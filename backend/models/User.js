@@ -15,9 +15,12 @@ const gameTutorialSchema = new mongoose.Schema({
 const userSchema = new mongoose.Schema(
   {
     email:    { type: String, required: true, unique: true, lowercase: true, trim: true },
-    password: { type: String, required: true, select: false },
+    password: { type: String, select: false }, // optional — not set for Google OAuth users
+    googleId: { type: String, unique: true, sparse: true },
 
     agentNumber: { type: String, unique: true, sparse: true }, // 7-digit, auto-generated
+
+    difficultySetting: { type: String, enum: ['easy', 'medium'], default: 'easy' },
 
     isAdmin:  { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },

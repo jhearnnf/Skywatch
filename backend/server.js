@@ -23,8 +23,9 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('Connected to MongoDB');
+    await require('./models/Level').seedLevels();
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })

@@ -1,3 +1,53 @@
+// Levels 1–10 with cumulative aircoins required to reach each level
+export const MOCK_LEVELS = [
+  { levelNumber: 1,  aircoinsToNextLevel: 100,  cumulativeAircoins: 0     },
+  { levelNumber: 2,  aircoinsToNextLevel: 250,  cumulativeAircoins: 100   },
+  { levelNumber: 3,  aircoinsToNextLevel: 500,  cumulativeAircoins: 350   },
+  { levelNumber: 4,  aircoinsToNextLevel: 850,  cumulativeAircoins: 850   },
+  { levelNumber: 5,  aircoinsToNextLevel: 1300, cumulativeAircoins: 1700  },
+  { levelNumber: 6,  aircoinsToNextLevel: 1850, cumulativeAircoins: 3000  },
+  { levelNumber: 7,  aircoinsToNextLevel: 2500, cumulativeAircoins: 4850  },
+  { levelNumber: 8,  aircoinsToNextLevel: 3250, cumulativeAircoins: 7350  },
+  { levelNumber: 9,  aircoinsToNextLevel: 4100, cumulativeAircoins: 10600 },
+  { levelNumber: 10, aircoinsToNextLevel: null,  cumulativeAircoins: 14700 },
+]
+
+// Mock leaderboard — top agents by total aircoins
+export const MOCK_LEADERBOARD = [
+  { agentNumber: '8832941', totalAircoins: 14820 },
+  { agentNumber: '1123456', totalAircoins: 8950  },
+  { agentNumber: '7654321', totalAircoins: 5320  },
+  { agentNumber: '2987654', totalAircoins: 3100  },
+  { agentNumber: '5544332', totalAircoins: 2430  },
+  { agentNumber: '9182736', totalAircoins: 1890  },
+  { agentNumber: '3312890', totalAircoins: 1250  },
+  { agentNumber: '6789012', totalAircoins:  780  },
+  { agentNumber: '4471823', totalAircoins:  310  },
+  { agentNumber: '2234567', totalAircoins:  175  },
+]
+
+export const MOCK_RANKS = [
+  { rankNumber: 1,  rankName: 'Aircraftman',          abbreviation: 'AC',      rankType: 'enlisted_aviator' },
+  { rankNumber: 2,  rankName: 'Leading Aircraftman',  abbreviation: 'LAC',     rankType: 'enlisted_aviator' },
+  { rankNumber: 3,  rankName: 'Senior Aircraftman',   abbreviation: 'SAC',     rankType: 'enlisted_aviator' },
+  { rankNumber: 4,  rankName: 'Corporal',              abbreviation: 'Cpl',     rankType: 'non_commissioned_aircrew' },
+  { rankNumber: 5,  rankName: 'Sergeant',              abbreviation: 'Sgt',     rankType: 'non_commissioned_aircrew' },
+  { rankNumber: 6,  rankName: 'Chief Technician',      abbreviation: 'Ch Tech', rankType: 'non_commissioned_aircrew' },
+  { rankNumber: 7,  rankName: 'Flight Sergeant',       abbreviation: 'FS',      rankType: 'non_commissioned_aircrew' },
+  { rankNumber: 8,  rankName: 'Warrant Officer',       abbreviation: 'WO',      rankType: 'non_commissioned_aircrew' },
+  { rankNumber: 9,  rankName: 'Pilot Officer',         abbreviation: 'Plt Off', rankType: 'commissioned_officer' },
+  { rankNumber: 10, rankName: 'Flying Officer',        abbreviation: 'Fg Off',  rankType: 'commissioned_officer' },
+  { rankNumber: 11, rankName: 'Flight Lieutenant',     abbreviation: 'Flt Lt',  rankType: 'commissioned_officer' },
+  { rankNumber: 12, rankName: 'Squadron Leader',       abbreviation: 'Sqn Ldr', rankType: 'commissioned_officer' },
+  { rankNumber: 13, rankName: 'Wing Commander',        abbreviation: 'Wg Cdr',  rankType: 'commissioned_officer' },
+  { rankNumber: 14, rankName: 'Group Captain',         abbreviation: 'Gp Capt', rankType: 'commissioned_officer' },
+  { rankNumber: 15, rankName: 'Air Commodore',         abbreviation: 'Air Cdre',rankType: 'commissioned_officer' },
+  { rankNumber: 16, rankName: 'Air Vice-Marshal',      abbreviation: 'AVM',     rankType: 'commissioned_officer' },
+  { rankNumber: 17, rankName: 'Air Marshal',           abbreviation: 'AM',      rankType: 'commissioned_officer' },
+  { rankNumber: 18, rankName: 'Air Chief Marshal',     abbreviation: 'ACM',     rankType: 'commissioned_officer' },
+  { rankNumber: 19, rankName: 'Marshal of the RAF',   abbreviation: 'MRAF',    rankType: 'commissioned_officer' },
+]
+
 export const CATEGORIES = [
   'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',

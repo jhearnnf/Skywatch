@@ -34,6 +34,20 @@ router.get('/stats', protect, async (req, res) => {
   }
 });
 
+// GET /api/users/leaderboard — top 20 agents by total aircoins (public)
+router.get('/leaderboard', async (req, res) => {
+  try {
+    const agents = await User.find({})
+      .select('agentNumber totalAircoins')
+      .sort({ totalAircoins: -1 })
+      .limit(20);
+
+    res.json({ status: 'success', data: { agents } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/users/report-problem
 router.post('/report-problem', protect, async (req, res) => {
   try {

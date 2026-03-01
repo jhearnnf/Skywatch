@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 
 const NAV_LINKS = [
   { id: 'dashboard',  label: 'Dashboard' },
@@ -16,22 +17,48 @@ function CrosshairIcon() {
   )
 }
 
-export default function Navbar({ page, navigate, isAdmin }) {
-  const [open, setOpen] = useState(false)
+function AircoinsDisplay({ coins }) {
+  return (
+    <div className="nav-aircoins" aria-label={`${coins} Aircoins`}>
+      <span className="nav-aircoins__icon" aria-hidden="true">⬡</span>
+      <span className="nav-aircoins__value">{coins.toLocaleString()}</span>
+    </div>
+  )
+}
 
-  const handleNav = (id) => {
-    navigate(id)
+function RankDisplay({ rank, navigate }) {
+  if (!rank) return null
+  return (
+    <button className="nav-rank" onClick={() => navigate('rankings')} aria-label="View rankings">
+      <span className="nav-rank__abbr">{rank.rankAbbreviation ?? rank.abbreviation ?? '—'}</span>
+      <span className="nav-rank__label">Rank</span>
+    </button>
+  )
+}
+
+export default function Navbar({ page, navigate }) {
+  const { user, logout } = useAuth()
+  const [open, setOpen]  = useState(false)
+
+  const handleNav = (id) => { navigate(id); setOpen(false) }
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('dashboard')
     setOpen(false)
   }
 
   return (
     <nav className="navbar">
       <div className="navbar-inner">
+
+        {/* Brand */}
         <button className="navbar-brand" onClick={() => handleNav('dashboard')}>
           <CrosshairIcon />
           <span className="brand-name">Skywatch</span>
         </button>
 
+        {/* Hamburger */}
         <button
           className={`menu-toggle ${open ? 'open' : ''}`}
           onClick={() => setOpen(!open)}
@@ -41,6 +68,7 @@ export default function Navbar({ page, navigate, isAdmin }) {
           <span /><span /><span />
         </button>
 
+        {/* Nav links */}
         <ul className={`nav-links ${open ? 'open' : ''}`} role="list">
           {NAV_LINKS.map(({ id, label }) => (
             <li key={id}>
@@ -53,18 +81,35 @@ export default function Navbar({ page, navigate, isAdmin }) {
               </button>
             </li>
           ))}
-          {isAdmin && (
+          {user?.isAdmin && (
             <li>
               <button
                 className={`nav-link nav-link--admin ${page === 'admin' ? 'active' : ''}`}
                 onClick={() => handleNav('admin')}
-                aria-current={page === 'admin' ? 'page' : undefined}
               >
                 Admin
               </button>
             </li>
           )}
         </ul>
+
+        {/* Right-side auth widgets */}
+        <div className={`nav-auth ${open ? 'nav-auth--open' : ''}`}>
+          {user ? (
+            <>
+              <AircoinsDisplay coins={user.totalAircoins ?? 0} />
+              <RankDisplay rank={user.rank} navigate={navigate} />
+              <button className="nav-btn nav-btn--ghost" onClick={handleLogout}>
+                Logout
+              </button>
+            </>
+          ) : (
+            <button className="nav-btn nav-btn--primary" onClick={() => handleNav('login')}>
+              Sign In
+            </button>
+          )}
+        </div>
+
       </div>
     </nav>
   )
