@@ -26,6 +26,9 @@ const appSettingsSchema = new mongoose.Schema({
     type: [String],
     default: ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
   },
+
+  // Feature flags
+  useLiveLeaderboard: { type: Boolean, default: false },
 });
 
 // Static helper — always returns (or creates) the single settings document

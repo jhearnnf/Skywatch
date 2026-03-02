@@ -1,24 +1,64 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import IntelBriefSummary from '../components/IntelBriefSummary'
-import { MOCK_BRIEFS, CATEGORIES } from '../data/mockData'
+import { useAuth } from '../context/AuthContext'
+import { CATEGORIES } from '../data/mockData'
+
+const CATEGORY_ICONS = {
+  All:         '🔍',
+  News:        '📰',
+  Aircrafts:   '✈️',
+  Bases:       '🏔️',
+  Ranks:       '🎖️',
+  Squadrons:   '⚡',
+  Training:    '🎯',
+  Threats:     '⚠️',
+  Allies:      '🤝',
+  Missions:    '🚀',
+  AOR:         '🌍',
+  Tech:        '💡',
+  Terminology: '📖',
+  Treaties:    '📜',
+}
+
+const ALL_CATEGORIES = ['All', ...CATEGORIES]
 
 export default function IntelFeed({ navigate }) {
-  const [search, setSearch]         = useState('')
-  const [category, setCategory]     = useState('All')
-  const [readFilter, setReadFilter] = useState('all') // 'all' | 'read' | 'unread'
+  const { API } = useAuth()
 
-  const filtered = useMemo(() => {
-    return MOCK_BRIEFS.filter(b => {
-      const matchesSearch   = !search || b.title.toLowerCase().includes(search.toLowerCase()) || b.subtitle?.toLowerCase().includes(search.toLowerCase())
-      const matchesCategory = category === 'All' || b.category === category
-      // Read state requires auth — mock as all unread for now
-      const matchesRead = readFilter === 'all' || readFilter === 'unread'
-      return matchesSearch && matchesCategory && matchesRead
-    })
-  }, [search, category, readFilter])
+  const [briefs,        setBriefs]        = useState([])
+  const [loading,       setLoading]       = useState(true)
+  const [searchInput,   setSearchInput]   = useState('')
+  const [search,        setSearch]        = useState('')   // debounced
+  const [category,      setCategory]      = useState('All')
+  const [readFilter,    setReadFilter]    = useState('all')
+
+  // Debounce search input by 400 ms
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput), 400)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  // Fetch whenever category or debounced search changes
+  useEffect(() => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (category !== 'All') params.set('category', category)
+    if (search)             params.set('search', search)
+
+    fetch(`${API}/api/briefs?${params}`)
+      .then(r => r.json())
+      .then(data => setBriefs(data?.data?.briefs ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [API, category, search])
+
+  // Client-side read filter (read state requires auth — applied once real read-records are wired)
+  const filtered = readFilter === 'all' ? briefs : briefs
 
   return (
     <main className="page intel-feed-page">
+
+      {/* ── Header ───────────────────────────────────────── */}
       <div className="feed-header">
         <div className="section-inner">
           <h1 className="feed-title">Intelligence Briefs</h1>
@@ -27,7 +67,8 @@ export default function IntelFeed({ navigate }) {
       </div>
 
       <div className="section-inner">
-        {/* ── Filters ────────────────────────────────────── */}
+
+        {/* ── Search + read filter ──────────────────────── */}
         <div className="feed-controls">
           <div className="feed-search-wrap">
             <svg className="feed-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -38,21 +79,11 @@ export default function IntelFeed({ navigate }) {
               className="feed-search"
               type="search"
               placeholder="Search briefs…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
               aria-label="Search intelligence briefs"
             />
           </div>
-
-          <select
-            className="feed-filter"
-            value={category}
-            onChange={e => setCategory(e.target.value)}
-            aria-label="Filter by category"
-          >
-            <option value="All">All Categories</option>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
 
           <select
             className="feed-filter"
@@ -66,13 +97,35 @@ export default function IntelFeed({ navigate }) {
           </select>
         </div>
 
-        {/* ── Results count ──────────────────────────────── */}
-        <p className="feed-count">
-          {filtered.length} brief{filtered.length !== 1 ? 's' : ''}
-        </p>
+        {/* ── Category pills ────────────────────────────── */}
+        <div className="feed-categories" role="group" aria-label="Filter by category">
+          {ALL_CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              className={`feed-cat-btn${category === cat ? ' feed-cat-btn--active' : ''}`}
+              onClick={() => setCategory(cat)}
+              aria-pressed={category === cat}
+            >
+              <span className="feed-cat-btn__icon" aria-hidden="true">{CATEGORY_ICONS[cat]}</span>
+              <span className="feed-cat-btn__label">{cat}</span>
+            </button>
+          ))}
+        </div>
 
-        {/* ── Brief grid ─────────────────────────────────── */}
-        {filtered.length > 0 ? (
+        {/* ── Results count ─────────────────────────────── */}
+        {!loading && (
+          <p className="feed-count">
+            {filtered.length} brief{filtered.length !== 1 ? 's' : ''}
+            {category !== 'All' && ` in ${category}`}
+          </p>
+        )}
+
+        {/* ── Brief grid ────────────────────────────────── */}
+        {loading ? (
+          <div className="feed-loading">
+            <div className="app-loading__spinner" />
+          </div>
+        ) : filtered.length > 0 ? (
           <div className="brief-grid">
             {filtered.map(brief => (
               <IntelBriefSummary
@@ -86,6 +139,7 @@ export default function IntelFeed({ navigate }) {
         ) : (
           <p className="empty-state">No briefs match your search.</p>
         )}
+
       </div>
     </main>
   )

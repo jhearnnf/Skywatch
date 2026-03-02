@@ -1,14 +1,15 @@
+import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { MOCK_RANKS, MOCK_LEVELS } from '../data/mockData'
+import { MOCK_LEVELS, MOCK_RANKS } from '../data/mockData'
 
-// Given totalAircoins, return current level + progress info
-function getLevelInfo(totalAircoins) {
-  let current = MOCK_LEVELS[0]
-  for (const lvl of MOCK_LEVELS) {
+function getLevelInfo(totalAircoins, levels) {
+  if (!levels?.length) return { current: { levelNumber: 1, aircoinsToNextLevel: 100 }, next: null, coinsInLevel: 0, coinsNeeded: 100, progress: 0 }
+  let current = levels[0]
+  for (const lvl of levels) {
     if (totalAircoins >= lvl.cumulativeAircoins) current = lvl
     else break
   }
-  const next         = MOCK_LEVELS.find(l => l.levelNumber === current.levelNumber + 1)
+  const next         = levels.find(l => l.levelNumber === current.levelNumber + 1)
   const coinsInLevel = totalAircoins - current.cumulativeAircoins
   const coinsNeeded  = current.aircoinsToNextLevel
   const progress     = coinsNeeded
@@ -18,15 +19,32 @@ function getLevelInfo(totalAircoins) {
 }
 
 export default function Rankings() {
-  const { user } = useAuth()
+  const { user, API } = useAuth()
+
+  const [levels, setLevels] = useState(MOCK_LEVELS)
+  const [ranks,  setRanks]  = useState(MOCK_RANKS.map(r => ({ ...r, rankAbbreviation: r.abbreviation })))
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/api/users/levels`).then(r => r.json()),
+      fetch(`${API}/api/users/ranks`).then(r => r.json()),
+    ])
+      .then(([lvlData, rankData]) => {
+        if (lvlData?.data?.levels?.length)  setLevels(lvlData.data.levels)
+        if (rankData?.data?.ranks?.length)  setRanks(rankData.data.ranks)
+      })
+      .catch(() => {})
+  }, [API])
 
   // ── Levels ──────────────────────────────────────────────
   const coins = user?.totalAircoins ?? 0
-  const { current: currentLvl, next: nextLvl, coinsInLevel, coinsNeeded, progress: lvlProgress } = getLevelInfo(coins)
+  const { current: currentLvl, next: nextLvl, coinsInLevel, coinsNeeded, progress: lvlProgress } = getLevelInfo(coins, levels)
 
   // ── Ranks ───────────────────────────────────────────────
-  const ranks        = [...MOCK_RANKS].sort((a, b) => b.rankNumber - a.rankNumber)
-  const userRankNumber = 3 // placeholder — replace with user?.rank?.rankNumber
+  const sortedRanks    = [...ranks].sort((a, b) => b.rankNumber - a.rankNumber)
+  const userRankId     = user?.rank  // ObjectId string from auth context
+  const userRank       = userRankId ? ranks.find(r => r._id?.toString() === userRankId?.toString()) : null
+  const userRankNumber = userRank?.rankNumber ?? null
 
   return (
     <main className="page rankings-page">
@@ -65,7 +83,7 @@ export default function Rankings() {
 
           {/* Level list */}
           <ol className="level-list" reversed>
-            {[...MOCK_LEVELS].sort((a, b) => b.levelNumber - a.levelNumber).map((lvl) => {
+            {[...levels].sort((a, b) => b.levelNumber - a.levelNumber).map((lvl) => {
               const isCurrent = lvl.levelNumber === currentLvl.levelNumber
               const isAbove   = lvl.levelNumber > currentLvl.levelNumber
               const isMax     = lvl.levelNumber === 10
@@ -92,20 +110,20 @@ export default function Rankings() {
         <div className="rankings-section">
           <h2 className="rankings-section-title">RAF Rank</h2>
 
-          {/* Rank XP bar */}
+          {/* Current rank display */}
           <div className="xp-panel">
             <div className="xp-panel__labels">
               <span className="xp-panel__label">
-                Current rank: <strong>{MOCK_RANKS.find(r => r.rankNumber === userRankNumber)?.rankName ?? '—'}</strong>
+                Current rank: <strong>{userRank?.rankName ?? 'Unranked'}</strong>
               </span>
             </div>
           </div>
 
           {/* Rank list */}
           <ol className="rank-list" reversed>
-            {ranks.map((rank) => {
-              const isUser  = rank.rankNumber === userRankNumber
-              const isAbove = rank.rankNumber > userRankNumber
+            {sortedRanks.map((rank) => {
+              const isUser  = userRankNumber !== null && rank.rankNumber === userRankNumber
+              const isAbove = userRankNumber !== null && rank.rankNumber > userRankNumber
               return (
                 <li
                   key={rank.rankNumber}
@@ -113,7 +131,7 @@ export default function Rankings() {
                 >
                   <span className="rank-row__number">{rank.rankNumber}</span>
                   <div className="rank-row__info">
-                    <span className="rank-row__abbr">{rank.abbreviation}</span>
+                    <span className="rank-row__abbr">{rank.rankAbbreviation}</span>
                     <span className="rank-row__name">{rank.rankName}</span>
                     <span className="rank-row__type">{rank.rankType.replace(/_/g, ' ')}</span>
                   </div>

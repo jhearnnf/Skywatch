@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import ReadyForBriefing from '../components/ReadyForBriefing'
 import TargetDossierModal from '../components/TargetDossierModal'
 import OutOfAmmo from '../components/OutOfAmmo'
-import { MOCK_BRIEFS } from '../data/mockData'
+import { useAuth } from '../context/AuthContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -18,9 +18,9 @@ function playSound(file) {
 // ── Keyword-aware description renderer ───────────────────────────────────────
 
 function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick }) {
-  const [reticlePos,    setReticlePos]    = useState({ x: 0, y: 0 })
-  const [reticleOn,     setReticleOn]     = useState(false)
-  const [hoveredKw,     setHoveredKw]     = useState(null)
+  const [reticlePos, setReticlePos] = useState({ x: 0, y: 0 })
+  const [reticleOn,  setReticleOn]  = useState(false)
+  const [hoveredKw,  setHoveredKw]  = useState(null)
   const areaRef = useRef(null)
 
   const handleMouseMove = (e) => setReticlePos({ x: e.clientX, y: e.clientY })
@@ -114,38 +114,133 @@ function MediaCarousel({ media }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function IntelligenceBrief({ briefId, navigate }) {
-  const [dossier,      setDossier]      = useState(null)     // { keyword, clickX, clickY }
-  const [ammoItems,    setAmmoItems]    = useState([])        // [{id, x, y}]
+  const { user, API } = useAuth()
 
-  // Mock: treat brief as loaded from mock data
-  const brief = MOCK_BRIEFS.find(b => b._id === briefId) || MOCK_BRIEFS[0]
+  const [brief,         setBrief]         = useState(null)
+  const [ammoRemaining, setAmmoRemaining] = useState(0)
+  const [loading,       setLoading]       = useState(true)
+  const [notFound,      setNotFound]      = useState(false)
+  const [dossier,       setDossier]       = useState(null)
+  const [ammoItems,     setAmmoItems]     = useState([])
+  const [quizOpen,      setQuizOpen]      = useState(false)
 
-  // Mock ammo — gold tier gets 10, replace with real API call later
-  const hasAmmo = true
+  // ── Time-spent-reading tracker ──────────────────────────────────────────────
+  // Counts elapsed seconds in a ref and flushes to the API every 30s and on unmount/quiz-open.
+  const readTimeRef      = useRef(0)
+  const timerIntervalRef = useRef(null)
 
+  // Always-current flush function stored in a ref so the timer interval
+  // can call it without needing to be in its dependency array.
+  const flushTimeRef = useRef(null)
+  flushTimeRef.current = () => {
+    if (!user || readTimeRef.current <= 0 || !briefId) return
+    const secs = readTimeRef.current
+    readTimeRef.current = 0
+    fetch(`${API}/api/briefs/${briefId}/time`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seconds: secs }),
+    }).catch(() => {})
+  }
+
+  // Start timer when brief loads and user is logged in.
+  // Pause (flush + stop) when quiz opens, resume when quiz closes.
+  // Flush remaining seconds when navigating away (effect cleanup / unmount).
   useEffect(() => {
-    // Play open sound
-    playSound('intel_brief_opened.mp3')
-  }, [briefId])
+    if (!brief || !user) return
+
+    if (quizOpen) {
+      clearInterval(timerIntervalRef.current)
+      flushTimeRef.current()
+      return
+    }
+
+    timerIntervalRef.current = setInterval(() => {
+      readTimeRef.current += 1
+      if (readTimeRef.current % 30 === 0) flushTimeRef.current()
+    }, 1000)
+
+    return () => {
+      clearInterval(timerIntervalRef.current)
+      flushTimeRef.current()
+    }
+  }, [brief, user, quizOpen])
+
+  // ── Fetch brief ────────────────────────────────────────────────────────────
+  // Uses optional auth — works for guests (no readRecord) and logged-in users.
+  useEffect(() => {
+    if (!briefId) { setNotFound(true); setLoading(false); return }
+    setLoading(true)
+    setNotFound(false)
+
+    fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
+      .then(r => {
+        if (r.status === 404) { setNotFound(true); return null }
+        return r.json()
+      })
+      .then(data => {
+        if (!data) return
+        setBrief(data?.data?.brief ?? null)
+        setAmmoRemaining(data?.data?.readRecord?.ammunitionRemaining ?? 0)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [API, briefId])
+
+  // Play open sound once brief data arrives
+  useEffect(() => {
+    if (brief) playSound('intel_brief_opened.mp3')
+  }, [brief])
+
+  // ── Keyword click ──────────────────────────────────────────────────────────
+  const hasAmmo = ammoRemaining > 0
 
   const handleKeywordClick = useCallback((e, keyword) => {
     e.stopPropagation()
     if (hasAmmo) {
       playSound('target_locked.mp3')
+      fetch(`${API}/api/briefs/${briefId}/use-ammo`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data?.data?.ammunitionRemaining !== undefined) {
+            setAmmoRemaining(data.data.ammunitionRemaining)
+          }
+        })
+        .catch(() => {})
       setDossier({ keyword, clickX: e.clientX, clickY: e.clientY })
     } else {
       setAmmoItems(prev => [...prev, { id: Date.now(), x: e.clientX, y: e.clientY }])
     }
-  }, [hasAmmo])
+  }, [API, briefId, hasAmmo])
 
-  if (!brief) return (
-    <main className="page brief-page">
-      <div className="section-inner">
-        <p className="empty-state">Brief not found.</p>
-        <button className="btn-ghost" onClick={() => navigate('intel-feed')}>← Back to Intel Feed</button>
-      </div>
-    </main>
-  )
+  // ── Render states ──────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <main className="page brief-page">
+        <div className="section-inner">
+          <div className="feed-loading"><div className="app-loading__spinner" /></div>
+        </div>
+      </main>
+    )
+  }
+
+  if (notFound || !brief) {
+    return (
+      <main className="page brief-page">
+        <div className="section-inner">
+          <p className="empty-state">Brief not found.</p>
+          <button className="btn-ghost" onClick={() => navigate('intel-feed')}>← Back to Intel Feed</button>
+        </div>
+      </main>
+    )
+  }
+
+  // ── Main render ────────────────────────────────────────────────────────────
 
   return (
     <main className="page brief-page">
@@ -183,7 +278,11 @@ export default function IntelligenceBrief({ briefId, navigate }) {
                 <li key={i}>
                   <a href={src.url} target="_blank" rel="noreferrer" className="brief-source-link">
                     {src.siteName || src.url}
-                    {src.articleDate && <span className="brief-source-date"> · {new Date(src.articleDate).toLocaleDateString('en-GB')}</span>}
+                    {src.articleDate && (
+                      <span className="brief-source-date">
+                        {' · '}{new Date(src.articleDate).toLocaleDateString('en-GB')}
+                      </span>
+                    )}
                   </a>
                 </li>
               ))}
@@ -192,7 +291,12 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         )}
 
         {/* ── Ready for Briefing ─────────────────────────── */}
-        <ReadyForBriefing briefId={brief._id} />
+        <ReadyForBriefing
+          briefId={brief._id}
+          quizOpen={quizOpen}
+          onQuizOpen={() => setQuizOpen(true)}
+          onQuizClose={() => setQuizOpen(false)}
+        />
 
       </div>
 

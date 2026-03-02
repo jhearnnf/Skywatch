@@ -1,16 +1,17 @@
+import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { MOCK_LEVELS, MOCK_LEADERBOARD } from '../data/mockData'
 
 const TIER_LABELS = { free: 'Free', trial: 'Trial', silver: 'Silver', gold: 'Gold' }
 
-// Given totalAircoins, return current level + progress info
-function getLevelInfo(totalAircoins) {
-  let current = MOCK_LEVELS[0]
-  for (const lvl of MOCK_LEVELS) {
+function getLevelInfo(totalAircoins, levels) {
+  if (!levels?.length) return { current: { levelNumber: 1, aircoinsToNextLevel: 100 }, next: null, coinsInLevel: 0, coinsNeeded: 100, progress: 0 }
+  let current = levels[0]
+  for (const lvl of levels) {
     if (totalAircoins >= lvl.cumulativeAircoins) current = lvl
     else break
   }
-  const next         = MOCK_LEVELS.find(l => l.levelNumber === current.levelNumber + 1)
+  const next         = levels.find(l => l.levelNumber === current.levelNumber + 1)
   const coinsInLevel = totalAircoins - current.cumulativeAircoins
   const coinsNeeded  = current.aircoinsToNextLevel
   const progress     = coinsNeeded
@@ -20,12 +21,57 @@ function getLevelInfo(totalAircoins) {
 }
 
 export default function Profile({ navigate }) {
-  const { user } = useAuth()
+  const { user, API } = useAuth()
+
+  const [stats,          setStats]          = useState({ brifsRead: 0, gamesPlayed: 0, winPercent: 0 })
+  const [levels,         setLevels]         = useState(MOCK_LEVELS)
+  const [leaderboard,    setLeaderboard]    = useState(MOCK_LEADERBOARD)
+  const [useLiveLeaderboard, setUseLive]    = useState(false)
+
+  // Fetch public data — levels, settings, then conditionally leaderboard
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/api/users/levels`).then(r => r.json()),
+      fetch(`${API}/api/users/settings`).then(r => r.json()),
+    ])
+      .then(([lvlData, settingsData]) => {
+        if (lvlData?.data?.levels?.length) setLevels(lvlData.data.levels)
+
+        const useLive = settingsData?.data?.useLiveLeaderboard ?? false
+        setUseLive(useLive)
+
+        if (useLive) {
+          return fetch(`${API}/api/users/leaderboard`)
+            .then(r => r.json())
+            .then(lbData => setLeaderboard(lbData?.data?.agents ?? []))
+        } else {
+          setLeaderboard(MOCK_LEADERBOARD)
+        }
+      })
+      .catch(() => {})
+  }, [API])
+
+  // Fetch authenticated user stats
+  useEffect(() => {
+    if (!user) return
+    fetch(`${API}/api/users/stats`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data?.data) {
+          setStats({
+            brifsRead:   data.data.brifsRead   ?? 0,
+            gamesPlayed: data.data.gamesPlayed ?? 0,
+            winPercent:  data.data.winPercent  ?? 0,
+          })
+        }
+      })
+      .catch(() => {})
+  }, [API, user])
 
   const coins = user?.totalAircoins ?? 0
-  const { current: lvl, next: nextLvl, coinsInLevel, coinsNeeded, progress } = getLevelInfo(coins)
+  const { current: lvl, next: nextLvl, coinsInLevel, coinsNeeded, progress } = getLevelInfo(coins, levels)
 
-  // Rank display — rank may be an ObjectId (string) or a populated object
+  // Rank — populated via /api/users/stats, but user from context has rank as ObjectId
   const rankDisplay =
     user?.rank && typeof user.rank === 'object' && user.rank.rankName
       ? `${user.rank.rankName} · ${user.rank.rankAbbreviation}`
@@ -38,8 +84,6 @@ export default function Profile({ navigate }) {
 
           {/* ── Left: user stats ──────────────────────────── */}
           <div className="profile-stats-section">
-
-            {/* Lock overlay when not logged in */}
             <div className={`profile-stats-content ${!user ? 'profile-stats-content--locked' : ''}`}>
 
               {/* Identity */}
@@ -86,10 +130,10 @@ export default function Profile({ navigate }) {
 
               {/* Stats grid */}
               <div className="stats-grid">
-                <StatCard label="Briefs Read"  value={user?.brifsRead  ?? 0}                       icon="📋" />
-                <StatCard label="Games Played" value={user?.gamesPlayed ?? 0}                       icon="🎯" />
-                <StatCard label="Win Rate"     value={`${user?.winPercent ?? 0}%`} icon="✓" highlight />
-                <StatCard label="Aircoins"     value={coins.toLocaleString()}                        icon="⬡" />
+                <StatCard label="Briefs Read"  value={stats.brifsRead}                          icon="📋" />
+                <StatCard label="Games Played" value={stats.gamesPlayed}                         icon="🎯" mock />
+                <StatCard label="Win Rate"     value={`${stats.winPercent}%`} icon="✓" highlight mock />
+                <StatCard label="Aircoins"     value={coins.toLocaleString()}                    icon="⬡" />
               </div>
 
             </div>
@@ -102,16 +146,18 @@ export default function Profile({ navigate }) {
                 <button className="btn-primary" onClick={() => navigate('login')}>Sign In</button>
               </div>
             )}
-
           </div>
 
           {/* ── Right: leaderboard ────────────────────────── */}
           <div className="leaderboard-panel">
             <div className="leaderboard-panel__header">
               <p className="leaderboard-panel__title">Top Agents — Aircoins</p>
+              {!useLiveLeaderboard && (
+                <span className="mock-badge">Mock data</span>
+              )}
             </div>
             <ol className="leaderboard-list">
-              {MOCK_LEADERBOARD.map((agent, i) => {
+              {leaderboard.map((agent, i) => {
                 const pos       = i + 1
                 const isCurrent = user?.agentNumber === agent.agentNumber
                 return (
@@ -127,6 +173,9 @@ export default function Profile({ navigate }) {
                   </li>
                 )
               })}
+              {leaderboard.length === 0 && (
+                <li className="leaderboard-row"><span className="leaderboard-row__agent">No agents yet</span></li>
+              )}
             </ol>
           </div>
 
@@ -136,9 +185,9 @@ export default function Profile({ navigate }) {
   )
 }
 
-function StatCard({ label, value, icon, highlight }) {
+function StatCard({ label, value, icon, highlight, mock }) {
   return (
-    <div className={`stat-card ${highlight ? 'stat-card--highlight' : ''}`}>
+    <div className={`stat-card ${highlight ? 'stat-card--highlight' : ''} ${mock ? 'stat-card--mock' : ''}`}>
       <span className="stat-card__icon" aria-hidden="true">{icon}</span>
       <span className="stat-card__value">{value}</span>
       <span className="stat-card__label">{label}</span>

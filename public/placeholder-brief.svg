@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">
+  <rect width="800" height="450" fill="#0f172a"/>
+  <!-- Radar rings -->
+  <circle cx="400" cy="225" r="180" fill="none" stroke="#1d4ed8" stroke-width="1" opacity="0.3"/>
+  <circle cx="400" cy="225" r="120" fill="none" stroke="#1d4ed8" stroke-width="1" opacity="0.3"/>
+  <circle cx="400" cy="225" r="60"  fill="none" stroke="#1d4ed8" stroke-width="1" opacity="0.4"/>
+  <!-- Crosshair lines -->
+  <line x1="220" y1="225" x2="580" y2="225" stroke="#1d4ed8" stroke-width="1" opacity="0.3"/>
+  <line x1="400" y1="45"  x2="400" y2="405" stroke="#1d4ed8" stroke-width="1" opacity="0.3"/>
+  <!-- Corner brackets -->
+  <polyline points="60,30 30,30 30,60"   fill="none" stroke="#1d4ed8" stroke-width="2" opacity="0.6"/>
+  <polyline points="740,30 770,30 770,60" fill="none" stroke="#1d4ed8" stroke-width="2" opacity="0.6"/>
+  <polyline points="60,420 30,420 30,390" fill="none" stroke="#1d4ed8" stroke-width="2" opacity="0.6"/>
+  <polyline points="740,420 770,420 770,390" fill="none" stroke="#1d4ed8" stroke-width="2" opacity="0.6"/>
+  <!-- Centre dot -->
+  <circle cx="400" cy="225" r="4" fill="#1d4ed8" opacity="0.7"/>
+  <!-- Label -->
+  <text x="400" y="360" text-anchor="middle" font-family="monospace" font-size="13" fill="#475569" letter-spacing="4">NO IMAGE AVAILABLE</text>
+</svg>

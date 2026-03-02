@@ -25,4 +25,17 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
-module.exports = { protect, adminOnly };
+// Like protect, but doesn't reject — sets req.user if a valid token is present, otherwise continues unauthenticated
+const optionalAuth = async (req, res, next) => {
+  try {
+    const token = req.cookies.jwt;
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select('-password');
+      if (user && !user.isBanned) req.user = user;
+    }
+  } catch {} // expired / invalid token — continue as guest
+  next();
+};
+
+module.exports = { protect, adminOnly, optionalAuth };

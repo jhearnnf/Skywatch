@@ -423,6 +423,60 @@
 
 .feed-count { font-size: 0.8rem; color: #94a3b8; margin-bottom: 1.25rem; }
 
+/* ── Category pills ──────────────────────────────────────── */
+
+.feed-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.25rem 0 1rem;
+}
+
+.feed-cat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+
+.feed-cat-btn:hover {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.feed-cat-btn--active {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.25);
+}
+
+.feed-cat-btn--active:hover {
+  background: #1e40af;
+  border-color: #1e40af;
+  color: #ffffff;
+}
+
+.feed-cat-btn__icon { font-size: 0.95rem; line-height: 1; }
+
+/* ── Feed / brief loading spinner ───────────────────────── */
+
+.feed-loading {
+  display: flex;
+  justify-content: center;
+  padding: 3rem 0;
+}
+
 .intel-feed-page .section-inner { padding-bottom: 4rem; }
 
 /* ── Intelligence Brief page ─────────────────────────────── */
@@ -778,6 +832,43 @@
 .stat-card--highlight .stat-card__value { color: #1d4ed8; }
 .stat-card__label        { font-size: 0.775rem; color: #64748b; font-weight: 500; }
 
+/* Mock data tooltip on stat cards */
+.stat-card--mock { position: relative; cursor: default; }
+.stat-card--mock::before {
+  content: 'MOCK DATA';
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: #f1f5f9;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 0.3rem 0.55rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 20;
+}
+.stat-card--mock::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: #1e293b;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 20;
+}
+.stat-card--mock:hover::before,
+.stat-card--mock:hover::after { opacity: 1; }
+
 /* ── Static pages (About, Contact, Report) ───────────────── */
 
 .static-page { background: #f4f8ff; }
@@ -900,6 +991,8 @@
 
   .feed-controls  { flex-direction: column; }
   .feed-search-wrap { min-width: unset; }
+  .feed-categories { gap: 0.4rem; }
+  .feed-cat-btn { font-size: 0.75rem; padding: 0.35rem 0.7rem; }
 
   .ready-for-briefing { padding: 1.75rem 1.25rem; }
 
@@ -1280,9 +1373,24 @@
   top: 76px;
 }
 
+.mock-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: #fef9c3;
+  color: #854d0e;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+}
+
 .leaderboard-panel__header {
   padding: 0.875rem 1.25rem;
   border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   background: #f8fafc;
 }
 
@@ -1586,6 +1694,44 @@
 .settings-cat-label:hover        { background: #eff6ff; border-color: #bfdbfe; }
 .settings-cat-label input        { cursor: pointer; accent-color: #1d4ed8; }
 .settings-save                   { margin-top: 1.25rem; }
+
+/* Feature flag toggle row */
+.settings-flag {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  margin-bottom: 1rem;
+}
+
+.settings-flag__info    { display: flex; flex-direction: column; gap: 0.3rem; }
+.settings-flag__name    { font-size: 0.85rem; font-weight: 600; color: #0f172a; }
+.settings-flag__desc    { font-size: 0.775rem; color: #64748b; line-height: 1.5; max-width: 400px; }
+
+.settings-flag__toggle  { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; cursor: pointer; }
+.settings-flag__toggle input { cursor: pointer; accent-color: #1d4ed8; width: 16px; height: 16px; }
+
+.settings-flag__pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #fef9c3;
+  color: #854d0e;
+  border: 1px solid #fde68a;
+  min-width: 3.5rem;
+  text-align: center;
+}
+.settings-flag__pill--on {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #bbf7d0;
+}
 
 /* Modal footer (used by ReasonModal) */
 .modal__footer {

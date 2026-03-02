@@ -501,6 +501,39 @@ function SettingsTab({ API }) {
           Save Game Options
         </button>
       </div>
+
+      {/* Feature flags */}
+      <div className="admin-section">
+        <h3 className="admin-section-title">Feature Flags</h3>
+        <p className="admin-section-sub">Enable or disable features that are under development or awaiting real data.</p>
+
+        <div className="settings-flag">
+          <div className="settings-flag__info">
+            <span className="settings-flag__name">Live Leaderboard</span>
+            <span className="settings-flag__desc">
+              When enabled, the Profile page leaderboard reads from the database.
+              When disabled, mock placeholder data is shown instead.
+            </span>
+          </div>
+          <label className="settings-flag__toggle">
+            <input
+              type="checkbox"
+              checked={draft.useLiveLeaderboard ?? false}
+              onChange={e => setDraft(prev => ({ ...prev, useLiveLeaderboard: e.target.checked }))}
+            />
+            <span className={`settings-flag__pill ${draft.useLiveLeaderboard ? 'settings-flag__pill--on' : ''}`}>
+              {draft.useLiveLeaderboard ? 'Live' : 'Mock'}
+            </span>
+          </label>
+        </div>
+
+        <button
+          className="btn-primary settings-save"
+          onClick={() => saveSection('Update Feature Flags', ['useLiveLeaderboard'])}
+        >
+          Save Feature Flags
+        </button>
+      </div>
     </div>
   )
 }

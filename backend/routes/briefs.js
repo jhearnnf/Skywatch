@@ -1,8 +1,10 @@
 const router = require('express').Router();
-const { protect } = require('../middleware/auth');
+const { protect, optionalAuth } = require('../middleware/auth');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const AppSettings = require('../models/AppSettings');
+// Required to register the schema so populate('quizQuestionsEasy/Medium') works
+require('../models/GameQuizQuestion');
 
 // GET /api/briefs — list all accessible briefs
 router.get('/', async (req, res) => {
@@ -27,8 +29,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/briefs/:id — single brief (records read + sets ammo)
-router.get('/:id', protect, async (req, res) => {
+// GET /api/briefs/:id — single brief. Works for guests (no readRecord) and authenticated users.
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const brief = await IntelligenceBrief.findById(req.params.id)
       .populate('media')
@@ -37,24 +39,27 @@ router.get('/:id', protect, async (req, res) => {
 
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
-    // Get or create the read record
-    let readRecord = await IntelligenceBriefRead.findOne({
-      userId: req.user._id,
-      intelBriefId: brief._id,
-    });
+    let readRecord = null;
 
-    if (!readRecord) {
-      const settings = await AppSettings.getSettings();
-      const ammoMap = { free: settings.ammoFree, trial: settings.ammoSilver, silver: settings.ammoSilver, gold: settings.ammoGold };
-      // Trial uses silver ammo while active, otherwise free
-      const tier = req.user.isTrialActive ? 'trial' : req.user.subscriptionTier;
-      const ammo = ammoMap[tier] ?? 0;
-
-      readRecord = await IntelligenceBriefRead.create({
+    if (req.user) {
+      // Get or create the read record for authenticated users
+      readRecord = await IntelligenceBriefRead.findOne({
         userId: req.user._id,
         intelBriefId: brief._id,
-        ammunitionRemaining: ammo,
       });
+
+      if (!readRecord) {
+        const settings = await AppSettings.getSettings();
+        const ammoMap = { free: settings.ammoFree, trial: settings.ammoSilver, silver: settings.ammoSilver, gold: settings.ammoGold };
+        const tier = req.user.isTrialActive ? 'trial' : req.user.subscriptionTier;
+        const ammo = ammoMap[tier] ?? 0;
+
+        readRecord = await IntelligenceBriefRead.create({
+          userId: req.user._id,
+          intelBriefId: brief._id,
+          ammunitionRemaining: ammo,
+        });
+      }
     }
 
     res.json({ status: 'success', data: { brief, readRecord } });

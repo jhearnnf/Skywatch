@@ -4,6 +4,9 @@ const User = require('../models/User');
 const GameSessionQuizResult = require('../models/GameSessionQuizResult');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const ProblemReport = require('../models/ProblemReport');
+const AppSettings = require('../models/AppSettings');
+const Level = require('../models/Level');
+const Rank = require('../models/Rank');
 
 // GET /api/users/stats — current user's stats for profile page
 router.get('/stats', protect, async (req, res) => {
@@ -43,6 +46,46 @@ router.get('/leaderboard', async (req, res) => {
       .limit(20);
 
     res.json({ status: 'success', data: { agents } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/users/settings — public read-only app settings subset
+router.get('/settings', async (req, res) => {
+  try {
+    const settings = await AppSettings.getSettings();
+    res.json({ status: 'success', data: { useLiveLeaderboard: settings.useLiveLeaderboard } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/users/levels — all levels with computed cumulativeAircoins (public)
+router.get('/levels', async (req, res) => {
+  try {
+    const levels = await Level.find({}).sort({ levelNumber: 1 });
+    let cumulative = 0;
+    const withCumulative = levels.map(l => {
+      const item = {
+        levelNumber: l.levelNumber,
+        aircoinsToNextLevel: l.aircoinsToNextLevel,
+        cumulativeAircoins: cumulative,
+      };
+      if (l.aircoinsToNextLevel) cumulative += l.aircoinsToNextLevel;
+      return item;
+    });
+    res.json({ status: 'success', data: { levels: withCumulative } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/users/ranks — all RAF ranks (public)
+router.get('/ranks', async (req, res) => {
+  try {
+    const ranks = await Rank.find({}).sort({ rankNumber: 1 });
+    res.json({ status: 'success', data: { ranks } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

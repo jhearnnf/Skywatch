@@ -1,9 +1,20 @@
+import { useState, useEffect } from 'react'
 import IntelBriefSummary from '../components/IntelBriefSummary'
-import { MOCK_BRIEFS } from '../data/mockData'
-
-const newsBriefs = MOCK_BRIEFS.filter(b => b.category === 'News')
+import { useAuth } from '../context/AuthContext'
 
 export default function Dashboard({ navigate }) {
+  const { API } = useAuth()
+  const [briefs, setBriefs]   = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch(`${API}/api/briefs?category=News&limit=6`)
+      .then(r => r.json())
+      .then(data => setBriefs(data?.data?.briefs ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [API])
+
   return (
     <main className="page dashboard-page">
 
@@ -27,9 +38,13 @@ export default function Dashboard({ navigate }) {
             </button>
           </div>
 
-          {newsBriefs.length > 0 ? (
+          {loading ? (
+            <div className="feed-loading">
+              <div className="app-loading__spinner" />
+            </div>
+          ) : briefs.length > 0 ? (
             <div className="brief-grid">
-              {newsBriefs.map(brief => (
+              {briefs.map(brief => (
                 <IntelBriefSummary
                   key={brief._id}
                   brief={brief}
