@@ -6,6 +6,8 @@ const AdminAction = require('../models/AdminAction');
 const AppSettings = require('../models/AppSettings');
 const GameSessionQuizResult = require('../models/GameSessionQuizResult');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
+const IntelligenceBrief = require('../models/IntelligenceBrief');
+const Media = require('../models/Media');
 
 router.use(protect, adminOnly);
 
@@ -150,6 +152,107 @@ router.post('/problems/:id/update', async (req, res) => {
 
     const report = await ProblemReport.findByIdAndUpdate(req.params.id, update, { new: true });
     res.json({ status: 'success', data: { report } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Intel Brief CRUD ──────────────────────────────────────────────────────────
+
+// GET /api/admin/briefs
+router.get('/briefs', async (req, res) => {
+  try {
+    const { search, category, page = 1, limit = 20 } = req.query;
+    const filter = {};
+    if (category) filter.category = category;
+    if (search) filter.$or = [
+      { title: new RegExp(search, 'i') },
+      { subtitle: new RegExp(search, 'i') },
+    ];
+    const [briefs, total] = await Promise.all([
+      IntelligenceBrief.find(filter)
+        .populate('media')
+        .sort({ dateAdded: -1 })
+        .skip((page - 1) * limit)
+        .limit(Number(limit)),
+      IntelligenceBrief.countDocuments(filter),
+    ]);
+    res.json({ status: 'success', data: { briefs, total } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/briefs/:id
+router.get('/briefs/:id', async (req, res) => {
+  try {
+    const brief = await IntelligenceBrief.findById(req.params.id).populate('media');
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    res.json({ status: 'success', data: { brief } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/briefs
+router.post('/briefs', requireReason, async (req, res) => {
+  try {
+    const { reason, ...fields } = req.body;
+    const brief = await IntelligenceBrief.create(fields);
+    await AdminAction.create({ userId: req.user._id, actionType: 'create_brief', reason });
+    res.json({ status: 'success', data: { brief } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/admin/briefs/:id
+router.patch('/briefs/:id', requireReason, async (req, res) => {
+  try {
+    const { reason, ...fields } = req.body;
+    const brief = await IntelligenceBrief.findByIdAndUpdate(req.params.id, fields, { new: true, runValidators: true }).populate('media');
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    await AdminAction.create({ userId: req.user._id, actionType: 'edit_brief', reason });
+    res.json({ status: 'success', data: { brief } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/admin/briefs/:id
+router.delete('/briefs/:id', requireReason, async (req, res) => {
+  try {
+    await IntelligenceBrief.findByIdAndDelete(req.params.id);
+    await AdminAction.create({ userId: req.user._id, actionType: 'delete_brief', reason: req.body.reason });
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/briefs/:id/media — add a media item to a brief
+router.post('/briefs/:id/media', async (req, res) => {
+  try {
+    const { mediaType, mediaUrl } = req.body;
+    if (!mediaUrl || !mediaType) return res.status(400).json({ message: 'mediaType and mediaUrl required' });
+    const media = await Media.create({ mediaType, mediaUrl: mediaUrl.trim() });
+    const brief = await IntelligenceBrief.findByIdAndUpdate(
+      req.params.id,
+      { $push: { media: media._id } },
+      { new: true }
+    ).populate('media');
+    res.json({ status: 'success', data: { brief } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/admin/briefs/:id/media/:mediaId — remove a media item
+router.delete('/briefs/:id/media/:mediaId', async (req, res) => {
+  try {
+    await IntelligenceBrief.findByIdAndUpdate(req.params.id, { $pull: { media: req.params.mediaId } });
+    await Media.findByIdAndDelete(req.params.mediaId);
+    res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

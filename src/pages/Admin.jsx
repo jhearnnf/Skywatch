@@ -89,9 +89,9 @@ function StatsTab({ API }) {
       <div className="admin-section">
         <h3 className="admin-section-title">Games</h3>
         <div className="admin-stats-grid">
-          <AdminStat label="Games Played" value={stats.games.totalGamesPlayed} />
-          <AdminStat label="Games Won"    value={stats.games.totalGamesWon} />
-          <AdminStat label="Games Lost"   value={stats.games.totalGamesLost} />
+          <AdminStat label="Games Played" value={stats.games.totalGamesPlayed} mock />
+          <AdminStat label="Games Won"    value={stats.games.totalGamesWon}    mock />
+          <AdminStat label="Games Lost"   value={stats.games.totalGamesLost}   mock />
         </div>
       </div>
       <div className="admin-section">
@@ -104,9 +104,9 @@ function StatsTab({ API }) {
   )
 }
 
-function AdminStat({ label, value }) {
+function AdminStat({ label, value, mock }) {
   return (
-    <div className="admin-stat-item">
+    <div className={`admin-stat-item${mock ? ' admin-stat-item--mock' : ''}`}>
       <span className="admin-stat-item__value">{value ?? '—'}</span>
       <span className="admin-stat-item__label">{label}</span>
     </div>
@@ -538,13 +538,427 @@ function SettingsTab({ API }) {
   )
 }
 
+// ── Intel Briefs tab ──────────────────────────────────────────────────────────
+
+const LIMIT = 20
+
+function BriefsTab({ API }) {
+  const [view,         setView]         = useState('list')   // 'list' | 'edit'
+  const [briefs,       setBriefs]       = useState([])
+  const [total,        setTotal]        = useState(0)
+  const [search,       setSearch]       = useState('')
+  const [catFilter,    setCatFilter]    = useState('')
+  const [page,         setPage]         = useState(1)
+  const [loading,      setLoading]      = useState(true)
+  const [editing,      setEditing]      = useState(null)      // populated brief doc or {} for new
+  const [isNew,        setIsNew]        = useState(false)
+  const [draft,        setDraft]        = useState({})
+  const [reasonModal,  setReasonModal]  = useState(null)
+  const [feedback,     setFeedback]     = useState('')
+  const [busy,         setBusy]         = useState(false)
+  const [mediaUrl,     setMediaUrl]     = useState('')
+  const [mediaType,    setMediaType]    = useState('picture')
+  const [addingMedia,  setAddingMedia]  = useState(false)
+
+  const loadBriefs = useCallback(async () => {
+    setLoading(true)
+    const params = new URLSearchParams({ page, limit: LIMIT })
+    if (search.trim())  params.set('search',   search.trim())
+    if (catFilter)      params.set('category', catFilter)
+    const res  = await fetch(`${API}/api/admin/briefs?${params}`, { credentials: 'include' })
+    const data = await res.json()
+    setBriefs(data.data?.briefs ?? [])
+    setTotal(data.data?.total   ?? 0)
+    setLoading(false)
+  }, [API, search, catFilter, page])
+
+  useEffect(() => { if (view === 'list') loadBriefs() }, [loadBriefs, view])
+
+  const openEdit = (brief) => {
+    setEditing(brief)
+    setDraft({
+      title:       brief.title       ?? '',
+      subtitle:    brief.subtitle    ?? '',
+      description: brief.description ?? '',
+      category:    brief.category    ?? ALL_CATEGORIES[0],
+      dateAdded:   brief.dateAdded   ? brief.dateAdded.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      sources:     brief.sources  ? brief.sources.map(s => ({ ...s }))  : [],
+      keywords:    brief.keywords ? brief.keywords.map(k => ({ ...k })) : [],
+    })
+    setIsNew(false)
+    setView('edit')
+    setFeedback('')
+  }
+
+  const openNew = () => {
+    setEditing({ media: [] })
+    setDraft({
+      title: '', subtitle: '', description: '',
+      category: ALL_CATEGORIES[0],
+      dateAdded: new Date().toISOString().slice(0, 10),
+      sources: [], keywords: [],
+    })
+    setIsNew(true)
+    setView('edit')
+    setFeedback('')
+  }
+
+  const backToList = () => { setView('list'); setEditing(null) }
+
+  const doSave = async (reason) => {
+    setBusy(true)
+    setReasonModal(null)
+    const url    = isNew ? `${API}/api/admin/briefs` : `${API}/api/admin/briefs/${editing._id}`
+    const method = isNew ? 'POST' : 'PATCH'
+    const res    = await fetch(url, {
+      method, credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...draft, reason }),
+    })
+    const data = await res.json()
+    if (data.status === 'success') {
+      setEditing(data.data.brief)
+      setIsNew(false)
+      setFeedback('Saved successfully.')
+      setTimeout(() => setFeedback(''), 3000)
+    } else {
+      setFeedback(`Error: ${data.message}`)
+    }
+    setBusy(false)
+  }
+
+  const doDelete = async (reason) => {
+    setBusy(true)
+    setReasonModal(null)
+    await fetch(`${API}/api/admin/briefs/${editing._id}`, {
+      method: 'DELETE', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+    setBusy(false)
+    backToList()
+  }
+
+  const addMedia = async () => {
+    if (!mediaUrl.trim()) return
+    setAddingMedia(true)
+    const res  = await fetch(`${API}/api/admin/briefs/${editing._id}/media`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mediaType, mediaUrl: mediaUrl.trim() }),
+    })
+    const data = await res.json()
+    if (data.status === 'success') {
+      setEditing(data.data.brief)
+      setMediaUrl('')
+    }
+    setAddingMedia(false)
+  }
+
+  const removeMedia = async (mediaId) => {
+    await fetch(`${API}/api/admin/briefs/${editing._id}/media/${mediaId}`, {
+      method: 'DELETE', credentials: 'include',
+    })
+    setEditing(prev => ({ ...prev, media: prev.media.filter(m => m._id !== mediaId) }))
+  }
+
+  const addSource    = () => setDraft(p => ({ ...p, sources:  [...p.sources,  { url: '', articleDate: '', siteName: '' }] }))
+  const removeSource = (i) => setDraft(p => ({ ...p, sources:  p.sources.filter((_, idx) => idx !== i) }))
+  const updateSource = (i, field, val) => setDraft(p => {
+    const sources = p.sources.map((s, idx) => idx === i ? { ...s, [field]: val } : s)
+    return { ...p, sources }
+  })
+
+  const addKeyword    = () => setDraft(p => ({ ...p, keywords: [...p.keywords, { keyword: '', generatedDescription: '' }] }))
+  const removeKeyword = (i) => setDraft(p => ({ ...p, keywords: p.keywords.filter((_, idx) => idx !== i) }))
+  const updateKeyword = (i, field, val) => setDraft(p => {
+    const keywords = p.keywords.map((k, idx) => idx === i ? { ...k, [field]: val } : k)
+    return { ...p, keywords }
+  })
+
+  // ── List view ──────────────────────────────────────────────────────────────
+  if (view === 'list') {
+    return (
+      <div>
+        <div className="admin-search-bar">
+          <input
+            className="feed-search"
+            style={{ maxWidth: 300 }}
+            placeholder="Search title or subtitle…"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+          />
+          <select className="feed-filter" value={catFilter} onChange={e => { setCatFilter(e.target.value); setPage(1) }}>
+            <option value="">All Categories</option>
+            {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={openNew}>+ New Brief</button>
+        </div>
+
+        {loading && <p className="admin-loading">Loading…</p>}
+        {!loading && briefs.length === 0 && <p className="empty-state">No briefs found.</p>}
+
+        <div className="admin-list">
+          {briefs.map(b => (
+            <div
+              key={b._id}
+              className="admin-card admin-brief-row"
+              onClick={() => openEdit(b)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={e => e.key === 'Enter' && openEdit(b)}
+            >
+              <div className="admin-card__header">
+                <div className="admin-card__meta">
+                  <span className="admin-badge admin-badge--free">{b.category}</span>
+                  <span className="admin-card__title">{b.title}</span>
+                  {b.subtitle && <span className="admin-card__sub">— {b.subtitle}</span>}
+                </div>
+                <span className="admin-card__sub" style={{ flexShrink: 0 }}>
+                  {new Date(b.dateAdded).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {total > LIMIT && (
+          <div className="admin-pagination">
+            <button className="btn-ghost" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</button>
+            <span className="admin-pagination__info">Page {page} of {Math.ceil(total / LIMIT)}</span>
+            <button className="btn-ghost" disabled={page >= Math.ceil(total / LIMIT)} onClick={() => setPage(p => p + 1)}>Next →</button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Edit view ──────────────────────────────────────────────────────────────
+  return (
+    <div>
+      {reasonModal && (
+        <ReasonModal
+          action={reasonModal.label}
+          onConfirm={reasonModal.onConfirm}
+          onCancel={() => setReasonModal(null)}
+        />
+      )}
+
+      <div className="admin-brief-toolbar">
+        <button className="btn-ghost" onClick={backToList}>← All Briefs</button>
+        <div className="admin-brief-toolbar__actions">
+          {!isNew && (
+            <button
+              className="admin-action-btn admin-action-btn--danger"
+              onClick={() => setReasonModal({ label: `Delete "${editing.title || 'brief'}"`, onConfirm: doDelete })}
+              disabled={busy}
+            >
+              Delete Brief
+            </button>
+          )}
+          <button
+            className="btn-primary"
+            onClick={() => setReasonModal({ label: isNew ? 'Create Intel Brief' : `Save "${draft.title || 'brief'}"`, onConfirm: doSave })}
+            disabled={busy}
+          >
+            {busy ? 'Saving…' : isNew ? 'Create Brief' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+
+      {feedback && <p className="admin-feedback">{feedback}</p>}
+
+      {/* Core details */}
+      <div className="admin-section">
+        <h3 className="admin-section-title">Core Details</h3>
+
+        <div className="brief-form-field">
+          <label className="form-label">Title</label>
+          <input
+            className="form-input"
+            value={draft.title}
+            onChange={e => setDraft(p => ({ ...p, title: e.target.value }))}
+            placeholder="Brief title"
+          />
+        </div>
+
+        <div className="brief-form-field">
+          <label className="form-label">Subtitle</label>
+          <input
+            className="form-input"
+            value={draft.subtitle}
+            onChange={e => setDraft(p => ({ ...p, subtitle: e.target.value }))}
+            placeholder="Optional subtitle"
+          />
+        </div>
+
+        <div className="brief-form-field">
+          <label className="form-label">Description</label>
+          <textarea
+            className="form-textarea"
+            rows={7}
+            value={draft.description}
+            onChange={e => setDraft(p => ({ ...p, description: e.target.value }))}
+            placeholder="~200 word brief description…"
+          />
+        </div>
+
+        <div className="brief-form-row">
+          <div className="brief-form-field" style={{ flex: 1 }}>
+            <label className="form-label">Category</label>
+            <select
+              className="feed-filter"
+              style={{ width: '100%' }}
+              value={draft.category}
+              onChange={e => setDraft(p => ({ ...p, category: e.target.value }))}
+            >
+              {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="brief-form-field" style={{ flex: 1 }}>
+            <label className="form-label">Date Added</label>
+            <input
+              type="date"
+              className="form-input"
+              value={draft.dateAdded}
+              onChange={e => setDraft(p => ({ ...p, dateAdded: e.target.value }))}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Media */}
+      <div className="admin-section">
+        <h3 className="admin-section-title">Images / Media</h3>
+        {isNew ? (
+          <p className="admin-section-sub" style={{ color: '#94a3b8', fontSize: '0.875rem' }}>
+            Create the brief first, then come back to add images.
+          </p>
+        ) : (
+          <>
+            {(editing.media ?? []).length === 0 && (
+              <p className="admin-loading" style={{ marginBottom: '1rem' }}>No media attached yet.</p>
+            )}
+            <div className="brief-media-grid">
+              {(editing.media ?? []).map(m => (
+                <div key={m._id} className="brief-media-item">
+                  <img
+                    src={m.mediaUrl}
+                    alt=""
+                    className="brief-media-item__img"
+                    onError={e => { e.currentTarget.style.display = 'none' }}
+                  />
+                  <div className="brief-media-item__info">
+                    <span className="brief-media-item__type">{m.mediaType}</span>
+                    <span className="brief-media-item__url" title={m.mediaUrl}>{m.mediaUrl}</span>
+                  </div>
+                  <button
+                    className="brief-media-item__remove"
+                    onClick={() => removeMedia(m._id)}
+                    title="Remove image"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="brief-media-add">
+              <select
+                className="feed-filter"
+                style={{ width: 110, flexShrink: 0 }}
+                value={mediaType}
+                onChange={e => setMediaType(e.target.value)}
+              >
+                <option value="picture">Picture</option>
+                <option value="video">Video</option>
+              </select>
+              <input
+                className="form-input"
+                placeholder="Image or video URL…"
+                value={mediaUrl}
+                onChange={e => setMediaUrl(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addMedia()}
+              />
+              <button className="btn-primary" style={{ flexShrink: 0 }} onClick={addMedia} disabled={!mediaUrl.trim() || addingMedia}>
+                {addingMedia ? 'Adding…' : 'Add'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Sources */}
+      <div className="admin-section">
+        <h3 className="admin-section-title">Sources</h3>
+        {draft.sources.map((src, i) => (
+          <div key={i} className="brief-array-row">
+            <div className="brief-array-row__fields">
+              <input
+                className="form-input"
+                placeholder="URL"
+                value={src.url}
+                onChange={e => updateSource(i, 'url', e.target.value)}
+                style={{ flex: 2 }}
+              />
+              <input
+                className="form-input"
+                placeholder="Site name"
+                value={src.siteName}
+                onChange={e => updateSource(i, 'siteName', e.target.value)}
+              />
+              <input
+                type="date"
+                className="form-input"
+                value={src.articleDate ? src.articleDate.slice(0, 10) : ''}
+                onChange={e => updateSource(i, 'articleDate', e.target.value)}
+                style={{ flex: '0 0 150px' }}
+              />
+            </div>
+            <button className="brief-array-row__remove" onClick={() => removeSource(i)} title="Remove source">✕</button>
+          </div>
+        ))}
+        <button className="admin-action-btn admin-action-btn--primary" onClick={addSource}>+ Add Source</button>
+      </div>
+
+      {/* Keywords */}
+      <div className="admin-section">
+        <h3 className="admin-section-title">Keywords</h3>
+        <p className="admin-section-sub">Keywords appear as interactive hotspots inside the brief. The description is the tooltip shown on click.</p>
+        {draft.keywords.map((kw, i) => (
+          <div key={i} className="brief-array-row">
+            <div className="brief-array-row__fields">
+              <input
+                className="form-input"
+                placeholder="Keyword"
+                value={kw.keyword}
+                onChange={e => updateKeyword(i, 'keyword', e.target.value)}
+                style={{ flex: '0 0 180px' }}
+              />
+              <input
+                className="form-input"
+                placeholder="Tooltip / description shown on click…"
+                value={kw.generatedDescription}
+                onChange={e => updateKeyword(i, 'generatedDescription', e.target.value)}
+              />
+            </div>
+            <button className="brief-array-row__remove" onClick={() => removeKeyword(i)} title="Remove keyword">✕</button>
+          </div>
+        ))}
+        <button className="admin-action-btn admin-action-btn--primary" onClick={addKeyword}>+ Add Keyword</button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Admin page ───────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'stats',    label: 'App Stats'  },
-  { id: 'problems', label: 'Problems'   },
-  { id: 'users',    label: 'Users'      },
-  { id: 'settings', label: 'Settings'   },
+  { id: 'stats',    label: 'App Stats'     },
+  { id: 'briefs',   label: 'Intel Briefs'  },
+  { id: 'problems', label: 'Problems'      },
+  { id: 'users',    label: 'Users'         },
+  { id: 'settings', label: 'Settings'      },
 ]
 
 export default function Admin({ navigate }) {
@@ -582,6 +996,7 @@ export default function Admin({ navigate }) {
 
         <div className="admin-tab-content">
           {tab === 'stats'    && <StatsTab    API={API} />}
+          {tab === 'briefs'   && <BriefsTab   API={API} />}
           {tab === 'problems' && <ProblemsTab API={API} />}
           {tab === 'users'    && <UsersTab    API={API} />}
           {tab === 'settings' && <SettingsTab API={API} />}

@@ -1531,6 +1531,42 @@
 .admin-stat-item__value { font-size: 1.75rem; font-weight: 800; color: #0f172a; line-height: 1; }
 .admin-stat-item__label { font-size: 0.775rem; color: #64748b; }
 
+.admin-stat-item--mock { position: relative; cursor: default; }
+.admin-stat-item--mock::before {
+  content: 'MOCK DATA';
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: #f1f5f9;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 0.3rem 0.55rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 20;
+}
+.admin-stat-item--mock::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: #1e293b;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 20;
+}
+.admin-stat-item--mock:hover::before,
+.admin-stat-item--mock:hover::after { opacity: 1; }
+
 /* Search bar row */
 .admin-search-bar {
   display: flex;
@@ -1755,3 +1791,142 @@
   padding: 0.6rem 1rem;
   margin-bottom: 1.25rem;
 }
+
+/* Fix form-input on the light admin page (it was styled for the dark login page) */
+.admin-page .form-input {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+.admin-page .form-input::placeholder { color: #94a3b8; }
+.admin-page .form-input:focus { border-color: #93c5fd; }
+
+/* Intel Briefs editor */
+.admin-brief-row { cursor: pointer; }
+.admin-brief-row:hover .admin-card__header { background: #f0f6ff; }
+
+.admin-brief-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+}
+.admin-brief-toolbar__actions { display: flex; gap: 0.75rem; align-items: center; }
+
+.brief-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+}
+.brief-form-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+/* Media grid */
+.brief-media-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+.brief-media-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+}
+.brief-media-item__img {
+  width: 56px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: #e2e8f0;
+}
+.brief-media-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+.brief-media-item__type {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.brief-media-item__url {
+  font-size: 0.775rem;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.brief-media-item__remove {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.brief-media-item__remove:hover { color: #dc2626; background: #fef2f2; }
+
+.brief-media-add {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Sources / Keywords rows */
+.brief-array-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.brief-array-row__fields {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.brief-array-row__fields .form-input { flex: 1; min-width: 140px; }
+.brief-array-row__remove {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+  margin-top: 0.1rem;
+}
+.brief-array-row__remove:hover { color: #dc2626; background: #fef2f2; }
+
+/* Pagination */
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.admin-pagination__info { font-size: 0.825rem; color: #64748b; }

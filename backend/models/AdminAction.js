@@ -9,6 +9,9 @@ const ACTION_TYPES = [
   'change_trial_duration',
   'change_silver_categories',
   'change_ammo_defaults',
+  'create_brief',
+  'edit_brief',
+  'delete_brief',
 ];
 
 const adminActionSchema = new mongoose.Schema({
