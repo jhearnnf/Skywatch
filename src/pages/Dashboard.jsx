@@ -3,17 +3,17 @@ import IntelBriefSummary from '../components/IntelBriefSummary'
 import { useAuth } from '../context/AuthContext'
 
 export default function Dashboard({ navigate }) {
-  const { API } = useAuth()
+  const { API, user } = useAuth()
   const [briefs, setBriefs]   = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/api/briefs?category=News&limit=6`)
+    fetch(`${API}/api/briefs?category=News&limit=3`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => setBriefs(data?.data?.briefs ?? []))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [API])
+  }, [API, user])
 
   return (
     <main className="page dashboard-page">
@@ -32,7 +32,7 @@ export default function Dashboard({ navigate }) {
       <section className="dashboard-news">
         <div className="section-inner">
           <div className="section-header">
-            <h2 className="section-title">Today&apos;s Briefs</h2>
+            <h2 className="section-title">Latest News Briefs</h2>
             <button className="section-link" onClick={() => navigate('intel-feed')}>
               View all intel →
             </button>
@@ -49,12 +49,14 @@ export default function Dashboard({ navigate }) {
                   key={brief._id}
                   brief={brief}
                   showDate
+                  isRead={!!brief.isRead}
+                  isLocked={!!brief.isLocked}
                   onClick={() => navigate('intelligence-brief', { briefId: brief._id })}
                 />
               ))}
             </div>
           ) : (
-            <p className="empty-state">No briefs available today.</p>
+            <p className="empty-state">No briefs available.</p>
           )}
         </div>
       </section>

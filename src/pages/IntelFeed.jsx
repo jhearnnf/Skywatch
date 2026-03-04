@@ -23,7 +23,7 @@ const CATEGORY_ICONS = {
 const ALL_CATEGORIES = ['All', ...CATEGORIES]
 
 export default function IntelFeed({ navigate }) {
-  const { API } = useAuth()
+  const { API, user } = useAuth()
 
   const [briefs,        setBriefs]        = useState([])
   const [loading,       setLoading]       = useState(true)
@@ -45,15 +45,16 @@ export default function IntelFeed({ navigate }) {
     if (category !== 'All') params.set('category', category)
     if (search)             params.set('search', search)
 
-    fetch(`${API}/api/briefs?${params}`)
+    fetch(`${API}/api/briefs?${params}`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => setBriefs(data?.data?.briefs ?? []))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [API, category, search])
+  }, [API, category, search, user?.subscriptionTier])
 
-  // Client-side read filter (read state requires auth — applied once real read-records are wired)
-  const filtered = readFilter === 'all' ? briefs : briefs
+  const filtered = readFilter === 'all'    ? briefs
+    : readFilter === 'read'  ? briefs.filter(b => b.isRead)
+    :                          briefs.filter(b => !b.isRead)
 
   return (
     <main className="page intel-feed-page">
@@ -85,16 +86,18 @@ export default function IntelFeed({ navigate }) {
             />
           </div>
 
-          <select
-            className="feed-filter"
-            value={readFilter}
-            onChange={e => setReadFilter(e.target.value)}
-            aria-label="Filter by read status"
-          >
-            <option value="all">All Briefs</option>
-            <option value="unread">Unread</option>
-            <option value="read">Read</option>
-          </select>
+          {user && (
+            <select
+              className="feed-filter"
+              value={readFilter}
+              onChange={e => setReadFilter(e.target.value)}
+              aria-label="Filter by read status"
+            >
+              <option value="all">All Briefs</option>
+              <option value="unread">Unread</option>
+              <option value="read">Read</option>
+            </select>
+          )}
         </div>
 
         {/* ── Category pills ────────────────────────────── */}
@@ -132,6 +135,8 @@ export default function IntelFeed({ navigate }) {
                 key={brief._id}
                 brief={brief}
                 showDate
+                isRead={!!brief.isRead}
+                isLocked={!!brief.isLocked}
                 onClick={() => navigate('intelligence-brief', { briefId: brief._id })}
               />
             ))}

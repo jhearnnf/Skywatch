@@ -102,6 +102,33 @@ router.post('/users/:id/ban', requireReason, async (req, res) => {
   }
 });
 
+// PATCH /api/admin/self/subscription — admin emulates a subscription tier on their own account
+router.patch('/self/subscription', async (req, res) => {
+  try {
+    const { tier } = req.body;
+    const valid = ['free', 'trial', 'silver', 'gold'];
+    if (!valid.includes(tier)) return res.status(400).json({ message: 'Invalid tier' });
+
+    const settings = await AppSettings.getSettings();
+    const ammoMap = {
+      free:   settings.ammoFree   ?? 3,
+      trial:  settings.ammoSilver ?? 10,
+      silver: settings.ammoSilver ?? 10,
+      gold:   9999,
+    };
+
+    // Update tier and reset all read record ammo counts for this user
+    const [user] = await Promise.all([
+      User.findByIdAndUpdate(req.user._id, { subscriptionTier: tier }, { new: true }).select('-password'),
+      IntelligenceBriefRead.updateMany({ userId: req.user._id }, { ammunitionRemaining: ammoMap[tier] }),
+    ]);
+
+    res.json({ status: 'success', data: { user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/admin/users/:id/make-admin
 router.post('/users/:id/make-admin', requireReason, async (req, res) => {
   try {
@@ -223,6 +250,7 @@ router.patch('/briefs/:id', requireReason, async (req, res) => {
 router.delete('/briefs/:id', requireReason, async (req, res) => {
   try {
     await IntelligenceBrief.findByIdAndDelete(req.params.id);
+    await IntelligenceBriefRead.deleteMany({ intelBriefId: req.params.id });
     await AdminAction.create({ userId: req.user._id, actionType: 'delete_brief', reason: req.body.reason });
     res.json({ status: 'success' });
   } catch (err) {

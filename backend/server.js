@@ -19,7 +19,23 @@ app.use('/api/games',  require('./routes/games'));
 app.use('/api/admin',  require('./routes/admin'));
 app.use('/api/users',  require('./routes/users'));
 
-app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
+
+// Public: expose only the fields the frontend needs (sound volumes)
+app.get('/api/settings', async (_req, res) => {
+  try {
+    const s = await require('./models/AppSettings').getSettings()
+    res.json({
+      volumeIntelBriefOpened: s.volumeIntelBriefOpened,
+      volumeTargetLocked:     s.volumeTargetLocked,
+      volumeOutOfAmmo:        s.volumeOutOfAmmo,
+      freeCategories:         s.freeCategories,
+      silverCategories:       s.silverCategories,
+    })
+  } catch {
+    res.json({ volumeIntelBriefOpened: 100, volumeTargetLocked: 100, volumeOutOfAmmo: 100, freeCategories: ['News'], silverCategories: [] })
+  }
+});
 
 mongoose
   .connect(process.env.MONGODB_URI)

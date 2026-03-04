@@ -2,7 +2,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import ReadyForBriefing from '../components/ReadyForBriefing'
 import TargetDossierModal from '../components/TargetDossierModal'
 import OutOfAmmo from '../components/OutOfAmmo'
+import TargetingHUD from '../components/TargetingHUD'
 import { useAuth } from '../context/AuthContext'
+import { playSound } from '../utils/sound'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -10,20 +12,17 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function playSound(file) {
-  const audio = new Audio(`/sounds/${file}`)
-  audio.play().catch(() => {})
-}
-
 // ── Keyword-aware description renderer ───────────────────────────────────────
 
-function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick }) {
+function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHoverChange }) {
   const [reticlePos, setReticlePos] = useState({ x: 0, y: 0 })
   const [reticleOn,  setReticleOn]  = useState(false)
   const [hoveredKw,  setHoveredKw]  = useState(null)
   const areaRef = useRef(null)
 
-  const handleMouseMove = (e) => setReticlePos({ x: e.clientX, y: e.clientY })
+  const handleMouseMove  = (e) => setReticlePos({ x: e.clientX, y: e.clientY })
+  const handleMouseEnter = ()  => { setReticleOn(true);  onHoverChange?.(true)  }
+  const handleMouseLeave = ()  => { setReticleOn(false); setHoveredKw(null); onHoverChange?.(false) }
 
   // Parse description into text + keyword segments
   const segments = (() => {
@@ -47,8 +46,8 @@ function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick }) {
       ref={areaRef}
       className="description-area"
       onMouseMove={handleMouseMove}
-      onMouseEnter={() => setReticleOn(true)}
-      onMouseLeave={() => { setReticleOn(false); setHoveredKw(null) }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {/* Custom reticle cursor */}
       {reticleOn && (
@@ -118,11 +117,20 @@ export default function IntelligenceBrief({ briefId, navigate }) {
 
   const [brief,         setBrief]         = useState(null)
   const [ammoRemaining, setAmmoRemaining] = useState(0)
+  const [ammoMax,       setAmmoMax]       = useState(0)
   const [loading,       setLoading]       = useState(true)
   const [notFound,      setNotFound]      = useState(false)
+  const [accessDenied,  setAccessDenied]  = useState(false)
   const [dossier,       setDossier]       = useState(null)
   const [ammoItems,     setAmmoItems]     = useState([])
   const [quizOpen,      setQuizOpen]      = useState(false)
+  const [descHovered,   setDescHovered]   = useState(false)
+  const [descRect,      setDescRect]      = useState(null)
+  const openSoundRef   = useRef(false)
+  const descWrapRef    = useRef(null)
+  const isScrollingRef = useRef(false)
+  const scrollTimerRef = useRef(null)
+  const mousePosRef    = useRef({ x: 0, y: 0 })
 
   // ── Time-spent-reading tracker ──────────────────────────────────────────────
   // Counts elapsed seconds in a ref and flushes to the API every 30s and on unmount/quiz-open.
@@ -167,31 +175,119 @@ export default function IntelligenceBrief({ briefId, navigate }) {
     }
   }, [brief, user, quizOpen])
 
+  // ── Global mouse tracking — needed for cursor-position checks ───────────────
+  useEffect(() => {
+    const onMove = (e) => { mousePosRef.current = { x: e.clientX, y: e.clientY } }
+    window.addEventListener('mousemove', onMove)
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [])
+
+  // ── Scroll detection ─────────────────────────────────────────────────────────
+  // Block targeting while scrolling. When scroll ends, re-check cursor position —
+  // onMouseEnter only fires once (boundary crossing), so if the cursor is already
+  // over the description when scrolling stops we must activate manually.
+  useEffect(() => {
+    const onScroll = () => {
+      isScrollingRef.current = true
+      clearTimeout(scrollTimerRef.current)
+      scrollTimerRef.current = setTimeout(() => {
+        isScrollingRef.current = false
+        const { x, y } = mousePosRef.current
+        const rect = descWrapRef.current?.getBoundingClientRect()
+        if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+          setDescHovered(true)
+        }
+      }, 200)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      clearTimeout(scrollTimerRef.current)
+    }
+  }, [])
+
+  // ── HUD position ───────────────────────────────────────────────────────────
+  // Keep descRect alive while the dossier modal is open so the HUDs don't disappear
+  // when the mouse moves from the description into the modal.
+  useEffect(() => {
+    if (descHovered && descWrapRef.current) {
+      setDescRect(descWrapRef.current.getBoundingClientRect())
+    } else if (!descHovered && !dossier) {
+      setDescRect(null)
+    }
+  }, [descHovered, dossier])
+
+  // ── Scroll lock ─────────────────────────────────────────────────────────────
+  // Prevent the page from scrolling while targeting mode is active (the HUDs are
+  // position:fixed and would not follow a page scroll).
+  // Compensate for scrollbar width to prevent the navbar/page from shifting.
+  useEffect(() => {
+    const locked = descHovered || !!dossier
+    if (locked) {
+      const sbWidth = window.innerWidth - document.documentElement.clientWidth
+      document.body.style.paddingRight = `${sbWidth}px`
+      document.body.style.overflow     = 'hidden'
+    } else {
+      document.body.style.paddingRight = ''
+      document.body.style.overflow     = ''
+    }
+    return () => {
+      document.body.style.paddingRight = ''
+      document.body.style.overflow     = ''
+    }
+  }, [descHovered, dossier])
+
   // ── Fetch brief ────────────────────────────────────────────────────────────
   // Uses optional auth — works for guests (no readRecord) and logged-in users.
   useEffect(() => {
     if (!briefId) { setNotFound(true); setLoading(false); return }
     setLoading(true)
     setNotFound(false)
+    setAccessDenied(false)
 
     fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
       .then(r => {
         if (r.status === 404) { setNotFound(true); return null }
+        if (r.status === 403) { setAccessDenied(true); return null }
         return r.json()
       })
       .then(data => {
         if (!data) return
         setBrief(data?.data?.brief ?? null)
-        setAmmoRemaining(data?.data?.readRecord?.ammunitionRemaining ?? 0)
+        const initAmmo = data?.data?.readRecord?.ammunitionRemaining ?? 0
+        setAmmoRemaining(initAmmo)
+        setAmmoMax(initAmmo)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [API, briefId])
 
-  // Play open sound once brief data arrives
+  // Play open sound once — guard prevents re-fire if brief reference changes
   useEffect(() => {
-    if (brief) playSound('intel_brief_opened.mp3')
+    if (brief && !openSoundRef.current) {
+      openSoundRef.current = true
+      playSound('intel_brief_opened')
+    }
   }, [brief])
+
+  // ── Desc hover — ignore activations that fire during a scroll ──────────────
+  const handleDescHoverChange = useCallback((hovered) => {
+    if (hovered && isScrollingRef.current) return
+    setDescHovered(hovered)
+  }, [])
+
+  // ── Dossier close — restore targeting if cursor is still over description ───
+  // Without this, closing the modal causes a one-frame flicker where both
+  // descHovered and dossier are false, dropping targetingActive to false before
+  // onMouseEnter can re-fire.
+  const handleDossierClose = useCallback(() => {
+    const { x, y } = mousePosRef.current
+    const rect = descWrapRef.current?.getBoundingClientRect()
+    if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      setDescHovered(true)
+    }
+    setDossier(null)
+  }, [])
 
   // ── Keyword click ──────────────────────────────────────────────────────────
   const hasAmmo = ammoRemaining > 0
@@ -199,7 +295,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const handleKeywordClick = useCallback((e, keyword) => {
     e.stopPropagation()
     if (hasAmmo) {
-      playSound('target_locked.mp3')
+      playSound('target_locked')
       fetch(`${API}/api/briefs/${briefId}/use-ammo`, {
         method: 'POST',
         credentials: 'include',
@@ -229,6 +325,24 @@ export default function IntelligenceBrief({ briefId, navigate }) {
     )
   }
 
+  if (accessDenied) {
+    return (
+      <main className="page brief-page">
+        <div className="section-inner">
+          <div className="brief-access-denied">
+            <span className="brief-access-denied__icon">🔒</span>
+            <h2 className="brief-access-denied__title">Subscription Required</h2>
+            <p className="brief-access-denied__msg">
+              This category is not available on your current subscription tier.
+              Upgrade to unlock access to this intel brief.
+            </p>
+            <button className="btn-ghost" onClick={() => navigate('intel-feed')}>← Back to Intel Feed</button>
+          </div>
+        </div>
+      </main>
+    )
+  }
+
   if (notFound || !brief) {
     return (
       <main className="page brief-page">
@@ -242,8 +356,12 @@ export default function IntelligenceBrief({ briefId, navigate }) {
 
   // ── Main render ────────────────────────────────────────────────────────────
 
+  const targetingActive = descHovered || !!dossier
+  const showLeftHUD     = targetingActive && descRect && descRect.left > 220
+  const showRightHUD    = targetingActive && descRect && (window.innerWidth - descRect.right) > 220
+
   return (
-    <main className="page brief-page">
+    <main className={`page brief-page${targetingActive ? ' targeting-active' : ''}`}>
       <div className="section-inner brief-layout">
 
         {/* ── Back nav ───────────────────────────────────── */}
@@ -262,12 +380,15 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         <MediaCarousel media={brief.media} />
 
         {/* ── Description ────────────────────────────────── */}
-        <DescriptionArea
-          description={brief.description}
-          keywords={brief.keywords}
-          hasAmmo={hasAmmo}
-          onKeywordClick={handleKeywordClick}
-        />
+        <div ref={descWrapRef}>
+          <DescriptionArea
+            description={brief.description}
+            keywords={brief.keywords}
+            hasAmmo={hasAmmo}
+            onKeywordClick={handleKeywordClick}
+            onHoverChange={handleDescHoverChange}
+          />
+        </div>
 
         {/* ── Sources ────────────────────────────────────── */}
         {brief.sources?.length > 0 && (
@@ -300,13 +421,39 @@ export default function IntelligenceBrief({ briefId, navigate }) {
 
       </div>
 
+      {/* ── Targeting HUDs ────────────────────────────────── */}
+      {showLeftHUD && (
+        <TargetingHUD
+          side="left"
+          descRect={descRect}
+          ammoRemaining={ammoRemaining}
+          ammoMax={ammoMax}
+          description={brief.description}
+          keywordCount={brief.keywords?.length ?? 0}
+          loggedIn={!!user}
+          onLoginClick={() => navigate('login')}
+        />
+      )}
+      {showRightHUD && (
+        <TargetingHUD
+          side="right"
+          descRect={descRect}
+          ammoRemaining={ammoRemaining}
+          ammoMax={ammoMax}
+          description={brief.description}
+          keywordCount={brief.keywords?.length ?? 0}
+          loggedIn={!!user}
+          onLoginClick={() => navigate('login')}
+        />
+      )}
+
       {/* ── Overlays ──────────────────────────────────────── */}
       {dossier && (
         <TargetDossierModal
           keyword={dossier.keyword}
           clickX={dossier.clickX}
           clickY={dossier.clickY}
-          onClose={() => setDossier(null)}
+          onClose={handleDossierClose}
         />
       )}
 

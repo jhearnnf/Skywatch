@@ -3,6 +3,7 @@ const { protect } = require('../middleware/auth');
 const User = require('../models/User');
 const GameSessionQuizResult = require('../models/GameSessionQuizResult');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
+const IntelligenceBrief = require('../models/IntelligenceBrief');
 const ProblemReport = require('../models/ProblemReport');
 const AppSettings = require('../models/AppSettings');
 const Level = require('../models/Level');
@@ -13,7 +14,11 @@ router.get('/stats', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate('rank');
 
-    const brifsRead = await IntelligenceBriefRead.countDocuments({ userId: req.user._id });
+    const validBriefIds = await IntelligenceBrief.distinct('_id');
+    const brifsRead = await IntelligenceBriefRead.countDocuments({
+      userId: req.user._id,
+      intelBriefId: { $in: validBriefIds },
+    });
 
     const quizResults = await GameSessionQuizResult.find({ userId: req.user._id });
     const gamesPlayed = quizResults.length;

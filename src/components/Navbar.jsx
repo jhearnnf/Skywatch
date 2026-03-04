@@ -1,5 +1,15 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { MOCK_LEVELS } from '../data/mockData'
+
+function getLevelNumber(totalAircoins = 0) {
+  let level = 1
+  for (const l of MOCK_LEVELS) {
+    if (totalAircoins >= l.cumulativeAircoins) level = l.levelNumber
+    else break
+  }
+  return level
+}
 
 const NAV_LINKS = [
   { id: 'dashboard',  label: 'Dashboard' },
@@ -23,6 +33,16 @@ function AircoinsDisplay({ coins }) {
       <span className="nav-aircoins__icon" aria-hidden="true">⬡</span>
       <span className="nav-aircoins__value">{coins.toLocaleString()}</span>
     </div>
+  )
+}
+
+function LevelDisplay({ aircoins, navigate }) {
+  const level = getLevelNumber(aircoins)
+  return (
+    <button className="nav-level" onClick={() => navigate('rankings')} aria-label="View level">
+      <span className="nav-level__num">L{level}</span>
+      <span className="nav-level__label">Level</span>
+    </button>
   )
 }
 
@@ -98,6 +118,7 @@ export default function Navbar({ page, navigate }) {
           {user ? (
             <>
               <AircoinsDisplay coins={user.totalAircoins ?? 0} />
+              <LevelDisplay aircoins={user.totalAircoins ?? 0} navigate={navigate} />
               <RankDisplay rank={user.rank} navigate={navigate} />
               <button className="nav-btn nav-btn--ghost" onClick={handleLogout}>
                 Logout
