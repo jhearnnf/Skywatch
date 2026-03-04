@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { playSound, invalidateSoundSettings } from '../utils/sound'
 
-const OPENROUTER_KEY          = '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'
+const OPENROUTER_KEY          = import.meta.env.VITE_OPENROUTER_KEY
 const NEWS_MODEL              = 'perplexity/sonar'       // live web search — headlines + brief generation
 const DEFAULT_BRIEF_IMAGE     = '/placeholder-brief.svg' // template image used on all intel briefs
 
