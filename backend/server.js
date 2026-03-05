@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const path = require('path');
 
 const app = express();
 
@@ -10,8 +11,9 @@ app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/auth',   require('./routes/auth'));
 app.use('/api/briefs', require('./routes/briefs'));
@@ -37,6 +39,21 @@ app.get('/api/settings', async (_req, res) => {
   }
 });
 
+async function seedGameTypes() {
+  const GameType = require('./models/GameType');
+  await GameType.findOneAndUpdate(
+    { gameTitle: 'quiz' },
+    { $setOnInsert: {
+        gameTitle: 'quiz',
+        allowedCategories: ['News','Aircrafts','Bases','Ranks','Squadrons','Training','Threats','Allies','Missions','AOR','Tech','Terminology','Treaties'],
+        tutorialSteps: [],
+        gameDescription: 'Answer multiple choice questions about the brief',
+        awardedAircoins: 10,
+    }},
+    { upsert: true }
+  );
+}
+
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(async () => {
@@ -45,6 +62,7 @@ mongoose
     await require('./seeds/seedRanks')();
     await require('./seeds/seedBriefs')();
     await require('./models/Media').ensurePlaceholderForBriefs();
+    await seedGameTypes();
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })

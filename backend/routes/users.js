@@ -1,8 +1,9 @@
 const router = require('express').Router();
 const { protect } = require('../middleware/auth');
 const User = require('../models/User');
-const GameSessionQuizResult = require('../models/GameSessionQuizResult');
-const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
+const GameSessionQuizResult  = require('../models/GameSessionQuizResult');
+const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
+const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const ProblemReport = require('../models/ProblemReport');
 const AppSettings = require('../models/AppSettings');
@@ -20,23 +21,42 @@ router.get('/stats', protect, async (req, res) => {
       intelBriefId: { $in: validBriefIds },
     });
 
-    const quizResults = await GameSessionQuizResult.find({ userId: req.user._id });
-    const gamesPlayed = quizResults.length;
-    const gamesWon = quizResults.filter(r => r.isCorrect).length;
-    const winPercent = gamesPlayed > 0 ? Math.round((gamesWon / gamesPlayed) * 100) : 0;
+    const attempts    = await GameSessionQuizAttempt.find({ userId: req.user._id, status: 'completed' });
+    const gamesPlayed = attempts.length;
+    const totalPct    = attempts.reduce((s, a) => s + (a.percentageCorrect ?? 0), 0);
+    const winPercent  = gamesPlayed > 0 ? Math.round(totalPct / gamesPlayed) : 0;
 
     res.json({
       status: 'success',
       data: {
-        agentNumber: user.agentNumber,
+        agentNumber:      user.agentNumber,
         subscriptionTier: user.subscriptionTier,
-        rank: user.rank,
+        difficultySetting: user.difficultySetting,
+        rank:             user.rank,
         brifsRead,
         gamesPlayed,
         winPercent,
-        totalAircoins: user.totalAircoins,
+        totalAircoins:    user.totalAircoins,
       },
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/users/me/difficulty — update the user's preferred quiz difficulty
+router.patch('/me/difficulty', protect, async (req, res) => {
+  try {
+    const { difficulty } = req.body;
+    if (!['easy', 'medium'].includes(difficulty)) {
+      return res.status(400).json({ message: 'difficulty must be easy or medium' });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { difficultySetting: difficulty },
+      { new: true }
+    ).populate('rank');
+    res.json({ status: 'success', data: { user } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

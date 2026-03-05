@@ -14,7 +14,7 @@ function fetchSettings() {
     .then(data => { cache = data; inflight = null; return data })
     .catch(() => {
       inflight = null
-      return { volumeIntelBriefOpened: 100, volumeTargetLocked: 100, volumeOutOfAmmo: 100 }
+      return { volumeIntelBriefOpened: 100, volumeTargetLocked: 100, volumeFire: 100, volumeAircoin: 100, volumeOutOfAmmo: 100 }
     })
   return inflight
 }
@@ -24,7 +24,7 @@ export function invalidateSoundSettings() {
   inflight = null
 }
 
-// name: 'intel_brief_opened' | 'target_locked' | 'out_of_ammo'
+// name: 'intel_brief_opened' | 'target_locked' | 'fire' | 'out_of_ammo'
 export function playSound(name) {
   fetchSettings().then(settings => {
     let file, volumeKey
@@ -35,6 +35,12 @@ export function playSound(name) {
     } else if (name === 'target_locked') {
       file      = 'target_locked.mp3'
       volumeKey = 'volumeTargetLocked'
+    } else if (name === 'fire') {
+      file      = 'fire.mp3'
+      volumeKey = 'volumeFire'
+    } else if (name === 'aircoin') {
+      file      = 'aircoin.mp3'
+      volumeKey = 'volumeAircoin'
     } else if (name === 'out_of_ammo') {
       file      = OUT_OF_AMMO_VARIANTS[Math.floor(Math.random() * OUT_OF_AMMO_VARIANTS.length)]
       volumeKey = 'volumeOutOfAmmo'

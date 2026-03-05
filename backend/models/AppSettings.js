@@ -14,8 +14,15 @@ const appSettingsSchema = new mongoose.Schema({
   easyAnswerCount:   { type: Number, default: 3 },
   mediumAnswerCount: { type: Number, default: 5 },
 
+  // Quiz pass threshold (% correct needed to "pass", must be a multiple of 20)
+  passThresholdEasy:   { type: Number, default: 60 },
+  passThresholdMedium: { type: Number, default: 60 },
+
   // Aircoins
-  aircoinsPerWin:        { type: Number, default: 10 },
+  aircoinsPerWin:        { type: Number, default: 10 }, // used by non-quiz games
+  aircoinsPerWinEasy:    { type: Number, default: 10 },
+  aircoinsPerWinMedium:  { type: Number, default: 20 },
+  aircoinsPerBriefRead:  { type: Number, default: 5 },
   aircoinsFirstLogin:    { type: Number, default: 5 },
   aircoinsStreakBonus:   { type: Number, default: 2 },
   aircoins100Percent:    { type: Number, default: 15 },
@@ -33,6 +40,8 @@ const appSettingsSchema = new mongoose.Schema({
   // Sound volumes (0–100)
   volumeIntelBriefOpened: { type: Number, default: 100, min: 0, max: 100 },
   volumeTargetLocked:     { type: Number, default: 100, min: 0, max: 100 },
+  volumeFire:             { type: Number, default: 100, min: 0, max: 100 },
+  volumeAircoin:          { type: Number, default: 100, min: 0, max: 100 },
   volumeOutOfAmmo:        { type: Number, default: 100, min: 0, max: 100 },
 
   // Feature flags

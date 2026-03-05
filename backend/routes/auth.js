@@ -4,14 +4,12 @@ const jwt     = require('jsonwebtoken');
 const User    = require('../models/User');
 const { sendWelcomeEmail } = require('../utils/email');
 
-const ADMIN_EMAIL = 'osmightymanos@hotmail.co.uk';
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const signToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
-const sendToken = (user, statusCode, res) => {
+const sendToken = (user, statusCode, res, extras = {}) => {
   const token = signToken(user._id);
   res.cookie('jwt', token, {
     httpOnly: true,
@@ -20,7 +18,7 @@ const sendToken = (user, statusCode, res) => {
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
   user.password = undefined;
-  res.status(statusCode).json({ status: 'success', data: { user } });
+  res.status(statusCode).json({ status: 'success', data: { user, ...extras } });
 };
 
 const recordLogin = async (user) => {
@@ -40,12 +38,11 @@ router.post('/register', async (req, res) => {
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) return res.status(409).json({ message: 'Email already registered' });
 
-    const isAdmin = email.toLowerCase() === ADMIN_EMAIL;
-    const user    = await User.create({ email, password, isAdmin });
+    const user    = await User.create({ email, password });
 
     sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
     await recordLogin(user);
-    sendToken(user, 201, res);
+    sendToken(user, 201, res, { isNew: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -102,21 +99,18 @@ router.post('/google', async (req, res) => {
     // Find by googleId first, then fall back to email (links existing account)
     let user = await User.findOne({ $or: [{ googleId }, { email }] });
 
+    let isNew = false;
     if (!user) {
-      const isAdmin = email === ADMIN_EMAIL;
-      user = await User.create({ email, googleId, isAdmin });
+      user = await User.create({ email, googleId });
       sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
+      isNew = true;
     } else {
-      // Link Google ID and enforce admin status if applicable
-      let changed = false;
-      if (!user.googleId)                { user.googleId = googleId; changed = true; }
-      if (email === ADMIN_EMAIL && !user.isAdmin) { user.isAdmin = true; changed = true; }
       if (user.isBanned) return res.status(403).json({ message: 'Login failed. Please contact support.' });
-      if (changed) await user.save();
+      if (!user.googleId) { user.googleId = googleId; await user.save(); }
     }
 
     await recordLogin(user);
-    sendToken(user, 200, res);
+    sendToken(user, 200, res, isNew ? { isNew: true } : {});
   } catch (err) {
     console.error('Google auth error:', err.message);
     res.status(401).json({ message: 'Google authentication failed' });

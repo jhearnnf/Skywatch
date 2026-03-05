@@ -5,10 +5,14 @@ const mediaSchema = new mongoose.Schema({
   mediaUrl:  { type: String, required: true, trim: true },
 }, { timestamps: true });
 
-const PLACEHOLDER_URL = '/placeholder-brief.svg';
+const PLACEHOLDER_URL     = '/images/placeholder-brief.svg';
+const OLD_PLACEHOLDER_URL = '/placeholder-brief.svg';
 
 mediaSchema.statics.ensurePlaceholderForBriefs = async function () {
   const IntelligenceBrief = require('./IntelligenceBrief');
+
+  // Migrate any existing Media docs that still have the old path
+  await this.updateMany({ mediaUrl: OLD_PLACEHOLDER_URL }, { mediaUrl: PLACEHOLDER_URL });
 
   // Find or create the single placeholder Media doc
   let placeholder = await this.findOne({ mediaUrl: PLACEHOLDER_URL });

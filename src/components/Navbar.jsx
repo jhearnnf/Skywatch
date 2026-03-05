@@ -17,15 +17,6 @@ const NAV_LINKS = [
   { id: 'profile',    label: 'Profile' },
 ]
 
-function CrosshairIcon() {
-  return (
-    <svg className="brand-icon" width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-      <circle cx="9" cy="9" r="2.5" fill="currentColor" />
-      <circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M9 1v3M9 14v3M1 9h3M14 9h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  )
-}
 
 function AircoinsDisplay({ coins }) {
   return (
@@ -74,8 +65,8 @@ export default function Navbar({ page, navigate }) {
 
         {/* Brand */}
         <button className="navbar-brand" onClick={() => handleNav('dashboard')}>
-          <CrosshairIcon />
-          <span className="brand-name">Skywatch</span>
+          <img src="/images/logo.png" className="brand-logo" alt="" aria-hidden="true" />
+          <img src="/images/logo_text.png" className="brand-logo-text" alt="Skywatch" />
         </button>
 
         {/* Hamburger */}

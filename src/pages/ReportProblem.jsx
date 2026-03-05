@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 
 export default function ReportProblem({ fromPage, navigate }) {
-  const isLoggedIn = false // replace with auth context once auth is implemented
+  const { user, API } = useAuth()
+  const isLoggedIn = !!user
 
   const [description, setDescription] = useState('')
   const [submitted,   setSubmitted]   = useState(false)
@@ -12,7 +14,7 @@ export default function ReportProblem({ fromPage, navigate }) {
     if (!description.trim()) { setError('Please describe the problem.'); return }
 
     try {
-      const res = await fetch('http://localhost:5000/api/users/report-problem', {
+      const res = await fetch(`${API}/api/users/report-problem`, {
         method:      'POST',
         credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },

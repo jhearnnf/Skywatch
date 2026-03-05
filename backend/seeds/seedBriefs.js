@@ -6,9 +6,9 @@ async function seedBriefs() {
   if (count > 0) return;
 
   // Get or create placeholder media
-  let placeholder = await Media.findOne({ mediaUrl: '/placeholder-brief.svg' });
+  let placeholder = await Media.findOne({ mediaUrl: '/images/placeholder-brief.svg' });
   if (!placeholder) {
-    placeholder = await Media.create({ mediaType: 'picture', mediaUrl: '/placeholder-brief.svg' });
+    placeholder = await Media.create({ mediaType: 'picture', mediaUrl: '/images/placeholder-brief.svg' });
   }
   const pid = placeholder._id;
 

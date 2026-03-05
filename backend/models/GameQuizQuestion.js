@@ -2,8 +2,7 @@ const mongoose = require('mongoose');
 
 // Each answer is an embedded sub-document — Mongoose auto-generates _id
 const answerSchema = new mongoose.Schema({
-  title:       { type: String, required: true, trim: true },
-  description: { type: String, required: true, trim: true },
+  title: { type: String, required: true, trim: true },
 });
 
 const gameQuizQuestionSchema = new mongoose.Schema({

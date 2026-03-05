@@ -3,6 +3,7 @@ const { protect, optionalAuth } = require('../middleware/auth');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const AppSettings = require('../models/AppSettings');
+const User = require('../models/User');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
 require('../models/GameQuizQuestion');
 
@@ -78,6 +79,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
     let readRecord = null;
+    let aircoinsEarned = 0;
+    let newTotalAircoins;
 
     if (req.user) {
       const settings = await AppSettings.getSettings();
@@ -102,6 +105,13 @@ router.get('/:id', optionalAuth, async (req, res) => {
           intelBriefId: brief._id,
           ammunitionRemaining: tierAmmo,
         });
+        aircoinsEarned = settings.aircoinsPerBriefRead ?? 5;
+        const updatedUser = await User.findByIdAndUpdate(
+          req.user._id,
+          { $inc: { totalAircoins: aircoinsEarned } },
+          { new: true }
+        );
+        newTotalAircoins = updatedUser.totalAircoins;
       } else if (readRecord.ammunitionRemaining < tierAmmo && readRecord.ammunitionRemaining === 0) {
         // Ammo was zero — refresh to current tier default (covers tier upgrades and old zero defaults)
         readRecord = await IntelligenceBriefRead.findByIdAndUpdate(
@@ -112,7 +122,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       }
     }
 
-    res.json({ status: 'success', data: { brief, readRecord } });
+    res.json({ status: 'success', data: { brief, readRecord, aircoinsEarned: aircoinsEarned ?? 0, newTotalAircoins } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

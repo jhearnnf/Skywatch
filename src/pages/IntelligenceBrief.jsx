@@ -3,6 +3,7 @@ import ReadyForBriefing from '../components/ReadyForBriefing'
 import TargetDossierModal from '../components/TargetDossierModal'
 import OutOfAmmo from '../components/OutOfAmmo'
 import TargetingHUD from '../components/TargetingHUD'
+import AircoinNotification from '../components/AircoinNotification'
 import { useAuth } from '../context/AuthContext'
 import { playSound } from '../utils/sound'
 
@@ -90,20 +91,28 @@ function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHov
 
 function MediaCarousel({ media }) {
   const [idx, setIdx] = useState(0)
+  const [imgError, setImgError] = useState(false)
   if (!media?.length) return null
   const item = media[idx]
+
+  const handleNext = (dir) => {
+    setImgError(false)
+    setIdx(i => Math.max(0, Math.min(media.length - 1, i + dir)))
+  }
 
   return (
     <div className="media-carousel">
       {item.mediaType === 'picture'
-        ? <img src={item.mediaUrl} alt="" className="carousel-img" />
+        ? imgError
+          ? <div className="carousel-img-error">Image could not be loaded — URL may be invalid or blocked.</div>
+          : <img src={item.mediaUrl} alt="" className="carousel-img" onError={() => setImgError(true)} />
         : <video src={item.mediaUrl} controls className="carousel-img" />
       }
       {media.length > 1 && (
         <div className="carousel-controls">
-          <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0} aria-label="Previous">‹</button>
+          <button onClick={() => handleNext(-1)} disabled={idx === 0} aria-label="Previous">‹</button>
           <span>{idx + 1} / {media.length}</span>
-          <button onClick={() => setIdx(i => Math.min(media.length - 1, i + 1))} disabled={idx === media.length - 1} aria-label="Next">›</button>
+          <button onClick={() => handleNext(1)} disabled={idx === media.length - 1} aria-label="Next">›</button>
         </div>
       )}
     </div>
@@ -113,7 +122,7 @@ function MediaCarousel({ media }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function IntelligenceBrief({ briefId, navigate }) {
-  const { user, API } = useAuth()
+  const { user, setUser, API } = useAuth()
 
   const [brief,         setBrief]         = useState(null)
   const [ammoRemaining, setAmmoRemaining] = useState(0)
@@ -124,9 +133,13 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const [dossier,       setDossier]       = useState(null)
   const [ammoItems,     setAmmoItems]     = useState([])
   const [quizOpen,      setQuizOpen]      = useState(false)
+  const [quizCompleted, setQuizCompleted] = useState(null) // null=unknown, true/false
+  const [quizAircoinReward, setQuizAircoinReward] = useState(0)
   const [descHovered,   setDescHovered]   = useState(false)
   const [descRect,      setDescRect]      = useState(null)
-  const openSoundRef   = useRef(false)
+  const [aircoinReward, setAircoinReward] = useState(0)
+  const openSoundRef      = useRef(false)
+  const targetingActiveRef = useRef(false)
   const descWrapRef    = useRef(null)
   const isScrollingRef = useRef(false)
   const scrollTimerRef = useRef(null)
@@ -257,10 +270,23 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         const initAmmo = data?.data?.readRecord?.ammunitionRemaining ?? 0
         setAmmoRemaining(initAmmo)
         setAmmoMax(initAmmo)
+        if (data?.data?.aircoinsEarned > 0) {
+          setAircoinReward(data.data.aircoinsEarned)
+          setUser(u => u ? { ...u, totalAircoins: data.data.newTotalAircoins } : u)
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [API, briefId])
+
+  // ── Fetch quiz completion status ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!user || !briefId) return
+    fetch(`${API}/api/games/quiz/status/${briefId}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setQuizCompleted(data?.data?.hasCompleted ?? false))
+      .catch(() => {})
+  }, [API, briefId, user])
 
   // Play open sound once — guard prevents re-fire if brief reference changes
   useEffect(() => {
@@ -273,6 +299,8 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   // ── Desc hover — ignore activations that fire during a scroll ──────────────
   const handleDescHoverChange = useCallback((hovered) => {
     if (hovered && isScrollingRef.current) return
+    if (hovered && !targetingActiveRef.current) playSound('target_locked')
+    targetingActiveRef.current = hovered
     setDescHovered(hovered)
   }, [])
 
@@ -284,7 +312,10 @@ export default function IntelligenceBrief({ briefId, navigate }) {
     const { x, y } = mousePosRef.current
     const rect = descWrapRef.current?.getBoundingClientRect()
     if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      targetingActiveRef.current = true
       setDescHovered(true)
+    } else {
+      targetingActiveRef.current = false
     }
     setDossier(null)
   }, [])
@@ -295,7 +326,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const handleKeywordClick = useCallback((e, keyword) => {
     e.stopPropagation()
     if (hasAmmo) {
-      playSound('target_locked')
+      playSound('fire')
       fetch(`${API}/api/briefs/${briefId}/use-ammo`, {
         method: 'POST',
         credentials: 'include',
@@ -414,9 +445,18 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         {/* ── Ready for Briefing ─────────────────────────── */}
         <ReadyForBriefing
           briefId={brief._id}
+          hasQuestions={(brief.quizQuestionsEasy?.length ?? 0) > 0 || (brief.quizQuestionsMedium?.length ?? 0) > 0}
+          hasCompleted={quizCompleted === true}
           quizOpen={quizOpen}
           onQuizOpen={() => setQuizOpen(true)}
           onQuizClose={() => setQuizOpen(false)}
+          onQuizComplete={(coins) => {
+            setQuizCompleted(true)
+            if (coins > 0) {
+              setQuizAircoinReward(coins)
+              setUser(u => u ? { ...u, totalAircoins: (u.totalAircoins ?? 0) + coins } : u)
+            }
+          }}
         />
 
       </div>
@@ -465,6 +505,21 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           onDone={() => setAmmoItems(prev => prev.filter(a => a.id !== item.id))}
         />
       ))}
+
+      {aircoinReward > 0 && (
+        <AircoinNotification
+          amount={aircoinReward}
+          onDone={() => setAircoinReward(0)}
+        />
+      )}
+
+      {quizAircoinReward > 0 && aircoinReward === 0 && (
+        <AircoinNotification
+          amount={quizAircoinReward}
+          label="QUIZ REWARD"
+          onDone={() => setQuizAircoinReward(0)}
+        />
+      )}
     </main>
   )
 }

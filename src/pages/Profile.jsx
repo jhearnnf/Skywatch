@@ -21,12 +21,13 @@ function getLevelInfo(totalAircoins, levels) {
 }
 
 export default function Profile({ navigate }) {
-  const { user, API } = useAuth()
+  const { user, setUser, API } = useAuth()
 
   const [stats,          setStats]          = useState({ brifsRead: 0, gamesPlayed: 0, winPercent: 0 })
   const [levels,         setLevels]         = useState(MOCK_LEVELS)
   const [leaderboard,    setLeaderboard]    = useState(MOCK_LEADERBOARD)
   const [useLiveLeaderboard, setUseLive]    = useState(false)
+  const [diffBusy,       setDiffBusy]      = useState(false)
 
   // Fetch public data — levels, settings, then conditionally leaderboard
   useEffect(() => {
@@ -67,6 +68,21 @@ export default function Profile({ navigate }) {
       })
       .catch(() => {})
   }, [API, user])
+
+  const changeDifficulty = async (d) => {
+    if (diffBusy || d === user?.difficultySetting) return
+    setDiffBusy(true)
+    try {
+      const res  = await fetch(`${API}/api/users/me/difficulty`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ difficulty: d }),
+      })
+      const data = await res.json()
+      if (data?.data?.user) setUser(data.data.user)
+    } catch { /* non-fatal */ }
+    finally { setDiffBusy(false) }
+  }
 
   const coins = user?.totalAircoins ?? 0
   const { current: lvl, next: nextLvl, coinsInLevel, coinsNeeded, progress } = getLevelInfo(coins, levels)
@@ -120,6 +136,25 @@ export default function Profile({ navigate }) {
                 }
               </div>
 
+              {/* Difficulty setting */}
+              {user && (
+                <div className="profile-difficulty">
+                  <span className="profile-difficulty__label">Quiz Difficulty</span>
+                  <div className="profile-difficulty__toggle">
+                    <button
+                      className={`diff-btn diff-btn--easy ${(user.difficultySetting ?? 'easy') === 'easy' ? 'diff-btn--active' : ''}`}
+                      onClick={() => changeDifficulty('easy')}
+                      disabled={diffBusy}
+                    >Easy</button>
+                    <button
+                      className={`diff-btn diff-btn--medium ${user.difficultySetting === 'medium' ? 'diff-btn--active' : ''}`}
+                      onClick={() => changeDifficulty('medium')}
+                      disabled={diffBusy}
+                    >Medium</button>
+                  </div>
+                </div>
+              )}
+
               {/* Daily login streak */}
               <div className="streak-display">
                 <span className="streak-display__icon" aria-hidden="true">🔥</span>
@@ -131,8 +166,8 @@ export default function Profile({ navigate }) {
               {/* Stats grid */}
               <div className="stats-grid">
                 <StatCard label="Briefs Read"  value={stats.brifsRead}                          icon="📋" />
-                <StatCard label="Games Played" value={stats.gamesPlayed}                         icon="🎯" mock />
-                <StatCard label="Win Rate"     value={`${stats.winPercent}%`} icon="✓" highlight mock />
+                <StatCard label="Games Played" value={stats.gamesPlayed}          icon="🎯" />
+                <StatCard label="Avg Score"    value={`${stats.winPercent}%`}  icon="✓" highlight />
                 <StatCard label="Aircoins"     value={coins.toLocaleString()}                    icon="⬡" />
               </div>
 

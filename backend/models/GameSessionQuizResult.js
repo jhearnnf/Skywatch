@@ -4,6 +4,7 @@ const gameSessionQuizResultSchema = new mongoose.Schema({
   userId:        { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   questionId:    { type: mongoose.Schema.Types.ObjectId, ref: 'GameQuizQuestion', required: true },
   gameSessionId: { type: String, required: true }, // UUID grouping all questions in one play session
+  attemptId:     { type: mongoose.Schema.Types.ObjectId, ref: 'GameSessionQuizAttempt' },
 
   // Subset of answer _ids that were displayed (3 for easy, 5 for medium)
   displayedAnswerIds: [mongoose.Schema.Types.ObjectId],

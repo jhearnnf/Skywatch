@@ -49,10 +49,12 @@ export default function TargetDossierModal({ keyword, clickX, clickY, onClose })
           <span className="dossier__keyword">{keyword?.keyword}</span>
         </div>
 
-        <p className="dossier__subtitle">Sights locked on · Generating intel…</p>
+        <p className="dossier__subtitle">Sights locked on · Intel retrieved</p>
 
         <div className="dossier__content">
-          <p className="dossier__ai-text">AI generated text coming soon.</p>
+          <p className="dossier__ai-text">
+            {keyword?.generatedDescription || 'No intel available for this target.'}
+          </p>
         </div>
 
         <div className="dossier__footer">

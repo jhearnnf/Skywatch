@@ -2,9 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { playSound, invalidateSoundSettings } from '../utils/sound'
 
-const OPENROUTER_KEY          = import.meta.env.VITE_OPENROUTER_KEY
-const NEWS_MODEL              = 'perplexity/sonar'       // live web search — headlines + brief generation
-const DEFAULT_BRIEF_IMAGE     = '/placeholder-brief.svg' // template image used on all intel briefs
+const DEFAULT_BRIEF_IMAGE     = '/images/placeholder-brief.svg'
 
 // Returns true if an existing brief already covers the same topic as a headline.
 // Matches on 2+ significant words (5+ chars) shared between headline and brief title/subtitle.
@@ -76,7 +74,101 @@ function ReasonModal({ action, onConfirm, onCancel }) {
   )
 }
 
+// ── Reset Stats Modal ─────────────────────────────────────────────────────────
+
+const RESET_FIELDS = [
+  { key: 'aircoins',        label: 'Aircoins',          desc: 'Zero out totalAircoins' },
+  { key: 'gameHistory',     label: 'Game History',      desc: 'Delete quiz results & clear gameTypesSeen' },
+  { key: 'intelBriefsRead', label: 'Intel Briefs Read', desc: 'Delete all brief-read records (resets ammo too)' },
+]
+
+function ResetStatsModal({ agentNumber, userId, API, onDone, onCancel }) {
+  const [selected, setSelected] = useState({ aircoins: true, gameHistory: true, intelBriefsRead: true })
+  const [reason,   setReason]   = useState('')
+  const [busy,     setBusy]     = useState(false)
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  const toggle = (key) => setSelected(s => ({ ...s, [key]: !s[key] }))
+  const fields = RESET_FIELDS.filter(f => selected[f.key]).map(f => f.key)
+
+  const confirm = async () => {
+    if (!reason.trim() || fields.length === 0) return
+    setBusy(true)
+    await fetch(`${API}/api/admin/users/${userId}/reset-stats`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.trim(), fields }),
+    })
+    setBusy(false)
+    onDone()
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal__header">
+          <div>
+            <span className="modal__eyebrow">Reason Required</span>
+            <h3 className="modal__title">Reset Stats — Agent {agentNumber}</h3>
+          </div>
+          <button className="modal__close" onClick={onCancel} aria-label="Close">✕</button>
+        </div>
+        <div className="modal__body">
+          <p className="admin-section-sub" style={{ marginBottom: '0.75rem' }}>Select which stats to reset:</p>
+          <div className="reset-stats-checks">
+            {RESET_FIELDS.map(f => (
+              <label key={f.key} className={`reset-stats-check ${selected[f.key] ? 'reset-stats-check--on' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={selected[f.key]}
+                  onChange={() => toggle(f.key)}
+                />
+                <span className="reset-stats-check__label">{f.label}</span>
+                <span className="reset-stats-check__desc">{f.desc}</span>
+              </label>
+            ))}
+          </div>
+          <label className="form-label" htmlFor="reset-reason" style={{ marginTop: '1rem', display: 'block' }}>
+            Reason for this action
+          </label>
+          <textarea
+            id="reset-reason"
+            className="form-textarea"
+            rows={3}
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="Briefly describe why you are resetting these stats…"
+            autoFocus
+          />
+        </div>
+        <div className="modal__footer">
+          <button className="btn-ghost" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button
+            className="btn-primary"
+            onClick={confirm}
+            disabled={!reason.trim() || fields.length === 0 || busy}
+          >
+            {busy ? 'Working…' : `Reset ${fields.length} stat${fields.length !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── App Stats tab ─────────────────────────────────────────────────────────────
+
+function fmtNum(n) {
+  if (n == null) return '—'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`
+  return String(n)
+}
 
 function StatsTab({ API }) {
   const [stats,   setStats]   = useState(null)
@@ -97,18 +189,23 @@ function StatsTab({ API }) {
       <div className="admin-section">
         <h3 className="admin-section-title">Users</h3>
         <div className="admin-stats-grid">
-          <AdminStat label="Total Users"     value={stats.users.totalUsers} />
-          <AdminStat label="Free Tier"       value={stats.users.freeUsers} />
-          <AdminStat label="Trial Tier"      value={stats.users.trialUsers} />
-          <AdminStat label="Subscribed"      value={stats.users.subscribedUsers} />
+          <AdminStat label="Total Users"      value={stats.users.totalUsers} />
+          <AdminStat label="Free Tier"        value={stats.users.freeUsers} />
+          <AdminStat label="Trial Tier"       value={stats.users.trialUsers} />
+          <AdminStat label="Subscribed"       value={stats.users.subscribedUsers} />
+          <AdminStat label="On Easy"          value={stats.users.easyPlayers} />
+          <AdminStat label="On Medium"        value={stats.users.mediumPlayers} />
+          <AdminStat label="Total Logins"     value={fmtNum(stats.users.totalLogins)} />
+          <AdminStat label="Combined Streaks" value={fmtNum(stats.users.combinedStreaks)} />
         </div>
       </div>
       <div className="admin-section">
         <h3 className="admin-section-title">Games</h3>
         <div className="admin-stats-grid">
-          <AdminStat label="Games Played" value={stats.games.totalGamesPlayed} mock />
-          <AdminStat label="Games Won"    value={stats.games.totalGamesWon}    mock />
-          <AdminStat label="Games Lost"   value={stats.games.totalGamesLost}   mock />
+          <AdminStat label="Quizzes Played"    value={stats.games.totalGamesPlayed} />
+          <AdminStat label="Perfect Score"     value={stats.games.totalGamesWon} />
+          <AdminStat label="Quizzes Lost"      value={stats.games.totalGamesLost} />
+          <AdminStat label="Aircoins in System" value={fmtNum(stats.games.totalAircoinsEarned)} />
         </div>
       </div>
       <div className="admin-section">
@@ -136,6 +233,7 @@ function ProblemsTab({ API }) {
   const [problems,     setProblems]    = useState([])
   const [search,       setSearch]      = useState('')
   const [filter,       setFilter]      = useState('unsolved')
+  const [sortOrder,    setSortOrder]   = useState('newest')
   const [loading,      setLoading]     = useState(true)
   const [tick,         setTick]        = useState(0) // bump to force reload
   const [expanded,     setExpanded]    = useState(null)
@@ -154,13 +252,14 @@ function ProblemsTab({ API }) {
       .finally(() => setLoading(false))
   }, [API, filter, tick])
 
-  // Client-side text filter to avoid hammering the API on each keystroke
-  const visible = search.trim()
+  // Client-side filter + sort (backend always returns newest-first)
+  const filtered = search.trim()
     ? problems.filter(p =>
         p.description.toLowerCase().includes(search.toLowerCase()) ||
         p.pageReported?.toLowerCase().includes(search.toLowerCase())
       )
     : problems
+  const visible = sortOrder === 'oldest' ? [...filtered].reverse() : filtered
 
   const postUpdate = async (id, description, markSolved) => {
     if (!description?.trim()) return
@@ -191,6 +290,10 @@ function ProblemsTab({ API }) {
           <option value="unsolved">Unsolved</option>
           <option value="solved">Solved</option>
           <option value="all">All</option>
+        </select>
+        <select className="feed-filter" value={sortOrder} onChange={e => setSortOrder(e.target.value)}>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
         </select>
       </div>
 
@@ -272,21 +375,41 @@ function ProblemsTab({ API }) {
 // ── Users tab ─────────────────────────────────────────────────────────────────
 
 function UsersTab({ API }) {
-  const [q,           setQ]           = useState('')
-  const [users,       setUsers]       = useState([])
-  const [loading,     setLoading]     = useState(false)
-  const [searched,    setSearched]    = useState(false)
-  const [reasonModal, setReasonModal] = useState(null) // { label, endpoint }
-  const [feedback,    setFeedback]    = useState('')
+  const { user: currentUser, setUser } = useAuth()
+  const [q,              setQ]              = useState('')
+  const [users,          setUsers]          = useState([])
+  const [loading,        setLoading]        = useState(true)
+  const [isSearchMode,   setIsSearchMode]   = useState(false)
+  const [reasonModal,    setReasonModal]    = useState(null) // { label, endpoint }
+  const [resetStatsUser, setResetStatsUser] = useState(null) // { _id, agentNumber }
+  const [feedback,       setFeedback]       = useState('')
+
+  const loadAll = useCallback(async () => {
+    setLoading(true)
+    setIsSearchMode(false)
+    const res  = await fetch(`${API}/api/admin/users`, { credentials: 'include' })
+    const data = await res.json()
+    setUsers(data.data?.users ?? [])
+    setLoading(false)
+  }, [API])
+
+  useEffect(() => { loadAll() }, [loadAll])
 
   const runSearch = useCallback(async () => {
-    if (!q.trim()) return
-    setLoading(true); setSearched(true)
+    if (!q.trim()) { loadAll(); return }
+    setLoading(true)
+    setIsSearchMode(true)
     const res  = await fetch(`${API}/api/admin/users/search?q=${encodeURIComponent(q.trim())}`, { credentials: 'include' })
     const data = await res.json()
     setUsers(data.data?.users ?? [])
     setLoading(false)
-  }, [API, q])
+  }, [API, q, loadAll])
+
+  const refreshSelf = useCallback(async () => {
+    const res  = await fetch(`${API}/api/auth/me`, { credentials: 'include' })
+    const data = await res.json()
+    if (data?.data?.user) setUser(data.data.user)
+  }, [API, setUser])
 
   const triggerAction = (label, endpoint) => setReasonModal({ label, endpoint })
 
@@ -299,8 +422,18 @@ function UsersTab({ API }) {
     setReasonModal(null)
     setFeedback('Action completed.')
     setTimeout(() => setFeedback(''), 3000)
-    runSearch()
+    isSearchMode ? runSearch() : loadAll()
   }
+
+  const handleResetDone = useCallback(async (targetUserId) => {
+    setResetStatsUser(null)
+    setFeedback('Stats reset.')
+    setTimeout(() => setFeedback(''), 3000)
+    isSearchMode ? runSearch() : loadAll()
+    if (currentUser && targetUserId === currentUser._id.toString()) {
+      refreshSelf()
+    }
+  }, [isSearchMode, runSearch, loadAll, refreshSelf, currentUser])
 
   return (
     <div>
@@ -309,6 +442,15 @@ function UsersTab({ API }) {
           action={reasonModal.label}
           onConfirm={confirmAction}
           onCancel={() => setReasonModal(null)}
+        />
+      )}
+      {resetStatsUser && (
+        <ResetStatsModal
+          agentNumber={resetStatsUser.agentNumber}
+          userId={resetStatsUser._id}
+          API={API}
+          onDone={() => handleResetDone(resetStatsUser._id)}
+          onCancel={() => setResetStatsUser(null)}
         />
       )}
 
@@ -321,11 +463,14 @@ function UsersTab({ API }) {
           onChange={e => setQ(e.target.value)}
         />
         <button type="submit" className="btn-primary">Search</button>
+        {isSearchMode && (
+          <button type="button" className="btn-ghost" onClick={() => { setQ(''); loadAll() }}>Clear</button>
+        )}
       </form>
 
       {feedback && <p className="admin-feedback">{feedback}</p>}
-      {loading  && <p className="admin-loading">Searching…</p>}
-      {searched && !loading && users.length === 0 && (
+      {loading  && <p className="admin-loading">{isSearchMode ? 'Searching…' : 'Loading users…'}</p>}
+      {!loading && isSearchMode && users.length === 0 && (
         <p className="empty-state">No users found for "{q}".</p>
       )}
 
@@ -346,6 +491,7 @@ function UsersTab({ API }) {
               <div className="admin-user-stat"><span>Created</span><strong>{new Date(u.createdAt).toLocaleDateString()}</strong></div>
               <div className="admin-user-stat"><span>Logins</span><strong>{u.logins?.length ?? 0}</strong></div>
               <div className="admin-user-stat"><span>Aircoins</span><strong>{u.totalAircoins ?? 0}</strong></div>
+              <div className="admin-user-stat"><span>Difficulty</span><strong style={{ textTransform: 'capitalize' }}>{u.difficultySetting ?? 'easy'}</strong></div>
               <div className="admin-user-stat"><span>Admin</span><strong>{u.isAdmin ? 'Yes' : 'No'}</strong></div>
               <div className="admin-user-stat"><span>Banned</span><strong>{u.isBanned ? 'Yes' : 'No'}</strong></div>
             </div>
@@ -354,14 +500,22 @@ function UsersTab({ API }) {
               {!u.isAdmin && (
                 <button
                   className="admin-action-btn admin-action-btn--primary"
-                  onClick={() => triggerAction(`Make Agent ${u.agentNumber} an admin`, `/api/admin/users/${u._id}/make-admin`)}
+                  onClick={() => triggerAction(`Grant admin access to Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/make-admin`)}
                 >
                   Make Admin
                 </button>
               )}
+              {u.isAdmin && u._id !== currentUser?._id && (
+                <button
+                  className="admin-action-btn admin-action-btn--danger"
+                  onClick={() => triggerAction(`Remove admin access from Agent ${u.agentNumber} (${u.email})`, `/api/admin/users/${u._id}/remove-admin`)}
+                >
+                  Remove Admin
+                </button>
+              )}
               <button
                 className="admin-action-btn admin-action-btn--warning"
-                onClick={() => triggerAction(`Reset stats for Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/reset-stats`)}
+                onClick={() => setResetStatsUser({ _id: u._id, agentNumber: u.agentNumber })}
               >
                 Reset Stats
               </button>
@@ -394,6 +548,8 @@ function SoundRow({ label, sound, value, onChange }) {
     const files = {
       intel_brief_opened: ['intel_brief_opened.mp3'],
       target_locked:      ['target_locked.mp3'],
+      fire:               ['fire.mp3'],
+      aircoin:            ['aircoin.mp3'],
       out_of_ammo:        ['out_of_ammo_1.mp3', 'out_of_ammo_2.mp3', 'out_of_ammo_3.mp3'],
     }
     const list = files[sound] ?? ['']
@@ -462,6 +618,30 @@ function SettingsTab({ API }) {
         loadSettings()
       },
     })
+  }
+
+  const pctSliderField = (key, label) => {
+    const val = draft[key] ?? 60
+    const steps = [0, 20, 40, 60, 80, 100]
+    return (
+      <div className="settings-field settings-field--pct">
+        <label className="settings-field__label">{label}</label>
+        <div className="pct-slider-wrap">
+          <input
+            type="range"
+            className="pct-slider"
+            min={0} max={100} step={20}
+            value={val}
+            onChange={e => setDraft(prev => ({ ...prev, [key]: Number(e.target.value) }))}
+          />
+          <div className="pct-slider-ticks">
+            {steps.map(v => (
+              <span key={v} className={`pct-slider-tick ${val === v ? 'pct-slider-tick--active' : ''}`}>{v}%</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const numField = (key, label, min = 0, max = 999) => (
@@ -560,13 +740,15 @@ function SettingsTab({ API }) {
       {/* Aircoin options */}
       <div className="admin-section">
         <h3 className="admin-section-title">Aircoin Options</h3>
-        {numField('aircoinsPerWin',      'Aircoins awarded per game win')}
-        {numField('aircoinsFirstLogin',  'Bonus Aircoins on first daily login')}
-        {numField('aircoinsStreakBonus', 'Bonus Aircoins per streak login day')}
-        {numField('aircoins100Percent',  'Bonus Aircoins for 100% correct quiz')}
+        {numField('aircoinsPerWinEasy',    'Aircoins per correct answer — Easy quiz')}
+        {numField('aircoinsPerWinMedium',  'Aircoins per correct answer — Medium quiz')}
+        {numField('aircoinsPerBriefRead', 'Aircoins awarded per brief read (first time)')}
+        {numField('aircoinsFirstLogin',   'Bonus Aircoins on first daily login')}
+        {numField('aircoinsStreakBonus',  'Bonus Aircoins per streak login day')}
+        {numField('aircoins100Percent',   'Bonus Aircoins for 100% correct quiz')}
         <button
           className="btn-primary settings-save"
-          onClick={() => saveSection('Update Aircoin Options', ['aircoinsPerWin', 'aircoinsFirstLogin', 'aircoinsStreakBonus', 'aircoins100Percent'])}
+          onClick={() => saveSection('Update Aircoin Options', ['aircoinsPerWinEasy', 'aircoinsPerWinMedium', 'aircoinsPerBriefRead', 'aircoinsFirstLogin', 'aircoinsStreakBonus', 'aircoins100Percent'])}
         >
           Save Aircoin Options
         </button>
@@ -588,9 +770,13 @@ function SettingsTab({ API }) {
         {numField('easyAnswerCount',   'Answers shown — Easy difficulty',   2, 10)}
         {numField('mediumAnswerCount', 'Answers shown — Medium difficulty', 2, 10)}
 
+        <p className="admin-section-sub" style={{ marginTop: '1.25rem' }}>Quiz pass threshold (% correct to count as a win)</p>
+        {pctSliderField('passThresholdEasy',   'Pass threshold — Easy difficulty')}
+        {pctSliderField('passThresholdMedium', 'Pass threshold — Medium difficulty')}
+
         <button
           className="btn-primary settings-save"
-          onClick={() => saveSection('Update Game Options', ['ammoFree', 'ammoSilver', 'easyAnswerCount', 'mediumAnswerCount'])}
+          onClick={() => saveSection('Update Game Options', ['ammoFree', 'ammoSilver', 'easyAnswerCount', 'mediumAnswerCount', 'passThresholdEasy', 'passThresholdMedium'])}
         >
           Save Game Options
         </button>
@@ -604,6 +790,8 @@ function SettingsTab({ API }) {
         {[
           { key: 'volumeIntelBriefOpened', label: 'Intel Brief Opened', sound: 'intel_brief_opened' },
           { key: 'volumeTargetLocked',     label: 'Target Locked',      sound: 'target_locked'      },
+          { key: 'volumeFire',             label: 'Keyword Fire',        sound: 'fire'               },
+          { key: 'volumeAircoin',          label: 'Aircoins Earned',     sound: 'aircoin'            },
           { key: 'volumeOutOfAmmo',        label: 'Out of Ammo',        sound: 'out_of_ammo'        },
         ].map(({ key, label, sound }) => (
           <SoundRow
@@ -617,7 +805,7 @@ function SettingsTab({ API }) {
 
         <button
           className="btn-primary settings-save"
-          onClick={() => saveSection('Update Sound Volumes', ['volumeIntelBriefOpened', 'volumeTargetLocked', 'volumeOutOfAmmo'])}
+          onClick={() => saveSection('Update Sound Volumes', ['volumeIntelBriefOpened', 'volumeTargetLocked', 'volumeFire', 'volumeAircoin', 'volumeOutOfAmmo'])}
         >
           Save Sound Settings
         </button>
@@ -679,9 +867,19 @@ function BriefsTab({ API }) {
   const [busy,         setBusy]         = useState(false)
   const [mediaUrl,     setMediaUrl]     = useState('')
   const [mediaType,    setMediaType]    = useState('picture')
-  const [addingMedia,  setAddingMedia]  = useState(false)
-  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiMediaSearching, setAiMediaSearching] = useState(false)
+  const [aiGenerating,     setAiGenerating]     = useState(false)
   const [pendingMedia, setPendingMedia] = useState([])  // media queued before first save
+  const originalMediaRef = useRef([])                   // snapshot of media at open-time for diffing
+
+  // Quiz question state
+  const [draftQuizEasy,   setDraftQuizEasy]   = useState([])
+  const [draftQuizMedium, setDraftQuizMedium] = useState([])
+  const [quizView,        setQuizView]        = useState('list') // 'list' | 'answers'
+  const [quizSelected,    setQuizSelected]    = useState(null)   // { difficulty, index }
+  const [quizGenerating,  setQuizGenerating]  = useState(false)
+  const [bulkActionsOpen, setBulkActionsOpen] = useState(false)
+  const [backfillStatus,  setBackfillStatus]  = useState(null)   // null | { done, msg }
 
   // ── Live RAF news (list view) — manual fetch only ────────
   const [rafNews,     setRafNews]     = useState([])
@@ -696,31 +894,15 @@ function BriefsTab({ API }) {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
       hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
     })
-    fetch('https://openrouter.ai/api/v1/chat/completions', {
+    fetch(`${API}/api/admin/ai/news-headlines`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': window.location.origin,
-        'X-Title': 'Skywatch',
-      },
-      body: JSON.stringify({
-        model: NEWS_MODEL,
-        messages: [{
-          role: 'system',
-          content: 'You are a factual news assistant. Only report real, verified news stories that have actually been published. Never invent or fabricate headlines.',
-        }, {
-          role: 'user',
-          content: `The current date and time is ${timestamp}. Search the web right now for real UK Royal Air Force (RAF) news stories published in the last 24 hours only. Return ONLY a JSON array of up to 6 headline strings taken verbatim or closely paraphrased from actual published sources. No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from the last 24 hours, return an empty array []. Format: ["Headline one", "Headline two"]`,
-        }],
-      }),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timestamp }),
     })
       .then(r => r.json())
       .then(data => {
-        const raw = data.choices?.[0]?.message?.content ?? '[]'
-        const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/\[\d+\]/g, '').trim()
-        const parsed = JSON.parse(clean)
-        setRafNews(Array.isArray(parsed) ? parsed : [])
+        setRafNews(data.data?.headlines ?? [])
         setNewsFetched(true)
       })
       .catch(() => setNewsError('Could not load news headlines.'))
@@ -741,7 +923,7 @@ function BriefsTab({ API }) {
 
   useEffect(() => { if (view === 'list') loadBriefs() }, [loadBriefs, view])
 
-  const openEdit = (brief) => {
+  const openEdit = async (brief) => {
     setEditing(brief)
     setDraft({
       title:       brief.title       ?? '',
@@ -753,8 +935,34 @@ function BriefsTab({ API }) {
       keywords:    brief.keywords ? brief.keywords.map(k => ({ ...k })) : [],
     })
     setIsNew(false)
+    setDraftQuizEasy([])
+    setDraftQuizMedium([])
+    setQuizView('list')
+    setQuizSelected(null)
     setView('edit')
     setFeedback('')
+
+    // Fetch full brief to get populated quiz questions
+    if (brief._id) {
+      try {
+        const res  = await fetch(`${API}/api/admin/briefs/${brief._id}`, { credentials: 'include' })
+        const data = await res.json()
+        if (data.status === 'success') {
+          const fullBrief = data.data.brief
+          setEditing(fullBrief)
+          originalMediaRef.current = fullBrief.media ?? []
+          const toLocal = q => ({
+            question: q.question,
+            answers:  q.answers.map(a => ({
+              title:    a.title,
+              isCorrect: String(a._id) === String(q.correctAnswerId),
+            })),
+          })
+          if (fullBrief.quizQuestionsEasy?.length   > 0) setDraftQuizEasy(fullBrief.quizQuestionsEasy.map(toLocal))
+          if (fullBrief.quizQuestionsMedium?.length > 0) setDraftQuizMedium(fullBrief.quizQuestionsMedium.map(toLocal))
+        }
+      } catch { /* proceed with empty quiz state */ }
+    }
   }
 
   const openNew = () => {
@@ -766,28 +974,63 @@ function BriefsTab({ API }) {
       sources: [], keywords: [],
     })
     setIsNew(true)
+    setDraftQuizEasy([])
+    setDraftQuizMedium([])
+    setQuizView('list')
+    setQuizSelected(null)
     setView('edit')
     setFeedback('')
     setPendingMedia([{ mediaType: 'picture', mediaUrl: DEFAULT_BRIEF_IMAGE }])
   }
 
-  const backToList = () => { setView('list'); setEditing(null); setPendingMedia([]) }
+  const backToList = () => {
+    setView('list')
+    setEditing(null)
+    setPendingMedia([])
+    setDraftQuizEasy([])
+    setDraftQuizMedium([])
+    setQuizView('list')
+    setQuizSelected(null)
+  }
 
   const doSave = async (reason) => {
     const wasNew = isNew
     setBusy(true)
     setReasonModal(null)
+
+    // ── For existing briefs: stage new media items first so we have their IDs ──
+    // Items without _id were added to editing.media in state but never POSTed yet.
+    let stagedMedia = wasNew ? [] : [...(editing.media ?? [])]
+    if (!wasNew) {
+      for (let i = 0; i < stagedMedia.length; i++) {
+        const m = stagedMedia[i]
+        if (m._id) continue
+        const r = await fetch(`${API}/api/admin/briefs/${editing._id}/media`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mediaType: m.mediaType, mediaUrl: m.mediaUrl }),
+        }).then(r => r.json()).catch(() => null)
+        const newItem = r?.data?.brief?.media?.slice(-1)[0]
+        if (newItem?._id) stagedMedia[i] = { ...m, _id: newItem._id }
+      }
+    }
+
     const url    = wasNew ? `${API}/api/admin/briefs` : `${API}/api/admin/briefs/${editing._id}`
     const method = wasNew ? 'POST' : 'PATCH'
     const res    = await fetch(url, {
       method, credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...draft, reason }),
+      body: JSON.stringify({
+        ...draft,
+        reason,
+        ...(!wasNew ? { media: stagedMedia.map(m => m._id).filter(Boolean) } : {}),
+      }),
     })
     const data = await res.json()
     if (data.status === 'success') {
       let savedBrief = data.data.brief
-      // Flush all queued media (includes template image pre-added to pendingMedia)
+
+      // ── New brief: flush all queued pendingMedia in order ──────────────────
       if (wasNew && pendingMedia.length > 0) {
         for (const item of pendingMedia) {
           const mediaRes = await fetch(`${API}/api/admin/briefs/${savedBrief._id}/media`, {
@@ -799,6 +1042,49 @@ function BriefsTab({ API }) {
         }
         setPendingMedia([])
       }
+
+      // ── Existing brief: delete removed items + patch changed URLs ──────────
+      if (!wasNew) {
+        const origIds    = new Set((originalMediaRef.current ?? []).map(m => String(m._id)))
+        const currentIds = new Set(stagedMedia.filter(m => m._id).map(m => String(m._id)))
+
+        // Delete media documents for items removed from the list
+        for (const id of origIds) {
+          if (!currentIds.has(id)) {
+            await fetch(`${API}/api/admin/briefs/${editing._id}/media/${id}`, {
+              method: 'DELETE', credentials: 'include',
+            }).catch(() => null)
+          }
+        }
+
+        // Patch URLs/types that changed
+        for (const m of stagedMedia.filter(m => m._id)) {
+          const orig = (originalMediaRef.current ?? []).find(o => String(o._id) === String(m._id))
+          if (orig && (orig.mediaUrl !== m.mediaUrl || orig.mediaType !== m.mediaType)) {
+            await fetch(`${API}/api/admin/media/${m._id}`, {
+              method: 'PATCH', credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mediaUrl: m.mediaUrl, mediaType: m.mediaType }),
+            }).catch(() => null)
+          }
+        }
+
+        originalMediaRef.current = stagedMedia.filter(m => m._id)
+      }
+
+      // ── Save quiz questions ────────────────────────────────────────────────
+      if (draftQuizEasy.length > 0 || draftQuizMedium.length > 0) {
+        await fetch(`${API}/api/admin/briefs/${savedBrief._id}/questions/bulk`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            easyQuestions:   toApiFormat(draftQuizEasy),
+            mediumQuestions: toApiFormat(draftQuizMedium),
+            reason,
+          }),
+        }).catch(() => null)
+      }
+
       setEditing(savedBrief)
       setIsNew(false)
       setFeedback('Saved successfully.')
@@ -821,27 +1107,73 @@ function BriefsTab({ API }) {
     backToList()
   }
 
-  const addMedia = async () => {
+  const addMedia = () => {
     if (!mediaUrl.trim()) return
-    setAddingMedia(true)
-    const res  = await fetch(`${API}/api/admin/briefs/${editing._id}/media`, {
-      method: 'POST', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mediaType, mediaUrl: mediaUrl.trim() }),
-    })
-    const data = await res.json()
-    if (data.status === 'success') {
-      setEditing(data.data.brief)
-      setMediaUrl('')
-    }
-    setAddingMedia(false)
+    setEditing(prev => ({ ...prev, media: [...(prev.media ?? []), { mediaType, mediaUrl: mediaUrl.trim() }] }))
+    setMediaUrl('')
   }
 
-  const removeMedia = async (mediaId) => {
-    await fetch(`${API}/api/admin/briefs/${editing._id}/media/${mediaId}`, {
-      method: 'DELETE', credentials: 'include',
+  const removeMedia = (idx) => {
+    setEditing(prev => ({ ...prev, media: prev.media.filter((_, i) => i !== idx) }))
+  }
+
+  const movePendingMedia = (idx, dir) => {
+    setPendingMedia(prev => {
+      const arr  = [...prev]
+      const swap = idx + dir
+      if (swap < 0 || swap >= arr.length) return prev
+      ;[arr[idx], arr[swap]] = [arr[swap], arr[idx]]
+      return arr
     })
-    setEditing(prev => ({ ...prev, media: prev.media.filter(m => m._id !== mediaId) }))
+  }
+
+  const moveMedia = (idx, dir) => {
+    setEditing(prev => {
+      const media = [...prev.media]
+      const swap  = idx + dir
+      if (swap < 0 || swap >= media.length) return prev
+      ;[media[idx], media[swap]] = [media[swap], media[idx]]
+      return { ...prev, media }
+    })
+  }
+
+  const findMediaWithAI = async () => {
+    const isVideo = mediaType === 'video'
+
+    // Videos: open a YouTube search — <video> tags can't embed YouTube directly
+    if (isVideo) {
+      const q = encodeURIComponent((draft.title || draft.subtitle || '').slice(0, 120) || 'RAF aircraft')
+      window.open(`https://www.youtube.com/results?search_query=${q}`, '_blank', 'noopener')
+      setFeedback('YouTube search opened in a new tab — find a direct video URL (.mp4) and paste it here.')
+      setTimeout(() => setFeedback(''), 6000)
+      return
+    }
+
+    setAiMediaSearching(true)
+    setFeedback('Generating image… this may take 20–30 seconds.')
+    try {
+      const saveRes  = await fetch(`${API}/api/admin/ai/generate-image`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: draft.title || draft.subtitle || 'Royal Air Force' }),
+      })
+      const saveData = await saveRes.json()
+
+      if (saveData.status === 'success') {
+        setMediaUrl(`${API}${saveData.data.url}`)
+        setFeedback('Image generated — click Add to attach it.')
+        setTimeout(() => setFeedback(''), 5000)
+      } else {
+        setFeedback(`Failed to save image: ${saveData.message}`)
+        setTimeout(() => setFeedback(''), 5000)
+      }
+    } catch (err) {
+      console.error('[generateImage] error:', err)
+      setFeedback(`Image generation failed: ${err.message}`)
+      setTimeout(() => setFeedback(''), 6000)
+    } finally {
+      setAiMediaSearching(false)
+    }
   }
 
   const addSource    = () => setDraft(p => ({ ...p, sources:  [...p.sources,  { url: '', articleDate: '', siteName: '' }] }))
@@ -858,6 +1190,148 @@ function BriefsTab({ API }) {
     return { ...p, keywords }
   })
 
+  // ── Quiz question helpers ──────────────────────────────────────────────────
+
+  const generateQuizQuestions = async () => {
+    if (!draft.title && !draft.description) return
+    setQuizGenerating(true)
+    try {
+      const res = await fetch(`${API}/api/admin/ai/generate-quiz`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: draft.title, description: draft.description ?? '' }),
+      })
+      const data = await res.json()
+      const generated = data.data ?? {}
+      const fromAI = (qs) => (Array.isArray(qs) ? qs : []).map(q => ({
+        question: q.question ?? '',
+        answers: (q.answers ?? []).map((a, ai) => ({
+          title:    a.title ?? '',
+          isCorrect: ai === q.correctAnswerIndex,
+        })),
+      }))
+      if (Array.isArray(generated.easyQuestions))   setDraftQuizEasy(fromAI(generated.easyQuestions))
+      if (Array.isArray(generated.mediumQuestions)) setDraftQuizMedium(fromAI(generated.mediumQuestions))
+    } catch {
+      setFeedback('Quiz generation failed — please try again.')
+      setTimeout(() => setFeedback(''), 4000)
+    } finally {
+      setQuizGenerating(false)
+    }
+  }
+
+  const updateQuizQuestion = (difficulty, i, value) => {
+    const setter = difficulty === 'easy' ? setDraftQuizEasy : setDraftQuizMedium
+    setter(prev => prev.map((q, idx) => idx === i ? { ...q, question: value } : q))
+  }
+
+  const updateQuizAnswer = (difficulty, qi, ai, field, value) => {
+    const setter = difficulty === 'easy' ? setDraftQuizEasy : setDraftQuizMedium
+    setter(prev => prev.map((q, idx) => {
+      if (idx !== qi) return q
+      return { ...q, answers: q.answers.map((a, aidx) => aidx === ai ? { ...a, [field]: value } : a) }
+    }))
+  }
+
+  const toggleCorrectAnswer = (difficulty, qi, ai) => {
+    const setter = difficulty === 'easy' ? setDraftQuizEasy : setDraftQuizMedium
+    setter(prev => prev.map((q, idx) => {
+      if (idx !== qi) return q
+      return { ...q, answers: q.answers.map((a, aidx) => ({ ...a, isCorrect: aidx === ai })) }
+    }))
+  }
+
+  const addQuizAnswer = (difficulty, qi) => {
+    const setter = difficulty === 'easy' ? setDraftQuizEasy : setDraftQuizMedium
+    setter(prev => prev.map((q, idx) => {
+      if (idx !== qi || q.answers.length >= 10) return q
+      return { ...q, answers: [...q.answers, { title: '', isCorrect: false }] }
+    }))
+  }
+
+  const removeQuizAnswer = (difficulty, qi, ai) => {
+    const setter = difficulty === 'easy' ? setDraftQuizEasy : setDraftQuizMedium
+    setter(prev => prev.map((q, idx) => {
+      if (idx !== qi) return q
+      const wasCorrect = q.answers[ai]?.isCorrect
+      const answers = q.answers.filter((_, aidx) => aidx !== ai)
+      if (wasCorrect && answers.length > 0) answers[0] = { ...answers[0], isCorrect: true }
+      return { ...q, answers }
+    }))
+  }
+
+  const addQuizQuestion = (difficulty) => {
+    const currentList = difficulty === 'easy' ? draftQuizEasy : draftQuizMedium
+    const newIndex = currentList.length
+    const setter = difficulty === 'easy' ? setDraftQuizEasy : setDraftQuizMedium
+    setter(prev => [...prev, {
+      question: '',
+      answers: Array.from({ length: 10 }, (_, i) => ({ title: '', isCorrect: i === 0 })),
+    }])
+    setQuizSelected({ difficulty, index: newIndex })
+    setQuizView('answers')
+  }
+
+  // Convert draft format (isCorrect boolean per answer) → API format (correctAnswerIndex)
+  const toApiFormat = (qs) => qs.map(q => ({
+    question: q.question,
+    answers:  q.answers.map(({ title }) => ({ title })),
+    correctAnswerIndex: Math.max(0, q.answers.findIndex(a => a.isCorrect)),
+  }))
+
+  const deleteQuizQuestion = (difficulty, i) => {
+    const setter = difficulty === 'easy' ? setDraftQuizEasy : setDraftQuizMedium
+    setter(prev => prev.filter((_, idx) => idx !== i))
+    setQuizView('list')
+  }
+
+  const runBackfill = async (reason) => {
+    setBackfillStatus({ done: false, msg: 'Fetching briefs…' })
+    let allBriefs = []
+    let pg = 1
+    while (true) {
+      const res  = await fetch(`${API}/api/admin/briefs?page=${pg}&limit=50`, { credentials: 'include' })
+      const data = await res.json()
+      const batch = data.data?.briefs ?? []
+      allBriefs = [...allBriefs, ...batch]
+      if (batch.length < 50) break
+      pg++
+    }
+    const needsQuestions = allBriefs.filter(b => (b.quizQuestionsEasy?.length ?? 0) === 0)
+    if (needsQuestions.length === 0) {
+      setBackfillStatus({ done: true, msg: 'All briefs already have quiz questions.' })
+      return
+    }
+    let done = 0
+    for (const brief of needsQuestions) {
+      setBackfillStatus({ done: false, msg: `Generating: ${done + 1} / ${needsQuestions.length} briefs…` })
+      try {
+        const aiRes  = await fetch(`${API}/api/admin/ai/generate-quiz`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: brief.title, description: brief.description ?? '' }),
+        })
+        const aiData = await aiRes.json()
+        const generated = aiData.data ?? {}
+        if (generated.easyQuestions?.length > 0 || generated.mediumQuestions?.length > 0) {
+          await fetch(`${API}/api/admin/briefs/${brief._id}/questions/bulk`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              easyQuestions:   generated.easyQuestions   ?? [],
+              mediumQuestions: generated.mediumQuestions ?? [],
+              reason,
+            }),
+          })
+        }
+      } catch { /* skip failed brief */ }
+      done++
+    }
+    setBackfillStatus({ done: true, msg: `Done — questions generated for ${done} briefs.` })
+  }
+
   // ── List view ──────────────────────────────────────────────────────────────
   if (view === 'list') {
     // Filter out headlines already covered by an existing brief
@@ -865,6 +1339,13 @@ function BriefsTab({ API }) {
 
     return (
       <div>
+        {reasonModal && (
+          <ReasonModal
+            action={reasonModal.label}
+            onConfirm={reasonModal.onConfirm}
+            onCancel={() => setReasonModal(null)}
+          />
+        )}
 
         {/* ── Live RAF news panel ──────────────────────────── */}
         <div className="raf-news-panel" style={{ margin: '0 0 1.5rem', borderRadius: 8 }}>
@@ -928,30 +1409,15 @@ function BriefsTab({ API }) {
                       setAiGenerating(true)
                       setPendingMedia([{ mediaType: 'picture', mediaUrl: DEFAULT_BRIEF_IMAGE }])
 
-                      fetch('https://openrouter.ai/api/v1/chat/completions', {
+                      fetch(`${API}/api/admin/ai/generate-brief`, {
                         method: 'POST',
-                        headers: {
-                          'Authorization': `Bearer ${OPENROUTER_KEY}`,
-                          'Content-Type': 'application/json',
-                          'HTTP-Referer': window.location.origin,
-                          'X-Title': 'Skywatch',
-                        },
-                        body: JSON.stringify({
-                          model: NEWS_MODEL,
-                          messages: [{
-                            role: 'system',
-                            content: 'You are a factual intelligence writer for a Royal Air Force training platform. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
-                          }, {
-                            role: 'user',
-                            content: `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources about this story, return a JSON object for an RAF trainee intelligence brief. Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "factual title drawn from the story, max 70 characters",\n  "subtitle": "one factual sentence summarising the story",\n  "description": "200-250 word factual brief about this story written for RAF trainees — only include details confirmed by published sources, no speculation",\n  "keywords": [\n    {"keyword": "verified term from the story", "generatedDescription": "factual 2-3 sentence explanation from published sources"},\n    {"keyword": "second verified term", "generatedDescription": "factual explanation"},\n    {"keyword": "third verified term", "generatedDescription": "factual explanation"}\n  ],\n  "sources": [\n    {"url": "https://full-url-of-actual-article.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}`,
-                          }],
-                        }),
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ headline }),
                       })
                         .then(r => r.json())
                         .then(data => {
-                          let content = data.choices?.[0]?.message?.content ?? '{}'
-                          content = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/\[\d+\]/g, '').trim()
-                          const generated = JSON.parse(content)
+                          const generated = data.data?.brief ?? {}
                           const sources = Array.isArray(generated.sources)
                             ? generated.sources.filter(s => s.url && s.url.startsWith('http'))
                             : []
@@ -1031,6 +1497,51 @@ function BriefsTab({ API }) {
             <button className="btn-ghost" disabled={page >= Math.ceil(total / LIMIT)} onClick={() => setPage(p => p + 1)}>Next →</button>
           </div>
         )}
+
+        {/* ── Bulk Actions ──────────────────────────────────── */}
+        <div className="admin-section" style={{ marginTop: '1.5rem' }}>
+          <div
+            className="admin-section-title"
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', userSelect: 'none' }}
+            onClick={() => setBulkActionsOpen(o => !o)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={e => e.key === 'Enter' && setBulkActionsOpen(o => !o)}
+          >
+            Bulk Actions {bulkActionsOpen ? '▲' : '▼'}
+          </div>
+          {bulkActionsOpen && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <p className="admin-section-sub">
+                Generate 10 easy + 10 medium quiz questions for every brief that doesn't have any yet.
+              </p>
+              {backfillStatus && (
+                <p className="quiz-generating" style={{ marginBottom: '0.75rem' }}>
+                  {backfillStatus.done ? '✓ ' : (
+                    <span className="app-loading__spinner" style={{ width: 13, height: 13, display: 'inline-block' }} />
+                  )}
+                  {backfillStatus.msg}
+                </p>
+              )}
+              <button
+                className="btn-primary"
+                disabled={!!backfillStatus && !backfillStatus.done}
+                onClick={() => {
+                  setBackfillStatus(null)
+                  setReasonModal({
+                    label: 'Generate Quiz Questions for All Briefs',
+                    onConfirm: async (reason) => {
+                      setReasonModal(null)
+                      runBackfill(reason)
+                    },
+                  })
+                }}
+              >
+                Generate Quiz Questions for All Briefs
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -1155,15 +1666,18 @@ function BriefsTab({ API }) {
                   />
                   <div className="brief-media-item__info">
                     <span className="brief-media-item__type">{m.mediaType}</span>
-                    <span className="brief-media-item__url" title={m.mediaUrl}>{m.mediaUrl}</span>
+                    <input
+                      className="brief-media-item__url-input"
+                      value={m.mediaUrl}
+                      onChange={e => setPendingMedia(prev => prev.map((item, i) => i === idx ? { ...item, mediaUrl: e.target.value } : item))}
+                      placeholder="URL"
+                    />
                   </div>
-                  <button
-                    className="brief-media-item__remove"
-                    onClick={() => setPendingMedia(prev => prev.filter((_, i) => i !== idx))}
-                    title="Remove"
-                  >
-                    ✕
-                  </button>
+                  <div className="brief-media-item__controls">
+                    <button className="brief-media-item__move-btn" onClick={() => movePendingMedia(idx, -1)} disabled={idx === 0} title="Move up">▲</button>
+                    <button className="brief-media-item__move-btn" onClick={() => movePendingMedia(idx, 1)} disabled={idx === pendingMedia.length - 1} title="Move down">▼</button>
+                    <button className="brief-media-item__remove" onClick={() => setPendingMedia(prev => prev.filter((_, i) => i !== idx))} title="Remove">✕</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1191,6 +1705,15 @@ function BriefsTab({ API }) {
                 }}
               />
               <button
+                className="btn-ghost"
+                style={{ flexShrink: 0 }}
+                disabled
+                title="Feature not working for now"
+                style={{ flexShrink: 0, opacity: 0.4, cursor: 'not-allowed' }}
+              >
+                Generate Image
+              </button>
+              <button
                 className="btn-primary"
                 style={{ flexShrink: 0 }}
                 disabled={!mediaUrl.trim()}
@@ -1209,7 +1732,7 @@ function BriefsTab({ API }) {
               <p className="admin-loading" style={{ marginBottom: '1rem' }}>No media attached yet.</p>
             )}
             <div className="brief-media-grid">
-              {(editing.media ?? []).map(m => (
+              {(editing.media ?? []).map((m, idx, arr) => (
                 <div key={m._id} className="brief-media-item">
                   <img
                     src={m.mediaUrl}
@@ -1219,15 +1742,21 @@ function BriefsTab({ API }) {
                   />
                   <div className="brief-media-item__info">
                     <span className="brief-media-item__type">{m.mediaType}</span>
-                    <span className="brief-media-item__url" title={m.mediaUrl}>{m.mediaUrl}</span>
+                    <input
+                      className="brief-media-item__url-input"
+                      value={m.mediaUrl}
+                      onChange={e => setEditing(prev => ({
+                        ...prev,
+                        media: prev.media.map((item, i) => i === idx ? { ...item, mediaUrl: e.target.value } : item),
+                      }))}
+                      placeholder="URL"
+                    />
                   </div>
-                  <button
-                    className="brief-media-item__remove"
-                    onClick={() => removeMedia(m._id)}
-                    title="Remove image"
-                  >
-                    ✕
-                  </button>
+                  <div className="brief-media-item__controls">
+                    <button className="brief-media-item__move-btn" onClick={() => moveMedia(idx, -1)} disabled={idx === 0} title="Move up">▲</button>
+                    <button className="brief-media-item__move-btn" onClick={() => moveMedia(idx, 1)} disabled={idx === arr.length - 1} title="Move down">▼</button>
+                    <button className="brief-media-item__remove" onClick={() => removeMedia(idx)} title="Remove image">✕</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1249,8 +1778,17 @@ function BriefsTab({ API }) {
                 onChange={e => setMediaUrl(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addMedia()}
               />
-              <button className="btn-primary" style={{ flexShrink: 0 }} onClick={addMedia} disabled={!mediaUrl.trim() || addingMedia}>
-                {addingMedia ? 'Adding…' : 'Add'}
+              <button
+                className="btn-ghost"
+                style={{ flexShrink: 0 }}
+                disabled
+                title="Feature not working for now"
+                style={{ flexShrink: 0, opacity: 0.4, cursor: 'not-allowed' }}
+              >
+                Generate Image
+              </button>
+              <button className="btn-primary" style={{ flexShrink: 0 }} onClick={addMedia} disabled={!mediaUrl.trim()}>
+                Add
               </button>
             </div>
           </>
@@ -1315,6 +1853,144 @@ function BriefsTab({ API }) {
           </div>
         ))}
         <button className="admin-action-btn admin-action-btn--primary" onClick={addKeyword}>+ Add Keyword</button>
+      </div>
+
+      {/* Quiz Questions */}
+      <div className="admin-section quiz-section">
+        <h3 className="admin-section-title">Quiz Questions</h3>
+
+        {quizView === 'list' ? (
+          <>
+            <div className="quiz-toolbar">
+              {!isNew && draftQuizEasy.length === 0 && draftQuizMedium.length === 0 && (
+                <button
+                  className="btn-ghost"
+                  onClick={generateQuizQuestions}
+                  disabled={quizGenerating || aiGenerating}
+                >
+                  {quizGenerating ? (
+                    <span className="quiz-generating">
+                      <span className="app-loading__spinner" style={{ width: 13, height: 13 }} />
+                      Generating…
+                    </span>
+                  ) : 'Generate 20 Questions with AI'}
+                </button>
+              )}
+            </div>
+
+            {draftQuizEasy.length === 0 && draftQuizMedium.length === 0 && !quizGenerating && (
+              <p className="admin-section-sub">
+                {isNew
+                  ? 'Add questions manually using the buttons below. They will be saved automatically when you create the brief.'
+                  : 'No questions yet — click "Generate 20 Questions with AI" or add them manually below.'}
+              </p>
+            )}
+
+            <div className="quiz-cols">
+              {[['easy', draftQuizEasy], ['medium', draftQuizMedium]].map(([diff, qs]) => (
+                <div key={diff} className="quiz-col">
+                  <div className="quiz-col-header">{diff.toUpperCase()} ({qs.length})</div>
+                  {qs.map((q, i) => (
+                    <div
+                      key={i}
+                      className="quiz-q-row"
+                      onClick={() => { setQuizSelected({ difficulty: diff, index: i }); setQuizView('answers') }}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={e => e.key === 'Enter' && (setQuizSelected({ difficulty: diff, index: i }), setQuizView('answers'))}
+                    >
+                      <span className="quiz-q-row__num">{i + 1}.</span>
+                      <span className="quiz-q-row__text">{q.question || <em style={{ color: '#94a3b8' }}>Untitled question</em>}</span>
+                      <span className="quiz-q-row__chevron">›</span>
+                    </div>
+                  ))}
+                  <button
+                    className="quiz-add-q-btn"
+                    onClick={() => addQuizQuestion(diff)}
+                  >
+                    + Add Question
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (() => {
+          const { difficulty, index } = quizSelected
+          const q = difficulty === 'easy' ? draftQuizEasy[index] : draftQuizMedium[index]
+          if (!q) return null
+          return (
+            <>
+              <div className="quiz-drill-back">
+                <button className="btn-ghost" onClick={() => setQuizView('list')}>← Back to Questions</button>
+                <span className="quiz-drill-badge">{difficulty.toUpperCase()} · Q{index + 1}</span>
+                <button
+                  className="admin-action-btn admin-action-btn--danger"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => deleteQuizQuestion(difficulty, index)}
+                >
+                  Delete Question
+                </button>
+              </div>
+
+              <textarea
+                className="form-textarea"
+                rows={3}
+                value={q.question}
+                onChange={e => updateQuizQuestion(difficulty, index, e.target.value)}
+                placeholder="Question text…"
+                style={{ marginBottom: '1rem' }}
+              />
+
+              <p className="admin-section-sub" style={{ marginBottom: '0.5rem' }}>
+                Click a radio button to mark the correct answer.
+              </p>
+
+              <div className="quiz-answers-list">
+                {q.answers.map((a, ai) => (
+                  <div
+                    key={ai}
+                    className={`quiz-answer-row${a.isCorrect ? ' quiz-answer-row--correct' : ''}`}
+                  >
+                    <button
+                      className={`quiz-correct-switch${a.isCorrect ? ' quiz-correct-switch--on' : ''}`}
+                      onClick={() => toggleCorrectAnswer(difficulty, index, ai)}
+                      title={a.isCorrect ? 'Correct answer' : 'Mark as correct'}
+                    >
+                      {a.isCorrect ? 'true' : 'false'}
+                    </button>
+                    <div className="quiz-answer-row__content" style={{ flex: 1 }}>
+                      <input
+                        className="form-input"
+                        value={a.title}
+                        onChange={e => updateQuizAnswer(difficulty, index, ai, 'title', e.target.value)}
+                        placeholder="Answer text…"
+                      />
+                    </div>
+                    {q.answers.length > 2 && (
+                      <button
+                        className="brief-array-row__remove"
+                        onClick={() => removeQuizAnswer(difficulty, index, ai)}
+                        title="Remove answer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {q.answers.length < 10 && (
+                <button
+                  className="admin-action-btn admin-action-btn--primary"
+                  style={{ marginTop: '0.75rem' }}
+                  onClick={() => addQuizAnswer(difficulty, index)}
+                >
+                  + Add Answer
+                </button>
+              )}
+            </>
+          )
+        })()}
       </div>
     </div>
   )
