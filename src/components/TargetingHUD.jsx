@@ -12,15 +12,14 @@ function AmmoBlock({ active }) {
   )
 }
 
-export default function TargetingHUD({ side, descRect, ammoRemaining, ammoMax, description, keywordCount, loggedIn = true, onLoginClick }) {
-  const top = Math.max(80, Math.min(
-    descRect.top + descRect.height / 2 - HUD_H / 2,
-    window.innerHeight - HUD_H - 20
-  ))
+export default function TargetingHUD({ side, below = false, descRect, scrollY = 0, ammoRemaining, ammoMax, description, keywordCount, loggedIn = true, onLoginClick, scanWord }) {
+  // In below mode the HUD is in normal page flow — no absolute positioning needed.
+  // In side mode: position in document space so it scrolls naturally with the page.
+  const docTop = descRect.top + scrollY + descRect.height / 2 - HUD_H / 2
 
-  const style = side === 'left'
-    ? { position: 'fixed', width: HUD_W, height: HUD_H, top, right: window.innerWidth - descRect.left + GAP, zIndex: 150 }
-    : { position: 'fixed', width: HUD_W, height: HUD_H, top, left: descRect.right + GAP,                    zIndex: 150 }
+  const style = below ? {} : side === 'left'
+    ? { position: 'absolute', width: HUD_W, height: HUD_H, top: docTop, left: descRect.left - HUD_W - GAP, zIndex: 150 }
+    : { position: 'absolute', width: HUD_W, height: HUD_H, top: docTop, left: descRect.right + GAP,        zIndex: 150 }
 
   // Pull deterministic fragments from the description for the right-panel data ghost
   const fragments = useMemo(() => {
@@ -122,6 +121,16 @@ export default function TargetingHUD({ side, descRect, ammoRemaining, ammoMax, d
 
       <div className="hud-header">▸ INTEL ANALYSIS</div>
       <div className="hud-rule" />
+
+      {scanWord && (
+        <div className="hud-scan-word">
+          <span className="hud-scan-word__label">SCANNING</span>
+          <span className="hud-scan-word__value">
+            <span className="hud-scan-word__count">{scanWord.count}x</span>
+            {scanWord.word.toUpperCase()}
+          </span>
+        </div>
+      )}
 
       <div className="hud-fragments">
         {fragments.map((f, i) => (

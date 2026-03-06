@@ -77,7 +77,7 @@ function ReasonModal({ action, onConfirm, onCancel }) {
 // ── Reset Stats Modal ─────────────────────────────────────────────────────────
 
 const RESET_FIELDS = [
-  { key: 'aircoins',        label: 'Aircoins',          desc: 'Zero out totalAircoins' },
+  { key: 'aircoins',        label: 'Aircoins',          desc: 'Zero out totalAircoins & reset rank to Unranked' },
   { key: 'gameHistory',     label: 'Game History',      desc: 'Delete quiz results & clear gameTypesSeen' },
   { key: 'intelBriefsRead', label: 'Intel Briefs Read', desc: 'Delete all brief-read records (resets ammo too)' },
 ]
@@ -203,8 +203,9 @@ function StatsTab({ API }) {
         <h3 className="admin-section-title">Games</h3>
         <div className="admin-stats-grid">
           <AdminStat label="Quizzes Played"    value={stats.games.totalGamesPlayed} />
-          <AdminStat label="Perfect Score"     value={stats.games.totalGamesWon} />
-          <AdminStat label="Quizzes Lost"      value={stats.games.totalGamesLost} />
+          <AdminStat label="Perfect Score"     value={stats.games.totalGamesCompleted > 0 ? `${Math.round((stats.games.totalPerfectScores / stats.games.totalGamesCompleted) * 100)}%` : '—'} title="% of completed (non-abandoned) quizzes where the user scored 100%" />
+          <AdminStat label="Quizzes Lost"      value={stats.games.totalGamesCompleted > 0 ? `${Math.round((stats.games.totalGamesLost    / stats.games.totalGamesCompleted) * 100)}%` : '—'} title={`% of completed (non-abandoned) quizzes where the user scored below the pass threshold (Easy: ${stats.games.passThresholdEasy}%, Medium: ${stats.games.passThresholdMedium}%)`} />
+          <AdminStat label="Quizzes Abandoned" value={stats.games.totalGamesPlayed > 0 ? `${Math.round((stats.games.totalGamesAbandoned / stats.games.totalGamesPlayed) * 100)}%` : '—'} />
           <AdminStat label="Aircoins in System" value={fmtNum(stats.games.totalAircoinsEarned)} />
         </div>
       </div>
@@ -218,11 +219,11 @@ function StatsTab({ API }) {
   )
 }
 
-function AdminStat({ label, value, mock }) {
+function AdminStat({ label, value, mock, title }) {
   return (
-    <div className={`admin-stat-item${mock ? ' admin-stat-item--mock' : ''}`}>
+    <div className={`admin-stat-item${mock ? ' admin-stat-item--mock' : ''}`} title={title}>
       <span className="admin-stat-item__value">{value ?? '—'}</span>
-      <span className="admin-stat-item__label">{label}</span>
+      <span className="admin-stat-item__label">{label}{title && <span className="admin-stat-item__hint" aria-hidden="true"> ⓘ</span>}</span>
     </div>
   )
 }
@@ -235,6 +236,7 @@ function ProblemsTab({ API }) {
   const [filter,       setFilter]      = useState('unsolved')
   const [sortOrder,    setSortOrder]   = useState('newest')
   const [loading,      setLoading]     = useState(true)
+  const [fetchError,   setFetchError]  = useState(null)
   const [tick,         setTick]        = useState(0) // bump to force reload
   const [expanded,     setExpanded]    = useState(null)
   const [updateTexts,  setUpdateTexts] = useState({})
@@ -242,13 +244,17 @@ function ProblemsTab({ API }) {
 
   useEffect(() => {
     setLoading(true)
+    setFetchError(null)
     const params = new URLSearchParams()
     if (filter !== 'all') params.set('solved', filter === 'solved' ? 'true' : 'false')
 
     fetch(`${API}/api/admin/problems?${params}`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => setProblems(d.data?.problems ?? []))
-      .catch(() => {})
+      .then(r => r.json().then(d => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (!ok) throw new Error(d.message || 'Unknown error')
+        setProblems(d.data?.problems ?? [])
+      })
+      .catch(err => { setFetchError(err.message); setProblems([]) })
       .finally(() => setLoading(false))
   }, [API, filter, tick])
 
@@ -298,7 +304,8 @@ function ProblemsTab({ API }) {
       </div>
 
       {loading && <p className="admin-loading">Loading…</p>}
-      {!loading && visible.length === 0 && <p className="empty-state">No problems found.</p>}
+      {fetchError && <p className="form-error">Failed to load: {fetchError}</p>}
+      {!loading && !fetchError && visible.length === 0 && <p className="empty-state">No problems found.</p>}
 
       <div className="admin-list">
         {visible.map(p => (
@@ -547,10 +554,15 @@ function SoundRow({ label, sound, value, onChange }) {
     // Temporarily override with draft value by playing directly
     const files = {
       intel_brief_opened: ['intel_brief_opened.mp3'],
+      level_up:           ['level_up.mp3'],
+      rank_promotion:     ['rank_promotion.mp3'],
       target_locked:      ['target_locked.mp3'],
       fire:               ['fire.mp3'],
       aircoin:            ['aircoin.mp3'],
       out_of_ammo:        ['out_of_ammo_1.mp3', 'out_of_ammo_2.mp3', 'out_of_ammo_3.mp3'],
+      quiz_complete_win:  ['quiz_complete_win.mp3'],
+      quiz_complete_lose: ['quiz_complete_lose.mp3'],
+      stand_down:         ['stand_down.mp3'],
     }
     const list = files[sound] ?? ['']
     const file = list[Math.floor(Math.random() * list.length)]
@@ -586,10 +598,13 @@ function SoundRow({ label, sound, value, onChange }) {
 // ── Settings tab ──────────────────────────────────────────────────────────────
 
 function SettingsTab({ API }) {
-  const [settings,    setSettings]    = useState(null)
-  const [draft,       setDraft]       = useState({})
-  const [reasonModal, setReasonModal] = useState(null)
-  const [feedback,    setFeedback]    = useState('')
+  const { awardAircoins } = useAuth()
+  const [settings,        setSettings]        = useState(null)
+  const [draft,           setDraft]           = useState({})
+  const [reasonModal,     setReasonModal]     = useState(null)
+  const [feedback,        setFeedback]        = useState('')
+  const [testCoinsAmount, setTestCoinsAmount] = useState('')
+  const [coinsBusy,       setCoinsBusy]       = useState(false)
 
   const loadSettings = useCallback(() => {
     fetch(`${API}/api/admin/settings`, { credentials: 'include' })
@@ -598,6 +613,31 @@ function SettingsTab({ API }) {
   }, [API])
 
   useEffect(() => { loadSettings() }, [loadSettings])
+
+  const awardTestCoins = async () => {
+    const amount = parseInt(testCoinsAmount, 10)
+    if (!amount || amount <= 0) return
+    setCoinsBusy(true)
+    try {
+      const res  = await fetch(`${API}/api/admin/award-coins`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        awardAircoins(data.awarded, 'Test Coins', { cycleAfter: data.cycleAircoins, totalAfter: data.totalAircoins, rankPromotion: data.rankPromotion })
+        setFeedback(`✓ Awarded ${data.awarded} test coins.`)
+        setTestCoinsAmount('')
+      } else {
+        setFeedback(`Error: ${data.message}`)
+      }
+    } catch {
+      setFeedback('Failed to award coins.')
+    }
+    setCoinsBusy(false)
+    setTimeout(() => setFeedback(''), 4000)
+  }
 
   const saveSection = (label, fields) => {
     const updates = {}
@@ -793,6 +833,11 @@ function SettingsTab({ API }) {
           { key: 'volumeFire',             label: 'Keyword Fire',        sound: 'fire'               },
           { key: 'volumeAircoin',          label: 'Aircoins Earned',     sound: 'aircoin'            },
           { key: 'volumeOutOfAmmo',        label: 'Out of Ammo',        sound: 'out_of_ammo'        },
+          { key: 'volumeLevelUp',          label: 'Level Up',            sound: 'level_up'           },
+          { key: 'volumeRankPromotion',    label: 'Rank Promotion',      sound: 'rank_promotion'     },
+          { key: 'volumeQuizCompleteWin',  label: 'Quiz Complete (Win)',  sound: 'quiz_complete_win'  },
+          { key: 'volumeQuizCompleteLose', label: 'Quiz Complete (Lose)', sound: 'quiz_complete_lose' },
+          { key: 'volumeStandDown',        label: 'Stand Down',           sound: 'stand_down'         },
         ].map(({ key, label, sound }) => (
           <SoundRow
             key={key}
@@ -805,7 +850,7 @@ function SettingsTab({ API }) {
 
         <button
           className="btn-primary settings-save"
-          onClick={() => saveSection('Update Sound Volumes', ['volumeIntelBriefOpened', 'volumeTargetLocked', 'volumeFire', 'volumeAircoin', 'volumeOutOfAmmo'])}
+          onClick={() => saveSection('Update Sound Volumes', ['volumeIntelBriefOpened', 'volumeTargetLocked', 'volumeFire', 'volumeAircoin', 'volumeOutOfAmmo', 'volumeLevelUp', 'volumeRankPromotion', 'volumeQuizCompleteWin', 'volumeQuizCompleteLose', 'volumeStandDown'])}
         >
           Save Sound Settings
         </button>
@@ -836,13 +881,58 @@ function SettingsTab({ API }) {
           </label>
         </div>
 
+        <div className="settings-flag">
+          <div className="settings-flag__info">
+            <span className="settings-flag__name">Disable Loading Bar</span>
+            <span className="settings-flag__desc">
+              Skip the intel brief loading sequence entirely. Useful for testing — page reveals instantly with no sound or progress bar.
+            </span>
+          </div>
+          <label className="settings-flag__toggle">
+            <input
+              type="checkbox"
+              checked={draft.disableLoadingBar ?? false}
+              onChange={e => setDraft(prev => ({ ...prev, disableLoadingBar: e.target.checked }))}
+            />
+            <span className={`settings-flag__pill ${draft.disableLoadingBar ? 'settings-flag__pill--on' : ''}`}>
+              {draft.disableLoadingBar ? 'Disabled' : 'Enabled'}
+            </span>
+          </label>
+        </div>
+
         <button
           className="btn-primary settings-save"
-          onClick={() => saveSection('Update Feature Flags', ['useLiveLeaderboard'])}
+          onClick={() => saveSection('Update Feature Flags', ['useLiveLeaderboard', 'disableLoadingBar'])}
         >
           Save Feature Flags
         </button>
       </div>
+
+      {/* Award Test Coins */}
+      <div className="admin-section">
+        <h3 className="admin-section-title">Award Test Coins</h3>
+        <p className="admin-section-sub">Award aircoins directly to your admin account. Logged as "Test Coins".</p>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            className="form-input"
+            type="number"
+            min="1"
+            placeholder="Amount…"
+            value={testCoinsAmount}
+            onChange={e => setTestCoinsAmount(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && awardTestCoins()}
+            style={{ width: 140 }}
+          />
+          <button
+            className="btn-primary"
+            onClick={awardTestCoins}
+            disabled={coinsBusy || !testCoinsAmount || parseInt(testCoinsAmount, 10) <= 0}
+          >
+            {coinsBusy ? 'Awarding…' : 'Award Coins'}
+          </button>
+        </div>
+      </div>
+
     </div>
   )
 }
@@ -877,7 +967,8 @@ function BriefsTab({ API }) {
   const [draftQuizMedium, setDraftQuizMedium] = useState([])
   const [quizView,        setQuizView]        = useState('list') // 'list' | 'answers'
   const [quizSelected,    setQuizSelected]    = useState(null)   // { difficulty, index }
-  const [quizGenerating,  setQuizGenerating]  = useState(false)
+  const [quizGenerating,      setQuizGenerating]      = useState(false)
+  const [kwGenerating,        setKwGenerating]        = useState(false)
   const [bulkActionsOpen, setBulkActionsOpen] = useState(false)
   const [backfillStatus,  setBackfillStatus]  = useState(null)   // null | { done, msg }
 
@@ -1114,6 +1205,14 @@ function BriefsTab({ API }) {
   }
 
   const removeMedia = (idx) => {
+    const item = editing.media?.[idx]
+    if (item?.mediaUrl?.startsWith('/uploads/brief-images/')) {
+      fetch(`${API}/api/admin/media/brief-image`, {
+        method: 'DELETE', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: item.mediaUrl }),
+      }).catch(() => {})
+    }
     setEditing(prev => ({ ...prev, media: prev.media.filter((_, i) => i !== idx) }))
   }
 
@@ -1150,22 +1249,30 @@ function BriefsTab({ API }) {
     }
 
     setAiMediaSearching(true)
-    setFeedback('Generating image… this may take 20–30 seconds.')
+    setFeedback('Identifying subject and fetching Wikipedia image…')
     try {
       const saveRes  = await fetch(`${API}/api/admin/ai/generate-image`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draft.title || draft.subtitle || 'Royal Air Force' }),
+        body: JSON.stringify({ title: draft.title || 'Royal Air Force', subtitle: draft.subtitle || '' }),
       })
       const saveData = await saveRes.json()
 
       if (saveData.status === 'success') {
-        setMediaUrl(`${API}${saveData.data.url}`)
-        setFeedback('Image generated — click Add to attach it.')
-        setTimeout(() => setFeedback(''), 5000)
+        const url  = `${API}${saveData.data.url}`
+        const term = saveData.data.term
+        const page = saveData.data.wikiPage
+        const entry = { mediaType: 'picture', mediaUrl: url }
+        if (isNew) {
+          setPendingMedia(prev => [...prev, entry])
+        } else {
+          setEditing(prev => ({ ...prev, media: [...(prev.media ?? []), entry] }))
+        }
+        setFeedback(`Image added — subject: "${term}" (Wikipedia: ${page}).`)
+        setTimeout(() => setFeedback(''), 8000)
       } else {
-        setFeedback(`Failed to save image: ${saveData.message}`)
-        setTimeout(() => setFeedback(''), 5000)
+        setFeedback(`Image fetch failed: ${saveData.message}`)
+        setTimeout(() => setFeedback(''), 6000)
       }
     } catch (err) {
       console.error('[generateImage] error:', err)
@@ -1189,6 +1296,33 @@ function BriefsTab({ API }) {
     const keywords = p.keywords.map((k, idx) => idx === i ? { ...k, [field]: val } : k)
     return { ...p, keywords }
   })
+
+  const generateKeywords = async () => {
+    if (!draft.description) return
+    const needed = 10 - (draft.keywords?.length ?? 0)
+    if (needed <= 0) return
+    setKwGenerating(true)
+    try {
+      const existing = (draft.keywords ?? []).map(k => k.keyword).filter(Boolean)
+      const res  = await fetch(`${API}/api/admin/ai/generate-keywords`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: draft.description, existingKeywords: existing, needed }),
+      })
+      const data = await res.json()
+      if (data.status === 'success' && data.data.keywords.length > 0) {
+        setDraft(p => ({ ...p, keywords: [...p.keywords, ...data.data.keywords] }))
+      } else {
+        setFeedback('No additional keywords found in the description.')
+        setTimeout(() => setFeedback(''), 4000)
+      }
+    } catch {
+      setFeedback('Keyword generation failed — please try again.')
+      setTimeout(() => setFeedback(''), 4000)
+    } finally {
+      setKwGenerating(false)
+    }
+  }
 
   // ── Quiz question helpers ──────────────────────────────────────────────────
 
@@ -1416,22 +1550,48 @@ function BriefsTab({ API }) {
                         body: JSON.stringify({ headline }),
                       })
                         .then(r => r.json())
-                        .then(data => {
+                        .then(async data => {
                           const generated = data.data?.brief ?? {}
                           const sources = Array.isArray(generated.sources)
                             ? generated.sources.filter(s => s.url && s.url.startsWith('http'))
                             : []
+                          const briefTitle = generated.title || headline
+                          const briefDesc  = generated.description || ''
                           setDraft({
-                            title:       generated.title       || headline,
-                            subtitle:    generated.subtitle    || '',
-                            description: generated.description || '',
+                            title:       briefTitle,
+                            subtitle:    generated.subtitle || '',
+                            description: briefDesc,
                             category:    'News',
                             keywords:    Array.isArray(generated.keywords) ? generated.keywords : [],
                             sources,
                             dateAdded:   new Date().toISOString().slice(0, 10),
                           })
-                          setFeedback('Brief populated from verified sources — review carefully before saving.')
-                          setTimeout(() => setFeedback(''), 6000)
+                          setFeedback('Brief populated — generating quiz questions…')
+
+                          // Auto-generate quiz questions using the brief content
+                          try {
+                            setQuizGenerating(true)
+                            const qRes  = await fetch(`${API}/api/admin/ai/generate-quiz`, {
+                              method: 'POST', credentials: 'include',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ title: briefTitle, description: briefDesc }),
+                            })
+                            const qData = await qRes.json()
+                            const fromAI = (qs) => (Array.isArray(qs) ? qs : []).map(q => ({
+                              question: q.question ?? '',
+                              answers: (q.answers ?? []).map((a, ai) => ({
+                                title: a.title ?? '', isCorrect: ai === q.correctAnswerIndex,
+                              })),
+                            }))
+                            if (Array.isArray(qData.data?.easyQuestions))   setDraftQuizEasy(fromAI(qData.data.easyQuestions))
+                            if (Array.isArray(qData.data?.mediumQuestions)) setDraftQuizMedium(fromAI(qData.data.mediumQuestions))
+                            setFeedback('Brief and quiz questions generated — review carefully before saving.')
+                          } catch {
+                            setFeedback('Brief populated — quiz generation failed, add questions manually.')
+                          } finally {
+                            setQuizGenerating(false)
+                          }
+                          setTimeout(() => setFeedback(''), 7000)
                         })
                         .catch(() => {
                           setFeedback('AI generation failed — please fill in the form manually.')
@@ -1477,6 +1637,7 @@ function BriefsTab({ API }) {
               onKeyDown={e => e.key === 'Enter' && openEdit(b)}
             >
               <div className="admin-card__header">
+                {(() => { const img = b.media?.find(m => m.mediaType === 'picture'); return img ? <img src={img.mediaUrl} alt="" className="admin-brief-row__thumb" /> : <div className="admin-brief-row__thumb admin-brief-row__thumb--empty" /> })()}
                 <div className="admin-card__meta">
                   <span className="admin-badge admin-badge--free">{b.category}</span>
                   <span className="admin-card__title">{b.title}</span>
@@ -1590,7 +1751,14 @@ function BriefsTab({ API }) {
 
       {/* Core details */}
       <div className="admin-section">
-        <h3 className="admin-section-title">Core Details</h3>
+        <h3 className="admin-section-title">
+          Core Details
+          {!isNew && editing?._id && (
+            <span style={{ fontSize: '0.7rem', fontWeight: 400, color: '#94a3b8', marginLeft: '0.75rem', letterSpacing: '0.03em' }}>
+              ID: {editing._id}
+            </span>
+          )}
+        </h3>
 
         <div className="brief-form-field">
           <label className="form-label">Title</label>
@@ -1676,7 +1844,17 @@ function BriefsTab({ API }) {
                   <div className="brief-media-item__controls">
                     <button className="brief-media-item__move-btn" onClick={() => movePendingMedia(idx, -1)} disabled={idx === 0} title="Move up">▲</button>
                     <button className="brief-media-item__move-btn" onClick={() => movePendingMedia(idx, 1)} disabled={idx === pendingMedia.length - 1} title="Move down">▼</button>
-                    <button className="brief-media-item__remove" onClick={() => setPendingMedia(prev => prev.filter((_, i) => i !== idx))} title="Remove">✕</button>
+                    <button className="brief-media-item__remove" onClick={() => {
+                      const item = pendingMedia[idx]
+                      if (item?.mediaUrl?.startsWith('/uploads/brief-images/')) {
+                        fetch(`${API}/api/admin/media/brief-image`, {
+                          method: 'DELETE', credentials: 'include',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ url: item.mediaUrl }),
+                        }).catch(() => {})
+                      }
+                      setPendingMedia(prev => prev.filter((_, i) => i !== idx))
+                    }} title="Remove">✕</button>
                   </div>
                 </div>
               ))}
@@ -1707,11 +1885,17 @@ function BriefsTab({ API }) {
               <button
                 className="btn-ghost"
                 style={{ flexShrink: 0 }}
-                disabled
-                title="Feature not working for now"
-                style={{ flexShrink: 0, opacity: 0.4, cursor: 'not-allowed' }}
+                onClick={findMediaWithAI}
+                disabled={aiMediaSearching}
               >
-                Generate Image
+                {aiMediaSearching ? 'Searching…' : 'Generate Image'}
+              </button>
+              <button
+                className="btn-ghost"
+                style={{ flexShrink: 0 }}
+                onClick={() => setPendingMedia(prev => [...prev, { mediaType: 'picture', mediaUrl: DEFAULT_BRIEF_IMAGE }])}
+              >
+                Add Placeholder
               </button>
               <button
                 className="btn-primary"
@@ -1781,11 +1965,17 @@ function BriefsTab({ API }) {
               <button
                 className="btn-ghost"
                 style={{ flexShrink: 0 }}
-                disabled
-                title="Feature not working for now"
-                style={{ flexShrink: 0, opacity: 0.4, cursor: 'not-allowed' }}
+                onClick={findMediaWithAI}
+                disabled={aiMediaSearching}
               >
-                Generate Image
+                {aiMediaSearching ? 'Searching…' : 'Generate Image'}
+              </button>
+              <button
+                className="btn-ghost"
+                style={{ flexShrink: 0 }}
+                onClick={() => setEditing(prev => ({ ...prev, media: [...(prev.media ?? []), { mediaType: 'picture', mediaUrl: DEFAULT_BRIEF_IMAGE }] }))}
+              >
+                Add Placeholder
               </button>
               <button className="btn-primary" style={{ flexShrink: 0 }} onClick={addMedia} disabled={!mediaUrl.trim()}>
                 Add
@@ -1852,7 +2042,27 @@ function BriefsTab({ API }) {
             <button className="brief-array-row__remove" onClick={() => removeKeyword(i)} title="Remove keyword">✕</button>
           </div>
         ))}
-        <button className="admin-action-btn admin-action-btn--primary" onClick={addKeyword}>+ Add Keyword</button>
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button className="admin-action-btn admin-action-btn--primary" onClick={addKeyword}>+ Add Keyword</button>
+          {(draft.keywords?.length ?? 0) < 10 && (
+            <button
+              className="admin-action-btn"
+              onClick={generateKeywords}
+              disabled={kwGenerating || !draft.description}
+              title={!draft.description ? 'Add a description first' : `Generate ${10 - (draft.keywords?.length ?? 0)} more keyword(s) from description`}
+            >
+              {kwGenerating ? (
+                <span className="quiz-generating">
+                  <span className="app-loading__spinner" style={{ width: 13, height: 13 }} />
+                  Generating…
+                </span>
+              ) : `✦ Generate Keywords with AI (${10 - (draft.keywords?.length ?? 0)} remaining)`}
+            </button>
+          )}
+          {(draft.keywords?.length ?? 0) >= 10 && (
+            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Maximum 10 keywords reached</span>
+          )}
+        </div>
       </div>
 
       {/* Quiz Questions */}

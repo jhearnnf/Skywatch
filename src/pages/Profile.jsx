@@ -84,7 +84,7 @@ export default function Profile({ navigate }) {
     finally { setDiffBusy(false) }
   }
 
-  const coins = user?.totalAircoins ?? 0
+  const coins = user?.cycleAircoins ?? 0
   const { current: lvl, next: nextLvl, coinsInLevel, coinsNeeded, progress } = getLevelInfo(coins, levels)
 
   // Rank — populated via /api/users/stats, but user from context has rank as ObjectId
@@ -95,6 +95,28 @@ export default function Profile({ navigate }) {
 
   return (
     <main className="page profile-page">
+
+      {/* ── Header ───────────────────────────────────────── */}
+      <div className="feed-header">
+        <div className="section-inner">
+          <div className="feed-header__eyebrow">
+            <span className="feed-header__eyebrow-dot" aria-hidden="true" />
+            <span>CLASSIFICATION: RESTRICTED</span>
+            <span className="feed-header__eyebrow-divider" aria-hidden="true">|</span>
+            <span>SKYWATCH AGENT DOSSIER</span>
+          </div>
+          <h1 className="feed-title">
+            <span className="feed-title__bracket" aria-hidden="true">[</span>
+            AGENT PROFILE
+            <span className="feed-title__bracket" aria-hidden="true">]</span>
+          </h1>
+          <p className="feed-subtitle">
+            <span className="feed-subtitle__tag" aria-hidden="true">// </span>
+            Mission stats, rank progression &amp; agent leaderboard.
+          </p>
+        </div>
+      </div>
+
       <div className="section-inner">
         <div className="profile-columns">
 
@@ -120,7 +142,7 @@ export default function Profile({ navigate }) {
               </div>
 
               {/* Level / XP bar */}
-              <div className="profile-xp">
+              <div className="profile-xp profile-xp--clickable" onClick={() => navigate('rankings')} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && navigate('rankings')} title="View level progression">
                 <div className="profile-xp__header">
                   <span className="profile-xp__level">Level {lvl.levelNumber}</span>
                   <span className="profile-xp__coins">
@@ -166,9 +188,9 @@ export default function Profile({ navigate }) {
               {/* Stats grid */}
               <div className="stats-grid">
                 <StatCard label="Briefs Read"  value={stats.brifsRead}                          icon="📋" />
-                <StatCard label="Games Played" value={stats.gamesPlayed}          icon="🎯" />
+                <StatCard label="Games Played" value={stats.gamesPlayed}          icon="🎯" onClick={() => navigate('game-history')} />
                 <StatCard label="Avg Score"    value={`${stats.winPercent}%`}  icon="✓" highlight />
-                <StatCard label="Aircoins"     value={coins.toLocaleString()}                    icon="⬡" />
+                <StatCard label="Aircoins"     value={coins.toLocaleString()}                    icon="⬡" onClick={() => navigate('aircoin-history')} />
               </div>
 
             </div>
@@ -220,12 +242,16 @@ export default function Profile({ navigate }) {
   )
 }
 
-function StatCard({ label, value, icon, highlight, mock }) {
+function StatCard({ label, value, icon, highlight, mock, onClick }) {
+  const Tag = onClick ? 'button' : 'div'
   return (
-    <div className={`stat-card ${highlight ? 'stat-card--highlight' : ''} ${mock ? 'stat-card--mock' : ''}`}>
+    <Tag
+      className={`stat-card ${highlight ? 'stat-card--highlight' : ''} ${mock ? 'stat-card--mock' : ''} ${onClick ? 'stat-card--clickable' : ''}`}
+      onClick={onClick}
+    >
       <span className="stat-card__icon" aria-hidden="true">{icon}</span>
       <span className="stat-card__value">{value}</span>
       <span className="stat-card__label">{label}</span>
-    </div>
+    </Tag>
   )
 }

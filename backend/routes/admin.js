@@ -4,8 +4,11 @@ const User = require('../models/User');
 const ProblemReport = require('../models/ProblemReport');
 const AdminAction = require('../models/AdminAction');
 const AppSettings = require('../models/AppSettings');
-const GameSessionQuizResult = require('../models/GameSessionQuizResult');
-const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
+const GameSessionQuizResult  = require('../models/GameSessionQuizResult');
+const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
+const AircoinLog             = require('../models/AircoinLog');
+const { awardCoins }         = require('../utils/awardCoins');
+const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const GameQuizQuestion  = require('../models/GameQuizQuestion');
 const GameType          = require('../models/GameType');
@@ -24,17 +27,20 @@ const requireReason = (req, res, next) => {
   next();
 };
 
-const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
-
 // GET /api/admin/stats
 router.get('/stats', async (_req, res) => {
   try {
     const settings = await AppSettings.getSettings();
+    const passThresholdEasy   = settings.passThresholdEasy   ?? 60;
+    const passThresholdMedium = settings.passThresholdMedium ?? 60;
+
     const [
       totalUsers, freeUsers, trialUsers, silverUsers, goldUsers,
       easyPlayers, mediumPlayers,
       totalBrifsRead,
-      totalGamesPlayed, totalGamesWon,
+      totalGamesPlayed, totalGamesCompleted, totalGamesWon,
+      easyLost, mediumLost,
+      totalGamesAbandoned,
       aircoinAgg, loginAgg,
     ] = await Promise.all([
       User.countDocuments(),
@@ -45,16 +51,14 @@ router.get('/stats', async (_req, res) => {
       User.countDocuments({ difficultySetting: 'easy' }),
       User.countDocuments({ difficultySetting: 'medium' }),
       IntelligenceBriefRead.countDocuments(),
+      GameSessionQuizAttempt.countDocuments({ status: { $in: ['completed', 'abandoned'] } }),
       GameSessionQuizAttempt.countDocuments({ status: 'completed' }),
-      GameSessionQuizAttempt.countDocuments({
-        status: 'completed',
-        $or: [
-          { difficulty: 'easy',   percentageCorrect: { $gte: settings.passThresholdEasy   ?? 60 } },
-          { difficulty: 'medium', percentageCorrect: { $gte: settings.passThresholdMedium ?? 60 } },
-        ],
-      }),
+      GameSessionQuizAttempt.countDocuments({ status: 'completed', percentageCorrect: 100 }),
+      GameSessionQuizAttempt.countDocuments({ status: 'completed', difficulty: 'easy',   percentageCorrect: { $lt: passThresholdEasy } }),
+      GameSessionQuizAttempt.countDocuments({ status: 'completed', difficulty: 'medium', percentageCorrect: { $lt: passThresholdMedium } }),
+      GameSessionQuizAttempt.countDocuments({ status: 'abandoned' }),
       User.aggregate([{ $group: { _id: null, total: { $sum: '$totalAircoins' } } }]),
-      User.aggregate([{ $group: { _id: null, total: { $sum: { $size: '$logins' } } } }]),
+      User.aggregate([{ $group: { _id: null, total: { $sum: { $size: { $ifNull: ['$logins', []] } } } } }]),
     ]);
 
     // Combined login streaks — requires virtual, so fetch all users
@@ -73,9 +77,13 @@ router.get('/stats', async (_req, res) => {
         },
         games: {
           totalGamesPlayed,
-          totalGamesWon,
-          totalGamesLost:      totalGamesPlayed - totalGamesWon,
+          totalGamesCompleted,
+          totalPerfectScores:  totalGamesWon,
+          totalGamesLost:      easyLost + mediumLost,
+          totalGamesAbandoned,
           totalAircoinsEarned: aircoinAgg[0]?.total ?? 0,
+          passThresholdEasy,
+          passThresholdMedium,
         },
         briefs: { totalBrifsRead },
       },
@@ -209,7 +217,7 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
     const userUpdates = {};
     const ops = [];
 
-    if (fields.includes('aircoins'))        userUpdates.totalAircoins = 0;
+    if (fields.includes('aircoins'))        { userUpdates.totalAircoins = 0; userUpdates.cycleAircoins = 0; userUpdates.rank = null; ops.push(AircoinLog.deleteMany({ userId: req.params.id })); }
     if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); }
     if (fields.includes('intelBriefsRead')) ops.push(IntelligenceBriefRead.deleteMany({ userId: req.params.id }));
 
@@ -217,6 +225,22 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
     await Promise.all(ops);
     await AdminAction.create({ userId: req.user._id, actionType: 'reset_user_stats', reason: req.body.reason, targetUserId: req.params.id });
     res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/award-coins — award test coins to the admin's own account
+router.post('/award-coins', async (req, res) => {
+  try {
+    const { amount } = req.body;
+    const parsed = parseInt(amount, 10);
+    if (!parsed || parsed <= 0) return res.status(400).json({ message: 'Amount must be a positive integer' });
+
+    const result = await awardCoins(req.user._id, parsed, 'admin', 'Test Coins');
+
+    await AdminAction.create({ userId: req.user._id, actionType: 'award_test_coins', reason: `Awarded ${parsed} test coins to self` });
+    res.json({ status: 'success', awarded: parsed, totalAircoins: result.totalAircoins, cycleAircoins: result.cycleAircoins, rankPromotion: result.rankPromotion });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -245,7 +269,7 @@ router.post('/problems/:id/update', async (req, res) => {
   try {
     const { description, solved } = req.body;
     const update = { $push: { updates: { adminUserId: req.user._id, description } } };
-    if (solved !== undefined) update.solved = solved;
+    if (solved !== undefined) update.$set = { solved };
 
     const report = await ProblemReport.findByIdAndUpdate(req.params.id, update, { new: true });
     res.json({ status: 'success', data: { report } });
@@ -322,8 +346,20 @@ router.patch('/briefs/:id', requireReason, async (req, res) => {
 // DELETE /api/admin/briefs/:id
 router.delete('/briefs/:id', requireReason, async (req, res) => {
   try {
-    await IntelligenceBrief.findByIdAndDelete(req.params.id);
-    await IntelligenceBriefRead.deleteMany({ intelBriefId: req.params.id });
+    const briefId = req.params.id;
+
+    // Collect question IDs before deleting so we can wipe their results
+    const questionIds = await GameQuizQuestion.distinct('_id', { intelBriefId: briefId });
+
+    await Promise.all([
+      IntelligenceBrief.findByIdAndDelete(briefId),
+      IntelligenceBriefRead.deleteMany({ intelBriefId: briefId }),
+      GameQuizQuestion.deleteMany({ intelBriefId: briefId }),
+      GameSessionQuizAttempt.deleteMany({ intelBriefId: briefId }),
+      GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
+      AircoinLog.deleteMany({ briefId }),
+    ]);
+
     await AdminAction.create({ userId: req.user._id, actionType: 'delete_brief', reason: req.body.reason });
     res.json({ status: 'success' });
   } catch (err) {
@@ -384,7 +420,12 @@ router.post('/briefs/:id/questions/bulk', requireReason, async (req, res) => {
     const gameType = await GameType.findOne({ gameTitle: 'quiz' });
     if (!gameType) return res.status(500).json({ message: 'Quiz game type not seeded — restart the server' });
 
-    await GameQuizQuestion.deleteMany({ intelBriefId: req.params.id });
+    // Wipe results tied to the old questions before replacing them
+    const oldQuestionIds = await GameQuizQuestion.distinct('_id', { intelBriefId: req.params.id });
+    await Promise.all([
+      GameQuizQuestion.deleteMany({ intelBriefId: req.params.id }),
+      GameSessionQuizResult.deleteMany({ questionId: { $in: oldQuestionIds } }),
+    ]);
 
     const createQuestions = async (questions, difficulty) => {
       const ids = [];
@@ -434,7 +475,11 @@ router.delete('/briefs/:id/questions', requireReason, async (req, res) => {
     const brief = await IntelligenceBrief.findById(req.params.id);
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
-    await GameQuizQuestion.deleteMany({ intelBriefId: req.params.id });
+    const questionIds = await GameQuizQuestion.distinct('_id', { intelBriefId: req.params.id });
+    await Promise.all([
+      GameQuizQuestion.deleteMany({ intelBriefId: req.params.id }),
+      GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
+    ]);
     brief.quizQuestionsEasy   = [];
     brief.quizQuestionsMedium = [];
     await brief.save();
@@ -500,11 +545,54 @@ router.post('/ai/generate-brief', async (req, res) => {
       content: 'You are a factual intelligence writer for a Royal Air Force training platform. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
     }, {
       role: 'user',
-      content: `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources about this story, return a JSON object for an RAF trainee intelligence brief. Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "factual title drawn from the story, max 70 characters",\n  "subtitle": "one factual sentence summarising the story",\n  "description": "200-250 word factual brief about this story written for RAF trainees — only include details confirmed by published sources, no speculation",\n  "keywords": [\n    {"keyword": "verified term from the story", "generatedDescription": "factual 2-3 sentence explanation from published sources"},\n    {"keyword": "second verified term", "generatedDescription": "factual explanation"},\n    {"keyword": "third verified term", "generatedDescription": "factual explanation"}\n  ],\n  "sources": [\n    {"url": "https://full-url-of-actual-article.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}`,
+      content: `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources, return a JSON object for an RAF trainee intelligence brief. Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "factual title drawn from the story, max 70 characters",\n  "subtitle": "one factual sentence summarising the story",\n  "description": "200-250 word factual brief written for RAF trainees — only include details confirmed by published sources, no speculation",\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim in the description above", "generatedDescription": "general RAF-specific definition of this term — e.g. what this aircraft/system/operation is, its role and capabilities — do NOT reference this intel brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"}\n  ],\n  "sources": [\n    {"url": "https://full-url-of-actual-article.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}\nCRITICAL RULES:\n1. Write the description first, then extract keywords FROM that description — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere in the description text.\n2. Return exactly 10 keyword objects.\n3. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns that actually appear in the description.`,
     }], 'perplexity/sonar');
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     const brief = JSON.parse(cleanJson(raw));
+    // Safety net: discard any keyword that doesn't appear verbatim in the description
+    if (Array.isArray(brief.keywords) && brief.description) {
+      const desc = brief.description.toLowerCase();
+      brief.keywords = brief.keywords.filter(k =>
+        k.keyword && desc.includes(k.keyword.toLowerCase())
+      );
+    }
     res.json({ status: 'success', data: { brief } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/generate-keywords
+// Generates up to `needed` additional keywords sourced from the description.
+// Existing keyword strings are passed in so the AI doesn't repeat them.
+router.post('/ai/generate-keywords', async (req, res) => {
+  try {
+    const { description, existingKeywords = [], needed = 10 } = req.body;
+    if (!description) return res.status(400).json({ message: 'description required' });
+    if (needed <= 0)  return res.json({ status: 'success', data: { keywords: [] } });
+
+    const existingList = existingKeywords.length
+      ? `Already used (do NOT repeat these): ${existingKeywords.join(', ')}\n\n`
+      : '';
+
+    const data = await openRouterChat([{
+      role: 'system',
+      content: 'You are a keyword extractor for a Royal Air Force training platform. You only select terms that appear verbatim in the provided description text. For each keyword you write a general RAF-specific definition of that term — what it is, its role and capabilities — without referencing the specific intel brief it was found in.',
+    }, {
+      role: 'user',
+      content: `Description:\n"""${description}"""\n\n${existingList}Extract exactly ${needed} keywords from the description above. Every keyword string MUST appear verbatim (same spelling and capitalisation) in the description. Choose technical terms, acronyms, aircraft designations, operation names, and proper nouns.\n\nFor "generatedDescription": write a general RAF-specific definition of the term itself (e.g. what that aircraft/system/operation is, its role and capabilities). Do NOT reference or summarise the intel brief — the description should be useful as a standalone glossary entry.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition of this term"},{"keyword":"...","generatedDescription":"..."}]}`,
+    }], 'perplexity/sonar');
+
+    const raw = data.choices?.[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(cleanJson(raw));
+    const desc = description.toLowerCase();
+    const existing = new Set(existingKeywords.map(k => k.toLowerCase()));
+
+    const keywords = (Array.isArray(parsed.keywords) ? parsed.keywords : [])
+      .filter(k => k.keyword && desc.includes(k.keyword.toLowerCase()) && !existing.has(k.keyword.toLowerCase()))
+      .slice(0, needed);
+
+    res.json({ status: 'success', data: { keywords } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -517,10 +605,10 @@ router.post('/ai/generate-quiz', async (req, res) => {
     if (!title && !description) return res.status(400).json({ message: 'title or description required' });
     const data = await openRouterChat([{
       role: 'system',
-      content: 'You are a quiz question writer for a Royal Air Force training platform.',
+      content: 'You are a quiz question writer for a Royal Air Force training platform. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description.',
     }, {
       role: 'user',
-      content: `Title: ${title}\nDescription: ${description ?? ''}\n\nGenerate exactly 10 easy and 10 medium RAF quiz questions about this intel brief.\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":[{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."}],"correctAnswerIndex":0}],"mediumQuestions":[...]}\nRules: easy=direct recall, medium=deeper understanding, exactly 10 answers per question, correctAnswerIndex is the 0-based index of the correct answer.`,
+      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 10 easy and 10 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Easy questions test direct recall of specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n3. Medium questions require understanding of context or relationships between facts stated in the description.\n4. The correct answer must be explicitly supported by the description.\n5. Wrong answers must be plausible but clearly incorrect based on the description.\n6. Exactly 10 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":[{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."}],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
     }], 'perplexity/sonar');
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     const generated = JSON.parse(raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
@@ -530,12 +618,34 @@ router.post('/ai/generate-quiz', async (req, res) => {
   }
 });
 
-// POST /api/admin/ai/generate-image — call OpenRouter for image, save to disk, return URL
+// DELETE /api/admin/media/brief-image — remove a locally stored brief image from disk
+router.delete('/media/brief-image', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url || !url.startsWith('/uploads/brief-images/')) {
+      return res.status(400).json({ message: 'Invalid or non-local URL' });
+    }
+    const filePath = path.join(__dirname, '..', url);
+    fs.unlink(filePath, (err) => {
+      if (err && err.code !== 'ENOENT') return res.status(500).json({ message: err.message });
+      res.json({ status: 'success' });
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/generate-image
+// 1. Ask OpenRouter to extract the key subject from the title
+// 2. Search Wikipedia for that subject
+// 3. Download the page thumbnail and save it locally
 router.post('/ai/generate-image', async (req, res) => {
   try {
-    const { title } = req.body;
-    const prompt = `${title ?? 'Royal Air Force'}, Royal Air Force, aviation, cinematic aerial photography, dramatic lighting, photorealistic, high detail`;
-    const result = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const { title, subtitle } = req.body;
+    if (!title) return res.status(400).json({ message: 'title is required' });
+
+    // Step 1 — extract subject via OpenRouter text model
+    const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
@@ -544,24 +654,51 @@ router.post('/ai/generate-image', async (req, res) => {
         'X-Title': 'Skywatch',
       },
       body: JSON.stringify({
-        model: 'openai/gpt-5-image-mini',
-        messages: [{ role: 'user', content: prompt }],
-        modalities: ['image', 'text'],
+        model: 'openai/gpt-4o-mini',
+        messages: [{
+          role: 'user',
+          content: `You are helping find a Wikipedia image for a news article. Extract the single most prominent subject, aircraft, person, place, or organisation from this title and subtitle that is most likely to have its own Wikipedia article with a photograph. Reply with ONLY the search term — no explanation, no punctuation, no quotes.\n\nTitle: "${title}"${subtitle ? `\nSubtitle: "${subtitle}"` : ''}`,
+        }],
       }),
     });
-    const genData = await result.json();
-    if (genData.error) throw new Error(genData.error.message ?? JSON.stringify(genData.error));
-    const content = genData.choices?.[0]?.message?.content;
-    const imgPart = Array.isArray(content) ? content.find(p => p.type === 'image_url') : null;
-    const dataUrl = imgPart?.image_url?.url ?? (typeof content === 'string' && content.startsWith('data:') ? content : null);
-    if (!dataUrl) throw new Error('No image returned — check model name or OpenRouter account');
-    const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
-    const buffer = Buffer.from(base64, 'base64');
+    const aiData = await aiRes.json();
+    if (aiData.error) throw new Error(aiData.error.message ?? JSON.stringify(aiData.error));
+    const searchTerm = aiData.choices?.[0]?.message?.content?.trim().replace(/^["']|["']$/g, '');
+    if (!searchTerm) throw new Error('AI did not return a search term');
+
+    // Step 2 — find the Wikipedia page
+    const searchRes = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchTerm)}&format=json&srlimit=1&origin=*`
+    );
+    const searchData = await searchRes.json();
+    const pageTitle = searchData.query?.search?.[0]?.title;
+    if (!pageTitle) throw new Error(`No Wikipedia page found for "${searchTerm}"`);
+
+    // Step 3 — get the page thumbnail
+    const thumbRes = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=800&origin=*`
+    );
+    const thumbData = await thumbRes.json();
+    const pages = thumbData.query?.pages ?? {};
+    const imageUrl = Object.values(pages)[0]?.thumbnail?.source;
+    if (!imageUrl) throw new Error(`No image found on Wikipedia for "${pageTitle}"`);
+
+    // Step 4 — download and save the image
+    const imgRes = await fetch(imageUrl, {
+      headers: { 'User-Agent': 'Skywatch/1.0 (educational-platform)' },
+    });
+    if (!imgRes.ok) throw new Error(`Wikipedia image download failed (${imgRes.status})`);
+    const buffer = Buffer.from(await imgRes.arrayBuffer());
+    const ext = /\.(jpe?g|png|gif|webp|svg)(\?|$)/i.exec(imageUrl)?.[1]?.replace('jpeg', 'jpg') ?? 'jpg';
     const dir = path.join(__dirname, '..', 'uploads', 'brief-images');
     fs.mkdirSync(dir, { recursive: true });
-    const filename = `brief-${Date.now()}.png`;
+    const filename = `brief-${Date.now()}.${ext}`;
     fs.writeFileSync(path.join(dir, filename), buffer);
-    res.json({ status: 'success', data: { url: `/uploads/brief-images/${filename}` } });
+
+    res.json({
+      status: 'success',
+      data: { url: `/uploads/brief-images/${filename}`, term: searchTerm, wikiPage: pageTitle },
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

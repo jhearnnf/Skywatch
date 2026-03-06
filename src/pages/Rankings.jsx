@@ -18,7 +18,7 @@ function getLevelInfo(totalAircoins, levels) {
   return { current, next, coinsInLevel, coinsNeeded, progress }
 }
 
-export default function Rankings() {
+export default function Rankings({ navigate }) {
   const { user, API } = useAuth()
 
   const [levels, setLevels] = useState(MOCK_LEVELS)
@@ -37,13 +37,18 @@ export default function Rankings() {
   }, [API])
 
   // ── Levels ──────────────────────────────────────────────
-  const coins = user?.totalAircoins ?? 0
+  const coins = user?.cycleAircoins ?? 0
   const { current: currentLvl, next: nextLvl, coinsInLevel, coinsNeeded, progress: lvlProgress } = getLevelInfo(coins, levels)
 
   // ── Ranks ───────────────────────────────────────────────
-  const sortedRanks    = [...ranks].sort((a, b) => b.rankNumber - a.rankNumber)
-  const userRankId     = user?.rank  // ObjectId string from auth context
-  const userRank       = userRankId ? ranks.find(r => r._id?.toString() === userRankId?.toString()) : null
+  const sortedRanks = [...ranks].sort((a, b) => b.rankNumber - a.rankNumber)
+  // user.rank may be a populated object or a raw ObjectId string
+  const userRankId  = user?.rank?._id ?? user?.rank ?? null
+  const userRank    = userRankId
+    ? (user.rank?.rankNumber != null
+        ? user.rank  // already a populated object in state
+        : ranks.find(r => r._id?.toString() === userRankId?.toString()))
+    : null
   const userRankNumber = userRank?.rankNumber ?? null
 
   return (
@@ -52,6 +57,7 @@ export default function Rankings() {
 
         {/* ── Header ─────────────────────────────────────── */}
         <div className="rankings-header">
+          <button className="ach-back" onClick={() => navigate('profile')} aria-label="Back">← Back</button>
           <span className="static-eyebrow">Intelligence Corps</span>
           <h1 className="rankings-title">Progression</h1>
         </div>
@@ -77,7 +83,7 @@ export default function Rankings() {
             </div>
             {nextLvl
               ? <p className="xp-panel__next">Next level: Level {nextLvl.levelNumber} — {coinsNeeded ? (coinsNeeded - coinsInLevel).toLocaleString() : 0} Aircoins to go</p>
-              : <p className="xp-panel__next">Maximum level reached</p>
+              : <p className="xp-panel__next">⭐ Maximum level reached — earn {Math.max(0, 14700 - coins).toLocaleString()} more Aircoins to trigger a Rank Promotion and reset to Level 1</p>
             }
           </div>
 
@@ -95,8 +101,9 @@ export default function Rankings() {
                   <span className="level-row__num">{lvl.levelNumber}</span>
                   <span className="level-row__label">Level {lvl.levelNumber}</span>
                   <span className="level-row__coins">
-                    {lvl.cumulativeAircoins.toLocaleString()} Aircoins to reach
+                    {lvl.cumulativeAircoins.toLocaleString()} Total Aircoins
                   </span>
+                  {isMax && <span className="level-row__promo">⭐ Rank Promotion</span>}
                   {isCurrent && <span className="level-row__you">← You</span>}
                 </li>
               )

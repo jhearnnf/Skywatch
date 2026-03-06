@@ -30,9 +30,17 @@ app.get('/api/settings', async (_req, res) => {
     res.json({
       volumeIntelBriefOpened: s.volumeIntelBriefOpened,
       volumeTargetLocked:     s.volumeTargetLocked,
+      volumeFire:             s.volumeFire,
+      volumeAircoin:          s.volumeAircoin,
       volumeOutOfAmmo:        s.volumeOutOfAmmo,
+      volumeLevelUp:          s.volumeLevelUp,
+      volumeRankPromotion:    s.volumeRankPromotion,
+      volumeQuizCompleteWin:  s.volumeQuizCompleteWin,
+      volumeQuizCompleteLose: s.volumeQuizCompleteLose,
+      volumeStandDown:        s.volumeStandDown,
       freeCategories:         s.freeCategories,
       silverCategories:       s.silverCategories,
+      disableLoadingBar:      s.disableLoadingBar,
     })
   } catch {
     res.json({ volumeIntelBriefOpened: 100, volumeTargetLocked: 100, volumeOutOfAmmo: 100, freeCategories: ['News'], silverCategories: [] })

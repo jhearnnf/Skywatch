@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-export default function TargetDossierModal({ keyword, clickX, clickY, onClose }) {
+export default function TargetDossierModal({ keyword, clickX, clickY, scrollY = 0, onClose }) {
   const isMobile = window.innerWidth <= 600
   const ref = useRef(null)
 
@@ -11,15 +11,15 @@ export default function TargetDossierModal({ keyword, clickX, clickY, onClose })
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
-  // Clamp desktop position so dossier stays within viewport
+  // Desktop: position:absolute in document space so dossier scrolls with the page.
+  // clickX/clickY are viewport-relative; add scrollY to get document-relative top.
   const getStyle = () => {
     if (isMobile) return {}
     const panelW = 320
-    const panelH = 220
     const margin = 12
     const x = Math.min(clickX + margin, window.innerWidth - panelW - margin)
-    const y = Math.min(clickY + margin, window.innerHeight - panelH - margin)
-    return { position: 'fixed', left: x, top: y }
+    const y = clickY + scrollY + margin
+    return { position: 'absolute', left: x, top: y }
   }
 
   return (

@@ -43,9 +43,15 @@ const appSettingsSchema = new mongoose.Schema({
   volumeFire:             { type: Number, default: 100, min: 0, max: 100 },
   volumeAircoin:          { type: Number, default: 100, min: 0, max: 100 },
   volumeOutOfAmmo:        { type: Number, default: 100, min: 0, max: 100 },
+  volumeLevelUp:            { type: Number, default: 100, min: 0, max: 100 },
+  volumeRankPromotion:      { type: Number, default: 100, min: 0, max: 100 },
+  volumeQuizCompleteWin:    { type: Number, default: 100, min: 0, max: 100 },
+  volumeQuizCompleteLose:   { type: Number, default: 100, min: 0, max: 100 },
+  volumeStandDown:          { type: Number, default: 100, min: 0, max: 100 },
 
   // Feature flags
-  useLiveLeaderboard: { type: Boolean, default: false },
+  useLiveLeaderboard:   { type: Boolean, default: false },
+  disableLoadingBar:    { type: Boolean, default: false },
 });
 
 // Static helper — always returns (or creates) the single settings document

@@ -9,6 +9,7 @@ const ProblemReport = require('../models/ProblemReport');
 const AppSettings = require('../models/AppSettings');
 const Level = require('../models/Level');
 const Rank = require('../models/Rank');
+const AircoinLog = require('../models/AircoinLog');
 
 // GET /api/users/stats — current user's stats for profile page
 router.get('/stats', protect, async (req, res) => {
@@ -21,10 +22,11 @@ router.get('/stats', protect, async (req, res) => {
       intelBriefId: { $in: validBriefIds },
     });
 
-    const attempts    = await GameSessionQuizAttempt.find({ userId: req.user._id, status: 'completed' });
-    const gamesPlayed = attempts.length;
-    const totalPct    = attempts.reduce((s, a) => s + (a.percentageCorrect ?? 0), 0);
-    const winPercent  = gamesPlayed > 0 ? Math.round(totalPct / gamesPlayed) : 0;
+    const allAttempts      = await GameSessionQuizAttempt.find({ userId: req.user._id, status: { $in: ['completed', 'abandoned'] } });
+    const completedAttempts = allAttempts.filter(a => a.status === 'completed');
+    const gamesPlayed      = allAttempts.length;
+    const totalPct         = completedAttempts.reduce((s, a) => s + (a.percentageCorrect ?? 0), 0);
+    const winPercent       = completedAttempts.length > 0 ? Math.round(totalPct / completedAttempts.length) : 0;
 
     res.json({
       status: 'success',
@@ -111,6 +113,27 @@ router.get('/ranks', async (req, res) => {
   try {
     const ranks = await Rank.find({}).sort({ rankNumber: 1 });
     res.json({ status: 'success', data: { ranks } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/users/aircoins/history — paginated aircoin award history for current user
+router.get('/aircoins/history', protect, async (req, res) => {
+  try {
+    const { page = 1, limit = 30 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [logs, total] = await Promise.all([
+      AircoinLog.find({ userId: req.user._id })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      AircoinLog.countDocuments({ userId: req.user._id }),
+    ]);
+
+    res.json({ status: 'success', data: { logs, total, page: Number(page), limit: Number(limit) } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

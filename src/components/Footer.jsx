@@ -1,3 +1,5 @@
+import { Fragment } from 'react'
+
 const FOOTER_LINKS = [
   { id: 'contact', label: 'Contact' },
   { id: 'about',   label: 'About' },
@@ -14,16 +16,15 @@ export default function Footer({ navigate, currentPage }) {
     <footer className="footer">
       <div className="footer-inner">
         {FOOTER_LINKS.map(({ id, label }, i) => (
-          <>
-            {i > 0 && <span key={`sep-${id}`} className="footer-sep" aria-hidden="true">·</span>}
+          <Fragment key={id}>
+            {i > 0 && <span className="footer-sep" aria-hidden="true">·</span>}
             <button
-              key={id}
               className="footer-link"
               onClick={() => id === 'report' ? handleReport() : navigate(id)}
             >
               {label}
             </button>
-          </>
+          </Fragment>
         ))}
       </div>
     </footer>

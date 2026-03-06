@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReadyForBriefing from '../components/ReadyForBriefing'
 import TargetDossierModal from '../components/TargetDossierModal'
 import OutOfAmmo from '../components/OutOfAmmo'
 import TargetingHUD from '../components/TargetingHUD'
-import AircoinNotification from '../components/AircoinNotification'
 import { useAuth } from '../context/AuthContext'
 import { playSound } from '../utils/sound'
 
@@ -13,45 +12,191 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+// ── Classified loading overlay (matrix rain, no modal) ───────────────────────
+
+const CO_CHARS = '01アイウエオカキクケコ0123456789ABCDEF!@#$[]{}|<>\\/~'
+
+function ClassifiedOverlay() {
+  const canvasRef = useRef(null)
+  const rafRef    = useRef(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.width  = window.innerWidth
+    canvas.height = window.innerHeight
+    const ctx  = canvas.getContext('2d')
+    const fs   = 13
+    const cols = Math.floor(canvas.width / fs)
+    const drops = Array.from({ length: cols }, () => Math.random() * -(canvas.height / fs))
+    let last = 0
+
+    const draw = (ts) => {
+      rafRef.current = requestAnimationFrame(draw)
+      if (ts - last < 55) return
+      last = ts
+      ctx.fillStyle = 'rgba(4, 8, 20, 0.1)'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.font = `${fs}px "Courier New", monospace`
+      for (let i = 0; i < cols; i++) {
+        const ch  = CO_CHARS[Math.floor(Math.random() * CO_CHARS.length)]
+        const rnd = Math.random()
+        ctx.fillStyle = rnd > 0.97 ? 'rgba(219,234,254,0.95)'
+                      : rnd > 0.82 ? 'rgba(96,165,250,0.5)'
+                      :              'rgba(29,78,216,0.18)'
+        ctx.fillText(ch, i * fs, drops[i] * fs)
+        if (drops[i] * fs > canvas.height && Math.random() > 0.975) drops[i] = 0
+        else drops[i] += 0.42
+      }
+    }
+    rafRef.current = requestAnimationFrame(draw)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [])
+
+  return (
+    <div className="classified-overlay" aria-hidden="true">
+      <canvas ref={canvasRef} className="co-canvas" />
+    </div>
+  )
+}
+
+// ── System initialisation bar ─────────────────────────────────────────────────
+
+const SYS_PHASES = [
+  'DECRYPTING PAYLOAD',
+  'VERIFYING CLEARANCE LEVEL',
+  'LOADING INTEL PACKAGE',
+  'CALIBRATING TARGETING MATRIX',
+]
+
+function SystemInitBar({ progress, online }) {
+  const pct   = Math.round(progress * 100)
+  const phase = SYS_PHASES[Math.min(Math.floor(progress * SYS_PHASES.length), SYS_PHASES.length - 1)]
+
+  if (online) {
+    return (
+      <div className="sys-init sys-init--online" aria-live="polite">
+        <div className="sys-init__header">
+          <span className="sys-init__dot sys-init__dot--online" />
+          <span className="sys-init__title">▸ TARGETING SYSTEM ONLINE</span>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="sys-init" aria-live="polite">
+      <div className="sys-init__header">
+        <span className="sys-init__dot" />
+        <span className="sys-init__title">▸▸ ESTABLISHING SECURE CHANNEL</span>
+        <span className="sys-init__pct">{pct}%</span>
+      </div>
+      <div className="sys-init__track">
+        <div className="sys-init__fill" style={{ width: `${pct}%` }} />
+        <div className="sys-init__scanline" />
+      </div>
+      <div className="sys-init__footer">
+        <span className="sys-init__code">SYS:{phase}</span>
+        <span className="sys-init__status">TARGETING OFFLINE · STAND BY</span>
+      </div>
+    </div>
+  )
+}
+
 // ── Keyword-aware description renderer ───────────────────────────────────────
 
-function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHoverChange }) {
+function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHoverChange, isMobile, systemReady, unlockedKws, targeting, onScanWord, dossierOpen }) {
   const [reticlePos, setReticlePos] = useState({ x: 0, y: 0 })
   const [reticleOn,  setReticleOn]  = useState(false)
   const [hoveredKw,  setHoveredKw]  = useState(null)
-  const areaRef = useRef(null)
+  const [kwFlashIdx, setKwFlashIdx] = useState(-1)
+  const areaRef          = useRef(null)
+  const flashTimerRef    = useRef(null)
+  const lastScannedRef   = useRef(null)
 
-  const handleMouseMove  = (e) => setReticlePos({ x: e.clientX, y: e.clientY })
-  const handleMouseEnter = ()  => { setReticleOn(true);  onHoverChange?.(true)  }
-  const handleMouseLeave = ()  => { setReticleOn(false); setHoveredKw(null); onHoverChange?.(false) }
-
-  // Parse description into text + keyword segments
-  const segments = (() => {
+  // Parse description into text + keyword segments (memoised so effect can read it)
+  const segments = useMemo(() => {
     if (!keywords?.length) return [{ type: 'text', content: description }]
     const sorted  = [...keywords].sort((a, b) => b.keyword.length - a.keyword.length)
-    const pattern = new RegExp(`\\b(${sorted.map(k => escapeRegex(k.keyword)).join('|')})\\b`, 'gi')
-    const parts   = []
+    const pattern = new RegExp(
+      `(?<![a-zA-Z0-9])(${sorted.map(k => escapeRegex(k.keyword)).join('|')})(?![a-zA-Z0-9])`,
+      'gi'
+    )
+    const parts = []
     let last = 0, match
     while ((match = pattern.exec(description)) !== null) {
       if (match.index > last) parts.push({ type: 'text', content: description.slice(last, match.index) })
-      const kw = keywords.find(k => k.keyword.toLowerCase() === match[0].toLowerCase())
-      parts.push({ type: 'keyword', content: match[0], keyword: kw })
-      last = match.index + match[0].length
+      const kw = keywords.find(k => k.keyword.toLowerCase() === match[1].toLowerCase())
+      parts.push({ type: 'keyword', content: match[1], keyword: kw })
+      last = match.index + match[1].length
     }
     if (last < description.length) parts.push({ type: 'text', content: description.slice(last) })
     return parts
-  })()
+  }, [description, keywords])
+
+  const countInstances = (content) =>
+    segments.filter(s => s.type === 'keyword' && s.content.toLowerCase() === content.toLowerCase()).length
+
+  const emitScanWord = (content) => {
+    if (!content) { onScanWord?.(null); return }
+    onScanWord?.({ word: content, count: countInstances(content) })
+  }
+
+  // Flash keywords in sequence when targeting activates; report current word via onScanWord
+  useEffect(() => {
+    if (!targeting) {
+      clearInterval(flashTimerRef.current)
+      setKwFlashIdx(-1)
+      lastScannedRef.current = null
+      onScanWord?.(null)
+      return
+    }
+    const kwSegs = segments.filter(s => s.type === 'keyword')
+    if (kwSegs.length === 0) return
+    clearInterval(flashTimerRef.current)
+    let idx = 0
+    setKwFlashIdx(0)
+    lastScannedRef.current = kwSegs[0].content
+    emitScanWord(kwSegs[0].content)
+    flashTimerRef.current = setInterval(() => {
+      idx++
+      if (idx >= kwSegs.length) {
+        clearInterval(flashTimerRef.current)
+        setKwFlashIdx(-1)
+      } else {
+        lastScannedRef.current = kwSegs[idx].content
+        setKwFlashIdx(idx)
+        emitScanWord(kwSegs[idx].content)
+      }
+    }, 70)
+    return () => clearInterval(flashTimerRef.current)
+  }, [targeting]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Track cursor globally while dossier is open so reticle follows the mouse over the modal
+  useEffect(() => {
+    if (!dossierOpen) return
+    const handler = (e) => setReticlePos({ x: e.clientX, y: e.clientY })
+    document.addEventListener('mousemove', handler)
+    return () => document.removeEventListener('mousemove', handler)
+  }, [dossierOpen])
+
+  const handleMouseMove  = (e) => setReticlePos({ x: e.clientX, y: e.clientY })
+  const handleMouseEnter = ()  => { setReticleOn(true);  if (systemReady) onHoverChange?.(true)  }
+  const handleMouseLeave = ()  => { if (dossierOpen) return; setReticleOn(false); setHoveredKw(null); if (systemReady) onHoverChange?.(false) }
+
+  // Track keyword instance index separately from segment index
+  let kwInstanceIdx = -1
 
   return (
     <div
       ref={areaRef}
       className="description-area"
-      onMouseMove={handleMouseMove}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onMouseMove={isMobile ? undefined : handleMouseMove}
+      onMouseEnter={isMobile ? undefined : handleMouseEnter}
+      onMouseLeave={isMobile ? undefined : handleMouseLeave}
     >
-      {/* Custom reticle cursor */}
-      {reticleOn && (
+      {/* Custom reticle cursor — desktop only, shows even during system init */}
+      {!isMobile && reticleOn && (
         <div
           className={`custom-reticle ${hoveredKw ? 'custom-reticle--targeted' : ''} ${!hasAmmo ? 'custom-reticle--grey' : ''}`}
           style={{ left: reticlePos.x, top: reticlePos.y }}
@@ -69,12 +214,16 @@ function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHov
       <p className={`description-text ${hoveredKw ? 'description-text--dimmed' : ''}`}>
         {segments.map((seg, i) => {
           if (seg.type === 'text') return <span key={i}>{seg.content}</span>
-          const isHovered = hoveredKw?.keyword === seg.keyword?.keyword
+          kwInstanceIdx++
+          const thisIdx    = kwInstanceIdx
+          const isHovered  = hoveredKw?.keyword === seg.keyword?.keyword
+          const isUnlocked = unlockedKws?.has(seg.keyword?.keyword)
+          const isFlashing = kwFlashIdx === thisIdx
           return (
             <span
               key={i}
-              className={`kw-highlight ${isHovered ? 'kw-highlight--targeted' : ''}`}
-              onMouseEnter={() => setHoveredKw(seg.keyword)}
+              className={`kw-highlight${isUnlocked ? ' kw-highlight--unlocked' : ''}${isHovered ? ' kw-highlight--targeted' : ''}${isFlashing ? ' kw-highlight--flash' : ''}`}
+              onMouseEnter={() => { setHoveredKw(seg.keyword); lastScannedRef.current = seg.content; emitScanWord(seg.content) }}
               onMouseLeave={() => setHoveredKw(null)}
               onClick={(e) => onKeywordClick(e, seg.keyword)}
             >
@@ -122,7 +271,10 @@ function MediaCarousel({ media }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function IntelligenceBrief({ briefId, navigate }) {
-  const { user, setUser, API } = useAuth()
+  const { user, setUser, API, awardAircoins } = useAuth()
+
+  // Touch-only devices don't hover — disable focus mode for them
+  const isMobile = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
 
   const [brief,         setBrief]         = useState(null)
   const [ammoRemaining, setAmmoRemaining] = useState(0)
@@ -133,13 +285,26 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const [dossier,       setDossier]       = useState(null)
   const [ammoItems,     setAmmoItems]     = useState([])
   const [quizOpen,      setQuizOpen]      = useState(false)
+  const [unlockedKws,   setUnlockedKws]   = useState(() => new Set())
   const [quizCompleted, setQuizCompleted] = useState(null) // null=unknown, true/false
-  const [quizAircoinReward, setQuizAircoinReward] = useState(0)
-  const [descHovered,   setDescHovered]   = useState(false)
-  const [descRect,      setDescRect]      = useState(null)
-  const [aircoinReward, setAircoinReward] = useState(0)
-  const openSoundRef      = useRef(false)
-  const targetingActiveRef = useRef(false)
+  const [quizAircoinReward, setQuizAircoinReward] = useState(0) // kept for quiz modal visibility gate
+  const [descHovered,     setDescHovered]     = useState(false)
+  const [scanWord,        setScanWord]        = useState(null)
+  const [descRect,        setDescRect]        = useState(null)
+  const [descScrollY,     setDescScrollY]     = useState(0)
+  const aircoinRewardRef      = useRef(0)
+  const aircoinCycleRef       = useRef(null)
+  const aircoinRankPromoRef   = useRef(null)
+  const [systemReady,     setSystemReady]     = useState(false)
+  const [systemProgress,  setSystemProgress]  = useState(0)
+  const [sysOnline,       setSysOnline]       = useState(false)
+  const [pageRevealed,    setPageRevealed]    = useState(false)
+  const systemReadyRef    = useRef(false)   // stable ref for callbacks
+  const pageRevealedRef   = useRef(false)   // stable ref for callbacks
+  const [loadingBarDisabled, setLoadingBarDisabled] = useState(null) // null = not yet fetched
+  const openSoundRef        = useRef(false)
+  const aircoinSoundRef     = useRef(false)
+  const targetingActiveRef  = useRef(false)
   const descWrapRef    = useRef(null)
   const isScrollingRef = useRef(false)
   const scrollTimerRef = useRef(null)
@@ -195,16 +360,18 @@ export default function IntelligenceBrief({ briefId, navigate }) {
     return () => window.removeEventListener('mousemove', onMove)
   }, [])
 
-  // ── Scroll detection ─────────────────────────────────────────────────────────
+  // ── Scroll detection — desktop only ──────────────────────────────────────────
   // Block targeting while scrolling. When scroll ends, re-check cursor position —
   // onMouseEnter only fires once (boundary crossing), so if the cursor is already
   // over the description when scrolling stops we must activate manually.
   useEffect(() => {
+    if (isMobile) return
     const onScroll = () => {
       isScrollingRef.current = true
       clearTimeout(scrollTimerRef.current)
       scrollTimerRef.current = setTimeout(() => {
         isScrollingRef.current = false
+        if (!systemReadyRef.current) return
         const { x, y } = mousePosRef.current
         const rect = descWrapRef.current?.getBoundingClientRect()
         if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
@@ -217,36 +384,19 @@ export default function IntelligenceBrief({ briefId, navigate }) {
       window.removeEventListener('scroll', onScroll)
       clearTimeout(scrollTimerRef.current)
     }
-  }, [])
+  }, [isMobile])
 
   // ── HUD position ───────────────────────────────────────────────────────────
   // Keep descRect alive while the dossier modal is open so the HUDs don't disappear
   // when the mouse moves from the description into the modal.
+  // Capture scrollY at the same moment so HUDs can be absolutely positioned in
+  // document space (they then scroll naturally with the page).
   useEffect(() => {
     if (descHovered && descWrapRef.current) {
       setDescRect(descWrapRef.current.getBoundingClientRect())
+      setDescScrollY(window.scrollY)
     } else if (!descHovered && !dossier) {
       setDescRect(null)
-    }
-  }, [descHovered, dossier])
-
-  // ── Scroll lock ─────────────────────────────────────────────────────────────
-  // Prevent the page from scrolling while targeting mode is active (the HUDs are
-  // position:fixed and would not follow a page scroll).
-  // Compensate for scrollbar width to prevent the navbar/page from shifting.
-  useEffect(() => {
-    const locked = descHovered || !!dossier
-    if (locked) {
-      const sbWidth = window.innerWidth - document.documentElement.clientWidth
-      document.body.style.paddingRight = `${sbWidth}px`
-      document.body.style.overflow     = 'hidden'
-    } else {
-      document.body.style.paddingRight = ''
-      document.body.style.overflow     = ''
-    }
-    return () => {
-      document.body.style.paddingRight = ''
-      document.body.style.overflow     = ''
     }
   }, [descHovered, dossier])
 
@@ -271,8 +421,9 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         setAmmoRemaining(initAmmo)
         setAmmoMax(initAmmo)
         if (data?.data?.aircoinsEarned > 0) {
-          setAircoinReward(data.data.aircoinsEarned)
-          setUser(u => u ? { ...u, totalAircoins: data.data.newTotalAircoins } : u)
+          aircoinRewardRef.current    = data.data.aircoinsEarned
+          aircoinCycleRef.current     = data.data.newCycleAircoins ?? null
+          aircoinRankPromoRef.current = data.data.rankPromotion ?? null
         }
       })
       .catch(() => {})
@@ -288,35 +439,96 @@ export default function IntelligenceBrief({ briefId, navigate }) {
       .catch(() => {})
   }, [API, briefId, user])
 
-  // Play open sound once — guard prevents re-fire if brief reference changes
+  // Fetch app settings to check disableLoadingBar flag
   useEffect(() => {
-    if (brief && !openSoundRef.current) {
-      openSoundRef.current = true
-      playSound('intel_brief_opened')
-    }
-  }, [brief])
+    fetch(`${API}/api/settings`)
+      .then(r => r.json())
+      .then(data => setLoadingBarDisabled(data.disableLoadingBar ?? false))
+      .catch(() => setLoadingBarDisabled(false))
+  }, [API])
 
-  // ── Desc hover — ignore activations that fire during a scroll ──────────────
+  // Play open sound once, track its progress to gate the targeting system.
+  // systemReady stays false until the sound ends (or fails), so hover/clicks
+  // are disabled while the "ESTABLISHING SECURE CHANNEL" bar is visible.
+  useEffect(() => {
+    if (!brief || loadingBarDisabled === null || openSoundRef.current) return
+    openSoundRef.current = true
+
+    if (loadingBarDisabled) {
+      setSystemProgress(1)
+      setSystemReady(true)
+      systemReadyRef.current = true
+      setPageRevealed(true)
+      pageRevealedRef.current = true
+      if (aircoinRewardRef.current > 0 && !aircoinSoundRef.current) {
+        aircoinSoundRef.current = true
+        awardAircoins(aircoinRewardRef.current, 'BRIEF READ REWARD', { cycleAfter: aircoinCycleRef.current, rankPromotion: aircoinRankPromoRef.current })
+      }
+      return
+    }
+
+    playSound('intel_brief_opened', {
+        onAudio: (audio) => {
+          const tick = () => {
+            if (audio.duration) {
+              setSystemProgress(Math.min(audio.currentTime / audio.duration, 1))
+            }
+          }
+          audio.addEventListener('loadedmetadata', tick)
+          audio.addEventListener('timeupdate', tick)
+        },
+      }).then(() => {
+        setSystemProgress(1)
+        setSystemReady(true)
+        systemReadyRef.current = true
+        setSysOnline(true)
+        // Hold "TARGETING SYSTEM ONLINE" for 1s while page stays greyed,
+        // then reveal page and remove bar simultaneously.
+        setTimeout(() => {
+          setSysOnline(false)
+          setPageRevealed(true)
+          pageRevealedRef.current = true
+
+          // Trigger aircoin reward notification once page is revealed — one-time guard
+          // avoids StrictMode double-fire since the ref lives outside the component.
+          if (aircoinRewardRef.current > 0 && !aircoinSoundRef.current) {
+            aircoinSoundRef.current = true
+            awardAircoins(aircoinRewardRef.current, 'BRIEF READ REWARD', { cycleAfter: aircoinCycleRef.current, rankPromotion: aircoinRankPromoRef.current })
+          }
+
+          // If cursor is already over the description when the page reveals,
+          // mouseenter was blocked until now — manually activate targeting.
+          if (!window.matchMedia('(hover: none)').matches) {
+            const { x, y } = mousePosRef.current
+            const rect = descWrapRef.current?.getBoundingClientRect()
+            if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+              targetingActiveRef.current = true
+              setDescHovered(true)
+              playSound('target_locked')
+            }
+          }
+        }, 1000)
+      })
+  }, [brief, loadingBarDisabled])
+
+  // ── Desc hover — ignore activations that fire during a scroll or before ready
   const handleDescHoverChange = useCallback((hovered) => {
+    if (!systemReadyRef.current || !pageRevealedRef.current) return
     if (hovered && isScrollingRef.current) return
     if (hovered && !targetingActiveRef.current) playSound('target_locked')
+    if (!hovered && targetingActiveRef.current) playSound('stand_down')
     targetingActiveRef.current = hovered
     setDescHovered(hovered)
   }, [])
 
-  // ── Dossier close — restore targeting if cursor is still over description ───
-  // Without this, closing the modal causes a one-frame flicker where both
-  // descHovered and dossier are false, dropping targetingActive to false before
-  // onMouseEnter can re-fire.
+  // ── Dossier close — keep targeting only if cursor is still over the description
   const handleDossierClose = useCallback(() => {
     const { x, y } = mousePosRef.current
     const rect = descWrapRef.current?.getBoundingClientRect()
-    if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-      targetingActiveRef.current = true
-      setDescHovered(true)
-    } else {
-      targetingActiveRef.current = false
-    }
+    const overDesc = systemReadyRef.current && rect &&
+      x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
+    targetingActiveRef.current = overDesc
+    setDescHovered(overDesc)
     setDossier(null)
   }, [])
 
@@ -324,25 +536,33 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const hasAmmo = ammoRemaining > 0
 
   const handleKeywordClick = useCallback((e, keyword) => {
+    if (!systemReadyRef.current) return
     e.stopPropagation()
-    if (hasAmmo) {
+    const kwKey = keyword.keyword
+    const alreadyUnlocked = unlockedKws.has(kwKey)
+
+    if (alreadyUnlocked || hasAmmo) {
       playSound('fire')
-      fetch(`${API}/api/briefs/${briefId}/use-ammo`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data?.data?.ammunitionRemaining !== undefined) {
-            setAmmoRemaining(data.data.ammunitionRemaining)
-          }
+      if (!alreadyUnlocked) {
+        // First use — consume ammo and mark as unlocked
+        fetch(`${API}/api/briefs/${briefId}/use-ammo`, {
+          method: 'POST',
+          credentials: 'include',
         })
-        .catch(() => {})
-      setDossier({ keyword, clickX: e.clientX, clickY: e.clientY })
+          .then(r => r.json())
+          .then(data => {
+            if (data?.data?.ammunitionRemaining !== undefined) {
+              setAmmoRemaining(data.data.ammunitionRemaining)
+            }
+          })
+          .catch(() => {})
+        setUnlockedKws(prev => new Set(prev).add(kwKey))
+      }
+      setDossier({ keyword, clickX: e.clientX, clickY: e.clientY, scrollY: window.scrollY })
     } else {
       setAmmoItems(prev => [...prev, { id: Date.now(), x: e.clientX, y: e.clientY }])
     }
-  }, [API, briefId, hasAmmo])
+  }, [API, briefId, hasAmmo, unlockedKws])
 
   // ── Render states ──────────────────────────────────────────────────────────
 
@@ -387,12 +607,17 @@ export default function IntelligenceBrief({ briefId, navigate }) {
 
   // ── Main render ────────────────────────────────────────────────────────────
 
-  const targetingActive = descHovered || !!dossier
-  const showLeftHUD     = targetingActive && descRect && descRect.left > 220
-  const showRightHUD    = targetingActive && descRect && (window.innerWidth - descRect.right) > 220
+  const targetingActive = !isMobile && (descHovered || !!dossier)
+  const hasSpaceLeft    = descRect && descRect.left > 220
+  const hasSpaceRight   = descRect && (window.innerWidth - descRect.right) > 220
+  const showSideHUDs    = pageRevealed && targetingActive && !!descRect && hasSpaceLeft && hasSpaceRight
+  const showBelowHUDs   = pageRevealed && targetingActive && !!descRect && !(hasSpaceLeft && hasSpaceRight)
 
   return (
-    <main className={`page brief-page${targetingActive ? ' targeting-active' : ''}`}>
+    <main className={`page brief-page${targetingActive ? ' targeting-active' : ''}${!pageRevealed ? ' brief-page--initializing' : ''}`}>
+
+      {!pageRevealed && <ClassifiedOverlay />}
+
       <div className="section-inner brief-layout">
 
         {/* ── Back nav ───────────────────────────────────── */}
@@ -410,6 +635,11 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         {/* ── Media ──────────────────────────────────────── */}
         <MediaCarousel media={brief.media} />
 
+        {/* ── System init bar ─────────────────────────────── */}
+        {!pageRevealed && (
+          <SystemInitBar progress={systemProgress} online={sysOnline} />
+        )}
+
         {/* ── Description ────────────────────────────────── */}
         <div ref={descWrapRef}>
           <DescriptionArea
@@ -418,8 +648,45 @@ export default function IntelligenceBrief({ briefId, navigate }) {
             hasAmmo={hasAmmo}
             onKeywordClick={handleKeywordClick}
             onHoverChange={handleDescHoverChange}
+            isMobile={isMobile}
+            systemReady={systemReady}
+            unlockedKws={unlockedKws}
+            targeting={descHovered}
+            onScanWord={setScanWord}
+            dossierOpen={!!dossier}
           />
         </div>
+
+        {/* ── Below HUDs — shown when screen too narrow for side panels ── */}
+        {showBelowHUDs && (
+          <div className="targeting-hud-below">
+            <TargetingHUD
+              side="left"
+              below
+              descRect={descRect}
+              scrollY={descScrollY}
+              ammoRemaining={ammoRemaining}
+              ammoMax={ammoMax}
+              description={brief.description}
+              keywordCount={brief.keywords?.length ?? 0}
+              loggedIn={!!user}
+              onLoginClick={() => navigate('login')}
+            />
+            <TargetingHUD
+              side="right"
+              below
+              descRect={descRect}
+              scrollY={descScrollY}
+              ammoRemaining={ammoRemaining}
+              ammoMax={ammoMax}
+              description={brief.description}
+              keywordCount={brief.keywords?.length ?? 0}
+              loggedIn={!!user}
+              onLoginClick={() => navigate('login')}
+              scanWord={scanWord}
+            />
+          </div>
+        )}
 
         {/* ── Sources ────────────────────────────────────── */}
         {brief.sources?.length > 0 && (
@@ -450,22 +717,23 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           quizOpen={quizOpen}
           onQuizOpen={() => setQuizOpen(true)}
           onQuizClose={() => setQuizOpen(false)}
-          onQuizComplete={(coins) => {
+          onQuizComplete={(coins, { rankPromotion, cycleAircoins } = {}) => {
             setQuizCompleted(true)
             if (coins > 0) {
               setQuizAircoinReward(coins)
-              setUser(u => u ? { ...u, totalAircoins: (u.totalAircoins ?? 0) + coins } : u)
+              awardAircoins(coins, 'QUIZ REWARD', { cycleAfter: cycleAircoins, rankPromotion })
             }
           }}
         />
 
       </div>
 
-      {/* ── Targeting HUDs ────────────────────────────────── */}
-      {showLeftHUD && (
+      {/* ── Side Targeting HUDs — desktop, wide screen only ── */}
+      {showSideHUDs && (
         <TargetingHUD
           side="left"
           descRect={descRect}
+          scrollY={descScrollY}
           ammoRemaining={ammoRemaining}
           ammoMax={ammoMax}
           description={brief.description}
@@ -474,16 +742,18 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           onLoginClick={() => navigate('login')}
         />
       )}
-      {showRightHUD && (
+      {showSideHUDs && (
         <TargetingHUD
           side="right"
           descRect={descRect}
+          scrollY={descScrollY}
           ammoRemaining={ammoRemaining}
           ammoMax={ammoMax}
           description={brief.description}
           keywordCount={brief.keywords?.length ?? 0}
           loggedIn={!!user}
           onLoginClick={() => navigate('login')}
+          scanWord={scanWord}
         />
       )}
 
@@ -493,6 +763,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           keyword={dossier.keyword}
           clickX={dossier.clickX}
           clickY={dossier.clickY}
+          scrollY={dossier.scrollY}
           onClose={handleDossierClose}
         />
       )}
@@ -506,20 +777,6 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         />
       ))}
 
-      {aircoinReward > 0 && (
-        <AircoinNotification
-          amount={aircoinReward}
-          onDone={() => setAircoinReward(0)}
-        />
-      )}
-
-      {quizAircoinReward > 0 && aircoinReward === 0 && (
-        <AircoinNotification
-          amount={quizAircoinReward}
-          label="QUIZ REWARD"
-          onDone={() => setQuizAircoinReward(0)}
-        />
-      )}
     </main>
   )
 }

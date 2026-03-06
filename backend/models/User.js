@@ -38,8 +38,9 @@ const userSchema = new mongoose.Schema(
     stripeSubscriptionId:  String,
 
     // Progress
-    rank:         { type: mongoose.Schema.Types.ObjectId, ref: 'Rank' },
+    rank:          { type: mongoose.Schema.Types.ObjectId, ref: 'Rank' },
     totalAircoins: { type: Number, default: 0 },
+    cycleAircoins: { type: Number, default: 0 }, // aircoins in current rank cycle — resets to 0 on rank promotion
 
     // Login history (used for streak calculation)
     logins: [loginSchema],
@@ -89,7 +90,7 @@ userSchema.virtual('isTrialActive').get(function () {
 
 // Calculate current login streak (consecutive days)
 userSchema.virtual('loginStreak').get(function () {
-  if (!this.logins.length) return 0;
+  if (!this.logins?.length) return 0;
   const dates = [...new Set(
     this.logins.map(l => new Date(l.timestamp).toDateString())
   )].sort((a, b) => new Date(b) - new Date(a));

@@ -22,21 +22,40 @@ const CATEGORY_ICONS = {
 
 const ALL_CATEGORIES = ['All', ...CATEGORIES]
 
-export default function IntelFeed({ navigate }) {
+export default function IntelFeed({ navigate, initialCategory }) {
   const { API, user } = useAuth()
 
   const [briefs,        setBriefs]        = useState([])
   const [loading,       setLoading]       = useState(true)
   const [searchInput,   setSearchInput]   = useState('')
   const [search,        setSearch]        = useState('')   // debounced
-  const [category,      setCategory]      = useState('All')
+  const [category,      setCategory]      = useState(initialCategory || 'All')
   const [readFilter,    setReadFilter]    = useState('all')
+  const [passedIds,     setPassedIds]     = useState(new Set())
+  const [catCounts,     setCatCounts]     = useState({})
 
   // Debounce search input by 400 ms
   useEffect(() => {
     const t = setTimeout(() => setSearch(searchInput), 400)
     return () => clearTimeout(t)
   }, [searchInput])
+
+  // Fetch category counts (to disable empty categories)
+  useEffect(() => {
+    fetch(`${API}/api/briefs/category-counts`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => setCatCounts(d.data?.counts ?? {}))
+      .catch(() => {})
+  }, [API, user?.subscriptionTier])
+
+  // Fetch completed quiz brief IDs once when user logs in
+  useEffect(() => {
+    if (!user) { setPassedIds(new Set()); return }
+    fetch(`${API}/api/games/quiz/completed-brief-ids`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setPassedIds(new Set(data?.data?.ids ?? [])))
+      .catch(() => {})
+  }, [API, user])
 
   // Fetch whenever category or debounced search changes
   useEffect(() => {
@@ -62,8 +81,21 @@ export default function IntelFeed({ navigate }) {
       {/* ── Header ───────────────────────────────────────── */}
       <div className="feed-header">
         <div className="section-inner">
-          <h1 className="feed-title">Intelligence Briefs</h1>
-          <p className="feed-subtitle">RAF news, aircraft, base, rank, and training briefs.</p>
+          <div className="feed-header__eyebrow">
+            <span className="feed-header__eyebrow-dot" aria-hidden="true" />
+            <span>CLASSIFICATION: RESTRICTED</span>
+            <span className="feed-header__eyebrow-divider" aria-hidden="true">|</span>
+            <span>SKYWATCH INTEL DIVISION</span>
+          </div>
+          <h1 className="feed-title">
+            <span className="feed-title__bracket" aria-hidden="true">[</span>
+            INTELLIGENCE BRIEFS
+            <span className="feed-title__bracket" aria-hidden="true">]</span>
+          </h1>
+          <p className="feed-subtitle">
+            <span className="feed-subtitle__tag" aria-hidden="true">// </span>
+            RAF news, aircraft, bases, ranks &amp; training — classified operational data.
+          </p>
         </div>
       </div>
 
@@ -72,54 +104,67 @@ export default function IntelFeed({ navigate }) {
         {/* ── Search + read filter ──────────────────────── */}
         <div className="feed-controls">
           <div className="feed-search-wrap">
-            <svg className="feed-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
-              <path d="M10 10l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
+            <span className="feed-search-prompt" aria-hidden="true">&gt;_</span>
             <input
               className="feed-search"
               type="search"
-              placeholder="Search briefs…"
+              placeholder="QUERY INTEL DATABASE…"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               aria-label="Search intelligence briefs"
+              spellCheck={false}
+              autoComplete="off"
             />
           </div>
 
           {user && (
-            <select
-              className="feed-filter"
-              value={readFilter}
-              onChange={e => setReadFilter(e.target.value)}
-              aria-label="Filter by read status"
-            >
-              <option value="all">All Briefs</option>
-              <option value="unread">Unread</option>
-              <option value="read">Read</option>
-            </select>
+            <div className="feed-filter-group" role="group" aria-label="Filter by read status">
+              {[
+                { value: 'all',    label: 'ALL BRIEFS', icon: '◈' },
+                { value: 'unread', label: 'UNREAD',     icon: '◎' },
+                { value: 'read',   label: 'ACCESSED',   icon: '◉' },
+              ].map(({ value, label, icon }) => (
+                <button
+                  key={value}
+                  className={`feed-filter-btn${readFilter === value ? ' feed-filter-btn--active' : ''}`}
+                  onClick={() => setReadFilter(value)}
+                  aria-pressed={readFilter === value}
+                >
+                  <span className="feed-filter-btn__icon" aria-hidden="true">{icon}</span>
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
         {/* ── Category pills ────────────────────────────── */}
         <div className="feed-categories" role="group" aria-label="Filter by category">
-          {ALL_CATEGORIES.map(cat => (
-            <button
-              key={cat}
-              className={`feed-cat-btn${category === cat ? ' feed-cat-btn--active' : ''}`}
-              onClick={() => setCategory(cat)}
-              aria-pressed={category === cat}
-            >
-              <span className="feed-cat-btn__icon" aria-hidden="true">{CATEGORY_ICONS[cat]}</span>
-              <span className="feed-cat-btn__label">{cat}</span>
-            </button>
-          ))}
+          {ALL_CATEGORIES.map(cat => {
+            const isEmpty = cat !== 'All' && !catCounts[cat]
+            return (
+              <button
+                key={cat}
+                className={`feed-cat-btn${category === cat ? ' feed-cat-btn--active' : ''}${isEmpty ? ' feed-cat-btn--empty' : ''}`}
+                onClick={() => !isEmpty && setCategory(cat)}
+                aria-pressed={category === cat}
+                aria-disabled={isEmpty}
+                tabIndex={isEmpty ? -1 : 0}
+              >
+                <span className="feed-cat-btn__icon" aria-hidden="true">{CATEGORY_ICONS[cat]}</span>
+                <span className="feed-cat-btn__label">{cat}</span>
+              </button>
+            )
+          })}
         </div>
 
         {/* ── Results count ─────────────────────────────── */}
         {!loading && (
           <p className="feed-count">
-            {filtered.length} brief{filtered.length !== 1 ? 's' : ''}
-            {category !== 'All' && ` in ${category}`}
+            <span className="feed-count__prefix">// </span>
+            {filtered.length} RESULT{filtered.length !== 1 ? 'S' : ''}
+            {category !== 'All' && ` — ${category.toUpperCase()}`}
+            {search && ` — QUERY: "${search.toUpperCase()}"`}
           </p>
         )}
 
@@ -137,6 +182,7 @@ export default function IntelFeed({ navigate }) {
                 showDate
                 isRead={!!brief.isRead}
                 isLocked={!!brief.isLocked}
+                quizPassed={passedIds.has(brief._id)}
                 onClick={() => navigate('intelligence-brief', { briefId: brief._id })}
               />
             ))}

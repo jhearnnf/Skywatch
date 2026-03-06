@@ -4,6 +4,8 @@ const IntelligenceBrief = require('../models/IntelligenceBrief');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const AppSettings = require('../models/AppSettings');
 const User = require('../models/User');
+const AircoinLog = require('../models/AircoinLog');
+const { awardCoins } = require('../utils/awardCoins');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
 require('../models/GameQuizQuestion');
 
@@ -68,6 +70,71 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /api/briefs/category-counts — how many briefs exist per accessible category
+router.get('/category-counts', optionalAuth, async (req, res) => {
+  try {
+    const settings    = await AppSettings.getSettings();
+    const tier        = req.user ? (req.user.isTrialActive ? 'trial' : req.user.subscriptionTier) : 'free';
+    const accessible  = getAccessibleCategories(tier, settings); // null = gold (all)
+    const match       = accessible !== null ? { category: { $in: accessible } } : {};
+
+    const rows = await IntelligenceBrief.aggregate([
+      { $match: match },
+      { $group: { _id: '$category', count: { $sum: 1 } } },
+    ]);
+
+    const counts = {};
+    rows.forEach(r => { counts[r._id] = r.count; });
+    res.json({ status: 'success', data: { counts } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/briefs/unread-categories — categories with ≥1 unread brief for the current user
+router.get('/unread-categories', optionalAuth, async (req, res) => {
+  try {
+    // Aggregate brief counts per category
+    const briefsByCat = await IntelligenceBrief.aggregate([
+      { $group: { _id: '$category', total: { $sum: 1 }, briefIds: { $push: '$_id' } } },
+    ]);
+
+    const settings   = await AppSettings.getSettings();
+
+    if (!req.user) {
+      // Guests: only free-tier categories, all treated as unread
+      const accessible = getAccessibleCategories('free', settings) ?? [];
+      const categories = briefsByCat
+        .filter(c => accessible.includes(c._id))
+        .map(c => ({ name: c._id, totalBriefs: c.total, unreadCount: c.total }))
+        .sort((a, b) => b.unreadCount - a.unreadCount);
+      return res.json({ status: 'success', data: { categories } });
+    }
+
+    const tier       = req.user.isTrialActive ? 'trial' : req.user.subscriptionTier;
+    const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
+
+    // Get IDs of briefs this user has already read
+    const readRecords = await IntelligenceBriefRead.find({ userId: req.user._id })
+      .select('intelBriefId').lean();
+    const readSet = new Set(readRecords.map(r => r.intelBriefId.toString()));
+
+    const categories = briefsByCat
+      .filter(c => accessible === null || accessible.includes(c._id))
+      .map(c => ({
+        name: c._id,
+        totalBriefs: c.total,
+        unreadCount: c.briefIds.filter(id => !readSet.has(id.toString())).length,
+      }))
+      .filter(c => c.unreadCount > 0)
+      .sort((a, b) => b.unreadCount - a.unreadCount);
+
+    res.json({ status: 'success', data: { categories } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/briefs/:id — single brief. Works for guests (no readRecord) and authenticated users.
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
@@ -81,6 +148,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
     let readRecord = null;
     let aircoinsEarned = 0;
     let newTotalAircoins;
+    let newCycleAircoins;
+    let briefRankPromotion = null;
 
     if (req.user) {
       const settings = await AppSettings.getSettings();
@@ -106,12 +175,10 @@ router.get('/:id', optionalAuth, async (req, res) => {
           ammunitionRemaining: tierAmmo,
         });
         aircoinsEarned = settings.aircoinsPerBriefRead ?? 5;
-        const updatedUser = await User.findByIdAndUpdate(
-          req.user._id,
-          { $inc: { totalAircoins: aircoinsEarned } },
-          { new: true }
-        );
-        newTotalAircoins = updatedUser.totalAircoins;
+        const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'brief_read', `Intel Brief Read: ${brief.title}`, brief._id);
+        newTotalAircoins  = coinResult.totalAircoins;
+        newCycleAircoins  = coinResult.cycleAircoins;
+        briefRankPromotion = coinResult.rankPromotion;
       } else if (readRecord.ammunitionRemaining < tierAmmo && readRecord.ammunitionRemaining === 0) {
         // Ammo was zero — refresh to current tier default (covers tier upgrades and old zero defaults)
         readRecord = await IntelligenceBriefRead.findByIdAndUpdate(
@@ -122,7 +189,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       }
     }
 
-    res.json({ status: 'success', data: { brief, readRecord, aircoinsEarned: aircoinsEarned ?? 0, newTotalAircoins } });
+    res.json({ status: 'success', data: { brief, readRecord, aircoinsEarned: aircoinsEarned ?? 0, newTotalAircoins, newCycleAircoins, rankPromotion: briefRankPromotion } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -33,7 +33,7 @@ function ShieldLarge() {
 }
 
 export default function Login({ navigate }) {
-  const { setUser, API } = useAuth()
+  const { setUser, API, awardAircoins } = useAuth()
   const [view,  setView]  = useState(VIEW.CHOICE)
   const [email, setEmail] = useState('')
   const [pass,  setPass]  = useState('')
@@ -68,6 +68,9 @@ export default function Login({ navigate }) {
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
       setUser(data.data.user)
+      if (data.data.loginAircoinsEarned > 0) {
+        awardAircoins(data.data.loginAircoinsEarned, data.data.loginAircoinLabel, { rankPromotion: data.data.rankPromotion ?? null })
+      }
       if (data.data.isNew) { setView(VIEW.DIFFICULTY); return }
       navigate('dashboard')
     } catch {
@@ -90,6 +93,9 @@ export default function Login({ navigate }) {
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
       setUser(data.data.user)
+      if (data.data.loginAircoinsEarned > 0) {
+        awardAircoins(data.data.loginAircoinsEarned, data.data.loginAircoinLabel, { rankPromotion: data.data.rankPromotion ?? null })
+      }
       if (data.data.isNew) { setView(VIEW.DIFFICULTY); return }
       navigate('dashboard')
     } catch {

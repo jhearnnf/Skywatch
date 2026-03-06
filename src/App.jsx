@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Navbar        from './components/Navbar'
 import Footer        from './components/Footer'
@@ -13,13 +13,28 @@ import Contact           from './pages/Contact'
 import About             from './pages/About'
 import ReportProblem     from './pages/ReportProblem'
 import Admin             from './pages/Admin'
+import AircoinHistory      from './pages/AircoinHistory'
+import GameHistory         from './pages/GameHistory'
+import AircoinNotification       from './components/AircoinNotification'
+import LevelUpNotification       from './components/LevelUpNotification'
+import RankPromotionNotification from './components/RankPromotionNotification'
+import { playSound }        from './utils/sound'
 import './App.css'
 
 // Inner app — has access to AuthContext
-import { useState } from 'react'
-
 function AppInner() {
-  const { loading } = useAuth()
+  const { loading, notifQueue, shiftNotif } = useAuth()
+  const currentNotif   = notifQueue[0] ?? null
+  const prevNotifIdRef = useRef(null)
+
+  useEffect(() => {
+    if (!currentNotif || currentNotif.id === prevNotifIdRef.current) return
+    prevNotifIdRef.current = currentNotif.id
+    if (currentNotif.type === 'aircoin') playSound('aircoin')
+    else if (currentNotif.type === 'levelup') playSound('level_up')
+    else if (currentNotif.type === 'rankpromotion') playSound('rank_promotion')
+  }, [currentNotif])
+
   const [page, setPage] = useState(() => {
     // Show welcome page if user hasn't visited today
     const today     = new Date().toDateString()
@@ -47,14 +62,16 @@ function AppInner() {
     switch (id) {
       case 'welcome':           return <Welcome navigate={navigate} />
       case 'login':             return <Login navigate={navigate} />
-      case 'intel-feed':        return <IntelFeed navigate={navigate} />
+      case 'intel-feed':        return <IntelFeed navigate={navigate} initialCategory={params.category} />
       case 'intelligence-brief':return <IntelligenceBrief briefId={params.briefId} navigate={navigate} />
       case 'profile':           return <Profile navigate={navigate} />
-      case 'rankings':          return <Rankings />
+      case 'rankings':          return <Rankings navigate={navigate} />
       case 'admin':             return <Admin navigate={navigate} />
       case 'contact':           return <Contact />
       case 'about':             return <About />
       case 'report':            return <ReportProblem fromPage={params.fromPage} navigate={navigate} />
+      case 'aircoin-history':   return <AircoinHistory navigate={navigate} />
+      case 'game-history':      return <GameHistory navigate={navigate} />
       default:                  return <Dashboard navigate={navigate} />
     }
   }
@@ -67,6 +84,28 @@ function AppInner() {
       {!fullScreen && <Navbar page={page.id} navigate={navigate} />}
       {renderPage()}
       {!fullScreen && <Footer navigate={navigate} currentPage={page.id} />}
+      {currentNotif?.type === 'aircoin' && (
+        <AircoinNotification
+          key={currentNotif.id}
+          amount={currentNotif.amount}
+          label={currentNotif.label}
+          onDone={shiftNotif}
+        />
+      )}
+      {currentNotif?.type === 'levelup' && (
+        <LevelUpNotification
+          key={currentNotif.id}
+          level={currentNotif.level}
+          onDone={shiftNotif}
+        />
+      )}
+      {currentNotif?.type === 'rankpromotion' && (
+        <RankPromotionNotification
+          key={currentNotif.id}
+          rank={currentNotif.rank}
+          onDone={shiftNotif}
+        />
+      )}
     </div>
   )
 }

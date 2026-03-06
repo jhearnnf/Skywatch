@@ -1,8 +1,11 @@
-const router  = require('express').Router();
-const bcrypt  = require('bcryptjs');
-const jwt     = require('jsonwebtoken');
-const User    = require('../models/User');
+const router      = require('express').Router();
+const bcrypt      = require('bcryptjs');
+const jwt         = require('jsonwebtoken');
+const User        = require('../models/User');
+const AppSettings = require('../models/AppSettings');
+const AircoinLog  = require('../models/AircoinLog');
 const { sendWelcomeEmail } = require('../utils/email');
+const { awardCoins }       = require('../utils/awardCoins');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -21,9 +24,29 @@ const sendToken = (user, statusCode, res, extras = {}) => {
   res.status(statusCode).json({ status: 'success', data: { user, ...extras } });
 };
 
+// Returns { earned, label } — earned is 0 if user already logged in today
 const recordLogin = async (user) => {
+  const todayStr = new Date().toDateString();
+  const alreadyTodayLogin = user.logins.some(
+    l => new Date(l.timestamp).toDateString() === todayStr
+  );
+
   user.logins.push({ timestamp: new Date() });
+
+  if (!alreadyTodayLogin) {
+    const streak   = user.loginStreak + 1; // +1 because we just pushed today
+    const settings = await AppSettings.getSettings();
+    const base     = settings.aircoinsFirstLogin  ?? 5;
+    const bonus    = settings.aircoinsStreakBonus ?? 2;
+    const earned   = base + (streak >= 2 ? bonus : 0);
+    const label    = streak >= 2 ? `Daily Login — ${streak}-day streak bonus` : 'Daily Login';
+    await user.save(); // save logins array first
+    const coinResult = await awardCoins(user._id, earned, 'login', label);
+    return { earned, label, rankPromotion: coinResult.rankPromotion };
+  }
+
   await user.save();
+  return { earned: 0, label: '', rankPromotion: null };
 };
 
 // ── Email / Password ──────────────────────────────────────────────────────────
@@ -41,8 +64,8 @@ router.post('/register', async (req, res) => {
     const user    = await User.create({ email, password });
 
     sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
-    await recordLogin(user);
-    sendToken(user, 201, res, { isNew: true });
+    const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
+    sendToken(user, 201, res, { isNew: true, loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -67,8 +90,8 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ message: 'Login failed. Please contact support.' });
     }
 
-    await recordLogin(user);
-    sendToken(user, 200, res);
+    const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
+    sendToken(user, 200, res, { loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -109,8 +132,8 @@ router.post('/google', async (req, res) => {
       if (!user.googleId) { user.googleId = googleId; await user.save(); }
     }
 
-    await recordLogin(user);
-    sendToken(user, 200, res, isNew ? { isNew: true } : {});
+    const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
+    sendToken(user, 200, res, { ...(isNew ? { isNew: true } : {}), loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
   } catch (err) {
     console.error('Google auth error:', err.message);
     res.status(401).json({ message: 'Google authentication failed' });

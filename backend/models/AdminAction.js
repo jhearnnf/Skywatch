@@ -12,6 +12,7 @@ const ACTION_TYPES = [
   'create_brief',
   'edit_brief',
   'delete_brief',
+  'award_test_coins',
 ];
 
 const adminActionSchema = new mongoose.Schema({

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { playSound } from '../utils/sound'
 
 export default function QuizGameModal({ briefId, onClose, onComplete }) {
   const { API } = useAuth()
@@ -14,11 +15,16 @@ export default function QuizGameModal({ briefId, onClose, onComplete }) {
   const [isCorrect,  setIsCorrect]  = useState(null)
   const [correctId,  setCorrectId]  = useState(null)
   const [score,      setScore]      = useState(0)
-  const [earnedCoins, setEarnedCoins] = useState(0)   // awarded at end
+  const [earnedCoins,    setEarnedCoins]    = useState(0)   // awarded at end
+  const [coinBreakdown,  setCoinBreakdown]  = useState([])  // breakdown lines
   const [errorMsg,   setErrorMsg]   = useState('')
-  const startTime     = useRef(null)
-  const abandonedRef  = useRef(false)
-  const completedRef  = useRef(false)
+  const startTime                = useRef(null)
+  const abandonedRef             = useRef(false)
+  const completedRef             = useRef(false)
+  const prevPhaseRef             = useRef(null)
+  const answeredQIds             = useRef(new Set())
+  const completedRankPromoRef    = useRef(null)
+  const completedCycleCoinsRef   = useRef(null)
 
   // Load questions on mount
   useEffect(() => {
@@ -53,34 +59,73 @@ export default function QuizGameModal({ briefId, onClose, onComplete }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     }).then(r => r.json()).catch(() => ({}))
-    return res?.data?.aircoinsEarned ?? 0
+    return { coins: res?.data?.aircoinsEarned ?? 0, breakdown: res?.data?.breakdown ?? [], rankPromotion: res?.data?.rankPromotion ?? null, cycleAircoins: res?.data?.cycleAircoins ?? null }
   }, [API, attemptId])
 
-  const handleClose = useCallback(async () => {
+  const handleClose = useCallback(() => {
     if (phase === 'results') {
-      // Quiz was completed — fire onComplete with coins earned
-      onComplete?.(earnedCoins)
+      onComplete?.(earnedCoins, { rankPromotion: completedRankPromoRef.current, cycleAircoins: completedCycleCoinsRef.current })
       onClose()
       return
     }
-    if (phase !== 'loading' && phase !== 'error') {
-      await finishAttempt('abandoned')
+    if (phase === 'loading' || phase === 'error') {
+      onClose()
+      return
     }
-    onClose()
-  }, [phase, finishAttempt, onClose, onComplete, earnedCoins])
+    // Mid-quiz — ask for confirmation
+    prevPhaseRef.current = phase
+    setPhase('confirm-abandon')
+  }, [phase, onClose, onComplete, earnedCoins])
+
+  const handleAbandonCancel = useCallback(() => {
+    setPhase(prevPhaseRef.current ?? 'question')
+  }, [])
+
+  const handleAbandonConfirm = useCallback(async () => {
+    // Submit any questions not yet answered as incorrect
+    const unanswered = questions.filter(q => !answeredQIds.current.has(String(q._id)))
+    for (const uq of unanswered) {
+      await fetch(`${API}/api/games/quiz/result`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionId:         uq._id,
+          displayedAnswerIds: uq.displayedAnswerIds,
+          selectedAnswerId:   null,
+          timeTakenSeconds:   0,
+          gameSessionId:      sessionId,
+          attemptId,
+        }),
+      }).catch(() => {})
+    }
+    await finishAttempt('abandoned')
+    setPhase('results')
+  }, [questions, sessionId, attemptId, API, finishAttempt])
 
   // Escape key
   useEffect(() => {
-    const h = (e) => { if (e.key === 'Escape') handleClose() }
+    const h = (e) => {
+      if (e.key === 'Escape') {
+        if (phase === 'confirm-abandon') handleAbandonCancel()
+        else handleClose()
+      }
+    }
     document.addEventListener('keydown', h)
     return () => document.removeEventListener('keydown', h)
-  }, [handleClose])
+  }, [phase, handleClose, handleAbandonCancel])
 
   // Lock scroll
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [])
+
+  // Quiz complete sound
+  useEffect(() => {
+    if (phase !== 'results') return
+    const passed = completedRef.current && score >= Math.ceil(questions.length / 2)
+    playSound(passed ? 'quiz_complete_win' : 'quiz_complete_lose')
+  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAnswer = async (answerId) => {
     if (phase !== 'question') return
@@ -103,6 +148,7 @@ export default function QuizGameModal({ briefId, onClose, onComplete }) {
       }),
     }).then(r => r.json()).catch(() => ({ status: 'error' }))
 
+    answeredQIds.current.add(String(q._id))
     const correct = res.data?.isCorrect ?? false
     if (correct) setScore(s => s + 1)
     setIsCorrect(correct)
@@ -115,8 +161,11 @@ export default function QuizGameModal({ briefId, onClose, onComplete }) {
     const next = qIndex + 1
     if (next >= questions.length) {
       // All questions answered — complete and get coins
-      const coins = await finishAttempt('completed')
+      const { coins, breakdown, rankPromotion, cycleAircoins } = await finishAttempt('completed')
       setEarnedCoins(coins)
+      setCoinBreakdown(breakdown)
+      completedRankPromoRef.current   = rankPromotion
+      completedCycleCoinsRef.current  = cycleAircoins
       completedRef.current = true
       setPhase('results')
     } else {
@@ -128,7 +177,11 @@ export default function QuizGameModal({ briefId, onClose, onComplete }) {
     }
   }
 
-  const overlay = (e) => { if (e.target === e.currentTarget) handleClose() }
+  const overlay = (e) => {
+    if (e.target !== e.currentTarget) return
+    if (phase === 'confirm-abandon') handleAbandonCancel()
+    else handleClose()
+  }
   const q = questions[qIndex]
 
   return (
@@ -166,6 +219,25 @@ export default function QuizGameModal({ briefId, onClose, onComplete }) {
             <div className="quiz-error">
               <p className="quiz-error__icon">⚠</p>
               <p className="quiz-error__msg">{errorMsg}</p>
+            </div>
+          )}
+
+          {/* Abandon confirmation */}
+          {phase === 'confirm-abandon' && (
+            <div className="quiz-abandon-confirm">
+              <p className="quiz-abandon-confirm__icon">⚠</p>
+              <h3 className="quiz-abandon-confirm__title">ABANDON MISSION?</h3>
+              <p className="quiz-abandon-confirm__body">
+                Closing now will mark this quiz as <strong>abandoned</strong>. Your correct answers will be saved, and any unanswered questions will be recorded as incorrect.
+              </p>
+              <div className="quiz-abandon-confirm__actions">
+                <button className="btn-secondary" onClick={handleAbandonCancel}>
+                  Continue Quiz
+                </button>
+                <button className="quiz-abandon-confirm__btn-abandon" onClick={handleAbandonConfirm}>
+                  Abandon
+                </button>
+              </div>
             </div>
           )}
 
@@ -219,19 +291,36 @@ export default function QuizGameModal({ briefId, onClose, onComplete }) {
           {/* Results */}
           {phase === 'results' && (
             <div className="quiz-results">
-              <p className="quiz-results__eyebrow">Debrief</p>
+              <p className="quiz-results__eyebrow">{completedRef.current ? 'Debrief' : 'Mission Abandoned'}</p>
               <div className="quiz-results__score">
                 <span className="quiz-results__fraction">{score} / {questions.length}</span>
                 <span className="quiz-results__pct">{Math.round((score / questions.length) * 100)}%</span>
               </div>
               {earnedCoins > 0 && (
-                <p className="quiz-results__coins">⬡ +{earnedCoins} Aircoins earned</p>
+                <div className="quiz-coin-breakdown">
+                  <p className="quiz-coin-breakdown__header">▸ AIRCOIN AWARD BREAKDOWN</p>
+                  <ul className="quiz-coin-breakdown__list">
+                    {coinBreakdown.map((line, i) => (
+                      <li key={i} className="quiz-coin-breakdown__row">
+                        <span className="quiz-coin-breakdown__label">{line.label}</span>
+                        <span className="quiz-coin-breakdown__amount">+{line.amount} ⬡</span>
+                      </li>
+                    ))}
+                    <li className="quiz-coin-breakdown__row quiz-coin-breakdown__row--total">
+                      <span className="quiz-coin-breakdown__label">TOTAL AWARDED</span>
+                      <span className="quiz-coin-breakdown__amount">+{earnedCoins} ⬡</span>
+                    </li>
+                  </ul>
+                </div>
               )}
               {earnedCoins === 0 && completedRef.current && (
-                <p className="quiz-results__coins quiz-results__coins--none">No Aircoins awarded — retake does not earn extra coins.</p>
+                <p className="quiz-coin-breakdown__none">▸ NO AIRCOINS AWARDED — RETAKE CLASSIFIED AS NON-OPERATIONAL</p>
               )}
-              <div className={`quiz-results__badge ${score === questions.length ? 'quiz-results__badge--gold' : score >= Math.ceil(questions.length / 2) ? 'quiz-results__badge--pass' : 'quiz-results__badge--fail'}`}>
-                {score === questions.length ? 'Perfect Score' : score >= Math.ceil(questions.length / 2) ? 'Mission Passed' : 'Mission Failed'}
+              {!completedRef.current && (
+                <p className="quiz-coin-breakdown__none">▸ NO AIRCOINS AWARDED — MISSION ABANDONED</p>
+              )}
+              <div className={`quiz-results__badge ${!completedRef.current ? 'quiz-results__badge--abandoned' : score === questions.length ? 'quiz-results__badge--gold' : score >= Math.ceil(questions.length / 2) ? 'quiz-results__badge--pass' : 'quiz-results__badge--fail'}`}>
+                {!completedRef.current ? 'Mission Abandoned' : score === questions.length ? 'Perfect Score' : score >= Math.ceil(questions.length / 2) ? 'Mission Passed' : 'Mission Failed'}
               </div>
               <button className="btn-primary" style={{ marginTop: '1.5rem' }} onClick={handleClose}>
                 Close

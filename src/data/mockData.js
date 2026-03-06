@@ -12,6 +12,15 @@ export const MOCK_LEVELS = [
   { levelNumber: 10, aircoinsToNextLevel: null,  cumulativeAircoins: 14700 },
 ]
 
+// Returns the level number a user is at for a given total aircoin count
+export function getLevelAtCoins(coins) {
+  let level = 1
+  for (const l of MOCK_LEVELS) {
+    if (coins >= l.cumulativeAircoins) level = l.levelNumber
+  }
+  return level
+}
+
 // Mock leaderboard — top agents by total aircoins
 export const MOCK_LEADERBOARD = [
   { agentNumber: '8832941', totalAircoins: 14820 },

@@ -16,6 +16,5 @@ const gameSessionQuizAttemptSchema = new mongoose.Schema({
 });
 
 gameSessionQuizAttemptSchema.index({ userId: 1, timeStarted: -1 });
-gameSessionQuizAttemptSchema.index({ gameSessionId: 1 });
 
 module.exports = mongoose.model('GameSessionQuizAttempt', gameSessionQuizAttemptSchema);

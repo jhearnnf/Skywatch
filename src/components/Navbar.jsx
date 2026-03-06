@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { MOCK_LEVELS } from '../data/mockData'
 
@@ -18,17 +18,17 @@ const NAV_LINKS = [
 ]
 
 
-function AircoinsDisplay({ coins }) {
+function AircoinsDisplay({ coins, navigate }) {
   return (
-    <div className="nav-aircoins" aria-label={`${coins} Aircoins`}>
+    <button className="nav-aircoins" onClick={() => navigate('aircoin-history')} aria-label={`${coins} Aircoins — view history`}>
       <span className="nav-aircoins__icon" aria-hidden="true">⬡</span>
       <span className="nav-aircoins__value">{coins.toLocaleString()}</span>
-    </div>
+    </button>
   )
 }
 
-function LevelDisplay({ aircoins, navigate }) {
-  const level = getLevelNumber(aircoins)
+function LevelDisplay({ cycleAircoins, navigate }) {
+  const level = getLevelNumber(cycleAircoins)
   return (
     <button className="nav-level" onClick={() => navigate('rankings')} aria-label="View level">
       <span className="nav-level__num">L{level}</span>
@@ -44,6 +44,53 @@ function RankDisplay({ rank, navigate }) {
       <span className="nav-rank__abbr">{rank.rankAbbreviation ?? rank.abbreviation ?? '—'}</span>
       <span className="nav-rank__label">Rank</span>
     </button>
+  )
+}
+
+function StatsCombo({ coins, cycleAircoins, rank, navigate }) {
+  const [open, setOpen] = useState(false)
+  const ref             = useRef(null)
+  const level           = getLevelNumber(cycleAircoins)
+  const abbr            = rank ? (rank.rankAbbreviation ?? rank.abbreviation ?? null) : null
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const select = (page) => { setOpen(false); navigate(page) }
+
+  return (
+    <div className="nav-stats-combo" ref={ref}>
+      <button
+        className={`nav-stats-combo__btn${open ? ' nav-stats-combo__btn--open' : ''}`}
+        onClick={() => setOpen(o => !o)}
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-label="Stats menu"
+      >
+        <span className="nav-stats-combo__icon" aria-hidden="true">⬡</span>
+        <span className="nav-stats-combo__coins">{coins.toLocaleString()}</span>
+        <span className="nav-stats-combo__sep" aria-hidden="true">·</span>
+        <span className="nav-stats-combo__level">L{level}{abbr ? ` · ${abbr}` : ''}</span>
+        <span className="nav-stats-combo__chevron" aria-hidden="true">{open ? '▲' : '▼'}</span>
+      </button>
+
+      {open && (
+        <div className="nav-stats-combo__menu" role="menu">
+          <button className="nav-stats-combo__item" role="menuitem" onClick={() => select('aircoin-history')}>
+            <span className="nav-stats-combo__item-icon" aria-hidden="true">⬡</span>
+            <span>{coins.toLocaleString()} Aircoins</span>
+          </button>
+          <button className="nav-stats-combo__item" role="menuitem" onClick={() => select('rankings')}>
+            <span className="nav-stats-combo__item-icon nav-stats-combo__item-icon--level" aria-hidden="true">◈</span>
+            <span>Level {level}</span>
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -65,8 +112,7 @@ export default function Navbar({ page, navigate }) {
 
         {/* Brand */}
         <button className="navbar-brand" onClick={() => handleNav('dashboard')}>
-          <img src="/images/logo.png" className="brand-logo" alt="" aria-hidden="true" />
-          <img src="/images/logo_text.png" className="brand-logo-text" alt="Skywatch" />
+          <img src="/images/skywatch-logo-dark.svg" className="brand-logo-svg" alt="SkyWatch" />
         </button>
 
         {/* Hamburger */}
@@ -108,8 +154,9 @@ export default function Navbar({ page, navigate }) {
         <div className={`nav-auth ${open ? 'nav-auth--open' : ''}`}>
           {user ? (
             <>
-              <AircoinsDisplay coins={user.totalAircoins ?? 0} />
-              <LevelDisplay aircoins={user.totalAircoins ?? 0} navigate={navigate} />
+              <StatsCombo coins={user.totalAircoins ?? 0} cycleAircoins={user.cycleAircoins ?? 0} rank={user.rank} navigate={navigate} />
+              <AircoinsDisplay coins={user.totalAircoins ?? 0} navigate={navigate} />
+              <LevelDisplay cycleAircoins={user.cycleAircoins ?? 0} navigate={navigate} />
               <RankDisplay rank={user.rank} navigate={navigate} />
               <button className="nav-btn nav-btn--ghost" onClick={handleLogout}>
                 Logout

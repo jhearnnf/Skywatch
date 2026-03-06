@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react'
-import { playSound } from '../utils/sound'
 
 export default function AircoinNotification({ amount, label = 'BRIEF READ REWARD', onDone }) {
   const [phase, setPhase] = useState('in') // 'in' | 'hold' | 'out'
 
   useEffect(() => {
-    playSound('aircoin')
     const holdTimer = setTimeout(() => setPhase('out'), 2400)
     return () => clearTimeout(holdTimer)
   }, [])
