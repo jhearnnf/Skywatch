@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { playSound, invalidateSoundSettings } from '../utils/sound'
+import { CATEGORY_ICONS, SUBCATEGORIES } from '../data/mockData'
 
 const DEFAULT_BRIEF_IMAGE     = '/images/placeholder-brief.svg'
 
@@ -156,6 +157,167 @@ function ResetStatsModal({ agentNumber, userId, API, onDone, onCancel }) {
             {busy ? 'Working…' : `Reset ${fields.length} stat${fields.length !== 1 ? 's' : ''}`}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Lead Picker Modal ─────────────────────────────────────────────────────────
+
+function LeadPickerModal({ API, onConfirm, onCancel }) {
+  const [step,     setStep]     = useState('prompt') // 'prompt' | 'loading' | 'pick'
+  const [leads,    setLeads]    = useState([])
+  const [selected, setSelected] = useState(null)
+  const [search,   setSearch]   = useState('')
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  const fetchLeads = async () => {
+    setStep('loading')
+    try {
+      const res  = await fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
+      const data = await res.json()
+      const all  = data.data?.leads ?? []
+      setLeads(all)
+      setSelected(all[Math.floor(Math.random() * all.length)] ?? null)
+      setStep('pick')
+    } catch {
+      setStep('prompt')
+    }
+  }
+
+  const shuffle = () => {
+    const others = leads.filter(l => l !== selected)
+    if (others.length) setSelected(others[Math.floor(Math.random() * others.length)])
+  }
+
+  const sectionLabel = (s) => s.replace(/^SECTION \d+:\s*/i, '')
+
+  const filtered = search
+    ? leads.filter(l => {
+        const q = search.toLowerCase()
+        return l.text.toLowerCase().includes(q)
+          || l.subsection.toLowerCase().includes(q)
+          || sectionLabel(l.section).toLowerCase().includes(q)
+      })
+    : leads
+
+  // Group filtered leads by section for display
+  const grouped = filtered.reduce((acc, lead) => {
+    const key = lead.section || 'Other'
+    if (!acc[key]) acc[key] = []
+    acc[key].push(lead)
+    return acc
+  }, {})
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className={`modal lead-picker-modal${step === 'pick' ? ' lead-picker-modal--wide' : ''}`} onClick={e => e.stopPropagation()}>
+
+        {/* ── Step 1: prompt ── */}
+        {step === 'prompt' && (
+          <>
+            <div className="modal__header">
+              <div>
+                <span className="modal__eyebrow">New Intel Brief</span>
+                <h3 className="modal__title">Generate from Intel Brief Lead?</h3>
+              </div>
+              <button className="modal__close" onClick={onCancel} aria-label="Close">✕</button>
+            </div>
+            <div className="modal__body">
+              <p className="lead-prompt-text">
+                Select a topic from the Intel Brief Leads list and let AI generate the brief content automatically, or start with a blank form.
+              </p>
+            </div>
+            <div className="modal__footer">
+              <button className="btn-ghost" onClick={onCancel}>No — blank form</button>
+              <button className="btn-primary" onClick={fetchLeads}>Yes — pick a lead</button>
+            </div>
+          </>
+        )}
+
+        {/* ── Step 2: loading ── */}
+        {step === 'loading' && (
+          <div className="modal__body" style={{ textAlign: 'center', padding: '2rem' }}>
+            <div className="app-loading__spinner" style={{ margin: '0 auto 1rem' }} />
+            <p style={{ color: '#64748b', fontSize: '0.85rem' }}>Loading leads…</p>
+          </div>
+        )}
+
+        {/* ── Step 3: pick ── */}
+        {step === 'pick' && (
+          <>
+            <div className="modal__header">
+              <div>
+                <span className="modal__eyebrow">Intel Brief Lead</span>
+                <h3 className="modal__title">Select a Topic</h3>
+              </div>
+              <button className="modal__close" onClick={onCancel} aria-label="Close">✕</button>
+            </div>
+
+            <div className="modal__body lead-picker-body">
+
+              {/* Current selection card */}
+              {selected && (
+                <div className="lead-selected-card">
+                  <div className="lead-selected-card__inner">
+                    <div>
+                      <span className="lead-selected-card__eyebrow">{selected.subsection || selected.section.replace(/^SECTION \d+:\s*/i, '')}</span>
+                      <p className="lead-selected-card__text">{selected.text}</p>
+                    </div>
+                    <button className="lead-shuffle-btn" onClick={shuffle} title="Pick another at random">↻ Shuffle</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Search */}
+              <input
+                className="feed-search lead-search"
+                type="search"
+                placeholder="Search leads…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+
+              {/* Scrollable lead list */}
+              <div className="lead-list">
+                {Object.entries(grouped).map(([section, items]) => (
+                  <div key={section}>
+                    <div className="lead-list-section">{sectionLabel(section)}</div>
+                    {items.map((lead, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className={`lead-list-item${selected === lead ? ' lead-list-item--active' : ''}`}
+                        onClick={() => setSelected(lead)}
+                      >
+                        {lead.subsection && <span className="lead-list-item__sub">{lead.subsection}</span>}
+                        <span className="lead-list-item__text">{lead.text}</span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+                {filtered.length === 0 && (
+                  <p style={{ padding: '1rem', color: '#94a3b8', fontSize: '0.8rem' }}>No leads match your search.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="modal__footer">
+              <span className="lead-count">{leads.length} leads available</span>
+              <button className="btn-ghost" onClick={onCancel}>Cancel</button>
+              <button className="btn-primary" onClick={() => selected && onConfirm(selected)} disabled={!selected}>
+                Use this lead →
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -958,8 +1120,11 @@ function BriefsTab({ API }) {
   const [mediaUrl,     setMediaUrl]     = useState('')
   const [mediaType,    setMediaType]    = useState('picture')
   const [aiMediaSearching, setAiMediaSearching] = useState(false)
+  const [generatedImages,  setGeneratedImages]  = useState([]) // [{ url, term, wikiPage, selected }]
   const [aiGenerating,     setAiGenerating]     = useState(false)
   const [pendingMedia, setPendingMedia] = useState([])  // media queued before first save
+  const [leadModal,    setLeadModal]    = useState(false)
+  const [pendingLead,  setPendingLead]  = useState(null) // lead text to mark [DB] after save
   const originalMediaRef = useRef([])                   // snapshot of media at open-time for diffing
 
   // Quiz question state
@@ -1015,12 +1180,15 @@ function BriefsTab({ API }) {
   useEffect(() => { if (view === 'list') loadBriefs() }, [loadBriefs, view])
 
   const openEdit = async (brief) => {
+    setGeneratedImages([])
     setEditing(brief)
     setDraft({
       title:       brief.title       ?? '',
       subtitle:    brief.subtitle    ?? '',
       description: brief.description ?? '',
       category:    brief.category    ?? ALL_CATEGORIES[0],
+      subcategory: brief.subcategory ?? '',
+      historic:    brief.historic    ?? false,
       dateAdded:   brief.dateAdded   ? brief.dateAdded.slice(0, 10) : new Date().toISOString().slice(0, 10),
       sources:     brief.sources  ? brief.sources.map(s => ({ ...s }))  : [],
       keywords:    brief.keywords ? brief.keywords.map(k => ({ ...k })) : [],
@@ -1061,9 +1229,13 @@ function BriefsTab({ API }) {
     setDraft({
       title: '', subtitle: '', description: '',
       category: ALL_CATEGORIES[0],
+      subcategory: '',
+      historic: false,
       dateAdded: new Date().toISOString().slice(0, 10),
       sources: [], keywords: [],
     })
+    setPendingLead(null)
+    setGeneratedImages([])
     setIsNew(true)
     setDraftQuizEasy([])
     setDraftQuizMedium([])
@@ -1078,10 +1250,152 @@ function BriefsTab({ API }) {
     setView('list')
     setEditing(null)
     setPendingMedia([])
+    setGeneratedImages([])
     setDraftQuizEasy([])
     setDraftQuizMedium([])
     setQuizView('list')
     setQuizSelected(null)
+  }
+
+  // Map intel_brief_leads.txt section headers → category + subcategory
+  const leadSectionToCategory = (section) => {
+    if (/SECTION 1/i.test(section))           return 'Ranks'
+    if (/SECTION 2/i.test(section))           return 'Squadrons'
+    if (/SECTION 3|SECTION 4/i.test(section)) return 'Aircrafts'
+    if (/SECTION 5|SECTION 6/i.test(section)) return 'Bases'
+    if (/SECTION 7/i.test(section))           return 'Training'
+    if (/SECTION 8/i.test(section))           return 'Threats'
+    if (/SECTION 9/i.test(section))           return 'Allies'
+    if (/SECTION 10/i.test(section))          return 'Missions'
+    if (/SECTION 11/i.test(section))          return 'Tech'
+    if (/SECTION 12/i.test(section))          return 'Terminology'
+    if (/SECTION 13/i.test(section))          return 'Treaties'
+    if (/SECTION 14/i.test(section))          return 'AOR'
+    return ALL_CATEGORIES[0]
+  }
+
+  const leadSubsectionToSubcategory = (subsection) => {
+    const map = {
+      'FAST JET':                               'Fast Jet',
+      'INTELLIGENCE, SURVEILLANCE & RECONNAISSANCE (ISR)': 'ISR & Surveillance',
+      'MARITIME PATROL':                        'Maritime Patrol',
+      'TRANSPORT & TANKER':                     'Transport & Tanker',
+      'ROTARY WING':                            'Rotary Wing',
+      'TRAINING (FIXED WING)':                  'Training Aircraft',
+      'GROUND-BASED AIR DEFENCE (RAF REGIMENT)':'Ground-Based Air Defence',
+      'WWII ERA':                               'Historic — WWII',
+      'PRE-WWII / INTERWAR':                    'Historic — WWII',
+      'COLD WAR ERA':                           'Historic — Cold War',
+      'PANAVIA TORNADO FAMILY':                 'Historic — Cold War',
+      'BAE HARRIER FAMILY':                     'Historic — Cold War',
+      'POST-COLD WAR / RECENT RETIREMENTS':     'Historic — Post-Cold War',
+      'MAIN OPERATING BASES':                   'UK Active',
+      'SUPPORT, INTELLIGENCE & SPECIALIST SITES':'UK Active',
+      'FORMER / RECENTLY CLOSED UK BASES':      'UK Former',
+      'PERMANENT OVERSEAS BASES':               'Overseas Permanent',
+      'DEPLOYED / FORWARD OPERATING LOCATIONS': 'Overseas Deployed / FOL',
+      'COMMISSIONED OFFICER RANKS':             'Commissioned Officer',
+      'NON-COMMISSIONED RANKS':                 'Non-Commissioned',
+      'SPECIALIST ROLES & DESIGNATIONS':        'Specialist Role',
+      'ACTIVE FRONT-LINE SQUADRONS':            'Active Front-Line',
+      'TRAINING SQUADRONS':                     'Training',
+      'ROYAL AUXILIARY AIR FORCE (RAuxAF) SQUADRONS': 'Royal Auxiliary Air Force',
+      'HISTORIC / FAMOUS SQUADRONS':            'Historic',
+      'INITIAL TRAINING':                       'Initial Training',
+      'FLYING TRAINING PIPELINE':               'Flying Training',
+      'GROUND TRAINING & PROFESSIONAL MILITARY EDUCATION': 'Ground Training & PME',
+      'AIR COMBAT & TACTICAL TRAINING':         'Tactical & Combat Training',
+      'STATE ACTOR AIR THREATS':                'State Actor Air',
+      'SURFACE-TO-AIR MISSILE (SAM) THREATS':  'Surface-to-Air Missiles',
+      'ASYMMETRIC / NON-STATE THREATS':         'Asymmetric & Non-State',
+      'MISSILE & STAND-OFF THREATS':            'Missiles & Stand-Off',
+      'ELECTRONIC & CYBER THREATS':             'Electronic & Cyber',
+      'NATO ALLIES (KEY)':                      'NATO',
+      'FIVE EYES PARTNERS':                     'Five Eyes',
+      'AUKUS PARTNERS':                         'AUKUS',
+      'BILATERAL & FRAMEWORK PARTNERS':         'Bilateral & Framework Partners',
+      'WEAPONS SYSTEMS':                        'Weapons Systems',
+      'SENSORS & AVIONICS':                     'Sensors & Avionics',
+      'ELECTRONIC WARFARE':                     'Electronic Warfare',
+      'FUTURE TECHNOLOGY & PROGRAMMES':         'Future Programmes',
+      'COMMAND & CONTROL / COMMS':              'Command, Control & Comms',
+      'OPERATIONAL CONCEPTS':                   'Operational Concepts',
+      'FLYING & TACTICAL TERMINOLOGY':          'Flying & Tactical',
+      'AIR TRAFFIC & NAVIGATION':               'Air Traffic & Navigation',
+      'INTELLIGENCE & PLANNING':                'Intelligence & Planning',
+      'MAINTENANCE & SUPPORT':                  'Maintenance & Support',
+      'FOUNDING & CORE ALLIANCES':              'Founding & Core Alliances',
+      'BILATERAL & DEFENCE AGREEMENTS':         'Bilateral Defence Agreements',
+      'ARMS CONTROL & NON-PROLIFERATION':       'Arms Control & Non-Proliferation',
+      'OPERATIONAL & STATUS AGREEMENTS':        'Operational & Status Agreements',
+    }
+    return map[subsection] || ''
+  }
+
+  const handleLeadConfirm = (lead) => {
+    setLeadModal(false)
+    openNew() // resets form; also clears pendingLead via setPendingLead(null)
+    setPendingLead(lead.text)
+
+    const category    = leadSectionToCategory(lead.section)
+    const subcategory = leadSubsectionToSubcategory(lead.subsection)
+
+    setDraft(p => ({ ...p, category, subcategory }))
+    setAiGenerating(true)
+    setPendingMedia([{ mediaType: 'picture', mediaUrl: DEFAULT_BRIEF_IMAGE }])
+
+    fetch(`${API}/api/admin/ai/generate-brief`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic: lead.text }),
+    })
+      .then(r => r.json())
+      .then(async data => {
+        const generated  = data.data?.brief ?? {}
+        const sources    = Array.isArray(generated.sources)
+          ? generated.sources.filter(s => s.url && s.url.startsWith('http'))
+          : []
+        const briefTitle = generated.title || lead.text
+        const briefDesc  = generated.description || ''
+        setDraft(p => ({
+          ...p,
+          title:       briefTitle,
+          subtitle:    generated.subtitle || '',
+          description: briefDesc,
+          keywords:    Array.isArray(generated.keywords) ? generated.keywords : [],
+          sources,
+          historic:    typeof generated.historic === 'boolean' ? generated.historic : p.historic,
+        }))
+        setFeedback('Brief populated — generating quiz questions…')
+        try {
+          setQuizGenerating(true)
+          const qRes  = await fetch(`${API}/api/admin/ai/generate-quiz`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: briefTitle, description: briefDesc }),
+          })
+          const qData  = await qRes.json()
+          const fromAI = (qs) => (Array.isArray(qs) ? qs : []).map(q => ({
+            question: q.question ?? '',
+            answers: (q.answers ?? []).map((a, ai) => ({
+              title: a.title ?? '', isCorrect: ai === q.correctAnswerIndex,
+            })),
+          }))
+          if (Array.isArray(qData.data?.easyQuestions))   setDraftQuizEasy(fromAI(qData.data.easyQuestions))
+          if (Array.isArray(qData.data?.mediumQuestions)) setDraftQuizMedium(fromAI(qData.data.mediumQuestions))
+          setFeedback('Brief and quiz questions generated — review carefully before saving.')
+        } catch {
+          setFeedback('Brief populated — quiz generation failed, add questions manually.')
+        } finally {
+          setQuizGenerating(false)
+        }
+        setTimeout(() => setFeedback(''), 7000)
+      })
+      .catch(() => {
+        setFeedback('AI generation failed — fill in the form manually.')
+        setTimeout(() => setFeedback(''), 5000)
+      })
+      .finally(() => setAiGenerating(false))
   }
 
   const doSave = async (reason) => {
@@ -1180,6 +1494,14 @@ function BriefsTab({ API }) {
       setIsNew(false)
       setFeedback('Saved successfully.')
       setTimeout(() => setFeedback(''), 3000)
+      if (pendingLead) {
+        fetch(`${API}/api/admin/intel-leads/mark-complete`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lead: pendingLead }),
+        }).catch(() => {})
+        setPendingLead(null)
+      }
     } else {
       setFeedback(`Error: ${data.message}`)
     }
@@ -1259,16 +1581,9 @@ function BriefsTab({ API }) {
       const saveData = await saveRes.json()
 
       if (saveData.status === 'success') {
-        const url  = `${API}${saveData.data.url}`
-        const term = saveData.data.term
-        const page = saveData.data.wikiPage
-        const entry = { mediaType: 'picture', mediaUrl: url }
-        if (isNew) {
-          setPendingMedia(prev => [...prev, entry])
-        } else {
-          setEditing(prev => ({ ...prev, media: [...(prev.media ?? []), entry] }))
-        }
-        setFeedback(`Image added — subject: "${term}" (Wikipedia: ${page}).`)
+        const images = (saveData.data.images ?? []).map(img => ({ ...img, selected: true }))
+        setGeneratedImages(images)
+        setFeedback(`${images.length} image${images.length !== 1 ? 's' : ''} found — select which to add.`)
         setTimeout(() => setFeedback(''), 8000)
       } else {
         setFeedback(`Image fetch failed: ${saveData.message}`)
@@ -1281,6 +1596,18 @@ function BriefsTab({ API }) {
     } finally {
       setAiMediaSearching(false)
     }
+  }
+
+  const addSelectedImages = () => {
+    const toAdd = generatedImages
+      .filter(img => img.selected)
+      .map(img => ({ mediaType: 'picture', mediaUrl: `${API}${img.url}` }))
+    if (isNew) {
+      setPendingMedia(prev => [...prev, ...toAdd])
+    } else {
+      setEditing(prev => ({ ...prev, media: [...(prev.media ?? []), ...toAdd] }))
+    }
+    setGeneratedImages([])
   }
 
   const addSource    = () => setDraft(p => ({ ...p, sources:  [...p.sources,  { url: '', articleDate: '', siteName: '' }] }))
@@ -1480,6 +1807,13 @@ function BriefsTab({ API }) {
             onCancel={() => setReasonModal(null)}
           />
         )}
+        {leadModal && (
+          <LeadPickerModal
+            API={API}
+            onConfirm={handleLeadConfirm}
+            onCancel={() => { setLeadModal(false); openNew() }}
+          />
+        )}
 
         {/* ── Live RAF news panel ──────────────────────────── */}
         <div className="raf-news-panel" style={{ margin: '0 0 1.5rem', borderRadius: 8 }}>
@@ -1534,6 +1868,8 @@ function BriefsTab({ API }) {
                       setDraft({
                         title: headline, subtitle: '', description: '',
                         category: ALL_CATEGORIES[0],
+                        subcategory: '',
+                        historic: false,
                         dateAdded: new Date().toISOString().slice(0, 10),
                         sources: [], keywords: [],
                       })
@@ -1616,11 +1952,22 @@ function BriefsTab({ API }) {
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1) }}
           />
-          <select className="feed-filter" value={catFilter} onChange={e => { setCatFilter(e.target.value); setPage(1) }}>
-            <option value="">All Categories</option>
-            {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={openNew}>+ New Brief</button>
+          <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setLeadModal(true)}>+ New Brief</button>
+        </div>
+
+        <div className="admin-cat-pills" style={{ marginBottom: '1.25rem' }} role="group" aria-label="Filter by category">
+          {[{ value: '', label: 'All' }, ...ALL_CATEGORIES.map(c => ({ value: c, label: c }))].map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              className={`admin-cat-btn${catFilter === value ? ' admin-cat-btn--active' : ''}`}
+              onClick={() => { setCatFilter(value); setPage(1) }}
+              aria-pressed={catFilter === value}
+            >
+              {value ? <span className="admin-cat-btn__icon" aria-hidden="true">{CATEGORY_ICONS[value]}</span> : null}
+              {label}
+            </button>
+          ))}
         </div>
 
         {loading && <p className="admin-loading">Loading…</p>}
@@ -1791,18 +2138,44 @@ function BriefsTab({ API }) {
           />
         </div>
 
-        <div className="brief-form-row">
-          <div className="brief-form-field" style={{ flex: 1 }}>
-            <label className="form-label">Category</label>
-            <select
-              className="feed-filter"
-              style={{ width: '100%' }}
-              value={draft.category}
-              onChange={e => setDraft(p => ({ ...p, category: e.target.value }))}
-            >
-              {ALL_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+        <div className="brief-form-field">
+          <label className="form-label">Category</label>
+          <div className="admin-cat-pills" role="group" aria-label="Select category">
+            {ALL_CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                type="button"
+                className={`admin-cat-btn${draft.category === cat ? ' admin-cat-btn--active' : ''}`}
+                onClick={() => setDraft(p => ({ ...p, category: cat, subcategory: '' }))}
+                aria-pressed={draft.category === cat}
+              >
+                <span className="admin-cat-btn__icon" aria-hidden="true">{CATEGORY_ICONS[cat]}</span>
+                {cat}
+              </button>
+            ))}
           </div>
+        </div>
+
+        {SUBCATEGORIES[draft.category]?.length > 0 && (
+          <div className="brief-form-field">
+            <label className="form-label">Subcategory</label>
+            <div className="admin-cat-pills" role="group" aria-label="Select subcategory">
+              {SUBCATEGORIES[draft.category].map(sub => (
+                <button
+                  key={sub}
+                  type="button"
+                  className={`admin-cat-btn admin-cat-btn--sub${draft.subcategory === sub ? ' admin-cat-btn--active' : ''}`}
+                  onClick={() => setDraft(p => ({ ...p, subcategory: p.subcategory === sub ? '' : sub }))}
+                  aria-pressed={draft.subcategory === sub}
+                >
+                  {sub}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="brief-form-row">
           <div className="brief-form-field" style={{ flex: 1 }}>
             <label className="form-label">Date Added</label>
             <input
@@ -1811,6 +2184,17 @@ function BriefsTab({ API }) {
               value={draft.dateAdded}
               onChange={e => setDraft(p => ({ ...p, dateAdded: e.target.value }))}
             />
+          </div>
+          <div className="brief-form-field admin-historic-field" style={{ flex: 1 }}>
+            <label className="form-label">Flags</label>
+            <label className="admin-historic-label">
+              <input
+                type="checkbox"
+                checked={!!draft.historic}
+                onChange={e => setDraft(p => ({ ...p, historic: e.target.checked }))}
+              />
+              <span>Historic brief</span>
+            </label>
           </div>
         </div>
       </div>
@@ -1840,6 +2224,14 @@ function BriefsTab({ API }) {
                       onChange={e => setPendingMedia(prev => prev.map((item, i) => i === idx ? { ...item, mediaUrl: e.target.value } : item))}
                       placeholder="URL"
                     />
+                    <label className="media-summary-toggle">
+                      <input
+                        type="checkbox"
+                        checked={m.showOnSummary !== false}
+                        onChange={e => setPendingMedia(prev => prev.map((item, i) => i === idx ? { ...item, showOnSummary: e.target.checked } : item))}
+                      />
+                      Show on brief summary
+                    </label>
                   </div>
                   <div className="brief-media-item__controls">
                     <button className="brief-media-item__move-btn" onClick={() => movePendingMedia(idx, -1)} disabled={idx === 0} title="Move up">▲</button>
@@ -1877,7 +2269,7 @@ function BriefsTab({ API }) {
                 onChange={e => setMediaUrl(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && mediaUrl.trim()) {
-                    setPendingMedia(prev => [...prev, { mediaType, mediaUrl: mediaUrl.trim() }])
+                    setPendingMedia(prev => [...prev, { mediaType, mediaUrl: mediaUrl.trim(), showOnSummary: true }])
                     setMediaUrl('')
                   }
                 }}
@@ -1888,7 +2280,7 @@ function BriefsTab({ API }) {
                 onClick={findMediaWithAI}
                 disabled={aiMediaSearching}
               >
-                {aiMediaSearching ? 'Searching…' : 'Generate Image'}
+                {aiMediaSearching ? 'Searching…' : 'Generate 3 Images'}
               </button>
               <button
                 className="btn-ghost"
@@ -1902,7 +2294,7 @@ function BriefsTab({ API }) {
                 style={{ flexShrink: 0 }}
                 disabled={!mediaUrl.trim()}
                 onClick={() => {
-                  setPendingMedia(prev => [...prev, { mediaType, mediaUrl: mediaUrl.trim() }])
+                  setPendingMedia(prev => [...prev, { mediaType, mediaUrl: mediaUrl.trim(), showOnSummary: true }])
                   setMediaUrl('')
                 }}
               >
@@ -1935,6 +2327,27 @@ function BriefsTab({ API }) {
                       }))}
                       placeholder="URL"
                     />
+                    <label className="media-summary-toggle">
+                      <input
+                        type="checkbox"
+                        checked={m.showOnSummary !== false}
+                        onChange={e => {
+                          const checked = e.target.checked
+                          setEditing(prev => ({
+                            ...prev,
+                            media: prev.media.map((item, i) => i === idx ? { ...item, showOnSummary: checked } : item),
+                          }))
+                          if (m._id) {
+                            fetch(`${API}/api/admin/media/${m._id}`, {
+                              method: 'PATCH', credentials: 'include',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ showOnSummary: checked }),
+                            }).catch(() => {})
+                          }
+                        }}
+                      />
+                      Show on brief summary
+                    </label>
                   </div>
                   <div className="brief-media-item__controls">
                     <button className="brief-media-item__move-btn" onClick={() => moveMedia(idx, -1)} disabled={idx === 0} title="Move up">▲</button>
@@ -1968,7 +2381,7 @@ function BriefsTab({ API }) {
                 onClick={findMediaWithAI}
                 disabled={aiMediaSearching}
               >
-                {aiMediaSearching ? 'Searching…' : 'Generate Image'}
+                {aiMediaSearching ? 'Searching…' : 'Generate 3 Images'}
               </button>
               <button
                 className="btn-ghost"
@@ -1982,6 +2395,53 @@ function BriefsTab({ API }) {
               </button>
             </div>
           </>
+        )}
+
+        {/* Generated image picker — appears after clicking Generate Image */}
+        {generatedImages.length > 0 && (
+          <div className="gen-img-picker">
+            <div className="gen-img-picker__header">
+              <span className="gen-img-picker__title">Select images to add</span>
+              <button className="gen-img-picker__close" onClick={() => setGeneratedImages([])}>✕</button>
+            </div>
+            <div className="gen-img-picker__grid">
+              {generatedImages.map((img, i) => (
+                <label
+                  key={i}
+                  className={`gen-img-card${img.selected ? ' gen-img-card--selected' : ''}`}
+                >
+                  <img
+                    src={`${API}${img.url}`}
+                    alt={img.term}
+                    className="gen-img-card__img"
+                    onError={e => { e.currentTarget.style.opacity = '0.3' }}
+                  />
+                  <div className="gen-img-card__info">
+                    <span className="gen-img-card__term">{img.term}</span>
+                    <span className="gen-img-card__wiki">{img.wikiPage}</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="gen-img-card__check"
+                    checked={img.selected}
+                    onChange={() => setGeneratedImages(prev =>
+                      prev.map((g, j) => j === i ? { ...g, selected: !g.selected } : g)
+                    )}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="gen-img-picker__footer">
+              <button
+                className="btn-primary"
+                onClick={addSelectedImages}
+                disabled={!generatedImages.some(g => g.selected)}
+              >
+                Add {generatedImages.filter(g => g.selected).length} image{generatedImages.filter(g => g.selected).length !== 1 ? 's' : ''}
+              </button>
+              <button className="btn-ghost" onClick={() => setGeneratedImages([])}>Cancel</button>
+            </div>
+          </div>
         )}
       </div>
 

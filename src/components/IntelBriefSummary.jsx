@@ -1,5 +1,5 @@
 export default function IntelBriefSummary({ brief, onClick, showDate = false, isRead = false, isLocked = false, quizPassed = false }) {
-  const images      = brief.media?.filter(m => m.mediaType === 'picture') ?? []
+  const images      = brief.media?.filter(m => m.mediaType === 'picture' && m.showOnSummary !== false) ?? []
   const firstImage  = images[0]
   const sourceSites = brief.sources?.map(s => s.siteName).filter(Boolean)
 

@@ -62,6 +62,112 @@ export const CATEGORIES = [
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
 ]
 
+export const CATEGORY_ICONS = {
+  News:        '📰',
+  Aircrafts:   '✈️',
+  Bases:       '🏔️',
+  Ranks:       '🎖️',
+  Squadrons:   '⚡',
+  Training:    '🎯',
+  Threats:     '⚠️',
+  Allies:      '🤝',
+  Missions:    '🚀',
+  AOR:         '🌍',
+  Tech:        '💡',
+  Terminology: '📖',
+  Treaties:    '📜',
+}
+
+export const SUBCATEGORIES = {
+  News: [],
+  Aircrafts: [
+    'Fast Jet',
+    'ISR & Surveillance',
+    'Maritime Patrol',
+    'Transport & Tanker',
+    'Rotary Wing',
+    'Training Aircraft',
+    'Ground-Based Air Defence',
+    'Historic — WWII',
+    'Historic — Cold War',
+    'Historic — Post-Cold War',
+  ],
+  Bases: [
+    'UK Active',
+    'UK Former',
+    'Overseas Permanent',
+    'Overseas Deployed / FOL',
+  ],
+  Ranks: [
+    'Commissioned Officer',
+    'Non-Commissioned',
+    'Specialist Role',
+  ],
+  Squadrons: [
+    'Active Front-Line',
+    'Training',
+    'Royal Auxiliary Air Force',
+    'Historic',
+  ],
+  Training: [
+    'Initial Training',
+    'Flying Training',
+    'Ground Training & PME',
+    'Tactical & Combat Training',
+  ],
+  Threats: [
+    'State Actor Air',
+    'Surface-to-Air Missiles',
+    'Asymmetric & Non-State',
+    'Missiles & Stand-Off',
+    'Electronic & Cyber',
+  ],
+  Allies: [
+    'NATO',
+    'Five Eyes',
+    'AUKUS',
+    'Bilateral & Framework Partners',
+  ],
+  Missions: [
+    'World War I',
+    'World War II',
+    'Post-War & Cold War',
+    'Post-Cold War',
+    'War on Terror',
+    'NATO Standing Operations',
+    'Humanitarian & NEO',
+  ],
+  AOR: [
+    'UK Home Air Defence',
+    'NATO AOR',
+    'Middle East & CENTCOM',
+    'Atlantic & GIUK Gap',
+    'Africa',
+    'Indo-Pacific',
+    'South Atlantic & Falklands',
+  ],
+  Tech: [
+    'Weapons Systems',
+    'Sensors & Avionics',
+    'Electronic Warfare',
+    'Future Programmes',
+    'Command, Control & Comms',
+  ],
+  Terminology: [
+    'Operational Concepts',
+    'Flying & Tactical',
+    'Air Traffic & Navigation',
+    'Intelligence & Planning',
+    'Maintenance & Support',
+  ],
+  Treaties: [
+    'Founding & Core Alliances',
+    'Bilateral Defence Agreements',
+    'Arms Control & Non-Proliferation',
+    'Operational & Status Agreements',
+  ],
+}
+
 export const MOCK_BRIEFS = [
   {
     _id: 'brief-001',

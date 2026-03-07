@@ -17,6 +17,8 @@ const mongoose          = require('mongoose');
 const path              = require('path');
 const fs                = require('fs');
 
+const LEADS_FILE = path.join(__dirname, '../../APPLICATION_INFO/intel_brief_leads.txt');
+
 router.use(protect, adminOnly);
 
 // Shared helper — all state-changing actions require a reason
@@ -370,9 +372,9 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
 // POST /api/admin/briefs/:id/media — add a media item to a brief
 router.post('/briefs/:id/media', async (req, res) => {
   try {
-    const { mediaType, mediaUrl } = req.body;
+    const { mediaType, mediaUrl, showOnSummary } = req.body;
     if (!mediaUrl || !mediaType) return res.status(400).json({ message: 'mediaType and mediaUrl required' });
-    const media = await Media.create({ mediaType, mediaUrl: mediaUrl.trim() });
+    const media = await Media.create({ mediaType, mediaUrl: mediaUrl.trim(), showOnSummary: showOnSummary !== false });
     const brief = await IntelligenceBrief.findByIdAndUpdate(
       req.params.id,
       { $push: { media: media._id } },
@@ -387,10 +389,11 @@ router.post('/briefs/:id/media', async (req, res) => {
 // PATCH /api/admin/media/:mediaId — update a media item's URL or type
 router.patch('/media/:mediaId', async (req, res) => {
   try {
-    const { mediaUrl, mediaType } = req.body;
+    const { mediaUrl, mediaType, showOnSummary } = req.body;
     const update = {};
-    if (mediaUrl !== undefined) update.mediaUrl = mediaUrl.trim();
-    if (mediaType !== undefined) update.mediaType = mediaType;
+    if (mediaUrl       !== undefined) update.mediaUrl       = mediaUrl.trim();
+    if (mediaType      !== undefined) update.mediaType      = mediaType;
+    if (showOnSummary  !== undefined) update.showOnSummary  = showOnSummary;
     const media = await Media.findByIdAndUpdate(req.params.mediaId, update, { new: true, runValidators: true });
     if (!media) return res.status(404).json({ message: 'Media not found' });
     res.json({ status: 'success', data: { media } });
@@ -538,14 +541,26 @@ router.post('/ai/news-headlines', async (req, res) => {
 // POST /api/admin/ai/generate-brief
 router.post('/ai/generate-brief', async (req, res) => {
   try {
-    const { headline } = req.body;
-    if (!headline) return res.status(400).json({ message: 'headline required' });
+    const { headline, topic } = req.body;
+    if (!headline && !topic) return res.status(400).json({ message: 'headline or topic required' });
+
+    const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "concise factual title, max 70 characters",\n  "subtitle": "one factual sentence summarising the subject",\n  "description": "200-250 word factual brief written for RAF trainees — only include details confirmed by published sources, no speculation",\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim in the description above", "generatedDescription": "general RAF-specific definition of this term — e.g. what this aircraft/system/operation is, its role and capabilities — do NOT reference this intel brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"}\n  ],\n  "sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}\nCRITICAL RULES:\n1. Write the description first, then extract keywords FROM that description — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere in the description text.\n2. Return exactly 10 keyword objects.\n3. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
+
+    const TOPIC_JSON_SHAPE = JSON_SHAPE.replace(
+      '"sources": [',
+      '"historic": <true if this subject is outdated/retired/no longer operationally relevant to the modern RAF — e.g. retired aircraft, concluded operations, obsolete systems, pre-2000 history with no current relevance; false if it has modern-day relevance, is currently in service, or ongoing>,\n  "sources": ['
+    );
+
+    const userContent = topic
+      ? `Write a comprehensive intelligence brief about this RAF topic: "${topic}"\n\nUsing verified facts from published sources, produce a reference-style brief suitable for RAF trainees learning about this subject — not a news story, but an informative overview covering its role, history, key facts, and RAF significance.\n\n${TOPIC_JSON_SHAPE}`
+      : `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources, return a JSON object for an RAF trainee intelligence brief.\n\n${JSON_SHAPE}`;
+
     const data = await openRouterChat([{
       role: 'system',
       content: 'You are a factual intelligence writer for a Royal Air Force training platform. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
     }, {
       role: 'user',
-      content: `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources, return a JSON object for an RAF trainee intelligence brief. Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "factual title drawn from the story, max 70 characters",\n  "subtitle": "one factual sentence summarising the story",\n  "description": "200-250 word factual brief written for RAF trainees — only include details confirmed by published sources, no speculation",\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim in the description above", "generatedDescription": "general RAF-specific definition of this term — e.g. what this aircraft/system/operation is, its role and capabilities — do NOT reference this intel brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition of this term, not related to this brief"}\n  ],\n  "sources": [\n    {"url": "https://full-url-of-actual-article.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}\nCRITICAL RULES:\n1. Write the description first, then extract keywords FROM that description — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere in the description text.\n2. Return exactly 10 keyword objects.\n3. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns that actually appear in the description.`,
+      content: userContent,
     }], 'perplexity/sonar');
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     const brief = JSON.parse(cleanJson(raw));
@@ -557,6 +572,62 @@ router.post('/ai/generate-brief', async (req, res) => {
       );
     }
     res.json({ status: 'success', data: { brief } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/intel-leads — parse intel_brief_leads.txt, return topics not yet marked [DB]
+router.get('/intel-leads', (req, res) => {
+  try {
+    const content = fs.readFileSync(LEADS_FILE, 'utf8');
+    const lines = content.split('\n');
+    const leads = [];
+    let currentSection = '';
+    let currentSubsection = '';
+
+    const SKIP = /^(SKYWATCH|Comprehensive seeding|All topics|LEGEND|END OF|Total categories|Approximate total|\[DB\]\s*=|News briefs are excluded)/i;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (trimmed.startsWith('=')) continue;
+      if (/^SECTION \d+:/i.test(trimmed)) { currentSection = trimmed; currentSubsection = ''; continue; }
+      if (trimmed.startsWith('---') && trimmed.endsWith('---')) {
+        currentSubsection = trimmed.replace(/^-+\s*/, '').replace(/\s*-+$/, '');
+        continue;
+      }
+      if (SKIP.test(trimmed)) continue;
+      if (trimmed.endsWith('[DB]')) continue; // already published
+
+      leads.push({ text: trimmed, section: currentSection, subsection: currentSubsection });
+    }
+
+    res.json({ status: 'success', data: { leads } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/intel-leads/mark-complete — append [DB] to a lead line in the file
+router.post('/intel-leads/mark-complete', (req, res) => {
+  try {
+    const { lead } = req.body;
+    if (!lead) return res.status(400).json({ message: 'lead required' });
+
+    const content = fs.readFileSync(LEADS_FILE, 'utf8');
+    let found = false;
+    const updated = content.split('\n').map(line => {
+      if (line.trim() === lead.trim() && !line.includes('[DB]')) {
+        found = true;
+        return line.trimEnd() + ' [DB]';
+      }
+      return line;
+    });
+
+    if (!found) return res.status(404).json({ message: 'Lead not found or already marked' });
+    fs.writeFileSync(LEADS_FILE, updated.join('\n'), 'utf8');
+    res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -636,15 +707,15 @@ router.delete('/media/brief-image', async (req, res) => {
 });
 
 // POST /api/admin/ai/generate-image
-// 1. Ask OpenRouter to extract the key subject from the title
-// 2. Search Wikipedia for that subject
-// 3. Download the page thumbnail and save it locally
+// 1. Ask OpenRouter for the 3 most visually distinct subjects from the title/subtitle
+// 2. Fetch Wikipedia thumbnail for each in parallel
+// 3. Download and save all found images, return array
 router.post('/ai/generate-image', async (req, res) => {
   try {
     const { title, subtitle } = req.body;
     if (!title) return res.status(400).json({ message: 'title is required' });
 
-    // Step 1 — extract subject via OpenRouter text model
+    // Step 1 — extract 3 distinct search terms
     const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -657,48 +728,53 @@ router.post('/ai/generate-image', async (req, res) => {
         model: 'openai/gpt-4o-mini',
         messages: [{
           role: 'user',
-          content: `You are helping find a Wikipedia image for a news article. Extract the single most prominent subject, aircraft, person, place, or organisation from this title and subtitle that is most likely to have its own Wikipedia article with a photograph. Reply with ONLY the search term — no explanation, no punctuation, no quotes.\n\nTitle: "${title}"${subtitle ? `\nSubtitle: "${subtitle}"` : ''}`,
+          content: `Extract the 3 most visually distinct subjects from this RAF article that are each likely to have their own Wikipedia page with a photograph. Prioritise specific aircraft designations, named bases/locations, named operations, or specific units.\n\nReturn ONLY a JSON array of exactly 3 search terms, e.g. ["Eurofighter Typhoon", "RAF Lossiemouth", "Operation Shader"]\n\nTitle: "${title}"${subtitle ? `\nSubtitle: "${subtitle}"` : ''}`,
         }],
       }),
     });
     const aiData = await aiRes.json();
     if (aiData.error) throw new Error(aiData.error.message ?? JSON.stringify(aiData.error));
-    const searchTerm = aiData.choices?.[0]?.message?.content?.trim().replace(/^["']|["']$/g, '');
-    if (!searchTerm) throw new Error('AI did not return a search term');
+    const raw = aiData.choices?.[0]?.message?.content?.trim() ?? '[]';
+    let terms = [];
+    try { terms = JSON.parse(raw.replace(/```json\n?|```/g, '').trim()); } catch { terms = [title]; }
+    if (!Array.isArray(terms) || terms.length === 0) terms = [title];
+    terms = terms.slice(0, 3);
 
-    // Step 2 — find the Wikipedia page
-    const searchRes = await fetch(
-      `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchTerm)}&format=json&srlimit=1&origin=*`
-    );
-    const searchData = await searchRes.json();
-    const pageTitle = searchData.query?.search?.[0]?.title;
-    if (!pageTitle) throw new Error(`No Wikipedia page found for "${searchTerm}"`);
-
-    // Step 3 — get the page thumbnail
-    const thumbRes = await fetch(
-      `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=800&origin=*`
-    );
-    const thumbData = await thumbRes.json();
-    const pages = thumbData.query?.pages ?? {};
-    const imageUrl = Object.values(pages)[0]?.thumbnail?.source;
-    if (!imageUrl) throw new Error(`No image found on Wikipedia for "${pageTitle}"`);
-
-    // Step 4 — download and save the image
-    const imgRes = await fetch(imageUrl, {
-      headers: { 'User-Agent': 'Skywatch/1.0 (educational-platform)' },
-    });
-    if (!imgRes.ok) throw new Error(`Wikipedia image download failed (${imgRes.status})`);
-    const buffer = Buffer.from(await imgRes.arrayBuffer());
-    const ext = /\.(jpe?g|png|gif|webp|svg)(\?|$)/i.exec(imageUrl)?.[1]?.replace('jpeg', 'jpg') ?? 'jpg';
+    // Step 2 — fetch Wikipedia image for each term in parallel
     const dir = path.join(__dirname, '..', 'uploads', 'brief-images');
     fs.mkdirSync(dir, { recursive: true });
-    const filename = `brief-${Date.now()}.${ext}`;
-    fs.writeFileSync(path.join(dir, filename), buffer);
 
-    res.json({
-      status: 'success',
-      data: { url: `/uploads/brief-images/${filename}`, term: searchTerm, wikiPage: pageTitle },
-    });
+    const fetchOneImage = async (term, idx) => {
+      const searchRes = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`
+      );
+      const searchData = await searchRes.json();
+      const pageTitle  = searchData.query?.search?.[0]?.title;
+      if (!pageTitle) throw new Error(`No Wikipedia page for "${term}"`);
+
+      const thumbRes  = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=800&origin=*`
+      );
+      const thumbData = await thumbRes.json();
+      const imageUrl  = Object.values(thumbData.query?.pages ?? {})[0]?.thumbnail?.source;
+      if (!imageUrl) throw new Error(`No image on Wikipedia for "${pageTitle}"`);
+
+      const imgRes = await fetch(imageUrl, { headers: { 'User-Agent': 'Skywatch/1.0 (educational-platform)' } });
+      if (!imgRes.ok) throw new Error(`Download failed (${imgRes.status})`);
+      const buffer   = Buffer.from(await imgRes.arrayBuffer());
+      const ext      = /\.(jpe?g|png|gif|webp|svg)(\?|$)/i.exec(imageUrl)?.[1]?.replace('jpeg', 'jpg') ?? 'jpg';
+      const filename = `brief-${Date.now()}-${idx}.${ext}`;
+      fs.writeFileSync(path.join(dir, filename), buffer);
+
+      return { url: `/uploads/brief-images/${filename}`, term, wikiPage: pageTitle };
+    };
+
+    const results = await Promise.allSettled(terms.map((term, i) => fetchOneImage(term, i)));
+    const images  = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+
+    if (images.length === 0) throw new Error('Could not find Wikipedia images for any of the extracted subjects');
+
+    res.json({ status: 'success', data: { images } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

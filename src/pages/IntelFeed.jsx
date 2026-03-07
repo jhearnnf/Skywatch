@@ -1,24 +1,9 @@
 import { useState, useEffect } from 'react'
 import IntelBriefSummary from '../components/IntelBriefSummary'
 import { useAuth } from '../context/AuthContext'
-import { CATEGORIES } from '../data/mockData'
+import { CATEGORIES, CATEGORY_ICONS as BASE_ICONS } from '../data/mockData'
 
-const CATEGORY_ICONS = {
-  All:         '🔍',
-  News:        '📰',
-  Aircrafts:   '✈️',
-  Bases:       '🏔️',
-  Ranks:       '🎖️',
-  Squadrons:   '⚡',
-  Training:    '🎯',
-  Threats:     '⚠️',
-  Allies:      '🤝',
-  Missions:    '🚀',
-  AOR:         '🌍',
-  Tech:        '💡',
-  Terminology: '📖',
-  Treaties:    '📜',
-}
+const CATEGORY_ICONS = { All: '🔍', ...BASE_ICONS }
 
 const ALL_CATEGORIES = ['All', ...CATEGORIES]
 

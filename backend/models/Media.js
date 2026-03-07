@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
 
 const mediaSchema = new mongoose.Schema({
-  mediaType: { type: String, enum: ['picture', 'video'], required: true },
-  mediaUrl:  { type: String, required: true, trim: true },
+  mediaType:     { type: String, enum: ['picture', 'video'], required: true },
+  mediaUrl:      { type: String, required: true, trim: true },
+  showOnSummary: { type: Boolean, default: true },
 }, { timestamps: true });
 
 const PLACEHOLDER_URL     = '/images/placeholder-brief.svg';
