@@ -4,8 +4,9 @@ const User = require('../models/User');
 const ProblemReport = require('../models/ProblemReport');
 const AdminAction = require('../models/AdminAction');
 const AppSettings = require('../models/AppSettings');
-const GameSessionQuizResult  = require('../models/GameSessionQuizResult');
-const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
+const GameSessionQuizResult           = require('../models/GameSessionQuizResult');
+const GameSessionQuizAttempt          = require('../models/GameSessionQuizAttempt');
+const GameSessionOrderOfBattleResult  = require('../models/GameSessionOrderOfBattleResult');
 const AircoinLog             = require('../models/AircoinLog');
 const { awardCoins }         = require('../utils/awardCoins');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
@@ -220,7 +221,7 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
     const ops = [];
 
     if (fields.includes('aircoins'))        { userUpdates.totalAircoins = 0; userUpdates.cycleAircoins = 0; userUpdates.rank = null; ops.push(AircoinLog.deleteMany({ userId: req.params.id })); }
-    if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); }
+    if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); }
     if (fields.includes('intelBriefsRead')) ops.push(IntelligenceBriefRead.deleteMany({ userId: req.params.id }));
 
     if (Object.keys(userUpdates).length) ops.push(User.findByIdAndUpdate(req.params.id, userUpdates));
@@ -544,7 +545,7 @@ router.post('/ai/generate-brief', async (req, res) => {
     const { headline, topic } = req.body;
     if (!headline && !topic) return res.status(400).json({ message: 'headline or topic required' });
 
-    const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "concise factual title, max 70 characters",\n  "subtitle": "one factual sentence summarising the subject",\n  "description": "200-250 word factual brief written for RAF trainees — only include details confirmed by published sources, no speculation",\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim in the description above", "generatedDescription": "general RAF-specific definition of this term — e.g. what this aircraft/system/operation is, its role and capabilities — do NOT reference this intel brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"}\n  ],\n  "sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}\nCRITICAL RULES:\n1. Write the description first, then extract keywords FROM that description — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere in the description text.\n2. Return exactly 10 keyword objects.\n3. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
+    const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "concise factual title, max 70 characters",\n  "subtitle": "one factual sentence summarising the subject",\n  "description": "200-300 word factual brief written for RAF trainees. Write in 2-3 paragraphs where appropriate — separate each paragraph with a double newline (\\n\\n) in the JSON string. Only include details confirmed by published sources, no speculation.",\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim in the description above", "generatedDescription": "general RAF-specific definition of this term — e.g. what this aircraft/system/operation is, its role and capabilities — do NOT reference this intel brief"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the description", "generatedDescription": "general RAF-specific definition"}\n  ],\n  "sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}\nCRITICAL RULES:\n1. Write the description first, then extract keywords FROM that description — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere in the description text.\n2. Return exactly 10 keyword objects.\n3. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
 
     const TOPIC_JSON_SHAPE = JSON_SHAPE.replace(
       '"sources": [',
@@ -701,6 +702,50 @@ router.delete('/media/brief-image', async (req, res) => {
       if (err && err.code !== 'ENOENT') return res.status(500).json({ message: err.message });
       res.json({ status: 'success' });
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/generate-battle-order-data
+// Accepts { title, description, category } and returns the relevant gameData fields for that category.
+const BOO_ELIGIBLE = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties'];
+router.post('/ai/generate-battle-order-data', async (req, res) => {
+  try {
+    const { title, description, category } = req.body;
+    if (!title && !description) return res.status(400).json({ message: 'title or description required' });
+    if (!BOO_ELIGIBLE.includes(category)) {
+      return res.status(400).json({ message: `Category "${category}" is not eligible for Battle of Order data` });
+    }
+
+    let fieldSpec = '';
+    let jsonShape = '';
+    if (category === 'Aircrafts') {
+      fieldSpec = 'topSpeedKph (integer, cruise/max speed in km/h), yearIntroduced (integer, year RAF first operated this aircraft), yearRetired (integer or null if still in service)';
+      jsonShape = '{"topSpeedKph":2400,"yearIntroduced":1976,"yearRetired":null}';
+    } else if (category === 'Ranks') {
+      fieldSpec = 'rankHierarchyOrder (integer, 1 = most senior e.g. Marshal of the RAF, higher numbers = more junior)';
+      jsonShape = '{"rankHierarchyOrder":5}';
+    } else if (category === 'Training') {
+      fieldSpec = 'trainingWeekStart (integer, the week number in the training pipeline when this phase/element begins), trainingWeekEnd (integer, the week number when this phase/element ends)';
+      jsonShape = '{"trainingWeekStart":3,"trainingWeekEnd":5}';
+    } else {
+      // Missions, Tech, Treaties
+      fieldSpec = 'startYear (integer, year this began/was introduced/enacted), endYear (integer or null if still ongoing/in service)';
+      jsonShape = '{"startYear":1939,"endYear":1945}';
+    }
+
+    const data = await openRouterChat([{
+      role: 'system',
+      content: 'You are a factual data extractor for a Royal Air Force training platform. You only return verified numeric data based on published facts. Return ONLY valid JSON with no markdown, no code blocks, no extra text.',
+    }, {
+      role: 'user',
+      content: `Extract the following data fields for this RAF "${category}" intel brief:\n\nFields needed: ${fieldSpec}\n\nTitle: "${title}"\nDescription:\n"""\n${description ?? ''}\n"""\n\nReturn ONLY valid JSON — no markdown, no code blocks. Use null for unknown/inapplicable values.\nExample shape: ${jsonShape}`,
+    }], 'perplexity/sonar');
+
+    const raw = data.choices?.[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(cleanJson(raw));
+    res.json({ status: 'success', data: { gameData: parsed } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

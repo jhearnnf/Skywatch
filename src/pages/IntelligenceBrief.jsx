@@ -3,6 +3,7 @@ import ReadyForBriefing from '../components/ReadyForBriefing'
 import TargetDossierModal from '../components/TargetDossierModal'
 import OutOfAmmo from '../components/OutOfAmmo'
 import TargetingHUD from '../components/TargetingHUD'
+import BattleOfOrderModal from '../components/BattleOfOrderModal'
 import { useAuth } from '../context/AuthContext'
 import { playSound } from '../utils/sound'
 
@@ -23,34 +24,55 @@ function ClassifiedOverlay() {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    canvas.width  = window.innerWidth
-    canvas.height = window.innerHeight
-    const ctx  = canvas.getContext('2d')
-    const fs   = 13
-    const cols = Math.floor(canvas.width / fs)
-    const drops = Array.from({ length: cols }, () => Math.random() * -(canvas.height / fs))
-    let last = 0
 
-    const draw = (ts) => {
-      rafRef.current = requestAnimationFrame(draw)
-      if (ts - last < 55) return
-      last = ts
-      ctx.fillStyle = 'rgba(4, 8, 20, 0.1)'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-      ctx.font = `${fs}px "Courier New", monospace`
-      for (let i = 0; i < cols; i++) {
-        const ch  = CO_CHARS[Math.floor(Math.random() * CO_CHARS.length)]
-        const rnd = Math.random()
-        ctx.fillStyle = rnd > 0.97 ? 'rgba(219,234,254,0.95)'
-                      : rnd > 0.82 ? 'rgba(96,165,250,0.5)'
-                      :              'rgba(29,78,216,0.18)'
-        ctx.fillText(ch, i * fs, drops[i] * fs)
-        if (drops[i] * fs > canvas.height && Math.random() > 0.975) drops[i] = 0
-        else drops[i] += 0.42
-      }
+    const fs = 20
+    let cols, drops, w, h
+
+    const init = () => {
+      cancelAnimationFrame(rafRef.current)
+      const dpr = window.devicePixelRatio || 1
+      w = window.innerWidth
+      h = window.innerHeight
+      canvas.width        = Math.round(w * dpr)
+      canvas.height       = Math.round(h * dpr)
+      canvas.style.width  = w + 'px'
+      canvas.style.height = h + 'px'
+      const ctx = canvas.getContext('2d')
+      ctx.scale(dpr, dpr)
+      cols  = Math.floor(w / fs)
+      drops = Array.from({ length: cols }, () => Math.random() * (h / fs) * 1.5 - (h / fs) * 0.5)
+      start(ctx)
     }
-    rafRef.current = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(rafRef.current)
+
+    const start = (ctx) => {
+      let last = 0
+      const draw = (ts) => {
+        rafRef.current = requestAnimationFrame(draw)
+        if (ts - last < 110) return
+        last = ts
+        ctx.fillStyle = 'rgba(4, 8, 20, 0.22)'
+        ctx.fillRect(0, 0, w, h)
+        ctx.font = `${fs}px "Courier New", monospace`
+        for (let i = 0; i < cols; i++) {
+          const ch  = CO_CHARS[Math.floor(Math.random() * CO_CHARS.length)]
+          const rnd = Math.random()
+          ctx.fillStyle = rnd > 0.97 ? 'rgba(219,234,254,0.12)'
+                        : rnd > 0.82 ? 'rgba(96,165,250,0.08)'
+                        :              'rgba(29,78,216,0.05)'
+          ctx.fillText(ch, i * fs, drops[i] * fs)
+          if (drops[i] * fs > h && Math.random() > 0.975) drops[i] = 0
+          else drops[i] += 0.22
+        }
+      }
+      rafRef.current = requestAnimationFrame(draw)
+    }
+
+    init()
+    window.addEventListener('resize', init)
+    return () => {
+      cancelAnimationFrame(rafRef.current)
+      window.removeEventListener('resize', init)
+    }
   }, [])
 
   return (
@@ -98,6 +120,44 @@ function SystemInitBar({ progress, online }) {
       <div className="sys-init__footer">
         <span className="sys-init__code">SYS:{phase}</span>
         <span className="sys-init__status">TARGETING OFFLINE · STAND BY</span>
+      </div>
+    </div>
+  )
+}
+
+// ── Mobile targeting bar (fixed bottom strip) ─────────────────────────────────
+
+function MobileTargetingBar({ ammoRemaining, ammoMax, scanWord }) {
+  const isUnlimited = ammoMax >= 9999
+  const isDepleted  = !isUnlimited && ammoRemaining === 0
+  const maxBlocks   = isUnlimited ? 8 : Math.min(ammoMax || 8, 8)
+
+  return (
+    <div className="mobile-targeting-bar" aria-hidden="true">
+      <div className="mtb__left">
+        <div className="mtb__status-row">
+          <span className="mtb__dot" />
+          <span className="mtb__label">TARGETING</span>
+        </div>
+        <div className="mtb__ammo-row">
+          <span className={`mtb__ammo-num${isDepleted ? ' mtb__ammo-num--depleted' : ''}`}>
+            {isUnlimited ? '∞' : String(ammoRemaining).padStart(2, '0')}
+          </span>
+          <span className="mtb__ammo-label">{isUnlimited ? 'UNLIMITED' : isDepleted ? 'DEPLETED' : 'RDS'}</span>
+        </div>
+      </div>
+
+      <div className="mtb__blocks">
+        {Array.from({ length: maxBlocks }, (_, i) => (
+          <span key={i} className={`mtb__block${i < ammoRemaining || isUnlimited ? ' mtb__block--live' : ' mtb__block--spent'}`}>
+            {i < ammoRemaining || isUnlimited ? '■' : '□'}
+          </span>
+        ))}
+      </div>
+
+      <div className="mtb__scan">
+        <span className="mtb__scan-label">{scanWord ? 'SCAN' : 'TAP'}</span>
+        <span className="mtb__scan-word">{scanWord ? scanWord.word.toUpperCase() : 'KEYWORDS'}</span>
       </div>
     </div>
   )
@@ -158,6 +218,7 @@ function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHov
     setKwFlashIdx(0)
     lastScannedRef.current = kwSegs[0].content
     emitScanWord(kwSegs[0].content)
+    playSound('target_locked_keyword')
     flashTimerRef.current = setInterval(() => {
       idx++
       if (idx >= kwSegs.length) {
@@ -167,6 +228,7 @@ function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHov
         lastScannedRef.current = kwSegs[idx].content
         setKwFlashIdx(idx)
         emitScanWord(kwSegs[idx].content)
+        playSound('target_locked_keyword')
       }
     }, 70)
     return () => clearInterval(flashTimerRef.current)
@@ -211,27 +273,49 @@ function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHov
         </div>
       )}
 
-      <p className={`description-text ${hoveredKw ? 'description-text--dimmed' : ''}`}>
-        {segments.map((seg, i) => {
-          if (seg.type === 'text') return <span key={i}>{seg.content}</span>
-          kwInstanceIdx++
-          const thisIdx    = kwInstanceIdx
-          const isHovered  = hoveredKw?.keyword === seg.keyword?.keyword
-          const isUnlocked = unlockedKws?.has(seg.keyword?.keyword)
-          const isFlashing = kwFlashIdx === thisIdx
-          return (
-            <span
-              key={i}
-              className={`kw-highlight${isUnlocked ? ' kw-highlight--unlocked' : ''}${isHovered ? ' kw-highlight--targeted' : ''}${isFlashing ? ' kw-highlight--flash' : ''}`}
-              onMouseEnter={() => { setHoveredKw(seg.keyword); lastScannedRef.current = seg.content; emitScanWord(seg.content) }}
-              onMouseLeave={() => setHoveredKw(null)}
-              onClick={(e) => onKeywordClick(e, seg.keyword)}
-            >
-              {seg.content}
-            </span>
-          )
-        })}
-      </p>
+      {(() => {
+        // Group segments into paragraphs on \n\n boundaries within text segments
+        const paragraphs = []
+        let currentPara  = []
+        for (const seg of segments) {
+          if (seg.type === 'text') {
+            const parts = seg.content.split('\n\n')
+            currentPara.push({ ...seg, content: parts[0] })
+            for (let j = 1; j < parts.length; j++) {
+              paragraphs.push(currentPara)
+              currentPara = [{ type: 'text', content: parts[j] }]
+            }
+          } else {
+            currentPara.push(seg)
+          }
+        }
+        if (currentPara.length > 0) paragraphs.push(currentPara)
+
+        return paragraphs.map((para, pi) => (
+          <p key={pi} className={`description-text ${hoveredKw ? 'description-text--dimmed' : ''}`}>
+            {para.map((seg, i) => {
+              if (seg.type === 'text') return <span key={i}>{seg.content}</span>
+              kwInstanceIdx++
+              const thisIdx    = kwInstanceIdx
+              const isHovered  = hoveredKw?.keyword === seg.keyword?.keyword
+              const isUnlocked = unlockedKws?.has(seg.keyword?.keyword)
+              const isFlashing = kwFlashIdx === thisIdx
+              return (
+                <span
+                  key={i}
+                  className={`kw-highlight${isUnlocked ? ' kw-highlight--unlocked' : ''}${isHovered ? ' kw-highlight--targeted' : ''}${isFlashing ? ' kw-highlight--flash' : ''}`}
+                  onMouseEnter={isMobile ? undefined : () => { setHoveredKw(seg.keyword); lastScannedRef.current = seg.content; emitScanWord(seg.content) }}
+                  onMouseLeave={isMobile ? undefined : () => setHoveredKw(null)}
+                  onTouchEnd={isMobile ? (e) => { e.preventDefault(); onKeywordClick(e, seg.keyword) } : undefined}
+                  onClick={isMobile ? undefined : (e) => onKeywordClick(e, seg.keyword)}
+                >
+                  {seg.content}
+                </span>
+              )
+            })}
+          </p>
+        ))
+      })()}
     </div>
   )
 }
@@ -268,6 +352,73 @@ function MediaCarousel({ media }) {
   )
 }
 
+// ── Brief game-data intel panel ───────────────────────────────────────────────
+
+const GAMEDATA_FIELDS = {
+  Aircrafts: [
+    { key: 'topSpeedKph',    label: 'TOP SPEED',       format: v => `${Number(v).toLocaleString()} KPH` },
+    { key: 'yearIntroduced', label: 'YEAR INTRODUCED', format: v => String(v) },
+    { key: 'yearRetired',    label: 'YEAR RETIRED',    format: v => v != null ? String(v) : 'IN SERVICE' },
+  ],
+  Ranks: [
+    { key: 'rankHierarchyOrder', label: 'RANK TIER', format: v => `#${v}` },
+  ],
+  Training: [
+    { key: 'trainingWeekStart', label: 'PHASE START', format: v => `WEEK ${v}` },
+    { key: 'trainingWeekEnd',   label: 'PHASE END',   format: v => `WEEK ${v}` },
+  ],
+  Missions: [
+    { key: 'startYear', label: 'COMMENCED', format: v => String(v) },
+    { key: 'endYear',   label: 'CONCLUDED', format: v => v != null ? String(v) : 'ONGOING' },
+  ],
+  Tech: [
+    { key: 'startYear', label: 'INTRODUCED', format: v => String(v) },
+    { key: 'endYear',   label: 'RETIRED',    format: v => v != null ? String(v) : 'ACTIVE' },
+  ],
+  Treaties: [
+    { key: 'startYear', label: 'RATIFIED',  format: v => String(v) },
+    { key: 'endYear',   label: 'DISSOLVED', format: v => v != null ? String(v) : 'IN FORCE' },
+  ],
+}
+
+function BriefGameDataPanel({ brief }) {
+  // Historic ranks: show decommissioned status only, no numeric stats
+  if (brief.category === 'Ranks' && brief.historic) {
+    return (
+      <div className="brief-gamedata-panel">
+        <span className="brief-gamedata-eyebrow">// CLASSIFIED TECHNICAL DATA</span>
+        <div className="brief-gamedata-grid">
+          <div className="brief-gamedata-row">
+            <span className="brief-gamedata-label">STATUS</span>
+            <span className="brief-gamedata-val brief-gamedata-val--historic">HISTORIC RANK — No longer in use</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  const fields = GAMEDATA_FIELDS[brief.category]
+  if (!fields || !brief.gameData) return null
+  const visibleRows = fields.filter(f => {
+    if (f.key === 'yearRetired')  return brief.gameData.yearIntroduced != null
+    if (f.key === 'endYear')      return brief.gameData.startYear != null
+    return brief.gameData[f.key] != null
+  })
+  if (visibleRows.length === 0) return null
+  return (
+    <div className="brief-gamedata-panel">
+      <span className="brief-gamedata-eyebrow">// CLASSIFIED TECHNICAL DATA</span>
+      <div className="brief-gamedata-grid">
+        {visibleRows.map(f => (
+          <div key={f.key} className="brief-gamedata-row">
+            <span className="brief-gamedata-label">{f.label}</span>
+            <span className="brief-gamedata-val">{f.format(brief.gameData[f.key])}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function IntelligenceBrief({ briefId, navigate }) {
@@ -285,9 +436,15 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const [dossier,       setDossier]       = useState(null)
   const [ammoItems,     setAmmoItems]     = useState([])
   const [quizOpen,      setQuizOpen]      = useState(false)
+  const [battleOpen,    setBattleOpen]    = useState(false)
   const [unlockedKws,   setUnlockedKws]   = useState(() => new Set())
   const [quizCompleted, setQuizCompleted] = useState(null) // null=unknown, true/false
   const [quizAircoinReward, setQuizAircoinReward] = useState(0) // kept for quiz modal visibility gate
+  const [booCompleted,     setBooCompleted]     = useState(false)
+  const [booAvailable,     setBooAvailable]     = useState(null) // null=fetching, true, false
+  const [booOptions,       setBooOptions]       = useState([])   // available orderType strings
+  const [booCompletedSet,  setBooCompletedSet]  = useState(new Set()) // won orderType strings
+  const pendingBooComplete = useRef(null) // deferred until modal close
   const [descHovered,     setDescHovered]     = useState(false)
   const [scanWord,        setScanWord]        = useState(null)
   const [descRect,        setDescRect]        = useState(null)
@@ -306,9 +463,15 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const aircoinSoundRef     = useRef(false)
   const targetingActiveRef  = useRef(false)
   const descWrapRef    = useRef(null)
+  const mainRef        = useRef(null)
+  const rfbRef         = useRef(null)
   const isScrollingRef = useRef(false)
   const scrollTimerRef = useRef(null)
   const mousePosRef    = useRef({ x: 0, y: 0 })
+
+  // Mobile scroll-based targeting
+  const [mobileTargeting, setMobileTargeting] = useState(false)
+  const mobileTargetingRef = useRef(false)
 
   // ── Time-spent-reading tracker ──────────────────────────────────────────────
   // Counts elapsed seconds in a ref and flushes to the API every 30s and on unmount/quiz-open.
@@ -386,15 +549,68 @@ export default function IntelligenceBrief({ briefId, navigate }) {
     }
   }, [isMobile])
 
+  // ── Mobile: engage targeting when description scrolls into view ───────────
+  // Scroll-driven targeting for mobile.
+  // Runs on every scroll event so it re-evaluates correctly on any screen size —
+  // IntersectionObserver was unreliable on larger screens because it only fires on
+  // threshold crossings, meaning if the desc never dropped below 0.45 after a
+  // disengage, it would never re-fire isIntersecting:true and targeting stayed dead.
+  useEffect(() => {
+    if (!isMobile || !pageRevealed) return
+    const descEl = descWrapRef.current
+    const rfbEl  = rfbRef.current
+    if (!descEl) return
+
+    let userHasScrolled = false
+
+    const engage = () => {
+      if (!userHasScrolled || mobileTargetingRef.current) return
+      mobileTargetingRef.current = true
+      setMobileTargeting(true)
+      playSound('target_locked')
+    }
+
+    const disengage = () => {
+      if (!mobileTargetingRef.current) return
+      mobileTargetingRef.current = false
+      setMobileTargeting(false)
+      playSound('stand_down')
+    }
+
+    const checkTargeting = () => {
+      const rect = descEl.getBoundingClientRect()
+      const visible = rect.height > 0
+        ? Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0)) / rect.height
+        : 0
+      // Disengage when RFB top enters the lower 80% of screen, or when near page bottom
+      const rfbRect   = rfbEl?.getBoundingClientRect()
+      const pastRfb   = rfbRect && rfbRect.top <= window.innerHeight * 0.8
+      const nearBottom = (window.scrollY + window.innerHeight) >= (document.documentElement.scrollHeight - 120)
+      if (visible >= 0.45 && !pastRfb && !nearBottom) engage()
+      else disengage()
+    }
+
+    const onScroll = () => {
+      if (!userHasScrolled) userHasScrolled = true
+      checkTargeting()
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [isMobile, pageRevealed]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── HUD position ───────────────────────────────────────────────────────────
   // Keep descRect alive while the dossier modal is open so the HUDs don't disappear
   // when the mouse moves from the description into the modal.
   // Capture scrollY at the same moment so HUDs can be absolutely positioned in
   // document space (they then scroll naturally with the page).
+  const [mainOffsetY, setMainOffsetY] = useState(0)
+
   useEffect(() => {
     if (descHovered && descWrapRef.current) {
       setDescRect(descWrapRef.current.getBoundingClientRect())
       setDescScrollY(window.scrollY)
+      setMainOffsetY(mainRef.current ? mainRef.current.offsetTop : 0)
     } else if (!descHovered && !dossier) {
       setDescRect(null)
     }
@@ -438,6 +654,41 @@ export default function IntelligenceBrief({ briefId, navigate }) {
       .then(data => setQuizCompleted(data?.data?.hasCompleted ?? false))
       .catch(() => {})
   }, [API, briefId, user])
+
+  // ── Fetch BOO completion + availability status ────────────────────────────────
+  useEffect(() => {
+    if (!user || !brief?._id) return
+    const BOO_CATS = ['Aircrafts','Ranks','Training','Missions','Tech','Treaties']
+    // Completion status — which orderTypes has this user won for this brief?
+    fetch(`${API}/api/games/battle-of-order/status/${brief._id}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        const completed = data?.data?.completedOrderTypes ?? []
+        setBooCompleted(data?.data?.hasCompleted ?? false)
+        // Deduplicate by orderType (any difficulty counts as "done")
+        setBooCompletedSet(new Set(completed.map(c => c.orderType)))
+      })
+      .catch(() => {})
+    // Availability — which orderTypes have enough briefs in this category?
+    if (!BOO_CATS.includes(brief.category)) return
+    fetch(`${API}/api/games/battle-of-order/options?briefId=${brief._id}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        setBooAvailable(data?.data?.available ?? false)
+        setBooOptions((data?.data?.options ?? []).map(o => o.orderType))
+      })
+      .catch(() => setBooAvailable(false))
+  }, [API, brief?._id, user])
+
+  // Lock body scroll during loading sequence, restore on reveal or unmount
+  useEffect(() => {
+    if (pageRevealed) {
+      document.body.style.overflow = ''
+    } else {
+      document.body.style.overflow = 'hidden'
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [pageRevealed])
 
   // Fetch app settings to check disableLoadingBar flag
   useEffect(() => {
@@ -523,14 +774,15 @@ export default function IntelligenceBrief({ briefId, navigate }) {
 
   // ── Dossier close — keep targeting only if cursor is still over the description
   const handleDossierClose = useCallback(() => {
+    setDossier(null)
+    if (isMobile) return // mobile targeting is scroll-driven, unaffected by dossier close
     const { x, y } = mousePosRef.current
     const rect = descWrapRef.current?.getBoundingClientRect()
     const overDesc = systemReadyRef.current && rect &&
       x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
     targetingActiveRef.current = overDesc
     setDescHovered(overDesc)
-    setDossier(null)
-  }, [])
+  }, [isMobile])
 
   // ── Keyword click ──────────────────────────────────────────────────────────
   const hasAmmo = ammoRemaining > 0
@@ -538,11 +790,22 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const handleKeywordClick = useCallback((e, keyword) => {
     if (!systemReadyRef.current) return
     e.stopPropagation()
+    const touch = e.changedTouches?.[0]
+    const clientX = touch ? touch.clientX : e.clientX
+    const clientY = touch ? touch.clientY : e.clientY
     const kwKey = keyword.keyword
     const alreadyUnlocked = unlockedKws.has(kwKey)
 
     if (alreadyUnlocked || hasAmmo) {
       playSound('fire')
+      // Update scan word so the mobile bar shows this keyword when dossier closes
+      if (isMobile) {
+        const desc = brief?.description ?? ''
+        const count = desc
+          ? (desc.match(new RegExp(`(?<![a-zA-Z0-9])${escapeRegex(kwKey)}(?![a-zA-Z0-9])`, 'gi')) ?? []).length || 1
+          : 1
+        setScanWord({ word: kwKey, count })
+      }
       if (!alreadyUnlocked) {
         // First use — consume ammo and mark as unlocked
         fetch(`${API}/api/briefs/${briefId}/use-ammo`, {
@@ -558,11 +821,11 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           .catch(() => {})
         setUnlockedKws(prev => new Set(prev).add(kwKey))
       }
-      setDossier({ keyword, clickX: e.clientX, clickY: e.clientY, scrollY: window.scrollY })
+      setDossier({ keyword, clickX: clientX, clickY: clientY, scrollY: window.scrollY })
     } else {
-      setAmmoItems(prev => [...prev, { id: Date.now(), x: e.clientX, y: e.clientY }])
+      setAmmoItems(prev => [...prev, { id: Date.now(), x: clientX, y: clientY }])
     }
-  }, [API, briefId, hasAmmo, unlockedKws])
+  }, [API, brief, briefId, hasAmmo, isMobile, unlockedKws])
 
   // ── Render states ──────────────────────────────────────────────────────────
 
@@ -614,7 +877,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const showBelowHUDs   = pageRevealed && targetingActive && !!descRect && !(hasSpaceLeft && hasSpaceRight)
 
   return (
-    <main className={`page brief-page${targetingActive ? ' targeting-active' : ''}${!pageRevealed ? ' brief-page--initializing' : ''}`}>
+    <main ref={mainRef} className={`page brief-page${targetingActive ? ' targeting-active' : ''}${!pageRevealed ? ' brief-page--initializing' : ''}`}>
 
       {!pageRevealed && <ClassifiedOverlay />}
 
@@ -625,15 +888,31 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           ← Intel Feed
         </button>
 
-        {/* ── Category badge ─────────────────────────────── */}
-        <span className="brief-category-badge">{brief.category}</span>
+        {/* ── Category / subcategory ──────────────────────── */}
+        <div className="brief-category-row">
+          <span className="brief-category-badge">▸ {brief.category}</span>
+          {brief.subcategory && brief.category !== 'News' && (
+            <>
+              <span className="brief-category-sep">//</span>
+              <span className="brief-subcategory-badge">{brief.subcategory}</span>
+            </>
+          )}
+        </div>
 
         {/* ── Title block ────────────────────────────────── */}
         <h1 className="brief-title">{brief.title}</h1>
-        {brief.subtitle && <p className="brief-subtitle">{brief.subtitle}</p>}
+        {brief.subtitle && (
+          <p className="brief-subtitle">
+            <span className="brief-subtitle__marker" aria-hidden="true">◈</span>
+            {brief.subtitle}
+          </p>
+        )}
 
         {/* ── Media ──────────────────────────────────────── */}
         <MediaCarousel media={brief.media} />
+
+        {/* ── Game-data intel panel ───────────────────── */}
+        <BriefGameDataPanel brief={brief} />
 
         {/* ── System init bar ─────────────────────────────── */}
         {!pageRevealed && (
@@ -651,7 +930,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
             isMobile={isMobile}
             systemReady={systemReady}
             unlockedKws={unlockedKws}
-            targeting={descHovered}
+            targeting={isMobile ? mobileTargeting : descHovered}
             onScanWord={setScanWord}
             dossierOpen={!!dossier}
           />
@@ -691,15 +970,16 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         {/* ── Sources ────────────────────────────────────── */}
         {brief.sources?.length > 0 && (
           <div className="brief-sources">
-            <h3 className="brief-sources__title">Sources</h3>
+            <h3 className="brief-sources__title">▸ Intel Sources</h3>
             <ul className="brief-sources__list">
               {brief.sources.map((src, i) => (
                 <li key={i}>
                   <a href={src.url} target="_blank" rel="noreferrer" className="brief-source-link">
-                    {src.siteName || src.url}
+                    <span className="brief-source-link__arrow" aria-hidden="true">↗</span>
+                    <span className="brief-source-link__name">{src.siteName || src.url}</span>
                     {src.articleDate && (
                       <span className="brief-source-date">
-                        {' · '}{new Date(src.articleDate).toLocaleDateString('en-GB')}
+                        {new Date(src.articleDate).toLocaleDateString('en-GB')}
                       </span>
                     )}
                   </a>
@@ -710,21 +990,122 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         )}
 
         {/* ── Ready for Briefing ─────────────────────────── */}
-        <ReadyForBriefing
-          briefId={brief._id}
-          hasQuestions={(brief.quizQuestionsEasy?.length ?? 0) > 0 || (brief.quizQuestionsMedium?.length ?? 0) > 0}
-          hasCompleted={quizCompleted === true}
-          quizOpen={quizOpen}
-          onQuizOpen={() => setQuizOpen(true)}
-          onQuizClose={() => setQuizOpen(false)}
-          onQuizComplete={(coins, { rankPromotion, cycleAircoins } = {}) => {
-            setQuizCompleted(true)
-            if (coins > 0) {
-              setQuizAircoinReward(coins)
-              awardAircoins(coins, 'QUIZ REWARD', { cycleAfter: cycleAircoins, rankPromotion })
-            }
-          }}
-        />
+        <div ref={rfbRef}>
+          <ReadyForBriefing
+            briefId={brief._id}
+            hasQuestions={(brief.quizQuestionsEasy?.length ?? 0) > 0 || (brief.quizQuestionsMedium?.length ?? 0) > 0}
+            hasCompleted={quizCompleted === true}
+            quizOpen={quizOpen}
+            targetingActive={mobileTargeting}
+            onQuizOpen={() => setQuizOpen(true)}
+            onQuizClose={() => setQuizOpen(false)}
+            onQuizComplete={(coins, { rankPromotion, cycleAircoins } = {}) => {
+              setQuizCompleted(true)
+              if (coins > 0) {
+                setQuizAircoinReward(coins)
+                awardAircoins(coins, 'QUIZ REWARD', { cycleAfter: cycleAircoins, rankPromotion })
+              }
+            }}
+          />
+        </div>
+
+        {/* ── Battle of Order ────────────────────────────────── */}
+        {user && pageRevealed && ['Aircrafts','Ranks','Training','Missions','Tech','Treaties'].includes(brief.category) && (booAvailable !== null || (brief.category === 'Ranks' && brief.historic)) && (() => {
+          const booHistoricLocked = brief.category === 'Ranks' && brief.historic === true
+          const allBooComplete  = !booHistoricLocked && booOptions.length > 0 && booOptions.every(ot => booCompletedSet.has(ot))
+          const booQuizLocked   = !booHistoricLocked && quizCompleted !== true
+          const booLocked       = booHistoricLocked || booAvailable === false || booQuizLocked
+          return (
+            <div className={`boa-trigger-wrap${booLocked ? ' boa-trigger-wrap--locked' : ''}`}>
+              {booHistoricLocked && (
+                <div className="boa-trigger-badge boa-trigger-badge--historic" aria-hidden="true">
+                  <span className="boa-trigger-badge__icon">⬡</span>
+                  <span className="boa-trigger-badge__text">DECOMMISSIONED</span>
+                  <span className="boa-trigger-badge__sub">Historic Rank</span>
+                </div>
+              )}
+              {!booHistoricLocked && booAvailable === false && (
+                <div className="boa-trigger-badge" aria-hidden="true">
+                  <span className="boa-trigger-badge__icon">⬡</span>
+                  <span className="boa-trigger-badge__text">CLASSIFIED</span>
+                  <span className="boa-trigger-badge__sub">Insufficient Intel Assets</span>
+                </div>
+              )}
+              {!booHistoricLocked && booAvailable !== false && booQuizLocked && (
+                <div className="boa-trigger-badge boa-trigger-badge--quiz-locked" aria-hidden="true">
+                  <span className="boa-trigger-badge__icon">⬡</span>
+                  <span className="boa-trigger-badge__text">MISSION LOCKED</span>
+                  <span className="boa-trigger-badge__sub">Complete Knowledge Check</span>
+                </div>
+              )}
+              <div className="boa-trigger-inner">
+                <span className="boa-trigger-eyebrow">Intelligence Game</span>
+                {allBooComplete && !booLocked ? (
+                  <h3 className="boa-trigger-title boa-trigger-title--done">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" style={{ verticalAlign: 'middle', marginRight: '0.4rem' }}>
+                      <circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="1.5"/>
+                      <path d="M6 10l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Battle of Order — Mission Successful
+                  </h3>
+                ) : (
+                  <h3 className="boa-trigger-title">Battle of Order</h3>
+                )}
+                <p className="boa-trigger-subtitle">
+                  {allBooComplete && !booLocked
+                    ? 'All sequences completed. Replay any game type — no extra Aircoins awarded.'
+                    : 'Arrange intel assets in the correct sequence to earn Aircoins. The game type is randomly selected.'}
+                </p>
+                {booHistoricLocked ? (
+                  <p className="boa-trigger-locked-msg">
+                    This rank has been decommissioned and is no longer active. Historic ranks are excluded from Battle of Order.
+                  </p>
+                ) : booAvailable === false ? (
+                  <p className="boa-trigger-locked-msg">
+                    Not enough intel briefs in this category yet. More classified assets must be added before this mission can be unlocked.
+                  </p>
+                ) : booQuizLocked ? (
+                  <p className="boa-trigger-locked-msg">
+                    Complete the Knowledge Check for this intel brief to unlock Battle of Order.
+                  </p>
+                ) : (
+                  <button className={`rfb__cta${allBooComplete ? ' rfb__cta--retake' : ''}`} onClick={() => setBattleOpen(true)}>
+                    {!allBooComplete && (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                    {allBooComplete ? 'Replay Battle of Order' : booCompleted ? 'Regenerate Battle of Order' : 'Generate Battle of Order'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+        {battleOpen && (
+          <BattleOfOrderModal
+            briefId={brief._id}
+            category={brief.category}
+            onClose={() => {
+              // Flush accumulated coin rewards deferred from the game results
+              if (pendingBooComplete.current) {
+                const { totalCoins, lastMeta } = pendingBooComplete.current
+                pendingBooComplete.current = null
+                if (totalCoins > 0) awardAircoins(totalCoins, 'BATTLE OF ORDER', lastMeta)
+              }
+              setBattleOpen(false)
+            }}
+            onComplete={(coins, meta) => {
+              // Accumulate across multiple wins in one session — avoids overlapping BOO sounds
+              const prev = pendingBooComplete.current
+              pendingBooComplete.current = { totalCoins: (prev?.totalCoins ?? 0) + coins, lastMeta: meta }
+              setBooCompleted(true)
+              if (meta?.orderType) {
+                setBooCompletedSet(prev => new Set([...prev, meta.orderType]))
+              }
+            }}
+          />
+        )}
 
       </div>
 
@@ -734,6 +1115,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           side="left"
           descRect={descRect}
           scrollY={descScrollY}
+          mainOffsetY={mainOffsetY}
           ammoRemaining={ammoRemaining}
           ammoMax={ammoMax}
           description={brief.description}
@@ -747,12 +1129,22 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           side="right"
           descRect={descRect}
           scrollY={descScrollY}
+          mainOffsetY={mainOffsetY}
           ammoRemaining={ammoRemaining}
           ammoMax={ammoMax}
           description={brief.description}
           keywordCount={brief.keywords?.length ?? 0}
           loggedIn={!!user}
           onLoginClick={() => navigate('login')}
+          scanWord={scanWord}
+        />
+      )}
+
+      {/* ── Mobile targeting bar ──────────────────────────── */}
+      {isMobile && mobileTargeting && pageRevealed && !dossier && (
+        <MobileTargetingBar
+          ammoRemaining={ammoRemaining}
+          ammoMax={ammoMax}
           scanWord={scanWord}
         />
       )}
@@ -764,6 +1156,8 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           clickX={dossier.clickX}
           clickY={dossier.clickY}
           scrollY={dossier.scrollY}
+          descRect={descRect}
+          descScrollY={descScrollY}
           onClose={handleDossierClose}
         />
       )}

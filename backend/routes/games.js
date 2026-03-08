@@ -12,6 +12,24 @@ const User = require('../models/User');
 const AircoinLog = require('../models/AircoinLog');
 const { awardCoins } = require('../utils/awardCoins');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
+const GameOrderOfBattle = require('../models/GameOrderOfBattle');
+const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/GameOrderOfBattle');
+
+function getDisplayValue(orderType, gameData) {
+  if (!gameData) return null;
+  const cy = new Date().getFullYear();
+  switch (orderType) {
+    case 'speed':           return gameData.topSpeedKph        != null ? `${gameData.topSpeedKph.toLocaleString()} kph` : null;
+    case 'year_introduced': return gameData.yearIntroduced      != null ? String(gameData.yearIntroduced)  : null;
+    case 'year_retired':    return gameData.yearRetired         != null ? String(gameData.yearRetired)     : `Present (${cy})`;
+    case 'rank_hierarchy':  return gameData.rankHierarchyOrder  != null ? `Order: ${gameData.rankHierarchyOrder}` : null;
+    case 'training_week':   return gameData.trainingWeekStart   != null
+      ? `Wk ${gameData.trainingWeekStart}${gameData.trainingWeekEnd ? `–${gameData.trainingWeekEnd}` : ''}` : null;
+    case 'start_year':      return gameData.startYear           != null ? String(gameData.startYear)      : null;
+    case 'end_year':        return gameData.endYear             != null ? String(gameData.endYear)        : `Ongoing (${cy})`;
+    default: return null;
+  }
+}
 
 // POST /api/games/quiz/start — fetch questions, create attempt, return question set
 router.post('/quiz/start', protect, async (req, res) => {
@@ -116,13 +134,19 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
     });
     const correct = results.filter(r => r.isCorrect).length;
     const total   = attempt.totalQuestions;
+    const percentageCorrect = total > 0 ? Math.round((correct / total) * 100) : 0;
 
-    // Award coins only on first completion
+    const settings       = await AppSettings.getSettings();
+    const passThreshold  = attempt.difficulty === 'medium'
+      ? (settings.passThresholdMedium ?? 60)
+      : (settings.passThresholdEasy   ?? 60);
+    const won = status === 'completed' && percentageCorrect >= passThreshold;
+
+    // Award coins only on first win
     let aircoinsEarned = 0;
     const breakdown = [];
-    if (status === 'completed' && attempt.isFirstAttempt) {
-      const settings  = await AppSettings.getSettings();
-      const coinRate  = attempt.difficulty === 'medium'
+    if (won && attempt.isFirstAttempt) {
+      const coinRate   = attempt.difficulty === 'medium'
         ? (settings.aircoinsPerWinMedium ?? 20)
         : (settings.aircoinsPerWinEasy   ?? 10);
       const perCorrect = correct * coinRate;
@@ -145,24 +169,26 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
     }
 
     attempt.status            = status;
+    attempt.won               = won;
     attempt.timeFinished      = new Date();
     attempt.correctAnswers    = correct;
-    attempt.percentageCorrect = total > 0 ? Math.round((correct / total) * 100) : 0;
+    attempt.percentageCorrect = percentageCorrect;
     attempt.aircoinsEarned    = aircoinsEarned;
     await attempt.save();
 
-    res.json({ status: 'success', data: { attempt, aircoinsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAircoins: attempt.cycleAircoins ?? null } });
+    res.json({ status: 'success', data: { attempt, won, aircoinsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAircoins: attempt.cycleAircoins ?? null } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// GET /api/games/quiz/completed-brief-ids — all briefIds this user has ever completed a quiz for
+// GET /api/games/quiz/completed-brief-ids — all briefIds this user has ever won a quiz for
 router.get('/quiz/completed-brief-ids', protect, async (req, res) => {
   try {
     const attempts = await GameSessionQuizAttempt.find({
       userId: req.user._id,
       status: 'completed',
+      won: true,
     }).select('intelBriefId').lean();
     const ids = [...new Set(attempts.map(a => a.intelBriefId.toString()))];
     res.json({ status: 'success', data: { ids } });
@@ -178,6 +204,7 @@ router.get('/quiz/status/:briefId', protect, async (req, res) => {
       userId: req.user._id,
       intelBriefId: req.params.briefId,
       status: 'completed',
+      won: true,
     });
     res.json({ status: 'success', data: { hasCompleted: !!completed } });
   } catch (err) {
@@ -185,25 +212,223 @@ router.get('/quiz/status/:briefId', protect, async (req, res) => {
   }
 });
 
-// POST /api/games/order-of-battle/result
-router.post('/order-of-battle/result', protect, async (req, res) => {
+// GET /api/games/battle-of-order/options — check available order types for a brief's category
+router.get('/battle-of-order/options', protect, async (req, res) => {
   try {
-    const { gameId, userSubmittedOrder, isCorrect, timeTakenSeconds, gameSessionId } = req.body;
+    const { briefId } = req.query;
+    if (!briefId) return res.status(400).json({ message: 'briefId required' });
 
-    const settings       = await AppSettings.getSettings();
-    const aircoinsEarned = isCorrect ? settings.aircoinsPerWin : 0;
+    const anchor = await IntelligenceBrief.findById(briefId).select('category gameData').lean();
+    if (!anchor) return res.status(404).json({ message: 'Brief not found' });
 
-    const result = await GameSessionOrderOfBattleResult.create({
-      userId: req.user._id, gameId, userSubmittedOrder, isCorrect, timeTakenSeconds, gameSessionId, aircoinsEarned,
-    });
+    const category   = anchor.category;
+    const orderTypes = ORDER_TYPES[category];
+    if (!orderTypes) return res.json({ status: 'success', data: { available: false, reason: 'ineligible_category' } });
 
-    let rankPromotion = null;
-    if (aircoinsEarned > 0) {
-      const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'order_of_battle', 'Order of Battle — correct sequence');
-      rankPromotion = coinResult.rankPromotion;
+    const user       = await User.findById(req.user._id).select('difficultySetting').lean();
+    const difficulty = user.difficultySetting ?? 'easy';
+    const needed     = difficulty === 'medium' ? 5 : 3;
+
+    const options = [];
+    for (const orderType of orderTypes) {
+      const fieldKey = REQUIRED_FIELD[orderType];
+      if (anchor.gameData?.[fieldKey] == null) continue;
+      const count = await IntelligenceBrief.countDocuments({
+        category,
+        [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
+      });
+      if (count >= needed) options.push({ orderType });
     }
 
-    res.status(201).json({ status: 'success', data: { result, rankPromotion } });
+    if (options.length === 0) {
+      return res.json({ status: 'success', data: { available: false, reason: 'insufficient_briefs', difficulty } });
+    }
+    res.json({ status: 'success', data: { available: true, options, difficulty } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/battle-of-order/generate — create a game for the selected order type
+router.post('/battle-of-order/generate', protect, async (req, res) => {
+  try {
+    const { briefId, orderType } = req.body;
+    if (!briefId || !orderType) return res.status(400).json({ message: 'briefId and orderType required' });
+
+    const anchor = await IntelligenceBrief.findById(briefId).select('category gameData title').lean();
+    if (!anchor) return res.status(404).json({ message: 'Brief not found' });
+
+    const category        = anchor.category;
+    const validOrderTypes = ORDER_TYPES[category];
+    if (!validOrderTypes?.includes(orderType)) return res.status(400).json({ message: 'Invalid orderType for this category' });
+
+    const fieldKey   = REQUIRED_FIELD[orderType];
+    if (anchor.gameData?.[fieldKey] == null) return res.status(400).json({ message: 'Anchor brief missing required game data' });
+
+    const user       = await User.findById(req.user._id).select('difficultySetting').lean();
+    const difficulty = user.difficultySetting ?? 'easy';
+    const needed     = difficulty === 'medium' ? 5 : 3;
+
+    const pool = await IntelligenceBrief.find({
+      category,
+      [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
+    }).select('_id title media gameData').lean();
+
+    if (pool.length < needed) return res.status(400).json({ message: `Not enough qualifying briefs (need ${needed}, found ${pool.length})` });
+
+    const others         = pool.filter(b => b._id.toString() !== briefId.toString());
+    const shuffledOthers = others.sort(() => Math.random() - 0.5).slice(0, needed - 1);
+    const selected       = [anchor, ...shuffledOthers];
+
+    const cy = new Date().getFullYear();
+    const getValue = (brief) => {
+      const gd = brief.gameData ?? {};
+      if (orderType === 'speed')           return gd.topSpeedKph       ?? Infinity;
+      if (orderType === 'year_introduced') return gd.yearIntroduced    ?? Infinity;
+      if (orderType === 'year_retired')    return gd.yearRetired       ?? cy;
+      if (orderType === 'rank_hierarchy')  return gd.rankHierarchyOrder ?? Infinity;
+      if (orderType === 'training_week')   return gd.trainingWeekStart  ?? Infinity;
+      if (orderType === 'start_year')      return gd.startYear         ?? Infinity;
+      if (orderType === 'end_year')        return gd.endYear           ?? cy;
+      return 0;
+    };
+
+    const sorted  = [...selected].sort((a, b) => getValue(a) - getValue(b));
+    const choices = sorted.map((brief, i) => ({ briefId: brief._id, correctOrder: i + 1 }));
+
+    const game = await GameOrderOfBattle.create({ anchorBriefId: briefId, category, difficulty, orderType, choices });
+
+    // Populate media for each choice
+    const MediaModel = require('../models/Media');
+    const mediaById  = {};
+    const allMediaIds = pool.flatMap(b => b.media ?? []).filter(Boolean);
+    if (allMediaIds.length > 0) {
+      const mediaItems = await MediaModel.find({ _id: { $in: allMediaIds } }).select('_id mediaUrl mediaType').lean();
+      mediaItems.forEach(m => { mediaById[m._id.toString()] = m; });
+    }
+
+    const getBriefMedia = (b) => (b.media ?? []).map(id => mediaById[id?.toString()]).filter(Boolean);
+
+    const choiceDetails = game.choices.map(c => {
+      const brief = pool.find(b => b._id.toString() === c.briefId.toString()) ??
+                    (anchor._id.toString() === c.briefId.toString() ? anchor : null);
+      return {
+        choiceId:   c._id,
+        briefTitle: brief?.title,
+        briefMedia: getBriefMedia(brief ?? {}),
+      };
+    });
+
+    // Shuffle for presentation
+    const shuffledChoices = [...choiceDetails].sort(() => Math.random() - 0.5);
+
+    res.json({
+      status: 'success',
+      data: { gameId: game._id, category, difficulty, orderType, choices: shuffledChoices },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/battle-of-order/status/:briefId — completion status for this user+brief
+router.get('/battle-of-order/status/:briefId', protect, async (req, res) => {
+  try {
+    const { briefId } = req.params;
+    const wonResults = await GameSessionOrderOfBattleResult.find({
+      userId: req.user._id,
+      won: true,
+    }).populate({ path: 'gameId', select: 'anchorBriefId orderType difficulty' }).lean();
+
+    const completedOrderTypes = wonResults
+      .filter(r => r.gameId?.anchorBriefId?.toString() === briefId)
+      .map(r => ({ orderType: r.gameId.orderType, difficulty: r.gameId.difficulty }));
+
+    res.json({ status: 'success', data: { hasCompleted: completedOrderTypes.length > 0, completedOrderTypes } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/battle-of-order/submit — validate user order, award coins
+router.post('/battle-of-order/submit', protect, async (req, res) => {
+  try {
+    const { gameId, userChoices } = req.body;
+    if (!gameId || !userChoices) return res.status(400).json({ message: 'gameId and userChoices required' });
+
+    const game = await GameOrderOfBattle.findById(gameId);
+    if (!game) return res.status(404).json({ message: 'Game not found' });
+
+    let won = userChoices.length === game.choices.length;
+    if (won) {
+      for (const uc of userChoices) {
+        const choice = game.choices.find(c => c._id.toString() === uc.choiceId.toString());
+        if (!choice || choice.correctOrder !== uc.userOrderNumber) { won = false; break; }
+      }
+    }
+
+    const settings        = await AppSettings.getSettings();
+    let aircoinsEarned    = 0;
+    let rankPromotion     = null;
+    let cycleAircoins     = null;
+
+    if (won) {
+      // Only award coins on first win for this brief + orderType + difficulty combination
+      const priorGameIds = (await GameOrderOfBattle.find({
+        anchorBriefId: game.anchorBriefId,
+        orderType:     game.orderType,
+        difficulty:    game.difficulty,
+        _id:           { $ne: game._id },
+      }).select('_id').lean()).map(g => g._id);
+
+      const isFirstWin = !(await GameSessionOrderOfBattleResult.findOne({
+        userId: req.user._id,
+        gameId: { $in: priorGameIds },
+        won: true,
+      }));
+
+      if (isFirstWin) {
+        aircoinsEarned = game.difficulty === 'medium'
+          ? (settings.aircoinsOrderOfBattleMedium ?? 18)
+          : (settings.aircoinsOrderOfBattleEasy   ?? 8);
+        const brief      = await IntelligenceBrief.findById(game.anchorBriefId).select('title').lean();
+        const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'battle_of_order',
+          `Battle of Order (${game.difficulty}): ${brief?.title ?? 'Unknown'} — ${game.orderType}`, game.anchorBriefId);
+        rankPromotion = coinResult.rankPromotion;
+        cycleAircoins = coinResult.cycleAircoins;
+      }
+    }
+
+    await GameSessionOrderOfBattleResult.create({ userId: req.user._id, gameId, won, abandoned: false, userChoices, aircoinsEarned });
+
+    // Build correct reveal (populate gameData for display values)
+    const populated = await GameOrderOfBattle.findById(gameId)
+      .populate({ path: 'choices.briefId', select: 'title gameData' })
+      .lean();
+
+    const correctReveal = [...populated.choices]
+      .sort((a, b) => a.correctOrder - b.correctOrder)
+      .map(c => ({
+        choiceId:      c._id,
+        briefTitle:    c.briefId?.title,
+        correctOrder:  c.correctOrder,
+        displayValue:  getDisplayValue(game.orderType, c.briefId?.gameData),
+      }));
+
+    res.json({ status: 'success', data: { won, aircoinsEarned, rankPromotion, cycleAircoins, correctReveal, alreadyCompleted: won && aircoinsEarned === 0 } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/battle-of-order/abandon
+router.post('/battle-of-order/abandon', protect, async (req, res) => {
+  try {
+    const { gameId } = req.body;
+    if (gameId) {
+      await GameSessionOrderOfBattleResult.create({ userId: req.user._id, gameId, won: false, abandoned: true, userChoices: [], aircoinsEarned: 0 });
+    }
+    res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -267,7 +492,7 @@ router.get('/history', protect, async (req, res) => {
         .sort({ timeStarted: -1 })
         .lean(),
       GameSessionWhosAtAircraftResult.find({ userId }).sort({ createdAt: -1 }).lean(),
-      GameSessionOrderOfBattleResult.find({ userId }).sort({ createdAt: -1 }).lean(),
+      GameSessionOrderOfBattleResult.find({ userId }).populate({ path: 'gameId', select: 'category difficulty orderType anchorBriefId' }).sort({ createdAt: -1 }).lean(),
       GameSessionFlashcardRecallResult.find({ userId }).sort({ createdAt: -1 }).lean(),
     ]);
 
@@ -304,15 +529,17 @@ router.get('/history', protect, async (req, res) => {
         canDrillDown:    false,
       })),
       ...oob.map(r => ({
-        _id:             r._id,
-        type:            'order_of_battle',
-        gameSessionId:   r.gameSessionId,
-        date:            r.createdAt,
-        status:          r.isCorrect ? 'correct' : 'incorrect',
-        isCorrect:       r.isCorrect,
-        aircoinsEarned:  r.aircoinsEarned,
-        timeTakenSeconds: r.timeTakenSeconds,
-        canDrillDown:    false,
+        _id:           r._id,
+        type:          'battle_of_order',
+        date:          r.createdAt,
+        status:        r.abandoned ? 'abandoned' : r.won ? 'won' : 'lost',
+        won:           r.won,
+        abandoned:     r.abandoned,
+        category:      r.gameId?.category,
+        difficulty:    r.gameId?.difficulty,
+        orderType:     r.gameId?.orderType,
+        aircoinsEarned: r.aircoinsEarned,
+        canDrillDown:  false,
       })),
       ...flash.map(r => {
         const recalled = r.cardResults?.filter(c => c.recalled).length ?? 0;

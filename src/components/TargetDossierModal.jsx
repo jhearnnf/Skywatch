@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-export default function TargetDossierModal({ keyword, clickX, clickY, scrollY = 0, onClose }) {
+export default function TargetDossierModal({ keyword, clickX, clickY, scrollY = 0, descRect, descScrollY = 0, onClose }) {
   const isMobile = window.innerWidth <= 600
   const ref = useRef(null)
 
@@ -12,14 +12,25 @@ export default function TargetDossierModal({ keyword, clickX, clickY, scrollY = 
   }, [onClose])
 
   // Desktop: position:absolute in document space so dossier scrolls with the page.
-  // clickX/clickY are viewport-relative; add scrollY to get document-relative top.
+  // Horizontally: to the right of the click, clamped to screen edge.
+  // Vertically: centred on the description area's midpoint via transform.
   const getStyle = () => {
     if (isMobile) return {}
-    const panelW = 320
-    const margin = 12
+    const panelW  = 320
+    const margin  = 12
     const x = Math.min(clickX + margin, window.innerWidth - panelW - margin)
-    const y = clickY + scrollY + margin
-    return { position: 'absolute', left: x, top: y }
+
+    // If we have the desc rect, centre the modal on it; otherwise fall back to click position
+    const y = descRect
+      ? descRect.top + descScrollY + descRect.height / 2
+      : clickY + scrollY + margin
+
+    return {
+      position: 'absolute',
+      left: x,
+      top: y,
+      transform: descRect ? 'translateY(-50%)' : 'none',
+    }
   }
 
   return (
@@ -57,7 +68,7 @@ export default function TargetDossierModal({ keyword, clickX, clickY, scrollY = 
           </p>
         </div>
 
-        <div className="dossier__footer">
+        <div className="dossier__footer" style={isMobile ? { paddingBottom: 'max(env(safe-area-inset-bottom), 0.5rem)' } : undefined}>
           <span className="dossier__footer-text">SKYWATCH INTEL · CLASSIFIED</span>
         </div>
       </div>

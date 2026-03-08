@@ -40,7 +40,7 @@ function LevelDisplay({ cycleAircoins, navigate }) {
 function RankDisplay({ rank, navigate }) {
   if (!rank) return null
   return (
-    <button className="nav-rank" onClick={() => navigate('rankings')} aria-label="View rankings">
+    <button className="nav-rank" onClick={() => navigate('rankings', { scrollTo: 'ranks' })} aria-label="View rank">
       <span className="nav-rank__abbr">{rank.rankAbbreviation ?? rank.abbreviation ?? '—'}</span>
       <span className="nav-rank__label">Rank</span>
     </button>
@@ -84,10 +84,16 @@ function StatsCombo({ coins, cycleAircoins, rank, navigate }) {
             <span className="nav-stats-combo__item-icon" aria-hidden="true">⬡</span>
             <span>{coins.toLocaleString()} Aircoins</span>
           </button>
-          <button className="nav-stats-combo__item" role="menuitem" onClick={() => select('rankings')}>
+          <button className="nav-stats-combo__item" role="menuitem" onClick={() => { setOpen(false); navigate('rankings') }}>
             <span className="nav-stats-combo__item-icon nav-stats-combo__item-icon--level" aria-hidden="true">◈</span>
             <span>Level {level}</span>
           </button>
+          {abbr && (
+            <button className="nav-stats-combo__item" role="menuitem" onClick={() => { setOpen(false); navigate('rankings', { scrollTo: 'ranks' }) }}>
+              <span className="nav-stats-combo__item-icon" aria-hidden="true">◈</span>
+              <span>{abbr} · Rank</span>
+            </button>
+          )}
         </div>
       )}
     </div>

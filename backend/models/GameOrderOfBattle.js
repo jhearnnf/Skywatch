@@ -1,29 +1,40 @@
 const mongoose = require('mongoose');
 
-const ALLOWED_CATEGORIES = ['Ranks', 'Squadrons', 'Missions'];
+const BATTLE_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties'];
 
-const gameOrderOfBattleSchema = new mongoose.Schema({
-  gameTypeId:   { type: mongoose.Schema.Types.ObjectId, ref: 'GameType', required: true },
-  intelBriefId: { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', required: true },
+const ORDER_TYPES = {
+  Aircrafts: ['speed', 'year_introduced', 'year_retired'],
+  Ranks:     ['rank_hierarchy'],
+  Training:  ['training_week'],
+  Missions:  ['start_year', 'end_year'],
+  Tech:      ['start_year', 'end_year'],
+  Treaties:  ['start_year', 'end_year'],
+};
 
-  orderType: {
-    type: String,
-    enum: ['rank_seniority', 'mission_date', 'squadron_seniority'],
-    required: true,
-  },
+// gameData field key for each orderType
+const REQUIRED_FIELD = {
+  speed:           'topSpeedKph',
+  year_introduced: 'yearIntroduced',
+  year_retired:    'yearRetired',
+  rank_hierarchy:  'rankHierarchyOrder',
+  training_week:   'trainingWeekStart',
+  start_year:      'startYear',
+  end_year:        'endYear',
+};
 
-  // Ordered array of IntelligenceBrief ObjectIds representing the correct sequence
-  correctOrder: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+const schema = new mongoose.Schema({
+  anchorBriefId: { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', required: true },
+  category:      { type: String, enum: BATTLE_CATEGORIES, required: true },
+  difficulty:    { type: String, enum: ['easy', 'medium'], required: true },
+  orderType:     { type: String, enum: Object.keys(REQUIRED_FIELD), required: true },
+  generatedAt:   { type: Date, default: Date.now },
+  choices: [{
+    briefId:      { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', required: true },
+    correctOrder: { type: Number, required: true },
+  }],
 });
 
-// Validate allowed categories
-gameOrderOfBattleSchema.pre('save', async function (next) {
-  const brief = await mongoose.model('IntelligenceBrief').findById(this.intelBriefId).select('category');
-  if (brief && !ALLOWED_CATEGORIES.includes(brief.category)) {
-    return next(new Error(`Order of Battle only allows categories: ${ALLOWED_CATEGORIES.join(', ')}`));
-  }
-  next();
-});
-
-module.exports = mongoose.model('GameOrderOfBattle', gameOrderOfBattleSchema);
-module.exports.ALLOWED_CATEGORIES = ALLOWED_CATEGORIES;
+module.exports = mongoose.model('GameOrderOfBattle', schema);
+module.exports.BATTLE_CATEGORIES = BATTLE_CATEGORIES;
+module.exports.ORDER_TYPES       = ORDER_TYPES;
+module.exports.REQUIRED_FIELD    = REQUIRED_FIELD;

@@ -27,6 +27,10 @@ const appSettingsSchema = new mongoose.Schema({
   aircoinsStreakBonus:   { type: Number, default: 2 },
   aircoins100Percent:    { type: Number, default: 15 },
 
+  // Battle of Order aircoins
+  aircoinsOrderOfBattleEasy:   { type: Number, default: 8,   min: 0 },
+  aircoinsOrderOfBattleMedium: { type: Number, default: 18,  min: 0 },
+
   // Category access per tier (gold always gets all categories)
   silverCategories: {
     type: [String],
@@ -47,7 +51,27 @@ const appSettingsSchema = new mongoose.Schema({
   volumeRankPromotion:      { type: Number, default: 100, min: 0, max: 100 },
   volumeQuizCompleteWin:    { type: Number, default: 100, min: 0, max: 100 },
   volumeQuizCompleteLose:   { type: Number, default: 100, min: 0, max: 100 },
-  volumeStandDown:          { type: Number, default: 100, min: 0, max: 100 },
+  volumeStandDown:            { type: Number, default: 100, min: 0, max: 100 },
+  volumeTargetLockedKeyword:  { type: Number, default: 100, min: 0, max: 100 },
+
+  // Sound enabled flags (true = on, false = off)
+  soundEnabledIntelBriefOpened:    { type: Boolean, default: true },
+  soundEnabledTargetLocked:        { type: Boolean, default: true },
+  soundEnabledStandDown:           { type: Boolean, default: true },
+  soundEnabledTargetLockedKeyword: { type: Boolean, default: true },
+  soundEnabledFire:                { type: Boolean, default: true },
+  soundEnabledOutOfAmmo:           { type: Boolean, default: true },
+  soundEnabledAircoin:             { type: Boolean, default: true },
+  soundEnabledLevelUp:             { type: Boolean, default: true },
+  soundEnabledRankPromotion:       { type: Boolean, default: true },
+  soundEnabledQuizCompleteWin:     { type: Boolean, default: true },
+  soundEnabledQuizCompleteLose:    { type: Boolean, default: true },
+  soundEnabledBattleOfOrderWon:       { type: Boolean, default: true },
+  soundEnabledBattleOfOrderLost:      { type: Boolean, default: true },
+  soundEnabledBattleOfOrderSelection: { type: Boolean, default: true },
+  volumeBattleOfOrderWon:             { type: Number, default: 100, min: 0, max: 100 },
+  volumeBattleOfOrderLost:            { type: Number, default: 100, min: 0, max: 100 },
+  volumeBattleOfOrderSelection:       { type: Number, default: 100, min: 0, max: 100 },
 
   // Feature flags
   useLiveLeaderboard:   { type: Boolean, default: false },

@@ -1,9 +1,9 @@
 import QuizGameModal from './QuizGameModal'
 
-export default function ReadyForBriefing({ briefId, hasQuestions, hasCompleted, quizOpen, onQuizOpen, onQuizClose, onQuizComplete }) {
+export default function ReadyForBriefing({ briefId, hasQuestions, hasCompleted, quizOpen, targetingActive, onQuizOpen, onQuizClose, onQuizComplete }) {
   return (
     <>
-      <div className="ready-for-briefing">
+      <div className={`ready-for-briefing${targetingActive ? ' ready-for-briefing--locked' : ''}`}>
         <div className="rfb__inner">
 
           {hasCompleted ? (
@@ -19,7 +19,7 @@ export default function ReadyForBriefing({ briefId, hasQuestions, hasCompleted, 
               <p className="rfb__subtitle">
                 Aircoins already earned for this brief. Retake anytime — no extra coins awarded.
               </p>
-              <button className="rfb__cta rfb__cta--retake" onClick={onQuizOpen}>
+              <button className="rfb__cta rfb__cta--retake" onClick={onQuizOpen} disabled={targetingActive} title={targetingActive ? 'Finish reading the brief first.' : undefined}>
                 Retake Quiz
               </button>
             </>
@@ -33,8 +33,8 @@ export default function ReadyForBriefing({ briefId, hasQuestions, hasCompleted, 
               <button
                 className="rfb__cta"
                 onClick={onQuizOpen}
-                disabled={!hasQuestions}
-                title={!hasQuestions ? 'Quiz not ready for this brief.' : undefined}
+                disabled={!hasQuestions || targetingActive}
+                title={targetingActive ? 'Finish reading the brief first.' : !hasQuestions ? 'Quiz not ready for this brief.' : undefined}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

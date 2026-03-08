@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { MOCK_LEVELS, MOCK_RANKS } from '../data/mockData'
 
@@ -18,11 +18,21 @@ function getLevelInfo(totalAircoins, levels) {
   return { current, next, coinsInLevel, coinsNeeded, progress }
 }
 
-export default function Rankings({ navigate }) {
+export default function Rankings({ navigate, scrollTo }) {
   const { user, API } = useAuth()
+  const ranksSectionRef = useRef(null)
 
   const [levels, setLevels] = useState(MOCK_LEVELS)
   const [ranks,  setRanks]  = useState(MOCK_RANKS.map(r => ({ ...r, rankAbbreviation: r.abbreviation })))
+
+  // Scroll to ranks section when navigated from the rank badge
+  useEffect(() => {
+    if (scrollTo !== 'ranks' || !ranksSectionRef.current) return
+    const t = setTimeout(() => {
+      ranksSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 150)
+    return () => clearTimeout(t)
+  }, [scrollTo])
 
   useEffect(() => {
     Promise.all([
@@ -114,7 +124,7 @@ export default function Rankings({ navigate }) {
         {/* ══════════════════════════════════════════════════
             SECTION 2 — RAF Rank (1–19)
         ══════════════════════════════════════════════════ */}
-        <div className="rankings-section">
+        <div className="rankings-section" ref={ranksSectionRef}>
           <h2 className="rankings-section-title">RAF Rank</h2>
 
           {/* Current rank display */}

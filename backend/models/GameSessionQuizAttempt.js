@@ -8,6 +8,7 @@ const gameSessionQuizAttemptSchema = new mongoose.Schema({
   timeStarted:   { type: Date, default: Date.now },
   timeFinished:  Date,
   status:        { type: String, enum: ['in_progress', 'completed', 'abandoned'], default: 'in_progress' },
+  won:               { type: Boolean, default: false },
   isFirstAttempt:    { type: Boolean, default: true },
   totalQuestions:    { type: Number, default: 5 },
   correctAnswers:    { type: Number, default: 0 },

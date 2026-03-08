@@ -706,27 +706,79 @@ function UsersTab({ API }) {
 
 // ── Sound row ─────────────────────────────────────────────────────────────────
 
-function SoundRow({ label, sound, value, onChange }) {
+const SOUND_FILES = {
+  intel_brief_opened:    ['intel_brief_opened.mp3'],
+  target_locked:         ['target_locked.mp3'],
+  stand_down:            ['stand_down.mp3'],
+  target_locked_keyword: ['target_locked_keyword.mp3'],
+  battle_of_order_won:       ['battle_of_order_won.mp3'],
+  battle_of_order_lost:      ['battle_of_order_lost.mp3'],
+  battle_of_order_selection: ['battle_of_order_selection.mp3'],
+  fire:                  ['fire.mp3'],
+  out_of_ammo:           ['out_of_ammo_1.mp3', 'out_of_ammo_2.mp3', 'out_of_ammo_3.mp3'],
+  aircoin:               ['aircoin.mp3'],
+  level_up:              ['level_up.mp3'],
+  rank_promotion:        ['rank_promotion.mp3'],
+  quiz_complete_win:     ['quiz_complete_win.mp3'],
+  quiz_complete_lose:    ['quiz_complete_lose.mp3'],
+}
+
+const SOUND_GROUPS = [
+  {
+    title: 'Targeting System',
+    sub: 'Plays on the Intel Brief page during focus/targeting mode',
+    sounds: [
+      { key: 'volumeTargetLocked',        enabledKey: 'soundEnabledTargetLocked',        label: 'Targeting Engaged',    sound: 'target_locked'           },
+      { key: 'volumeStandDown',           enabledKey: 'soundEnabledStandDown',           label: 'Targeting Disengaged', sound: 'stand_down'              },
+      { key: 'volumeTargetLockedKeyword', enabledKey: 'soundEnabledTargetLockedKeyword', label: 'Keyword Scan',         sound: 'target_locked_keyword'   },
+      { key: 'volumeFire',                enabledKey: 'soundEnabledFire',                label: 'Keyword Fired',        sound: 'fire'                    },
+      { key: 'volumeOutOfAmmo',           enabledKey: 'soundEnabledOutOfAmmo',           label: 'Out of Ammo',          sound: 'out_of_ammo'             },
+    ],
+  },
+  {
+    title: 'Intel Brief',
+    sub: 'Plays during general Intel Brief interactions',
+    sounds: [
+      { key: 'volumeIntelBriefOpened', enabledKey: 'soundEnabledIntelBriefOpened', label: 'Brief Opened', sound: 'intel_brief_opened' },
+    ],
+  },
+  {
+    title: 'Rewards & Progression',
+    sub: 'Plays when earning aircoins, levelling up or being promoted',
+    sounds: [
+      { key: 'volumeAircoin',       enabledKey: 'soundEnabledAircoin',       label: 'Aircoins Earned', sound: 'aircoin'        },
+      { key: 'volumeLevelUp',       enabledKey: 'soundEnabledLevelUp',       label: 'Level Up',        sound: 'level_up'       },
+      { key: 'volumeRankPromotion', enabledKey: 'soundEnabledRankPromotion', label: 'Rank Promotion',  sound: 'rank_promotion' },
+    ],
+  },
+  {
+    title: 'Quiz',
+    sub: 'Plays at the end of a quiz attempt',
+    sounds: [
+      { key: 'volumeQuizCompleteWin',  enabledKey: 'soundEnabledQuizCompleteWin',  label: 'Quiz Complete — Win',  sound: 'quiz_complete_win'  },
+      { key: 'volumeQuizCompleteLose', enabledKey: 'soundEnabledQuizCompleteLose', label: 'Quiz Complete — Fail', sound: 'quiz_complete_lose' },
+    ],
+  },
+  {
+    title: 'Battle of Order',
+    sub:   'Plays during the Battle of Order game',
+    sounds: [
+      { key: 'volumeBattleOfOrderSelection', enabledKey: 'soundEnabledBattleOfOrderSelection', label: 'Reel Selection', sound: 'battle_of_order_selection' },
+      { key: 'volumeBattleOfOrderWon',       enabledKey: 'soundEnabledBattleOfOrderWon',       label: 'Game Won',       sound: 'battle_of_order_won'       },
+      { key: 'volumeBattleOfOrderLost',      enabledKey: 'soundEnabledBattleOfOrderLost',      label: 'Game Lost',      sound: 'battle_of_order_lost'      },
+    ],
+  },
+]
+
+const ALL_SOUND_KEYS = SOUND_GROUPS.flatMap(g => g.sounds.flatMap(s => [s.key, s.enabledKey]))
+
+function SoundRow({ label, sound, value, onChange, enabled, onToggle }) {
   const previewRef = useRef(null)
 
   const preview = () => {
-    // Play at the current draft volume without saving
     if (previewRef.current) { previewRef.current.pause(); previewRef.current = null }
     invalidateSoundSettings()
-    // Temporarily override with draft value by playing directly
-    const files = {
-      intel_brief_opened: ['intel_brief_opened.mp3'],
-      level_up:           ['level_up.mp3'],
-      rank_promotion:     ['rank_promotion.mp3'],
-      target_locked:      ['target_locked.mp3'],
-      fire:               ['fire.mp3'],
-      aircoin:            ['aircoin.mp3'],
-      out_of_ammo:        ['out_of_ammo_1.mp3', 'out_of_ammo_2.mp3', 'out_of_ammo_3.mp3'],
-      quiz_complete_win:  ['quiz_complete_win.mp3'],
-      quiz_complete_lose: ['quiz_complete_lose.mp3'],
-      stand_down:         ['stand_down.mp3'],
-    }
-    const list = files[sound] ?? ['']
+    const list = SOUND_FILES[sound] ?? ['']
     const file = list[Math.floor(Math.random() * list.length)]
     const audio = new Audio(`/sounds/${file}`)
     audio.volume = Math.min(1, Math.max(0, value / 100))
@@ -735,7 +787,15 @@ function SoundRow({ label, sound, value, onChange }) {
   }
 
   return (
-    <div className="sound-row">
+    <div className={`sound-row${!enabled ? ' sound-row--disabled' : ''}`}>
+      <button
+        className={`sound-row__toggle${enabled ? ' sound-row__toggle--on' : ' sound-row__toggle--off'}`}
+        onClick={onToggle}
+        title={enabled ? 'Disable sound' : 'Enable sound'}
+        aria-label={enabled ? 'Disable' : 'Enable'}
+      >
+        {enabled ? 'ON' : 'OFF'}
+      </button>
       <span className="sound-row__label">{label}</span>
       <button className="sound-row__play" onClick={preview} title="Preview">▶</button>
       <input
@@ -744,6 +804,7 @@ function SoundRow({ label, sound, value, onChange }) {
         min={0} max={100} step={1}
         value={value}
         onChange={e => onChange(Number(e.target.value))}
+        disabled={!enabled}
       />
       <input
         type="number"
@@ -751,6 +812,7 @@ function SoundRow({ label, sound, value, onChange }) {
         min={0} max={100}
         value={value}
         onChange={e => onChange(Math.min(100, Math.max(0, Number(e.target.value))))}
+        disabled={!enabled}
       />
       <span className="sound-row__pct">%</span>
     </div>
@@ -948,9 +1010,19 @@ function SettingsTab({ API }) {
         {numField('aircoinsFirstLogin',   'Bonus Aircoins on first daily login')}
         {numField('aircoinsStreakBonus',  'Bonus Aircoins per streak login day')}
         {numField('aircoins100Percent',   'Bonus Aircoins for 100% correct quiz')}
+          <div className="settings-field">
+            <label className="settings-label">Aircoins — Battle of Order (Easy)</label>
+            <input type="number" className="settings-input" min={0} value={draft.aircoinsOrderOfBattleEasy ?? 8}
+              onChange={e => setDraft(p => ({ ...p, aircoinsOrderOfBattleEasy: Number(e.target.value) }))} />
+          </div>
+          <div className="settings-field">
+            <label className="settings-label">Aircoins — Battle of Order (Medium)</label>
+            <input type="number" className="settings-input" min={0} value={draft.aircoinsOrderOfBattleMedium ?? 18}
+              onChange={e => setDraft(p => ({ ...p, aircoinsOrderOfBattleMedium: Number(e.target.value) }))} />
+          </div>
         <button
           className="btn-primary settings-save"
-          onClick={() => saveSection('Update Aircoin Options', ['aircoinsPerWinEasy', 'aircoinsPerWinMedium', 'aircoinsPerBriefRead', 'aircoinsFirstLogin', 'aircoinsStreakBonus', 'aircoins100Percent'])}
+          onClick={() => saveSection('Update Aircoin Options', ['aircoinsPerWinEasy', 'aircoinsPerWinMedium', 'aircoinsPerBriefRead', 'aircoinsFirstLogin', 'aircoinsStreakBonus', 'aircoins100Percent', 'aircoinsOrderOfBattleEasy', 'aircoinsOrderOfBattleMedium'])}
         >
           Save Aircoin Options
         </button>
@@ -987,32 +1059,31 @@ function SettingsTab({ API }) {
       {/* Sound Effects */}
       <div className="admin-section">
         <h3 className="admin-section-title">Sound Effects</h3>
-        <p className="admin-section-sub">Adjust volume for each sound effect. Use the play button to preview.</p>
+        <p className="admin-section-sub">Toggle sounds on/off, adjust volume, and preview each effect.</p>
 
-        {[
-          { key: 'volumeIntelBriefOpened', label: 'Intel Brief Opened', sound: 'intel_brief_opened' },
-          { key: 'volumeTargetLocked',     label: 'Target Locked',      sound: 'target_locked'      },
-          { key: 'volumeFire',             label: 'Keyword Fire',        sound: 'fire'               },
-          { key: 'volumeAircoin',          label: 'Aircoins Earned',     sound: 'aircoin'            },
-          { key: 'volumeOutOfAmmo',        label: 'Out of Ammo',        sound: 'out_of_ammo'        },
-          { key: 'volumeLevelUp',          label: 'Level Up',            sound: 'level_up'           },
-          { key: 'volumeRankPromotion',    label: 'Rank Promotion',      sound: 'rank_promotion'     },
-          { key: 'volumeQuizCompleteWin',  label: 'Quiz Complete (Win)',  sound: 'quiz_complete_win'  },
-          { key: 'volumeQuizCompleteLose', label: 'Quiz Complete (Lose)', sound: 'quiz_complete_lose' },
-          { key: 'volumeStandDown',        label: 'Stand Down',           sound: 'stand_down'         },
-        ].map(({ key, label, sound }) => (
-          <SoundRow
-            key={key}
-            label={label}
-            sound={sound}
-            value={draft[key] ?? 100}
-            onChange={v => setDraft(prev => ({ ...prev, [key]: v }))}
-          />
+        {SOUND_GROUPS.map(group => (
+          <div key={group.title} className="sound-group">
+            <div className="sound-group__header">
+              <span className="sound-group__title">{group.title}</span>
+              <span className="sound-group__sub">{group.sub}</span>
+            </div>
+            {group.sounds.map(({ key, enabledKey, label, sound }) => (
+              <SoundRow
+                key={key}
+                label={label}
+                sound={sound}
+                value={draft[key] ?? 100}
+                onChange={v => setDraft(prev => ({ ...prev, [key]: v }))}
+                enabled={draft[enabledKey] !== false}
+                onToggle={() => setDraft(prev => ({ ...prev, [enabledKey]: prev[enabledKey] === false ? true : false }))}
+              />
+            ))}
+          </div>
         ))}
 
         <button
           className="btn-primary settings-save"
-          onClick={() => saveSection('Update Sound Volumes', ['volumeIntelBriefOpened', 'volumeTargetLocked', 'volumeFire', 'volumeAircoin', 'volumeOutOfAmmo', 'volumeLevelUp', 'volumeRankPromotion', 'volumeQuizCompleteWin', 'volumeQuizCompleteLose', 'volumeStandDown'])}
+          onClick={() => saveSection('Update Sound Settings', ALL_SOUND_KEYS)}
         >
           Save Sound Settings
         </button>
@@ -1133,6 +1204,7 @@ function BriefsTab({ API }) {
   const [quizView,        setQuizView]        = useState('list') // 'list' | 'answers'
   const [quizSelected,    setQuizSelected]    = useState(null)   // { difficulty, index }
   const [quizGenerating,      setQuizGenerating]      = useState(false)
+  const [booGenerating,       setBooGenerating]       = useState(false)
   const [kwGenerating,        setKwGenerating]        = useState(false)
   const [bulkActionsOpen, setBulkActionsOpen] = useState(false)
   const [backfillStatus,  setBackfillStatus]  = useState(null)   // null | { done, msg }
@@ -1192,6 +1264,7 @@ function BriefsTab({ API }) {
       dateAdded:   brief.dateAdded   ? brief.dateAdded.slice(0, 10) : new Date().toISOString().slice(0, 10),
       sources:     brief.sources  ? brief.sources.map(s => ({ ...s }))  : [],
       keywords:    brief.keywords ? brief.keywords.map(k => ({ ...k })) : [],
+      gameData:    brief.gameData ?? {},
     })
     setIsNew(false)
     setDraftQuizEasy([])
@@ -1233,6 +1306,7 @@ function BriefsTab({ API }) {
       historic: false,
       dateAdded: new Date().toISOString().slice(0, 10),
       sources: [], keywords: [],
+      gameData: {},
     })
     setPendingLead(null)
     setGeneratedImages([])
@@ -1384,6 +1458,23 @@ function BriefsTab({ API }) {
           if (Array.isArray(qData.data?.easyQuestions))   setDraftQuizEasy(fromAI(qData.data.easyQuestions))
           if (Array.isArray(qData.data?.mediumQuestions)) setDraftQuizMedium(fromAI(qData.data.mediumQuestions))
           setFeedback('Brief and quiz questions generated — review carefully before saving.')
+
+          // Auto-generate Battle of Order data for eligible categories (skip historic ranks)
+          const generatedHistoric = typeof generated.historic === 'boolean' ? generated.historic : draft.historic
+          if (['Aircrafts','Ranks','Training','Missions','Tech','Treaties'].includes(category) && !(category === 'Ranks' && generatedHistoric)) {
+            try {
+              setBooGenerating(true)
+              const booRes  = await fetch(`${API}/api/admin/ai/generate-battle-order-data`, {
+                method: 'POST', credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: briefTitle, description: briefDesc, category }),
+              })
+              const booData = await booRes.json()
+              if (booData.data?.gameData) setDraft(p => ({ ...p, gameData: { ...p.gameData, ...booData.data.gameData } }))
+            } catch { /* non-fatal */ } finally {
+              setBooGenerating(false)
+            }
+          }
         } catch {
           setFeedback('Brief populated — quiz generation failed, add questions manually.')
         } finally {
@@ -1682,6 +1773,30 @@ function BriefsTab({ API }) {
     }
   }
 
+  const BOO_ELIGIBLE_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
+
+  const generateBOOData = async () => {
+    if (!draft.title && !draft.description) return
+    setBooGenerating(true)
+    try {
+      const res = await fetch(`${API}/api/admin/ai/generate-battle-order-data`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: draft.title, description: draft.description ?? '', category: draft.category }),
+      })
+      const data = await res.json()
+      if (data.data?.gameData) {
+        setDraft(p => ({ ...p, gameData: { ...p.gameData, ...data.data.gameData } }))
+      }
+    } catch {
+      setFeedback('BOO data generation failed — fill in manually.')
+      setTimeout(() => setFeedback(''), 4000)
+    } finally {
+      setBooGenerating(false)
+    }
+  }
+
   const updateQuizQuestion = (difficulty, i, value) => {
     const setter = difficulty === 'easy' ? setDraftQuizEasy : setDraftQuizMedium
     setter(prev => prev.map((q, idx) => idx === i ? { ...q, question: value } : q))
@@ -1901,6 +2016,7 @@ function BriefsTab({ API }) {
                             keywords:    Array.isArray(generated.keywords) ? generated.keywords : [],
                             sources,
                             dateAdded:   new Date().toISOString().slice(0, 10),
+                            gameData:    {},
                           })
                           setFeedback('Brief populated — generating quiz questions…')
 
@@ -2524,6 +2640,99 @@ function BriefsTab({ API }) {
           )}
         </div>
       </div>
+
+      {/* Battle of Order Data */}
+      {['Aircrafts','Ranks','Training','Missions','Tech','Treaties'].includes(draft.category) && (
+        <div className="admin-section">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <h3 className="admin-section-title" style={{ marginBottom: 0 }}>Battle of Order Data</h3>
+            {(
+              (draft.category === 'Aircrafts' && !draft.gameData?.topSpeedKph && !draft.gameData?.yearIntroduced) ||
+              (draft.category === 'Ranks' && !draft.historic && !draft.gameData?.rankHierarchyOrder) ||
+              (draft.category === 'Training' && !draft.gameData?.trainingWeekStart) ||
+              (['Missions','Tech','Treaties'].includes(draft.category) && !draft.gameData?.startYear)
+            ) && (
+              <button
+                className="btn-ghost"
+                onClick={generateBOOData}
+                disabled={booGenerating || aiGenerating || !draft.title}
+                style={{ fontSize: '0.78rem', padding: '3px 10px' }}
+              >
+                {booGenerating
+                  ? <span className="quiz-generating"><span className="app-loading__spinner" style={{ width: 12, height: 12 }} />Generating…</span>
+                  : '✦ Generate with AI'}
+              </button>
+            )}
+          </div>
+          <p className="admin-section-sub">
+            Fill in the fields relevant to this category so this brief can appear in generated Battle of Order games.
+          </p>
+          {draft.category === 'Aircrafts' && (<>
+            <div className="settings-field">
+              <label className="settings-label">Top Speed (kph)</label>
+              <input type="number" className="settings-input" min={0} placeholder="e.g. 2400"
+                value={draft.gameData?.topSpeedKph ?? ''}
+                onChange={e => setDraft(p => ({ ...p, gameData: { ...p.gameData, topSpeedKph: e.target.value === '' ? null : Number(e.target.value) } }))} />
+            </div>
+            <div className="settings-field">
+              <label className="settings-label">Year Introduced</label>
+              <input type="number" className="settings-input" min={1900} max={2100} placeholder="e.g. 1976"
+                value={draft.gameData?.yearIntroduced ?? ''}
+                onChange={e => setDraft(p => ({ ...p, gameData: { ...p.gameData, yearIntroduced: e.target.value === '' ? null : Number(e.target.value) } }))} />
+            </div>
+            <div className="settings-field">
+              <label className="settings-label">Year Retired <span className="settings-hint">Leave blank if still in service</span></label>
+              <input type="number" className="settings-input" min={1900} max={2100} placeholder="e.g. 2003"
+                value={draft.gameData?.yearRetired ?? ''}
+                onChange={e => setDraft(p => ({ ...p, gameData: { ...p.gameData, yearRetired: e.target.value === '' ? null : Number(e.target.value) } }))} />
+            </div>
+          </>)}
+          {draft.category === 'Ranks' && (
+            <div
+              className="settings-field"
+              style={draft.historic ? { opacity: 0.4, pointerEvents: 'none' } : undefined}
+              title={draft.historic ? 'Not applicable — this is a historic rank and is no longer in use' : undefined}
+            >
+              <label className="settings-label">
+                Hierarchy Order <span className="settings-hint">1 = most senior (e.g. Marshal of the RAF)</span>
+                {draft.historic && <span className="settings-hint" style={{ color: '#f87171', marginLeft: '0.4rem' }}>— Historic rank: not applicable</span>}
+              </label>
+              <input type="number" className="settings-input" min={1} placeholder="e.g. 1"
+                value={draft.gameData?.rankHierarchyOrder ?? ''}
+                disabled={draft.historic}
+                onChange={e => setDraft(p => ({ ...p, gameData: { ...p.gameData, rankHierarchyOrder: e.target.value === '' ? null : Number(e.target.value) } }))} />
+            </div>
+          )}
+          {draft.category === 'Training' && (<>
+            <div className="settings-field">
+              <label className="settings-label">Training Week Start</label>
+              <input type="number" className="settings-input" min={1} placeholder="e.g. 3"
+                value={draft.gameData?.trainingWeekStart ?? ''}
+                onChange={e => setDraft(p => ({ ...p, gameData: { ...p.gameData, trainingWeekStart: e.target.value === '' ? null : Number(e.target.value) } }))} />
+            </div>
+            <div className="settings-field">
+              <label className="settings-label">Training Week End</label>
+              <input type="number" className="settings-input" min={1} placeholder="e.g. 5"
+                value={draft.gameData?.trainingWeekEnd ?? ''}
+                onChange={e => setDraft(p => ({ ...p, gameData: { ...p.gameData, trainingWeekEnd: e.target.value === '' ? null : Number(e.target.value) } }))} />
+            </div>
+          </>)}
+          {['Missions','Tech','Treaties'].includes(draft.category) && (<>
+            <div className="settings-field">
+              <label className="settings-label">Start Year</label>
+              <input type="number" className="settings-input" min={1000} max={2100} placeholder="e.g. 1939"
+                value={draft.gameData?.startYear ?? ''}
+                onChange={e => setDraft(p => ({ ...p, gameData: { ...p.gameData, startYear: e.target.value === '' ? null : Number(e.target.value) } }))} />
+            </div>
+            <div className="settings-field">
+              <label className="settings-label">End Year <span className="settings-hint">Leave blank if ongoing</span></label>
+              <input type="number" className="settings-input" min={1000} max={2100} placeholder="e.g. 1945"
+                value={draft.gameData?.endYear ?? ''}
+                onChange={e => setDraft(p => ({ ...p, gameData: { ...p.gameData, endYear: e.target.value === '' ? null : Number(e.target.value) } }))} />
+            </div>
+          </>)}
+        </div>
+      )}
 
       {/* Quiz Questions */}
       <div className="admin-section quiz-section">

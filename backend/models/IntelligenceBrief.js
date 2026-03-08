@@ -135,6 +135,25 @@ const intelligenceBriefSchema = new mongoose.Schema(
     sources:  [sourceSchema],
     keywords: [keywordSchema],
 
+    // Game data — populated per-category for Battle of Order game
+    gameData: {
+      // Aircrafts
+      topSpeedKph:        { type: Number },
+      yearIntroduced:     { type: Number },
+      yearRetired:        { type: Number },   // null = still in service
+
+      // Ranks
+      rankHierarchyOrder: { type: Number },   // 1 = most senior
+
+      // Training
+      trainingWeekStart:  { type: Number },
+      trainingWeekEnd:    { type: Number },
+
+      // Missions / Tech / Treaties
+      startYear:          { type: Number },
+      endYear:            { type: Number },   // null = ongoing
+    },
+
     // 10 questions per difficulty — references to GameQuizQuestion
     quizQuestionsEasy: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'GameQuizQuestion' }],

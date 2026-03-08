@@ -14,7 +14,7 @@ function fetchSettings() {
     .then(data => { cache = data; inflight = null; return data })
     .catch(() => {
       inflight = null
-      return { volumeIntelBriefOpened: 100, volumeTargetLocked: 100, volumeFire: 100, volumeAircoin: 100, volumeOutOfAmmo: 100, volumeLevelUp: 100, volumeRankPromotion: 100, volumeQuizCompleteWin: 100, volumeQuizCompleteLose: 100, volumeStandDown: 100 }
+      return { volumeIntelBriefOpened: 100, volumeTargetLocked: 100, volumeFire: 100, volumeAircoin: 100, volumeOutOfAmmo: 100, volumeLevelUp: 100, volumeRankPromotion: 100, volumeQuizCompleteWin: 100, volumeQuizCompleteLose: 100, volumeStandDown: 100, volumeTargetLockedKeyword: 100, volumeBattleOfOrderWon: 100, volumeBattleOfOrderLost: 100, volumeBattleOfOrderSelection: 100 }
     })
   return inflight
 }
@@ -81,50 +81,101 @@ function playOutOfAmmo(volume) {
   audio.play().catch(done)
 }
 
+// ── Keyword locked: bypasses the queue, plays immediately, max 5 concurrent ──
+const KWL_MAX = 5
+let   kwlActive = 0
+
+function playKeywordLocked(volume) {
+  if (kwlActive >= KWL_MAX) return
+  const audio = new Audio('/sounds/target_locked_keyword.mp3')
+  audio.volume = volume
+  kwlActive++
+  const done = () => { kwlActive-- }
+  audio.addEventListener('ended', done, { once: true })
+  audio.addEventListener('error', done, { once: true })
+  audio.play().catch(done)
+}
+
 // name: 'intel_brief_opened' | 'target_locked' | 'fire' | 'out_of_ammo' | 'aircoin'
 // options.onAudio(audio) — called with the Audio element once playback starts
 export function playSound(name, { onAudio } = {}) {
   return fetchSettings().then(settings => {
     // out_of_ammo bypasses the queue entirely
     if (name === 'out_of_ammo') {
+      if (settings.soundEnabledOutOfAmmo === false) return Promise.resolve()
       const volume = Math.min(1, Math.max(0, (settings.volumeOutOfAmmo ?? 100) / 100))
       playOutOfAmmo(volume)
       return Promise.resolve()
     }
 
+    // target_locked_keyword bypasses the queue entirely — plays the instant a keyword is highlighted
+    if (name === 'target_locked_keyword') {
+      if (settings.soundEnabledTargetLockedKeyword === false) return Promise.resolve()
+      const volume = Math.min(1, Math.max(0, (settings.volumeTargetLockedKeyword ?? 100) / 100))
+      playKeywordLocked(volume)
+      return Promise.resolve()
+    }
+
+    // Battle of Order sounds — all bypass the queue
+    if (name === 'battle_of_order_won' || name === 'battle_of_order_lost' || name === 'battle_of_order_selection') {
+      const enabledKey = name === 'battle_of_order_won'       ? 'soundEnabledBattleOfOrderWon'
+                       : name === 'battle_of_order_lost'      ? 'soundEnabledBattleOfOrderLost'
+                       :                                        'soundEnabledBattleOfOrderSelection'
+      const volumeKey  = name === 'battle_of_order_won'       ? 'volumeBattleOfOrderWon'
+                       : name === 'battle_of_order_lost'      ? 'volumeBattleOfOrderLost'
+                       :                                        'volumeBattleOfOrderSelection'
+      if (settings[enabledKey] === false) return Promise.resolve()
+      const volume = Math.min(1, Math.max(0, (settings[volumeKey] ?? 100) / 100))
+      const audio  = new Audio(`/sounds/${name}.mp3`)
+      audio.volume = volume
+      audio.play().catch(() => {})
+      return Promise.resolve()
+    }
+
     return new Promise(resolve => {
-      let file, volumeKey
+      let file, volumeKey, enabledKey
 
       if (name === 'intel_brief_opened') {
-        file      = 'intel_brief_opened.mp3'
-        volumeKey = 'volumeIntelBriefOpened'
+        file       = 'intel_brief_opened.mp3'
+        volumeKey  = 'volumeIntelBriefOpened'
+        enabledKey = 'soundEnabledIntelBriefOpened'
       } else if (name === 'target_locked') {
-        file      = 'target_locked.mp3'
-        volumeKey = 'volumeTargetLocked'
+        file       = 'target_locked.mp3'
+        volumeKey  = 'volumeTargetLocked'
+        enabledKey = 'soundEnabledTargetLocked'
       } else if (name === 'fire') {
-        file      = 'fire.mp3'
-        volumeKey = 'volumeFire'
+        file       = 'fire.mp3'
+        volumeKey  = 'volumeFire'
+        enabledKey = 'soundEnabledFire'
       } else if (name === 'aircoin') {
-        file      = 'aircoin.mp3'
-        volumeKey = 'volumeAircoin'
+        file       = 'aircoin.mp3'
+        volumeKey  = 'volumeAircoin'
+        enabledKey = 'soundEnabledAircoin'
       } else if (name === 'level_up') {
-        file      = 'level_up.mp3'
-        volumeKey = 'volumeLevelUp'
+        file       = 'level_up.mp3'
+        volumeKey  = 'volumeLevelUp'
+        enabledKey = 'soundEnabledLevelUp'
       } else if (name === 'rank_promotion') {
-        file      = 'rank_promotion.mp3'
-        volumeKey = 'volumeRankPromotion'
+        file       = 'rank_promotion.mp3'
+        volumeKey  = 'volumeRankPromotion'
+        enabledKey = 'soundEnabledRankPromotion'
       } else if (name === 'quiz_complete_win') {
-        file      = 'quiz_complete_win.mp3'
-        volumeKey = 'volumeQuizCompleteWin'
+        file       = 'quiz_complete_win.mp3'
+        volumeKey  = 'volumeQuizCompleteWin'
+        enabledKey = 'soundEnabledQuizCompleteWin'
       } else if (name === 'quiz_complete_lose') {
-        file      = 'quiz_complete_lose.mp3'
-        volumeKey = 'volumeQuizCompleteLose'
+        file       = 'quiz_complete_lose.mp3'
+        volumeKey  = 'volumeQuizCompleteLose'
+        enabledKey = 'soundEnabledQuizCompleteLose'
       } else if (name === 'stand_down') {
-        file      = 'stand_down.mp3'
-        volumeKey = 'volumeStandDown'
+        file       = 'stand_down.mp3'
+        volumeKey  = 'volumeStandDown'
+        enabledKey = 'soundEnabledStandDown'
       } else {
         file = name
       }
+
+      if (enabledKey && settings[enabledKey] === false) { resolve(); return }
 
       const volume = Math.min(1, Math.max(0, (settings[volumeKey] ?? 100) / 100))
 

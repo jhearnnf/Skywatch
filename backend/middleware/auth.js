@@ -7,7 +7,7 @@ const protect = async (req, res, next) => {
     if (!token) return res.status(401).json({ message: 'Not authenticated' });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-password');
+    req.user = await User.findById(decoded.id).select('-password').populate('rank');
 
     if (!req.user) return res.status(401).json({ message: 'User not found' });
     if (req.user.isBanned) return res.status(403).json({ message: 'Account suspended. Please contact support.' });
@@ -31,7 +31,7 @@ const optionalAuth = async (req, res, next) => {
     const token = req.cookies.jwt;
     if (token) {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.id).select('-password');
+      const user = await User.findById(decoded.id).select('-password').populate('rank');
       if (user && !user.isBanned) req.user = user;
     }
   } catch {} // expired / invalid token — continue as guest

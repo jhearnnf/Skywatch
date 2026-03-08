@@ -65,7 +65,7 @@ function AppInner() {
       case 'intel-feed':        return <IntelFeed navigate={navigate} initialCategory={params.category} />
       case 'intelligence-brief':return <IntelligenceBrief briefId={params.briefId} navigate={navigate} />
       case 'profile':           return <Profile navigate={navigate} />
-      case 'rankings':          return <Rankings navigate={navigate} />
+      case 'rankings':          return <Rankings navigate={navigate} scrollTo={params.scrollTo} />
       case 'admin':             return <Admin navigate={navigate} />
       case 'contact':           return <Contact />
       case 'about':             return <About />
