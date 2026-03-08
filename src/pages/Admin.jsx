@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useTutorial } from '../context/TutorialContext'
 import { playSound, invalidateSoundSettings } from '../utils/sound'
 import { CATEGORY_ICONS, SUBCATEGORIES } from '../data/mockData'
 
@@ -81,6 +82,7 @@ const RESET_FIELDS = [
   { key: 'aircoins',        label: 'Aircoins',          desc: 'Zero out totalAircoins & reset rank to Unranked' },
   { key: 'gameHistory',     label: 'Game History',      desc: 'Delete quiz results & clear gameTypesSeen' },
   { key: 'intelBriefsRead', label: 'Intel Briefs Read', desc: 'Delete all brief-read records (resets ammo too)' },
+  { key: 'tutorials',       label: 'Tutorials',         desc: 'Mark all tutorials as unseen so they replay from scratch' },
 ]
 
 function ResetStatsModal({ agentNumber, userId, API, onDone, onCancel }) {
@@ -498,7 +500,13 @@ function ProblemsTab({ API }) {
                     <p className="admin-updates__label">Updates</p>
                     {p.updates.map((u, i) => (
                       <div key={i} className="admin-update-item">
-                        <span className="admin-update-item__time">{new Date(u.time).toLocaleDateString()}</span>
+                        <span className="admin-update-item__time">
+                          {new Date(u.time).toLocaleDateString()}
+                          {' · '}
+                          <span className="admin-update-item__agent">
+                            Agent {u.adminUserId?.agentNumber ?? '?'}
+                          </span>
+                        </span>
                         <p className="admin-update-item__text">{u.description}</p>
                       </div>
                     ))}
@@ -2875,6 +2883,231 @@ function BriefsTab({ API }) {
   )
 }
 
+// ── Tutorials tab ─────────────────────────────────────────────────────────────
+
+// Mirrors the hardcoded TUTORIALS structure in TutorialContext for display purposes.
+// Admin overrides are saved per-step; empty fields fall back to the hardcoded defaults.
+const TUTORIAL_DEFS = [
+  {
+    id: 'welcome', label: 'Welcome Tutorial',
+    desc: 'Shown to any user (guest or logged-in) on their first dashboard visit.',
+    steps: [
+      { index: 0, label: 'Step 1 — Welcome to SkyWatch',
+        defaults: { title: 'Welcome to SkyWatch', body: 'On the dashboard you can view the latest news intel, and keep up to date with recommended categories.' } },
+      { index: 1, label: 'Step 2 — Intel Feed',
+        defaults: { title: 'Intel Feed', body: 'Grab the latest intel briefs, from news to aircraft and more.' } },
+    ],
+  },
+  {
+    id: 'intel_brief', label: 'Intel Brief Tutorial',
+    desc: 'Shown to any user on their first visit to an intel brief page.',
+    steps: [
+      { index: 0, label: 'Step 1 — First Briefing',
+        defaults: { title: 'First Briefing', body: 'Here you can learn about a piece of RAF intel. Media, stats, info and even classified games to test your knowledge.' } },
+    ],
+  },
+  {
+    id: 'user', label: 'User Tutorial',
+    desc: 'Shown to logged-in users when they first visit their profile page.',
+    steps: [
+      { index: 0, label: 'Step 1 — Your Profile',
+        defaults: { title: 'Your Profile', body: 'Here you can see your level and current rank, the leaderboards, profile stats and your daily login streak.' } },
+      { index: 1, label: 'Step 2 — Stay Aware',
+        defaults: { title: 'Stay Aware', body: 'Any issues or incorrect info? Please report it to us — the link is at the bottom of this page.' } },
+    ],
+  },
+  {
+    id: 'load_up', label: 'Load Up Tutorial',
+    desc: 'Triggered when a user first engages targeting mode on an intel brief. Has separate text for guests.',
+    steps: [
+      { index: 0, label: 'Step 1 — Load Up', hasGuestBody: true,
+        defaults: {
+          title: 'Load Up',
+          body: 'Each intel brief gives you a daily ammo allocation based on your subscription tier. Use that ammo to unlock classified keyword dossiers within the brief — no Aircoins spent. Aircoins are earned separately by reading briefs and completing games.',
+          guestBody: "You've engaged the targeting system! Each intel brief comes with a daily ammo allocation for unlocking classified keyword dossiers — no Aircoins needed for this. Sign up to receive your ammo allocation and start earning Aircoins.",
+        } },
+    ],
+  },
+]
+
+function TutorialStepEditor({ tutorialId, step, override, API, onSaved }) {
+  const { refreshOverrides } = useTutorial()
+  const dbKey = `${tutorialId}_${step.index}`
+
+  // Effective text = whatever is stored in DB (if non-empty), else the hardcoded default.
+  // This is what the fields are pre-filled with and what gets compared for isDirty.
+  const effectiveTitle     = override?.title?.trim()     || step.defaults.title
+  const effectiveBody      = override?.body?.trim()      || step.defaults.body
+  const effectiveGuestBody = override?.guestBody?.trim() || (step.defaults.guestBody ?? '')
+
+  const [title,       setTitle]       = useState(effectiveTitle)
+  const [body,        setBody]        = useState(effectiveBody)
+  const [guestBody,   setGuestBody]   = useState(effectiveGuestBody)
+  const [busy,        setBusy]        = useState(false)
+  const [saved,       setSaved]       = useState(false)
+  const [reasonModal, setReasonModal] = useState(null) // { action, payload }
+
+  // Sync fields when the override prop changes (e.g. after parent re-fetches post-save)
+  useEffect(() => {
+    setTitle(override?.title?.trim()     || step.defaults.title)
+    setBody(override?.body?.trim()       || step.defaults.body)
+    setGuestBody(override?.guestBody?.trim() || (step.defaults.guestBody ?? ''))
+  }, [override]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isDirty =
+    title.trim()     !== effectiveTitle     ||
+    body.trim()      !== effectiveBody      ||
+    (step.hasGuestBody && guestBody.trim() !== effectiveGuestBody)
+
+  const doFetch = async (payload, reason) => {
+    setBusy(true)
+    await fetch(`${API}/api/admin/tutorials/content`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, reason }),
+    })
+    refreshOverrides()
+    setBusy(false)
+  }
+
+  const save = () => {
+    if (!title.trim() || !body.trim()) return
+    const payload = { key: dbKey, title: title.trim(), body: body.trim() }
+    if (step.hasGuestBody) payload.guestBody = guestBody.trim()
+    setReasonModal({
+      action: `Update Tutorial Step — ${step.label}`,
+      onConfirm: async (reason) => {
+        setReasonModal(null)
+        await doFetch(payload, reason)
+        setSaved(true)
+        setTimeout(() => setSaved(false), 2000)
+        onSaved?.()
+      },
+    })
+  }
+
+  // Reset to hardcoded defaults (saves empty strings → TutorialContext falls back to defaults)
+  const resetToDefault = () => {
+    const payload = { key: dbKey, title: '', body: '' }
+    if (step.hasGuestBody) payload.guestBody = ''
+    setReasonModal({
+      action: `Reset Tutorial Step to Default — ${step.label}`,
+      onConfirm: async (reason) => {
+        setReasonModal(null)
+        await doFetch(payload, reason)
+        onSaved?.()
+      },
+    })
+  }
+
+  const isCustomised =
+    (override?.title?.trim()     && override.title.trim()     !== step.defaults.title) ||
+    (override?.body?.trim()      && override.body.trim()      !== step.defaults.body)  ||
+    (step.hasGuestBody && override?.guestBody?.trim() && override.guestBody.trim() !== step.defaults.guestBody)
+
+  return (
+    <div className="tut-step-editor">
+      {reasonModal && (
+        <ReasonModal
+          action={reasonModal.action}
+          onConfirm={reasonModal.onConfirm}
+          onCancel={() => setReasonModal(null)}
+        />
+      )}
+
+      <p className="tut-step-editor__label">{step.label}</p>
+
+      <div className="settings-field">
+        <label className="form-label">Title</label>
+        <input
+          className="form-input"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+        />
+      </div>
+
+      <div className="settings-field">
+        <label className="form-label">Body</label>
+        <textarea
+          className="form-textarea"
+          rows={4}
+          value={body}
+          onChange={e => setBody(e.target.value)}
+        />
+      </div>
+
+      {step.hasGuestBody && (
+        <div className="settings-field">
+          <label className="form-label">
+            Guest Body <span className="settings-hint">(shown to non-logged-in users)</span>
+          </label>
+          <textarea
+            className="form-textarea"
+            rows={4}
+            value={guestBody}
+            onChange={e => setGuestBody(e.target.value)}
+          />
+        </div>
+      )}
+
+      <div className="tut-step-editor__actions">
+        <button className="btn-primary" onClick={save} disabled={busy || !isDirty || !title.trim() || !body.trim()}>
+          {busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
+        </button>
+        {isCustomised && (
+          <button className="btn-ghost" onClick={resetToDefault} disabled={busy} title="Restore hardcoded defaults">
+            Reset to Default
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TutorialsTab({ API }) {
+  const [overrides, setOverrides] = useState(null) // null = loading
+  const [error,     setError]     = useState('')
+
+  const load = useCallback(async () => {
+    try {
+      const res  = await fetch(`${API}/api/admin/settings`, { credentials: 'include' })
+      const data = await res.json()
+      setOverrides(data.data?.settings?.tutorialContent ?? {})
+    } catch {
+      setError('Failed to load tutorial content.')
+    }
+  }, [API])
+
+  useEffect(() => { load() }, [load])
+
+  if (error)         return <p className="admin-error">{error}</p>
+  if (!overrides)    return <p className="admin-loading">Loading…</p>
+
+  return (
+    <div>
+      <p className="admin-section-sub" style={{ marginBottom: '1.5rem' }}>
+        Override the title and body text for each tutorial step. Leave a field blank to use the hardcoded default (shown as placeholder text).
+      </p>
+      {TUTORIAL_DEFS.map(tut => (
+        <div key={tut.id} className="admin-section">
+          <h3 className="admin-section-title">{tut.label}</h3>
+          <p className="admin-section-sub">{tut.desc}</p>
+          {tut.steps.map(step => (
+            <TutorialStepEditor
+              key={`${tut.id}_${step.index}`}
+              tutorialId={tut.id}
+              step={step}
+              override={overrides[`${tut.id}_${step.index}`] ?? null}
+              API={API}
+              onSaved={load}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Main Admin page ───────────────────────────────────────────────────────────
 
 const TABS = [
@@ -2882,7 +3115,8 @@ const TABS = [
   { id: 'briefs',   label: 'Intel Briefs'  },
   { id: 'problems', label: 'Problems'      },
   { id: 'users',    label: 'Users'         },
-  { id: 'settings', label: 'Settings'      },
+  { id: 'settings',  label: 'Settings'   },
+  { id: 'tutorials', label: 'Tutorials'  },
 ]
 
 // ── Admin subscription emulator ───────────────────────────────────────────────
@@ -2978,7 +3212,8 @@ export default function Admin({ navigate }) {
           {tab === 'briefs'   && <BriefsTab   API={API} />}
           {tab === 'problems' && <ProblemsTab API={API} />}
           {tab === 'users'    && <UsersTab    API={API} />}
-          {tab === 'settings' && <SettingsTab API={API} />}
+          {tab === 'settings'  && <SettingsTab  API={API} />}
+          {tab === 'tutorials' && <TutorialsTab API={API} />}
         </div>
 
       </div>

@@ -195,6 +195,13 @@ export default function Profile({ navigate }) {
 
             </div>
 
+            {/* Report a problem link */}
+            <div className="profile-report-row">
+              <button className="footer-link--report profile-report-btn" onClick={() => navigate('report-problem')}>
+                Report a Problem
+              </button>
+            </div>
+
             {/* Overlay shown when not logged in */}
             {!user && (
               <div className="profile-locked-overlay">

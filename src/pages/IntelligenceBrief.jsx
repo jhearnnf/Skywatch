@@ -5,6 +5,7 @@ import OutOfAmmo from '../components/OutOfAmmo'
 import TargetingHUD from '../components/TargetingHUD'
 import BattleOfOrderModal from '../components/BattleOfOrderModal'
 import { useAuth } from '../context/AuthContext'
+import { useTutorial } from '../context/TutorialContext'
 import { playSound } from '../utils/sound'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ function MobileTargetingBar({ ammoRemaining, ammoMax, scanWord }) {
 
 // ── Keyword-aware description renderer ───────────────────────────────────────
 
-function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHoverChange, isMobile, systemReady, unlockedKws, targeting, onScanWord, dossierOpen }) {
+function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHoverChange, isMobile, systemReady, unlockedKws, targeting, suppressSounds, loopFlash, onScanWord, dossierOpen }) {
   const [reticlePos, setReticlePos] = useState({ x: 0, y: 0 })
   const [reticleOn,  setReticleOn]  = useState(false)
   const [hoveredKw,  setHoveredKw]  = useState(null)
@@ -202,10 +203,11 @@ function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHov
     onScanWord?.({ word: content, count: countInstances(content) })
   }
 
-  // Flash keywords in sequence when targeting activates; report current word via onScanWord
+  // Flash keywords in sequence when targeting activates; report current word via onScanWord.
+  // When loopFlash is true the sequence repeats continuously (no sounds on repeat passes).
   useEffect(() => {
     if (!targeting) {
-      clearInterval(flashTimerRef.current)
+      clearTimeout(flashTimerRef.current)
       setKwFlashIdx(-1)
       lastScannedRef.current = null
       onScanWord?.(null)
@@ -213,26 +215,30 @@ function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHov
     }
     const kwSegs = segments.filter(s => s.type === 'keyword')
     if (kwSegs.length === 0) return
-    clearInterval(flashTimerRef.current)
-    let idx = 0
-    setKwFlashIdx(0)
-    lastScannedRef.current = kwSegs[0].content
-    emitScanWord(kwSegs[0].content)
-    playSound('target_locked_keyword')
-    flashTimerRef.current = setInterval(() => {
-      idx++
+
+    let cancelled = false
+
+    const tick = (idx) => {
+      if (cancelled) return
       if (idx >= kwSegs.length) {
-        clearInterval(flashTimerRef.current)
+        // End of sequence
         setKwFlashIdx(-1)
-      } else {
-        lastScannedRef.current = kwSegs[idx].content
-        setKwFlashIdx(idx)
-        emitScanWord(kwSegs[idx].content)
-        playSound('target_locked_keyword')
+        if (loopFlash) {
+          // Pause then restart — sounds already played on first pass, stay silent on loops
+          flashTimerRef.current = setTimeout(() => tick(0), 700)
+        }
+        return
       }
-    }, 70)
-    return () => clearInterval(flashTimerRef.current)
-  }, [targeting]) // eslint-disable-line react-hooks/exhaustive-deps
+      lastScannedRef.current = kwSegs[idx].content
+      setKwFlashIdx(idx)
+      emitScanWord(kwSegs[idx].content)
+      if (!suppressSounds) playSound('target_locked_keyword')
+      flashTimerRef.current = setTimeout(() => tick(idx + 1), 70)
+    }
+
+    tick(0)
+    return () => { cancelled = true; clearTimeout(flashTimerRef.current) }
+  }, [targeting, loopFlash]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track cursor globally while dossier is open so reticle follows the mouse over the modal
   useEffect(() => {
@@ -338,7 +344,12 @@ function MediaCarousel({ media }) {
       {item.mediaType === 'picture'
         ? imgError
           ? <div className="carousel-img-error">Image could not be loaded — URL may be invalid or blocked.</div>
-          : <img src={item.mediaUrl} alt="" className="carousel-img" onError={() => setImgError(true)} />
+          : (
+            <div className="carousel-img-wrap">
+              <img src={item.mediaUrl} alt="" className="carousel-img-bg" aria-hidden="true" />
+              <img src={item.mediaUrl} alt="" className="carousel-img" onError={() => setImgError(true)} />
+            </div>
+          )
         : <video src={item.mediaUrl} controls className="carousel-img" />
       }
       {media.length > 1 && (
@@ -423,9 +434,25 @@ function BriefGameDataPanel({ brief }) {
 
 export default function IntelligenceBrief({ briefId, navigate }) {
   const { user, setUser, API, awardAircoins } = useAuth()
+  const { setBlocked, getStatus, startTutorial, activeTutorialId, showOverlay: tutShowOverlay } = useTutorial()
 
   // Touch-only devices don't hover — disable focus mode for them
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
+
+  // intel_brief tutorial must be completed/skipped before targeting mode is unlocked
+  const intelBriefTutDone = getStatus('intel_brief') !== 'unseen'
+  const intelBriefTutDoneRef = useRef(intelBriefTutDone)
+  intelBriefTutDoneRef.current = intelBriefTutDone
+
+  // Always current — updated synchronously in render (no stale-closure window from useEffect)
+  const startTutorialRef = useRef(startTutorial)
+  startTutorialRef.current = startTutorial
+
+  // Tracks whether targeting mode has ever been engaged this session (for load_up trigger)
+  const hasEngagedTargetingRef = useRef(false)
+
+  // When the Load Up tutorial card is visible, force targeting mode on (no sounds)
+  const loadUpActive = tutShowOverlay && activeTutorialId === 'load_up'
 
   const [brief,         setBrief]         = useState(null)
   const [ammoRemaining, setAmmoRemaining] = useState(0)
@@ -565,9 +592,16 @@ export default function IntelligenceBrief({ briefId, navigate }) {
 
     const engage = () => {
       if (!userHasScrolled || mobileTargetingRef.current) return
+      // Block targeting until the "First Briefing" tutorial has been seen/skipped
+      if (!intelBriefTutDoneRef.current) return
       mobileTargetingRef.current = true
       setMobileTargeting(true)
       playSound('target_locked')
+      // Trigger "Load Up" tutorial on first ever targeting engagement
+      if (!hasEngagedTargetingRef.current) {
+        hasEngagedTargetingRef.current = true
+        startTutorialRef.current('load_up')
+      }
     }
 
     const disengage = () => {
@@ -607,14 +641,22 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const [mainOffsetY, setMainOffsetY] = useState(0)
 
   useEffect(() => {
-    if (descHovered && descWrapRef.current) {
+    if ((descHovered || loadUpActive) && descWrapRef.current) {
       setDescRect(descWrapRef.current.getBoundingClientRect())
       setDescScrollY(window.scrollY)
       setMainOffsetY(mainRef.current ? mainRef.current.offsetTop : 0)
-    } else if (!descHovered && !dossier) {
+    } else if (!descHovered && !dossier && !loadUpActive) {
       setDescRect(null)
     }
-  }, [descHovered, dossier])
+  }, [descHovered, dossier, loadUpActive]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Play targeting engagement sound once when the Load Up tutorial activates.
+  // If the user physically hovered (targetingActiveRef already true), the sound
+  // was already played by handleDescHoverChange — skip to avoid a double play.
+  useEffect(() => {
+    if (!loadUpActive) return
+    if (!targetingActiveRef.current) playSound('target_locked')
+  }, [loadUpActive]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch brief ────────────────────────────────────────────────────────────
   // Uses optional auth — works for guests (no readRecord) and logged-in users.
@@ -690,6 +732,12 @@ export default function IntelligenceBrief({ briefId, navigate }) {
     return () => { document.body.style.overflow = '' }
   }, [pageRevealed])
 
+  // Block tutorial overlay during loading sequence — unblock when page is revealed
+  useEffect(() => {
+    setBlocked(!pageRevealed)
+    return () => setBlocked(false)
+  }, [pageRevealed, setBlocked])
+
   // Fetch app settings to check disableLoadingBar flag
   useEffect(() => {
     fetch(`${API}/api/settings`)
@@ -749,13 +797,18 @@ export default function IntelligenceBrief({ briefId, navigate }) {
 
           // If cursor is already over the description when the page reveals,
           // mouseenter was blocked until now — manually activate targeting.
-          if (!window.matchMedia('(hover: none)').matches) {
+          // Only activate if the intel_brief tutorial has been completed/skipped.
+          if (!window.matchMedia('(hover: none)').matches && intelBriefTutDoneRef.current) {
             const { x, y } = mousePosRef.current
             const rect = descWrapRef.current?.getBoundingClientRect()
             if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
               targetingActiveRef.current = true
               setDescHovered(true)
               playSound('target_locked')
+              if (!hasEngagedTargetingRef.current) {
+                hasEngagedTargetingRef.current = true
+                startTutorialRef.current('load_up')
+              }
             }
           }
         }, 1000)
@@ -766,7 +819,16 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const handleDescHoverChange = useCallback((hovered) => {
     if (!systemReadyRef.current || !pageRevealedRef.current) return
     if (hovered && isScrollingRef.current) return
-    if (hovered && !targetingActiveRef.current) playSound('target_locked')
+    // Block targeting until the "First Briefing" tutorial has been seen/skipped
+    if (hovered && !intelBriefTutDoneRef.current) return
+    if (hovered && !targetingActiveRef.current) {
+      playSound('target_locked')
+      // Trigger "Load Up" tutorial on first ever targeting engagement
+      if (!hasEngagedTargetingRef.current) {
+        hasEngagedTargetingRef.current = true
+        startTutorialRef.current('load_up')
+      }
+    }
     if (!hovered && targetingActiveRef.current) playSound('stand_down')
     targetingActiveRef.current = hovered
     setDescHovered(hovered)
@@ -870,11 +932,27 @@ export default function IntelligenceBrief({ briefId, navigate }) {
 
   // ── Main render ────────────────────────────────────────────────────────────
 
-  const targetingActive = !isMobile && (descHovered || !!dossier)
+  // Detect when a BOO-compatible brief hasn't had its game data filled in yet.
+  // Only relevant when the quiz has been won — quiz lock takes priority otherwise.
+  // Historic ranks are excluded from this check (they have their own lock).
+  const BOO_REQUIRED_FIELDS = {
+    Aircrafts: ['topSpeedKph', 'yearIntroduced'],
+    Ranks:     ['rankHierarchyOrder'],
+    Training:  ['trainingWeekStart', 'trainingWeekEnd'],
+    Missions:  ['startYear'],
+    Tech:      ['startYear'],
+    Treaties:  ['startYear'],
+  }
+  const booIsHistoric   = brief.category === 'Ranks' && brief.historic === true
+  const booHasBriefData = !booIsHistoric && !!(brief.gameData &&
+    (BOO_REQUIRED_FIELDS[brief.category] ?? []).some(f => brief.gameData[f] != null))
+  const booMissingIntel = !booIsHistoric && !booHasBriefData && quizCompleted === true
+
+  const targetingActive = !isMobile && (descHovered || !!dossier || loadUpActive)
   const hasSpaceLeft    = descRect && descRect.left > 220
   const hasSpaceRight   = descRect && (window.innerWidth - descRect.right) > 220
   const showSideHUDs    = pageRevealed && targetingActive && !!descRect && hasSpaceLeft && hasSpaceRight
-  const showBelowHUDs   = pageRevealed && targetingActive && !!descRect && !(hasSpaceLeft && hasSpaceRight)
+  const showBelowHUDs   = pageRevealed && targetingActive && !!descRect && !(hasSpaceLeft && hasSpaceRight) && window.innerWidth > 768
 
   return (
     <main ref={mainRef} className={`page brief-page${targetingActive ? ' targeting-active' : ''}${!pageRevealed ? ' brief-page--initializing' : ''}`}>
@@ -930,7 +1008,9 @@ export default function IntelligenceBrief({ briefId, navigate }) {
             isMobile={isMobile}
             systemReady={systemReady}
             unlockedKws={unlockedKws}
-            targeting={isMobile ? mobileTargeting : descHovered}
+            targeting={isMobile ? (mobileTargeting || loadUpActive) : (descHovered || loadUpActive)}
+            suppressSounds={loadUpActive}
+            loopFlash={loadUpActive}
             onScanWord={setScanWord}
             dossierOpen={!!dossier}
           />
@@ -1012,11 +1092,11 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         </div>
 
         {/* ── Battle of Order ────────────────────────────────── */}
-        {user && pageRevealed && ['Aircrafts','Ranks','Training','Missions','Tech','Treaties'].includes(brief.category) && (booAvailable !== null || (brief.category === 'Ranks' && brief.historic)) && (() => {
-          const booHistoricLocked = brief.category === 'Ranks' && brief.historic === true
-          const allBooComplete  = !booHistoricLocked && booOptions.length > 0 && booOptions.every(ot => booCompletedSet.has(ot))
-          const booQuizLocked   = !booHistoricLocked && quizCompleted !== true
-          const booLocked       = booHistoricLocked || booAvailable === false || booQuizLocked
+        {user && pageRevealed && ['Aircrafts','Ranks','Training','Missions','Tech','Treaties'].includes(brief.category) && (booAvailable !== null || booIsHistoric || booMissingIntel) && (() => {
+          const booHistoricLocked = booIsHistoric
+          const allBooComplete  = !booHistoricLocked && !booMissingIntel && booOptions.length > 0 && booOptions.every(ot => booCompletedSet.has(ot))
+          const booQuizLocked   = !booHistoricLocked && !booMissingIntel && quizCompleted !== true
+          const booLocked       = booHistoricLocked || booMissingIntel || booAvailable === false || booQuizLocked
           return (
             <div className={`boa-trigger-wrap${booLocked ? ' boa-trigger-wrap--locked' : ''}`}>
               {booHistoricLocked && (
@@ -1026,14 +1106,21 @@ export default function IntelligenceBrief({ briefId, navigate }) {
                   <span className="boa-trigger-badge__sub">Historic Rank</span>
                 </div>
               )}
-              {!booHistoricLocked && booAvailable === false && (
+              {!booHistoricLocked && booMissingIntel && (
+                <div className="boa-trigger-badge boa-trigger-badge--collecting" aria-hidden="true">
+                  <span className="boa-trigger-badge__icon">⬡</span>
+                  <span className="boa-trigger-badge__text">INTEL PENDING</span>
+                  <span className="boa-trigger-badge__sub">Data Collection In Progress</span>
+                </div>
+              )}
+              {!booHistoricLocked && !booMissingIntel && booAvailable === false && (
                 <div className="boa-trigger-badge" aria-hidden="true">
                   <span className="boa-trigger-badge__icon">⬡</span>
                   <span className="boa-trigger-badge__text">CLASSIFIED</span>
                   <span className="boa-trigger-badge__sub">Insufficient Intel Assets</span>
                 </div>
               )}
-              {!booHistoricLocked && booAvailable !== false && booQuizLocked && (
+              {!booHistoricLocked && !booMissingIntel && booAvailable !== false && booQuizLocked && (
                 <div className="boa-trigger-badge boa-trigger-badge--quiz-locked" aria-hidden="true">
                   <span className="boa-trigger-badge__icon">⬡</span>
                   <span className="boa-trigger-badge__text">MISSION LOCKED</span>
@@ -1061,6 +1148,10 @@ export default function IntelligenceBrief({ briefId, navigate }) {
                 {booHistoricLocked ? (
                   <p className="boa-trigger-locked-msg">
                     This rank has been decommissioned and is no longer active. Historic ranks are excluded from Battle of Order.
+                  </p>
+                ) : booMissingIntel ? (
+                  <p className="boa-trigger-locked-msg">
+                    We're currently collecting additional intel on this asset — check back later to attempt this mission.
                   </p>
                 ) : booAvailable === false ? (
                   <p className="boa-trigger-locked-msg">
@@ -1143,7 +1234,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
       )}
 
       {/* ── Mobile targeting bar ──────────────────────────── */}
-      {isMobile && mobileTargeting && pageRevealed && !dossier && (
+      {isMobile && (mobileTargeting || loadUpActive) && pageRevealed && !dossier && (
         <MobileTargetingBar
           ammoRemaining={ammoRemaining}
           ammoMax={ammoMax}

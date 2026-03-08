@@ -124,6 +124,33 @@ router.patch('/settings', requireReason, async (req, res) => {
   }
 });
 
+// PATCH /api/admin/tutorials/content — save an override for one tutorial step
+// Body: { key: 'welcome_0', title, body, guestBody (optional) }
+// Send title/body as empty string to clear the override for that field.
+router.patch('/tutorials/content', requireReason, async (req, res) => {
+  try {
+    const { key, title, body, guestBody, reason } = req.body;
+    const VALID_KEYS = ['welcome_0','welcome_1','intel_brief_0','user_0','user_1','load_up_0'];
+    if (!VALID_KEYS.includes(key)) return res.status(400).json({ message: 'Invalid tutorial key' });
+
+    // Build the override object; omit guestBody unless it was provided
+    const override = { title: title ?? '', body: body ?? '' };
+    if (guestBody !== undefined) override.guestBody = guestBody;
+
+    const settings = await AppSettings.findOne() ?? await AppSettings.create({});
+    const existing = settings.tutorialContent ?? {};
+    existing[key] = override;
+    settings.tutorialContent = existing;
+    settings.markModified('tutorialContent');
+    await settings.save();
+
+    await AdminAction.create({ userId: req.user._id, actionType: 'edit_tutorial_content', reason });
+    res.json({ status: 'success', data: { tutorialContent: settings.tutorialContent } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/admin/users — all users, oldest first (first registered at top)
 router.get('/users', async (req, res) => {
   try {
@@ -223,6 +250,7 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
     if (fields.includes('aircoins'))        { userUpdates.totalAircoins = 0; userUpdates.cycleAircoins = 0; userUpdates.rank = null; ops.push(AircoinLog.deleteMany({ userId: req.params.id })); }
     if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); }
     if (fields.includes('intelBriefsRead')) ops.push(IntelligenceBriefRead.deleteMany({ userId: req.params.id }));
+    if (fields.includes('tutorials'))       { userUpdates['tutorials.welcome'] = 'unseen'; userUpdates['tutorials.intel_brief'] = 'unseen'; userUpdates['tutorials.user'] = 'unseen'; userUpdates['tutorials.load_up'] = 'unseen'; }
 
     if (Object.keys(userUpdates).length) ops.push(User.findByIdAndUpdate(req.params.id, userUpdates));
     await Promise.all(ops);
@@ -259,6 +287,7 @@ router.get('/problems', async (req, res) => {
 
     const problems = await ProblemReport.find(filter)
       .populate('userId', 'email agentNumber')
+      .populate('updates.adminUserId', 'agentNumber email')
       .sort({ time: -1 });
 
     res.json({ status: 'success', data: { problems } });

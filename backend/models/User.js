@@ -42,6 +42,14 @@ const userSchema = new mongoose.Schema(
     totalAircoins: { type: Number, default: 0 },
     cycleAircoins: { type: Number, default: 0 }, // aircoins in current rank cycle — resets to 0 on rank promotion
 
+    // Tutorial progress
+    tutorials: {
+      welcome:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      intel_brief: { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      user:        { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      load_up:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+    },
+
     // Login history (used for streak calculation)
     logins: [loginSchema],
 

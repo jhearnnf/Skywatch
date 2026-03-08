@@ -139,6 +139,52 @@ router.get('/aircoins/history', protect, async (req, res) => {
   }
 });
 
+// PATCH /api/users/me/tutorials — update a single tutorial status
+const VALID_TUTORIAL_IDS = ['welcome', 'intel_brief', 'user', 'load_up'];
+const TUTORIAL_PRIORITY  = { unseen: 0, skipped: 1, viewed: 2 };
+
+router.patch('/me/tutorials', protect, async (req, res) => {
+  try {
+    const { tutorialId, status } = req.body;
+    if (!VALID_TUTORIAL_IDS.includes(tutorialId))
+      return res.status(400).json({ message: 'Invalid tutorialId' });
+    if (!['unseen','skipped','viewed'].includes(status))
+      return res.status(400).json({ message: 'Invalid status' });
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { [`tutorials.${tutorialId}`]: status },
+      { new: true }
+    );
+    res.json({ status: 'success', data: { tutorials: user.tutorials } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/users/me/tutorials/sync — sync localStorage tutorial states to DB on login
+router.patch('/me/tutorials/sync', protect, async (req, res) => {
+  try {
+    const incoming = req.body; // { welcome: 'viewed', intel_brief: 'skipped', ... }
+    const user     = await User.findById(req.user._id);
+    const updates  = {};
+    for (const [id, status] of Object.entries(incoming)) {
+      if (!VALID_TUTORIAL_IDS.includes(id)) continue;
+      if (!['unseen','skipped','viewed'].includes(status)) continue;
+      const current = user.tutorials?.[id] ?? 'unseen';
+      if (TUTORIAL_PRIORITY[status] > TUTORIAL_PRIORITY[current]) {
+        updates[`tutorials.${id}`] = status;
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      await User.findByIdAndUpdate(req.user._id, { $set: updates });
+    }
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/users/report-problem
 router.post('/report-problem', protect, async (req, res) => {
   try {

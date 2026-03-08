@@ -18,6 +18,8 @@ import GameHistory         from './pages/GameHistory'
 import AircoinNotification       from './components/AircoinNotification'
 import LevelUpNotification       from './components/LevelUpNotification'
 import RankPromotionNotification from './components/RankPromotionNotification'
+import TutorialOverlay           from './components/TutorialOverlay'
+import { TutorialProvider }      from './context/TutorialContext'
 import { playSound }        from './utils/sound'
 import './App.css'
 
@@ -80,33 +82,36 @@ function AppInner() {
   const fullScreen = page.id === 'welcome' || page.id === 'login'
 
   return (
-    <div className="app">
-      {!fullScreen && <Navbar page={page.id} navigate={navigate} />}
-      {renderPage()}
-      {!fullScreen && <Footer navigate={navigate} currentPage={page.id} />}
-      {currentNotif?.type === 'aircoin' && (
-        <AircoinNotification
-          key={currentNotif.id}
-          amount={currentNotif.amount}
-          label={currentNotif.label}
-          onDone={shiftNotif}
-        />
-      )}
-      {currentNotif?.type === 'levelup' && (
-        <LevelUpNotification
-          key={currentNotif.id}
-          level={currentNotif.level}
-          onDone={shiftNotif}
-        />
-      )}
-      {currentNotif?.type === 'rankpromotion' && (
-        <RankPromotionNotification
-          key={currentNotif.id}
-          rank={currentNotif.rank}
-          onDone={shiftNotif}
-        />
-      )}
-    </div>
+    <TutorialProvider currentPage={page.id} navigate={navigate}>
+      <div className="app">
+        {!fullScreen && <Navbar page={page.id} navigate={navigate} />}
+        {renderPage()}
+        {!fullScreen && <Footer navigate={navigate} currentPage={page.id} />}
+        {currentNotif?.type === 'aircoin' && (
+          <AircoinNotification
+            key={currentNotif.id}
+            amount={currentNotif.amount}
+            label={currentNotif.label}
+            onDone={shiftNotif}
+          />
+        )}
+        {currentNotif?.type === 'levelup' && (
+          <LevelUpNotification
+            key={currentNotif.id}
+            level={currentNotif.level}
+            onDone={shiftNotif}
+          />
+        )}
+        {currentNotif?.type === 'rankpromotion' && (
+          <RankPromotionNotification
+            key={currentNotif.id}
+            rank={currentNotif.rank}
+            onDone={shiftNotif}
+          />
+        )}
+        <TutorialOverlay />
+      </div>
+    </TutorialProvider>
   )
 }
 

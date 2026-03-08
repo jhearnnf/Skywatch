@@ -76,6 +76,10 @@ const appSettingsSchema = new mongoose.Schema({
   // Feature flags
   useLiveLeaderboard:   { type: Boolean, default: false },
   disableLoadingBar:    { type: Boolean, default: false },
+
+  // Tutorial text overrides — keys are '<tutorialId>_<stepIndex>' (e.g. 'welcome_0')
+  // Absent or empty fields fall back to the hardcoded defaults in TutorialContext.
+  tutorialContent: { type: mongoose.Schema.Types.Mixed, default: {} },
 });
 
 // Static helper — always returns (or creates) the single settings document

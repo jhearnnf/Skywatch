@@ -104,7 +104,7 @@ export default function Navbar({ page, navigate }) {
   const { user, logout } = useAuth()
   const [open, setOpen]  = useState(false)
 
-  const handleNav = (id) => { navigate(id); setOpen(false) }
+  const handleNav = (id, params) => { navigate(id, params); setOpen(false) }
 
   const handleLogout = async () => {
     await logout()
@@ -160,10 +160,10 @@ export default function Navbar({ page, navigate }) {
         <div className={`nav-auth ${open ? 'nav-auth--open' : ''}`}>
           {user ? (
             <>
-              <StatsCombo coins={user.totalAircoins ?? 0} cycleAircoins={user.cycleAircoins ?? 0} rank={user.rank} navigate={navigate} />
-              <AircoinsDisplay coins={user.totalAircoins ?? 0} navigate={navigate} />
-              <LevelDisplay cycleAircoins={user.cycleAircoins ?? 0} navigate={navigate} />
-              <RankDisplay rank={user.rank} navigate={navigate} />
+              <StatsCombo coins={user.totalAircoins ?? 0} cycleAircoins={user.cycleAircoins ?? 0} rank={user.rank} navigate={handleNav} />
+              <AircoinsDisplay coins={user.totalAircoins ?? 0} navigate={handleNav} />
+              <LevelDisplay cycleAircoins={user.cycleAircoins ?? 0} navigate={handleNav} />
+              <RankDisplay rank={user.rank} navigate={handleNav} />
               <button className="nav-btn nav-btn--ghost" onClick={handleLogout}>
                 Logout
               </button>

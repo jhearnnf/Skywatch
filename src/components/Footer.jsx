@@ -19,7 +19,7 @@ export default function Footer({ navigate, currentPage }) {
           <Fragment key={id}>
             {i > 0 && <span className="footer-sep" aria-hidden="true">·</span>}
             <button
-              className="footer-link"
+              className={`footer-link${id === 'report' ? ' footer-link--report' : ''}`}
               onClick={() => id === 'report' ? handleReport() : navigate(id)}
             >
               {label}

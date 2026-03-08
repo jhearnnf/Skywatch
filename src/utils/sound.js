@@ -14,7 +14,24 @@ function fetchSettings() {
     .then(data => { cache = data; inflight = null; return data })
     .catch(() => {
       inflight = null
-      return { volumeIntelBriefOpened: 100, volumeTargetLocked: 100, volumeFire: 100, volumeAircoin: 100, volumeOutOfAmmo: 100, volumeLevelUp: 100, volumeRankPromotion: 100, volumeQuizCompleteWin: 100, volumeQuizCompleteLose: 100, volumeStandDown: 100, volumeTargetLockedKeyword: 100, volumeBattleOfOrderWon: 100, volumeBattleOfOrderLost: 100, volumeBattleOfOrderSelection: 100 }
+      // All volumes default to 100, all enabled flags default to true (absent = enabled)
+      return {
+        volumeIntelBriefOpened: 100, soundEnabledIntelBriefOpened: true,
+        volumeTargetLocked: 100,     soundEnabledTargetLocked: true,
+        volumeStandDown: 100,        soundEnabledStandDown: true,
+        volumeTargetLockedKeyword: 100, soundEnabledTargetLockedKeyword: true,
+        volumeFire: 100,             soundEnabledFire: true,
+        volumeOutOfAmmo: 100,        soundEnabledOutOfAmmo: true,
+        volumeAircoin: 100,          soundEnabledAircoin: true,
+        volumeLevelUp: 100,          soundEnabledLevelUp: true,
+        volumeRankPromotion: 100,    soundEnabledRankPromotion: true,
+        volumeQuizCompleteWin: 100,  soundEnabledQuizCompleteWin: true,
+        volumeQuizCompleteLose: 100, soundEnabledQuizCompleteLose: true,
+        volumeBattleOfOrderWon: 100,       soundEnabledBattleOfOrderWon: true,
+        volumeBattleOfOrderLost: 100,      soundEnabledBattleOfOrderLost: true,
+        volumeBattleOfOrderSelection: 100, soundEnabledBattleOfOrderSelection: true,
+        freeCategories: ['News'], silverCategories: [],
+      }
     })
   return inflight
 }

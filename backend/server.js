@@ -23,25 +23,13 @@ app.use('/api/users',  require('./routes/users'));
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
-// Public: expose only the fields the frontend needs (sound volumes)
+// Public: expose all app settings so the frontend always has every volume/enabled flag.
+// Strips internal Mongoose fields (_id, __v, _singleton) before sending.
 app.get('/api/settings', async (_req, res) => {
   try {
     const s = await require('./models/AppSettings').getSettings()
-    res.json({
-      volumeIntelBriefOpened: s.volumeIntelBriefOpened,
-      volumeTargetLocked:     s.volumeTargetLocked,
-      volumeFire:             s.volumeFire,
-      volumeAircoin:          s.volumeAircoin,
-      volumeOutOfAmmo:        s.volumeOutOfAmmo,
-      volumeLevelUp:          s.volumeLevelUp,
-      volumeRankPromotion:    s.volumeRankPromotion,
-      volumeQuizCompleteWin:  s.volumeQuizCompleteWin,
-      volumeQuizCompleteLose: s.volumeQuizCompleteLose,
-      volumeStandDown:        s.volumeStandDown,
-      freeCategories:         s.freeCategories,
-      silverCategories:       s.silverCategories,
-      disableLoadingBar:      s.disableLoadingBar,
-    })
+    const { _id, __v, _singleton, ...pub } = s.toObject()
+    res.json(pub)
   } catch {
     res.json({ volumeIntelBriefOpened: 100, volumeTargetLocked: 100, volumeOutOfAmmo: 100, freeCategories: ['News'], silverCategories: [] })
   }
