@@ -1700,7 +1700,7 @@ function BriefsTab({ API }) {
   const addSelectedImages = () => {
     const toAdd = generatedImages
       .filter(img => img.selected)
-      .map(img => ({ mediaType: 'picture', mediaUrl: `${API}${img.url}` }))
+      .map(img => ({ mediaType: 'picture', mediaUrl: img.url }))
     if (isNew) {
       setPendingMedia(prev => [...prev, ...toAdd])
     } else {
