@@ -2985,10 +2985,23 @@
   min-height: 100vh;
   background: linear-gradient(160deg, #020818 0%, #071a40 50%, #0a2050 100%);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1.25rem;
   padding: 2rem 1rem;
 }
+.login-back-link {
+  background: none;
+  border: none;
+  color: rgba(148, 163, 184, 0.5);
+  font-size: 0.78rem;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  padding: 0.25rem 0.5rem;
+  transition: color 0.15s;
+}
+.login-back-link:hover { color: rgba(148, 163, 184, 0.85); }
 
 .login-card {
   background: rgba(15, 23, 42, 0.85);

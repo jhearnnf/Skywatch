@@ -997,6 +997,8 @@ export default function IntelligenceBrief({ briefId, navigate }) {
             hasCompleted={quizCompleted === true}
             quizOpen={quizOpen}
             targetingActive={mobileTargeting}
+            loggedIn={!!user}
+            onLoginClick={() => navigate('login')}
             onQuizOpen={() => setQuizOpen(true)}
             onQuizClose={() => setQuizOpen(false)}
             onQuizComplete={(coins, { rankPromotion, cycleAircoins } = {}) => {

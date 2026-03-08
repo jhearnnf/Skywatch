@@ -205,6 +205,10 @@ export default function Login({ navigate }) {
         )}
 
       </div>
+
+      <button className="login-back-link" onClick={() => navigate('dashboard')}>
+        ← Return to Dashboard
+      </button>
     </div>
   )
 }

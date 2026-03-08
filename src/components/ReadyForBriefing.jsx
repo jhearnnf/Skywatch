@@ -1,12 +1,26 @@
 import QuizGameModal from './QuizGameModal'
 
-export default function ReadyForBriefing({ briefId, hasQuestions, hasCompleted, quizOpen, targetingActive, onQuizOpen, onQuizClose, onQuizComplete }) {
+export default function ReadyForBriefing({ briefId, hasQuestions, hasCompleted, quizOpen, targetingActive, onQuizOpen, onQuizClose, onQuizComplete, loggedIn, onLoginClick }) {
   return (
     <>
       <div className={`ready-for-briefing${targetingActive ? ' ready-for-briefing--locked' : ''}`}>
         <div className="rfb__inner">
 
-          {hasCompleted ? (
+          {!loggedIn ? (
+            <>
+              <p className="rfb__eyebrow">Operator</p>
+              <h2 className="rfb__title">Ready for Briefing?</h2>
+              <p className="rfb__subtitle">
+                Sign in to test your recall of this intel and earn Aircoins.
+              </p>
+              <button className="rfb__cta" onClick={onLoginClick}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M6 3l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Sign In to Play
+              </button>
+            </>
+          ) : hasCompleted ? (
             <>
               <p className="rfb__eyebrow">Knowledge Check</p>
               <h2 className="rfb__title rfb__title--done">
