@@ -177,11 +177,12 @@ export function TutorialProvider({ children, currentPage, navigate }) {
   // Uses activeTutorialIdRef (not the closure value) so this never reads stale state
   // even when called from event-handler callbacks that captured an old version.
   const startTutorial = useCallback((id) => {
-    if (!TUTORIALS[id]) return
-    if (getStatus(id) !== 'unseen') return
-    if (activeTutorialIdRef.current) return // don't interrupt an active tutorial
+    if (!TUTORIALS[id]) return false
+    if (getStatus(id) !== 'unseen') return false
+    if (activeTutorialIdRef.current) return false // don't interrupt an active tutorial
     setActiveTutorialId(id)
     setActiveStep(0)
+    return true
   }, [getStatus])
 
   // ── Derived overlay state ────────────────────────────────────────────────────
@@ -246,6 +247,7 @@ export function TutorialProvider({ children, currentPage, navigate }) {
     const nextIdx = activeStep + 1
     if (nextIdx >= tut.steps.length) {
       saveStatus(activeTutorialId, 'viewed')
+      activeTutorialIdRef.current = null  // immediate — closes race-condition window
       setActiveTutorialId(null)
       setActiveStep(0)
     } else {
@@ -258,12 +260,13 @@ export function TutorialProvider({ children, currentPage, navigate }) {
   const skip = useCallback(() => {
     if (!activeTutorialId) return
     saveStatus(activeTutorialId, 'skipped')
+    activeTutorialIdRef.current = null  // immediate — closes race-condition window
     setActiveTutorialId(null)
     setActiveStep(0)
   }, [activeTutorialId, saveStatus])
 
   return (
-    <TutorialContext.Provider value={{ showOverlay, stepData, activeStep, totalSteps, next, skip, setBlocked, getStatus, startTutorial, activeTutorialId, refreshOverrides }}>
+    <TutorialContext.Provider value={{ showOverlay, stepData, activeStep, totalSteps, next, skip, setBlocked, getStatus, startTutorial, activeTutorialId, activeTutorialIdRef, refreshOverrides }}>
       {children}
     </TutorialContext.Provider>
   )

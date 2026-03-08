@@ -150,6 +150,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     let newTotalAircoins;
     let newCycleAircoins;
     let briefRankPromotion = null;
+    let tierAmmo = 0;
 
     if (req.user) {
       const settings = await AppSettings.getSettings();
@@ -161,12 +162,14 @@ router.get('/:id', optionalAuth, async (req, res) => {
         return res.status(403).json({ message: 'Upgrade your subscription to access this category.' });
       }
 
-      const tierAmmo = getTierAmmo(tier, settings);
+      tierAmmo = getTierAmmo(tier, settings);
 
       readRecord = await IntelligenceBriefRead.findOne({
         userId: req.user._id,
         intelBriefId: brief._id,
       });
+
+      const AMMO_REGEN_MS = 24 * 60 * 60 * 1000;
 
       if (!readRecord) {
         readRecord = await IntelligenceBriefRead.create({
@@ -179,17 +182,26 @@ router.get('/:id', optionalAuth, async (req, res) => {
         newTotalAircoins  = coinResult.totalAircoins;
         newCycleAircoins  = coinResult.cycleAircoins;
         briefRankPromotion = coinResult.rankPromotion;
-      } else if (readRecord.ammunitionRemaining < tierAmmo && readRecord.ammunitionRemaining === 0) {
-        // Ammo was zero — refresh to current tier default (covers tier upgrades and old zero defaults)
-        readRecord = await IntelligenceBriefRead.findByIdAndUpdate(
-          readRecord._id,
-          { ammunitionRemaining: tierAmmo },
-          { new: true }
-        );
+      } else if (readRecord.ammunitionRemaining === 0 && readRecord.ammoDepletedAt) {
+        // Ammo depleted — check if 24h have elapsed
+        const elapsed = Date.now() - new Date(readRecord.ammoDepletedAt).getTime();
+        if (elapsed >= AMMO_REGEN_MS) {
+          readRecord = await IntelligenceBriefRead.findByIdAndUpdate(
+            readRecord._id,
+            { ammunitionRemaining: tierAmmo, ammoDepletedAt: null },
+            { new: true }
+          );
+        }
+      } else if (readRecord.ammunitionRemaining === 0 && !readRecord.ammoDepletedAt) {
+        // Legacy record with zero ammo but no depletedAt — stamp it now
+        const now = new Date();
+        await IntelligenceBriefRead.findByIdAndUpdate(readRecord._id, { ammoDepletedAt: now });
+        readRecord = Object.assign(readRecord.toObject(), { ammoDepletedAt: now });
       }
     }
 
-    res.json({ status: 'success', data: { brief, readRecord, aircoinsEarned: aircoinsEarned ?? 0, newTotalAircoins, newCycleAircoins, rankPromotion: briefRankPromotion } });
+    const ammoMax = req.user ? tierAmmo : 0;
+    res.json({ status: 'success', data: { brief, readRecord, ammoMax, aircoinsEarned: aircoinsEarned ?? 0, newTotalAircoins, newCycleAircoins, rankPromotion: briefRankPromotion } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -223,12 +235,13 @@ router.post('/:id/use-ammo', protect, async (req, res) => {
     if (record.ammunitionRemaining >= AMMO_GOLD) {
       return res.json({ status: 'success', data: { ammunitionRemaining: AMMO_GOLD } });
     }
+    const willDeplete = record.ammunitionRemaining === 1;
     const updated = await IntelligenceBriefRead.findByIdAndUpdate(
       record._id,
-      { $inc: { ammunitionRemaining: -1 } },
+      { $inc: { ammunitionRemaining: -1 }, ...(willDeplete ? { ammoDepletedAt: new Date() } : {}) },
       { new: true }
     );
-    res.json({ status: 'success', data: { ammunitionRemaining: updated.ammunitionRemaining } });
+    res.json({ status: 'success', data: { ammunitionRemaining: updated.ammunitionRemaining, ammoDepletedAt: updated.ammoDepletedAt ?? null } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

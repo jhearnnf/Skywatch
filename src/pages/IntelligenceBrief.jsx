@@ -128,10 +128,20 @@ function SystemInitBar({ progress, online }) {
 
 // ── Mobile targeting bar (fixed bottom strip) ─────────────────────────────────
 
-function MobileTargetingBar({ ammoRemaining, ammoMax, scanWord }) {
+function MobileTargetingBar({ ammoRemaining, ammoMax, ammoDepletedAt, scanWord }) {
   const isUnlimited = ammoMax >= 9999
   const isDepleted  = !isUnlimited && ammoRemaining === 0
   const maxBlocks   = isUnlimited ? 8 : Math.min(ammoMax || 8, 8)
+
+  const rechargeLabel = (() => {
+    if (!isDepleted || !ammoDepletedAt) return null
+    const rechargeAt = new Date(new Date(ammoDepletedAt).getTime() + 24 * 60 * 60 * 1000)
+    const diffMs = rechargeAt - Date.now()
+    if (diffMs <= 0) return 'READY'
+    const h = Math.floor(diffMs / 3600000)
+    const m = Math.floor((diffMs % 3600000) / 60000)
+    return `REGEN ${String(h).padStart(2,'0')}H ${String(m).padStart(2,'0')}M`
+  })()
 
   return (
     <div className="mobile-targeting-bar" aria-hidden="true">
@@ -146,6 +156,7 @@ function MobileTargetingBar({ ammoRemaining, ammoMax, scanWord }) {
           </span>
           <span className="mtb__ammo-label">{isUnlimited ? 'UNLIMITED' : isDepleted ? 'DEPLETED' : 'RDS'}</span>
         </div>
+        {rechargeLabel && <span className="mtb__regen">{rechargeLabel}</span>}
       </div>
 
       <div className="mtb__blocks">
@@ -434,15 +445,10 @@ function BriefGameDataPanel({ brief }) {
 
 export default function IntelligenceBrief({ briefId, navigate }) {
   const { user, setUser, API, awardAircoins } = useAuth()
-  const { setBlocked, getStatus, startTutorial, activeTutorialId, showOverlay: tutShowOverlay } = useTutorial()
+  const { setBlocked, getStatus, startTutorial, activeTutorialId, activeTutorialIdRef: tutorialIdRef, showOverlay: tutShowOverlay } = useTutorial()
 
   // Touch-only devices don't hover — disable focus mode for them
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
-
-  // intel_brief tutorial must be completed/skipped before targeting mode is unlocked
-  const intelBriefTutDone = getStatus('intel_brief') !== 'unseen'
-  const intelBriefTutDoneRef = useRef(intelBriefTutDone)
-  intelBriefTutDoneRef.current = intelBriefTutDone
 
   // Always current — updated synchronously in render (no stale-closure window from useEffect)
   const startTutorialRef = useRef(startTutorial)
@@ -454,9 +460,10 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   // When the Load Up tutorial card is visible, force targeting mode on (no sounds)
   const loadUpActive = tutShowOverlay && activeTutorialId === 'load_up'
 
-  const [brief,         setBrief]         = useState(null)
-  const [ammoRemaining, setAmmoRemaining] = useState(0)
-  const [ammoMax,       setAmmoMax]       = useState(0)
+  const [brief,           setBrief]           = useState(null)
+  const [ammoRemaining,   setAmmoRemaining]   = useState(0)
+  const [ammoMax,         setAmmoMax]         = useState(0)
+  const [ammoDepletedAt,  setAmmoDepletedAt]  = useState(null)
   const [loading,       setLoading]       = useState(true)
   const [notFound,      setNotFound]      = useState(false)
   const [accessDenied,  setAccessDenied]  = useState(false)
@@ -592,15 +599,14 @@ export default function IntelligenceBrief({ briefId, navigate }) {
 
     const engage = () => {
       if (!userHasScrolled || mobileTargetingRef.current) return
-      // Block targeting until the "First Briefing" tutorial has been seen/skipped
-      if (!intelBriefTutDoneRef.current) return
+      // Block targeting while any tutorial except load_up is active
+      if (tutorialIdRef.current && tutorialIdRef.current !== 'load_up') return
       mobileTargetingRef.current = true
       setMobileTargeting(true)
       playSound('target_locked')
       // Trigger "Load Up" tutorial on first ever targeting engagement
       if (!hasEngagedTargetingRef.current) {
-        hasEngagedTargetingRef.current = true
-        startTutorialRef.current('load_up')
+        if (startTutorialRef.current('load_up')) hasEngagedTargetingRef.current = true
       }
     }
 
@@ -677,7 +683,8 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         setBrief(data?.data?.brief ?? null)
         const initAmmo = data?.data?.readRecord?.ammunitionRemaining ?? 0
         setAmmoRemaining(initAmmo)
-        setAmmoMax(initAmmo)
+        setAmmoMax(data?.data?.ammoMax ?? initAmmo)
+        setAmmoDepletedAt(data?.data?.readRecord?.ammoDepletedAt ?? null)
         if (data?.data?.aircoinsEarned > 0) {
           aircoinRewardRef.current    = data.data.aircoinsEarned
           aircoinCycleRef.current     = data.data.newCycleAircoins ?? null
@@ -798,7 +805,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           // If cursor is already over the description when the page reveals,
           // mouseenter was blocked until now — manually activate targeting.
           // Only activate if the intel_brief tutorial has been completed/skipped.
-          if (!window.matchMedia('(hover: none)').matches && intelBriefTutDoneRef.current) {
+          if (!window.matchMedia('(hover: none)').matches && (!tutorialIdRef.current || tutorialIdRef.current === 'load_up')) {
             const { x, y } = mousePosRef.current
             const rect = descWrapRef.current?.getBoundingClientRect()
             if (rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
@@ -806,8 +813,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
               setDescHovered(true)
               playSound('target_locked')
               if (!hasEngagedTargetingRef.current) {
-                hasEngagedTargetingRef.current = true
-                startTutorialRef.current('load_up')
+                if (startTutorialRef.current('load_up')) hasEngagedTargetingRef.current = true
               }
             }
           }
@@ -819,14 +825,14 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const handleDescHoverChange = useCallback((hovered) => {
     if (!systemReadyRef.current || !pageRevealedRef.current) return
     if (hovered && isScrollingRef.current) return
-    // Block targeting until the "First Briefing" tutorial has been seen/skipped
-    if (hovered && !intelBriefTutDoneRef.current) return
+    // Block targeting while any tutorial except load_up is active (uses the ref so it's
+    // immediately correct even before React commits the state update from skip/next)
+    if (hovered && tutorialIdRef.current && tutorialIdRef.current !== 'load_up') return
     if (hovered && !targetingActiveRef.current) {
       playSound('target_locked')
       // Trigger "Load Up" tutorial on first ever targeting engagement
       if (!hasEngagedTargetingRef.current) {
-        hasEngagedTargetingRef.current = true
-        startTutorialRef.current('load_up')
+        if (startTutorialRef.current('load_up')) hasEngagedTargetingRef.current = true
       }
     }
     if (!hovered && targetingActiveRef.current) playSound('stand_down')
@@ -878,6 +884,9 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           .then(data => {
             if (data?.data?.ammunitionRemaining !== undefined) {
               setAmmoRemaining(data.data.ammunitionRemaining)
+            }
+            if (data?.data?.ammoDepletedAt !== undefined) {
+              setAmmoDepletedAt(data.data.ammoDepletedAt)
             }
           })
           .catch(() => {})
@@ -1238,6 +1247,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         <MobileTargetingBar
           ammoRemaining={ammoRemaining}
           ammoMax={ammoMax}
+          ammoDepletedAt={ammoDepletedAt}
           scanWord={scanWord}
         />
       )}

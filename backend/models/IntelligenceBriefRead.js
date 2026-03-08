@@ -6,6 +6,7 @@ const intelligenceBriefReadSchema = new mongoose.Schema({
 
   timeSpentSeconds:    { type: Number, default: 0 },
   ammunitionRemaining: { type: Number, default: 0, min: 0 },
+  ammoDepletedAt:      { type: Date,   default: null },
 
   firstReadAt: { type: Date, default: Date.now },
   lastReadAt:  { type: Date, default: Date.now },

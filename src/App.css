@@ -1911,6 +1911,16 @@
 
 .mtb__ammo-num--depleted { color: #ef4444; }
 
+.mtb__regen {
+  font-size: 0.45rem;
+  letter-spacing: 0.1em;
+  color: #f59e0b;
+  text-transform: uppercase;
+  font-family: 'Courier New', monospace;
+  margin-top: 0.15rem;
+  white-space: nowrap;
+}
+
 .mtb__ammo-label {
   font-size: 0.5rem;
   letter-spacing: 0.12em;

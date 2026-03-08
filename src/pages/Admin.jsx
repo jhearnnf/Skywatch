@@ -86,7 +86,7 @@ const RESET_FIELDS = [
 ]
 
 function ResetStatsModal({ agentNumber, userId, API, onDone, onCancel }) {
-  const [selected, setSelected] = useState({ aircoins: true, gameHistory: true, intelBriefsRead: true })
+  const [selected, setSelected] = useState({ aircoins: true, gameHistory: true, intelBriefsRead: true, tutorials: true })
   const [reason,   setReason]   = useState('')
   const [busy,     setBusy]     = useState(false)
 
