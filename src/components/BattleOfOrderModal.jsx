@@ -183,10 +183,13 @@ export default function BattleOfOrderModal({ briefId, category, onClose, onCompl
   const handleClose = useCallback(() => {
     if (gameIdRef.current && phase === 'playing' && !abandonedRef.current) {
       abandonedRef.current = true
+      const timeTakenSeconds = gameStartTimeRef.current
+        ? Math.round((Date.now() - gameStartTimeRef.current) / 1000)
+        : null
       fetch(`${API}/api/games/battle-of-order/abandon`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gameId: gameIdRef.current }),
+        body: JSON.stringify({ gameId: gameIdRef.current, timeTakenSeconds }),
       }).catch(() => {})
     }
     onClose?.()

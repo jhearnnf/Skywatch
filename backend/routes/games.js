@@ -424,9 +424,9 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
 // POST /api/games/battle-of-order/abandon
 router.post('/battle-of-order/abandon', protect, async (req, res) => {
   try {
-    const { gameId } = req.body;
+    const { gameId, timeTakenSeconds } = req.body;
     if (gameId) {
-      await GameSessionOrderOfBattleResult.create({ userId: req.user._id, gameId, won: false, abandoned: true, userChoices: [], aircoinsEarned: 0 });
+      await GameSessionOrderOfBattleResult.create({ userId: req.user._id, gameId, won: false, abandoned: true, userChoices: [], aircoinsEarned: 0, timeTakenSeconds: timeTakenSeconds ?? null });
     }
     res.json({ status: 'success' });
   } catch (err) {

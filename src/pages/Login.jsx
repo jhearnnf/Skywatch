@@ -3,22 +3,18 @@ import { useAuth } from '../context/AuthContext'
 
 const VIEW = { CHOICE: 'choice', SIGNIN: 'signin', REGISTER: 'register', DIFFICULTY: 'difficulty' }
 
-const DIFFICULTY_OPTIONS = [
-  {
-    value: 'easy',
-    label: 'Recruit',
-    tag: 'EASY',
-    flavor: 'Three answer choices. Training wheels on. No shame in it, Airman.',
-    stars: '★★☆☆☆',
-  },
-  {
-    value: 'medium',
-    label: 'Operative',
-    tag: 'MEDIUM',
-    flavor: 'Five choices. The real RAF quiz. Separate the rookies from the veterans.',
-    stars: '★★★★☆',
-  },
-]
+const DIFFICULTY_DEFAULTS = {
+  title:         'Select Combat Readiness',
+  subtitle:      'Choose your quiz difficulty. You can change this anytime from your profile.',
+  easyLabel:     'Recruit',
+  easyTag:       'EASY',
+  easyFlavor:    'Three answer choices. Training wheels on. No shame in it, Airman.',
+  easyStars:     '★★★☆☆',
+  mediumLabel:   'Operative',
+  mediumTag:     'MEDIUM',
+  mediumFlavor:  'Five choices. The real RAF quiz. Separate the rookies from the veterans.',
+  mediumStars:   '★★★★☆',
+}
 
 function ShieldLarge() {
   return (
@@ -34,12 +30,35 @@ function ShieldLarge() {
 
 export default function Login({ navigate }) {
   const { setUser, API, awardAircoins } = useAuth()
-  const [view,  setView]  = useState(VIEW.CHOICE)
-  const [email, setEmail] = useState('')
-  const [pass,  setPass]  = useState('')
-  const [error, setError] = useState('')
-  const [busy,  setBusy]  = useState(false)
+  const [view,       setView]      = useState(VIEW.CHOICE)
+  const [email,      setEmail]     = useState('')
+  const [pass,       setPass]      = useState('')
+  const [error,      setError]     = useState('')
+  const [busy,       setBusy]      = useState(false)
+  const [diffText,   setDiffText]  = useState(DIFFICULTY_DEFAULTS)
   const googleBtnRef = useRef(null)
+
+  useEffect(() => {
+    fetch(`${API}/api/users/settings`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d?.data) return
+        const s = d.data
+        setDiffText({
+          title:        s.combatReadinessTitle        || DIFFICULTY_DEFAULTS.title,
+          subtitle:     s.combatReadinessSubtitle     || DIFFICULTY_DEFAULTS.subtitle,
+          easyLabel:    s.combatReadinessEasyLabel    || DIFFICULTY_DEFAULTS.easyLabel,
+          easyTag:      s.combatReadinessEasyTag      || DIFFICULTY_DEFAULTS.easyTag,
+          easyFlavor:   s.combatReadinessEasyFlavor   || DIFFICULTY_DEFAULTS.easyFlavor,
+          easyStars:    s.combatReadinessEasyStars    || DIFFICULTY_DEFAULTS.easyStars,
+          mediumLabel:  s.combatReadinessMediumLabel  || DIFFICULTY_DEFAULTS.mediumLabel,
+          mediumTag:    s.combatReadinessMediumTag    || DIFFICULTY_DEFAULTS.mediumTag,
+          mediumFlavor: s.combatReadinessMediumFlavor || DIFFICULTY_DEFAULTS.mediumFlavor,
+          mediumStars:  s.combatReadinessMediumStars  || DIFFICULTY_DEFAULTS.mediumStars,
+        })
+      })
+      .catch(() => {})
+  }, [API])
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
@@ -183,11 +202,14 @@ export default function Login({ navigate }) {
           <>
             <div className="login-header">
               <p className="login-eyebrow">Mission Briefing</p>
-              <h2 className="login-title">Select Combat Readiness</h2>
-              <p className="login-subtitle">Choose your quiz difficulty. You can change this anytime from your profile.</p>
+              <h2 className="login-title">{diffText.title}</h2>
+              <p className="login-subtitle">{diffText.subtitle}</p>
             </div>
             <div className="difficulty-options">
-              {DIFFICULTY_OPTIONS.map(opt => (
+              {[
+                { value: 'easy',   label: diffText.easyLabel,   tag: diffText.easyTag,   stars: diffText.easyStars,   flavor: diffText.easyFlavor   },
+                { value: 'medium', label: diffText.mediumLabel, tag: diffText.mediumTag, stars: diffText.mediumStars, flavor: diffText.mediumFlavor },
+              ].map(opt => (
                 <button
                   key={opt.value}
                   className={`difficulty-option difficulty-option--${opt.value}`}

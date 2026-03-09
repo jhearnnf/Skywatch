@@ -80,6 +80,25 @@ const appSettingsSchema = new mongoose.Schema({
   // Tutorial text overrides — keys are '<tutorialId>_<stepIndex>' (e.g. 'welcome_0')
   // Absent or empty fields fall back to the hardcoded defaults in TutorialContext.
   tutorialContent: { type: mongoose.Schema.Types.Mixed, default: {} },
+
+  // Welcome email — all fields optional; absent or empty falls back to hardcoded defaults in email.js
+  welcomeEmailSubject: { type: String, default: '' },
+  welcomeEmailHeading: { type: String, default: '' },
+  welcomeEmailBody:    { type: String, default: '' },
+  welcomeEmailCta:     { type: String, default: '' },
+  welcomeEmailFooter:  { type: String, default: '' },
+
+  // Combat readiness (difficulty selection) screen — all optional; absent/empty falls back to hardcoded defaults
+  combatReadinessTitle:    { type: String, default: '' },
+  combatReadinessSubtitle: { type: String, default: '' },
+  combatReadinessEasyLabel:  { type: String, default: '' },
+  combatReadinessEasyTag:    { type: String, default: '' },
+  combatReadinessEasyFlavor: { type: String, default: '' },
+  combatReadinessEasyStars:  { type: String, default: '' },
+  combatReadinessMediumLabel:  { type: String, default: '' },
+  combatReadinessMediumTag:    { type: String, default: '' },
+  combatReadinessMediumFlavor: { type: String, default: '' },
+  combatReadinessMediumStars:  { type: String, default: '' },
 });
 
 // Static helper — always returns (or creates) the single settings document

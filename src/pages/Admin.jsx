@@ -380,8 +380,7 @@ function StatsTab({ API }) {
           <AdminStat label="Perfect Score"     value={stats.games.totalGamesCompleted > 0 ? `${Math.round((stats.games.totalPerfectScores / stats.games.totalGamesCompleted) * 100)}%` : '—'} title="% of completed (non-abandoned) quizzes where the user scored 100%" />
           <AdminStat label="Quizzes Lost"      value={stats.games.totalGamesCompleted > 0 ? `${Math.round((stats.games.totalGamesLost    / stats.games.totalGamesCompleted) * 100)}%` : '—'} title={`% of completed (non-abandoned) quizzes where the user scored below the pass threshold (Easy: ${stats.games.passThresholdEasy}%, Medium: ${stats.games.passThresholdMedium}%)`} />
           <AdminStat label="Quizzes Abandoned" value={stats.games.totalGamesPlayed > 0 ? `${Math.round((stats.games.totalGamesAbandoned / stats.games.totalGamesPlayed) * 100)}%` : '—'} />
-          <AdminStat label="Time Played"       value={fmtSeconds(stats.games.quizTotalSeconds)} title="Total time across all quiz attempts" />
-          <AdminStat label="Aircoins in System" value={fmtNum(stats.games.totalAircoinsEarned)} />
+          <AdminStat label="Time Played" value={fmtSeconds(stats.games.quizTotalSeconds)} title="Total time across all quiz attempts" />
         </div>
       </div>
       <div className="admin-section">
@@ -391,13 +390,26 @@ function StatsTab({ API }) {
           <AdminStat label="Perfect Score" value={stats.games.boo.total > 0 ? `${Math.round((stats.games.boo.won      / stats.games.boo.total) * 100)}%` : '—'} title="% of all BOO games where the user won" />
           <AdminStat label="Defeated"      value={stats.games.boo.total > 0 ? `${Math.round((stats.games.boo.defeated / stats.games.boo.total) * 100)}%` : '—'} title="% of all BOO games where the user was defeated (not abandoned)" />
           <AdminStat label="Abandoned"     value={stats.games.boo.total > 0 ? `${Math.round((stats.games.boo.abandoned / stats.games.boo.total) * 100)}%` : '—'} />
-          <AdminStat label="Time Played"   value={fmtSeconds(stats.games.boo.totalSeconds)} title="Total time across all BOO games" />
+          <AdminStat label="Time Played"   value={fmtSeconds(stats.games.boo.totalSeconds)} title="Total time across all BOO games (including abandoned)" />
+        </div>
+      </div>
+      <div className="admin-section">
+        <h3 className="admin-section-title">Aircoins</h3>
+        <div className="admin-stats-grid">
+          <AdminStat label="Aircoins in System" value={fmtNum(stats.games.totalAircoinsEarned)} title="Total aircoins earned across all users" />
         </div>
       </div>
       <div className="admin-section">
         <h3 className="admin-section-title">Intel Briefs</h3>
         <div className="admin-stats-grid">
           <AdminStat label="Total Briefs Read" value={stats.briefs.totalBrifsRead} />
+        </div>
+      </div>
+      <div className="admin-section">
+        <h3 className="admin-section-title">Tutorials</h3>
+        <div className="admin-stats-grid">
+          <AdminStat label="Tutorials Read"    value={stats.tutorials.viewed}  title="Total tutorial steps marked as viewed across all users" />
+          <AdminStat label="Tutorials Skipped" value={stats.tutorials.skipped} title="Total tutorial steps skipped across all users" />
         </div>
       </div>
     </div>
@@ -3231,15 +3243,173 @@ function TutorialsTab({ API }) {
   )
 }
 
+// ── Content tab ───────────────────────────────────────────────────────────────
+// Editable copy: welcome email + combat readiness screen text
+
+const COMBAT_READINESS_DEFAULTS = {
+  combatReadinessTitle:          'Select Combat Readiness',
+  combatReadinessSubtitle:       'Choose your quiz difficulty. You can change this anytime from your profile.',
+  combatReadinessEasyLabel:      'Recruit',
+  combatReadinessEasyTag:        'EASY',
+  combatReadinessEasyFlavor:     'Three answer choices. Training wheels on. No shame in it, Airman.',
+  combatReadinessEasyStars:      '★★★☆☆',
+  combatReadinessMediumLabel:    'Operative',
+  combatReadinessMediumTag:      'MEDIUM',
+  combatReadinessMediumFlavor:   'Five choices. The real RAF quiz. Separate the rookies from the veterans.',
+  combatReadinessMediumStars:    '★★★★☆',
+}
+
+const WELCOME_EMAIL_DEFAULTS = {
+  welcomeEmailSubject: 'Welcome to Skywatch — Mission Briefing',
+  welcomeEmailHeading: 'Welcome to Skywatch',
+  welcomeEmailBody:    'Your intelligence briefings are ready. Study RAF aircraft, ranks, bases, squadrons, and doctrine. Test your recall through gamified knowledge checks and earn Aircoins to climb the Intelligence Corps rank ladder.',
+  welcomeEmailCta:     'Begin Mission',
+  welcomeEmailFooter:  'Skywatch — Intelligence Study Platform for RAF Applicants & Enthusiasts.\nIf you didn\'t create this account, you can safely ignore this email.',
+}
+
+function ContentTab({ API }) {
+  const [settings,    setSettings]    = useState(null)
+  const [draft,       setDraft]       = useState({})
+  const [reasonModal, setReasonModal] = useState(null)
+  const [feedback,    setFeedback]    = useState('')
+
+  const loadSettings = useCallback(() => {
+    fetch(`${API}/api/admin/settings`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { const s = d.data?.settings; if (s) { setSettings(s); setDraft(s) } })
+  }, [API])
+
+  useEffect(() => { loadSettings() }, [loadSettings])
+
+  const saveSection = (label, fields) => {
+    const updates = {}
+    fields.forEach(f => { updates[f] = draft[f] })
+    setReasonModal({
+      label,
+      onConfirm: async (reason) => {
+        await fetch(`${API}/api/admin/settings`, {
+          method: 'PATCH', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...updates, reason }),
+        })
+        setReasonModal(null)
+        setFeedback(`${label} saved.`)
+        setTimeout(() => setFeedback(''), 3000)
+        loadSettings()
+      },
+    })
+  }
+
+  const textField = (key, label, defaultText, rows) => (
+    <div className="settings-field" key={key}>
+      <label className="settings-field__label">{label}</label>
+      {rows ? (
+        <textarea
+          className="form-textarea"
+          rows={rows}
+          placeholder={defaultText}
+          value={draft[key] ?? ''}
+          onChange={e => setDraft(prev => ({ ...prev, [key]: e.target.value }))}
+        />
+      ) : (
+        <input
+          type="text"
+          className="settings-field__input"
+          placeholder={defaultText}
+          value={draft[key] ?? ''}
+          onChange={e => setDraft(prev => ({ ...prev, [key]: e.target.value }))}
+        />
+      )}
+    </div>
+  )
+
+  if (!settings) return <p className="admin-loading">Loading…</p>
+
+  return (
+    <div>
+      {reasonModal && (
+        <ReasonModal
+          action={reasonModal.label}
+          onConfirm={reasonModal.onConfirm}
+          onCancel={() => setReasonModal(null)}
+        />
+      )}
+      {feedback && <p className="admin-feedback">{feedback}</p>}
+
+      {/* Welcome Email */}
+      <div className="admin-section">
+        <h3 className="admin-section-title">Welcome Email</h3>
+        <p className="admin-section-sub">
+          Customise the new-account welcome email. Leave any field blank to use the default text (shown as placeholder).
+        </p>
+        {textField('welcomeEmailSubject', 'Subject line',    WELCOME_EMAIL_DEFAULTS.welcomeEmailSubject)}
+        {textField('welcomeEmailHeading', 'Heading',         WELCOME_EMAIL_DEFAULTS.welcomeEmailHeading)}
+        {textField('welcomeEmailBody',    'Body text',       WELCOME_EMAIL_DEFAULTS.welcomeEmailBody, 4)}
+        {textField('welcomeEmailCta',     'CTA button text', WELCOME_EMAIL_DEFAULTS.welcomeEmailCta)}
+        {textField('welcomeEmailFooter',  'Footer text',     WELCOME_EMAIL_DEFAULTS.welcomeEmailFooter, 3)}
+        <p className="admin-section-sub" style={{ marginTop: '0.5rem' }}>
+          HTML is supported in the footer (e.g. <code>&lt;br&gt;</code>, <code>&amp;amp;</code>).
+        </p>
+        <button
+          className="btn-primary settings-save"
+          onClick={() => saveSection('Update Welcome Email', ['welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}
+        >
+          Save Welcome Email
+        </button>
+      </div>
+
+      {/* Combat Readiness screen */}
+      <div className="admin-section">
+        <h3 className="admin-section-title">Select Combat Readiness Screen</h3>
+        <p className="admin-section-sub">
+          Customise the difficulty selection screen shown after new account registration. Leave any field blank to use the default text (shown as placeholder).
+        </p>
+
+        <p className="admin-section-sub" style={{ marginTop: '1rem' }}>Screen header</p>
+        {textField('combatReadinessTitle',    'Title',    COMBAT_READINESS_DEFAULTS.combatReadinessTitle)}
+        {textField('combatReadinessSubtitle', 'Subtitle', COMBAT_READINESS_DEFAULTS.combatReadinessSubtitle)}
+
+        <p className="admin-section-sub" style={{ marginTop: '1rem' }}>
+          Easy option <span className="settings-tier-badge settings-tier-badge--free">Easy</span>
+        </p>
+        {textField('combatReadinessEasyLabel',  'Label (name)',    COMBAT_READINESS_DEFAULTS.combatReadinessEasyLabel)}
+        {textField('combatReadinessEasyTag',    'Tag (e.g. EASY)', COMBAT_READINESS_DEFAULTS.combatReadinessEasyTag)}
+        {textField('combatReadinessEasyStars',  'Stars',           COMBAT_READINESS_DEFAULTS.combatReadinessEasyStars)}
+        {textField('combatReadinessEasyFlavor', 'Flavour text',    COMBAT_READINESS_DEFAULTS.combatReadinessEasyFlavor, 2)}
+
+        <p className="admin-section-sub" style={{ marginTop: '1rem' }}>
+          Medium option <span className="settings-tier-badge settings-tier-badge--silver">Medium</span>
+        </p>
+        {textField('combatReadinessMediumLabel',  'Label (name)',      COMBAT_READINESS_DEFAULTS.combatReadinessMediumLabel)}
+        {textField('combatReadinessMediumTag',    'Tag (e.g. MEDIUM)', COMBAT_READINESS_DEFAULTS.combatReadinessMediumTag)}
+        {textField('combatReadinessMediumStars',  'Stars',             COMBAT_READINESS_DEFAULTS.combatReadinessMediumStars)}
+        {textField('combatReadinessMediumFlavor', 'Flavour text',      COMBAT_READINESS_DEFAULTS.combatReadinessMediumFlavor, 2)}
+
+        <button
+          className="btn-primary settings-save"
+          onClick={() => saveSection('Update Combat Readiness Screen', [
+            'combatReadinessTitle', 'combatReadinessSubtitle',
+            'combatReadinessEasyLabel', 'combatReadinessEasyTag', 'combatReadinessEasyFlavor', 'combatReadinessEasyStars',
+            'combatReadinessMediumLabel', 'combatReadinessMediumTag', 'combatReadinessMediumFlavor', 'combatReadinessMediumStars',
+          ])}
+        >
+          Save Combat Readiness Screen
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Admin page ───────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'stats',    label: 'App Stats'     },
-  { id: 'briefs',   label: 'Intel Briefs'  },
-  { id: 'problems', label: 'Problems'      },
-  { id: 'users',    label: 'Users'         },
-  { id: 'settings',  label: 'Settings'   },
+  { id: 'stats',    label: 'App Stats'    },
+  { id: 'briefs',   label: 'Intel Briefs' },
+  { id: 'problems', label: 'Problems'     },
+  { id: 'users',    label: 'Users'        },
+  { id: 'settings', label: 'Settings'    },
   { id: 'tutorials', label: 'Tutorials'  },
+  { id: 'content',  label: 'Content'     },
 ]
 
 // ── Admin subscription emulator ───────────────────────────────────────────────
@@ -3337,6 +3507,7 @@ export default function Admin({ navigate }) {
           {tab === 'users'    && <UsersTab    API={API} navigate={navigate} />}
           {tab === 'settings'  && <SettingsTab  API={API} />}
           {tab === 'tutorials' && <TutorialsTab API={API} />}
+          {tab === 'content'   && <ContentTab   API={API} />}
         </div>
 
       </div>

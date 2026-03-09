@@ -1,4 +1,5 @@
-const { Resend } = require('resend');
+const { Resend }      = require('resend');
+const AppSettings     = require('../models/AppSettings');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -6,16 +7,32 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // In development, Resend allows sending from onboarding@resend.dev.
 const FROM = 'Skywatch <onboarding@resend.dev>';
 
+// Default copy — used when admin has not overridden the field.
+const DEFAULTS = {
+  subject: 'Welcome to Skywatch — Mission Briefing',
+  heading: 'Welcome to Skywatch',
+  body:    'Your intelligence briefings are ready. Study RAF aircraft, ranks, bases, squadrons, and doctrine. Test your recall through gamified knowledge checks and earn Aircoins to climb the Intelligence Corps rank ladder.',
+  cta:     'Begin Mission',
+  footer:  'Skywatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>If you didn&apos;t create this account, you can safely ignore this email.',
+};
+
 // Send a welcome email to a newly registered agent.
 // Errors are caught internally so a mail failure never blocks registration.
 async function sendWelcomeEmail({ email, agentNumber }) {
   try {
-    const appUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const appUrl  = process.env.CLIENT_URL || 'http://localhost:5173';
+    const s       = await AppSettings.getSettings();
+
+    const subject = s.welcomeEmailSubject?.trim() || DEFAULTS.subject;
+    const heading = s.welcomeEmailHeading?.trim() || DEFAULTS.heading;
+    const body    = s.welcomeEmailBody?.trim()    || DEFAULTS.body;
+    const cta     = s.welcomeEmailCta?.trim()     || DEFAULTS.cta;
+    const footer  = s.welcomeEmailFooter?.trim()  || DEFAULTS.footer;
 
     await resend.emails.send({
       from: FROM,
       to: email,
-      subject: 'Welcome to Skywatch — Mission Briefing',
+      subject,
       html: `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -35,7 +52,7 @@ async function sendWelcomeEmail({ email, agentNumber }) {
           </p>
 
           <h1 style="font-size:26px;font-weight:800;color:#0f172a;letter-spacing:-0.02em;margin:0 0 8px;line-height:1.2;">
-            Welcome to Skywatch
+            ${heading}
           </h1>
 
           <p style="font-size:13px;color:#94a3b8;letter-spacing:0.04em;margin:0 0 28px;">
@@ -43,20 +60,18 @@ async function sendWelcomeEmail({ email, agentNumber }) {
           </p>
 
           <p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 32px;">
-            Your intelligence briefings are ready. Study RAF aircraft, ranks, bases, squadrons, and doctrine.
-            Test your recall through gamified knowledge checks and earn Aircoins to climb the Intelligence Corps rank ladder.
+            ${body}
           </p>
 
           <a href="${appUrl}"
              style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;
                     font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;
                     padding:13px 30px;border-radius:6px;">
-            Begin Mission
+            ${cta}
           </a>
 
           <p style="font-size:11px;color:#94a3b8;margin:36px 0 0;padding-top:24px;border-top:1px solid #e2e8f0;line-height:1.6;">
-            Skywatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>
-            If you didn&apos;t create this account, you can safely ignore this email.
+            ${footer}
           </p>
 
         </td></tr>

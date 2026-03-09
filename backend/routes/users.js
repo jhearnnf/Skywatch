@@ -93,7 +93,19 @@ router.get('/leaderboard', async (req, res) => {
 router.get('/settings', async (req, res) => {
   try {
     const settings = await AppSettings.getSettings();
-    res.json({ status: 'success', data: { useLiveLeaderboard: settings.useLiveLeaderboard } });
+    res.json({ status: 'success', data: {
+      useLiveLeaderboard: settings.useLiveLeaderboard,
+      combatReadinessTitle:          settings.combatReadinessTitle          || '',
+      combatReadinessSubtitle:       settings.combatReadinessSubtitle       || '',
+      combatReadinessEasyLabel:      settings.combatReadinessEasyLabel      || '',
+      combatReadinessEasyTag:        settings.combatReadinessEasyTag        || '',
+      combatReadinessEasyFlavor:     settings.combatReadinessEasyFlavor     || '',
+      combatReadinessEasyStars:      settings.combatReadinessEasyStars      || '',
+      combatReadinessMediumLabel:    settings.combatReadinessMediumLabel    || '',
+      combatReadinessMediumTag:      settings.combatReadinessMediumTag      || '',
+      combatReadinessMediumFlavor:   settings.combatReadinessMediumFlavor   || '',
+      combatReadinessMediumStars:    settings.combatReadinessMediumStars    || '',
+    } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

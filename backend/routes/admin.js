@@ -47,6 +47,7 @@ router.get('/stats', async (_req, res) => {
       aircoinAgg, loginAgg,
       quizTimeAgg,
       booTotal, booWon, booDefeated, booAbandoned, booTimeAgg,
+      tutorialAgg,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ subscriptionTier: 'free' }),
@@ -78,6 +79,24 @@ router.get('/stats', async (_req, res) => {
       GameSessionOrderOfBattleResult.aggregate([
         { $group: { _id: null, total: { $sum: { $ifNull: ['$timeTakenSeconds', 0] } } } },
       ]),
+      // Tutorial viewed/skipped counts across all users and all 4 tutorial fields
+      User.aggregate([{
+        $group: {
+          _id: null,
+          viewed: { $sum: { $add: [
+            { $cond: [{ $eq: ['$tutorials.welcome',     'viewed'] }, 1, 0] },
+            { $cond: [{ $eq: ['$tutorials.intel_brief', 'viewed'] }, 1, 0] },
+            { $cond: [{ $eq: ['$tutorials.user',        'viewed'] }, 1, 0] },
+            { $cond: [{ $eq: ['$tutorials.load_up',     'viewed'] }, 1, 0] },
+          ]}},
+          skipped: { $sum: { $add: [
+            { $cond: [{ $eq: ['$tutorials.welcome',     'skipped'] }, 1, 0] },
+            { $cond: [{ $eq: ['$tutorials.intel_brief', 'skipped'] }, 1, 0] },
+            { $cond: [{ $eq: ['$tutorials.user',        'skipped'] }, 1, 0] },
+            { $cond: [{ $eq: ['$tutorials.load_up',     'skipped'] }, 1, 0] },
+          ]}},
+        },
+      }]),
     ]);
 
     // Combined login streaks — requires virtual, so fetch all users
@@ -113,6 +132,10 @@ router.get('/stats', async (_req, res) => {
           },
         },
         briefs: { totalBrifsRead },
+        tutorials: {
+          viewed:  tutorialAgg[0]?.viewed  ?? 0,
+          skipped: tutorialAgg[0]?.skipped ?? 0,
+        },
       },
     });
   } catch (err) {

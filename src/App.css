@@ -5725,8 +5725,15 @@ button.nav-aircoins:hover {
 
 /* Locked state — not enough briefs */
 .boa-trigger-wrap--locked {
-  opacity: 0.6;
   pointer-events: none;
+}
+/* Dim only the card content, not the lock badge */
+.boa-trigger-wrap--locked .boa-trigger-inner {
+  opacity: 0.5;
+}
+/* Hide Mini Game tag when locked so the lock badge is the sole focus */
+.boa-trigger-wrap--locked .boa-mini-game-tag {
+  display: none;
 }
 .boa-trigger-locked-msg {
   font-size: 0.82rem;
