@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 const REASON_LABELS = {
   brief_read:      'Intel Brief Read',
   quiz:            'Quiz Completed',
-  order_of_battle: 'Order of Battle',
+  order_of_battle: 'Battle of Order - Mini Game',
   whos_at_aircraft:"Who's That Aircraft",
   flashcard:       'Flashcard Recall',
   admin:           'Admin Award',
@@ -27,7 +27,7 @@ function formatDate(iso) {
     ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function AircoinHistory({ navigate }) {
+export default function AircoinHistory({ navigate, targetUser }) {
   const { user, API } = useAuth()
   const [logs, setLogs]     = useState([])
   const [total, setTotal]   = useState(0)
@@ -36,12 +36,16 @@ export default function AircoinHistory({ navigate }) {
   const [error, setError]   = useState(null)
 
   const LIMIT = 30
+  const isAdminView = !!targetUser
 
   const fetchHistory = useCallback(async (p) => {
     setLoading(true)
     setError(null)
     try {
-      const res  = await fetch(`${API}/api/users/aircoins/history?page=${p}&limit=${LIMIT}`, { credentials: 'include' })
+      const url = isAdminView
+        ? `${API}/api/admin/users/${targetUser._id}/aircoins/history?page=${p}&limit=${LIMIT}`
+        : `${API}/api/users/aircoins/history?page=${p}&limit=${LIMIT}`
+      const res  = await fetch(url, { credentials: 'include' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || 'Failed to load history')
       setLogs(json.data.logs)
@@ -51,7 +55,7 @@ export default function AircoinHistory({ navigate }) {
     } finally {
       setLoading(false)
     }
-  }, [API])
+  }, [API, isAdminView, targetUser?._id])
 
   useEffect(() => {
     if (!user) { navigate('login'); return }
@@ -59,25 +63,30 @@ export default function AircoinHistory({ navigate }) {
   }, [user, page, fetchHistory, navigate])
 
   const totalPages = Math.ceil(total / LIMIT)
+  const displayBalance = isAdminView ? (targetUser.totalAircoins ?? 0) : (user?.totalAircoins ?? 0)
 
   return (
     <main className="ach-page">
       <div className="ach-inner">
 
         <header className="ach-header">
-          <button className="ach-back" onClick={() => navigate('profile')} aria-label="Back">
+          <button className="ach-back" onClick={() => navigate(isAdminView ? 'admin' : 'profile')} aria-label="Back">
             ← Back
           </button>
           <div className="ach-title-row">
             <span className="ach-hex-icon" aria-hidden="true">⬡</span>
             <div>
               <h1 className="ach-title">Aircoin Ledger</h1>
-              <p className="ach-subtitle">CLASSIFIED — AGENT REWARD RECORD</p>
+              <p className="ach-subtitle">
+                {isAdminView
+                  ? `AGENT ${targetUser.agentNumber} — ADMIN VIEW`
+                  : 'CLASSIFIED — AGENT REWARD RECORD'}
+              </p>
             </div>
           </div>
           <div className="ach-total-badge">
             <span className="ach-total-label">Total Balance</span>
-            <span className="ach-total-value">⬡ {(user?.totalAircoins ?? 0).toLocaleString()}</span>
+            <span className="ach-total-value">⬡ {displayBalance.toLocaleString()}</span>
           </div>
         </header>
 

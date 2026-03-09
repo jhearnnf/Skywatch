@@ -353,7 +353,7 @@ router.get('/battle-of-order/status/:briefId', protect, async (req, res) => {
 // POST /api/games/battle-of-order/submit — validate user order, award coins
 router.post('/battle-of-order/submit', protect, async (req, res) => {
   try {
-    const { gameId, userChoices } = req.body;
+    const { gameId, userChoices, timeTakenSeconds } = req.body;
     if (!gameId || !userChoices) return res.status(400).json({ message: 'gameId and userChoices required' });
 
     const game = await GameOrderOfBattle.findById(gameId);
@@ -393,13 +393,13 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
           : (settings.aircoinsOrderOfBattleEasy   ?? 8);
         const brief      = await IntelligenceBrief.findById(game.anchorBriefId).select('title').lean();
         const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'battle_of_order',
-          `Battle of Order (${game.difficulty}): ${brief?.title ?? 'Unknown'} — ${game.orderType}`, game.anchorBriefId);
+          `Battle of Order - Mini Game (${game.difficulty}): ${brief?.title ?? 'Unknown'} — ${game.orderType}`, game.anchorBriefId);
         rankPromotion = coinResult.rankPromotion;
         cycleAircoins = coinResult.cycleAircoins;
       }
     }
 
-    await GameSessionOrderOfBattleResult.create({ userId: req.user._id, gameId, won, abandoned: false, userChoices, aircoinsEarned });
+    await GameSessionOrderOfBattleResult.create({ userId: req.user._id, gameId, won, abandoned: false, userChoices, aircoinsEarned, timeTakenSeconds: timeTakenSeconds ?? null });
 
     // Build correct reveal (populate gameData for display values)
     const populated = await GameOrderOfBattle.findById(gameId)
@@ -492,7 +492,7 @@ router.get('/history', protect, async (req, res) => {
         .sort({ timeStarted: -1 })
         .lean(),
       GameSessionWhosAtAircraftResult.find({ userId }).sort({ createdAt: -1 }).lean(),
-      GameSessionOrderOfBattleResult.find({ userId }).populate({ path: 'gameId', select: 'category difficulty orderType anchorBriefId' }).sort({ createdAt: -1 }).lean(),
+      GameSessionOrderOfBattleResult.find({ userId }).populate({ path: 'gameId', select: 'category difficulty orderType anchorBriefId', populate: { path: 'anchorBriefId', select: 'title' } }).sort({ createdAt: -1 }).lean(),
       GameSessionFlashcardRecallResult.find({ userId }).sort({ createdAt: -1 }).lean(),
     ]);
 
@@ -530,16 +530,18 @@ router.get('/history', protect, async (req, res) => {
       })),
       ...oob.map(r => ({
         _id:           r._id,
-        type:          'battle_of_order',
+        type:          'order_of_battle',
         date:          r.createdAt,
         status:        r.abandoned ? 'abandoned' : r.won ? 'won' : 'lost',
         won:           r.won,
         abandoned:     r.abandoned,
+        briefTitle:    r.gameId?.anchorBriefId?.title ?? null,
         category:      r.gameId?.category,
         difficulty:    r.gameId?.difficulty,
         orderType:     r.gameId?.orderType,
-        aircoinsEarned: r.aircoinsEarned,
-        canDrillDown:  false,
+        aircoinsEarned:   r.aircoinsEarned,
+        timeTakenSeconds: r.timeTakenSeconds ?? null,
+        canDrillDown:     !r.abandoned,
       })),
       ...flash.map(r => {
         const recalled = r.cardResults?.filter(c => c.recalled).length ?? 0;
@@ -606,6 +608,45 @@ router.get('/history/quiz/:attemptId', protect, async (req, res) => {
       });
 
     res.json({ status: 'success', data: { attempt, questions: detailed } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/history/battle-of-order/:sessionId — per-choice drill-down for a BOO session
+router.get('/history/battle-of-order/:sessionId', protect, async (req, res) => {
+  try {
+    const session = await GameSessionOrderOfBattleResult.findOne({
+      _id: req.params.sessionId,
+      userId: req.user._id,
+    }).lean();
+    if (!session) return res.status(404).json({ message: 'Session not found' });
+
+    const game = await GameOrderOfBattle.findById(session.gameId)
+      .populate({ path: 'choices.briefId', select: 'title gameData' })
+      .lean();
+    if (!game) return res.status(404).json({ message: 'Game not found' });
+
+    const items = game.choices.map(c => {
+      const userChoice = session.userChoices.find(uc => uc.choiceId.toString() === c._id.toString());
+      return {
+        choiceId:     c._id,
+        briefTitle:   c.briefId?.title ?? 'Unknown',
+        correctOrder: c.correctOrder,
+        userOrder:    userChoice?.userOrderNumber ?? null,
+        isCorrect:    userChoice?.userOrderNumber === c.correctOrder,
+        displayValue: getDisplayValue(game.orderType, c.briefId?.gameData),
+      };
+    }).sort((a, b) => a.correctOrder - b.correctOrder);
+
+    res.json({ status: 'success', data: {
+      won:       session.won,
+      abandoned: session.abandoned,
+      category:  game.category,
+      orderType: game.orderType,
+      difficulty: game.difficulty,
+      items,
+    }});
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

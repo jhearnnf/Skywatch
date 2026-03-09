@@ -46,8 +46,9 @@ export default function BattleOfOrderModal({ briefId, category, onClose, onCompl
   const [userOrder,         setUserOrder]          = useState([])
   const [result,            setResult]             = useState(null)
   const [submitting,        setSubmitting]         = useState(false)
-  const abandonedRef = useRef(false)
-  const gameIdRef    = useRef(null)
+  const abandonedRef      = useRef(false)
+  const gameIdRef         = useRef(null)
+  const gameStartTimeRef  = useRef(null)
 
   // Fetch options on mount
   useEffect(() => {
@@ -127,7 +128,8 @@ export default function BattleOfOrderModal({ briefId, category, onClose, onCompl
           return
         }
         const { gameId, choices, orderType, difficulty } = data.data
-        gameIdRef.current = gameId
+        gameIdRef.current        = gameId
+        gameStartTimeRef.current = Date.now()
         setGame({ gameId, orderType, difficulty })
         setUserOrder(choices)
         setPhase('playing')
@@ -152,11 +154,14 @@ export default function BattleOfOrderModal({ briefId, category, onClose, onCompl
       choiceId: item.choiceId,
       userOrderNumber: idx + 1,
     }))
+    const timeTakenSeconds = gameStartTimeRef.current
+      ? Math.round((Date.now() - gameStartTimeRef.current) / 1000)
+      : null
     try {
       const res  = await fetch(`${API}/api/games/battle-of-order/submit`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gameId: game.gameId, userChoices }),
+        body: JSON.stringify({ gameId: game.gameId, userChoices, timeTakenSeconds }),
       })
       const data = await res.json()
       if (data.status !== 'success') throw new Error(data.message)
@@ -215,7 +220,7 @@ export default function BattleOfOrderModal({ briefId, category, onClose, onCompl
   const lockedMeta = selectedOrderType ? ORDER_TYPE_META[selectedOrderType] : null
 
   return (
-    <div className="modal-overlay" role="dialog" aria-label="Battle of Order">
+    <div className="modal-overlay" role="dialog" aria-label="Battle of Order - Mini Game">
       <div className="modal boa-modal">
 
         {/* Classification banner */}

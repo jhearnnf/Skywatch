@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 const TYPE_LABELS = {
   quiz:            'Intel Brief Quiz',
   whos_at_aircraft:"Who's That Aircraft",
-  order_of_battle: 'Order of Battle',
+  order_of_battle: 'Battle of Order - Mini Game',
   flashcard:       'Flashcard Recall',
 }
 
@@ -13,6 +13,16 @@ const TYPE_ICONS = {
   whos_at_aircraft:'✈️',
   order_of_battle: '📋',
   flashcard:       '🃏',
+}
+
+const ORDER_TYPE_META = {
+  speed:           { label: 'TOP SPEED',       direction: 'Slowest → Fastest',   startLabel: 'SLOWEST',      endLabel: 'FASTEST'     },
+  year_introduced: { label: 'YEAR INTRODUCED', direction: 'Oldest → Newest',     startLabel: 'OLDEST',       endLabel: 'NEWEST'      },
+  year_retired:    { label: 'YEAR RETIRED',    direction: 'Earliest → Latest',   startLabel: 'EARLIEST',     endLabel: 'LATEST'      },
+  rank_hierarchy:  { label: 'RANK HIERARCHY',  direction: 'Most Senior → Junior',startLabel: 'MOST SENIOR',  endLabel: 'MOST JUNIOR' },
+  training_week:   { label: 'TRAINING PHASE',  direction: 'First Phase → Last',  startLabel: 'FIRST PHASE',  endLabel: 'LAST PHASE'  },
+  start_year:      { label: 'YEAR STARTED',    direction: 'Earliest → Latest',   startLabel: 'EARLIEST',     endLabel: 'LATEST'      },
+  end_year:        { label: 'YEAR CONCLUDED',  direction: 'Earliest → Latest',   startLabel: 'EARLIEST',     endLabel: 'LATEST'      },
 }
 
 function formatDate(iso) {
@@ -37,6 +47,11 @@ function StatusBadge({ session }) {
   if (session.type === 'flashcard') {
     if (session.status === 'perfect') return <span className="gh-badge gh-badge--perfect">PERFECT RECALL</span>
     return <span className="gh-badge gh-badge--pass">COMPLETED</span>
+  }
+  if (session.type === 'order_of_battle') {
+    if (session.abandoned) return <span className="gh-badge gh-badge--abandoned">ABANDONED</span>
+    if (session.won) return <span className="gh-badge gh-badge--perfect">VICTORY</span>
+    return <span className="gh-badge gh-badge--fail">DEFEAT</span>
   }
   if (session.isCorrect) return <span className="gh-badge gh-badge--pass">CORRECT</span>
   return <span className="gh-badge gh-badge--fail">INCORRECT</span>
@@ -92,13 +107,89 @@ function QuizDrillDown({ attemptId, API }) {
   )
 }
 
+function BooOrderDrillDown({ sessionId, API }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`${API}/api/games/history/battle-of-order/${sessionId}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(json => {
+        if (json.status === 'success') setData(json.data)
+        else throw new Error(json.message || 'Failed to load')
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [sessionId, API])
+
+  if (loading) return <div className="gh-drill-loading">RETRIEVING ORDER DATA…</div>
+  if (error)   return <div className="gh-drill-error">Error: {error}</div>
+  if (!data)   return null
+
+  const meta = ORDER_TYPE_META[data.orderType]
+  const typeLabel  = meta?.label      ?? data.orderType.replace(/_/g, ' ').toUpperCase()
+  const direction  = meta?.direction  ?? ''
+  const startLabel = meta?.startLabel ?? '#1'
+  const endLabel   = meta?.endLabel   ?? `#${data.items.length}`
+  const total      = data.items.length
+
+  // Build a lookup: position → which brief the user placed there
+  const byUserOrder = {}
+  data.items.forEach(item => { if (item.userOrder != null) byUserOrder[item.userOrder] = item })
+
+  const posLabel = (correctOrder) => {
+    if (correctOrder === 1)     return { text: startLabel, mod: 'start' }
+    if (correctOrder === total) return { text: endLabel,   mod: 'end'   }
+    return { text: '↓', mod: 'mid' }
+  }
+
+  return (
+    <div className="gh-drill gh-drill--boo">
+      <div className="gh-boo-header">
+        <span className="gh-boo-header__type">{typeLabel}</span>
+        <span className="gh-boo-header__dir">{direction}</span>
+      </div>
+      <div className="gh-boo-table">
+        <div className="gh-boo-table__head">
+          <span className="gh-boo-col gh-boo-col--pos">POSITION</span>
+          <span className="gh-boo-col gh-boo-col--answer">CORRECT ANSWER</span>
+          <span className="gh-boo-col gh-boo-col--answer">YOUR ANSWER</span>
+          <span className="gh-boo-col gh-boo-col--result">✓/✗</span>
+        </div>
+        {data.items.map((item, i) => {
+          const pos        = posLabel(item.correctOrder)
+          const userChoice = byUserOrder[item.correctOrder]
+          const match      = item.isCorrect
+          return (
+            <div key={i} className={`gh-boo-table__row ${match ? 'gh-boo-table__row--correct' : 'gh-boo-table__row--wrong'}`}>
+              <span className={`gh-boo-col gh-boo-col--pos gh-boo-pos--${pos.mod}`}>{pos.text}</span>
+              <div className="gh-boo-col gh-boo-col--answer gh-boo-answer--correct">
+                <span className="gh-boo-answer__name">{item.briefTitle}</span>
+                {item.displayValue && <span className="gh-boo-answer__val">{item.displayValue}</span>}
+              </div>
+              <div className={`gh-boo-col gh-boo-col--answer ${match ? 'gh-boo-answer--match' : 'gh-boo-answer--miss'}`}>
+                <span className="gh-boo-answer__name">{userChoice?.briefTitle ?? '—'}</span>
+                {userChoice?.displayValue && <span className="gh-boo-answer__val">{userChoice.displayValue}</span>}
+              </div>
+              <span className="gh-boo-col gh-boo-col--result">{match ? '✓' : '✗'}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function SessionRow({ session, API }) {
   const [expanded, setExpanded] = useState(false)
 
   const scoreText = () => {
-    if (session.type === 'quiz')       return `${session.correctAnswers}/${session.totalQuestions} (${session.percentageCorrect}%)`
-    if (session.type === 'flashcard')  return `${session.recalled}/${session.cardCount} recalled`
+    if (session.type === 'quiz')             return `${session.correctAnswers}/${session.totalQuestions} (${session.percentageCorrect}%)`
+    if (session.type === 'flashcard')        return `${session.recalled}/${session.cardCount} recalled`
     if (session.type === 'whos_at_aircraft') return session.userAnswer ? `"${session.userAnswer}"` : '—'
+    if (session.type === 'order_of_battle')  return session.orderType ? (ORDER_TYPE_META[session.orderType]?.label ?? session.orderType.replace(/_/g, ' ').toUpperCase()) : '—'
     return '—'
   }
 
@@ -140,8 +231,11 @@ function SessionRow({ session, API }) {
         )}
       </div>
 
-      {expanded && session.canDrillDown && (
+      {expanded && session.canDrillDown && session.type === 'quiz' && (
         <QuizDrillDown attemptId={session._id} API={API} />
+      )}
+      {expanded && session.canDrillDown && session.type === 'order_of_battle' && (
+        <BooOrderDrillDown sessionId={session._id} API={API} />
       )}
     </li>
   )

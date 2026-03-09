@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { MOCK_LEVELS, MOCK_LEADERBOARD } from '../data/mockData'
+import { getMasterVolume, setMasterVolume } from '../utils/sound'
 
 const TIER_LABELS = { free: 'Free', trial: 'Trial', silver: 'Silver', gold: 'Gold' }
 
@@ -28,6 +29,7 @@ export default function Profile({ navigate }) {
   const [leaderboard,    setLeaderboard]    = useState(MOCK_LEADERBOARD)
   const [useLiveLeaderboard, setUseLive]    = useState(false)
   const [diffBusy,       setDiffBusy]      = useState(false)
+  const [masterVol,      setMasterVol]     = useState(() => getMasterVolume())
 
   // Fetch public data — levels, settings, then conditionally leaderboard
   useEffect(() => {
@@ -136,9 +138,14 @@ export default function Profile({ navigate }) {
                   <p className="profile-agent">Agent {user?.agentNumber ?? '———'}</p>
                   <p className="profile-rank">{rankDisplay}</p>
                 </div>
-                <span className={`tier-badge tier-badge--${user?.subscriptionTier ?? 'free'}`}>
-                  {TIER_LABELS[user?.subscriptionTier ?? 'free']}
-                </span>
+                <div className="profile-tier-group">
+                  <span className={`tier-badge tier-badge--${user?.subscriptionTier ?? 'free'}`}>
+                    {TIER_LABELS[user?.subscriptionTier ?? 'free']}
+                  </span>
+                  {(user?.subscriptionTier ?? 'free') === 'free' && (
+                    <span className="profile-coming-soon">Subscription coming soon</span>
+                  )}
+                </div>
               </div>
 
               {/* Level / XP bar */}
@@ -176,6 +183,31 @@ export default function Profile({ navigate }) {
                   </div>
                 </div>
               )}
+
+              {/* App volume */}
+              <div className="profile-volume">
+                <div className="profile-volume__header">
+                  <span className="profile-volume__label">SkyWatch Volume</span>
+                  <span className="profile-volume__value">{masterVol}%</span>
+                </div>
+                <input
+                  type="range"
+                  className="profile-volume__slider"
+                  min={0}
+                  max={100}
+                  value={masterVol}
+                  onChange={e => {
+                    const v = Number(e.target.value)
+                    setMasterVol(v)
+                    setMasterVolume(v)
+                  }}
+                  aria-label="App volume"
+                />
+                <div className="profile-volume__marks">
+                  <span>Mute</span>
+                  <span>Max</span>
+                </div>
+              </div>
 
               {/* Daily login streak */}
               <div className="streak-display">

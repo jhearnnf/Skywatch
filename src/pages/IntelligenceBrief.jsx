@@ -447,8 +447,11 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   const { user, setUser, API, awardAircoins } = useAuth()
   const { setBlocked, getStatus, startTutorial, activeTutorialId, activeTutorialIdRef: tutorialIdRef, showOverlay: tutShowOverlay } = useTutorial()
 
-  // Touch-only devices don't hover — disable focus mode for them
-  const isMobile = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
+  // Touch/coarse-pointer devices don't hover — disable focus mode for them.
+  // Use both (hover: none) and (pointer: coarse) to catch Android tablets and
+  // stylus devices where (hover: none) alone can return false.
+  const isMobile = typeof window !== 'undefined' &&
+    window.matchMedia('(hover: none), (pointer: coarse)').matches
 
   // Always current — updated synchronously in render (no stale-closure window from useEffect)
   const startTutorialRef = useRef(startTutorial)
@@ -642,8 +645,8 @@ export default function IntelligenceBrief({ briefId, navigate }) {
   // ── HUD position ───────────────────────────────────────────────────────────
   // Keep descRect alive while the dossier modal is open so the HUDs don't disappear
   // when the mouse moves from the description into the modal.
-  // Capture scrollY at the same moment so HUDs can be absolutely positioned in
-  // document space (they then scroll naturally with the page).
+  // HUDs use position:fixed, so descRect must stay current during scroll so they
+  // track the description. A scroll listener refreshes it whenever targeting is active.
   const [mainOffsetY, setMainOffsetY] = useState(0)
 
   useEffect(() => {
@@ -655,6 +658,18 @@ export default function IntelligenceBrief({ briefId, navigate }) {
       setDescRect(null)
     }
   }, [descHovered, dossier, loadUpActive]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresh descRect on scroll so fixed-position HUDs track the description
+  useEffect(() => {
+    if (isMobile) return
+    const onScroll = () => {
+      if (descWrapRef.current && (descHovered || loadUpActive || !!dossier)) {
+        setDescRect(descWrapRef.current.getBoundingClientRect())
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [isMobile, descHovered, loadUpActive, dossier])
 
   // Play targeting engagement sound once when the Load Up tutorial activates.
   // If the user physically hovered (targetingActiveRef already true), the sound
@@ -1137,7 +1152,10 @@ export default function IntelligenceBrief({ briefId, navigate }) {
                 </div>
               )}
               <div className="boa-trigger-inner">
-                <span className="boa-trigger-eyebrow">Intelligence Game</span>
+                <div className="boa-trigger-eyebrow-row">
+                  <span className="boa-trigger-eyebrow">Intelligence Game</span>
+                  <span className="boa-mini-game-tag">Mini Game</span>
+                </div>
                 {allBooComplete && !booLocked ? (
                   <h3 className="boa-trigger-title boa-trigger-title--done">
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true" style={{ verticalAlign: 'middle', marginRight: '0.4rem' }}>

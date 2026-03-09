@@ -72,7 +72,7 @@ function AppInner() {
       case 'contact':           return <Contact />
       case 'about':             return <About />
       case 'report':            return <ReportProblem fromPage={params.fromPage} navigate={navigate} />
-      case 'aircoin-history':   return <AircoinHistory navigate={navigate} />
+      case 'aircoin-history':   return <AircoinHistory navigate={navigate} targetUser={params.targetUser} />
       case 'game-history':      return <GameHistory navigate={navigate} />
       default:                  return <Dashboard navigate={navigate} />
     }

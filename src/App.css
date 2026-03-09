@@ -1801,6 +1801,33 @@
 .diff-btn--medium.diff-btn--active { background: #fef9c3; border-color: #f59e0b; color: #a16207; }
 .diff-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* ── Profile volume slider ──────────────────────────────────────────────────── */
+.profile-volume {
+  padding: 0.75rem 0;
+  border-top: 1px solid #f1f5f9;
+}
+.profile-volume__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.profile-volume__label { font-size: 0.8rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; }
+.profile-volume__value { font-size: 0.8rem; font-weight: 700; color: #1d4ed8; min-width: 2.5rem; text-align: right; }
+.profile-volume__slider {
+  width: 100%;
+  accent-color: #1d4ed8;
+  cursor: pointer;
+}
+.profile-volume__marks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.62rem;
+  color: #94a3b8;
+  margin-top: 0.2rem;
+  letter-spacing: 0.06em;
+}
+
 /* ── Target Dossier ──────────────────────────────────────── */
 
 .dossier-backdrop {
@@ -1811,7 +1838,7 @@
 }
 
 .target-dossier {
-  position: absolute;
+  position: fixed;
   z-index: 1002;
   width: 320px;
   background: #0f172a;
@@ -2589,8 +2616,22 @@
 .profile-agent { font-size: 1.3rem; font-weight: 800; color: #0f172a; margin: 0 0 0.2rem; letter-spacing: -0.01em; }
 .profile-rank  { font-size: 0.875rem; color: #64748b; margin: 0; }
 
-.tier-badge {
+.profile-tier-group {
   margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
+}
+
+.profile-coming-soon {
+  font-size: 0.62rem;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+  font-style: italic;
+}
+
+.tier-badge {
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -2600,7 +2641,7 @@
 }
 
 .tier-badge--free   { color: #64748b; background: #f1f5f9; border: 1px solid #e2e8f0; }
-.tier-badge--trial  { color: #d97706; background: #fef3c7; border: 1px solid #fde68a; }
+.tier-badge--trial  { color: #475569; background: #f1f5f9; border: 1px solid #cbd5e1; }
 .tier-badge--silver { color: #475569; background: #f1f5f9; border: 1px solid #cbd5e1; }
 .tier-badge--gold   { color: #92400e; background: #fef3c7; border: 1px solid #fde68a; }
 
@@ -3553,10 +3594,20 @@
   padding: 0.875rem 1.25rem;
   border-bottom: 1px solid #f1f5f9;
 }
+.admin-user-stats--profile {
+  background: #f8fafc;
+  border-top: 1px solid #f1f5f9;
+}
 
 .admin-user-stat         { display: flex; flex-direction: column; gap: 0.1rem; }
 .admin-user-stat span    { font-size: 0.65rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; }
 .admin-user-stat strong  { font-size: 0.875rem; color: #0f172a; }
+.admin-user-stat__link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 0.875rem; font-weight: 700; color: #1d4ed8;
+  text-align: left; text-decoration: underline; text-underline-offset: 2px;
+}
+.admin-user-stat__link:hover { color: #1e40af; }
 
 /* Reset stats checkboxes */
 .reset-stats-checks {
@@ -5353,6 +5404,142 @@ button.nav-aircoins:hover {
 }
 .gh-drill-error { color: #f87171; }
 
+/* BOO drill-down: no padding — header/table bleed to edges */
+.gh-drill--boo { padding: 0; }
+
+/* BOO drill-down header */
+.gh-boo-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem 0.4rem;
+  background: #0a0f1a;
+  border-bottom: 1px solid #1e293b;
+}
+.gh-boo-header__type {
+  font-family: 'Courier New', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #7dd3fc;
+  text-transform: uppercase;
+}
+.gh-boo-header__dir {
+  font-family: 'Courier New', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: #64748b;
+}
+/* BOO drill-down table */
+.gh-boo-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 0;
+  border: none;
+  overflow: hidden;
+}
+.gh-boo-table__head {
+  display: flex;
+  align-items: center;
+  background: #0a0f1a;
+  border-bottom: 1px solid #1e293b;
+  padding: 0.45rem 0.75rem;
+  gap: 0.5rem;
+}
+.gh-boo-table__head .gh-boo-col {
+  font-size: 0.65rem;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.12em;
+  color: #475569;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.gh-boo-table__row {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  gap: 0.5rem;
+  border-bottom: 1px solid #1e293b;
+}
+.gh-boo-table__row:last-child { border-bottom: none; }
+.gh-boo-table__row--correct { background: rgba(22,101,52,0.10); }
+.gh-boo-table__row--wrong   { background: rgba(153,27,27,0.10); }
+
+.gh-boo-col { display: flex; align-items: center; }
+.gh-boo-col--pos    { width: 88px; flex-shrink: 0; }
+.gh-boo-col--answer { flex: 1; flex-direction: column; align-items: flex-start; gap: 0.15rem; padding: 0 0.5rem; min-width: 0; }
+.gh-boo-col--result { width: 32px; flex-shrink: 0; font-size: 0.85rem; font-weight: 700; justify-content: center; }
+.gh-boo-table__row--correct .gh-boo-col--result { color: #4ade80; }
+.gh-boo-table__row--wrong   .gh-boo-col--result { color: #f87171; }
+
+/* Answer cell content */
+.gh-boo-answer__name {
+  font-size: 0.76rem;
+  color: #e2e8f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.gh-boo-answer__val {
+  font-family: 'Courier New', monospace;
+  font-size: 0.65rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+/* Correct answer column — always neutral */
+.gh-boo-answer--correct .gh-boo-answer__name { color: #94a3b8; }
+.gh-boo-answer--correct .gh-boo-answer__val  { color: #475569; }
+
+/* User's answer — green if match, red if wrong */
+.gh-boo-answer--match .gh-boo-answer__name { color: #4ade80; font-weight: 600; }
+.gh-boo-answer--match .gh-boo-answer__val  { color: #166534; }
+.gh-boo-answer--miss  .gh-boo-answer__name { color: #f87171; font-weight: 600; }
+.gh-boo-answer--miss  .gh-boo-answer__val  { color: #7f1d1d; }
+
+/* Column header label distinction */
+.gh-boo-table__head .gh-boo-col--answer:first-of-type  { color: #475569; }
+.gh-boo-table__head .gh-boo-col--answer:last-of-type   { color: #7dd3fc; }
+
+/* Position label badges */
+.gh-boo-pos--start,
+.gh-boo-pos--end {
+  display: inline-flex;
+  align-items: center;
+  font-family: 'Courier New', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.35rem;
+  border-radius: 2px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.gh-boo-pos--start {
+  background: rgba(56,189,248,0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56,189,248,0.3);
+}
+.gh-boo-pos--end {
+  background: rgba(251,146,60,0.12);
+  color: #fb923c;
+  border: 1px solid rgba(251,146,60,0.3);
+}
+.gh-boo-pos--mid {
+  font-size: 0.85rem;
+  color: #334155;
+  padding-left: 0.6rem;
+}
+
+@media (max-width: 600px) {
+  .gh-boo-col--pos { width: 64px; }
+  .gh-boo-pos--start,
+  .gh-boo-pos--end { font-size: 0.55rem; padding: 0.1rem 0.22rem; }
+  .gh-boo-answer__val { display: none; }
+}
+
 /* ── Battle of Order Modal ──────────────────────────────────────────────── */
 
 /* Base modal override — dark classified theme */
@@ -5495,14 +5682,18 @@ button.nav-aircoins:hover {
   z-index: 1;
   max-width: 480px;
 }
+.boa-trigger-eyebrow-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
 .boa-trigger-eyebrow {
-  display: block;
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: #60a5fa;
-  margin-bottom: 0.75rem;
 }
 .boa-trigger-title {
   font-size: 1.5rem;
@@ -5512,6 +5703,19 @@ button.nav-aircoins:hover {
   letter-spacing: -0.02em;
 }
 .boa-trigger-title--done { color: #34d399; }
+.boa-mini-game-tag {
+  display: inline-block;
+  font-family: 'Courier New', monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #93c5fd;
+  background: rgba(96,165,250,0.08);
+  border: 1px solid rgba(96,165,250,0.25);
+  border-radius: 3px;
+  padding: 0.15rem 0.5rem;
+}
 .boa-trigger-subtitle {
   font-size: 0.9rem;
   color: #94a3b8;
@@ -6099,6 +6303,69 @@ button.nav-aircoins:hover {
   transition: color 0.15s;
 }
 .boa-close-text:hover { color: #475569; }
+
+/* ── BOA modal — mobile fixes ───────────────────────────────────────────── */
+@media (max-width: 600px) {
+
+  /* ── Reel: prevent glitch-text width reflows + stable height across spin→lock ── */
+  .boa-reel {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .boa-reel__text {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    width: 100%;
+  }
+  .boa-spin-screen {
+    min-height: 22rem;
+    justify-content: center;
+  }
+
+  /* ── Cards: title wraps; buttons pinned to right edge via absolute position ── */
+  .boa-card {
+    position: relative;
+    padding-right: 5.5rem; /* reserve space so title never runs under buttons */
+  }
+  .boa-card__title {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+  }
+  .boa-card__btns {
+    position: absolute;
+    right: 0.4rem;
+    top: 50%;
+    transform: translateY(-50%);
+    flex-direction: row;
+    gap: 5px;
+  }
+  .boa-card__mv {
+    width: 40px !important;
+    height: 40px !important;
+    font-size: 0.9rem !important;
+    color: #60a5fa !important;
+    border-color: rgba(96,165,250,0.45) !important;
+    background: rgba(5,13,26,0.9) !important;
+  }
+  .boa-card__mv--up:active:not(:disabled) {
+    background: rgba(34,211,238,0.15) !important;
+    border-color: #22d3ee !important;
+    color: #22d3ee !important;
+  }
+  .boa-card__mv--dn:active:not(:disabled) {
+    background: rgba(245,158,11,0.15) !important;
+    border-color: #f59e0b !important;
+    color: #f59e0b !important;
+  }
+  .boa-card__mv:disabled {
+    opacity: 0.25 !important;
+  }
+}
 
 /* settings-hint inline label */
 .settings-hint { font-weight: 400; font-size: 0.72rem; color: #94a3b8; margin-left: 0.4rem; }

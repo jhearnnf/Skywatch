@@ -327,6 +327,16 @@ function LeadPickerModal({ API, onConfirm, onCancel }) {
 
 // ── App Stats tab ─────────────────────────────────────────────────────────────
 
+function fmtSeconds(s) {
+  if (s == null || s === 0) return '—'
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = Math.floor(s % 60)
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${sec}s`
+  return `${sec}s`
+}
+
 function fmtNum(n) {
   if (n == null) return '—'
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -364,13 +374,24 @@ function StatsTab({ API }) {
         </div>
       </div>
       <div className="admin-section">
-        <h3 className="admin-section-title">Games</h3>
+        <h3 className="admin-section-title">Quiz Games</h3>
         <div className="admin-stats-grid">
           <AdminStat label="Quizzes Played"    value={stats.games.totalGamesPlayed} />
           <AdminStat label="Perfect Score"     value={stats.games.totalGamesCompleted > 0 ? `${Math.round((stats.games.totalPerfectScores / stats.games.totalGamesCompleted) * 100)}%` : '—'} title="% of completed (non-abandoned) quizzes where the user scored 100%" />
           <AdminStat label="Quizzes Lost"      value={stats.games.totalGamesCompleted > 0 ? `${Math.round((stats.games.totalGamesLost    / stats.games.totalGamesCompleted) * 100)}%` : '—'} title={`% of completed (non-abandoned) quizzes where the user scored below the pass threshold (Easy: ${stats.games.passThresholdEasy}%, Medium: ${stats.games.passThresholdMedium}%)`} />
           <AdminStat label="Quizzes Abandoned" value={stats.games.totalGamesPlayed > 0 ? `${Math.round((stats.games.totalGamesAbandoned / stats.games.totalGamesPlayed) * 100)}%` : '—'} />
+          <AdminStat label="Time Played"       value={fmtSeconds(stats.games.quizTotalSeconds)} title="Total time across all quiz attempts" />
           <AdminStat label="Aircoins in System" value={fmtNum(stats.games.totalAircoinsEarned)} />
+        </div>
+      </div>
+      <div className="admin-section">
+        <h3 className="admin-section-title">Battle of Order — Mini Game</h3>
+        <div className="admin-stats-grid">
+          <AdminStat label="Games Played"  value={stats.games.boo.total} />
+          <AdminStat label="Perfect Score" value={stats.games.boo.total > 0 ? `${Math.round((stats.games.boo.won      / stats.games.boo.total) * 100)}%` : '—'} title="% of all BOO games where the user won" />
+          <AdminStat label="Defeated"      value={stats.games.boo.total > 0 ? `${Math.round((stats.games.boo.defeated / stats.games.boo.total) * 100)}%` : '—'} title="% of all BOO games where the user was defeated (not abandoned)" />
+          <AdminStat label="Abandoned"     value={stats.games.boo.total > 0 ? `${Math.round((stats.games.boo.abandoned / stats.games.boo.total) * 100)}%` : '—'} />
+          <AdminStat label="Time Played"   value={fmtSeconds(stats.games.boo.totalSeconds)} title="Total time across all BOO games" />
         </div>
       </div>
       <div className="admin-section">
@@ -551,7 +572,7 @@ function ProblemsTab({ API }) {
 
 // ── Users tab ─────────────────────────────────────────────────────────────────
 
-function UsersTab({ API }) {
+function UsersTab({ API, navigate }) {
   const { user: currentUser, setUser } = useAuth()
   const [q,              setQ]              = useState('')
   const [users,          setUsers]          = useState([])
@@ -588,11 +609,11 @@ function UsersTab({ API }) {
     if (data?.data?.user) setUser(data.data.user)
   }, [API, setUser])
 
-  const triggerAction = (label, endpoint) => setReasonModal({ label, endpoint })
+  const triggerAction = (label, endpoint, method = 'POST') => setReasonModal({ label, endpoint, method })
 
   const confirmAction = async (reason) => {
     await fetch(`${API}${reasonModal.endpoint}`, {
-      method: 'POST', credentials: 'include',
+      method: reasonModal.method ?? 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
     })
@@ -667,11 +688,33 @@ function UsersTab({ API }) {
             <div className="admin-user-stats">
               <div className="admin-user-stat"><span>Created</span><strong>{new Date(u.createdAt).toLocaleDateString()}</strong></div>
               <div className="admin-user-stat"><span>Logins</span><strong>{u.logins?.length ?? 0}</strong></div>
-              <div className="admin-user-stat"><span>Aircoins</span><strong>{u.totalAircoins ?? 0}</strong></div>
+              <div className="admin-user-stat"><span>Login Streak</span><strong>{u.loginStreak ?? 0}</strong></div>
+              <div className="admin-user-stat">
+                <span>Aircoins</span>
+                <button
+                  className="admin-user-stat__link"
+                  onClick={() => navigate('aircoin-history', { targetUser: { _id: u._id, agentNumber: u.agentNumber, totalAircoins: u.totalAircoins ?? 0 } })}
+                  title="View aircoin history"
+                >
+                  {(u.totalAircoins ?? 0).toLocaleString()} ⬡
+                </button>
+              </div>
               <div className="admin-user-stat"><span>Difficulty</span><strong style={{ textTransform: 'capitalize' }}>{u.difficultySetting ?? 'easy'}</strong></div>
               <div className="admin-user-stat"><span>Admin</span><strong>{u.isAdmin ? 'Yes' : 'No'}</strong></div>
               <div className="admin-user-stat"><span>Banned</span><strong>{u.isBanned ? 'Yes' : 'No'}</strong></div>
             </div>
+
+            {u.profileStats && (
+              <div className="admin-user-stats admin-user-stats--profile">
+                <div className="admin-user-stat"><span>Briefs Read</span><strong>{u.profileStats.brifsRead}</strong></div>
+                <div className="admin-user-stat"><span>Quizzes Played</span><strong>{u.profileStats.quizzesPlayed}</strong></div>
+                <div className="admin-user-stat"><span>Quizzes Passed</span><strong>{u.profileStats.quizzesCompleted}</strong></div>
+                <div className="admin-user-stat"><span>Quizzes Abandoned</span><strong>{u.profileStats.quizzesAbandoned}</strong></div>
+                <div className="admin-user-stat"><span>BOO Played</span><strong>{u.profileStats.booPlayed}</strong></div>
+                <div className="admin-user-stat"><span>BOO Won</span><strong>{u.profileStats.booWon}</strong></div>
+                <div className="admin-user-stat"><span>BOO Abandoned</span><strong>{u.profileStats.booAbandoned}</strong></div>
+              </div>
+            )}
 
             <div className="admin-card__actions">
               {!u.isAdmin && (
@@ -702,6 +745,14 @@ function UsersTab({ API }) {
                   onClick={() => triggerAction(`Ban Agent ${u.agentNumber} (${u.email})`, `/api/admin/users/${u._id}/ban`)}
                 >
                   Ban User
+                </button>
+              )}
+              {u._id !== currentUser?._id && (
+                <button
+                  className="admin-action-btn admin-action-btn--danger"
+                  onClick={() => triggerAction(`Permanently delete Agent ${u.agentNumber} (${u.email}) and all their data`, `/api/admin/users/${u._id}`, 'DELETE')}
+                >
+                  Delete Account
                 </button>
               )}
             </div>
@@ -1214,6 +1265,7 @@ function BriefsTab({ API }) {
   const [quizGenerating,      setQuizGenerating]      = useState(false)
   const [booGenerating,       setBooGenerating]       = useState(false)
   const [kwGenerating,        setKwGenerating]        = useState(false)
+  const [aiRegenDesc,         setAiRegenDesc]         = useState(false)
   const [bulkActionsOpen, setBulkActionsOpen] = useState(false)
   const [backfillStatus,  setBackfillStatus]  = useState(null)   // null | { done, msg }
 
@@ -1805,6 +1857,57 @@ function BriefsTab({ API }) {
     }
   }
 
+  const regenerateDescription = async () => {
+    if (!draft.title) return
+    setAiRegenDesc(true)
+    setFeedback('')
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/generate-brief`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: draft.title }),
+      })
+      const data = await res.json()
+      const generated = data.data?.brief ?? {}
+      const newDesc = generated.description ?? draft.description
+      const newKeywords = Array.isArray(generated.keywords)
+        ? generated.keywords.filter(k => k.keyword && newDesc.toLowerCase().includes(k.keyword.toLowerCase()))
+        : draft.keywords
+      setDraft(p => ({ ...p, description: newDesc, keywords: newKeywords }))
+      setFeedback('Description and keywords regenerated — regenerating quiz questions…')
+      // Regenerate quiz questions with new description
+      setQuizGenerating(true)
+      try {
+        const qRes  = await fetch(`${API}/api/admin/ai/generate-quiz`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: draft.title, description: newDesc }),
+        })
+        const qData = await qRes.json()
+        const qGenerated = qData.data ?? {}
+        const fromAI = (qs) => (Array.isArray(qs) ? qs : []).map(q => ({
+          question: q.question ?? '',
+          answers: (q.answers ?? []).map((a, ai) => ({
+            title:    a.title ?? '',
+            isCorrect: ai === q.correctAnswerIndex,
+          })),
+        }))
+        if (Array.isArray(qGenerated.easyQuestions))   setDraftQuizEasy(fromAI(qGenerated.easyQuestions))
+        if (Array.isArray(qGenerated.mediumQuestions)) setDraftQuizMedium(fromAI(qGenerated.mediumQuestions))
+        setFeedback('Description, keywords, and quiz questions regenerated.')
+      } catch {
+        setFeedback('Description and keywords updated — quiz regeneration failed.')
+      } finally {
+        setQuizGenerating(false)
+      }
+    } catch {
+      setFeedback('AI regeneration failed — please try again.')
+    } finally {
+      setAiRegenDesc(false)
+      setTimeout(() => setFeedback(''), 6000)
+    }
+  }
+
   const updateQuizQuestion = (difficulty, i, value) => {
     const setter = difficulty === 'easy' ? setDraftQuizEasy : setDraftQuizMedium
     setter(prev => prev.map((q, idx) => idx === i ? { ...q, question: value } : q))
@@ -2252,7 +2355,25 @@ function BriefsTab({ API }) {
         </div>
 
         <div className="brief-form-field">
-          <label className="form-label">Description</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+            <label className="form-label" style={{ margin: 0 }}>Description</label>
+            {!isNew && (
+              <button
+                className="admin-action-btn"
+                style={{ fontSize: '0.72rem', padding: '2px 9px' }}
+                onClick={regenerateDescription}
+                disabled={aiRegenDesc || quizGenerating || !draft.title}
+                title={!draft.title ? 'Add a title first' : 'Regenerate description, keywords, and quiz questions with AI'}
+              >
+                {aiRegenDesc ? (
+                  <span className="quiz-generating">
+                    <span className="app-loading__spinner" style={{ width: 12, height: 12 }} />
+                    Regenerating…
+                  </span>
+                ) : '✦ Regenerate with AI'}
+              </button>
+            )}
+          </div>
           <textarea
             className="form-textarea"
             rows={7}
@@ -2410,6 +2531,7 @@ function BriefsTab({ API }) {
                 className="btn-ghost"
                 style={{ flexShrink: 0 }}
                 onClick={() => setPendingMedia(prev => [...prev, { mediaType: 'picture', mediaUrl: DEFAULT_BRIEF_IMAGE }])}
+                disabled={pendingMedia.some(m => m.mediaUrl === DEFAULT_BRIEF_IMAGE)}
               >
                 Add Placeholder
               </button>
@@ -2511,6 +2633,7 @@ function BriefsTab({ API }) {
                 className="btn-ghost"
                 style={{ flexShrink: 0 }}
                 onClick={() => setEditing(prev => ({ ...prev, media: [...(prev.media ?? []), { mediaType: 'picture', mediaUrl: DEFAULT_BRIEF_IMAGE }] }))}
+                disabled={(editing.media ?? []).some(m => m.mediaUrl === DEFAULT_BRIEF_IMAGE)}
               >
                 Add Placeholder
               </button>
@@ -3211,7 +3334,7 @@ export default function Admin({ navigate }) {
           {tab === 'stats'    && <StatsTab    API={API} />}
           {tab === 'briefs'   && <BriefsTab   API={API} />}
           {tab === 'problems' && <ProblemsTab API={API} />}
-          {tab === 'users'    && <UsersTab    API={API} />}
+          {tab === 'users'    && <UsersTab    API={API} navigate={navigate} />}
           {tab === 'settings'  && <SettingsTab  API={API} />}
           {tab === 'tutorials' && <TutorialsTab API={API} />}
         </div>

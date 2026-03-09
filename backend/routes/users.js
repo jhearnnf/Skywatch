@@ -1,8 +1,9 @@
 const router = require('express').Router();
 const { protect } = require('../middleware/auth');
 const User = require('../models/User');
-const GameSessionQuizResult  = require('../models/GameSessionQuizResult');
-const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
+const GameSessionQuizResult           = require('../models/GameSessionQuizResult');
+const GameSessionQuizAttempt          = require('../models/GameSessionQuizAttempt');
+const GameSessionOrderOfBattleResult  = require('../models/GameSessionOrderOfBattleResult');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const ProblemReport = require('../models/ProblemReport');
@@ -22,11 +23,21 @@ router.get('/stats', protect, async (req, res) => {
       intelBriefId: { $in: validBriefIds },
     });
 
-    const allAttempts      = await GameSessionQuizAttempt.find({ userId: req.user._id, status: { $in: ['completed', 'abandoned'] } });
-    const completedAttempts = allAttempts.filter(a => a.status === 'completed');
-    const gamesPlayed      = allAttempts.length;
-    const totalPct         = completedAttempts.reduce((s, a) => s + (a.percentageCorrect ?? 0), 0);
-    const winPercent       = completedAttempts.length > 0 ? Math.round(totalPct / completedAttempts.length) : 0;
+    const allAttempts = await GameSessionQuizAttempt.find({ userId: req.user._id, status: { $in: ['completed', 'abandoned'] } }).lean();
+    const gamesPlayed = allAttempts.length;
+
+    // Quiz avg: count every individually answered question (includes abandoned partial attempts)
+    const quizResults  = await GameSessionQuizResult.find({ userId: req.user._id }).lean();
+    const quizAnswered = quizResults.length;
+    const quizCorrect  = quizResults.filter(r => r.isCorrect).length;
+
+    // BOO avg: each non-abandoned game counts as 100 (win) or 0 (loss)
+    const booResults = await GameSessionOrderOfBattleResult.find({ userId: req.user._id, abandoned: false }).lean();
+    const booPlayed  = booResults.length;
+    const booWins    = booResults.filter(r => r.won).length;
+
+    const totalDataPoints = quizAnswered + booPlayed;
+    const winPercent = totalDataPoints > 0 ? Math.round((quizCorrect + booWins) / totalDataPoints * 100) : 0;
 
     res.json({
       status: 'success',

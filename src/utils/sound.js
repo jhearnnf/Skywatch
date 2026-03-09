@@ -36,6 +36,22 @@ function fetchSettings() {
   return inflight
 }
 
+// ── Master volume (user preference, stored in localStorage) ──────────────────
+const MASTER_VOL_KEY = 'skywatch_master_volume'
+
+export function getMasterVolume() {
+  const v = parseInt(localStorage.getItem(MASTER_VOL_KEY) ?? '100', 10)
+  return isNaN(v) ? 100 : Math.min(100, Math.max(0, v))
+}
+
+export function setMasterVolume(v) {
+  localStorage.setItem(MASTER_VOL_KEY, String(Math.min(100, Math.max(0, Math.round(v)))))
+}
+
+function masterVol(vol) {
+  return vol * (getMasterVolume() / 100)
+}
+
 export function invalidateSoundSettings() {
   cache = null
   inflight = null
@@ -120,7 +136,7 @@ export function playSound(name, { onAudio } = {}) {
     // out_of_ammo bypasses the queue entirely
     if (name === 'out_of_ammo') {
       if (settings.soundEnabledOutOfAmmo === false) return Promise.resolve()
-      const volume = Math.min(1, Math.max(0, (settings.volumeOutOfAmmo ?? 100) / 100))
+      const volume = masterVol(Math.min(1, Math.max(0, (settings.volumeOutOfAmmo ?? 100) / 100)))
       playOutOfAmmo(volume)
       return Promise.resolve()
     }
@@ -128,7 +144,7 @@ export function playSound(name, { onAudio } = {}) {
     // target_locked_keyword bypasses the queue entirely — plays the instant a keyword is highlighted
     if (name === 'target_locked_keyword') {
       if (settings.soundEnabledTargetLockedKeyword === false) return Promise.resolve()
-      const volume = Math.min(1, Math.max(0, (settings.volumeTargetLockedKeyword ?? 100) / 100))
+      const volume = masterVol(Math.min(1, Math.max(0, (settings.volumeTargetLockedKeyword ?? 100) / 100)))
       playKeywordLocked(volume)
       return Promise.resolve()
     }
@@ -142,7 +158,7 @@ export function playSound(name, { onAudio } = {}) {
                        : name === 'battle_of_order_lost'      ? 'volumeBattleOfOrderLost'
                        :                                        'volumeBattleOfOrderSelection'
       if (settings[enabledKey] === false) return Promise.resolve()
-      const volume = Math.min(1, Math.max(0, (settings[volumeKey] ?? 100) / 100))
+      const volume = masterVol(Math.min(1, Math.max(0, (settings[volumeKey] ?? 100) / 100)))
       const audio  = new Audio(`/sounds/${name}.mp3`)
       audio.volume = volume
       audio.play().catch(() => {})
@@ -194,7 +210,7 @@ export function playSound(name, { onAudio } = {}) {
 
       if (enabledKey && settings[enabledKey] === false) { resolve(); return }
 
-      const volume = Math.min(1, Math.max(0, (settings[volumeKey] ?? 100) / 100))
+      const volume = masterVol(Math.min(1, Math.max(0, (settings[volumeKey] ?? 100) / 100)))
 
       // target_locked: dedup — skip if already waiting in queue
       if (name === 'target_locked') {

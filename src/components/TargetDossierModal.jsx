@@ -11,26 +11,24 @@ export default function TargetDossierModal({ keyword, clickX, clickY, scrollY = 
     return () => document.removeEventListener('keydown', handler)
   }, [onClose])
 
-  // Desktop: position:absolute in document space so dossier scrolls with the page.
+  // Desktop: position:fixed so it sits in viewport space and never overlaps the sticky navbar.
   // Horizontally: to the right of the click, clamped to screen edge.
-  // Vertically: centred on the description area's midpoint via transform.
+  // Vertically: centred on the description area, clamped so the panel top stays below navbar.
   const getStyle = () => {
     if (isMobile) return {}
     const panelW  = 320
+    const panelH  = 280  // approx dossier height
     const margin  = 12
+    const navbarH = 60
     const x = Math.min(clickX + margin, window.innerWidth - panelW - margin)
 
-    // If we have the desc rect, centre the modal on it; otherwise fall back to click position
-    const y = descRect
-      ? descRect.top + descScrollY + descRect.height / 2
-      : clickY + scrollY + margin
+    // descRect.top is already viewport-relative (getBoundingClientRect), no scrollY needed
+    const rawY = descRect
+      ? descRect.top + descRect.height / 2 - panelH / 2
+      : clickY + margin
+    const y = Math.max(rawY, navbarH + margin)
 
-    return {
-      position: 'absolute',
-      left: x,
-      top: y,
-      transform: descRect ? 'translateY(-50%)' : 'none',
-    }
+    return { position: 'fixed', left: x, top: y }
   }
 
   return (

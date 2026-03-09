@@ -45,6 +45,8 @@ router.get('/stats', async (_req, res) => {
       easyLost, mediumLost,
       totalGamesAbandoned,
       aircoinAgg, loginAgg,
+      quizTimeAgg,
+      booTotal, booWon, booDefeated, booAbandoned, booTimeAgg,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ subscriptionTier: 'free' }),
@@ -62,6 +64,20 @@ router.get('/stats', async (_req, res) => {
       GameSessionQuizAttempt.countDocuments({ status: 'abandoned' }),
       User.aggregate([{ $group: { _id: null, total: { $sum: '$totalAircoins' } } }]),
       User.aggregate([{ $group: { _id: null, total: { $sum: { $size: { $ifNull: ['$logins', []] } } } } }]),
+      // Quiz: sum time for attempts that have both timeStarted and timeFinished
+      GameSessionQuizAttempt.aggregate([
+        { $match: { timeFinished: { $ne: null } } },
+        { $group: { _id: null, total: { $sum: { $divide: [{ $subtract: ['$timeFinished', '$timeStarted'] }, 1000] } } } },
+      ]),
+      // BOO counts
+      GameSessionOrderOfBattleResult.countDocuments(),
+      GameSessionOrderOfBattleResult.countDocuments({ won: true,  abandoned: { $ne: true } }),
+      GameSessionOrderOfBattleResult.countDocuments({ won: false, abandoned: { $ne: true } }),
+      GameSessionOrderOfBattleResult.countDocuments({ abandoned: true }),
+      // BOO: sum timeTakenSeconds (null entries treated as 0)
+      GameSessionOrderOfBattleResult.aggregate([
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$timeTakenSeconds', 0] } } } },
+      ]),
     ]);
 
     // Combined login streaks — requires virtual, so fetch all users
@@ -87,6 +103,14 @@ router.get('/stats', async (_req, res) => {
           totalAircoinsEarned: aircoinAgg[0]?.total ?? 0,
           passThresholdEasy,
           passThresholdMedium,
+          quizTotalSeconds: Math.round(quizTimeAgg[0]?.total ?? 0),
+          boo: {
+            total:     booTotal,
+            won:       booWon,
+            defeated:  booDefeated,
+            abandoned: booAbandoned,
+            totalSeconds: booTimeAgg[0]?.total ?? 0,
+          },
         },
         briefs: { totalBrifsRead },
       },
@@ -151,11 +175,61 @@ router.patch('/tutorials/content', requireReason, async (req, res) => {
   }
 });
 
+// Helper — attach profileStats to a list of User documents
+async function enrichUsersWithStats(users) {
+  if (!users.length) return [];
+  const userIds = users.map(u => u._id);
+
+  const [briefCounts, quizCounts, booCounts] = await Promise.all([
+    IntelligenceBriefRead.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      { $group: { _id: '$userId', count: { $sum: 1 } } },
+    ]),
+    GameSessionQuizAttempt.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      { $group: { _id: '$userId',
+          total:     { $sum: 1 },
+          completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+          abandoned: { $sum: { $cond: [{ $eq: ['$status', 'abandoned'] }, 1, 0] } },
+      }},
+    ]),
+    GameSessionOrderOfBattleResult.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      { $group: { _id: '$userId',
+          total:    { $sum: 1 },
+          won:      { $sum: { $cond: ['$won',      1, 0] } },
+          abandoned:{ $sum: { $cond: ['$abandoned', 1, 0] } },
+      }},
+    ]),
+  ]);
+
+  const briefMap = Object.fromEntries(briefCounts.map(b => [b._id.toString(), b.count]));
+  const quizMap  = Object.fromEntries(quizCounts.map(q  => [q._id.toString(), q]));
+  const booMap   = Object.fromEntries(booCounts.map(b   => [b._id.toString(), b]));
+
+  return users.map(u => {
+    const plain = u.toObject({ virtuals: true });
+    const uid   = plain._id.toString();
+    return {
+      ...plain,
+      profileStats: {
+        brifsRead:        briefMap[uid]          ?? 0,
+        quizzesPlayed:    quizMap[uid]?.total     ?? 0,
+        quizzesCompleted: quizMap[uid]?.completed ?? 0,
+        quizzesAbandoned: quizMap[uid]?.abandoned ?? 0,
+        booPlayed:        booMap[uid]?.total      ?? 0,
+        booWon:           booMap[uid]?.won        ?? 0,
+        booAbandoned:     booMap[uid]?.abandoned  ?? 0,
+      },
+    };
+  });
+}
+
 // GET /api/admin/users — all users, oldest first (first registered at top)
 router.get('/users', async (req, res) => {
   try {
     const users = await User.find().populate('rank').sort({ createdAt: 1 });
-    res.json({ status: 'success', data: { users } });
+    res.json({ status: 'success', data: { users: await enrichUsersWithStats(users) } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -171,7 +245,7 @@ router.get('/users/search', async (req, res) => {
       $or: [{ email: new RegExp(q, 'i') }, { agentNumber: q }],
     }).populate('rank').limit(20);
 
-    res.json({ status: 'success', data: { users } });
+    res.json({ status: 'success', data: { users: await enrichUsersWithStats(users) } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -182,6 +256,49 @@ router.post('/users/:id/ban', requireReason, async (req, res) => {
   try {
     await User.findByIdAndUpdate(req.params.id, { isBanned: true });
     await AdminAction.create({ userId: req.user._id, actionType: 'ban_user', reason: req.body.reason, targetUserId: req.params.id });
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/users/:id/aircoins/history — paginated aircoin history for any user
+router.get('/users/:id/aircoins/history', async (req, res) => {
+  try {
+    const { page = 1, limit = 30 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+    const userId = req.params.id;
+
+    const [logs, total, user] = await Promise.all([
+      AircoinLog.find({ userId }).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
+      AircoinLog.countDocuments({ userId }),
+      User.findById(userId).select('totalAircoins agentNumber').lean(),
+    ]);
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json({ status: 'success', data: { logs, total, page: Number(page), limit: Number(limit), user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/admin/users/:id — permanently delete a user and all their data
+router.delete('/users/:id', requireReason, async (req, res) => {
+  try {
+    if (req.params.id === req.user._id.toString()) {
+      return res.status(400).json({ message: 'You cannot delete your own account' });
+    }
+    const userId = req.params.id;
+    await Promise.all([
+      AircoinLog.deleteMany({ userId }),
+      GameSessionQuizResult.deleteMany({ userId }),
+      GameSessionQuizAttempt.deleteMany({ userId }),
+      GameSessionOrderOfBattleResult.deleteMany({ userId }),
+      IntelligenceBriefRead.deleteMany({ userId }),
+      ProblemReport.deleteMany({ userId }),
+    ]);
+    await User.findByIdAndDelete(userId);
+    await AdminAction.create({ userId: req.user._id, actionType: 'delete_user', reason: req.body.reason, targetUserId: userId });
     res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });

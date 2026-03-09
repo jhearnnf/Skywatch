@@ -9,8 +9,9 @@ const schema = new mongoose.Schema({
     choiceId:        { type: mongoose.Schema.Types.ObjectId },
     userOrderNumber: { type: Number },
   }],
-  aircoinsEarned: { type: Number, default: 0 },
-  createdAt:      { type: Date, default: Date.now },
+  aircoinsEarned:    { type: Number, default: 0 },
+  timeTakenSeconds:  { type: Number, default: null },
+  createdAt:         { type: Date, default: Date.now },
 });
 
 module.exports = mongoose.model('GameSessionOrderOfBattleResult', schema);

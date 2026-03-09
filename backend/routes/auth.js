@@ -34,7 +34,7 @@ const recordLogin = async (user) => {
   user.logins.push({ timestamp: new Date() });
 
   if (!alreadyTodayLogin) {
-    const streak   = user.loginStreak + 1; // +1 because we just pushed today
+    const streak   = user.loginStreak; // virtual already includes today's pushed login
     const settings = await AppSettings.getSettings();
     const base     = settings.aircoinsFirstLogin  ?? 5;
     const bonus    = settings.aircoinsStreakBonus ?? 2;

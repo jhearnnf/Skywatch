@@ -12,16 +12,17 @@ function AmmoBlock({ active }) {
   )
 }
 
-export default function TargetingHUD({ side, below = false, descRect, scrollY = 0, mainOffsetY = 0, ammoRemaining, ammoMax, description, keywordCount, loggedIn = true, onLoginClick, scanWord }) {
+export default function TargetingHUD({ side, below = false, descRect, ammoRemaining, ammoMax, description, keywordCount, loggedIn = true, onLoginClick, scanWord }) {
   // In below mode the HUD is in normal page flow — no absolute positioning needed.
-  // In side mode: position:absolute inside <main position:relative>.
-  // descRect.top is viewport-relative; adding scrollY gives document-absolute position.
-  // Subtract mainOffsetY (main.offsetTop ≈ navbar height) to get main-relative coords.
-  const docTop = (descRect.top + scrollY - mainOffsetY) + descRect.height / 2 - HUD_H / 2
+  // In side mode: position:fixed in viewport space so the HUD never slides under the sticky navbar.
+  // descRect coords are already viewport-relative (getBoundingClientRect), no scrollY offset needed.
+  const navbarH = 60
+  const rawTop  = descRect.top + descRect.height / 2 - HUD_H / 2
+  const fixedTop = Math.max(rawTop, navbarH + 8)
 
   const style = below ? {} : side === 'left'
-    ? { position: 'absolute', width: HUD_W, height: HUD_H, top: docTop, left: descRect.left - HUD_W - GAP, zIndex: 150 }
-    : { position: 'absolute', width: HUD_W, height: HUD_H, top: docTop, left: descRect.right + GAP,        zIndex: 150 }
+    ? { position: 'fixed', width: HUD_W, height: HUD_H, top: fixedTop, left: descRect.left - HUD_W - GAP, zIndex: 150 }
+    : { position: 'fixed', width: HUD_W, height: HUD_H, top: fixedTop, left: descRect.right + GAP,        zIndex: 150 }
 
   // Pull deterministic fragments from the description for the right-panel data ghost
   const fragments = useMemo(() => {
