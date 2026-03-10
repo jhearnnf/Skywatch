@@ -58,7 +58,7 @@ export const MOCK_RANKS = [
 ]
 
 export const CATEGORIES = [
-  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training',
+  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
 ]
 
@@ -69,6 +69,7 @@ export const CATEGORY_ICONS = {
   Ranks:       '🎖️',
   Squadrons:   '⚡',
   Training:    '🎯',
+  Roles:       '🪖',
   Threats:     '⚠️',
   Allies:      '🤝',
   Missions:    '🚀',
@@ -114,6 +115,20 @@ export const SUBCATEGORIES = {
     'Flying Training',
     'Ground Training & PME',
     'Tactical & Combat Training',
+  ],
+  Roles: [
+    'Fast Jet Pilot',
+    'Multi-Engine Pilot',
+    'Rotary Wing Pilot',
+    'Weapons Systems Operator',
+    'Intelligence Officer',
+    'Engineer Officer',
+    'Air Traffic Control Officer',
+    'RAF Regiment',
+    'Logistics & Supply',
+    'Medical & Nursing',
+    'Cyber & Information',
+    'Fighter Controller',
   ],
   Threats: [
     'State Actor Air',
@@ -174,8 +189,9 @@ export const MOCK_BRIEFS = [
     category: 'News',
     title: 'RAF Typhoons Intercept Russian Aircraft Over North Sea',
     subtitle: 'Quick Reaction Alert scramble marks third such incident this quarter.',
-    description:
+    descriptionSections: [
       'Royal Air Force Typhoon jets were scrambled from RAF Lossiemouth on Tuesday following the detection of Russian Tupolev Tu-95 Bear aircraft approaching UK airspace from the north. The QRA intercept was coordinated with NATO allies and the aircraft were shadowed until they turned back. The Ministry of Defence confirmed no incursion into sovereign airspace occurred. The Typhoon remains the backbone of UK air defence, capable of reaching intercept speed within minutes of the alert being triggered. Russia\'s strategic bomber patrols are a routine intelligence-gathering exercise that tests NATO response times and procedures.',
+    ],
     keywords: [
       { _id: 'kw-1', keyword: 'Typhoon',      generatedDescription: 'RAF Eurofighter Typhoon multirole combat aircraft.' },
       { _id: 'kw-2', keyword: 'QRA',           generatedDescription: 'Quick Reaction Alert — 24/7 airborne intercept readiness.' },
@@ -194,8 +210,10 @@ export const MOCK_BRIEFS = [
     category: 'Aircrafts',
     title: 'Eurofighter Typhoon',
     subtitle: 'Multi-role swing-role combat aircraft in service with the RAF.',
-    description:
-      'The Eurofighter Typhoon is a twin-engine, canard-delta wing, multirole combat aircraft. It is highly agile, primarily designed for air superiority, but is fully capable of ground attack and maritime roles. The Typhoon entered RAF service in 2003 and is operated by both XI Squadron and 1 Squadron from RAF Coningsby, as well as 6 Squadron and 11 Squadron at RAF Lossiemouth. Its radar system, CAPTOR-E AESA, provides a wide field of regard and advanced electronic warfare capabilities. The aircraft can carry a mix of Meteor, ASRAAM, Brimstone, and Paveway IV munitions.',
+    descriptionSections: [
+      'The Eurofighter Typhoon is a twin-engine, canard-delta wing, multirole combat aircraft. It is highly agile, primarily designed for air superiority, but is fully capable of ground attack and maritime roles. The Typhoon entered RAF service in 2003 and is operated by both XI Squadron and 1 Squadron from RAF Coningsby, as well as 6 Squadron and 11 Squadron at RAF Lossiemouth.',
+      'Its radar system, CAPTOR-E AESA, provides a wide field of regard and advanced electronic warfare capabilities. The aircraft can carry a mix of Meteor, ASRAAM, Brimstone, and Paveway IV munitions.',
+    ],
     keywords: [
       { _id: 'kw-5',  keyword: 'AESA',        generatedDescription: 'Active Electronically Scanned Array — advanced radar technology.' },
       { _id: 'kw-6',  keyword: 'Meteor',       generatedDescription: 'Beyond-visual-range air-to-air missile used by RAF Typhoons.' },
@@ -213,8 +231,10 @@ export const MOCK_BRIEFS = [
     category: 'Ranks',
     title: 'RAF Rank Structure — Commissioned Officers',
     subtitle: 'From Pilot Officer to Marshal of the Royal Air Force.',
-    description:
-      'The RAF commissioned officer ranks are divided into three broad bands: junior officers, senior officers, and air officers. Junior officers span Pilot Officer (Plt Off), Flying Officer (Fg Off), and Flight Lieutenant (Flt Lt). Senior officers include Squadron Leader (Sqn Ldr), Wing Commander (Wg Cdr), and Group Captain (Gp Capt). Air officers rank from Air Commodore (Air Cdre) through Air Vice-Marshal (AVM), Air Marshal (AM), Air Chief Marshal (ACM), to the ceremonial five-star rank of Marshal of the Royal Air Force (MRAF), which is awarded only in wartime or on exceptional occasions.',
+    descriptionSections: [
+      'The RAF commissioned officer ranks are divided into three broad bands: junior officers, senior officers, and air officers. Junior officers span Pilot Officer (Plt Off), Flying Officer (Fg Off), and Flight Lieutenant (Flt Lt).',
+      'Senior officers include Squadron Leader (Sqn Ldr), Wing Commander (Wg Cdr), and Group Captain (Gp Capt). Air officers rank from Air Commodore (Air Cdre) through Air Vice-Marshal (AVM), Air Marshal (AM), Air Chief Marshal (ACM), to the ceremonial five-star rank of Marshal of the Royal Air Force (MRAF), which is awarded only in wartime or on exceptional occasions.',
+    ],
     keywords: [
       { _id: 'kw-9',  keyword: 'Pilot Officer',         generatedDescription: 'Most junior commissioned rank in the RAF (OF-1).' },
       { _id: 'kw-10', keyword: 'Air Chief Marshal',     generatedDescription: 'Four-star air officer rank (OF-9), typically CAS or NATO commander.' },
@@ -232,8 +252,9 @@ export const MOCK_BRIEFS = [
     category: 'News',
     title: 'F-35B Lightning II Declared Fully Operational',
     subtitle: 'RAF and Royal Navy joint force achieves initial operational capability milestone.',
-    description:
+    descriptionSections: [
       'The UK\'s F-35B Lightning II fleet has been declared fully operational, marking a significant capability step for the nation\'s carrier strike group. Operating from HMS Queen Elizabeth and HMS Prince of Wales, the aircraft provides a fifth-generation stealth platform for both offensive and defensive operations. 617 Squadron — the Dambusters — led the initial operational declaration. The F-35B\'s short take-off and vertical landing capability makes it uniquely suited to carrier operations. Its sensor fusion and low observable characteristics represent a generational leap beyond legacy fast jets in the RAF\'s inventory.',
+    ],
     keywords: [
       { _id: 'kw-13', keyword: 'F-35B',            generatedDescription: 'Fifth-generation STOVL stealth multirole combat aircraft.' },
       { _id: 'kw-14', keyword: '617 Squadron',      generatedDescription: 'RAF Marham-based fast jet squadron, the Dambusters.' },
@@ -251,8 +272,10 @@ export const MOCK_BRIEFS = [
     category: 'Bases',
     title: 'RAF Brize Norton',
     subtitle: 'The RAF\'s largest station and primary air transport and air-to-air refuelling hub.',
-    description:
-      'RAF Brize Norton in Oxfordshire is the largest station in the Royal Air Force, covering over 3,000 acres. It is home to Air Mobility Force and hosts the A400M Atlas, Voyager KC2/KC3, and C-17 Globemaster III fleets. The station handles thousands of air transport movements per year, including operational support to global deployments, humanitarian missions, and repatriation flights. The Voyager aircraft operate in both passenger transport and air-to-air refuelling roles, extending the range of fast jet assets during operations. Brize Norton also houses No. 10 Squadron, operating the Sentinel R1 for airborne intelligence gathering.',
+    descriptionSections: [
+      'RAF Brize Norton in Oxfordshire is the largest station in the Royal Air Force, covering over 3,000 acres. It is home to Air Mobility Force and hosts the A400M Atlas, Voyager KC2/KC3, and C-17 Globemaster III fleets.',
+      'The station handles thousands of air transport movements per year, including operational support to global deployments, humanitarian missions, and repatriation flights. The Voyager aircraft operate in both passenger transport and air-to-air refuelling roles, extending the range of fast jet assets during operations. Brize Norton also houses No. 10 Squadron, operating the Sentinel R1 for airborne intelligence gathering.',
+    ],
     keywords: [
       { _id: 'kw-17', keyword: 'A400M Atlas',     generatedDescription: 'RAF turboprop military transport aircraft by Airbus.' },
       { _id: 'kw-18', keyword: 'Voyager',          generatedDescription: 'RAF Airbus A330 MRTT for air transport and AAR.' },
@@ -270,8 +293,11 @@ export const MOCK_BRIEFS = [
     category: 'Training',
     title: 'Initial Officer Training at RAF Cranwell',
     subtitle: 'The 30-week IOT programme that forges RAF officers.',
-    description:
-      'RAF College Cranwell in Lincolnshire is the home of officer training for the Royal Air Force. All RAF officers, regardless of branch or trade, complete Initial Officer Training (IOT) at Cranwell. The 30-week programme covers military skills, leadership, academic study, and physical fitness. Cadets progress through three phases: Foundation, Development, and Final. The programme culminates in the Sovereign\'s Parade, where newly commissioned officers receive their rank insignia. Cranwell has trained RAF officers since 1920, making it one of the oldest military aviation training colleges in the world. The college also hosts the Advanced Command and Staff Course (ACSC) for senior officers.',
+    descriptionSections: [
+      'RAF College Cranwell in Lincolnshire is the home of officer training for the Royal Air Force. All RAF officers, regardless of branch or trade, complete Initial Officer Training (IOT) at Cranwell. The 30-week programme covers military skills, leadership, academic study, and physical fitness.',
+      'Cadets progress through three phases: Foundation, Development, and Final. The programme culminates in the Sovereign\'s Parade, where newly commissioned officers receive their rank insignia.',
+      'Cranwell has trained RAF officers since 1920, making it one of the oldest military aviation training colleges in the world. The college also hosts the Advanced Command and Staff Course (ACSC) for senior officers.',
+    ],
     keywords: [
       { _id: 'kw-21', keyword: 'IOT',           generatedDescription: 'Initial Officer Training — 30-week RAF officer commissioning course.' },
       { _id: 'kw-22', keyword: 'RAF Cranwell',  generatedDescription: 'RAF College in Lincolnshire; home of officer training since 1920.' },

@@ -177,7 +177,8 @@ function MobileTargetingBar({ ammoRemaining, ammoMax, ammoDepletedAt, scanWord }
 
 // ── Keyword-aware description renderer ───────────────────────────────────────
 
-function DescriptionArea({ description, keywords, hasAmmo, onKeywordClick, onHoverChange, isMobile, systemReady, unlockedKws, targeting, suppressSounds, loopFlash, onScanWord, dossierOpen }) {
+function DescriptionArea({ descriptionSections, keywords, hasAmmo, onKeywordClick, onHoverChange, isMobile, systemReady, unlockedKws, targeting, suppressSounds, loopFlash, onScanWord, dossierOpen }) {
+  const description = (descriptionSections ?? []).filter(Boolean).join('\n\n')
   const [reticlePos, setReticlePos] = useState({ x: 0, y: 0 })
   const [reticleOn,  setReticleOn]  = useState(false)
   const [hoveredKw,  setHoveredKw]  = useState(null)
@@ -1024,7 +1025,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
         {/* ── Description ────────────────────────────────── */}
         <div ref={descWrapRef}>
           <DescriptionArea
-            description={brief.description}
+            descriptionSections={brief.descriptionSections}
             keywords={brief.keywords}
             hasAmmo={hasAmmo}
             onKeywordClick={handleKeywordClick}
@@ -1050,7 +1051,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
               scrollY={descScrollY}
               ammoRemaining={ammoRemaining}
               ammoMax={ammoMax}
-              description={brief.description}
+              description={(brief.descriptionSections ?? []).filter(Boolean).join('\n\n')}
               keywordCount={brief.keywords?.length ?? 0}
               loggedIn={!!user}
               onLoginClick={() => navigate('login')}
@@ -1062,7 +1063,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
               scrollY={descScrollY}
               ammoRemaining={ammoRemaining}
               ammoMax={ammoMax}
-              description={brief.description}
+              description={(brief.descriptionSections ?? []).filter(Boolean).join('\n\n')}
               keywordCount={brief.keywords?.length ?? 0}
               loggedIn={!!user}
               onLoginClick={() => navigate('login')}
@@ -1238,7 +1239,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           mainOffsetY={mainOffsetY}
           ammoRemaining={ammoRemaining}
           ammoMax={ammoMax}
-          description={brief.description}
+          description={(brief.descriptionSections ?? []).filter(Boolean).join('\n\n')}
           keywordCount={brief.keywords?.length ?? 0}
           loggedIn={!!user}
           onLoginClick={() => navigate('login')}
@@ -1252,7 +1253,7 @@ export default function IntelligenceBrief({ briefId, navigate }) {
           mainOffsetY={mainOffsetY}
           ammoRemaining={ammoRemaining}
           ammoMax={ammoMax}
-          description={brief.description}
+          description={(brief.descriptionSections ?? []).filter(Boolean).join('\n\n')}
           keywordCount={brief.keywords?.length ?? 0}
           loggedIn={!!user}
           onLoginClick={() => navigate('login')}

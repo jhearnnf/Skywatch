@@ -1329,7 +1329,9 @@ function BriefsTab({ API }) {
     setDraft({
       title:       brief.title       ?? '',
       subtitle:    brief.subtitle    ?? '',
-      description: brief.description ?? '',
+      descriptionSections: brief.descriptionSections?.length
+        ? brief.descriptionSections
+        : (brief.description ? [brief.description] : ['']),
       category:    brief.category    ?? ALL_CATEGORIES[0],
       subcategory: brief.subcategory ?? '',
       historic:    brief.historic    ?? false,
@@ -1372,7 +1374,7 @@ function BriefsTab({ API }) {
   const openNew = () => {
     setEditing({ media: [] })
     setDraft({
-      title: '', subtitle: '', description: '',
+      title: '', subtitle: '', descriptionSections: [''],
       category: ALL_CATEGORIES[0],
       subcategory: '',
       historic: false,
@@ -1501,16 +1503,19 @@ function BriefsTab({ API }) {
         const sources    = Array.isArray(generated.sources)
           ? generated.sources.filter(s => s.url && s.url.startsWith('http'))
           : []
-        const briefTitle = generated.title || lead.text
-        const briefDesc  = generated.description || ''
+        const briefTitle    = generated.title || lead.text
+        const briefSections = Array.isArray(generated.descriptionSections) && generated.descriptionSections.length > 0
+          ? generated.descriptionSections
+          : ['']
+        const briefDescText = briefSections.filter(Boolean).join('\n\n')
         setDraft(p => ({
           ...p,
-          title:       briefTitle,
-          subtitle:    generated.subtitle || '',
-          description: briefDesc,
-          keywords:    Array.isArray(generated.keywords) ? generated.keywords : [],
+          title:               briefTitle,
+          subtitle:            generated.subtitle || '',
+          descriptionSections: briefSections,
+          keywords:            Array.isArray(generated.keywords) ? generated.keywords : [],
           sources,
-          historic:    typeof generated.historic === 'boolean' ? generated.historic : p.historic,
+          historic:            typeof generated.historic === 'boolean' ? generated.historic : p.historic,
         }))
         setFeedback('Brief populated — generating quiz questions…')
         try {
@@ -1518,7 +1523,7 @@ function BriefsTab({ API }) {
           const qRes  = await fetch(`${API}/api/admin/ai/generate-quiz`, {
             method: 'POST', credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: briefTitle, description: briefDesc }),
+            body: JSON.stringify({ title: briefTitle, description: briefDescText }),
           })
           const qData  = await qRes.json()
           const fromAI = (qs) => (Array.isArray(qs) ? qs : []).map(q => ({
@@ -1539,7 +1544,7 @@ function BriefsTab({ API }) {
               const booRes  = await fetch(`${API}/api/admin/ai/generate-battle-order-data`, {
                 method: 'POST', credentials: 'include',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: briefTitle, description: briefDesc, category }),
+                body: JSON.stringify({ title: briefTitle, description: briefDescText, category }),
               })
               const booData = await booRes.json()
               if (booData.data?.gameData) setDraft(p => ({ ...p, gameData: { ...p.gameData, ...booData.data.gameData } }))
@@ -1788,7 +1793,8 @@ function BriefsTab({ API }) {
   })
 
   const generateKeywords = async () => {
-    if (!draft.description) return
+    const descText = (draft.descriptionSections ?? []).filter(Boolean).join('\n\n')
+    if (!descText) return
     const needed = 10 - (draft.keywords?.length ?? 0)
     if (needed <= 0) return
     setKwGenerating(true)
@@ -1797,7 +1803,7 @@ function BriefsTab({ API }) {
       const res  = await fetch(`${API}/api/admin/ai/generate-keywords`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: draft.description, existingKeywords: existing, needed }),
+        body: JSON.stringify({ description: descText, existingKeywords: existing, needed }),
       })
       const data = await res.json()
       if (data.status === 'success' && data.data.keywords.length > 0) {
@@ -1817,14 +1823,15 @@ function BriefsTab({ API }) {
   // ── Quiz question helpers ──────────────────────────────────────────────────
 
   const generateQuizQuestions = async () => {
-    if (!draft.title && !draft.description) return
+    const descText = (draft.descriptionSections ?? []).filter(Boolean).join('\n\n')
+    if (!draft.title && !descText) return
     setQuizGenerating(true)
     try {
       const res = await fetch(`${API}/api/admin/ai/generate-quiz`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draft.title, description: draft.description ?? '' }),
+        body: JSON.stringify({ title: draft.title, description: descText }),
       })
       const data = await res.json()
       const generated = data.data ?? {}
@@ -1848,14 +1855,15 @@ function BriefsTab({ API }) {
   const BOO_ELIGIBLE_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
 
   const generateBOOData = async () => {
-    if (!draft.title && !draft.description) return
+    const descText = (draft.descriptionSections ?? []).filter(Boolean).join('\n\n')
+    if (!draft.title && !descText) return
     setBooGenerating(true)
     try {
       const res = await fetch(`${API}/api/admin/ai/generate-battle-order-data`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draft.title, description: draft.description ?? '', category: draft.category }),
+        body: JSON.stringify({ title: draft.title, description: descText, category: draft.category }),
       })
       const data = await res.json()
       if (data.data?.gameData) {
@@ -1880,12 +1888,15 @@ function BriefsTab({ API }) {
         body: JSON.stringify({ topic: draft.title }),
       })
       const data = await res.json()
-      const generated = data.data?.brief ?? {}
-      const newDesc = generated.description ?? draft.description
-      const newKeywords = Array.isArray(generated.keywords)
-        ? generated.keywords.filter(k => k.keyword && newDesc.toLowerCase().includes(k.keyword.toLowerCase()))
+      const generated    = data.data?.brief ?? {}
+      const newSections  = Array.isArray(generated.descriptionSections) && generated.descriptionSections.length > 0
+        ? generated.descriptionSections
+        : draft.descriptionSections
+      const newDescText  = newSections.filter(Boolean).join(' ')
+      const newKeywords  = Array.isArray(generated.keywords)
+        ? generated.keywords.filter(k => k.keyword && newDescText.toLowerCase().includes(k.keyword.toLowerCase()))
         : draft.keywords
-      setDraft(p => ({ ...p, description: newDesc, keywords: newKeywords }))
+      setDraft(p => ({ ...p, descriptionSections: newSections, keywords: newKeywords }))
       setFeedback('Description and keywords regenerated — regenerating quiz questions…')
       // Regenerate quiz questions with new description
       setQuizGenerating(true)
@@ -1893,7 +1904,7 @@ function BriefsTab({ API }) {
         const qRes  = await fetch(`${API}/api/admin/ai/generate-quiz`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: draft.title, description: newDesc }),
+          body: JSON.stringify({ title: draft.title, description: newDescText }),
         })
         const qData = await qRes.json()
         const qGenerated = qData.data ?? {}
@@ -2010,7 +2021,7 @@ function BriefsTab({ API }) {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: brief.title, description: brief.description ?? '' }),
+          body: JSON.stringify({ title: brief.title, description: (brief.descriptionSections ?? []).filter(Boolean).join('\n\n') }),
         })
         const aiData = await aiRes.json()
         const generated = aiData.data ?? {}
@@ -2125,21 +2136,24 @@ function BriefsTab({ API }) {
                       })
                         .then(r => r.json())
                         .then(async data => {
-                          const generated = data.data?.brief ?? {}
+                          const generated     = data.data?.brief ?? {}
                           const sources = Array.isArray(generated.sources)
                             ? generated.sources.filter(s => s.url && s.url.startsWith('http'))
                             : []
-                          const briefTitle = generated.title || headline
-                          const briefDesc  = generated.description || ''
+                          const briefTitle    = generated.title || headline
+                          const briefSections = Array.isArray(generated.descriptionSections) && generated.descriptionSections.length > 0
+                            ? generated.descriptionSections
+                            : ['']
+                          const briefDescText = briefSections.filter(Boolean).join('\n\n')
                           setDraft({
-                            title:       briefTitle,
-                            subtitle:    generated.subtitle || '',
-                            description: briefDesc,
-                            category:    'News',
-                            keywords:    Array.isArray(generated.keywords) ? generated.keywords : [],
+                            title:               briefTitle,
+                            subtitle:            generated.subtitle || '',
+                            descriptionSections: briefSections,
+                            category:            'News',
+                            keywords:            Array.isArray(generated.keywords) ? generated.keywords : [],
                             sources,
-                            dateAdded:   new Date().toISOString().slice(0, 10),
-                            gameData:    {},
+                            dateAdded:           new Date().toISOString().slice(0, 10),
+                            gameData:            {},
                           })
                           setFeedback('Brief populated — generating quiz questions…')
 
@@ -2149,7 +2163,7 @@ function BriefsTab({ API }) {
                             const qRes  = await fetch(`${API}/api/admin/ai/generate-quiz`, {
                               method: 'POST', credentials: 'include',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ title: briefTitle, description: briefDesc }),
+                              body: JSON.stringify({ title: briefTitle, description: briefDescText }),
                             })
                             const qData = await qRes.json()
                             const fromAI = (qs) => (Array.isArray(qs) ? qs : []).map(q => ({
@@ -2368,7 +2382,7 @@ function BriefsTab({ API }) {
 
         <div className="brief-form-field">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
-            <label className="form-label" style={{ margin: 0 }}>Description</label>
+            <label className="form-label" style={{ margin: 0 }}>Description Sections</label>
             {!isNew && (
               <button
                 className="admin-action-btn"
@@ -2385,14 +2399,49 @@ function BriefsTab({ API }) {
                 ) : '✦ Regenerate with AI'}
               </button>
             )}
+            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: (() => { const w = (draft.descriptionSections ?? []).join(' ').trim().split(/\s+/).filter(Boolean).length; return w > 240 ? '#dc2626' : '#64748b' })() }}>
+              {(draft.descriptionSections ?? []).join(' ').trim().split(/\s+/).filter(Boolean).length} / 240 words
+            </span>
           </div>
-          <textarea
-            className="form-textarea"
-            rows={7}
-            value={draft.description}
-            onChange={e => setDraft(p => ({ ...p, description: e.target.value }))}
-            placeholder="~200 word brief description…"
-          />
+          {(draft.descriptionSections ?? ['']).map((section, si) => (
+            <div key={si} style={{ display: 'flex', gap: '0.4rem', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginBottom: '0.2rem' }}>Section {si + 1}</div>
+                <textarea
+                  className="form-textarea"
+                  rows={3}
+                  value={section}
+                  onChange={e => setDraft(p => {
+                    const s = [...(p.descriptionSections ?? [''])]
+                    s[si] = e.target.value
+                    return { ...p, descriptionSections: s }
+                  })}
+                  placeholder={`Paragraph ${si + 1}…`}
+                />
+              </div>
+              {(draft.descriptionSections ?? []).length > 1 && (
+                <button
+                  type="button"
+                  className="admin-action-btn"
+                  style={{ marginTop: '1.4rem', fontSize: '0.72rem', padding: '3px 8px', color: '#dc2626' }}
+                  onClick={() => setDraft(p => {
+                    const s = [...(p.descriptionSections ?? [])]
+                    s.splice(si, 1)
+                    return { ...p, descriptionSections: s }
+                  })}
+                  title="Remove this section"
+                >✕</button>
+              )}
+            </div>
+          ))}
+          {(draft.descriptionSections ?? []).length < 4 && (
+            <button
+              type="button"
+              className="admin-action-btn"
+              style={{ fontSize: '0.72rem', padding: '3px 10px' }}
+              onClick={() => setDraft(p => ({ ...p, descriptionSections: [...(p.descriptionSections ?? []), ''] }))}
+            >+ Add Section</button>
+          )}
         </div>
 
         <div className="brief-form-field">
@@ -2767,8 +2816,8 @@ function BriefsTab({ API }) {
             <button
               className="admin-action-btn"
               onClick={generateKeywords}
-              disabled={kwGenerating || !draft.description}
-              title={!draft.description ? 'Add a description first' : `Generate ${10 - (draft.keywords?.length ?? 0)} more keyword(s) from description`}
+              disabled={kwGenerating || !(draft.descriptionSections ?? []).some(Boolean)}
+              title={!(draft.descriptionSections ?? []).some(Boolean) ? 'Add a description first' : `Generate ${10 - (draft.keywords?.length ?? 0)} more keyword(s) from description`}
             >
               {kwGenerating ? (
                 <span className="quiz-generating">

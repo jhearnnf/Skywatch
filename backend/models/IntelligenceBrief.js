@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const CATEGORIES = [
-  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training',
+  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
 ];
 
@@ -42,6 +42,20 @@ const SUBCATEGORIES = {
     'Flying Training',
     'Ground Training & PME',
     'Tactical & Combat Training',
+  ],
+  Roles: [
+    'Fast Jet Pilot',
+    'Multi-Engine Pilot',
+    'Rotary Wing Pilot',
+    'Weapons Systems Operator',
+    'Intelligence Officer',
+    'Engineer Officer',
+    'Air Traffic Control Officer',
+    'RAF Regiment',
+    'Logistics & Supply',
+    'Medical & Nursing',
+    'Cyber & Information',
+    'Fighter Controller',
   ],
   Threats: [
     'State Actor Air',
@@ -130,7 +144,7 @@ const intelligenceBriefSchema = new mongoose.Schema(
 
     title:       { type: String, required: true, trim: true },
     subtitle:    { type: String, trim: true },
-    description: { type: String, trim: true }, // ~200 words
+    descriptionSections: [{ type: String, trim: true }], // 2–4 paragraphs, max 240 words total
 
     sources:  [sourceSchema],
     keywords: [keywordSchema],
