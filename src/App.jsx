@@ -1,124 +1,184 @@
-import { useState, useEffect, useRef } from 'react'
-import { AuthProvider, useAuth } from './context/AuthContext'
-import Navbar        from './components/Navbar'
-import Footer        from './components/Footer'
-import Dashboard         from './pages/Dashboard'
-import IntelFeed         from './pages/IntelFeed'
-import Profile           from './pages/Profile'
-import IntelligenceBrief from './pages/IntelligenceBrief'
-import Rankings          from './pages/Rankings'
-import Login             from './pages/Login'
-import Welcome           from './pages/Welcome'
-import Contact           from './pages/Contact'
-import About             from './pages/About'
-import ReportProblem     from './pages/ReportProblem'
-import Admin             from './pages/Admin'
-import AircoinHistory      from './pages/AircoinHistory'
-import GameHistory         from './pages/GameHistory'
-import AircoinNotification       from './components/AircoinNotification'
-import LevelUpNotification       from './components/LevelUpNotification'
-import RankPromotionNotification from './components/RankPromotionNotification'
-import TutorialOverlay           from './components/TutorialOverlay'
-import { TutorialProvider }      from './context/TutorialContext'
-import { playSound }        from './utils/sound'
-import './App.css'
+import { useEffect, useRef } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 
-// Inner app — has access to AuthContext
-function AppInner() {
-  const { loading, notifQueue, shiftNotif } = useAuth()
-  const currentNotif   = notifQueue[0] ?? null
-  const prevNotifIdRef = useRef(null)
+import { AuthProvider, useAuth }          from './context/AuthContext'
+import { AppTutorialProvider }             from './context/AppTutorialContext'
+import AppShell                            from './components/layout/AppShell'
+import AircoinNotification                 from './components/AircoinNotification'
+import LevelUpNotification                 from './components/LevelUpNotification'
+import RankPromotionNotification           from './components/RankPromotionNotification'
 
-  useEffect(() => {
-    if (!currentNotif || currentNotif.id === prevNotifIdRef.current) return
-    prevNotifIdRef.current = currentNotif.id
-    if (currentNotif.type === 'aircoin') playSound('aircoin')
-    else if (currentNotif.type === 'levelup') playSound('level_up')
-    else if (currentNotif.type === 'rankpromotion') playSound('rank_promotion')
-  }, [currentNotif])
+// v2 pages
+import Landing        from './pages/v2/Landing'
+import Home           from './pages/v2/Home'
+import Learn          from './pages/v2/Learn'
+import CategoryBriefs from './pages/v2/CategoryBriefs'
+import BriefReader    from './pages/v2/BriefReader'
+import QuizFlow       from './pages/v2/QuizFlow'
 
-  const [page, setPage] = useState(() => {
-    // Show welcome page if user hasn't visited today
-    const today     = new Date().toDateString()
-    const lastVisit = localStorage.getItem('skywatch_last_visit')
-    return lastVisit === today
-      ? { id: 'dashboard', params: {} }
-      : { id: 'welcome',   params: {} }
-  })
+// Legacy pages kept as-is (just wrapped in new shell)
+import Login          from './pages/Login'
+import Profile        from './pages/Profile'
+import Rankings       from './pages/Rankings'
+import Admin          from './pages/Admin'
+import ReportProblem  from './pages/ReportProblem'
+import AircoinHistory from './pages/AircoinHistory'
+import GameHistory    from './pages/GameHistory'
 
-  const navigate = (id, params = {}) => {
-    setPage({ id, params })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
+import { playSound } from './utils/sound'
 
-  if (loading) {
-    return (
-      <div className="app-loading">
-        <div className="app-loading__spinner" aria-label="Loading" />
-      </div>
-    )
-  }
-
-  const renderPage = () => {
-    const { id, params } = page
-    switch (id) {
-      case 'welcome':           return <Welcome navigate={navigate} />
-      case 'login':             return <Login navigate={navigate} />
-      case 'intel-feed':        return <IntelFeed navigate={navigate} initialCategory={params.category} />
-      case 'intelligence-brief':return <IntelligenceBrief briefId={params.briefId} navigate={navigate} />
-      case 'profile':           return <Profile navigate={navigate} />
-      case 'rankings':          return <Rankings navigate={navigate} scrollTo={params.scrollTo} />
-      case 'admin':             return <Admin navigate={navigate} />
-      case 'contact':           return <Contact />
-      case 'about':             return <About />
-      case 'report':            return <ReportProblem fromPage={params.fromPage} navigate={navigate} />
-      case 'aircoin-history':   return <AircoinHistory navigate={navigate} targetUser={params.targetUser} />
-      case 'game-history':      return <GameHistory navigate={navigate} />
-      default:                  return <Dashboard navigate={navigate} />
-    }
-  }
-
-  // Hide navbar/footer on welcome and login pages for full-screen experience
-  const fullScreen = page.id === 'welcome' || page.id === 'login'
-
+// ── Page transition wrapper ────────────────────────────────────────────────
+function PageWrapper({ children }) {
   return (
-    <TutorialProvider currentPage={page.id} navigate={navigate}>
-      <div className="app">
-        {!fullScreen && <Navbar page={page.id} navigate={navigate} />}
-        {renderPage()}
-        {!fullScreen && <Footer navigate={navigate} currentPage={page.id} />}
-        {currentNotif?.type === 'aircoin' && (
-          <AircoinNotification
-            key={currentNotif.id}
-            amount={currentNotif.amount}
-            label={currentNotif.label}
-            onDone={shiftNotif}
-          />
-        )}
-        {currentNotif?.type === 'levelup' && (
-          <LevelUpNotification
-            key={currentNotif.id}
-            level={currentNotif.level}
-            onDone={shiftNotif}
-          />
-        )}
-        {currentNotif?.type === 'rankpromotion' && (
-          <RankPromotionNotification
-            key={currentNotif.id}
-            rank={currentNotif.rank}
-            onDone={shiftNotif}
-          />
-        )}
-        <TutorialOverlay />
-      </div>
-    </TutorialProvider>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+    >
+      {children}
+    </motion.div>
   )
 }
 
+// ── Shim: passes navigate-compatible props to legacy pages ─────────────────
+function LegacyPage({ Component, ...props }) {
+  const nav = useNavigate()
+  const navigate = (id, params = {}) => {
+    const MAP = {
+      dashboard:           '/home',
+      'intel-feed':        '/learn',
+      profile:             '/profile',
+      rankings:            '/rankings',
+      admin:               '/admin',
+      login:               '/login',
+      'aircoin-history':   '/aircoin-history',
+      'game-history':      '/game-history',
+      'report':            '/report',
+    }
+    if (id?.startsWith('intelligence-brief') || id === 'intelligence-brief') {
+      nav(`/brief/${params.briefId ?? ''}`)
+    } else {
+      nav(MAP[id] ?? '/')
+    }
+  }
+  return <Component navigate={navigate} {...props} />
+}
+
+// ── Notification layer (sits above all routes) ─────────────────────────────
+function NotifLayer() {
+  const { notifQueue, shiftNotif } = useAuth()
+  const current     = notifQueue[0] ?? null
+  const prevIdRef   = useRef(null)
+
+  useEffect(() => {
+    if (!current || current.id === prevIdRef.current) return
+    prevIdRef.current = current.id
+    if (current.type === 'aircoin')       playSound('aircoin')
+    else if (current.type === 'levelup')  playSound('level_up')
+    else if (current.type === 'rankpromotion') playSound('rank_promotion')
+  }, [current])
+
+  if (!current) return null
+
+  if (current.type === 'aircoin') {
+    return <AircoinNotification key={current.id} amount={current.amount} label={current.label} onDone={shiftNotif} />
+  }
+  if (current.type === 'levelup') {
+    return <LevelUpNotification key={current.id} level={current.level} onDone={shiftNotif} />
+  }
+  if (current.type === 'rankpromotion') {
+    return <RankPromotionNotification key={current.id} rank={current.rank} onDone={shiftNotif} />
+  }
+  return null
+}
+
+// ── Loading screen ─────────────────────────────────────────────────────────
+function LoadingScreen() {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center bg-brand-50">
+      <div className="text-center">
+        <div className="w-10 h-10 border-3 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-sm font-semibold text-brand-700 tracking-widest">SKYWATCH</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Route guard ────────────────────────────────────────────────────────────
+function RequireAuth({ children }) {
+  const { user, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (!user)   return <Navigate to="/login" replace />
+  return children
+}
+
+// ── Login shim (legacy Login page adapted for React Router) ───────────────
+function LoginPage() {
+  const nav = useNavigate()
+  const { user } = useAuth()
+  if (user) return <Navigate to="/home" replace />
+
+  const navigate = (id, params = {}) => {
+    if (id === 'dashboard') nav('/home')
+    else nav('/')
+  }
+  return <Login navigate={navigate} />
+}
+
+// ── App routes ─────────────────────────────────────────────────────────────
+function AppRoutes() {
+  const { loading } = useAuth()
+  const location    = useLocation()
+
+  if (loading) return <LoadingScreen />
+
+  return (
+    <AppShell>
+      <AnimatePresence mode="wait" initial={false}>
+        <Routes location={location} key={location.pathname}>
+
+          {/* Public */}
+          <Route path="/" element={<PageWrapper><Landing /></PageWrapper>} />
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* Core learning (accessible without login, progress tracked when logged in) */}
+          <Route path="/home"              element={<PageWrapper><Home /></PageWrapper>} />
+          <Route path="/learn"             element={<PageWrapper><Learn /></PageWrapper>} />
+          <Route path="/learn/:category"   element={<PageWrapper><CategoryBriefs /></PageWrapper>} />
+          <Route path="/brief/:briefId"    element={<PageWrapper><BriefReader /></PageWrapper>} />
+          <Route path="/quiz/:briefId"     element={<RequireAuth><PageWrapper><QuizFlow /></PageWrapper></RequireAuth>} />
+
+          {/* Protected */}
+          <Route path="/profile"          element={<RequireAuth><PageWrapper><LegacyPage Component={Profile} /></PageWrapper></RequireAuth>} />
+          <Route path="/rankings"         element={<PageWrapper><LegacyPage Component={Rankings} /></PageWrapper>} />
+          <Route path="/report"           element={<PageWrapper><LegacyPage Component={ReportProblem} /></PageWrapper>} />
+          <Route path="/aircoin-history"  element={<RequireAuth><PageWrapper><LegacyPage Component={AircoinHistory} /></PageWrapper></RequireAuth>} />
+          <Route path="/game-history"     element={<RequireAuth><PageWrapper><LegacyPage Component={GameHistory} /></PageWrapper></RequireAuth>} />
+          <Route path="/admin"            element={<RequireAuth><PageWrapper><LegacyPage Component={Admin} /></PageWrapper></RequireAuth>} />
+
+          {/* Play hub (future — redirect to learn for now) */}
+          <Route path="/play"             element={<Navigate to="/learn" replace />} />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/home" replace />} />
+        </Routes>
+      </AnimatePresence>
+    </AppShell>
+  )
+}
+
+// ── Root ───────────────────────────────────────────────────────────────────
 export default function App() {
   return (
-    <AuthProvider>
-      <AppInner />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppTutorialProvider>
+          <AppRoutes />
+          <NotifLayer />
+        </AppTutorialProvider>
+      </AuthProvider>
+    </BrowserRouter>
   )
 }
