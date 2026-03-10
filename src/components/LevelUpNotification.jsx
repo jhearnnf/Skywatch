@@ -1,28 +1,34 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export default function LevelUpNotification({ level, onDone }) {
-  const [phase, setPhase] = useState('in')
-
   useEffect(() => {
-    const t = setTimeout(() => setPhase('out'), 3200)
+    const t = setTimeout(onDone, 3400)
     return () => clearTimeout(t)
-  }, [])
-
-  const handleAnimEnd = () => { if (phase === 'out') onDone() }
+  }, [onDone])
 
   return (
-    <div
-      className={`levelup-notif levelup-notif--${phase}`}
-      onAnimationEnd={handleAnimEnd}
-      aria-live="polite"
-    >
-      <svg className="levelup-notif__icon" width="34" height="34" viewBox="0 0 34 34" fill="none">
-        <polygon points="17,3 21,13 32,13 23,20 26,31 17,24 8,31 11,20 2,13 13,13" fill="#f59e0b" stroke="#d97706" strokeWidth="1.2" strokeLinejoin="round"/>
-      </svg>
-      <div className="levelup-notif__text">
-        <span className="levelup-notif__title">LEVEL UP</span>
-        <span className="levelup-notif__sub">AGENT LEVEL {level} ACHIEVED</span>
-      </div>
-    </div>
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: -80, scale: 0.85 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -60, scale: 0.9 }}
+        transition={{ type: 'spring', damping: 16, stiffness: 260 }}
+        aria-live="polite"
+        className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 bg-brand-600 text-white px-5 py-3 rounded-2xl shadow-xl shadow-brand-300/50 font-bold text-sm whitespace-nowrap"
+      >
+        <motion.span
+          animate={{ rotate: [0, -15, 15, -10, 10, 0], scale: [1, 1.3, 1.3, 1.1, 1] }}
+          transition={{ duration: 0.7, delay: 0.1 }}
+          className="text-2xl"
+        >
+          ⭐
+        </motion.span>
+        <div>
+          <p className="text-base font-extrabold">Level Up!</p>
+          <p className="text-brand-200 text-xs font-semibold">Agent Level {level} achieved</p>
+        </div>
+      </motion.div>
+    </AnimatePresence>
   )
 }

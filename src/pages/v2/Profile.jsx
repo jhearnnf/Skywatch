@@ -1,0 +1,278 @@
+import { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { useAuth } from '../../context/AuthContext'
+import { MOCK_LEVELS, MOCK_LEADERBOARD } from '../../data/mockData'
+import { getMasterVolume, setMasterVolume } from '../../utils/sound'
+
+function getLevelInfo(coins) {
+  const levels = MOCK_LEVELS
+  const idx    = [...levels].reverse().findIndex(l => coins >= l.cumulativeAircoins)
+  const lvl    = idx >= 0 ? levels[levels.length - 1 - idx] : levels[0]
+  const next   = levels[levels.indexOf(lvl) + 1]
+  const base   = lvl.cumulativeAircoins
+  const cap    = next ? next.cumulativeAircoins - base : 200
+  const earned = Math.max(0, coins - base)
+  return { level: lvl.levelNumber, progress: Math.min(100, Math.round((earned / cap) * 100)), current: earned, next: cap }
+}
+
+function StatCard({ label, value, icon, onClick }) {
+  const Tag = onClick ? 'button' : 'div'
+  return (
+    <Tag
+      onClick={onClick}
+      className={`flex flex-col items-center gap-1 bg-white rounded-2xl p-3 border border-slate-200 card-shadow text-center
+        ${onClick ? 'hover:border-brand-300 hover:bg-brand-50 transition-all cursor-pointer' : ''}`}
+    >
+      <span className="text-xl">{icon}</span>
+      <span className="text-lg font-extrabold text-slate-900">{value}</span>
+      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
+    </Tag>
+  )
+}
+
+export default function Profile() {
+  const { user, setUser, API } = useAuth()
+  const navigate = useNavigate()
+
+  const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, winPercent: 0 })
+  const [levels,      setLevels]      = useState(MOCK_LEVELS)
+  const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
+  const [diffBusy,    setDiffBusy]    = useState(false)
+  const [masterVol,   setMasterVol]   = useState(() => getMasterVolume())
+  const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard'
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/api/users/levels`).then(r => r.json()),
+      fetch(`${API}/api/users/settings`).then(r => r.json()),
+    ])
+      .then(([lvlData, settingsData]) => {
+        if (lvlData?.data?.levels?.length) setLevels(lvlData.data.levels)
+        const useLive = settingsData?.data?.useLiveLeaderboard ?? false
+        if (useLive) {
+          return fetch(`${API}/api/users/leaderboard`)
+            .then(r => r.json())
+            .then(lbData => setLeaderboard(lbData?.data?.agents ?? []))
+        }
+      })
+      .catch(() => {})
+  }, [API])
+
+  useEffect(() => {
+    if (!user) return
+    fetch(`${API}/api/users/stats`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data?.data) setStats({
+          brifsRead:   data.data.brifsRead   ?? 0,
+          gamesPlayed: data.data.gamesPlayed ?? 0,
+          winPercent:  data.data.winPercent  ?? 0,
+        })
+      })
+      .catch(() => {})
+  }, [API, user])
+
+  const changeDifficulty = async (d) => {
+    if (diffBusy || d === user?.difficultySetting) return
+    setDiffBusy(true)
+    try {
+      const res  = await fetch(`${API}/api/users/me/difficulty`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ difficulty: d }),
+      })
+      const data = await res.json()
+      if (data?.data?.user) setUser(data.data.user)
+    } catch { /* non-fatal */ }
+    finally { setDiffBusy(false) }
+  }
+
+  const coins    = user?.cycleAircoins ?? 0
+  const levelInfo = getLevelInfo(coins)
+  const rankDisplay = user?.rank && typeof user.rank === 'object' && user.rank.rankName
+    ? `${user.rank.rankName} (${user.rank.rankAbbreviation})`
+    : 'Unranked'
+
+  return (
+    <div className="max-w-lg mx-auto">
+
+      {/* User card */}
+      {user ? (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-brand-600 to-brand-500 rounded-2xl p-5 mb-5 text-white card-shadow"
+        >
+          <div className="flex items-center gap-4">
+            {/* Avatar */}
+            <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 flex items-center justify-center text-xl font-extrabold shrink-0">
+              {(user.displayName || user.email || 'A')[0].toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-extrabold text-lg leading-tight truncate">{user.displayName || 'Agent'}</p>
+              <p className="text-brand-200 text-sm">{rankDisplay}</p>
+              <p className="text-brand-200 text-xs mt-0.5">Agent #{user.agentNumber ?? '———'}</p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-xs text-brand-200">Streak</p>
+              <p className="text-2xl font-extrabold">{user.streak ?? 0}</p>
+              <p className="text-lg">🔥</p>
+            </div>
+          </div>
+
+          {/* XP bar */}
+          <div className="mt-4">
+            <div className="flex justify-between text-xs text-brand-200 mb-1">
+              <span>Level {levelInfo.level}</span>
+              <span>{levelInfo.current} / {levelInfo.next} XP</span>
+            </div>
+            <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-white rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${levelInfo.progress}%` }}
+                transition={{ duration: 0.8, ease: 'easeOut' }}
+              />
+            </div>
+          </div>
+        </motion.div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-5 text-center card-shadow">
+          <div className="text-4xl mb-3">🔒</div>
+          <p className="font-bold text-slate-800 mb-1">Sign in to view your profile</p>
+          <p className="text-sm text-slate-500 mb-4">Track progress, earn Aircoins, and climb the ranks.</p>
+          <Link to="/login" className="inline-flex px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors">
+            Sign In
+          </Link>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-4">
+        {['stats', 'leaderboard'].map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all
+              ${tab === t ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:border-brand-300'}`}
+          >
+            {t === 'stats' ? '📊 My Stats' : '🏆 Leaderboard'}
+          </button>
+        ))}
+      </div>
+
+      {/* Stats tab */}
+      {tab === 'stats' && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+
+          {/* Stats grid */}
+          <div className={`grid grid-cols-2 gap-3 ${!user ? 'opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
+            <StatCard label="Briefs Read"  value={stats.brifsRead}           icon="📋" />
+            <StatCard label="Games Played" value={stats.gamesPlayed}         icon="🎯" onClick={user ? () => navigate('/game-history') : undefined} />
+            <StatCard label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓" />
+            <StatCard label="Aircoins"     value={coins.toLocaleString()}     icon="⭐" onClick={user ? () => navigate('/aircoin-history') : undefined} />
+          </div>
+
+          {user && (
+            <>
+              {/* Difficulty */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quiz Difficulty</p>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'easy',   label: '🌱 Standard' },
+                    { value: 'medium', label: '🔥 Advanced' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => changeDifficulty(opt.value)}
+                      disabled={diffBusy}
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                        ${(user.difficultySetting ?? 'easy') === opt.value
+                          ? 'bg-brand-600 text-white'
+                          : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                        }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Volume */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">App Volume</p>
+                  <span className="text-sm font-bold text-brand-600">{masterVol}%</span>
+                </div>
+                <input
+                  type="range"
+                  className="w-full accent-brand-500 cursor-pointer"
+                  min={0} max={100}
+                  value={masterVol}
+                  onChange={e => {
+                    const v = Number(e.target.value)
+                    setMasterVol(v)
+                    setMasterVolume(v)
+                  }}
+                  aria-label="App volume"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                  <span>Mute</span><span>Max</span>
+                </div>
+              </div>
+
+              {/* Links */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow space-y-2">
+                <Link to="/rankings" className="flex items-center justify-between py-2 px-1 text-sm font-semibold text-slate-700 hover:text-brand-600 transition-colors">
+                  <span>🏅 View Progression & Ranks</span>
+                  <span className="text-slate-400">→</span>
+                </Link>
+                <div className="h-px bg-slate-100" />
+                <Link to="/report" className="flex items-center justify-between py-2 px-1 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
+                  <span>⚠️ Report a Problem</span>
+                  <span className="text-slate-400">→</span>
+                </Link>
+              </div>
+            </>
+          )}
+        </motion.div>
+      )}
+
+      {/* Leaderboard tab */}
+      {tab === 'leaderboard' && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+          <div className="p-4 border-b border-slate-100">
+            <p className="font-bold text-slate-800 text-sm">Top Agents — Aircoins</p>
+          </div>
+          <ol className="divide-y divide-slate-100">
+            {leaderboard.map((agent, i) => {
+              const pos = i + 1
+              const isCurrent = user?.agentNumber === agent.agentNumber
+              return (
+                <li
+                  key={agent.agentNumber}
+                  className={`flex items-center gap-3 px-4 py-3 ${isCurrent ? 'bg-brand-50' : ''}`}
+                >
+                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-extrabold shrink-0
+                    ${pos === 1 ? 'bg-amber-400 text-white' : pos === 2 ? 'bg-slate-300 text-white' : pos === 3 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    {pos}
+                  </span>
+                  <span className={`flex-1 text-sm font-semibold ${isCurrent ? 'text-brand-700' : 'text-slate-800'}`}>
+                    Agent {agent.agentNumber} {isCurrent && <span className="text-xs text-brand-500">(You)</span>}
+                  </span>
+                  <span className="text-sm font-bold text-amber-600">⭐ {agent.totalAircoins.toLocaleString()}</span>
+                </li>
+              )
+            })}
+            {leaderboard.length === 0 && (
+              <li className="px-4 py-6 text-center text-sm text-slate-400">No agents yet</li>
+            )}
+          </ol>
+        </motion.div>
+      )}
+
+    </div>
+  )
+}

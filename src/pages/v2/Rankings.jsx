@@ -1,0 +1,190 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { useAuth } from '../../context/AuthContext'
+import { MOCK_LEVELS, MOCK_RANKS } from '../../data/mockData'
+
+function getLevelInfo(coins, levels) {
+  if (!levels?.length) return { current: levels?.[0] ?? { levelNumber: 1, aircoinsToNextLevel: 100, cumulativeAircoins: 0 }, coinsInLevel: 0, coinsNeeded: 100, progress: 0 }
+  let current = levels[0]
+  for (const lvl of levels) {
+    if (coins >= lvl.cumulativeAircoins) current = lvl
+    else break
+  }
+  const coinsInLevel = coins - current.cumulativeAircoins
+  const coinsNeeded  = current.aircoinsToNextLevel
+  const progress     = coinsNeeded ? Math.min(100, Math.round((coinsInLevel / coinsNeeded) * 100)) : 100
+  return { current, coinsInLevel, coinsNeeded, progress }
+}
+
+export default function Rankings() {
+  const { user, API } = useAuth()
+  const navigate = useNavigate()
+
+  const [levels, setLevels] = useState(MOCK_LEVELS)
+  const [ranks,  setRanks]  = useState(MOCK_RANKS?.map(r => ({ ...r, rankAbbreviation: r.abbreviation })) ?? [])
+  const [tab,    setTab]    = useState('levels') // 'levels' | 'ranks'
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${API}/api/users/levels`).then(r => r.json()),
+      fetch(`${API}/api/users/ranks`).then(r => r.json()),
+    ])
+      .then(([lvlData, rankData]) => {
+        if (lvlData?.data?.levels?.length)  setLevels(lvlData.data.levels)
+        if (rankData?.data?.ranks?.length)  setRanks(rankData.data.ranks)
+      })
+      .catch(() => {})
+  }, [API])
+
+  const coins = user?.cycleAircoins ?? 0
+  const { current: currentLvl, coinsInLevel, coinsNeeded, progress: lvlProgress } = getLevelInfo(coins, levels)
+
+  const sortedRanks    = [...ranks].sort((a, b) => b.rankNumber - a.rankNumber)
+  const userRankId     = user?.rank?._id ?? user?.rank ?? null
+  const userRank       = userRankId
+    ? (user.rank?.rankNumber != null ? user.rank : ranks.find(r => r._id?.toString() === userRankId?.toString()))
+    : null
+  const userRankNumber = userRank?.rankNumber ?? null
+
+  return (
+    <div className="max-w-lg mx-auto">
+
+      {/* Header */}
+      <div className="mb-5">
+        <button onClick={() => navigate('/profile')} className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1">
+          ← Back
+        </button>
+        <h1 className="text-2xl font-extrabold text-slate-900">Progression</h1>
+        <p className="text-sm text-slate-500 mt-0.5">Level up and earn RAF Ranks.</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 mb-5">
+        {[
+          { key: 'levels', label: '🎖 Agent Levels' },
+          { key: 'ranks',  label: '🪖 RAF Ranks' },
+        ].map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+              ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:border-brand-300'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Levels tab */}
+      {tab === 'levels' && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+
+          {/* XP panel */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+            <div className="flex justify-between items-baseline mb-2">
+              <p className="text-sm font-bold text-slate-800">Level {currentLvl.levelNumber}</p>
+              <p className="text-xs text-slate-500">{coinsInLevel.toLocaleString()} / {coinsNeeded?.toLocaleString() ?? '—'} XP</p>
+            </div>
+            <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-brand-500 rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${lvlProgress}%` }}
+                transition={{ duration: 0.8, ease: 'easeOut' }}
+              />
+            </div>
+            <p className="text-xs text-slate-400 mt-1.5">
+              {coinsNeeded
+                ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} XP to Level ${currentLvl.levelNumber + 1}`
+                : '⭐ Max level — Rank Promotion on next cycle'
+              }
+            </p>
+          </div>
+
+          {/* Level list */}
+          <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+            {[...levels].sort((a, b) => b.levelNumber - a.levelNumber).map((lvl, i) => {
+              const isCurrent = lvl.levelNumber === currentLvl.levelNumber
+              const isAbove   = lvl.levelNumber > currentLvl.levelNumber
+              const isMax     = lvl.levelNumber === 10
+              return (
+                <motion.div
+                  key={lvl.levelNumber}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                  className={`flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-0
+                    ${isCurrent ? 'bg-brand-50' : isAbove ? 'opacity-40' : ''}`}
+                >
+                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-extrabold shrink-0
+                    ${isCurrent ? 'bg-brand-600 text-white' : isAbove ? 'bg-slate-100 text-slate-400' : 'bg-slate-100 text-slate-600'}`}>
+                    {lvl.levelNumber}
+                  </span>
+                  <div className="flex-1">
+                    <p className={`text-sm font-bold ${isCurrent ? 'text-brand-700' : 'text-slate-700'}`}>
+                      Level {lvl.levelNumber} {isMax && <span className="text-amber-500">⭐</span>}
+                    </p>
+                    <p className="text-xs text-slate-400">{lvl.cumulativeAircoins.toLocaleString()} total XP required</p>
+                  </div>
+                  {isCurrent && <span className="text-xs font-bold text-brand-600 bg-brand-100 px-2 py-0.5 rounded-full">You</span>}
+                  {isMax && !isCurrent && <span className="text-xs text-amber-600">Rank Promotion</span>}
+                  {isAbove && <span className="text-slate-300 text-lg">🔒</span>}
+                </motion.div>
+              )
+            })}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Ranks tab */}
+      {tab === 'ranks' && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+
+          {/* Current rank panel */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Current RAF Rank</p>
+            <p className="text-lg font-extrabold text-slate-900">{userRank?.rankName ?? 'Unranked'}</p>
+            {userRank?.rankAbbreviation && (
+              <p className="text-sm text-slate-500">{userRank.rankAbbreviation} · {userRank.rankType?.replace(/_/g, ' ')}</p>
+            )}
+          </div>
+
+          {/* Rank list */}
+          <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+            {sortedRanks.map((rank, i) => {
+              const isUser  = userRankNumber !== null && rank.rankNumber === userRankNumber
+              const isAbove = userRankNumber !== null && rank.rankNumber > userRankNumber
+              return (
+                <motion.div
+                  key={rank.rankNumber}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.025 }}
+                  className={`flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-0
+                    ${isUser ? 'bg-brand-50' : isAbove ? 'opacity-40' : ''}`}
+                >
+                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold shrink-0
+                    ${isUser ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                    {rank.rankNumber}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-bold truncate ${isUser ? 'text-brand-700' : 'text-slate-800'}`}>
+                      {rank.rankAbbreviation ?? rank.abbreviation}
+                    </p>
+                    <p className="text-xs text-slate-400 truncate">{rank.rankName} · {rank.rankType?.replace(/_/g, ' ')}</p>
+                  </div>
+                  {isUser && <span className="text-xs font-bold text-brand-600 bg-brand-100 px-2 py-0.5 rounded-full shrink-0">You</span>}
+                  {isAbove && !isUser && <span className="text-slate-300">🔒</span>}
+                </motion.div>
+              )
+            })}
+            {sortedRanks.length === 0 && (
+              <div className="px-4 py-6 text-center text-sm text-slate-400">No rank data available.</div>
+            )}
+          </div>
+        </motion.div>
+      )}
+    </div>
+  )
+}

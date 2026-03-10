@@ -91,6 +91,41 @@ router.get('/category-counts', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /api/briefs/category-stats — total + done (read) count per category for the current user
+router.get('/category-stats', optionalAuth, async (req, res) => {
+  try {
+    // Total briefs per category
+    const totals = await IntelligenceBrief.aggregate([
+      { $group: { _id: '$category', total: { $sum: 1 } } },
+    ]);
+
+    const stats = {};
+    totals.forEach(r => { stats[r._id] = { total: r.total, done: 0 }; });
+
+    if (req.user) {
+      // How many briefs per category has this user read?
+      const reads = await IntelligenceBriefRead.aggregate([
+        { $match: { userId: req.user._id } },
+        {
+          $lookup: {
+            from: 'intelligencebriefs',
+            localField: 'intelBriefId',
+            foreignField: '_id',
+            as: 'brief',
+          },
+        },
+        { $unwind: '$brief' },
+        { $group: { _id: '$brief.category', done: { $sum: 1 } } },
+      ]);
+      reads.forEach(r => { if (stats[r._id]) stats[r._id].done = r.done; });
+    }
+
+    res.json({ status: 'success', data: { stats } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/briefs/unread-categories — categories with ≥1 unread brief for the current user
 router.get('/unread-categories', optionalAuth, async (req, res) => {
   try {

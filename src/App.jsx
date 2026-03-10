@@ -17,10 +17,13 @@ import CategoryBriefs from './pages/v2/CategoryBriefs'
 import BriefReader    from './pages/v2/BriefReader'
 import QuizFlow       from './pages/v2/QuizFlow'
 
+// v2 pages (continued)
+import LoginPage      from './pages/v2/Login'
+import Profile        from './pages/v2/Profile'
+import Rankings       from './pages/v2/Rankings'
+import Play           from './pages/v2/Play'
+
 // Legacy pages kept as-is (just wrapped in new shell)
-import Login          from './pages/Login'
-import Profile        from './pages/Profile'
-import Rankings       from './pages/Rankings'
 import Admin          from './pages/Admin'
 import ReportProblem  from './pages/ReportProblem'
 import AircoinHistory from './pages/AircoinHistory'
@@ -114,17 +117,11 @@ function RequireAuth({ children }) {
   return children
 }
 
-// ── Login shim (legacy Login page adapted for React Router) ───────────────
-function LoginPage() {
-  const nav = useNavigate()
+// ── Login wrapper (redirect if already authed) ─────────────────────────────
+function LoginRoute() {
   const { user } = useAuth()
   if (user) return <Navigate to="/home" replace />
-
-  const navigate = (id, params = {}) => {
-    if (id === 'dashboard') nav('/home')
-    else nav('/')
-  }
-  return <Login navigate={navigate} />
+  return <LoginPage />
 }
 
 // ── App routes ─────────────────────────────────────────────────────────────
@@ -141,7 +138,7 @@ function AppRoutes() {
 
           {/* Public */}
           <Route path="/" element={<PageWrapper><Landing /></PageWrapper>} />
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login" element={<LoginRoute />} />
 
           {/* Core learning (accessible without login, progress tracked when logged in) */}
           <Route path="/home"              element={<PageWrapper><Home /></PageWrapper>} />
@@ -150,16 +147,16 @@ function AppRoutes() {
           <Route path="/brief/:briefId"    element={<PageWrapper><BriefReader /></PageWrapper>} />
           <Route path="/quiz/:briefId"     element={<RequireAuth><PageWrapper><QuizFlow /></PageWrapper></RequireAuth>} />
 
-          {/* Protected */}
-          <Route path="/profile"          element={<RequireAuth><PageWrapper><LegacyPage Component={Profile} /></PageWrapper></RequireAuth>} />
-          <Route path="/rankings"         element={<PageWrapper><LegacyPage Component={Rankings} /></PageWrapper>} />
+          {/* v2 pages */}
+          <Route path="/profile"          element={<PageWrapper><Profile /></PageWrapper>} />
+          <Route path="/rankings"         element={<PageWrapper><Rankings /></PageWrapper>} />
+          <Route path="/play"             element={<PageWrapper><Play /></PageWrapper>} />
+
+          {/* Protected (legacy wrapped) */}
           <Route path="/report"           element={<PageWrapper><LegacyPage Component={ReportProblem} /></PageWrapper>} />
           <Route path="/aircoin-history"  element={<RequireAuth><PageWrapper><LegacyPage Component={AircoinHistory} /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"     element={<RequireAuth><PageWrapper><LegacyPage Component={GameHistory} /></PageWrapper></RequireAuth>} />
           <Route path="/admin"            element={<RequireAuth><PageWrapper><LegacyPage Component={Admin} /></PageWrapper></RequireAuth>} />
-
-          {/* Play hub (future — redirect to learn for now) */}
-          <Route path="/play"             element={<Navigate to="/learn" replace />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/home" replace />} />

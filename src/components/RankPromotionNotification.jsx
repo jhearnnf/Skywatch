@@ -1,32 +1,35 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export default function RankPromotionNotification({ rank, onDone }) {
-  const [phase, setPhase] = useState('in')
-
   useEffect(() => {
-    const t = setTimeout(() => setPhase('out'), 4000)
+    const t = setTimeout(onDone, 4200)
     return () => clearTimeout(t)
-  }, [])
-
-  const handleAnimEnd = () => { if (phase === 'out') onDone() }
+  }, [onDone])
 
   return (
-    <div
-      className={`rankpromo-notif rankpromo-notif--${phase}`}
-      onAnimationEnd={handleAnimEnd}
-      aria-live="polite"
-    >
-      <svg className="rankpromo-notif__icon" width="36" height="36" viewBox="0 0 36 36" fill="none">
-        <polygon points="18,2 22,14 34,14 25,21 28,33 18,26 8,33 11,21 2,14 14,14" fill="#1d4ed8" stroke="#93c5fd" strokeWidth="1.2" strokeLinejoin="round"/>
-        <polygon points="18,8 21,16 29,16 23,20 25,28 18,23 11,28 13,20 7,16 15,16" fill="#60a5fa" stroke="none"/>
-      </svg>
-      <div className="rankpromo-notif__text">
-        <span className="rankpromo-notif__title">RANK PROMOTION</span>
-        <span className="rankpromo-notif__rank">
-          {rank?.rankAbbreviation && <span className="rankpromo-notif__abbr">{rank.rankAbbreviation}</span>}
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.7, y: 40 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.85, y: -40 }}
+        transition={{ type: 'spring', damping: 14, stiffness: 220 }}
+        aria-live="polite"
+        className="fixed inset-x-4 top-8 mx-auto max-w-xs z-[200] bg-gradient-to-br from-brand-700 to-brand-500 text-white p-5 rounded-3xl shadow-2xl shadow-brand-300/60 text-center"
+      >
+        <motion.div
+          animate={{ scale: [1, 1.25, 1], rotate: [0, -8, 8, 0] }}
+          transition={{ duration: 0.8, delay: 0.15 }}
+          className="text-4xl mb-2"
+        >
+          🏅
+        </motion.div>
+        <p className="text-xs font-bold text-brand-200 uppercase tracking-widest mb-1">Rank Promotion</p>
+        <p className="text-xl font-extrabold">
+          {rank?.rankAbbreviation && <span className="mr-1">{rank.rankAbbreviation}</span>}
           {rank?.rankName ?? 'New Rank'}
-        </span>
-      </div>
-    </div>
+        </p>
+      </motion.div>
+    </AnimatePresence>
   )
 }
