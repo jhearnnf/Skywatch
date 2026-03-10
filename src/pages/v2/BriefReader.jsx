@@ -160,7 +160,10 @@ export default function BriefReader() {
   const { start }      = useAppTutorial()
   const [brief, setBrief]       = useState(null)
   const [loading, setLoading]   = useState(true)
-  const [sectionIdx, setSection] = useState(0)
+  const [sectionIdx, setSection] = useState(() => {
+    const saved = sessionStorage.getItem(`sw_brief_sec_${briefId}`)
+    return saved ? parseInt(saved, 10) : 0
+  })
   const [done, setDone]          = useState(false)
   const [activeKw, setActiveKw]  = useState(null)
   const [learnedKws, setLearned] = useState(new Set())
@@ -203,9 +206,14 @@ export default function BriefReader() {
   const handleContinue = () => {
     if (isLast) {
       markRead()
+      sessionStorage.removeItem(`sw_brief_sec_${briefId}`)
       setDone(true)
     } else {
-      setSection(i => i + 1)
+      setSection(i => {
+        const next = i + 1
+        sessionStorage.setItem(`sw_brief_sec_${briefId}`, String(next))
+        return next
+      })
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }

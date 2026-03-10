@@ -100,8 +100,9 @@ export default function Home() {
   const { user, API } = useAuth()
   const { start }     = useAppTutorial()
   const navigate      = useNavigate()
-  const [stats, setStats] = useState({}) // { [category]: { total, done } }
-  const [missionDone, setMissionDone] = useState(todaysMissionDone)
+  const [stats,        setStats]        = useState({}) // { [category]: { total, done } }
+  const [missionDone,  setMissionDone]  = useState(todaysMissionDone)
+  const [latestBriefs, setLatestBriefs] = useState([])
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
 
   // Start tutorial on first visit
@@ -118,6 +119,14 @@ export default function Home() {
       .then(data => { if (data.status === 'success') setStats(data.data?.stats ?? {}) })
       .catch(() => {})
   }, [user, API])
+
+  // Fetch latest 4 briefs for "keep learning" strip
+  useEffect(() => {
+    fetch(`${API}/api/briefs?limit=4`)
+      .then(r => r.json())
+      .then(data => setLatestBriefs(data.data?.briefs ?? []))
+      .catch(() => {})
+  }, [API])
 
   const today   = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
   const greeting = user
@@ -205,6 +214,46 @@ export default function Home() {
           </Link>
         )}
       </motion.div>
+
+      {/* Keep learning — latest briefs */}
+      {latestBriefs.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-base font-bold text-slate-800">Latest Briefs</h2>
+            <Link to="/learn" className="text-xs font-semibold text-brand-600 hover:text-brand-700">See all →</Link>
+          </div>
+          <div className="space-y-2">
+            {latestBriefs.map((brief, i) => (
+              <motion.div
+                key={brief._id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.06 }}
+              >
+                <Link
+                  to={`/brief/${brief._id}`}
+                  className={`flex items-center gap-3 rounded-2xl px-4 py-3 border transition-all card-shadow group hover:-translate-y-0.5
+                    ${brief.isRead
+                      ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
+                      : 'bg-white border-slate-200 hover:border-brand-300 hover:bg-brand-50'}`}
+                >
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg
+                    ${brief.isRead ? 'bg-emerald-100' : 'bg-brand-50'}`}>
+                    {brief.isRead ? '✓' : (CATEGORY_ICONS[brief.category] ?? '📄')}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-bold truncate ${brief.isRead ? 'text-emerald-800' : 'text-slate-800'}`}>
+                      {brief.title}
+                    </p>
+                    <p className="text-xs text-slate-400 truncate">{brief.category}</p>
+                  </div>
+                  <span className={`text-slate-300 group-hover:text-brand-400 transition-colors ${brief.isRead ? 'text-emerald-300' : ''}`}>→</span>
+                </Link>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Subject grid */}
       <div className="mb-4 flex items-center justify-between">

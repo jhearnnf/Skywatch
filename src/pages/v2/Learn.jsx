@@ -24,10 +24,11 @@ const DESCRIPTIONS = {
 }
 
 export default function Learn() {
-  const { API } = useAuth()
+  const { user, API } = useAuth()
   const { start } = useAppTutorial()
-  const [counts, setCounts]   = useState({}) // { [category]: number }
-  const [search, setSearch]   = useState('')
+  const [counts,   setCounts]   = useState({}) // { [category]: total }
+  const [progress, setProgress] = useState({}) // { [category]: { total, done } }
+  const [search,   setSearch]   = useState('')
 
   // Tutorial on first visit
   useEffect(() => {
@@ -42,6 +43,15 @@ export default function Learn() {
       .then(data => { if (data?.data?.counts) setCounts(data.data.counts) })
       .catch(() => {})
   }, [API])
+
+  // Per-category progress for logged-in user
+  useEffect(() => {
+    if (!user) return
+    fetch(`${API}/api/briefs/category-stats`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => { if (data?.data?.stats) setProgress(data.data.stats) })
+      .catch(() => {})
+  }, [user, API])
 
   const filtered = CATEGORIES.filter(cat =>
     cat.toLowerCase().includes(search.toLowerCase()) ||
@@ -91,24 +101,50 @@ export default function Learn() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.04, duration: 0.35 }}
             >
-              <Link
-                to={`/learn/${encodeURIComponent(cat)}`}
-                className="flex items-center gap-4 bg-white rounded-2xl p-4 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all card-shadow hover:card-shadow-hover group hover:-translate-y-0.5"
-              >
-                <span className="text-3xl shrink-0 group-hover:scale-110 transition-transform">
-                  {CATEGORY_ICONS[cat] ?? '📄'}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-slate-800">{cat}</p>
-                  <p className="text-xs text-slate-400 truncate">{DESCRIPTIONS[cat] ?? ''}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  {counts[cat] != null && (
-                    <p className="text-xs font-bold text-brand-600">{counts[cat]}</p>
-                  )}
-                  <span className="text-slate-300 group-hover:text-brand-400 transition-colors block">→</span>
-                </div>
-              </Link>
+              {(() => {
+                const prog   = progress[cat]
+                const total  = counts[cat] ?? prog?.total ?? 0
+                const done   = prog?.done ?? 0
+                const pct    = total > 0 ? Math.round((done / total) * 100) : 0
+                const complete = user && pct === 100 && total > 0
+                return (
+                  <Link
+                    to={`/learn/${encodeURIComponent(cat)}`}
+                    className={`flex items-center gap-4 bg-white rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover group hover:-translate-y-0.5
+                      ${complete ? 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-300' : 'border-slate-200 hover:border-brand-300 hover:bg-brand-50'}`}
+                  >
+                    <span className="text-3xl shrink-0 group-hover:scale-110 transition-transform">
+                      {CATEGORY_ICONS[cat] ?? '📄'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <p className="font-bold text-slate-800">{cat}</p>
+                        {complete && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">✓ Done</span>}
+                      </div>
+                      <p className="text-xs text-slate-400 truncate">{DESCRIPTIONS[cat] ?? ''}</p>
+                      {user && total > 0 && (
+                        <div className="mt-1.5">
+                          <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                            <motion.div
+                              className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-brand-500'}`}
+                              initial={{ width: 0 }}
+                              animate={{ width: `${pct}%` }}
+                              transition={{ duration: 0.5, delay: 0.1 }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{done}/{total} read</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      {total > 0 && (
+                        <p className={`text-xs font-bold mb-0.5 ${complete ? 'text-emerald-600' : 'text-brand-600'}`}>{total}</p>
+                      )}
+                      <span className={`transition-colors block ${complete ? 'text-emerald-300 group-hover:text-emerald-500' : 'text-slate-300 group-hover:text-brand-400'}`}>→</span>
+                    </div>
+                  </Link>
+                )
+              })()}
             </motion.div>
           ))}
         </div>

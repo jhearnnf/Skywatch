@@ -22,12 +22,13 @@ import LoginPage      from './pages/v2/Login'
 import Profile        from './pages/v2/Profile'
 import Rankings       from './pages/v2/Rankings'
 import Play           from './pages/v2/Play'
+import AircoinHistory from './pages/v2/AircoinHistory'
+import GameHistory    from './pages/v2/GameHistory'
+import ReportProblem  from './pages/v2/ReportProblem'
+import NotFound       from './pages/v2/NotFound'
 
 // Legacy pages kept as-is (just wrapped in new shell)
 import Admin          from './pages/Admin'
-import ReportProblem  from './pages/ReportProblem'
-import AircoinHistory from './pages/AircoinHistory'
-import GameHistory    from './pages/GameHistory'
 
 import { playSound } from './utils/sound'
 
@@ -152,14 +153,14 @@ function AppRoutes() {
           <Route path="/rankings"         element={<PageWrapper><Rankings /></PageWrapper>} />
           <Route path="/play"             element={<PageWrapper><Play /></PageWrapper>} />
 
-          {/* Protected (legacy wrapped) */}
-          <Route path="/report"           element={<PageWrapper><LegacyPage Component={ReportProblem} /></PageWrapper>} />
-          <Route path="/aircoin-history"  element={<RequireAuth><PageWrapper><LegacyPage Component={AircoinHistory} /></PageWrapper></RequireAuth>} />
-          <Route path="/game-history"     element={<RequireAuth><PageWrapper><LegacyPage Component={GameHistory} /></PageWrapper></RequireAuth>} />
+          {/* v2 protected pages */}
+          <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
+          <Route path="/aircoin-history"  element={<RequireAuth><PageWrapper><AircoinHistory /></PageWrapper></RequireAuth>} />
+          <Route path="/game-history"     element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
           <Route path="/admin"            element={<RequireAuth><PageWrapper><LegacyPage Component={Admin} /></PageWrapper></RequireAuth>} />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/home" replace />} />
+          {/* 404 */}
+          <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
         </Routes>
       </AnimatePresence>
     </AppShell>
