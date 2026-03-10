@@ -11,7 +11,7 @@ const FEATURES = [
   { emoji: '📰', title: 'Live RAF News',               body: 'Stay up to date with real RAF news — automatically sourced and formatted as intel briefs.' },
 ]
 
-const CATEGORIES = [
+const PREVIEW_CATEGORIES = [
   { emoji: '✈️', label: 'Aircrafts'   },
   { emoji: '🏔️', label: 'Bases'       },
   { emoji: '🎯', label: 'Training'    },
@@ -135,11 +135,11 @@ export default function Landing() {
           className="text-center mb-10"
         >
           <h2 className="text-3xl font-bold text-slate-900 mb-3">Everything You Need to Know</h2>
-          <p className="text-slate-500 max-w-lg mx-auto">Eight subject areas covering the full breadth of modern RAF knowledge.</p>
+          <p className="text-slate-500 max-w-lg mx-auto">Fourteen subject areas covering the full breadth of modern RAF knowledge.</p>
         </motion.div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {CATEGORIES.map(({ emoji, label }, i) => (
+          {PREVIEW_CATEGORIES.map(({ emoji, label }, i) => (
             <motion.div
               key={label}
               initial={{ opacity: 0, scale: 0.9 }}
@@ -148,7 +148,7 @@ export default function Landing() {
               transition={{ delay: i * 0.05, duration: 0.35 }}
             >
               <Link
-                to={`/learn/${label.toLowerCase()}`}
+                to={`/learn/${encodeURIComponent(label)}`}
                 className="flex flex-col items-center gap-2 bg-white rounded-2xl p-4 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all card-shadow hover:card-shadow-hover group"
               >
                 <span className="text-3xl group-hover:scale-110 transition-transform">{emoji}</span>

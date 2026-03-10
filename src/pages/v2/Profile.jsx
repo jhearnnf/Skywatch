@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
+import { useAppTutorial } from '../../context/AppTutorialContext'
+import TutorialModal from '../../components/tutorial/TutorialModal'
 import { MOCK_LEVELS, MOCK_LEADERBOARD } from '../../data/mockData'
 import { getMasterVolume, setMasterVolume } from '../../utils/sound'
 
@@ -31,16 +33,33 @@ function StatCard({ label, value, icon, onClick }) {
   )
 }
 
+const TUTORIAL_LABELS = [
+  { key: 'home',        label: '🏠 Home',         emoji: '🏠' },
+  { key: 'learn',       label: '📚 Learn',        emoji: '📚' },
+  { key: 'briefReader', label: '📋 Brief Reader', emoji: '📋' },
+  { key: 'quiz',        label: '🎯 Quiz',         emoji: '🎯' },
+  { key: 'play',        label: '🎮 Play Hub',     emoji: '🎮' },
+  { key: 'profile',     label: '👤 Profile',      emoji: '👤' },
+  { key: 'rankings',    label: '🏆 Rankings',     emoji: '🏆' },
+]
+
 export default function Profile() {
   const { user, setUser, API } = useAuth()
   const navigate = useNavigate()
+  const { start, replay } = useAppTutorial()
 
   const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, winPercent: 0 })
   const [levels,      setLevels]      = useState(MOCK_LEVELS)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
   const [diffBusy,    setDiffBusy]    = useState(false)
   const [masterVol,   setMasterVol]   = useState(() => getMasterVolume())
-  const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard'
+  const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'tutorials'
+
+  // Tutorial on first visit
+  useEffect(() => {
+    const t = setTimeout(() => start('profile'), 600)
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     Promise.all([
@@ -95,6 +114,8 @@ export default function Profile() {
     : 'Unranked'
 
   return (
+    <>
+    <TutorialModal />
     <div className="max-w-lg mx-auto">
 
       {/* User card */}
@@ -150,14 +171,18 @@ export default function Profile() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-4">
-        {['stats', 'leaderboard'].map(t => (
+        {[
+          { key: 'stats',       label: '📊 Stats' },
+          { key: 'leaderboard', label: '🏆 Ranks' },
+          { key: 'tutorials',   label: '💡 Help' },
+        ].map(t => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={t.key}
+            onClick={() => setTab(t.key)}
             className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all
-              ${tab === t ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:border-brand-300'}`}
+              ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:border-brand-300'}`}
           >
-            {t === 'stats' ? '📊 My Stats' : '🏆 Leaderboard'}
+            {t.label}
           </button>
         ))}
       </div>
@@ -273,6 +298,31 @@ export default function Profile() {
         </motion.div>
       )}
 
+      {/* Tutorials tab */}
+      {tab === 'tutorials' && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+          <p className="text-sm text-slate-500 mb-1">Replay any tutorial to revisit how a feature works.</p>
+          <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+            {TUTORIAL_LABELS.map((tut, i) => (
+              <div
+                key={tut.key}
+                className={`flex items-center gap-3 px-4 py-3 ${i < TUTORIAL_LABELS.length - 1 ? 'border-b border-slate-100' : ''}`}
+              >
+                <span className="text-xl w-7 text-center">{tut.emoji}</span>
+                <span className="flex-1 text-sm font-semibold text-slate-700">{tut.label}</span>
+                <button
+                  onClick={() => replay(tut.key)}
+                  className="text-xs font-bold text-brand-600 hover:text-brand-700 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-full transition-colors"
+                >
+                  Replay
+                </button>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
     </div>
+    </>
   )
 }

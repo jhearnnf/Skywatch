@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
+import { useAppTutorial } from '../../context/AppTutorialContext'
+import TutorialModal from '../../components/tutorial/TutorialModal'
 
 const GAME_MODES = [
   {
@@ -41,7 +43,14 @@ const GAME_MODES = [
 export default function Play() {
   const { user, API } = useAuth()
   const navigate = useNavigate()
+  const { start } = useAppTutorial()
   const [recentBriefs, setRecentBriefs] = useState([])
+
+  // Tutorial on first visit
+  useEffect(() => {
+    const t = setTimeout(() => start('play'), 600)
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch recently read briefs to suggest as quiz starting points
   useEffect(() => {
@@ -53,6 +62,8 @@ export default function Play() {
   }, [user, API])
 
   return (
+    <>
+    <TutorialModal />
     <div>
       <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Play</h1>
       <p className="text-sm text-slate-500 mb-6">Test your RAF knowledge with training games.</p>
@@ -154,5 +165,6 @@ export default function Play() {
         </div>
       )}
     </div>
+    </>
   )
 }

@@ -26,7 +26,7 @@ export default function BottomNav() {
             <NavLink
               key={to}
               to={user || to === '/home' || to === '/rankings' ? to : '/login'}
-              className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors
+              className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors
                 ${active
                   ? 'text-brand-600'
                   : 'text-slate-400 hover:text-slate-600'
@@ -39,7 +39,7 @@ export default function BottomNav() {
                 {label}
               </span>
               {active && (
-                <span className="absolute bottom-0 w-8 h-0.5 bg-brand-600 rounded-full" />
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-brand-600 rounded-full" />
               )}
             </NavLink>
           )

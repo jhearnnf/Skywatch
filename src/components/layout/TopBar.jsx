@@ -1,6 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { CATEGORY_ICONS } from '../../data/mockData'
 
 function CrosshairLogo() {
   return (

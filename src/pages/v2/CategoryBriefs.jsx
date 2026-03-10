@@ -81,6 +81,7 @@ export default function CategoryBriefs() {
   const [readIds, setReadIds]     = useState(new Set())
   const [loading, setLoading]     = useState(true)
   const [activeSubcat, setSubcat] = useState('all')
+  const [search, setSearch]       = useState('')
 
   const icon  = CATEGORY_ICONS[category] ?? '📄'
   const subs  = SUBCATEGORIES[category]  ?? []
@@ -101,9 +102,9 @@ export default function CategoryBriefs() {
       .finally(() => setLoading(false))
   }, [category, user, API])
 
-  const filtered = activeSubcat === 'all'
-    ? briefs
-    : briefs.filter(b => b.subcategory === activeSubcat)
+  const filtered = briefs
+    .filter(b => activeSubcat === 'all' || b.subcategory === activeSubcat)
+    .filter(b => !search || b.title?.toLowerCase().includes(search.toLowerCase()) || b.subtitle?.toLowerCase().includes(search.toLowerCase()))
 
   const totalRead = briefs.filter(b => readIds.has(b._id)).length
   const pct       = briefs.length > 0 ? Math.round((totalRead / briefs.length) * 100) : 0
@@ -142,6 +143,21 @@ export default function CategoryBriefs() {
           />
         </div>
         <p className="text-xs text-slate-400 mt-2">{totalRead} of {briefs.length} briefs read</p>
+      </div>
+
+      {/* Search bar */}
+      <div className="relative mb-4">
+        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search briefs…"
+          className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm bg-white transition-all"
+        />
+        {search && (
+          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm">✕</button>
+        )}
       </div>
 
       {/* Subcategory filter */}

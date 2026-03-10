@@ -92,11 +92,16 @@ function CategoryCard({ category, progress = 0, total = 0, done = 0, index = 0 }
   )
 }
 
+function todaysMissionDone() {
+  return localStorage.getItem('sw_read_today') === new Date().toDateString()
+}
+
 export default function Home() {
   const { user, API } = useAuth()
   const { start }     = useAppTutorial()
   const navigate      = useNavigate()
   const [stats, setStats] = useState({}) // { [category]: { total, done } }
+  const [missionDone, setMissionDone] = useState(todaysMissionDone)
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
 
   // Start tutorial on first visit
@@ -171,19 +176,34 @@ export default function Home() {
         initial={{ opacity: 0, x: -12 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 0.2 }}
-        className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 flex items-center gap-3"
+        className={`rounded-2xl p-4 mb-6 flex items-center gap-3 border
+          ${missionDone
+            ? 'bg-emerald-50 border-emerald-200'
+            : 'bg-amber-50 border-amber-200'
+          }`}
       >
-        <span className="text-2xl">⭐</span>
+        <span className="text-2xl">{missionDone ? '✅' : '⭐'}</span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-amber-800">Daily mission available</p>
-          <p className="text-xs text-amber-600">Read one brief today to keep your streak going.</p>
+          {missionDone ? (
+            <>
+              <p className="text-sm font-bold text-emerald-800">Mission complete!</p>
+              <p className="text-xs text-emerald-600">You've read a brief today — streak secured. Keep it up!</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-bold text-amber-800">Daily mission available</p>
+              <p className="text-xs text-amber-600">Read one brief today to keep your streak going.</p>
+            </>
+          )}
         </div>
-        <Link
-          to="/learn"
-          className="shrink-0 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl transition-colors"
-        >
-          Go →
-        </Link>
+        {!missionDone && (
+          <Link
+            to="/learn"
+            className="shrink-0 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl transition-colors"
+          >
+            Go →
+          </Link>
+        )}
       </motion.div>
 
       {/* Subject grid */}

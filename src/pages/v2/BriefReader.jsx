@@ -195,6 +195,8 @@ export default function BriefReader() {
       await fetch(`${API}/api/briefs/${briefId}/read`, {
         method: 'POST', credentials: 'include',
       })
+      // Stamp today's date so Home page can show "mission complete"
+      localStorage.setItem('sw_read_today', new Date().toDateString())
     } catch {}
   }, [briefId, user, API])
 

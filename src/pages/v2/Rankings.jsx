@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
+import { useAppTutorial } from '../../context/AppTutorialContext'
+import TutorialModal from '../../components/tutorial/TutorialModal'
 import { MOCK_LEVELS, MOCK_RANKS } from '../../data/mockData'
 
 function getLevelInfo(coins, levels) {
@@ -20,10 +22,17 @@ function getLevelInfo(coins, levels) {
 export default function Rankings() {
   const { user, API } = useAuth()
   const navigate = useNavigate()
+  const { start } = useAppTutorial()
 
   const [levels, setLevels] = useState(MOCK_LEVELS)
   const [ranks,  setRanks]  = useState(MOCK_RANKS?.map(r => ({ ...r, rankAbbreviation: r.abbreviation })) ?? [])
   const [tab,    setTab]    = useState('levels') // 'levels' | 'ranks'
+
+  // Tutorial on first visit
+  useEffect(() => {
+    const t = setTimeout(() => start('rankings'), 600)
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     Promise.all([
@@ -48,6 +57,8 @@ export default function Rankings() {
   const userRankNumber = userRank?.rankNumber ?? null
 
   return (
+    <>
+    <TutorialModal />
     <div className="max-w-lg mx-auto">
 
       {/* Header */}
@@ -186,5 +197,6 @@ export default function Rankings() {
         </motion.div>
       )}
     </div>
+    </>
   )
 }

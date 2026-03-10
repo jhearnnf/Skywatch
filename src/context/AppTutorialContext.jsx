@@ -22,6 +22,14 @@ export const TUTORIAL_STEPS = {
     { emoji: '⭐', title: 'Earn Aircoins',
       body: 'Reading briefs and completing quizzes earns you Aircoins. These build your level and track your progress through the platform.' },
   ],
+  learn: [
+    { emoji: '📚', title: 'Subject Areas',
+      body: 'Every subject covers a different part of RAF knowledge — from aircraft and bases to roles, squadrons, and live news. Pick any subject to start reading intel briefs.' },
+    { emoji: '🔍', title: 'Search Subjects',
+      body: 'Use the search bar at the top to find a specific subject quickly. Great if you already know what you want to study!' },
+    { emoji: '📊', title: 'Brief Counts',
+      body: 'Each subject card shows how many intel briefs are available inside it. Aim to read every brief in a subject to fully master that area.' },
+  ],
   briefReader: [
     { emoji: '📋', title: 'Reading Intel Briefs',
       body: 'Each brief is broken into short, clear sections. Read one section at a time by pressing Continue — no rushing, just learning at your own pace.' },
@@ -39,6 +47,32 @@ export const TUTORIAL_STEPS = {
       body: 'Tap an answer to select it. You\'ll see immediately if it\'s right or wrong. Wrong answers show the correct answer so you learn from every mistake.' },
     { emoji: '⭐', title: 'Earn Aircoins',
       body: 'Every correct answer earns Aircoins. Complete the quiz to lock in your score. You can retake quizzes to improve your understanding!' },
+  ],
+  play: [
+    { emoji: '🎮', title: 'Play Hub',
+      body: 'This is your training games hub. Each game mode tests your RAF knowledge in a different way — from quizzes to flashcards and aircraft identification.' },
+    { emoji: '🧠', title: 'Start a Quiz',
+      body: 'The Intel Quiz lets you test yourself on any brief you\'ve read. Choose Standard for basic recall or Advanced for deeper questions. Earn Aircoins for every correct answer!' },
+    { emoji: '⚡', title: 'More Games Coming',
+      body: 'Flashcard Recall, Who\'s at Aircraft, and Battle Order are all in development. Check back as new game modes are added to keep training fresh.' },
+  ],
+  profile: [
+    { emoji: '👤', title: 'Your Agent Profile',
+      body: 'This is your personal stats dashboard. Track your level, Aircoins, reading streak, and quiz performance all in one place.' },
+    { emoji: '📊', title: 'Stats Tab',
+      body: 'The Stats tab shows briefs read, games played, average quiz score, and total Aircoins. Tap any stat to see its history.' },
+    { emoji: '🏆', title: 'Leaderboard Tab',
+      body: 'Switch to the Leaderboard tab to see how you rank against other RAF applicants by total Aircoins.' },
+    { emoji: '🎯', title: 'Quiz Difficulty',
+      body: 'You can change your preferred quiz difficulty here at any time — Standard for direct recall questions, or Advanced for tougher contextual challenges.' },
+  ],
+  rankings: [
+    { emoji: '🎖️', title: 'Level Progression',
+      body: 'The Agent Level tab shows your progress through Levels 1–10. Each level requires more Aircoins than the last. Reach Level 10 to trigger a Rank Promotion!' },
+    { emoji: '🪖', title: 'RAF Ranks',
+      body: 'The RAF Ranks tab shows all real RAF rank designations. Earn rank promotions by reaching Level 10 repeatedly — working your way up from Aircraftman to Marshal of the RAF.' },
+    { emoji: '⭐', title: 'How to Level Up',
+      body: 'Earn Aircoins by reading briefs and completing quizzes. Each correct quiz answer adds to your tally. The XP bar shows your progress to the next level.' },
   ],
 }
 
