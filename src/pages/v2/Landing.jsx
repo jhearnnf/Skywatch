@@ -3,12 +3,12 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 
 const FEATURES = [
-  { emoji: '✈️', title: 'Learn About the RAF',         body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — written for RAF applicants.' },
-  { emoji: '🧠', title: 'Section-by-Section Reading',  body: 'Each brief is broken into short, clear sections. Read at your own pace and build genuine knowledge.' },
-  { emoji: '🎮', title: 'Test Yourself',               body: 'After each brief, take a quiz to reinforce what you\'ve learned and earn Aircoins.' },
-  { emoji: '🔥', title: 'Daily Streaks',               body: 'Return every day to keep your streak alive. Consistent learning beats last-minute cramming every time.' },
-  { emoji: '🏆', title: 'Climb the Rankings',          body: 'Compete with other RAF applicants on the leaderboard as you progress through subjects.' },
-  { emoji: '📰', title: 'Live RAF News',               body: 'Stay up to date with real RAF news — automatically sourced and formatted as intel briefs.' },
+  { icon: '✈️', title: 'Learn About the RAF',        body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — written for RAF applicants.' },
+  { icon: '🧠', title: 'Section-by-Section Reading', body: 'Each brief is broken into short, clear sections. Read at your own pace and build genuine knowledge.' },
+  { icon: '🎮', title: 'Test Yourself',              body: 'After each brief, take a quiz to reinforce what you\'ve learned and earn Aircoins.' },
+  { icon: '🔥', title: 'Daily Streaks',              body: 'Return every day to keep your streak alive. Consistent learning beats last-minute cramming every time.' },
+  { icon: '🏆', title: 'Climb the Rankings',         body: 'Compete with other RAF applicants on the leaderboard as you progress through subjects.' },
+  { icon: '📰', title: 'Live RAF News',              body: 'Stay up to date with real RAF news — automatically sourced and formatted as intel briefs.' },
 ]
 
 const PREVIEW_CATEGORIES = [
@@ -30,29 +30,50 @@ const fadeUp = {
   }),
 }
 
+function CrosshairSVG() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+      <circle cx="14" cy="14" r="10" stroke="#5baaff" strokeWidth="1.8"/>
+      <circle cx="14" cy="14" r="3.5" stroke="#5baaff" strokeWidth="1.8"/>
+      <line x1="14" y1="1"  x2="14" y2="7"  stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="14" y1="21" x2="14" y2="27" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="1"  y1="14" x2="7"  y2="14" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="21" y1="14" x2="27" y2="14" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+/* Corner bracket decoration — tactical UI feel */
+function CornerBrackets({ size = 18, color = '#5baaff', opacity = 0.4 }) {
+  const s = `${size}px`
+  const style = { color, opacity, pointerEvents: 'none' }
+  const line = `2px solid currentColor`
+  return (
+    <>
+      <span style={{ ...style, position: 'absolute', top: 0,    left: 0,  width: s, height: s, borderTop: line, borderLeft:  line }} />
+      <span style={{ ...style, position: 'absolute', top: 0,    right: 0, width: s, height: s, borderTop: line, borderRight: line }} />
+      <span style={{ ...style, position: 'absolute', bottom: 0, left: 0,  width: s, height: s, borderBottom: line, borderLeft:  line }} />
+      <span style={{ ...style, position: 'absolute', bottom: 0, right: 0, width: s, height: s, borderBottom: line, borderRight: line }} />
+    </>
+  )
+}
+
 export default function Landing() {
   const { user } = useAuth()
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-brand-50 via-white to-white">
+    <div className="min-h-screen" style={{ background: '#06101e' }}>
 
-      {/* ── Minimal header ─────────────────────────────────── */}
-      <header className="fixed top-0 inset-x-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/60">
+      {/* ── Header ─────────────────────────────────────────── */}
+      <header className="fixed top-0 inset-x-0 z-40 bg-slate-50/80 backdrop-blur-md border-b border-slate-200/50">
         <div className="max-w-5xl mx-auto px-5 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
-              <circle cx="14" cy="14" r="10" stroke="#1a76e4" strokeWidth="1.8"/>
-              <circle cx="14" cy="14" r="3.5" stroke="#1a76e4" strokeWidth="1.8"/>
-              <line x1="14" y1="1"  x2="14" y2="7"  stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
-              <line x1="14" y1="21" x2="14" y2="27" stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
-              <line x1="1"  y1="14" x2="7"  y2="14" stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
-              <line x1="21" y1="14" x2="27" y2="14" stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
-            </svg>
-            <span className="font-bold tracking-widest text-slate-800 text-sm">SKYWATCH</span>
+            <CrosshairSVG />
+            <span className="font-bold tracking-widest text-brand-600 text-sm">SKYWATCH</span>
           </div>
           <div className="flex items-center gap-3">
             {user ? (
-              <Link to="/home" className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold px-4 py-1.5 rounded-full transition-colors">
+              <Link to="/home" className="bg-brand-600 hover:bg-brand-700 text-slate-50 text-sm font-bold px-4 py-1.5 rounded-full transition-colors">
                 Continue Learning
               </Link>
             ) : (
@@ -60,7 +81,7 @@ export default function Landing() {
                 <Link to="/login" className="text-sm font-semibold text-slate-600 hover:text-slate-800 transition-colors">
                   Sign In
                 </Link>
-                <Link to="/login?tab=register" className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold px-4 py-1.5 rounded-full transition-colors">
+                <Link to="/login?tab=register" className="bg-brand-600 hover:bg-brand-700 text-slate-50 text-sm font-bold px-4 py-1.5 rounded-full transition-colors">
                   Get Started
                 </Link>
               </>
@@ -70,13 +91,16 @@ export default function Landing() {
       </header>
 
       {/* ── Hero ───────────────────────────────────────────── */}
-      <section className="pt-32 pb-20 px-5 text-center max-w-3xl mx-auto">
+      <section className="pt-36 pb-24 px-5 text-center max-w-3xl mx-auto">
         <motion.div
           initial="hidden" animate="visible"
           variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
         >
-          <motion.div variants={fadeUp} custom={0} className="inline-flex items-center gap-2 bg-brand-100 text-brand-700 text-sm font-semibold px-4 py-1.5 rounded-full mb-6 border border-brand-200">
-            ✈️ Built for RAF Applicants
+          {/* Classified badge row */}
+          <motion.div variants={fadeUp} custom={0} className="flex items-center justify-center gap-2 mb-8">
+            <span className="classified-tag">CLASSIFIED</span>
+            <span className="intel-tag">RAF INTEL BRIEF</span>
+            <span className="intel-tag">APPLICANT ACCESS</span>
           </motion.div>
 
           <motion.h1 variants={fadeUp} custom={1} className="text-5xl sm:text-6xl font-extrabold text-slate-900 mb-5 leading-tight tracking-tight">
@@ -91,13 +115,14 @@ export default function Landing() {
           <motion.div variants={fadeUp} custom={3} className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               to={user ? '/home' : '/login?tab=register'}
-              className="bg-brand-600 hover:bg-brand-700 text-white font-bold px-8 py-4 rounded-2xl text-lg transition-all shadow-lg shadow-brand-200 hover:shadow-xl hover:shadow-brand-300 hover:-translate-y-0.5"
+              className="bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-all hover:shadow-lg hover:-translate-y-0.5"
+              style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)' }}
             >
               {user ? 'Continue Learning' : 'Start for Free →'}
             </Link>
             <Link
               to="/learn"
-              className="bg-white hover:bg-slate-50 text-slate-700 font-bold px-8 py-4 rounded-2xl text-lg border border-slate-200 transition-all hover:-translate-y-0.5"
+              className="bg-surface hover:bg-surface-raised text-slate-700 font-bold px-8 py-4 rounded-2xl text-lg border border-slate-200 transition-all hover:-translate-y-0.5"
             >
               Browse Subjects
             </Link>
@@ -109,23 +134,24 @@ export default function Landing() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, duration: 0.5 }}
-          className="mt-14 flex flex-wrap justify-center gap-8 text-center"
+          className="mt-16 flex flex-wrap justify-center gap-10 text-center"
         >
           {[
-            { value: '14',  label: 'Subject areas'   },
-            { value: '100+', label: 'Intel briefs'    },
-            { value: '1000+', label: 'Quiz questions' },
-            { value: 'Free', label: 'To start'        },
+            { value: '14',    label: 'Subject Areas'   },
+            { value: '100+',  label: 'Intel Briefs'    },
+            { value: '1000+', label: 'Quiz Questions'  },
+            { value: 'Free',  label: 'To Start'        },
           ].map(({ value, label }) => (
-            <div key={label}>
-              <div className="text-2xl font-extrabold text-brand-600">{value}</div>
-              <div className="text-sm text-slate-500">{label}</div>
+            <div key={label} className="relative px-4 py-3" style={{ border: '1px solid rgba(91,170,255,0.12)', borderRadius: 8 }}>
+              <CornerBrackets size={8} />
+              <div className="text-2xl font-extrabold text-brand-600 intel-mono">{value}</div>
+              <div className="text-xs text-slate-500 intel-mono mt-0.5">{label}</div>
             </div>
           ))}
         </motion.div>
       </section>
 
-      {/* ── Subject areas preview ──────────────────────────── */}
+      {/* ── Subject areas ──────────────────────────────────── */}
       <section className="py-16 px-5 max-w-4xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -134,6 +160,9 @@ export default function Landing() {
           transition={{ duration: 0.5 }}
           className="text-center mb-10"
         >
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <span className="intel-tag">SUBJECT INDEX</span>
+          </div>
           <h2 className="text-3xl font-bold text-slate-900 mb-3">Everything You Need to Know</h2>
           <p className="text-slate-500 max-w-lg mx-auto">Fourteen subject areas covering the full breadth of modern RAF knowledge.</p>
         </motion.div>
@@ -142,15 +171,16 @@ export default function Landing() {
           {PREVIEW_CATEGORIES.map(({ emoji, label }, i) => (
             <motion.div
               key={label}
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={{ opacity: 0, scale: 0.92 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.05, duration: 0.35 }}
             >
               <Link
                 to={`/learn/${encodeURIComponent(label)}`}
-                className="flex flex-col items-center gap-2 bg-white rounded-2xl p-4 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all card-shadow hover:card-shadow-hover group"
+                className="relative flex flex-col items-center gap-2 rounded-2xl p-4 border transition-all card-intel hover:card-intel hover:-translate-y-0.5 group"
               >
+                <CornerBrackets size={10} />
                 <span className="text-3xl group-hover:scale-110 transition-transform">{emoji}</span>
                 <span className="text-sm font-semibold text-slate-700">{label}</span>
               </Link>
@@ -167,21 +197,25 @@ export default function Landing() {
           viewport={{ once: true }}
           className="text-center mb-10"
         >
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <span className="intel-tag">MISSION BRIEFING</span>
+          </div>
           <h2 className="text-3xl font-bold text-slate-900 mb-3">How It Works</h2>
           <p className="text-slate-500">Designed from the ground up for RAF applicants.</p>
         </motion.div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {FEATURES.map(({ emoji, title, body }, i) => (
+          {FEATURES.map(({ icon, title, body }, i) => (
             <motion.div
               key={title}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.07, duration: 0.4 }}
-              className="bg-white rounded-2xl p-5 border border-slate-200 card-shadow"
+              className="relative card-intel rounded-2xl p-5"
             >
-              <span className="text-3xl">{emoji}</span>
+              <CornerBrackets size={12} />
+              <span className="text-3xl">{icon}</span>
               <h3 className="font-bold text-slate-900 mt-3 mb-1.5">{title}</h3>
               <p className="text-sm text-slate-500 leading-relaxed">{body}</p>
             </motion.div>
@@ -195,16 +229,28 @@ export default function Landing() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="max-w-2xl mx-auto bg-gradient-to-br from-brand-600 to-brand-700 rounded-3xl p-10 text-center text-white shadow-2xl shadow-brand-300"
+          className="relative max-w-2xl mx-auto rounded-3xl p-10 text-center overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)',
+            border: '1px solid rgba(91,170,255,0.2)',
+            boxShadow: '0 0 60px rgba(91,170,255,0.08), 0 20px 40px rgba(0,0,0,0.4)',
+          }}
         >
+          <CornerBrackets size={20} color="#5baaff" opacity={0.5} />
+
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <span className="classified-tag">PRIORITY ACCESS</span>
+          </div>
+
           <div className="text-5xl mb-4">🎯</div>
-          <h2 className="text-3xl font-extrabold mb-3">Ready to Begin?</h2>
-          <p className="text-brand-100 text-lg mb-8 max-w-md mx-auto">
+          <h2 className="text-3xl font-extrabold text-slate-900 mb-3">Ready to Begin?</h2>
+          <p className="text-slate-600 text-lg mb-8 max-w-md mx-auto">
             Join RAF applicants already using Skywatch to prepare for their selection journey.
           </p>
           <Link
             to={user ? '/home' : '/login?tab=register'}
-            className="inline-block bg-white text-brand-700 font-bold px-8 py-4 rounded-2xl text-lg hover:bg-brand-50 transition-colors shadow-lg"
+            className="inline-block bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-colors"
+            style={{ boxShadow: '0 0 20px rgba(91,170,255,0.3)' }}
           >
             {user ? 'Go to Home →' : 'Create Free Account →'}
           </Link>
@@ -212,8 +258,8 @@ export default function Landing() {
       </section>
 
       {/* ── Footer ────────────────────────────────────────── */}
-      <footer className="py-8 px-5 border-t border-slate-200 text-center text-sm text-slate-400">
-        <p>© {new Date().getFullYear()} Skywatch · Built for RAF Applicants</p>
+      <footer className="py-8 px-5 border-t border-slate-200 text-center">
+        <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR RAF APPLICANTS</p>
       </footer>
     </div>
   )

@@ -1,52 +1,94 @@
 @import "tailwindcss";
 
 @theme {
-  /* Brand palette — sky-blue RAF theme */
-  --color-brand-50:  #eff8ff;
-  --color-brand-100: #dbeffe;
-  --color-brand-200: #bfe3fc;
-  --color-brand-300: #92d0fa;
-  --color-brand-400: #5eb4f6;
-  --color-brand-500: #3896f0;
-  --color-brand-600: #1a76e4;
-  --color-brand-700: #1560c8;
-  --color-brand-800: #174fa3;
-  --color-brand-900: #194481;
+  /* ── Brand palette — dark electric blue RAF theme ─────────────────── */
+  --color-brand-50:  #04101f;
+  --color-brand-100: #081e38;
+  --color-brand-200: #0f3060;
+  --color-brand-300: #1a4e98;
+  --color-brand-400: #2d72d4;
+  --color-brand-500: #4590ee;
+  --color-brand-600: #5baaff;
+  --color-brand-700: #82c4ff;
+  --color-brand-800: #b8dcff;
+  --color-brand-900: #e0f0ff;
 
-  /* Semantic aliases */
+  /* ── Semantic aliases */
   --color-primary:        var(--color-brand-600);
   --color-primary-hover:  var(--color-brand-700);
-  --color-primary-light:  var(--color-brand-50);
+  --color-primary-light:  var(--color-brand-100);
 
-  /* Surface */
-  --color-surface:        #ffffff;
-  --color-surface-raised: #f8fbff;
-  --color-bg:             #f0f6fe;
+  /* ── Dark surfaces ────────────────────────────────────────────────── */
+  --color-surface:        #0c1829;
+  --color-surface-raised: #102040;
+  --color-bg:             #06101e;
 
-  /* Text */
-  --color-text:           #0f172a;
-  --color-text-muted:     #64748b;
-  --color-text-faint:     #94a3b8;
+  /* ── Text ─────────────────────────────────────────────────────────── */
+  --color-text:           #ddeaf8;
+  --color-text-muted:     #7090b0;
+  --color-text-faint:     #3d5a7a;
 
-  /* XP / coins */
-  --color-xp:   #f59e0b;
-  --color-xp-bg: #fef3c7;
+  /* ── Slate scale — dark mode ──────────────────────────────────────── */
+  --color-slate-50:  #080e1c;
+  --color-slate-100: #0d1625;
+  --color-slate-200: #172236;
+  --color-slate-300: #243650;
+  --color-slate-400: #4a6282;
+  --color-slate-500: #6880a0;
+  --color-slate-600: #8ba0c0;
+  --color-slate-700: #aec0d8;
+  --color-slate-800: #ccd8ec;
+  --color-slate-900: #e8edf8;
 
-  /* Success / warning / danger */
-  --color-success:  #22c55e;
-  --color-warning:  #f59e0b;
-  --color-danger:   #ef4444;
+  /* ── Amber — dark context ─────────────────────────────────────────── */
+  --color-amber-50:  #1a1200;
+  --color-amber-100: #2d2000;
+  --color-amber-200: #4a3400;
+  --color-amber-600: #f59e0b;
+  --color-amber-700: #fbbf24;
+  --color-amber-800: #fcd34d;
 
-  /* Radius tokens */
-  --radius-card:   1rem;
-  --radius-btn:    0.75rem;
-  --radius-pill:   9999px;
+  /* ── Sky — dark context ───────────────────────────────────────────── */
+  --color-sky-50:  #001525;
+  --color-sky-100: #002340;
+  --color-sky-200: #003d65;
+  --color-sky-600: #0ea5e9;
+  --color-sky-700: #38bdf8;
+  --color-sky-800: #7dd3fc;
 
-  /* Font */
+  /* ── Emerald — dark context ───────────────────────────────────────── */
+  --color-emerald-50:  #001a10;
+  --color-emerald-100: #002d1a;
+  --color-emerald-200: #004520;
+  --color-emerald-300: #006e38;
+  --color-emerald-600: #4ade80;
+  --color-emerald-800: #86efac;
+
+  /* ── Red — dark context ───────────────────────────────────────────── */
+  --color-red-50:  #1a0508;
+  --color-red-100: #2e0a10;
+  --color-red-200: #4a1018;
+
+  /* ── XP / coins */
+  --color-xp:    #fbbf24;
+  --color-xp-bg: #1a1200;
+
+  /* ── Status */
+  --color-success: #22c55e;
+  --color-warning: #fbbf24;
+  --color-danger:  #ef4444;
+
+  /* ── Radius tokens */
+  --radius-card: 1rem;
+  --radius-btn:  0.75rem;
+  --radius-pill: 9999px;
+
+  /* ── Fonts */
   --font-family-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Courier New', monospace;
 }
 
-/* ── Base ─────────────────────────────────────────────── */
+/* ── Base ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
 html { scroll-behavior: smooth; }
@@ -59,26 +101,106 @@ body {
   overscroll-behavior-y: contain;
 }
 
+/* Subtle tactical grid overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(91, 170, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(91, 170, 255, 0.022) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root { position: relative; z-index: 1; }
+
 /* custom scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+::-webkit-scrollbar-thumb { background: #1a3060; border-radius: 9999px; }
 
 /* prevent layout shift when bottom-sheet open */
 .no-scroll { overflow: hidden; }
 
-/* ── Utility classes used alongside Tailwind ──────────── */
+/* ── Core utilities ───────────────────────────────────────────────────── */
 .text-gradient {
-  background: linear-gradient(135deg, var(--color-brand-600), var(--color-brand-400));
+  background: linear-gradient(135deg, var(--color-brand-600), #38bdf8);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .card-shadow {
-  box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(26,118,228,.08);
+  box-shadow: 0 1px 3px rgba(0,0,0,.5), 0 4px 16px rgba(91,170,255,.06);
 }
 
 .card-shadow-hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,.08), 0 8px 24px rgba(26,118,228,.14);
+  box-shadow: 0 4px 12px rgba(0,0,0,.6), 0 8px 28px rgba(91,170,255,.16);
+}
+
+/* ── Intel / spy aesthetic utilities ─────────────────────────────────── */
+
+/* Monospace tactical label */
+.intel-mono {
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.08em;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* Small "CLASSIFIED" tag */
+.classified-tag {
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.14em;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #ef4444;
+  text-transform: uppercase;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  padding: 2px 6px;
+  border-radius: 2px;
+  line-height: 1.4;
+}
+
+/* Small "INTEL BRIEF" / status tag in brand blue */
+.intel-tag {
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.14em;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: var(--color-brand-600);
+  text-transform: uppercase;
+  border: 1px solid rgba(91, 170, 255, 0.35);
+  padding: 2px 6px;
+  border-radius: 2px;
+  line-height: 1.4;
+}
+
+/* Card with intel-style inset border glow */
+.card-intel {
+  background: var(--color-surface);
+  border: 1px solid rgba(91, 170, 255, 0.1);
+  box-shadow:
+    0 1px 3px rgba(0,0,0,.5),
+    0 4px 16px rgba(91,170,255,.04),
+    inset 0 1px 0 rgba(91,170,255,.05);
+}
+
+.card-intel:hover {
+  border-color: rgba(91, 170, 255, 0.22);
+  box-shadow:
+    0 4px 12px rgba(0,0,0,.55),
+    0 8px 28px rgba(91,170,255,.12);
+}
+
+/* Horizontal redaction bar (decorative) */
+.redact {
+  display: inline-block;
+  background: rgba(91, 170, 255, 0.18);
+  border-radius: 2px;
+  height: 1em;
+  vertical-align: middle;
 }

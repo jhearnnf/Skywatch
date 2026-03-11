@@ -22,7 +22,7 @@ function BriefNode({ brief, index, isRead }) {
         className={`flex items-start gap-4 p-4 rounded-2xl border transition-all group
           ${isRead
             ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
-            : 'bg-white border-slate-200 hover:border-brand-300 hover:bg-brand-50 card-shadow hover:card-shadow-hover'
+            : 'bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 card-shadow hover:card-shadow-hover'
           }
           ${locked ? 'opacity-50 cursor-not-allowed' : 'hover:-translate-y-0.5 cursor-pointer'}`}
       >
@@ -31,7 +31,7 @@ function BriefNode({ brief, index, isRead }) {
           border-2 transition-all
           ${isRead
             ? 'bg-emerald-500 border-emerald-500 text-white'
-            : 'bg-white border-slate-200 group-hover:border-brand-400'
+            : 'bg-surface border-slate-200 group-hover:border-brand-400'
           }`}
         >
           {isRead ? '✓' : (locked ? '🔒' : CATEGORY_ICONS[brief.category] ?? '📄')}
@@ -129,7 +129,7 @@ export default function CategoryBriefs() {
       </div>
 
       {/* Progress */}
-      <div className="bg-white rounded-2xl p-4 mb-5 border border-slate-200 card-shadow">
+      <div className="bg-surface rounded-2xl p-4 mb-5 border border-slate-200 card-shadow">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-semibold text-slate-700">Your Progress</span>
           <span className="text-sm font-bold text-brand-600">{pct}%</span>
@@ -153,7 +153,7 @@ export default function CategoryBriefs() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search briefs…"
-          className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm bg-white transition-all"
+          className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm bg-surface transition-all"
         />
         {search && (
           <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm">✕</button>
@@ -168,7 +168,7 @@ export default function CategoryBriefs() {
             className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors
               ${activeSubcat === 'all'
                 ? 'bg-brand-600 text-white border-brand-600'
-                : 'bg-white text-slate-600 border-slate-200 hover:border-brand-300'}`}
+                : 'bg-surface text-slate-600 border-slate-200 hover:border-brand-300'}`}
           >
             All
           </button>
@@ -179,7 +179,7 @@ export default function CategoryBriefs() {
               className={`shrink-0 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors
                 ${activeSubcat === s
                   ? 'bg-brand-600 text-white border-brand-600'
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-brand-300'}`}
+                  : 'bg-surface text-slate-600 border-slate-200 hover:border-brand-300'}`}
             >
               {s}
             </button>
@@ -191,7 +191,7 @@ export default function CategoryBriefs() {
       {loading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-white rounded-2xl p-4 border border-slate-100 animate-pulse h-20" />
+            <div key={i} className="bg-surface rounded-2xl p-4 border border-slate-100 animate-pulse h-20" />
           ))}
         </div>
       ) : filtered.length === 0 ? (

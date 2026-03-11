@@ -49,6 +49,7 @@ const userSchema = new mongoose.Schema(
       user:        { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       load_up:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
     },
+    tutorialsResetAt: { type: Date, default: null }, // admin-triggered; frontend clears localStorage tutorial keys when newer than last clear
 
     // Login history (used for streak calculation)
     logins: [loginSchema],

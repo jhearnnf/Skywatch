@@ -105,7 +105,16 @@ const appSettingsSchema = new mongoose.Schema({
 appSettingsSchema.statics.getSettings = async function () {
   let settings = await this.findOne();
   if (!settings) {
-    settings = await this.create({});
+    try {
+      settings = await this.create({});
+    } catch (err) {
+      if (err.code === 11000) {
+        // Concurrent call already created it — just fetch
+        settings = await this.findOne();
+      } else {
+        throw err;
+      }
+    }
   } else {
     const updates = {};
     if (settings.ammoFree === 0)   updates.ammoFree   = 3;   // old default was 0

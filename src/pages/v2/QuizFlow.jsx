@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
@@ -6,7 +6,7 @@ import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 
 // ── Single question card ──────────────────────────────────────────────────
-function QuestionCard({ question, answers, onAnswer, answered, correctIdx, selectedIdx }) {
+function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, selectedAnswerId }) {
   return (
     <div>
       <h2 className="text-xl font-bold text-slate-900 leading-snug mb-6">
@@ -14,17 +14,19 @@ function QuestionCard({ question, answers, onAnswer, answered, correctIdx, selec
       </h2>
 
       <div className="space-y-3">
-        {answers.slice(0, 4).map((ans, i) => {
+        {answers.map((ans) => {
+          const isCorrect  = String(ans._id) === String(correctAnswerId)
+          const isSelected = String(ans._id) === String(selectedAnswerId)
           let state = 'idle'
           if (answered) {
-            if (i === correctIdx)                        state = 'correct'
-            else if (i === selectedIdx && i !== correctIdx) state = 'wrong'
+            if (isCorrect)       state = 'correct'
+            else if (isSelected) state = 'wrong'
           }
 
           return (
             <motion.button
-              key={i}
-              onClick={() => !answered && onAnswer(i)}
+              key={String(ans._id)}
+              onClick={() => !answered && onAnswer(ans._id)}
               disabled={answered}
               whileTap={!answered ? { scale: 0.98 } : {}}
               animate={
@@ -37,7 +39,7 @@ function QuestionCard({ question, answers, onAnswer, answered, correctIdx, selec
                 ${state === 'correct' ? 'bg-emerald-50 border-emerald-500 text-emerald-800' :
                   state === 'wrong'   ? 'bg-red-50 border-red-400 text-red-700' :
                   answered            ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed' :
-                                        'bg-white border-slate-200 text-slate-800 hover:border-brand-400 hover:bg-brand-50 cursor-pointer'
+                                        'bg-surface border-slate-200 text-slate-800 hover:border-brand-400 hover:bg-brand-50 cursor-pointer'
                 }`}
             >
               <div className="flex items-center gap-3">
@@ -48,7 +50,7 @@ function QuestionCard({ question, answers, onAnswer, answered, correctIdx, selec
                                           'border-slate-300 text-slate-500'
                   }`}
                 >
-                  {state === 'correct' ? '✓' : state === 'wrong' ? '✗' : String.fromCharCode(65 + i)}
+                  {state === 'correct' ? '✓' : state === 'wrong' ? '✗' : ''}
                 </span>
                 {ans.title}
               </div>
@@ -65,14 +67,14 @@ function QuestionCard({ question, answers, onAnswer, answered, correctIdx, selec
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             className={`mt-4 p-3 rounded-xl text-sm font-semibold
-              ${selectedIdx === correctIdx
+              ${String(selectedAnswerId) === String(correctAnswerId)
                 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                 : 'bg-red-50 text-red-800 border border-red-200'
               }`}
           >
-            {selectedIdx === correctIdx
+            {String(selectedAnswerId) === String(correctAnswerId)
               ? '✅ Correct! Well done.'
-              : `❌ The correct answer was: ${answers[correctIdx]?.title}`
+              : `❌ The correct answer was: ${answers.find(a => String(a._id) === String(correctAnswerId))?.title ?? '—'}`
             }
           </motion.div>
         )}
@@ -82,8 +84,8 @@ function QuestionCard({ question, answers, onAnswer, answered, correctIdx, selec
 }
 
 // ── Results screen ────────────────────────────────────────────────────────
-function ResultsScreen({ score, total, xpEarned, onRetry, onBack }) {
-  const pct     = Math.round((score / total) * 100)
+function ResultsScreen({ score, total, xpEarned, won, onRetry, onBack }) {
+  const pct     = total > 0 ? Math.round((score / total) * 100) : 0
   const perfect = score === total
 
   return (
@@ -104,9 +106,12 @@ function ResultsScreen({ score, total, xpEarned, onRetry, onBack }) {
       <h2 className="text-3xl font-extrabold text-slate-900 mb-1">
         {pct === 100 ? 'Perfect!' : pct >= 70 ? 'Great work!' : pct >= 40 ? 'Keep it up!' : 'Keep learning!'}
       </h2>
-      <p className="text-slate-500 mb-6">
+      <p className="text-slate-500 mb-2">
         {score} out of {total} correct ({pct}%)
       </p>
+      {!won && total > 0 && (
+        <p className="text-xs text-slate-400 mb-6">Score above 60% to earn Aircoins</p>
+      )}
 
       {/* Score ring */}
       <div className="relative w-28 h-28 mx-auto mb-6">
@@ -163,31 +168,59 @@ export default function QuizFlow() {
   const navigate         = useNavigate()
   const { user, API, awardAircoins } = useAuth()
   const { start }        = useAppTutorial()
-  const [questions, setQuestions]  = useState([])
-  const [brief, setBrief]          = useState(null)
-  const [loading, setLoading]      = useState(true)
-  const [qIdx, setQIdx]            = useState(0)
-  const [answered, setAnswered]    = useState(false)
-  const [selectedIdx, setSelected] = useState(null)
-  const [score, setScore]          = useState(0)
-  const [done, setDone]            = useState(false)
-  const [xpEarned, setXP]          = useState(0)
-  const [difficulty, setDifficulty] = useState('easy') // 'easy' | 'medium'
-  const [diffChosen, setDiffChosen] = useState(false)
 
+  const [loading, setLoading]        = useState(true)
+  const [error, setError]            = useState(null)
+  const [brief, setBrief]            = useState(null)
+  const [questions, setQuestions]    = useState([])
+  const [attemptId, setAttemptId]    = useState(null)
+  const [gameSessionId, setSession]  = useState(null)
+  const [difficulty, setDifficulty]  = useState('easy')
+
+  const [qIdx, setQIdx]              = useState(0)
+  const [answered, setAnswered]      = useState(false)
+  const [selectedAnswerId, setSelected] = useState(null)
+  const [score, setScore]            = useState(0)
+  const [done, setDone]              = useState(false)
+  const [won, setWon]                = useState(false)
+  const [xpEarned, setXP]            = useState(0)
+
+  const questionStartRef = useRef(Date.now())
+  const finishedRef      = useRef(false)
+
+  // Load brief info + start quiz session
   useEffect(() => {
-    Promise.all([
-      fetch(`${API}/api/briefs/${briefId}`).then(r => r.json()),
-      fetch(`${API}/api/briefs/${briefId}/questions`).then(r => r.json()),
-    ])
-      .then(([briefData, qData]) => {
+    async function startQuiz() {
+      try {
+        const [briefRes, startRes] = await Promise.all([
+          fetch(`${API}/api/briefs/${briefId}`),
+          fetch(`${API}/api/games/quiz/start`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ briefId }),
+          }),
+        ])
+        const briefData = await briefRes.json()
+        const startData = await startRes.json()
+
+        if (!startRes.ok) {
+          setError(startData.message ?? 'Could not start quiz')
+          return
+        }
+
         setBrief(briefData.data?.brief ?? null)
-        const easy   = qData.data?.easyQuestions   ?? []
-        const medium = qData.data?.mediumQuestions  ?? []
-        setQuestions({ easy, medium })
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+        setQuestions(startData.data?.questions ?? [])
+        setAttemptId(startData.data?.attemptId ?? null)
+        setSession(startData.data?.gameSessionId ?? null)
+        setDifficulty(startData.data?.difficulty ?? 'easy')
+      } catch {
+        setError('Failed to load quiz')
+      } finally {
+        setLoading(false)
+      }
+    }
+    startQuiz()
   }, [briefId, API])
 
   useEffect(() => {
@@ -197,38 +230,65 @@ export default function QuizFlow() {
     }
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const activeQs  = questions[difficulty] ?? []
-  const current   = activeQs[qIdx]
-  const totalQs   = activeQs.length
+  const current  = questions[qIdx]
+  const totalQs  = questions.length
 
-  // Find the correct answer index
-  const correctIdx = current?.answers?.findIndex(a => a.isCorrect) ?? 0
+  // Submit per-question result to backend
+  const submitResult = useCallback(async (answerId) => {
+    if (!attemptId || !gameSessionId || !current) return
+    const timeTaken = Math.round((Date.now() - questionStartRef.current) / 1000)
+    try {
+      await fetch(`${API}/api/games/quiz/result`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionId:         current._id,
+          displayedAnswerIds: current.answers.map(a => a._id),
+          selectedAnswerId:   answerId,
+          timeTakenSeconds:   timeTaken,
+          gameSessionId,
+          attemptId,
+        }),
+      })
+    } catch {}
+  }, [API, attemptId, gameSessionId, current])
 
-  const handleAnswer = (i) => {
-    setSelected(i)
+  const handleAnswer = (answerId) => {
+    setSelected(answerId)
     setAnswered(true)
-    if (i === correctIdx) setScore(s => s + 1)
+    if (String(answerId) === String(current.correctAnswerId)) {
+      setScore(s => s + 1)
+    }
+    submitResult(answerId)
   }
 
   const handleNext = async () => {
     const nextIdx = qIdx + 1
     if (nextIdx >= totalQs) {
-      // Award XP
-      const pts = Math.round((score + (selectedIdx === correctIdx ? 1 : 0)) / totalQs * 10)
-      if (user && pts > 0) {
+      // Finish the attempt
+      if (!finishedRef.current && attemptId) {
+        finishedRef.current = true
         try {
-          const res  = await fetch(`${API}/api/games/quiz/complete`, {
-            method: 'POST', credentials: 'include',
+          const res  = await fetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
+            method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ briefId, difficulty, score: score + (selectedIdx === correctIdx ? 1 : 0), total: totalQs }),
+            body: JSON.stringify({ status: 'completed' }),
           })
           const data = await res.json()
-          if (data.data?.aircoinsAwarded) {
-            awardAircoins(data.data.aircoinsAwarded, 'Quiz complete', {
-              cycleAfter: data.data.cycleAfter,
-              totalAfter: data.data.totalAfter,
-            })
-            setXP(data.data.aircoinsAwarded)
+          const earned = data.data?.aircoinsEarned ?? 0
+          const didWin = data.data?.won ?? false
+          setWon(didWin)
+          if (earned > 0) {
+            setXP(earned)
+            if (awardAircoins) {
+              awardAircoins(earned, 'Quiz complete', {
+                cycleAfter:  data.data?.attempt?.cycleAircoins,
+                totalAfter:  data.data?.attempt?.totalAircoins,
+                rankPromotion: data.data?.rankPromotion,
+              })
+            }
           }
         } catch {}
       }
@@ -237,15 +297,17 @@ export default function QuizFlow() {
       setQIdx(nextIdx)
       setAnswered(false)
       setSelected(null)
+      questionStartRef.current = Date.now()
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }
 
   const handleRetry = () => {
-    setQIdx(0); setAnswered(false); setSelected(null)
-    setScore(0); setDone(false); setXP(0)
+    // Re-navigate to the same route so a fresh session starts
+    navigate(0)
   }
 
+  // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
@@ -256,51 +318,41 @@ export default function QuizFlow() {
     )
   }
 
-  // Difficulty chooser
-  if (!diffChosen) {
+  // ── Error (not enough questions, etc.) ───────────────────────────────────
+  if (error) {
     return (
       <>
-        <TutorialModal />
-        <button onClick={() => navigate(`/brief/${briefId}`)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors">
+        <button
+          onClick={() => navigate(`/brief/${briefId}`)}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
+        >
           ← Back to Brief
         </button>
-        <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Choose Difficulty</h1>
-        <p className="text-sm text-slate-500 mb-6">{brief?.title}</p>
-        <div className="space-y-3">
-          {[
-            { key: 'easy',   emoji: '🌱', title: 'Standard',   body: 'Direct recall questions — ideal for your first attempt.', count: questions.easy?.length ?? 0 },
-            { key: 'medium', emoji: '🔥', title: 'Advanced',   body: 'Contextual questions requiring deeper understanding.',     count: questions.medium?.length ?? 0 },
-          ].map(({ key, emoji, title, body, count }) => (
-            <button
-              key={key}
-              onClick={() => { setDifficulty(key); setDiffChosen(true) }}
-              disabled={count === 0}
-              className="w-full text-left p-4 bg-white rounded-2xl border-2 border-slate-200 hover:border-brand-400 hover:bg-brand-50 transition-all card-shadow disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <div className="flex items-start gap-3">
-                <span className="text-3xl">{emoji}</span>
-                <div>
-                  <p className="font-bold text-slate-800">{title}</p>
-                  <p className="text-sm text-slate-500">{body}</p>
-                  <p className="text-xs text-slate-400 mt-1">{count} questions</p>
-                </div>
-              </div>
-            </button>
-          ))}
+        <div className="text-center py-16 text-slate-400">
+          <div className="text-4xl mb-3">📭</div>
+          <p className="font-semibold text-slate-600 mb-1">Quiz unavailable</p>
+          <p className="text-sm">{error}</p>
+          <button
+            onClick={() => navigate(`/brief/${briefId}`)}
+            className="mt-6 text-brand-600 font-semibold text-sm hover:text-brand-700"
+          >
+            ← Back to brief
+          </button>
         </div>
       </>
     )
   }
 
+  // ── Results ──────────────────────────────────────────────────────────────
   if (done) {
-    const finalScore = score
     return (
       <>
         <TutorialModal />
         <ResultsScreen
-          score={finalScore}
+          score={score}
           total={totalQs}
           xpEarned={xpEarned}
+          won={won}
           onRetry={handleRetry}
           onBack={() => navigate(`/brief/${briefId}`)}
         />
@@ -308,6 +360,7 @@ export default function QuizFlow() {
     )
   }
 
+  // ── No questions ─────────────────────────────────────────────────────────
   if (!current) {
     return <div className="text-center py-16 text-slate-400">No questions available.</div>
   }
@@ -319,7 +372,21 @@ export default function QuizFlow() {
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
-          <button onClick={() => navigate(`/brief/${briefId}`)} className="text-sm text-slate-500 hover:text-slate-700 transition-colors">
+          <button
+            onClick={async () => {
+              // Abandon the attempt before navigating away
+              if (attemptId && !finishedRef.current) {
+                finishedRef.current = true
+                await fetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
+                  method: 'POST', credentials: 'include',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'abandoned' }),
+                }).catch(() => {})
+              }
+              navigate(`/brief/${briefId}`)
+            }}
+            className="text-sm text-slate-500 hover:text-slate-700 transition-colors"
+          >
             ✕ Quit
           </button>
           <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
@@ -327,6 +394,18 @@ export default function QuizFlow() {
           </span>
           <span className="text-xs font-semibold text-slate-400">
             {score} correct
+          </span>
+        </div>
+
+        {/* Difficulty badge */}
+        <div className="flex justify-center mb-2">
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border
+            ${difficulty === 'medium'
+              ? 'bg-orange-50 border-orange-200 text-orange-600'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-600'
+            }`}
+          >
+            {difficulty === 'medium' ? '🔥 Advanced' : '🌱 Standard'}
           </span>
         </div>
 
@@ -341,16 +420,25 @@ export default function QuizFlow() {
       </div>
 
       {/* Question */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200 mb-4 card-shadow">
-        <QuestionCard
-          question={current.question}
-          answers={current.answers}
-          onAnswer={handleAnswer}
-          answered={answered}
-          correctIdx={correctIdx}
-          selectedIdx={selectedIdx}
-        />
-      </div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={qIdx}
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.2 }}
+          className="bg-surface rounded-2xl p-5 border border-slate-200 mb-4 card-shadow"
+        >
+          <QuestionCard
+            question={current.question}
+            answers={current.answers}
+            onAnswer={handleAnswer}
+            answered={answered}
+            correctAnswerId={current.correctAnswerId}
+            selectedAnswerId={selectedAnswerId}
+          />
+        </motion.div>
+      </AnimatePresence>
 
       {/* Next button */}
       {answered && (

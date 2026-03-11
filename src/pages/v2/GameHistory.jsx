@@ -323,7 +323,7 @@ export default function GameHistory() {
       {loading ? (
         <div className="space-y-2">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-white rounded-2xl p-4 border border-slate-100 animate-pulse h-20" />
+            <div key={i} className="bg-surface rounded-2xl p-4 border border-slate-100 animate-pulse h-20" />
           ))}
         </div>
       ) : sessions.length === 0 ? (
@@ -333,7 +333,7 @@ export default function GameHistory() {
           <p className="text-sm mt-1">Complete quizzes and training drills to build your history.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+        <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
           {sessions.map((s, i) => (
             <SessionRow key={s._id} session={s} API={API} index={i} />
           ))}

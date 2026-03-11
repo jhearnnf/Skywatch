@@ -4,12 +4,12 @@ import { useAuth } from '../../context/AuthContext'
 function CrosshairLogo() {
   return (
     <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-      <circle cx="14" cy="14" r="10" stroke="#1a76e4" strokeWidth="1.8"/>
-      <circle cx="14" cy="14" r="3.5" stroke="#1a76e4" strokeWidth="1.8"/>
-      <line x1="14" y1="1" x2="14" y2="7"  stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="14" y1="21" x2="14" y2="27" stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="1"  y1="14" x2="7"  y2="14" stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="21" y1="14" x2="27" y2="14" stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
+      <circle cx="14" cy="14" r="10" stroke="#5baaff" strokeWidth="1.8"/>
+      <circle cx="14" cy="14" r="3.5" stroke="#5baaff" strokeWidth="1.8"/>
+      <line x1="14" y1="1" x2="14" y2="7"  stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="14" y1="21" x2="14" y2="27" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="1"  y1="14" x2="7"  y2="14" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="21" y1="14" x2="27" y2="14" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
     </svg>
   )
 }
@@ -19,13 +19,13 @@ export default function TopBar() {
   const navigate = useNavigate()
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 h-14">
+    <header className="fixed top-0 left-0 right-0 z-40 bg-slate-50/90 backdrop-blur-md border-b border-slate-200/60 h-14">
       <div className="max-w-6xl mx-auto px-4 h-full flex items-center justify-between gap-3">
 
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <CrosshairLogo />
-          <span className="font-bold text-lg tracking-widest text-slate-800 hidden sm:block">
+          <span className="font-bold text-lg tracking-widest text-brand-600 hidden sm:block">
             SKYWATCH
           </span>
         </Link>
@@ -37,7 +37,7 @@ export default function TopBar() {
               {/* Streak */}
               <div className="flex items-center gap-1 bg-amber-50 rounded-full px-3 py-1 border border-amber-200">
                 <span className="text-base">🔥</span>
-                <span className="text-sm font-bold text-amber-700">{user.streak ?? 0}</span>
+                <span className="text-sm font-bold text-amber-700">{user.loginStreak ?? 0}</span>
               </div>
 
               {/* Aircoins */}

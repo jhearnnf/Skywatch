@@ -1,0 +1,1290 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
+import { invalidateSoundSettings } from '../../utils/sound'
+import { TUTORIAL_STEPS } from '../../context/AppTutorialContext'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const fmtNum = (n) => (n ?? 0).toLocaleString()
+
+function fmtSeconds(s) {
+  if (!s) return '0s'
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
+  if (h) return `${h}h ${m}m`
+  if (m) return `${m}m ${sec}s`
+  return `${sec}s`
+}
+
+const ALL_CATEGORIES = [
+  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training',
+  'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
+]
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared UI
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Toast({ msg, onClear }) {
+  useEffect(() => {
+    if (!msg) return
+    const t = setTimeout(onClear, 3500)
+    return () => clearTimeout(t)
+  }, [msg, onClear])
+  if (!msg) return null
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm font-semibold px-5 py-2.5 rounded-full shadow-lg"
+    >
+      {msg}
+    </motion.div>
+  )
+}
+
+function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger = false, onConfirm, onCancel }) {
+  const [reason, setReason] = useState('')
+  const [busy,   setBusy]   = useState(false)
+
+  useEffect(() => {
+    const fn = (e) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [onCancel])
+
+  const confirm = async () => {
+    if (!reason.trim()) return
+    setBusy(true)
+    await onConfirm(reason.trim())
+    setBusy(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-end sm:items-center justify-center p-4" onClick={onCancel}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-surface rounded-2xl p-6 w-full max-w-md shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        <h3 className="text-base font-bold text-slate-900 mb-1">{title}</h3>
+        {body && <p className="text-sm text-slate-500 mb-4">{body}</p>}
+        <label className="block text-xs font-semibold text-slate-500 mb-1">Reason (required)</label>
+        <textarea
+          autoFocus
+          rows={2}
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Briefly describe why…"
+          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 resize-none mb-4"
+        />
+        <div className="flex gap-2">
+          <button onClick={onCancel} disabled={busy} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={confirm}
+            disabled={!reason.trim() || busy}
+            className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-colors disabled:opacity-40
+              ${danger ? 'bg-red-500 hover:bg-red-600' : 'bg-brand-600 hover:bg-brand-700'}`}
+          >
+            {busy ? 'Working…' : confirmLabel}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+function StatCard({ label, value, sub, color = 'slate' }) {
+  const colors = {
+    slate:  'bg-slate-50  border-slate-200  text-slate-700',
+    brand:  'bg-brand-50  border-brand-200  text-brand-700',
+    amber:  'bg-amber-50  border-amber-200  text-amber-700',
+    emerald:'bg-emerald-50 border-emerald-200 text-emerald-700',
+    red:    'bg-red-50    border-red-200    text-red-700',
+  }
+  return (
+    <div className={`rounded-2xl border p-4 ${colors[color] ?? colors.slate}`}>
+      <p className="text-2xl font-extrabold mb-0.5">{value ?? '—'}</p>
+      <p className="text-xs font-semibold uppercase tracking-wider opacity-70">{label}</p>
+      {sub && <p className="text-[10px] opacity-50 mt-0.5">{sub}</p>}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+function StatsTab({ API }) {
+  const [stats, setStats] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch(`${API}/api/admin/stats`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (d.status === 'success') setStats(d.data); else setError('Failed to load stats') })
+      .catch(() => setError('Failed to load stats'))
+  }, [API])
+
+  if (error) return <p className="text-sm text-red-500 py-8 text-center">{error}</p>
+  if (!stats) return <div className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading stats…</div>
+
+  const { users, games, briefs, tutorials } = stats
+
+  const pct = (n, d) => d > 0 ? `${Math.round((n / d) * 100)}%` : '—'
+
+  return (
+    <div className="space-y-8">
+      {/* Users */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Users</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Total Users"      value={fmtNum(users.totalUsers)}       color="brand" />
+          <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate" />
+          <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber" />
+          <StatCard label="Subscribed"       value={fmtNum(users.subscribedUsers)}   color="emerald" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate" />
+          <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate" />
+          <StatCard label="Total Logins"     value={fmtNum(users.totalLogins)}       color="slate" />
+          <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate" />
+        </div>
+      </section>
+
+      {/* Quiz */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Quiz</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Played"           value={fmtNum(games.totalGamesPlayed)}  color="brand" />
+          <StatCard label="Completed"        value={fmtNum(games.totalGamesCompleted)} color="slate" />
+          <StatCard label="Perfect Score"    value={pct(games.totalPerfectScores, games.totalGamesCompleted)} color="emerald" />
+          <StatCard label="Abandoned"        value={pct(games.totalGamesAbandoned, games.totalGamesPlayed)} color="red" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="Time Played"      value={fmtSeconds(games.quizTotalSeconds)} color="slate" />
+          <StatCard label="Pass Rate"        value={pct(games.totalGamesWon, games.totalGamesCompleted)} color="emerald" />
+          <StatCard label="Failed Quizzes"   value={pct(games.totalGamesLost, games.totalGamesCompleted)} color="amber" sub={`below pass threshold`} />
+        </div>
+      </section>
+
+      {/* Battle of Order */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Battle of Order</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Games"     value={fmtNum(games.boo?.total)}                                    color="brand" />
+          <StatCard label="Won"       value={pct(games.boo?.won, games.boo?.total)}                       color="emerald" />
+          <StatCard label="Defeated"  value={pct(games.boo?.defeated, games.boo?.total)}                  color="amber" />
+          <StatCard label="Abandoned" value={pct(games.boo?.abandoned, games.boo?.total)}                 color="red" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="Time Played" value={fmtSeconds(games.boo?.totalSeconds)} color="slate" />
+        </div>
+      </section>
+
+      {/* Aircoins + Briefs + Tutorials */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Economy & Content</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Aircoins in System" value={fmtNum(games.totalAircoinsEarned)} color="amber" />
+          <StatCard label="Briefs Read"        value={fmtNum(briefs.totalBrifsRead)}     color="brand" />
+          <StatCard label="Tutorials Viewed"   value={fmtNum(tutorials.viewed)}          color="slate" />
+          <StatCard label="Tutorials Skipped"  value={fmtNum(tutorials.skipped)}         color="slate" />
+        </div>
+      </section>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SETTINGS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SOUND_GROUPS = [
+  {
+    title: 'Brief Reader',
+    sounds: [
+      { key: 'volumeTargetLocked',        enabledKey: 'soundEnabledTargetLocked',        label: 'Targeting Engaged',    sound: 'target_locked'        },
+      { key: 'volumeStandDown',           enabledKey: 'soundEnabledStandDown',           label: 'Targeting Disengaged', sound: 'stand_down'           },
+      { key: 'volumeTargetLockedKeyword', enabledKey: 'soundEnabledTargetLockedKeyword', label: 'Keyword Scan',         sound: 'target_locked_keyword'},
+      { key: 'volumeFire',                enabledKey: 'soundEnabledFire',                label: 'Keyword Fired',        sound: 'fire'                 },
+      { key: 'volumeOutOfAmmo',           enabledKey: 'soundEnabledOutOfAmmo',           label: 'Out of Ammo',          sound: 'out_of_ammo'          },
+    ],
+  },
+  {
+    title: 'Navigation',
+    sounds: [
+      { key: 'volumeIntelBriefOpened', enabledKey: 'soundEnabledIntelBriefOpened', label: 'Brief Opened', sound: 'intel_brief_opened' },
+    ],
+  },
+  {
+    title: 'Rewards',
+    sounds: [
+      { key: 'volumeAircoin',       enabledKey: 'soundEnabledAircoin',       label: 'Aircoins Earned', sound: 'aircoin'        },
+      { key: 'volumeLevelUp',       enabledKey: 'soundEnabledLevelUp',       label: 'Level Up',        sound: 'level_up'       },
+      { key: 'volumeRankPromotion', enabledKey: 'soundEnabledRankPromotion', label: 'Rank Promotion',  sound: 'rank_promotion' },
+    ],
+  },
+  {
+    title: 'Quiz',
+    sounds: [
+      { key: 'volumeQuizCompleteWin',  enabledKey: 'soundEnabledQuizCompleteWin',  label: 'Quiz Won',  sound: 'quiz_complete_win'  },
+      { key: 'volumeQuizCompleteLose', enabledKey: 'soundEnabledQuizCompleteLose', label: 'Quiz Fail', sound: 'quiz_complete_lose' },
+    ],
+  },
+  {
+    title: 'Battle of Order',
+    sounds: [
+      { key: 'volumeBattleOfOrderSelection', enabledKey: 'soundEnabledBattleOfOrderSelection', label: 'Selection',  sound: 'battle_of_order_selection' },
+      { key: 'volumeBattleOfOrderWon',       enabledKey: 'soundEnabledBattleOfOrderWon',       label: 'Game Won',   sound: 'battle_of_order_won'       },
+      { key: 'volumeBattleOfOrderLost',      enabledKey: 'soundEnabledBattleOfOrderLost',      label: 'Game Lost',  sound: 'battle_of_order_lost'      },
+    ],
+  },
+]
+
+const ALL_SOUND_KEYS = SOUND_GROUPS.flatMap(g => g.sounds.flatMap(s => [s.key, s.enabledKey]))
+
+function NumInput({ label, value, onChange, min = 0, max = 9999, hint }) {
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
+      <div>
+        <p className="text-sm font-semibold text-slate-700">{label}</p>
+        {hint && <p className="text-xs text-slate-400">{hint}</p>}
+      </div>
+      <input
+        type="number"
+        min={min} max={max}
+        value={value ?? ''}
+        onChange={e => onChange(Number(e.target.value))}
+        className="w-20 border border-slate-200 rounded-xl px-3 py-1.5 text-sm text-right outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400"
+      />
+    </div>
+  )
+}
+
+function Toggle({ label, hint, checked, onChange }) {
+  return (
+    <div className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
+      <div>
+        <p className="text-sm font-semibold text-slate-700">{label}</p>
+        {hint && <p className="text-xs text-slate-400">{hint}</p>}
+      </div>
+      <button
+        onClick={() => onChange(!checked)}
+        className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-brand-500' : 'bg-slate-200'}`}
+      >
+        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-surface rounded-full shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
+      </button>
+    </div>
+  )
+}
+
+function SoundRowV2({ label, value, onChange, enabled, onToggle }) {
+  const preview = () => {
+    invalidateSoundSettings()
+    try {
+      const audio = new Audio(`/sounds/${label.toLowerCase().replace(/\s+/g, '_')}.mp3`)
+      audio.volume = Math.min(1, (value ?? 100) / 100)
+      audio.play().catch(() => {})
+    } catch {}
+  }
+
+  return (
+    <div className={`flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0 ${!enabled ? 'opacity-50' : ''}`}>
+      <button
+        onClick={onToggle}
+        className={`w-10 h-5 rounded-full flex-shrink-0 transition-colors ${enabled ? 'bg-brand-500' : 'bg-slate-200'}`}
+      >
+        <span className={`block w-4 h-4 bg-surface rounded-full shadow mx-auto transition-transform ${enabled ? '' : ''}`} />
+      </button>
+      <span className="text-sm text-slate-700 flex-1">{label}</span>
+      <button onClick={preview} className="text-slate-400 hover:text-brand-600 text-xs px-2" title="Preview">▶</button>
+      <input
+        type="range" min={0} max={100}
+        value={value ?? 100}
+        onChange={e => onChange(Number(e.target.value))}
+        disabled={!enabled}
+        className="w-24"
+      />
+      <span className="text-xs text-slate-400 w-8 text-right">{value ?? 100}%</span>
+    </div>
+  )
+}
+
+function Section({ title, children, onSave, saving }) {
+  return (
+    <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="px-5 py-4 border-b border-slate-100">
+        <h3 className="font-bold text-slate-800">{title}</h3>
+      </div>
+      <div className="px-5 py-3">{children}</div>
+      {onSave && (
+        <div className="px-5 pb-4">
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="mt-1 px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CategoryGrid({ selected, onChange }) {
+  return (
+    <div className="flex flex-wrap gap-2 pt-2">
+      {ALL_CATEGORIES.map(cat => {
+        const on = selected?.includes(cat)
+        return (
+          <button
+            key={cat}
+            onClick={() => onChange(cat)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
+              ${on
+                ? 'bg-brand-600 text-white border-brand-600'
+                : 'bg-surface text-slate-600 border-slate-200 hover:border-brand-300'
+              }`}
+          >
+            {cat}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function PctSlider({ label, value, onChange }) {
+  const steps = [0, 20, 40, 60, 80, 100]
+  return (
+    <div className="py-3 border-b border-slate-100 last:border-0">
+      <div className="flex items-center justify-between mb-1.5">
+        <p className="text-sm font-semibold text-slate-700">{label}</p>
+        <span className="text-sm font-bold text-brand-600">{value ?? 60}%</span>
+      </div>
+      <input
+        type="range" min={0} max={100} step={20}
+        value={value ?? 60}
+        onChange={e => onChange(Number(e.target.value))}
+        className="w-full"
+      />
+      <div className="flex justify-between mt-0.5">
+        {steps.map(v => (
+          <span key={v} className={`text-[10px] ${(value ?? 60) === v ? 'text-brand-600 font-bold' : 'text-slate-300'}`}>{v}%</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SettingsTab({ API }) {
+  const { awardAircoins } = useAuth()
+  const [settings, setSettings] = useState(null)
+  const [draft,    setDraft]    = useState({})
+  const [modal,    setModal]    = useState(null)   // { label, fields }
+  const [toast,    setToast]    = useState('')
+  const [testAmount, setTestAmount] = useState('')
+  const [coinBusy,   setCoinBusy]   = useState(false)
+
+  const load = useCallback(() => {
+    fetch(`${API}/api/admin/settings`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { const s = d.data?.settings; if (s) { setSettings(s); setDraft(s) } })
+  }, [API])
+
+  useEffect(() => { load() }, [load])
+
+  const save = (label, fields) => {
+    setModal({ label, fields })
+  }
+
+  const confirmSave = async (reason) => {
+    const updates = {}
+    modal.fields.forEach(f => { updates[f] = draft[f] })
+    await fetch(`${API}/api/admin/settings`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...updates, reason }),
+    })
+    setModal(null)
+    invalidateSoundSettings()
+    setToast(`✓ ${modal.label} saved`)
+    load()
+  }
+
+  const awardTest = async () => {
+    const amt = parseInt(testAmount, 10)
+    if (!amt || amt <= 0) return
+    setCoinBusy(true)
+    try {
+      const res  = await fetch(`${API}/api/admin/award-coins`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amt }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        awardAircoins(data.awarded, 'Test Coins', { cycleAfter: data.cycleAircoins, totalAfter: data.totalAircoins })
+        setToast(`✓ Awarded ${data.awarded} test coins`)
+        setTestAmount('')
+      }
+    } finally { setCoinBusy(false) }
+  }
+
+  const set = (key, val) => setDraft(p => ({ ...p, [key]: val }))
+  const toggleCat = (key, cat) => setDraft(p => {
+    const cats = p[key] ?? []
+    return { ...p, [key]: cats.includes(cat) ? cats.filter(c => c !== cat) : [...cats, cat] }
+  })
+
+  if (!settings) return <div className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading settings…</div>
+
+  return (
+    <div>
+      <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
+
+      {modal && (
+        <ConfirmModal
+          title={modal.label}
+          confirmLabel="Save Changes"
+          onConfirm={confirmSave}
+          onCancel={() => setModal(null)}
+        />
+      )}
+
+      {/* ── Subscription ─────────────────────────────────────── */}
+      <Section title="Subscription" onSave={() => save('Update Subscription Settings', ['trialDurationDays', 'freeCategories', 'silverCategories'])}>
+        <NumInput label="Trial duration (days)" value={draft.trialDurationDays} min={1} max={365} onChange={v => set('trialDurationDays', v)} />
+
+        <div className="pt-3">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
+            Free tier categories
+            <span className="ml-2 bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] normal-case">Gold = all categories always</span>
+          </p>
+          <CategoryGrid selected={draft.freeCategories} onChange={cat => toggleCat('freeCategories', cat)} />
+        </div>
+
+        <div className="pt-4">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Silver tier categories</p>
+          <CategoryGrid selected={draft.silverCategories} onChange={cat => toggleCat('silverCategories', cat)} />
+        </div>
+      </Section>
+
+      {/* ── Aircoins ─────────────────────────────────────────── */}
+      <Section title="Aircoins" onSave={() => save('Update Aircoin Options', [
+        'aircoinsPerWinEasy', 'aircoinsPerWinMedium', 'aircoinsPerBriefRead',
+        'aircoinsFirstLogin', 'aircoinsStreakBonus', 'aircoins100Percent',
+        'aircoinsOrderOfBattleEasy', 'aircoinsOrderOfBattleMedium',
+      ])}>
+        <NumInput label="Per correct answer — Easy quiz"   value={draft.aircoinsPerWinEasy}          onChange={v => set('aircoinsPerWinEasy', v)} />
+        <NumInput label="Per correct answer — Medium quiz" value={draft.aircoinsPerWinMedium}        onChange={v => set('aircoinsPerWinMedium', v)} />
+        <NumInput label="100% score bonus"                 value={draft.aircoins100Percent}          onChange={v => set('aircoins100Percent', v)} />
+        <NumInput label="Per brief read (first time)"      value={draft.aircoinsPerBriefRead}        onChange={v => set('aircoinsPerBriefRead', v)} />
+        <NumInput label="First daily login"                value={draft.aircoinsFirstLogin}          onChange={v => set('aircoinsFirstLogin', v)} />
+        <NumInput label="Streak login bonus"               value={draft.aircoinsStreakBonus}         onChange={v => set('aircoinsStreakBonus', v)} />
+        <NumInput label="Battle of Order — Easy win"       value={draft.aircoinsOrderOfBattleEasy}   onChange={v => set('aircoinsOrderOfBattleEasy', v)} />
+        <NumInput label="Battle of Order — Medium win"     value={draft.aircoinsOrderOfBattleMedium} onChange={v => set('aircoinsOrderOfBattleMedium', v)} />
+      </Section>
+
+      {/* ── Game ────────────────────────────────────────────── */}
+      <Section title="Game Options" onSave={() => save('Update Game Options', [
+        'ammoFree', 'ammoSilver', 'easyAnswerCount', 'mediumAnswerCount',
+        'passThresholdEasy', 'passThresholdMedium',
+      ])}>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-1 pb-2">Brief Ammunition</p>
+        <NumInput label="Ammo per brief — Free tier"         value={draft.ammoFree}   min={0} max={99} onChange={v => set('ammoFree', v)} />
+        <NumInput label="Ammo per brief — Silver / Trial"    value={draft.ammoSilver} min={0} max={99} onChange={v => set('ammoSilver', v)} hint="Gold = unlimited always" />
+
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Quiz Answer Count</p>
+        <NumInput label="Answers shown — Easy"   value={draft.easyAnswerCount}   min={2} max={10} onChange={v => set('easyAnswerCount', v)} />
+        <NumInput label="Answers shown — Medium" value={draft.mediumAnswerCount} min={2} max={10} onChange={v => set('mediumAnswerCount', v)} />
+
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-1">Pass Threshold</p>
+        <PctSlider label="Easy"   value={draft.passThresholdEasy}   onChange={v => set('passThresholdEasy', v)} />
+        <PctSlider label="Medium" value={draft.passThresholdMedium} onChange={v => set('passThresholdMedium', v)} />
+      </Section>
+
+      {/* ── Feature Flags ───────────────────────────────────── */}
+      <Section title="Feature Flags" onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'disableLoadingBar'])}>
+        <Toggle
+          label="Live Leaderboard"
+          hint="When off, mock placeholder data is shown on the Profile page"
+          checked={draft.useLiveLeaderboard ?? false}
+          onChange={v => set('useLiveLeaderboard', v)}
+        />
+        <Toggle
+          label="Disable Loading Bar"
+          hint="Briefs load instantly with no animation — useful for testing"
+          checked={draft.disableLoadingBar ?? false}
+          onChange={v => set('disableLoadingBar', v)}
+        />
+      </Section>
+
+      {/* ── Sound Effects ───────────────────────────────────── */}
+      <Section title="Sound Effects" onSave={() => save('Update Sound Settings', ALL_SOUND_KEYS)}>
+        {SOUND_GROUPS.map(group => (
+          <div key={group.title} className="mb-4">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-1 pb-1">{group.title}</p>
+            {group.sounds.map(({ key, enabledKey, label }) => (
+              <SoundRowV2
+                key={key}
+                label={label}
+                value={draft[key] ?? 100}
+                onChange={v => set(key, v)}
+                enabled={draft[enabledKey] !== false}
+                onToggle={() => set(enabledKey, draft[enabledKey] === false ? true : false)}
+              />
+            ))}
+          </div>
+        ))}
+      </Section>
+
+      {/* ── Award Test Coins ────────────────────────────────── */}
+      <Section title="Award Test Coins">
+        <p className="text-xs text-slate-400 mb-3">Awards aircoins to your admin account, logged as "Test Coins".</p>
+        <div className="flex items-center gap-3">
+          <input
+            type="number" min={1} placeholder="Amount…"
+            value={testAmount}
+            onChange={e => setTestAmount(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && awardTest()}
+            className="w-32 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+          />
+          <button
+            onClick={awardTest}
+            disabled={coinBusy || !testAmount || parseInt(testAmount, 10) <= 0}
+            className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
+          >
+            {coinBusy ? 'Awarding…' : '⬡ Award'}
+          </button>
+        </div>
+      </Section>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USERS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TIER_COLORS = {
+  free:   'bg-slate-100 text-slate-600',
+  trial:  'bg-amber-100 text-amber-700',
+  silver: 'bg-slate-200 text-slate-700',
+  gold:   'bg-yellow-100 text-yellow-700',
+}
+
+function UsersTab({ API }) {
+  const [users,   setUsers]   = useState([])
+  const [q,       setQ]       = useState('')
+  const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState(false) // is in search mode
+  const [modal,   setModal]   = useState(null)
+  const [toast,   setToast]   = useState('')
+  const [resetId, setResetId] = useState(null)
+
+  const loadAll = useCallback(async () => {
+    setLoading(true); setSearch(false)
+    const res  = await fetch(`${API}/api/admin/users`, { credentials: 'include' })
+    const data = await res.json()
+    setUsers(data.data?.users ?? [])
+    setLoading(false)
+  }, [API])
+
+  useEffect(() => { loadAll() }, [loadAll])
+
+  const runSearch = async () => {
+    if (!q.trim()) { loadAll(); return }
+    setLoading(true); setSearch(true)
+    const res  = await fetch(`${API}/api/admin/users/search?q=${encodeURIComponent(q.trim())}`, { credentials: 'include' })
+    const data = await res.json()
+    setUsers(data.data?.users ?? [])
+    setLoading(false)
+  }
+
+  const action = (label, endpoint, method = 'POST', extra = {}) => setModal({ label, endpoint, method, extra })
+
+  const confirmAction = async (reason) => {
+    await fetch(`${API}${modal.endpoint}`, {
+      method: modal.method, credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason, ...modal.extra }),
+    })
+    setModal(null)
+    setToast('Action completed')
+    search ? runSearch() : loadAll()
+  }
+
+  return (
+    <div>
+      <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
+      {modal && (
+        <ConfirmModal title={modal.label} danger={modal.label.toLowerCase().includes('ban') || modal.label.toLowerCase().includes('delete')}
+          onConfirm={confirmAction} onCancel={() => setModal(null)} />
+      )}
+
+      {/* Search */}
+      <form className="flex gap-2 mb-5" onSubmit={e => { e.preventDefault(); runSearch() }}>
+        <input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Search by email or agent number…"
+          className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400"
+        />
+        <button type="submit" className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors">
+          Search
+        </button>
+        {search && (
+          <button type="button" onClick={() => { setQ(''); loadAll() }}
+            className="px-4 py-2.5 border border-slate-200 text-slate-600 text-sm font-semibold rounded-xl hover:bg-slate-50 transition-colors">
+            Clear
+          </button>
+        )}
+      </form>
+
+      {loading && <div className="text-center py-8 text-slate-400 text-sm animate-pulse">Loading users…</div>}
+      {!loading && users.length === 0 && (
+        <div className="text-center py-12 text-slate-400">
+          <div className="text-3xl mb-2">👤</div>
+          <p>No users found</p>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {users.map(u => (
+          <div key={u._id} className="bg-surface rounded-2xl border border-slate-200 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+              <div>
+                <p className="font-bold text-slate-800 text-sm">
+                  Agent {u.agentNumber}
+                  {u.isAdmin && <span className="ml-2 text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-bold">ADMIN</span>}
+                  {u.isBanned && <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">BANNED</span>}
+                </p>
+                <p className="text-xs text-slate-400">{u.email}</p>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-1 rounded-full capitalize ${TIER_COLORS[u.subscriptionTier] ?? TIER_COLORS.free}`}>
+                {u.subscriptionTier}
+              </span>
+            </div>
+
+            {/* Stats row */}
+            <div className="grid grid-cols-4 sm:grid-cols-6 divide-x divide-slate-100 border-b border-slate-100">
+              {[
+                ['Coins', (u.totalAircoins ?? 0).toLocaleString()],
+                ['Streak', u.loginStreak ?? 0],
+                ['Logins', u.logins?.length ?? 0],
+                ['Difficulty', u.difficultySetting ?? 'easy'],
+                ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })],
+              ].map(([l, v]) => (
+                <div key={l} className="px-3 py-2 text-center">
+                  <p className="text-xs font-bold text-slate-700">{v}</p>
+                  <p className="text-[10px] text-slate-400">{l}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap gap-2 px-4 py-3 border-b border-slate-100">
+              {!u.isAdmin && (
+                <button onClick={() => action(`Grant admin — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/make-admin`)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 font-semibold transition-colors">
+                  Make Admin
+                </button>
+              )}
+              {u.isAdmin && (
+                <button onClick={() => action(`Remove admin — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/remove-admin`)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold transition-colors">
+                  Remove Admin
+                </button>
+              )}
+              <button onClick={() => action(`${u.isBanned ? 'Unban' : 'Ban'} — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/ban`)}
+                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors
+                  ${u.isBanned
+                    ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                    : 'border-red-200 text-red-600 hover:bg-red-50'
+                  }`}>
+                {u.isBanned ? 'Unban' : 'Ban'}
+              </button>
+              <button onClick={() => action(`Delete account — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}`, 'DELETE')}
+                className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors">
+                Delete
+              </button>
+            </div>
+
+            {/* Reset (testing) */}
+            <div className="px-4 py-2.5">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Reset for testing</p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: 'Aircoins',      fields: ['aircoins'] },
+                  { label: 'Game History',  fields: ['gameHistory'] },
+                  { label: 'Briefs Read',   fields: ['intelBriefsRead'] },
+                  { label: 'Tutorials',     fields: ['tutorials'] },
+                ].map(({ label, fields }) => (
+                  <button
+                    key={label}
+                    onClick={() => action(
+                      `Reset ${label} — Agent ${u.agentNumber}`,
+                      `/api/admin/users/${u._id}/reset-stats`,
+                      'POST',
+                      { fields },
+                    )}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 font-semibold transition-colors"
+                  >
+                    ↺ {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROBLEMS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ProblemsTab({ API }) {
+  const [problems, setProblems] = useState([])
+  const [filter,   setFilter]   = useState('unsolved')
+  const [search,   setSearch]   = useState('')
+  const [loading,  setLoading]  = useState(true)
+  const [expanded, setExpanded] = useState(null)
+  const [updates,  setUpdates]  = useState({})
+  const [busy,     setBusy]     = useState(null)
+  const [toast,    setToast]    = useState('')
+  const [tick,     setTick]     = useState(0)
+
+  useEffect(() => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (filter !== 'all') params.set('solved', filter === 'solved' ? 'true' : 'false')
+    fetch(`${API}/api/admin/problems?${params}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => setProblems(d.data?.problems ?? []))
+      .finally(() => setLoading(false))
+  }, [API, filter, tick])
+
+  const visible = search.trim()
+    ? problems.filter(p => p.description.toLowerCase().includes(search.toLowerCase()) || p.pageReported?.toLowerCase().includes(search.toLowerCase()))
+    : problems
+
+  const postUpdate = async (id, description, solved) => {
+    if (!description?.trim()) return
+    setBusy(id)
+    await fetch(`${API}/api/admin/problems/${id}/update`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description, ...(solved !== undefined ? { solved } : {}) }),
+    })
+    setUpdates(p => ({ ...p, [id]: '' }))
+    setBusy(null)
+    setToast(solved !== undefined ? (solved ? '✓ Marked solved' : '✓ Reopened') : '✓ Updated')
+    setTick(t => t + 1)
+  }
+
+  return (
+    <div>
+      <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
+
+      {/* Controls */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        {['unsolved', 'solved', 'all'].map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors capitalize
+              ${filter === f ? 'bg-brand-600 text-white' : 'bg-surface border border-slate-200 text-slate-600 hover:border-brand-300'}`}>
+            {f}
+          </button>
+        ))}
+        <input
+          value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Filter reports…"
+          className="flex-1 min-w-40 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+        />
+      </div>
+
+      {loading && <div className="text-center py-8 text-slate-400 text-sm animate-pulse">Loading…</div>}
+      {!loading && visible.length === 0 && (
+        <div className="text-center py-12 text-slate-400">
+          <div className="text-3xl mb-2">✅</div>
+          <p>No {filter !== 'all' ? filter : ''} reports</p>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {visible.map(p => (
+          <div key={p._id} className={`bg-surface rounded-2xl border overflow-hidden transition-colors ${p.solved ? 'border-emerald-200' : 'border-slate-200'}`}>
+            <button
+              className="w-full flex items-start justify-between gap-3 px-4 py-3 text-left"
+              onClick={() => setExpanded(e => e === p._id ? null : p._id)}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-slate-400 mb-0.5">{p.pageReported || 'Unknown page'} · {new Date(p.time).toLocaleDateString('en-GB')}</p>
+                <p className="text-sm font-semibold text-slate-800 line-clamp-2">{p.description}</p>
+              </div>
+              <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${p.solved ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                {p.solved ? 'Solved' : 'Open'}
+              </span>
+            </button>
+
+            {expanded === p._id && (
+              <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-3">
+
+                {/* Full original description */}
+                <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-700">
+                  <p className="font-semibold text-slate-400 mb-1 uppercase tracking-wider text-[10px]">Original report</p>
+                  <p className="whitespace-pre-wrap leading-relaxed">{p.description}</p>
+                  <p className="mt-1 text-slate-400">
+                    {p.userId?.agentNumber ? `Agent ${p.userId.agentNumber}` : 'Unknown agent'}
+                    {' · '}{new Date(p.time || p.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+                  </p>
+                </div>
+
+                {/* Update history */}
+                {p.updates?.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Update history</p>
+                    {p.updates.map((u, i) => (
+                      <div key={i} className="bg-brand-50 border border-brand-100 rounded-xl p-3 text-xs text-slate-700">
+                        <p className="whitespace-pre-wrap leading-relaxed mb-1">{u.description}</p>
+                        <p className="text-slate-400">
+                          {u.adminUserId?.agentNumber ? `Agent ${u.adminUserId.agentNumber}` : 'Admin'}
+                          {' · '}{new Date(u.time).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* New note */}
+                <textarea
+                  rows={2}
+                  placeholder="Add admin note…"
+                  value={updates[p._id] ?? ''}
+                  onChange={e => setUpdates(prev => ({ ...prev, [p._id]: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-200"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => postUpdate(p._id, updates[p._id])}
+                    disabled={busy === p._id || !updates[p._id]?.trim()}
+                    className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-40"
+                  >
+                    {busy === p._id ? 'Saving…' : 'Save Note'}
+                  </button>
+                  <button
+                    onClick={() => postUpdate(p._id, updates[p._id]?.trim() || (p.solved ? 'Reopened' : 'Marked as solved'), !p.solved)}
+                    disabled={busy === p._id}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors disabled:opacity-40
+                      ${p.solved ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
+                  >
+                    {p.solved ? 'Reopen' : 'Mark Solved'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTENT TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EMAIL_DEFAULTS = {
+  welcomeEmailSubject: 'Welcome to Skywatch — Mission Briefing',
+  welcomeEmailHeading: 'Welcome to Skywatch',
+  welcomeEmailBody:    'Your intelligence briefings are ready.',
+  welcomeEmailCta:     'Begin Mission',
+  welcomeEmailFooter:  'Skywatch — Intelligence Study Platform.',
+}
+
+const CR_DEFAULTS = {
+  combatReadinessTitle:    'Combat Readiness Assessment',
+  combatReadinessSubtitle: 'Choose your quiz difficulty.',
+  combatReadinessEasyLabel:    'Recruit',   combatReadinessEasyTag:    'EASY',   combatReadinessEasyStars:    '★★★☆☆', combatReadinessEasyFlavor:    'Direct recall questions.',
+  combatReadinessMediumLabel:  'Operative', combatReadinessMediumTag:  'MEDIUM', combatReadinessMediumStars:  '★★★★☆', combatReadinessMediumFlavor:  'Contextual, deeper questions.',
+}
+
+// Tutorial names in display order with friendly labels
+const TUTORIAL_META = [
+  { key: 'home',        label: 'Home Page' },
+  { key: 'learn',       label: 'Learn Page' },
+  { key: 'briefReader', label: 'Brief Reader' },
+  { key: 'quiz',        label: 'Quiz' },
+  { key: 'play',        label: 'Play Hub' },
+  { key: 'profile',     label: 'Profile Page' },
+  { key: 'rankings',    label: 'Rankings Page' },
+]
+
+function ContentTab({ API }) {
+  const [draft,       setDraft]       = useState({})
+  const [tutDraft,    setTutDraft]    = useState({}) // tutorialContent edits: { 'home_0': { title, body } }
+  const [modal,       setModal]       = useState(null)
+  const [toast,       setToast]       = useState('')
+  const [emailBusy,   setEmailBusy]   = useState(false)
+  const [expandedTut, setExpandedTut] = useState(null)
+
+  const load = useCallback(() => {
+    fetch(`${API}/api/admin/settings`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.data?.settings) {
+          setDraft(d.data.settings)
+          setTutDraft(d.data.settings.tutorialContent ?? {})
+        }
+      })
+  }, [API])
+
+  useEffect(() => { load() }, [load])
+
+  const save = (label, fields) => setModal({ label, fields })
+
+  const confirmSave = async (reason) => {
+    const updates = {}
+    modal.fields.forEach(f => { updates[f] = draft[f] })
+    await fetch(`${API}/api/admin/settings`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...updates, reason }),
+    })
+    setModal(null)
+    setToast(`✓ ${modal.label} saved`)
+    load()
+  }
+
+  const confirmSaveTutorials = async (reason) => {
+    await fetch(`${API}/api/admin/settings`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tutorialContent: tutDraft, reason }),
+    })
+    setModal(null)
+    setToast('✓ Tutorial text saved')
+    load()
+  }
+
+  const sendTestEmail = async () => {
+    setEmailBusy(true)
+    try {
+      const res  = await fetch(`${API}/api/admin/test-email`, { method: 'POST', credentials: 'include' })
+      const data = await res.json()
+      setToast(data.status === 'success' ? `✓ ${data.message}` : `✗ ${data.message}`)
+    } catch {
+      setToast('✗ Failed to send test email')
+    } finally {
+      setEmailBusy(false)
+    }
+  }
+
+  const setTutField = (tutKey, stepIdx, field, value) => {
+    const key = `${tutKey}_${stepIdx}`
+    setTutDraft(p => ({
+      ...p,
+      [key]: { ...(p[key] ?? {}), [field]: value },
+    }))
+  }
+
+  const field = (key, label, placeholder, rows) => (
+    <div key={key} className="py-2.5 border-b border-slate-100 last:border-0">
+      <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
+      {rows ? (
+        <textarea rows={rows} placeholder={placeholder} value={draft[key] ?? ''}
+          onChange={e => setDraft(p => ({ ...p, [key]: e.target.value }))}
+          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-200" />
+      ) : (
+        <input type="text" placeholder={placeholder} value={draft[key] ?? ''}
+          onChange={e => setDraft(p => ({ ...p, [key]: e.target.value }))}
+          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200" />
+      )}
+    </div>
+  )
+
+  return (
+    <div>
+      <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
+      {modal && <ConfirmModal title={modal.label} onConfirm={modal.isTutorial ? confirmSaveTutorials : confirmSave} onCancel={() => setModal(null)} />}
+
+      {/* ── Welcome Email ─────────────────────────────────────────── */}
+      <Section title="Welcome Email" onSave={() => save('Update Welcome Email', ['welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
+        {field('welcomeEmailSubject', 'Subject',  EMAIL_DEFAULTS.welcomeEmailSubject)}
+        {field('welcomeEmailHeading', 'Heading',  EMAIL_DEFAULTS.welcomeEmailHeading)}
+        {field('welcomeEmailBody',    'Body',     EMAIL_DEFAULTS.welcomeEmailBody, 4)}
+        {field('welcomeEmailCta',     'CTA text', EMAIL_DEFAULTS.welcomeEmailCta)}
+        {field('welcomeEmailFooter',  'Footer',   EMAIL_DEFAULTS.welcomeEmailFooter, 2)}
+        <div className="pt-3">
+          <button
+            onClick={sendTestEmail}
+            disabled={emailBusy}
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-40"
+          >
+            {emailBusy ? 'Sending…' : '✉ Send Test Email'}
+          </button>
+          <p className="text-[11px] text-slate-400 mt-1.5">Sends a test email using the current saved content to your admin email address.</p>
+        </div>
+      </Section>
+
+      {/* ── Difficulty Select Screen ─────────────────────────────── */}
+      <Section title="Difficulty Select Screen" onSave={() => save('Update Combat Readiness Screen', [
+        'combatReadinessTitle', 'combatReadinessSubtitle',
+        'combatReadinessEasyLabel', 'combatReadinessEasyTag', 'combatReadinessEasyStars', 'combatReadinessEasyFlavor',
+        'combatReadinessMediumLabel', 'combatReadinessMediumTag', 'combatReadinessMediumStars', 'combatReadinessMediumFlavor',
+      ])}>
+        {field('combatReadinessTitle',    'Title',    CR_DEFAULTS.combatReadinessTitle)}
+        {field('combatReadinessSubtitle', 'Subtitle', CR_DEFAULTS.combatReadinessSubtitle)}
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-3 pb-1">Easy Option</p>
+        {field('combatReadinessEasyLabel',  'Label',  CR_DEFAULTS.combatReadinessEasyLabel)}
+        {field('combatReadinessEasyTag',    'Tag',    CR_DEFAULTS.combatReadinessEasyTag)}
+        {field('combatReadinessEasyStars',  'Stars',  CR_DEFAULTS.combatReadinessEasyStars)}
+        {field('combatReadinessEasyFlavor', 'Flavour text', CR_DEFAULTS.combatReadinessEasyFlavor, 2)}
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-3 pb-1">Medium Option</p>
+        {field('combatReadinessMediumLabel',  'Label',  CR_DEFAULTS.combatReadinessMediumLabel)}
+        {field('combatReadinessMediumTag',    'Tag',    CR_DEFAULTS.combatReadinessMediumTag)}
+        {field('combatReadinessMediumStars',  'Stars',  CR_DEFAULTS.combatReadinessMediumStars)}
+        {field('combatReadinessMediumFlavor', 'Flavour text', CR_DEFAULTS.combatReadinessMediumFlavor, 2)}
+      </Section>
+
+      {/* ── Tutorials ─────────────────────────────────────────────── */}
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-bold text-slate-800">Tutorials</h3>
+          <p className="text-xs text-slate-400">Leave a field blank to use the default text</p>
+        </div>
+        <div className="px-5 py-3">
+          {TUTORIAL_META.map(({ key: tutKey, label: tutLabel }) => {
+            const steps    = TUTORIAL_STEPS[tutKey] ?? []
+            const isOpen   = expandedTut === tutKey
+            return (
+              <div key={tutKey} className="border-b border-slate-100 last:border-0">
+                <button
+                  onClick={() => setExpandedTut(isOpen ? null : tutKey)}
+                  className="w-full flex items-center justify-between py-3 text-left"
+                >
+                  <span className="text-sm font-semibold text-slate-700">{tutLabel}</span>
+                  <span className="text-slate-400 text-xs">{isOpen ? '▲ collapse' : `${steps.length} steps ▼`}</span>
+                </button>
+                {isOpen && (
+                  <div className="pb-4 space-y-5">
+                    {steps.map((defaultStep, idx) => {
+                      const overrideKey = `${tutKey}_${idx}`
+                      const override    = tutDraft[overrideKey] ?? {}
+                      return (
+                        <div key={idx} className="bg-slate-50 rounded-xl p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xl">{defaultStep.emoji}</span>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Step {idx + 1}</span>
+                          </div>
+                          <div className="space-y-2">
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">
+                                Title <span className="text-slate-300 font-normal">(default: "{defaultStep.title}")</span>
+                              </label>
+                              <input
+                                type="text"
+                                placeholder={defaultStep.title}
+                                value={override.title ?? ''}
+                                onChange={e => setTutField(tutKey, idx, 'title', e.target.value)}
+                                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 bg-surface-raised text-slate-800 placeholder:text-slate-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">Body</label>
+                              <textarea
+                                rows={3}
+                                placeholder={defaultStep.body}
+                                value={override.body ?? ''}
+                                onChange={e => setTutField(tutKey, idx, 'body', e.target.value)}
+                                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-200 bg-surface-raised text-slate-800 placeholder:text-slate-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <div className="px-5 pb-4">
+          <button
+            onClick={() => setModal({ label: 'Update Tutorial Text', isTutorial: true })}
+            className="mt-1 px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors"
+          >
+            Save Tutorials
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUBSCRIPTION EMULATOR
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TIERS = ['free', 'trial', 'silver', 'gold']
+const TIER_LABELS = { free: 'Free', trial: 'Trial', silver: 'Silver', gold: 'Gold' }
+const TIER_BTN = {
+  free:   'bg-slate-100 text-slate-700 border-slate-200',
+  trial:  'bg-amber-50  text-amber-700  border-amber-200',
+  silver: 'bg-slate-200 text-slate-700  border-slate-300',
+  gold:   'bg-yellow-50 text-yellow-700 border-yellow-200',
+}
+
+function SubEmulator({ user, API, onTierChange }) {
+  const [busy, setBusy] = useState(false)
+  const setTier = async (tier) => {
+    if (tier === user.subscriptionTier || busy) return
+    setBusy(true)
+    const res  = await fetch(`${API}/api/admin/self/subscription`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tier }),
+    })
+    const data = await res.json()
+    if (data.status === 'success') onTierChange(data.data.user)
+    setBusy(false)
+  }
+  return (
+    <div className="bg-slate-900 rounded-2xl px-4 py-3 mb-6 flex flex-wrap items-center gap-3">
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Subscription Emulator</p>
+        <p className="text-xs text-slate-500 mt-0.5">Test how each tier experiences the app</p>
+      </div>
+      <div className="flex gap-1.5 flex-wrap">
+        {TIERS.map(tier => (
+          <button
+            key={tier}
+            onClick={() => setTier(tier)}
+            disabled={busy}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all
+              ${user.subscriptionTier === tier
+                ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900 scale-105 ' + TIER_BTN[tier]
+                : TIER_BTN[tier] + ' opacity-60 hover:opacity-100'
+              }`}
+          >
+            {TIER_LABELS[tier]}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TABS = [
+  { id: 'stats',    label: 'Stats',    icon: '📊' },
+  { id: 'settings', label: 'Settings', icon: '⚙️'  },
+  { id: 'users',    label: 'Users',    icon: '👥'  },
+  { id: 'problems', label: 'Reports',  icon: '🚩'  },
+  { id: 'content',  label: 'Content',  icon: '✏️'  },
+]
+
+export default function Admin() {
+  const { user, setUser, loading, API } = useAuth()
+  const navigate = useNavigate()
+  const [tab, setTab] = useState('stats')
+  const [unsolvedCount, setUnsolvedCount] = useState(null)
+
+  useEffect(() => {
+    if (!loading && (!user || !user.isAdmin)) navigate('/home', { replace: true })
+  }, [loading, user, navigate])
+
+  // Fetch unsolved count for tab badge; refresh whenever leaving the problems tab
+  useEffect(() => {
+    if (!user?.isAdmin) return
+    fetch(`${API}/api/admin/problems/count`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => setUnsolvedCount(d.data?.unsolvedCount ?? 0))
+      .catch(() => {})
+  }, [API, user, tab])
+
+  if (loading || !user?.isAdmin) return null
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-2xl mx-auto px-4 py-6">
+
+        {/* Header */}
+        <div className="mb-5">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Restricted Access</p>
+          <h1 className="text-2xl font-extrabold text-slate-900">Admin Panel</h1>
+        </div>
+
+        {/* Subscription emulator */}
+        <SubEmulator user={user} API={API} onTierChange={setUser} />
+
+        {/* Tabs */}
+        <div className="flex gap-1 bg-surface rounded-2xl border border-slate-200 p-1 mb-6 overflow-x-auto">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap
+                ${tab === t.id
+                  ? 'bg-brand-600 text-white shadow'
+                  : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                }`}
+            >
+              <span>{t.icon}</span>
+              <span>{t.label}</span>
+              {t.id === 'problems' && unsolvedCount > 0 && (
+                <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab content */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            {tab === 'stats'    && <StatsTab    API={API} />}
+            {tab === 'settings' && <SettingsTab API={API} />}
+            {tab === 'users'    && <UsersTab    API={API} />}
+            {tab === 'problems' && <ProblemsTab API={API} />}
+            {tab === 'content'  && <ContentTab  API={API} />}
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Legacy tools link */}
+        <p className="text-center text-xs text-slate-400 mt-8">
+          Intel Briefs editor, Tutorials, and AI generation tools are available in the{' '}
+          <button
+            onClick={() => navigate('/admin-legacy')}
+            className="text-brand-600 hover:text-brand-700 font-semibold"
+          >
+            legacy admin panel →
+          </button>
+        </p>
+
+      </div>
+    </div>
+  )
+}

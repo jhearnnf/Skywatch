@@ -27,8 +27,10 @@ import GameHistory    from './pages/v2/GameHistory'
 import ReportProblem  from './pages/v2/ReportProblem'
 import NotFound       from './pages/v2/NotFound'
 
+// v2 admin
+import Admin          from './pages/v2/Admin'
 // Legacy pages kept as-is (just wrapped in new shell)
-import Admin          from './pages/Admin'
+import AdminLegacy    from './pages/Admin'
 
 import { playSound } from './utils/sound'
 
@@ -157,7 +159,8 @@ function AppRoutes() {
           <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
           <Route path="/aircoin-history"  element={<RequireAuth><PageWrapper><AircoinHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"     element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
-          <Route path="/admin"            element={<RequireAuth><PageWrapper><LegacyPage Component={Admin} /></PageWrapper></RequireAuth>} />
+          <Route path="/admin"             element={<RequireAuth><PageWrapper><Admin /></PageWrapper></RequireAuth>} />
+          <Route path="/admin-legacy"    element={<RequireAuth><PageWrapper><LegacyPage Component={AdminLegacy} /></PageWrapper></RequireAuth>} />
 
           {/* 404 */}
           <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />

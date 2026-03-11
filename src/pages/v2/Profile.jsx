@@ -23,7 +23,7 @@ function StatCard({ label, value, icon, onClick }) {
   return (
     <Tag
       onClick={onClick}
-      className={`flex flex-col items-center gap-1 bg-white rounded-2xl p-3 border border-slate-200 card-shadow text-center
+      className={`flex flex-col items-center gap-1 bg-surface rounded-2xl p-3 border border-slate-200 card-shadow text-center
         ${onClick ? 'hover:border-brand-300 hover:bg-brand-50 transition-all cursor-pointer' : ''}`}
     >
       <span className="text-xl">{icon}</span>
@@ -123,34 +123,35 @@ export default function Profile() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-r from-brand-600 to-brand-500 rounded-2xl p-5 mb-5 text-white card-shadow"
+          className="rounded-2xl p-5 mb-5 card-shadow border border-brand-300/40"
+          style={{ background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)' }}
         >
           <div className="flex items-center gap-4">
             {/* Avatar */}
-            <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 flex items-center justify-center text-xl font-extrabold shrink-0">
+            <div className="w-14 h-14 rounded-2xl bg-brand-200/60 border-2 border-brand-400/50 flex items-center justify-center text-xl font-extrabold text-brand-600 shrink-0">
               {(user.displayName || user.email || 'A')[0].toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-extrabold text-lg leading-tight truncate">{user.displayName || 'Agent'}</p>
-              <p className="text-brand-200 text-sm">{rankDisplay}</p>
-              <p className="text-brand-200 text-xs mt-0.5">Agent #{user.agentNumber ?? '———'}</p>
+              <p className="font-extrabold text-lg text-slate-800 leading-tight truncate">{user.displayName || 'Agent'}</p>
+              <p className="text-slate-600 text-sm">{rankDisplay}</p>
+              <p className="text-slate-500 text-xs mt-0.5 intel-mono">Agent #{user.agentNumber ?? '———'}</p>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-xs text-brand-200">Streak</p>
-              <p className="text-2xl font-extrabold">{user.streak ?? 0}</p>
+              <p className="text-xs text-slate-500 intel-mono">Streak</p>
+              <p className="text-2xl font-extrabold text-amber-700">{user.loginStreak ?? 0}</p>
               <p className="text-lg">🔥</p>
             </div>
           </div>
 
           {/* XP bar */}
           <div className="mt-4">
-            <div className="flex justify-between text-xs text-brand-200 mb-1">
+            <div className="flex justify-between text-xs text-slate-600 mb-1 intel-mono">
               <span>Level {levelInfo.level}</span>
-              <span>{levelInfo.current} / {levelInfo.next} XP</span>
+              <span>{levelInfo.current} / {levelInfo.next} Aircoins</span>
             </div>
-            <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+            <div className="h-2 bg-brand-200/50 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-white rounded-full"
+                className="h-full bg-brand-600 rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${levelInfo.progress}%` }}
                 transition={{ duration: 0.8, ease: 'easeOut' }}
@@ -159,7 +160,7 @@ export default function Profile() {
           </div>
         </motion.div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-5 text-center card-shadow">
+        <div className="bg-surface rounded-2xl border border-slate-200 p-6 mb-5 text-center card-shadow">
           <div className="text-4xl mb-3">🔒</div>
           <p className="font-bold text-slate-800 mb-1">Sign in to view your profile</p>
           <p className="text-sm text-slate-500 mb-4">Track progress, earn Aircoins, and climb the ranks.</p>
@@ -180,7 +181,7 @@ export default function Profile() {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all
-              ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:border-brand-300'}`}
+              ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-surface border border-slate-200 text-slate-500 hover:border-brand-300'}`}
           >
             {t.label}
           </button>
@@ -202,7 +203,7 @@ export default function Profile() {
           {user && (
             <>
               {/* Difficulty */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quiz Difficulty</p>
                 <div className="flex gap-2">
                   {[
@@ -226,7 +227,7 @@ export default function Profile() {
               </div>
 
               {/* Volume */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
                 <div className="flex justify-between items-center mb-3">
                   <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">App Volume</p>
                   <span className="text-sm font-bold text-brand-600">{masterVol}%</span>
@@ -249,7 +250,7 @@ export default function Profile() {
               </div>
 
               {/* Links */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow space-y-2">
+              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow space-y-2">
                 <Link to="/rankings" className="flex items-center justify-between py-2 px-1 text-sm font-semibold text-slate-700 hover:text-brand-600 transition-colors">
                   <span>🏅 View Progression & Ranks</span>
                   <span className="text-slate-400">→</span>
@@ -267,7 +268,7 @@ export default function Profile() {
 
       {/* Leaderboard tab */}
       {tab === 'leaderboard' && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
           <div className="p-4 border-b border-slate-100">
             <p className="font-bold text-slate-800 text-sm">Top Agents — Aircoins</p>
           </div>
@@ -302,7 +303,7 @@ export default function Profile() {
       {tab === 'tutorials' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
           <p className="text-sm text-slate-500 mb-1">Replay any tutorial to revisit how a feature works.</p>
-          <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+          <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
             {TUTORIAL_LABELS.map((tut, i) => (
               <div
                 key={tut.key}

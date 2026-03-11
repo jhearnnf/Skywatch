@@ -82,7 +82,7 @@ export default function ReportProblem() {
         <p className="text-sm text-slate-500 mt-1">Something not working? Let us know and we'll fix it.</p>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 card-shadow">
+      <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow">
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2" htmlFor="description">

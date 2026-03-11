@@ -16,7 +16,22 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     fetch(`${API}/api/auth/me`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
-      .then(data => { setUser(data?.data?.user ?? null) })
+      .then(data => {
+        const u = data?.data?.user ?? null
+        setUser(u)
+        // If an admin reset this user's tutorials server-side, clear localStorage tutorial keys
+        if (u?.tutorialsResetAt) {
+          const resetTs   = new Date(u.tutorialsResetAt).getTime()
+          const clearKey  = `sw_tut_cleared_at_${u._id}`
+          const clearedTs = parseInt(localStorage.getItem(clearKey) ?? '0', 10)
+          if (resetTs > clearedTs) {
+            Object.keys(localStorage)
+              .filter(k => k.startsWith(`sw_tut_v2_${u._id}_`))
+              .forEach(k => localStorage.removeItem(k))
+            localStorage.setItem(clearKey, String(resetTs))
+          }
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])

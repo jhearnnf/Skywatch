@@ -19,12 +19,12 @@ const DIFFICULTY_DEFAULTS = {
 function CrosshairLogo() {
   return (
     <svg width="40" height="40" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-      <circle cx="14" cy="14" r="10" stroke="#1a76e4" strokeWidth="1.8"/>
-      <circle cx="14" cy="14" r="3.5" stroke="#1a76e4" strokeWidth="1.8"/>
-      <line x1="14" y1="1"  x2="14" y2="7"  stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="14" y1="21" x2="14" y2="27" stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="1"  y1="14" x2="7"  y2="14" stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="21" y1="14" x2="27" y2="14" stroke="#1a76e4" strokeWidth="1.8" strokeLinecap="round"/>
+      <circle cx="14" cy="14" r="10" stroke="#5baaff" strokeWidth="1.8"/>
+      <circle cx="14" cy="14" r="3.5" stroke="#5baaff" strokeWidth="1.8"/>
+      <line x1="14" y1="1"  x2="14" y2="7"  stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="14" y1="21" x2="14" y2="27" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="1"  y1="14" x2="7"  y2="14" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="21" y1="14" x2="27" y2="14" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
     </svg>
   )
 }
@@ -138,16 +138,16 @@ export default function LoginPage() {
   const reset = (nextView) => { setError(''); setEmail(''); setPass(''); setView(nextView) }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-50 via-white to-slate-100 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#06101e' }}>
       <div className="w-full max-w-sm">
 
         {/* Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white border border-brand-100 shadow-sm mb-3">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand-100 border border-brand-300 shadow-sm mb-3" style={{ boxShadow: '0 0 20px rgba(91,170,255,0.15)' }}>
             <CrosshairLogo />
           </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">SKYWATCH</h1>
-          <p className="text-sm text-slate-500 mt-1">RAF intelligence training platform</p>
+          <h1 className="text-2xl font-extrabold text-brand-600 tracking-widest">SKYWATCH</h1>
+          <p className="text-sm text-slate-500 mt-1 intel-mono">RAF intelligence training platform</p>
         </div>
 
         <AnimatePresence mode="wait">
@@ -159,7 +159,7 @@ export default function LoginPage() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="bg-white rounded-3xl border border-slate-200 p-6 card-shadow space-y-3"
+              className="bg-surface rounded-3xl border border-slate-200 p-6 card-shadow space-y-3"
             >
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wider text-center mb-4">Sign in or create an account</p>
 
@@ -196,7 +196,7 @@ export default function LoginPage() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="bg-white rounded-3xl border border-slate-200 p-6 card-shadow"
+              className="bg-surface rounded-3xl border border-slate-200 p-6 card-shadow"
             >
               <h2 className="text-xl font-extrabold text-slate-900 mb-5">
                 {view === VIEW.SIGNIN ? 'Welcome back' : 'Join Skywatch'}
@@ -207,7 +207,7 @@ export default function LoginPage() {
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5" htmlFor="email">Email</label>
                   <input
                     id="email" type="email"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm transition-all"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface-raised text-slate-800 placeholder:text-slate-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none text-sm transition-all"
                     placeholder="agent@example.com"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
@@ -219,7 +219,7 @@ export default function LoginPage() {
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5" htmlFor="password">Password</label>
                   <input
                     id="password" type="password"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm transition-all"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface-raised text-slate-800 placeholder:text-slate-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none text-sm transition-all"
                     placeholder={view === VIEW.REGISTER ? 'Min. 8 characters' : '••••••••'}
                     value={pass}
                     onChange={e => setPass(e.target.value)}
@@ -261,7 +261,7 @@ export default function LoginPage() {
               initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0 }}
-              className="bg-white rounded-3xl border border-slate-200 p-6 card-shadow"
+              className="bg-surface rounded-3xl border border-slate-200 p-6 card-shadow"
             >
               <div className="text-center mb-6">
                 <span className="text-4xl">🎯</span>
@@ -278,7 +278,7 @@ export default function LoginPage() {
                     key={opt.value}
                     onClick={() => handleDifficulty(opt.value)}
                     disabled={busy}
-                    className="w-full text-left p-4 bg-white rounded-2xl border-2 border-slate-200 hover:border-brand-400 hover:bg-brand-50 transition-all card-shadow disabled:opacity-50"
+                    className="w-full text-left p-4 bg-surface rounded-2xl border-2 border-slate-200 hover:border-brand-400 hover:bg-brand-100 transition-all card-shadow disabled:opacity-50"
                   >
                     <div className="flex items-start gap-3">
                       <span className="text-2xl">{opt.emoji}</span>

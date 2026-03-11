@@ -80,7 +80,7 @@ export default function Rankings() {
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
-              ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:border-brand-300'}`}
+              ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-surface border border-slate-200 text-slate-500 hover:border-brand-300'}`}
           >
             {t.label}
           </button>
@@ -92,10 +92,10 @@ export default function Rankings() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
 
           {/* XP panel */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+          <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
             <div className="flex justify-between items-baseline mb-2">
               <p className="text-sm font-bold text-slate-800">Level {currentLvl.levelNumber}</p>
-              <p className="text-xs text-slate-500">{coinsInLevel.toLocaleString()} / {coinsNeeded?.toLocaleString() ?? '—'} XP</p>
+              <p className="text-xs text-slate-500">{coinsInLevel.toLocaleString()} / {coinsNeeded?.toLocaleString() ?? '—'} Aircoins</p>
             </div>
             <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
               <motion.div
@@ -107,14 +107,14 @@ export default function Rankings() {
             </div>
             <p className="text-xs text-slate-400 mt-1.5">
               {coinsNeeded
-                ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} XP to Level ${currentLvl.levelNumber + 1}`
+                ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} Aircoins to Level ${currentLvl.levelNumber + 1}`
                 : '⭐ Max level — Rank Promotion on next cycle'
               }
             </p>
           </div>
 
           {/* Level list */}
-          <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+          <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
             {[...levels].sort((a, b) => b.levelNumber - a.levelNumber).map((lvl, i) => {
               const isCurrent = lvl.levelNumber === currentLvl.levelNumber
               const isAbove   = lvl.levelNumber > currentLvl.levelNumber
@@ -136,7 +136,7 @@ export default function Rankings() {
                     <p className={`text-sm font-bold ${isCurrent ? 'text-brand-700' : 'text-slate-700'}`}>
                       Level {lvl.levelNumber} {isMax && <span className="text-amber-500">⭐</span>}
                     </p>
-                    <p className="text-xs text-slate-400">{lvl.cumulativeAircoins.toLocaleString()} total XP required</p>
+                    <p className="text-xs text-slate-400">{lvl.cumulativeAircoins.toLocaleString()} Aircoins required</p>
                   </div>
                   {isCurrent && <span className="text-xs font-bold text-brand-600 bg-brand-100 px-2 py-0.5 rounded-full">You</span>}
                   {isMax && !isCurrent && <span className="text-xs text-amber-600">Rank Promotion</span>}
@@ -153,7 +153,7 @@ export default function Rankings() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
 
           {/* Current rank panel */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 card-shadow">
+          <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Current RAF Rank</p>
             <p className="text-lg font-extrabold text-slate-900">{userRank?.rankName ?? 'Unranked'}</p>
             {userRank?.rankAbbreviation && (
@@ -162,7 +162,7 @@ export default function Rankings() {
           </div>
 
           {/* Rank list */}
-          <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+          <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
             {sortedRanks.map((rank, i) => {
               const isUser  = userRankNumber !== null && rank.rankNumber === userRankNumber
               const isAbove = userRankNumber !== null && rank.rankNumber > userRankNumber

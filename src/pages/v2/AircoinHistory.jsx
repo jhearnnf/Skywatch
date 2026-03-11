@@ -90,7 +90,7 @@ export default function AircoinHistory() {
       {loading ? (
         <div className="space-y-2">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-white rounded-2xl p-4 border border-slate-100 animate-pulse h-16" />
+            <div key={i} className="bg-surface rounded-2xl p-4 border border-slate-100 animate-pulse h-16" />
           ))}
         </div>
       ) : logs.length === 0 ? (
@@ -100,7 +100,7 @@ export default function AircoinHistory() {
           <p className="text-sm mt-1">Read intel briefs and complete quizzes to earn Aircoins.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+        <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
           {logs.map((log, i) => (
             <motion.div
               key={log._id}

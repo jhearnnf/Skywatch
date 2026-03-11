@@ -226,4 +226,15 @@ router.post('/report-problem', protect, async (req, res) => {
   }
 });
 
+// GET /api/users/me/read-briefs — list of brief IDs the current user has read
+router.get('/me/read-briefs', protect, async (req, res) => {
+  try {
+    const records = await IntelligenceBriefRead.find({ userId: req.user._id }).select('intelBriefId');
+    const briefIds = records.map(r => r.intelBriefId.toString());
+    res.json({ status: 'success', data: { briefIds } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

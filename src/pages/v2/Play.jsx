@@ -78,7 +78,7 @@ export default function Play() {
             transition={{ delay: i * 0.06, duration: 0.35 }}
           >
             <div
-              className={`relative flex items-start gap-4 bg-white rounded-2xl p-4 border transition-all card-shadow
+              className={`relative flex items-start gap-4 bg-surface rounded-2xl p-4 border transition-all card-shadow
                 ${mode.available
                   ? 'border-slate-200 hover:border-brand-300 hover:bg-brand-50 cursor-pointer group hover:-translate-y-0.5'
                   : 'border-slate-100 opacity-60'
@@ -129,7 +129,7 @@ export default function Play() {
             >
               <Link
                 to={`/quiz/${brief._id}`}
-                className="flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all card-shadow group"
+                className="flex items-center gap-3 bg-surface rounded-2xl px-4 py-3 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all card-shadow group"
               >
                 <div className="w-8 h-8 rounded-xl bg-brand-100 flex items-center justify-center shrink-0">
                   <span className="text-brand-600 font-bold text-xs">Q</span>
@@ -157,7 +157,7 @@ export default function Play() {
         <div className="mt-6">
           <Link
             to="/game-history"
-            className="flex items-center justify-between bg-white rounded-2xl px-4 py-3 border border-slate-200 hover:border-brand-300 transition-all card-shadow text-sm font-semibold text-slate-700"
+            className="flex items-center justify-between bg-surface rounded-2xl px-4 py-3 border border-slate-200 hover:border-brand-300 transition-all card-shadow text-sm font-semibold text-slate-700"
           >
             <span>📜 View game history</span>
             <span className="text-slate-400">→</span>

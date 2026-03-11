@@ -1,14 +1,17 @@
 /**
- * New tutorial system for the redesigned UI.
- * Works with React Router (uses useLocation instead of prop-based currentPage).
- * Stored in localStorage — syncs to DB when user logs in (future enhancement).
+ * Tutorial system for the redesigned UI.
+ * Tutorial steps can be overridden via AppSettings.tutorialContent (admin-editable).
+ * Falls back to hardcoded defaults when no override is set.
  */
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
+import { useAuth } from './AuthContext'
 
 const Ctx = createContext(null)
 
-// ── Tutorial definitions ───────────────────────────────────────────────────
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+
+// ── Tutorial default definitions ───────────────────────────────────────────
 export const TUTORIAL_STEPS = {
   home: [
     { emoji: '👋', title: 'Welcome to Skywatch!',
@@ -20,7 +23,7 @@ export const TUTORIAL_STEPS = {
     { emoji: '🔥', title: 'Daily Streak',
       body: 'Come back every day to keep your streak going! Consistent daily learning is the fastest way to be ready for RAF selection.' },
     { emoji: '⭐', title: 'Earn Aircoins',
-      body: 'Reading briefs and completing quizzes earns you Aircoins. These build your level and track your progress through the platform.' },
+      body: 'Reading briefs and completing quizzes earns you Aircoins. Collect enough Aircoins to level up — the more you learn, the higher your level climbs.' },
   ],
   learn: [
     { emoji: '📚', title: 'Subject Areas',
@@ -72,28 +75,66 @@ export const TUTORIAL_STEPS = {
     { emoji: '🪖', title: 'RAF Ranks',
       body: 'The RAF Ranks tab shows all real RAF rank designations. Earn rank promotions by reaching Level 10 repeatedly — working your way up from Aircraftman to Marshal of the RAF.' },
     { emoji: '⭐', title: 'How to Level Up',
-      body: 'Earn Aircoins by reading briefs and completing quizzes. Each correct quiz answer adds to your tally. The XP bar shows your progress to the next level.' },
+      body: 'Earn Aircoins by reading briefs and completing quizzes. Collect enough Aircoins and your level increases automatically — the Aircoins bar shows your progress to the next level.' },
   ],
 }
 
-const storageKey = (name) => `sw_tut_v2_${name}`
+// Apply admin-configured overrides to the default steps.
+// tutorialContent shape: { 'home_0': { title, body }, 'learn_2': { body }, ... }
+function applyOverrides(steps, tutorialContent) {
+  if (!tutorialContent || typeof tutorialContent !== 'object') return steps
+  const out = {}
+  for (const [name, arr] of Object.entries(steps)) {
+    out[name] = arr.map((step, i) => {
+      const override = tutorialContent[`${name}_${i}`]
+      if (!override) return step
+      return {
+        ...step,
+        ...(override.title?.trim() ? { title: override.title } : {}),
+        ...(override.body?.trim()  ? { body:  override.body  } : {}),
+      }
+    })
+  }
+  return out
+}
 
 // ── Provider ──────────────────────────────────────────────────────────────
 export function AppTutorialProvider({ children }) {
-  const [active, setActive] = useState(null) // { name, steps, stepIndex }
+  const [active,          setActive]          = useState(null) // { name, steps, stepIndex }
+  const [tutorialContent, setTutorialContent] = useState(null)
   const location = useLocation()
+  const { user } = useAuth()
+
+  // Keys are user-scoped so tutorials seen on one account don't suppress them on another
+  const storageKey = useCallback((name) => {
+    return user?._id ? `sw_tut_v2_${user._id}_${name}` : `sw_tut_v2_anon_${name}`
+  }, [user?._id])
+
+  // Load tutorial content overrides from public settings on mount
+  useEffect(() => {
+    fetch(`${API}/api/settings`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.tutorialContent) setTutorialContent(d.tutorialContent) })
+      .catch(() => {})
+  }, [])
 
   // Close tutorial on route change
   useEffect(() => {
     setActive(null)
   }, [location.pathname])
 
+  // Returns steps for a named tutorial, with DB overrides applied
+  const getSteps = useCallback((name) => {
+    const overridden = applyOverrides(TUTORIAL_STEPS, tutorialContent)
+    return overridden[name] ?? null
+  }, [tutorialContent])
+
   const start = useCallback((name, force = false) => {
     if (!force && localStorage.getItem(storageKey(name))) return
-    const steps = TUTORIAL_STEPS[name]
+    const steps = getSteps(name)
     if (!steps?.length) return
     setActive({ name, steps, stepIndex: 0 })
-  }, [])
+  }, [getSteps, storageKey])
 
   const next = useCallback(() => {
     setActive(prev => {
@@ -105,12 +146,12 @@ export function AppTutorialProvider({ children }) {
       }
       return { ...prev, stepIndex: nextIdx }
     })
-  }, [])
+  }, [storageKey])
 
   const skip = useCallback(() => {
     if (active) localStorage.setItem(storageKey(active.name), '1')
     setActive(null)
-  }, [active])
+  }, [active, storageKey])
 
   const replay = useCallback((name) => {
     start(name, true)
@@ -122,7 +163,7 @@ export function AppTutorialProvider({ children }) {
   const visible = !!step
 
   return (
-    <Ctx.Provider value={{ start, next, skip, replay, step, total, current, visible }}>
+    <Ctx.Provider value={{ start, next, skip, replay, step, total, current, visible, tutorialContent }}>
       {children}
     </Ctx.Provider>
   )

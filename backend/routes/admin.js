@@ -4,6 +4,7 @@ const User = require('../models/User');
 const ProblemReport = require('../models/ProblemReport');
 const AdminAction = require('../models/AdminAction');
 const AppSettings = require('../models/AppSettings');
+const { sendWelcomeEmail } = require('../utils/email');
 const GameSessionQuizResult           = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt          = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult  = require('../models/GameSessionOrderOfBattleResult');
@@ -41,7 +42,7 @@ router.get('/stats', async (_req, res) => {
       totalUsers, freeUsers, trialUsers, silverUsers, goldUsers,
       easyPlayers, mediumPlayers,
       totalBrifsRead,
-      totalGamesPlayed, totalGamesCompleted, totalGamesWon,
+      totalGamesPlayed, totalGamesCompleted, totalPerfectScores, totalGamesWon,
       easyLost, mediumLost,
       totalGamesAbandoned,
       aircoinAgg, loginAgg,
@@ -60,6 +61,7 @@ router.get('/stats', async (_req, res) => {
       GameSessionQuizAttempt.countDocuments({ status: { $in: ['completed', 'abandoned'] } }),
       GameSessionQuizAttempt.countDocuments({ status: 'completed' }),
       GameSessionQuizAttempt.countDocuments({ status: 'completed', percentageCorrect: 100 }),
+      GameSessionQuizAttempt.countDocuments({ won: true }),
       GameSessionQuizAttempt.countDocuments({ status: 'completed', difficulty: 'easy',   percentageCorrect: { $lt: passThresholdEasy } }),
       GameSessionQuizAttempt.countDocuments({ status: 'completed', difficulty: 'medium', percentageCorrect: { $lt: passThresholdMedium } }),
       GameSessionQuizAttempt.countDocuments({ status: 'abandoned' }),
@@ -116,7 +118,8 @@ router.get('/stats', async (_req, res) => {
         games: {
           totalGamesPlayed,
           totalGamesCompleted,
-          totalPerfectScores:  totalGamesWon,
+          totalGamesWon,
+          totalPerfectScores,
           totalGamesLost:      easyLost + mediumLost,
           totalGamesAbandoned,
           totalAircoinsEarned: aircoinAgg[0]?.total ?? 0,
@@ -158,6 +161,8 @@ router.patch('/settings', requireReason, async (req, res) => {
   try {
     const { reason, ...updates } = req.body;
     const settings = await AppSettings.findOneAndUpdate({}, updates, { new: true, upsert: true });
+    // Mixed field tutorialContent needs explicit mark after findOneAndUpdate via set,
+    // but findOneAndUpdate at the DB level handles it correctly already.
 
     await AdminAction.create({
       userId: req.user._id,
@@ -168,6 +173,16 @@ router.patch('/settings', requireReason, async (req, res) => {
     res.json({ status: 'success', data: { settings } });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/test-email — sends a test welcome email to the admin's own address
+router.post('/test-email', async (req, res) => {
+  try {
+    await sendWelcomeEmail({ email: req.user.email, agentNumber: req.user.agentNumber });
+    res.json({ status: 'success', message: `Test email sent to ${req.user.email}` });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
   }
 });
 
@@ -390,7 +405,7 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
     if (fields.includes('aircoins'))        { userUpdates.totalAircoins = 0; userUpdates.cycleAircoins = 0; userUpdates.rank = null; ops.push(AircoinLog.deleteMany({ userId: req.params.id })); }
     if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); }
     if (fields.includes('intelBriefsRead')) ops.push(IntelligenceBriefRead.deleteMany({ userId: req.params.id }));
-    if (fields.includes('tutorials'))       { userUpdates['tutorials.welcome'] = 'unseen'; userUpdates['tutorials.intel_brief'] = 'unseen'; userUpdates['tutorials.user'] = 'unseen'; userUpdates['tutorials.load_up'] = 'unseen'; }
+    if (fields.includes('tutorials'))       { userUpdates.tutorialsResetAt = new Date(); }
 
     if (Object.keys(userUpdates).length) ops.push(User.findByIdAndUpdate(req.params.id, userUpdates));
     await Promise.all(ops);
@@ -412,6 +427,16 @@ router.post('/award-coins', async (req, res) => {
 
     await AdminAction.create({ userId: req.user._id, actionType: 'award_test_coins', reason: `Awarded ${parsed} test coins to self` });
     res.json({ status: 'success', awarded: parsed, totalAircoins: result.totalAircoins, cycleAircoins: result.cycleAircoins, rankPromotion: result.rankPromotion });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/problems/count — unsolved report count for tab badge
+router.get('/problems/count', async (req, res) => {
+  try {
+    const unsolvedCount = await ProblemReport.countDocuments({ solved: false });
+    res.json({ status: 'success', data: { unsolvedCount } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -25,7 +25,7 @@ function KeywordSheet({ kw, onClose }) {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 320 }}
-            className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-3xl p-6 pb-10 max-w-lg mx-auto shadow-2xl"
+            className="fixed bottom-0 inset-x-0 z-50 bg-surface rounded-t-3xl p-6 pb-10 max-w-lg mx-auto shadow-2xl"
           >
             {/* Drag handle */}
             <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
@@ -120,7 +120,7 @@ function CompletionScreen({ brief, onQuiz, onBack }) {
 
       {/* Keywords learned */}
       {brief.keywords?.length > 0 && (
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 mb-6 text-left card-shadow">
+        <div className="bg-surface rounded-2xl p-4 border border-slate-200 mb-6 text-left card-shadow">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
             🔑 Keywords in this brief
           </p>
@@ -139,7 +139,7 @@ function CompletionScreen({ brief, onQuiz, onBack }) {
           onClick={onQuiz}
           className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-lg transition-colors shadow-lg shadow-brand-200"
         >
-          🎮 Take the Quiz → Earn XP
+          🎮 Take the Quiz → Earn Aircoins
         </button>
         <button
           onClick={onBack}
@@ -198,8 +198,8 @@ export default function BriefReader() {
       await fetch(`${API}/api/briefs/${briefId}/read`, {
         method: 'POST', credentials: 'include',
       })
-      // Stamp today's date so Home page can show "mission complete"
-      localStorage.setItem('sw_read_today', new Date().toDateString())
+      // Stamp today's date so Home page can show "mission complete" (user-scoped)
+      if (user?._id) localStorage.setItem(`sw_read_today_${user._id}`, new Date().toDateString())
     } catch {}
   }, [briefId, user, API])
 
@@ -334,7 +334,7 @@ export default function BriefReader() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.25 }}
-              className="bg-white rounded-2xl p-5 border border-slate-200 mb-4 card-shadow"
+              className="bg-surface rounded-2xl p-5 border border-slate-200 mb-4 card-shadow"
             >
               <SectionText
                 text={sections[sectionIdx]}

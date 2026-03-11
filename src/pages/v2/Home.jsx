@@ -25,17 +25,17 @@ function XPRing({ pct = 0, level = 1, size = 72 }) {
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e2e8f0" strokeWidth="5"/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1a3060" strokeWidth="5"/>
         <circle
           cx={size/2} cy={size/2} r={r}
-          fill="none" stroke="#1a76e4" strokeWidth="5"
+          fill="none" stroke="#5baaff" strokeWidth="5"
           strokeLinecap="round"
           strokeDasharray={`${dash} ${circ}`}
           style={{ transition: 'stroke-dasharray 0.8s ease' }}
         />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-lg font-extrabold text-brand-700">{level}</span>
+        <span className="text-lg font-extrabold text-brand-600">{level}</span>
       </div>
     </div>
   )
@@ -55,8 +55,8 @@ function CategoryCard({ category, progress = 0, total = 0, done = 0, index = 0 }
     >
       <Link
         to={`/learn/${encodeURIComponent(category)}`}
-        className={`flex flex-col gap-3 bg-white rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 group
-          ${complete ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200 hover:border-brand-300'}`}
+        className={`flex flex-col gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 group
+          ${complete ? 'border-emerald-300 bg-emerald-50/40 card-intel' : 'bg-surface border-slate-200 hover:border-brand-400 card-intel'}`}
       >
         {/* Icon + label */}
         <div className="flex items-start justify-between">
@@ -92,18 +92,20 @@ function CategoryCard({ category, progress = 0, total = 0, done = 0, index = 0 }
   )
 }
 
-function todaysMissionDone() {
-  return localStorage.getItem('sw_read_today') === new Date().toDateString()
-}
-
 export default function Home() {
   const { user, API } = useAuth()
   const { start }     = useAppTutorial()
   const navigate      = useNavigate()
   const [stats,        setStats]        = useState({}) // { [category]: { total, done } }
-  const [missionDone,  setMissionDone]  = useState(todaysMissionDone)
+  const [missionDone,  setMissionDone]  = useState(false)
   const [latestBriefs, setLatestBriefs] = useState([])
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
+
+  // Check user-scoped daily mission flag
+  useEffect(() => {
+    if (!user?._id) { setMissionDone(false); return }
+    setMissionDone(localStorage.getItem(`sw_read_today_${user._id}`) === new Date().toDateString())
+  }, [user?._id])
 
   // Start tutorial on first visit
   useEffect(() => {
@@ -153,28 +155,29 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-r from-brand-600 to-brand-500 rounded-2xl p-4 mb-6 text-white card-shadow"
+          className="rounded-2xl p-4 mb-6 card-shadow border border-brand-300/40"
+          style={{ background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)' }}
         >
           <div className="flex items-center gap-4">
             <XPRing pct={levelInfo.progress} level={levelInfo.level} />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-brand-100 mb-0.5">Level {levelInfo.level}</p>
-              <div className="h-2 bg-brand-400/50 rounded-full overflow-hidden">
+              <p className="text-sm font-semibold text-brand-600 mb-0.5 intel-mono">Level {levelInfo.level}</p>
+              <div className="h-2 bg-brand-200/60 rounded-full overflow-hidden">
                 <motion.div
-                  className="h-full bg-white rounded-full"
+                  className="h-full bg-brand-600 rounded-full"
                   initial={{ width: 0 }}
                   animate={{ width: `${levelInfo.progress}%` }}
                   transition={{ duration: 0.8, ease: 'easeOut' }}
                 />
               </div>
-              <p className="text-xs text-brand-200 mt-1">
-                {levelInfo.current} / {levelInfo.next} XP to Level {levelInfo.level + 1}
+              <p className="text-xs text-slate-600 mt-1">
+                {levelInfo.current} / {levelInfo.next} Aircoins to Level {levelInfo.level + 1}
               </p>
             </div>
             <div className="text-right shrink-0">
               <div className="text-2xl">🔥</div>
-              <div className="text-lg font-bold">{user.streak ?? 0}</div>
-              <div className="text-xs text-brand-200">streak</div>
+              <div className="text-lg font-bold text-amber-700">{user.loginStreak ?? 0}</div>
+              <div className="text-xs text-slate-600 intel-mono">streak</div>
             </div>
           </div>
         </motion.div>
@@ -234,11 +237,11 @@ export default function Home() {
                   to={`/brief/${brief._id}`}
                   className={`flex items-center gap-3 rounded-2xl px-4 py-3 border transition-all card-shadow group hover:-translate-y-0.5
                     ${brief.isRead
-                      ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
-                      : 'bg-white border-slate-200 hover:border-brand-300 hover:bg-brand-50'}`}
+                      ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300 card-intel'
+                      : 'bg-surface border-slate-200 hover:border-brand-400 card-intel'}`}
                 >
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg
-                    ${brief.isRead ? 'bg-emerald-100' : 'bg-brand-50'}`}>
+                    ${brief.isRead ? 'bg-emerald-100/80' : 'bg-brand-100'}`}>
                     {brief.isRead ? '✓' : (CATEGORY_ICONS[brief.category] ?? '📄')}
                   </div>
                   <div className="flex-1 min-w-0">

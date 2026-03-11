@@ -73,7 +73,7 @@ export default function Learn() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search subjects…"
-          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm bg-white transition-all"
+          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm bg-surface transition-all"
         />
         {search && (
           <button
@@ -110,7 +110,7 @@ export default function Learn() {
                 return (
                   <Link
                     to={`/learn/${encodeURIComponent(cat)}`}
-                    className={`flex items-center gap-4 bg-white rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover group hover:-translate-y-0.5
+                    className={`flex items-center gap-4 bg-surface rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover group hover:-translate-y-0.5
                       ${complete ? 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-300' : 'border-slate-200 hover:border-brand-300 hover:bg-brand-50'}`}
                   >
                     <span className="text-3xl shrink-0 group-hover:scale-110 transition-transform">

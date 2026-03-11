@@ -18,7 +18,7 @@ export default function BottomNav() {
   if (hide) return null
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-white border-t border-slate-200 safe-area-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-slate-50/95 backdrop-blur-md border-t border-slate-200 safe-area-bottom">
       <div className="flex items-stretch h-16">
         {NAV_ITEMS.map(({ to, emoji, label }) => {
           const active = location.pathname === to || location.pathname.startsWith(to + '/')
