@@ -12,6 +12,7 @@ const AircoinLog             = require('../models/AircoinLog');
 const { awardCoins }         = require('../utils/awardCoins');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
+const { CATEGORIES, SUBCATEGORIES } = IntelligenceBrief;
 const GameQuizQuestion  = require('../models/GameQuizQuestion');
 const GameType          = require('../models/GameType');
 const Media             = require('../models/Media');
@@ -529,6 +530,15 @@ router.get('/briefs/:id', async (req, res) => {
 router.post('/briefs', requireReason, async (req, res) => {
   try {
     const { reason, ...fields } = req.body;
+    if (fields.category && !CATEGORIES.includes(fields.category)) {
+      return res.status(400).json({ message: `Invalid category "${fields.category}". Must be one of: ${CATEGORIES.join(', ')}` });
+    }
+    if (fields.subcategory && fields.category) {
+      const validSubs = SUBCATEGORIES[fields.category] ?? [];
+      if (validSubs.length > 0 && !validSubs.includes(fields.subcategory)) {
+        return res.status(400).json({ message: `"${fields.subcategory}" is not a valid subcategory for ${fields.category}` });
+      }
+    }
     const brief = await IntelligenceBrief.create(fields);
     await AdminAction.create({ userId: req.user._id, actionType: 'create_brief', reason });
     res.json({ status: 'success', data: { brief } });
@@ -762,7 +772,7 @@ router.delete('/briefs/:id/questions', requireReason, async (req, res) => {
 // ── OpenRouter AI Proxies ──────────────────────────────────────────────────
 // All OpenRouter calls are made server-side so OPENROUTER_KEY never reaches the browser.
 
-async function openRouterChat(messages, model) {
+async function openRouterChat(messages, model, maxTokens = 2048) {
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -771,7 +781,7 @@ async function openRouterChat(messages, model) {
       'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
       'X-Title': 'Skywatch',
     },
-    body: JSON.stringify({ model, messages }),
+    body: JSON.stringify({ model, messages, max_tokens: maxTokens }),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -835,13 +845,13 @@ router.post('/ai/generate-brief', async (req, res) => {
     }, {
       role: 'user',
       content: userContent,
-    }], 'perplexity/sonar');
+    }], 'perplexity/sonar', 4096);
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     let brief;
     try {
       brief = JSON.parse(cleanJson(raw));
     } catch (parseErr) {
-      console.error('[generate-brief] JSON parse failed. Raw response:', raw.slice(0, 500));
+      console.error('[generate-brief] JSON parse failed. Raw response:', raw);
       throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
     }
     // Safety net: discard any keyword that doesn't appear verbatim in any section
@@ -872,7 +882,7 @@ router.get('/intel-leads', (req, res) => {
       const trimmed = line.trim();
       if (!trimmed) continue;
       if (trimmed.startsWith('=')) continue;
-      if (/^SECTION \d+:/i.test(trimmed)) { currentSection = trimmed; currentSubsection = ''; continue; }
+      if (/^SECTION\s+\d+:/i.test(trimmed)) { currentSection = trimmed; currentSubsection = ''; continue; }
       if (trimmed.startsWith('---') && trimmed.endsWith('---')) {
         currentSubsection = trimmed.replace(/^-+\s*/, '').replace(/\s*-+$/, '');
         continue;

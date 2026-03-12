@@ -31,8 +31,6 @@ import NotFound       from './pages/v2/NotFound'
 
 // v2 admin
 import Admin          from './pages/v2/Admin'
-// Legacy pages kept as-is (just wrapped in new shell)
-import AdminLegacy    from './pages/Admin'
 
 import { playSound } from './utils/sound'
 
@@ -48,30 +46,6 @@ function PageWrapper({ children }) {
       {children}
     </motion.div>
   )
-}
-
-// ── Shim: passes navigate-compatible props to legacy pages ─────────────────
-function LegacyPage({ Component, ...props }) {
-  const nav = useNavigate()
-  const navigate = (id, params = {}) => {
-    const MAP = {
-      dashboard:           '/home',
-      'intel-feed':        '/learn',
-      profile:             '/profile',
-      rankings:            '/rankings',
-      admin:               '/admin',
-      login:               '/login',
-      'aircoin-history':   '/aircoin-history',
-      'game-history':      '/game-history',
-      'report':            '/report',
-    }
-    if (id?.startsWith('intelligence-brief') || id === 'intelligence-brief') {
-      nav(`/brief/${params.briefId ?? ''}`)
-    } else {
-      nav(MAP[id] ?? '/')
-    }
-  }
-  return <Component navigate={navigate} {...props} />
 }
 
 // ── Notification layer (sits above all routes) ─────────────────────────────
@@ -163,7 +137,6 @@ function AppRoutes() {
           <Route path="/aircoin-history"  element={<RequireAuth><PageWrapper><AircoinHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"     element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
           <Route path="/admin"             element={<RequireAuth><PageWrapper><Admin /></PageWrapper></RequireAuth>} />
-          <Route path="/admin-legacy"    element={<RequireAuth><PageWrapper><LegacyPage Component={AdminLegacy} /></PageWrapper></RequireAuth>} />
 
           {/* 404 */}
           <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />

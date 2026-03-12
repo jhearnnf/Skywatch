@@ -661,3 +661,85 @@ describe('POST /api/admin/briefs — field saving', () => {
     expect(res.body.data.brief.sources[0].siteName).toBe('RAF');
   });
 });
+
+// ── POST /api/admin/briefs — category & subcategory validation ────────────────
+
+describe('POST /api/admin/briefs — category and subcategory validation', () => {
+  it('rejects an invalid category with 400', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Bad Cat', category: 'Planes', reason: 'test' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Invalid category/);
+  });
+
+  it('rejects a subcategory that does not belong to the given category with 400', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Bad Sub', category: 'Aircrafts', subcategory: 'World War II', reason: 'test' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/not a valid subcategory/);
+  });
+
+  it('accepts Aircrafts brief with subcategory Fast Jet', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Typhoon Brief', category: 'Aircrafts', subcategory: 'Fast Jet', reason: 'test' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.brief.subcategory).toBe('Fast Jet');
+  });
+
+  it('accepts Aircrafts brief with subcategory ISR & Surveillance', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'RC-135 Brief', category: 'Aircrafts', subcategory: 'ISR & Surveillance', reason: 'test' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.brief.subcategory).toBe('ISR & Surveillance');
+  });
+
+  it('accepts Missions brief with subcategory World War II', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Battle of Britain', category: 'Missions', subcategory: 'World War II', reason: 'test' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.brief.subcategory).toBe('World War II');
+  });
+
+  it('accepts AOR brief with subcategory South Atlantic & Falklands', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Falklands AOR', category: 'AOR', subcategory: 'South Atlantic & Falklands', reason: 'test' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.brief.subcategory).toBe('South Atlantic & Falklands');
+  });
+
+  it('accepts a News brief with no subcategory', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'News Brief', category: 'News', reason: 'test' });
+    expect(res.status).toBe(200);
+  });
+
+  it('accepts a brief with no subcategory when the category has subcategories (subcategory is optional)', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Aircraft no sub', category: 'Aircrafts', reason: 'test' });
+    expect(res.status).toBe(200);
+  });
+});

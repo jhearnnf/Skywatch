@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import UpgradePrompt from '../../components/UpgradePrompt'
+import { playSound } from '../../utils/sound'
 
 // ── Single question card ──────────────────────────────────────────────────
 function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, selectedAnswerId }) {
@@ -266,6 +267,7 @@ export default function QuizFlow() {
     setAnswered(true)
     if (String(answerId) === String(current.correctAnswerId)) {
       setScore(s => s + 1)
+      playSound('fire')
     }
     submitResult(answerId)
   }
@@ -287,6 +289,7 @@ export default function QuizFlow() {
           const earned = data.data?.aircoinsEarned ?? 0
           const didWin = data.data?.won ?? false
           setWon(didWin)
+          playSound(didWin ? 'quiz_complete_win' : 'quiz_complete_lose')
           if (earned > 0) {
             setXP(earned)
             if (awardAircoins) {

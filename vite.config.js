@@ -10,5 +10,11 @@ export default defineConfig({
       '/api': 'http://localhost:5000',
       '/uploads': 'http://localhost:5000',
     }
-  }
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.js'],
+    globals: true,
+    include: ['src/**/*.test.{js,jsx,ts,tsx}'],
+  },
 })

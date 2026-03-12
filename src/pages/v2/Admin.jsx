@@ -24,6 +24,90 @@ const ALL_CATEGORIES = [
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
 ]
 
+function leadSectionToCategory(section) {
+  if (!section) return ALL_CATEGORIES[0]
+  const match = section.match(/SECTION\s+(\d+)/i)
+  const num = match ? parseInt(match[1], 10) : 0
+  const map = {
+    1: 'Ranks', 2: 'Squadrons', 3: 'Aircrafts', 4: 'Aircrafts',
+    5: 'Bases', 6: 'Bases', 7: 'Training', 8: 'Threats', 9: 'Allies',
+    10: 'Missions', 11: 'Tech', 12: 'Terminology', 13: 'Treaties', 14: 'AOR',
+  }
+  return map[num] ?? ALL_CATEGORIES[0]
+}
+
+function leadSubsectionToSubcategory(subsection) {
+  const map = {
+    'FAST JET': 'Fast Jet',
+    'INTELLIGENCE, SURVEILLANCE & RECONNAISSANCE (ISR)': 'ISR & Surveillance',
+    'MARITIME PATROL': 'Maritime Patrol',
+    'TRANSPORT & TANKER': 'Transport & Tanker',
+    'ROTARY WING': 'Rotary Wing',
+    'TRAINING (FIXED WING)': 'Training Aircraft',
+    'GROUND-BASED AIR DEFENCE (RAF REGIMENT)': 'Ground-Based Air Defence',
+    'WWII ERA': 'Historic — WWII',
+    'PRE-WWII / INTERWAR': 'Historic — WWII',
+    'COLD WAR ERA': 'Historic — Cold War',
+    'PANAVIA TORNADO FAMILY': 'Historic — Cold War',
+    'BAE HARRIER FAMILY': 'Historic — Cold War',
+    'POST-COLD WAR / RECENT RETIREMENTS': 'Historic — Post-Cold War',
+    'MAIN OPERATING BASES': 'UK Active',
+    'SUPPORT, INTELLIGENCE & SPECIALIST SITES': 'UK Active',
+    'FORMER / RECENTLY CLOSED UK BASES': 'UK Former',
+    'PERMANENT OVERSEAS BASES': 'Overseas Permanent',
+    'DEPLOYED / FORWARD OPERATING LOCATIONS': 'Overseas Deployed / FOL',
+    'COMMISSIONED OFFICER RANKS': 'Commissioned Officer',
+    'NON-COMMISSIONED RANKS': 'Non-Commissioned',
+    'SPECIALIST ROLES & DESIGNATIONS': 'Specialist Role',
+    'ACTIVE FRONT-LINE SQUADRONS': 'Active Front-Line',
+    'TRAINING SQUADRONS': 'Training',
+    'ROYAL AUXILIARY AIR FORCE (RAuxAF) SQUADRONS': 'Royal Auxiliary Air Force',
+    'HISTORIC / FAMOUS SQUADRONS': 'Historic',
+    'INITIAL TRAINING': 'Initial Training',
+    'FLYING TRAINING PIPELINE': 'Flying Training',
+    'GROUND TRAINING & PROFESSIONAL MILITARY EDUCATION': 'Ground Training & PME',
+    'AIR COMBAT & TACTICAL TRAINING': 'Tactical & Combat Training',
+    'STATE ACTOR AIR THREATS': 'State Actor Air',
+    'SURFACE-TO-AIR MISSILE (SAM) THREATS': 'Surface-to-Air Missiles',
+    'ASYMMETRIC / NON-STATE THREATS': 'Asymmetric & Non-State',
+    'MISSILE & STAND-OFF THREATS': 'Missiles & Stand-Off',
+    'ELECTRONIC & CYBER THREATS': 'Electronic & Cyber',
+    'NATO ALLIES (KEY)': 'NATO',
+    'FIVE EYES PARTNERS': 'Five Eyes',
+    'AUKUS PARTNERS': 'AUKUS',
+    'BILATERAL & FRAMEWORK PARTNERS': 'Bilateral & Framework Partners',
+    'WORLD WAR I': 'World War I',
+    'WORLD WAR II': 'World War II',
+    'POST-WAR / COLD WAR': 'Post-War & Cold War',
+    'POST-COLD WAR': 'Post-Cold War',
+    'WAR ON TERROR / 21ST CENTURY': 'War on Terror',
+    'NATO STANDING OPERATIONS': 'NATO Standing Operations',
+    'HUMANITARIAN / DISASTER RELIEF': 'Humanitarian & NEO',
+    'WEAPONS SYSTEMS': 'Weapons Systems',
+    'SENSORS & AVIONICS': 'Sensors & Avionics',
+    'ELECTRONIC WARFARE': 'Electronic Warfare',
+    'FUTURE TECHNOLOGY & PROGRAMMES': 'Future Programmes',
+    'COMMAND & CONTROL / COMMS': 'Command, Control & Comms',
+    'OPERATIONAL CONCEPTS': 'Operational Concepts',
+    'FLYING & TACTICAL TERMINOLOGY': 'Flying & Tactical',
+    'AIR TRAFFIC & NAVIGATION': 'Air Traffic & Navigation',
+    'INTELLIGENCE & PLANNING': 'Intelligence & Planning',
+    'MAINTENANCE & SUPPORT': 'Maintenance & Support',
+    'FOUNDING & CORE ALLIANCES': 'Founding & Core Alliances',
+    'BILATERAL DEFENCE AGREEMENTS': 'Bilateral Defence Agreements',
+    'ARMS CONTROL & NON-PROLIFERATION': 'Arms Control & Non-Proliferation',
+    'OPERATIONAL & STATUS AGREEMENTS': 'Operational & Status Agreements',
+    'UK / HOME AIR DEFENCE': 'UK Home Air Defence',
+    'NATO AOR STRUCTURE': 'NATO AOR',
+    'CENTCOM / MIDDLE EAST AOR': 'Middle East & CENTCOM',
+    'ATLANTIC / GIUK GAP': 'Atlantic & GIUK Gap',
+    'AFRICA AOR': 'Africa',
+    'INDO-PACIFIC AOR': 'Indo-Pacific',
+    'FALKLAND ISLANDS AOR': 'South Atlantic & Falklands',
+  }
+  return map[subsection] || ''
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared UI
 // ─────────────────────────────────────────────────────────────────────────────
@@ -286,11 +370,16 @@ function Toggle({ label, hint, checked, onChange }) {
   )
 }
 
-function SoundRowV2({ label, value, onChange, enabled, onToggle }) {
+const OUT_OF_AMMO_VARIANTS = ['out_of_ammo_1', 'out_of_ammo_2', 'out_of_ammo_3']
+
+function SoundRowV2({ label, sound, value, onChange, enabled, onToggle }) {
   const preview = () => {
     invalidateSoundSettings()
     try {
-      const audio = new Audio(`/sounds/${label.toLowerCase().replace(/\s+/g, '_')}.mp3`)
+      const file = sound === 'out_of_ammo'
+        ? OUT_OF_AMMO_VARIANTS[Math.floor(Math.random() * OUT_OF_AMMO_VARIANTS.length)]
+        : sound
+      const audio = new Audio(`/sounds/${file}.mp3`)
       audio.volume = Math.min(1, (value ?? 100) / 100)
       audio.play().catch(() => {})
     } catch {}
@@ -534,10 +623,11 @@ function SettingsTab({ API }) {
         {SOUND_GROUPS.map(group => (
           <div key={group.title} className="mb-4">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-1 pb-1">{group.title}</p>
-            {group.sounds.map(({ key, enabledKey, label }) => (
+            {group.sounds.map(({ key, enabledKey, label, sound }) => (
               <SoundRowV2
                 key={key}
                 label={label}
+                sound={sound}
                 value={draft[key] ?? 100}
                 onChange={v => set(key, v)}
                 enabled={draft[enabledKey] !== false}
@@ -1270,7 +1360,8 @@ function LeadsModal({ API, onClose, onGenerate }) {
   }
 
   const generate = async (topicOrHeadline, isHeadline = false) => {
-    const key = typeof topicOrHeadline === 'string' ? topicOrHeadline : topicOrHeadline.text
+    const lead = typeof topicOrHeadline === 'string' ? null : topicOrHeadline
+    const key  = lead ? lead.text : topicOrHeadline
     setBusy(key)
     try {
       const body = isHeadline ? { headline: key } : { topic: key }
@@ -1281,7 +1372,7 @@ function LeadsModal({ API, onClose, onGenerate }) {
       })
       const data = await res.json()
       if (data.status === 'success') {
-        onGenerate(data.data.brief, isHeadline ? null : key)
+        onGenerate(data.data.brief, isHeadline ? null : lead)
         onClose()
       } else {
         alert(`Generation failed: ${data.message}`)
@@ -1491,6 +1582,7 @@ function BriefsTab({ API }) {
   const [pendingImages, setPendingImages] = useState([])
   const [qTab,          setQTab]          = useState('easy')
   const [generating,    setGenerating]    = useState(null)
+  const [autoGenerating, setAutoGenerating] = useState(false)
   const [saveStatus,    setSaveStatus]    = useState(null)
   const [briefId,       setBriefId]       = useState(null)
   const [pendingLead,   setPendingLead]   = useState(null)
@@ -1649,12 +1741,21 @@ function BriefsTab({ API }) {
   }
 
   // ── AI: Generate brief from lead ─────────────────────────────────────────
-  const handleLeadGenerate = (briefData, leadText) => {
+  const handleLeadGenerate = async (briefData, lead) => {
+    // lead is the full { text, section, subsection } object for topic leads, null for news headlines
+    const category    = lead ? leadSectionToCategory(lead.section) : 'News'
+    const subcategory = lead ? leadSubsectionToSubcategory(lead.subsection) : ''
+    const title       = briefData.title ?? ''
+    const subtitle    = briefData.subtitle ?? ''
+    const description = Array.isArray(briefData.descriptionSections)
+      ? briefData.descriptionSections.join('\n\n')
+      : ''
+
     setDraft({
-      title:               briefData.title ?? '',
-      subtitle:            briefData.subtitle ?? '',
-      category:            briefData.category ?? 'News',
-      subcategory:         '',
+      title,
+      subtitle,
+      category,
+      subcategory,
       historic:            briefData.historic ?? false,
       descriptionSections: Array.isArray(briefData.descriptionSections) && briefData.descriptionSections.length
         ? briefData.descriptionSections
@@ -1667,8 +1768,35 @@ function BriefsTab({ API }) {
     setMedia([])
     setPendingImages([])
     setBriefId(null)
-    setPendingLead(leadText)
+    setPendingLead(lead ? lead.text : null)
     setView('editor')
+
+    // Auto-generate questions and images in parallel
+    setAutoGenerating(true)
+    try {
+      const [qRes, imgRes] = await Promise.all([
+        fetch(`${API}/api/admin/ai/generate-quiz`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, description }),
+        }),
+        fetch(`${API}/api/admin/ai/generate-image`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, subtitle }),
+        }),
+      ])
+      const [qData, imgData] = await Promise.all([qRes.json(), imgRes.json()])
+      if (qData.status === 'success') {
+        setEasyQuestions(qData.data.easyQuestions ?? [])
+        setMediumQuestions(qData.data.mediumQuestions ?? [])
+      }
+      if (imgData.status === 'success') {
+        setPendingImages((imgData.data.images ?? []).map(img => ({ ...img, selected: true })))
+      }
+    } finally {
+      setAutoGenerating(false)
+    }
   }
 
   // ── AI: Generate keywords ─────────────────────────────────────────────────
@@ -2214,10 +2342,10 @@ function BriefsTab({ API }) {
             <div className="flex gap-2 flex-wrap mt-4">
               <button
                 onClick={generateQuestions}
-                disabled={generating === 'questions'}
+                disabled={generating === 'questions' || autoGenerating}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
-                {generating === 'questions' ? '↺ Generating…' : '↺ Generate Questions'}
+                {generating === 'questions' || autoGenerating ? '↺ Generating…' : '↺ Generate Questions'}
               </button>
               {briefId && (easyQuestions.length > 0 || mediumQuestions.length > 0) && (
                 <button
@@ -2265,10 +2393,10 @@ function BriefsTab({ API }) {
             {/* Generate button */}
             <button
               onClick={generateImages}
-              disabled={generating === 'images'}
+              disabled={generating === 'images' || autoGenerating}
               className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40 mb-4"
             >
-              {generating === 'images' ? 'Generating…' : 'Generate 3 Images'}
+              {generating === 'images' || autoGenerating ? 'Generating…' : 'Generate 3 Images'}
             </button>
 
             {/* Pending images */}
@@ -2448,17 +2576,6 @@ export default function Admin() {
             {tab === 'briefs'   && <BriefsTab   API={API} />}
           </motion.div>
         </AnimatePresence>
-
-        {/* Legacy tools link */}
-        <p className="text-center text-xs text-slate-400 mt-8">
-          Tutorials and additional tools are available in the{' '}
-          <button
-            onClick={() => navigate('/admin-legacy')}
-            className="text-brand-600 hover:text-brand-700 font-semibold"
-          >
-            legacy admin panel →
-          </button>
-        </p>
 
       </div>
     </div>

@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import UpgradePrompt from '../../components/UpgradePrompt'
+import { playSound } from '../../utils/sound'
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
 function KeywordSheet({ kw, onClose }) {
@@ -170,6 +171,7 @@ export default function BriefReader() {
   const [activeKw, setActiveKw]  = useState(null)
   const [learnedKws, setLearned] = useState(new Set())
   const markingRef               = useRef(false)
+  const briefOpenedRef           = useRef(false)
 
   useEffect(() => {
     fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
@@ -186,7 +188,9 @@ export default function BriefReader() {
 
   // Tutorial on first visit
   useEffect(() => {
-    if (!loading && brief) {
+    if (!loading && brief && !briefOpenedRef.current) {
+      briefOpenedRef.current = true
+      playSound('intel_brief_opened')
       const t = setTimeout(() => start('briefReader'), 800)
       return () => clearTimeout(t)
     }
@@ -220,6 +224,7 @@ export default function BriefReader() {
   }
 
   const handleKeywordTap = (kw) => {
+    if (kw) playSound('target_locked_keyword')
     setActiveKw(kw)
     if (kw) setLearned(s => new Set([...s, kw.keyword.toLowerCase()]))
   }
@@ -261,7 +266,7 @@ export default function BriefReader() {
   return (
     <>
       <TutorialModal />
-      <KeywordSheet kw={activeKw} onClose={() => setActiveKw(null)} />
+      <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} />
 
       {/* Back */}
       <button

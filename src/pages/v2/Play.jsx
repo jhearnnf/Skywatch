@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
@@ -25,10 +25,10 @@ const GAME_MODES = [
     badge: 'Coming soon',
   },
   {
-    key: 'whos-at-aircraft',
+    key: 'whos-that-aircraft',
     emoji: '✈️',
-    title: "Who's at Aircraft",
-    desc: 'Identify aircraft and match them to their squadrons.',
+    title: "Who's that Aircraft?",
+    desc: 'Identify aircraft from silhouettes and match them to their squadrons.',
     available: false,
     badge: 'Coming soon',
   },
@@ -44,10 +44,24 @@ const GAME_MODES = [
 
 export default function Play() {
   const { user, API } = useAuth()
-  const navigate = useNavigate()
-  const { start } = useAppTutorial()
-  const { settings } = useAppSettings()
+  const { start }     = useAppTutorial()
+  const { settings }  = useAppSettings()
+
   const [recentBriefs, setRecentBriefs] = useState([])
+  const [activeGame,   setActiveGame]   = useState(null)
+
+  const quizRef      = useRef(null)
+  const flashcardRef = useRef(null)
+  const aircraftRef  = useRef(null)
+  const battleRef    = useRef(null)
+  const highlightTimerRef = useRef(null)
+
+  const sectionRefs = {
+    'quiz':               quizRef,
+    'flashcard':          flashcardRef,
+    'whos-that-aircraft': aircraftRef,
+    'battle-order':       battleRef,
+  }
 
   // Tutorial on first visit
   useEffect(() => {
@@ -55,7 +69,10 @@ export default function Play() {
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch recently read briefs to suggest as quiz starting points
+  // Clear highlight timer on unmount
+  useEffect(() => () => clearTimeout(highlightTimerRef.current), [])
+
+  // Fetch recently read briefs for the quiz launcher
   useEffect(() => {
     if (!user) return
     fetch(`${API}/api/briefs?limit=6`, { credentials: 'include' })
@@ -64,125 +81,238 @@ export default function Play() {
       .catch(() => {})
   }, [user, API])
 
+  function handleCardClick(key) {
+    const ref = sectionRefs[key]
+    if (!ref?.current) return
+    // 56px = fixed TopBar (h-14) + 16px breathing room
+    const OFFSET = 56 + 16
+    const y = ref.current.getBoundingClientRect().top + window.scrollY - OFFSET
+    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
+    setActiveGame(key)
+    clearTimeout(highlightTimerRef.current)
+    highlightTimerRef.current = setTimeout(() => setActiveGame(null), 1500)
+  }
+
+  // Each launcher section is a card; active state pulses the border brand-coloured
+  function sectionClass(key) {
+    const isActive = activeGame === key
+    return [
+      'bg-surface rounded-2xl border card-shadow transition-all duration-500',
+      isActive ? 'border-brand-400' : 'border-slate-200',
+    ].join(' ')
+  }
+
   return (
     <>
-    <TutorialModal />
-    <div>
-      <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Play</h1>
-      <p className="text-sm text-slate-500 mb-6">Test your RAF knowledge with training games.</p>
+      <TutorialModal />
+      <div>
+        <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Play</h1>
+        <p className="text-sm text-slate-500 mb-6">Test your RAF knowledge with training games.</p>
 
-      {/* Game mode grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
-        {GAME_MODES.map((mode, i) => (
-          <motion.div
-            key={mode.key}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.06, duration: 0.35 }}
-          >
-            <div
-              className={`relative flex items-start gap-4 bg-surface rounded-2xl p-4 border transition-all card-shadow
-                ${mode.available
-                  ? 'border-slate-200 hover:border-brand-300 hover:bg-brand-50 cursor-pointer group hover:-translate-y-0.5'
-                  : 'border-slate-100 opacity-60'
-                }`}
-              onClick={() => {
-                if (!mode.available) return
-                if (mode.key === 'quiz') navigate('/learn')
-              }}
-              role={mode.available ? 'button' : undefined}
-              tabIndex={mode.available ? 0 : undefined}
+        {/* ── Game mode grid ─────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+          {GAME_MODES.map((mode, i) => (
+            <motion.div
+              key={mode.key}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.06, duration: 0.35 }}
             >
-              <span className="text-3xl shrink-0 group-hover:scale-110 transition-transform">{mode.emoji}</span>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <p className="font-bold text-slate-800">{mode.title}</p>
-                  {mode.badge && (
-                    <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">{mode.badge}</span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-400">{mode.desc}</p>
-              </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Quiz launcher — pick a brief */}
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-bold text-slate-800">Start a Quiz</h2>
-        <Link to="/learn" className="text-xs font-semibold text-brand-600 hover:text-brand-700">Browse briefs →</Link>
-      </div>
-
-      {!user ? (
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center">
-          <p className="text-sm text-slate-500 mb-3">Sign in to take quizzes and earn Aircoins.</p>
-          <Link to="/login" className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors">
-            Sign In
-          </Link>
-        </div>
-      ) : recentBriefs.length > 0 ? (
-        <div className="space-y-2">
-          {recentBriefs.map((brief, i) => {
-            const locked = isCategoryLocked(brief.category, user, settings)
-            return (
-              <motion.div
-                key={brief._id}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
+              <div
+                data-testid={`card-${mode.key}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleCardClick(mode.key)}
+                onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleCardClick(mode.key)}
+                className={`relative flex items-start gap-4 bg-surface rounded-2xl p-4 border transition-all card-shadow cursor-pointer
+                  ${mode.available
+                    ? 'border-slate-200 hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5'
+                    : 'border-slate-100 opacity-60'
+                  }`}
               >
-                {locked ? (
-                  <div className="flex items-center gap-3 bg-surface rounded-2xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed card-shadow">
-                    <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
-                      <span className="text-slate-400 font-bold text-xs">🔒</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
-                      <p className="text-xs text-slate-400">{brief.category}</p>
-                    </div>
+                <span className="text-3xl shrink-0 group-hover:scale-110 transition-transform">{mode.emoji}</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="font-bold text-slate-800">{mode.title}</p>
+                    {mode.badge && (
+                      <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">
+                        {mode.badge}
+                      </span>
+                    )}
                   </div>
-                ) : (
-                  <Link
-                    to={`/quiz/${brief._id}`}
-                    className="flex items-center gap-3 bg-surface rounded-2xl px-4 py-3 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all card-shadow group"
-                  >
-                    <div className="w-8 h-8 rounded-xl bg-brand-100 flex items-center justify-center shrink-0">
-                      <span className="text-brand-600 font-bold text-xs">Q</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
-                      <p className="text-xs text-slate-400">{brief.category}</p>
-                    </div>
-                    <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
-                  </Link>
-                )}
-              </motion.div>
-            )
-          })}
+                  <p className="text-xs text-slate-400">{mode.desc}</p>
+                </div>
+              </div>
+            </motion.div>
+          ))}
         </div>
-      ) : (
-        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center">
-          <p className="text-sm text-slate-500 mb-3">Read some briefs first, then return here to quiz yourself.</p>
-          <Link to="/learn" className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors">
-            Browse Briefs
-          </Link>
-        </div>
-      )}
 
-      {/* Game history */}
-      {user && (
-        <div className="mt-6">
-          <Link
-            to="/game-history"
-            className="flex items-center justify-between bg-surface rounded-2xl px-4 py-3 border border-slate-200 hover:border-brand-300 transition-all card-shadow text-sm font-semibold text-slate-700"
-          >
-            <span>📜 View game history</span>
-            <span className="text-slate-400">→</span>
-          </Link>
+        {/* ── Launcher sections ──────────────────────────────────────── */}
+        <div className="space-y-4">
+
+          {/* Intel Quiz */}
+          <div ref={quizRef} className={sectionClass('quiz')}>
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🧠</span>
+                <h2 className="font-bold text-slate-800">Intel Quiz</h2>
+              </div>
+              <Link to="/learn" className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors">
+                Browse briefs →
+              </Link>
+            </div>
+            <div className="p-5">
+              {!user ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-slate-500 mb-4">Sign in to take quizzes and earn Aircoins.</p>
+                  <Link
+                    to="/login"
+                    className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                </div>
+              ) : recentBriefs.length > 0 ? (
+                <div className="space-y-2">
+                  {recentBriefs.map((brief, i) => {
+                    const locked = isCategoryLocked(brief.category, user, settings)
+                    return (
+                      <motion.div
+                        key={brief._id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                      >
+                        {locked ? (
+                          <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed">
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                              <span className="text-slate-400 text-xs">🔒</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                              <p className="text-xs text-slate-400">{brief.category}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <Link
+                            to={`/quiz/${brief._id}`}
+                            className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group"
+                          >
+                            <div className="w-8 h-8 rounded-xl bg-brand-100 flex items-center justify-center shrink-0">
+                              <span className="text-brand-600 font-bold text-xs">Q</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                              <p className="text-xs text-slate-400">{brief.category}</p>
+                            </div>
+                            <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                          </Link>
+                        )}
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-sm text-slate-500 mb-4">Read some briefs first, then return here to quiz yourself.</p>
+                  <Link
+                    to="/learn"
+                    className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+                  >
+                    Browse Briefs
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Flashcard Recall */}
+          <div ref={flashcardRef} className={sectionClass('flashcard')}>
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">⚡</span>
+                <h2 className="font-bold text-slate-800">Flashcard Recall</h2>
+              </div>
+              <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Coming soon</span>
+            </div>
+            <div className="p-5">
+              <div className="space-y-2 mb-4">
+                {['ISTAR', 'QRA', 'COMAO'].map(kw => (
+                  <div key={kw} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-50">
+                    <span className="text-base">⚡</span>
+                    <span className="text-sm font-semibold text-slate-600">{kw}</span>
+                    <span className="ml-auto text-xs text-slate-400">keyword</span>
+                  </div>
+                ))}
+              </div>
+              <button disabled className="w-full py-2.5 bg-slate-100 text-slate-400 font-bold rounded-xl text-sm cursor-not-allowed">
+                Start Drill
+              </button>
+            </div>
+          </div>
+
+          {/* Who's that Aircraft? */}
+          <div ref={aircraftRef} className={sectionClass('whos-that-aircraft')}>
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✈️</span>
+                <h2 className="font-bold text-slate-800">Who's that Aircraft?</h2>
+              </div>
+              <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Coming soon</span>
+            </div>
+            <div className="p-5">
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {[1, 2, 3].map(n => (
+                  <div key={n} className="aspect-square bg-slate-100 rounded-xl border border-slate-200 flex items-center justify-center opacity-40">
+                    <span className="text-3xl">✈️</span>
+                  </div>
+                ))}
+              </div>
+              <button disabled className="w-full py-2.5 bg-slate-100 text-slate-400 font-bold rounded-xl text-sm cursor-not-allowed">
+                Identify Aircraft
+              </button>
+            </div>
+          </div>
+
+          {/* Battle Order */}
+          <div ref={battleRef} className={sectionClass('battle-order')}>
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🗺️</span>
+                <h2 className="font-bold text-slate-800">Battle Order</h2>
+              </div>
+              <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Coming soon</span>
+            </div>
+            <div className="p-5">
+              <div className="space-y-2 mb-4">
+                {[1, 2, 3].map(n => (
+                  <div key={n} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-50">
+                    <span className="text-xs font-bold text-slate-400 w-4 shrink-0">{n}.</span>
+                    <div className="h-2.5 bg-slate-200 rounded-full flex-1" />
+                  </div>
+                ))}
+              </div>
+              <button disabled className="w-full py-2.5 bg-slate-100 text-slate-400 font-bold rounded-xl text-sm cursor-not-allowed">
+                Order Units
+              </button>
+            </div>
+          </div>
+
         </div>
-      )}
-    </div>
+
+        {/* ── Game history ───────────────────────────────────────────── */}
+        {user && (
+          <div className="mt-4">
+            <Link
+              to="/game-history"
+              className="flex items-center justify-between bg-surface rounded-2xl px-4 py-3 border border-slate-200 hover:border-brand-300 transition-all card-shadow text-sm font-semibold text-slate-700"
+            >
+              <span>📜 View game history</span>
+              <span className="text-slate-400">→</span>
+            </Link>
+          </div>
+        )}
+      </div>
     </>
   )
 }
