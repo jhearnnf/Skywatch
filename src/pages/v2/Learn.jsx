@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
+import { useAppSettings } from '../../context/AppSettingsContext'
+import { isCategoryLocked } from '../../utils/subscription'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import { CATEGORIES, CATEGORY_ICONS } from '../../data/mockData'
 
@@ -26,6 +28,7 @@ const DESCRIPTIONS = {
 export default function Learn() {
   const { user, API } = useAuth()
   const { start } = useAppTutorial()
+  const { settings } = useAppSettings()
   const [counts,   setCounts]   = useState({}) // { [category]: total }
   const [progress, setProgress] = useState({}) // { [category]: { total, done } }
   const [search,   setSearch]   = useState('')
@@ -102,27 +105,38 @@ export default function Learn() {
               transition={{ delay: i * 0.04, duration: 0.35 }}
             >
               {(() => {
-                const prog   = progress[cat]
-                const total  = counts[cat] ?? prog?.total ?? 0
-                const done   = prog?.done ?? 0
-                const pct    = total > 0 ? Math.round((done / total) * 100) : 0
+                const prog     = progress[cat]
+                const total    = counts[cat] ?? prog?.total ?? 0
+                const done     = prog?.done ?? 0
+                const pct      = total > 0 ? Math.round((done / total) * 100) : 0
                 const complete = user && pct === 100 && total > 0
-                return (
-                  <Link
-                    to={`/learn/${encodeURIComponent(cat)}`}
-                    className={`flex items-center gap-4 bg-surface rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover group hover:-translate-y-0.5
-                      ${complete ? 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-300' : 'border-slate-200 hover:border-brand-300 hover:bg-brand-50'}`}
-                  >
-                    <span className="text-3xl shrink-0 group-hover:scale-110 transition-transform">
+                const locked   = isCategoryLocked(cat, user, settings)
+
+                const cardClass = `relative flex items-center gap-4 bg-surface rounded-2xl p-4 border transition-all card-shadow
+                  ${locked
+                    ? 'border-slate-200 opacity-60 cursor-not-allowed'
+                    : complete
+                      ? 'border-emerald-200 bg-emerald-50/40 hover:border-emerald-300 hover:card-shadow-hover hover:-translate-y-0.5'
+                      : 'border-slate-200 hover:border-brand-300 hover:bg-brand-50 hover:card-shadow-hover hover:-translate-y-0.5'
+                  }`
+
+                const inner = (
+                  <>
+                    {locked && (
+                      <span className="absolute top-2 right-2 text-xs bg-slate-200 text-slate-500 rounded-full px-1.5 py-0.5 font-bold leading-none">
+                        🔒
+                      </span>
+                    )}
+                    <span className={`text-3xl shrink-0 ${!locked ? 'group-hover:scale-110' : ''} transition-transform`}>
                       {CATEGORY_ICONS[cat] ?? '📄'}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <p className="font-bold text-slate-800">{cat}</p>
-                        {complete && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">✓ Done</span>}
+                        {complete && !locked && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">✓ Done</span>}
                       </div>
                       <p className="text-xs text-slate-400 truncate">{DESCRIPTIONS[cat] ?? ''}</p>
-                      {user && total > 0 && (
+                      {user && total > 0 && !locked && (
                         <div className="mt-1.5">
                           <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
                             <motion.div
@@ -137,11 +151,21 @@ export default function Learn() {
                       )}
                     </div>
                     <div className="text-right shrink-0">
-                      {total > 0 && (
+                      {total > 0 && !locked && (
                         <p className={`text-xs font-bold mb-0.5 ${complete ? 'text-emerald-600' : 'text-brand-600'}`}>{total}</p>
                       )}
-                      <span className={`transition-colors block ${complete ? 'text-emerald-300 group-hover:text-emerald-500' : 'text-slate-300 group-hover:text-brand-400'}`}>→</span>
+                      {!locked && (
+                        <span className={`transition-colors block ${complete ? 'text-emerald-300 group-hover:text-emerald-500' : 'text-slate-300 group-hover:text-brand-400'}`}>→</span>
+                      )}
                     </div>
+                  </>
+                )
+
+                return locked ? (
+                  <div className={cardClass}>{inner}</div>
+                ) : (
+                  <Link to={`/learn/${encodeURIComponent(cat)}`} className={`group ${cardClass}`}>
+                    {inner}
                   </Link>
                 )
               })()}

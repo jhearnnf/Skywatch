@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
+import UpgradePrompt from '../../components/UpgradePrompt'
 
 // ── Single question card ──────────────────────────────────────────────────
 function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, selectedAnswerId }) {
@@ -171,6 +172,7 @@ export default function QuizFlow() {
 
   const [loading, setLoading]        = useState(true)
   const [error, setError]            = useState(null)
+  const [lockedCategory, setLockedCategory] = useState(null)
   const [brief, setBrief]            = useState(null)
   const [questions, setQuestions]    = useState([])
   const [attemptId, setAttemptId]    = useState(null)
@@ -205,7 +207,12 @@ export default function QuizFlow() {
         const startData = await startRes.json()
 
         if (!startRes.ok) {
-          setError(startData.message ?? 'Could not start quiz')
+          if (startRes.status === 403) {
+            setError('locked')
+            setLockedCategory(startData.category ?? null)
+          } else {
+            setError(startData.message ?? 'Could not start quiz')
+          }
           return
         }
 
@@ -318,8 +325,21 @@ export default function QuizFlow() {
     )
   }
 
-  // ── Error (not enough questions, etc.) ───────────────────────────────────
+  // ── Error (not enough questions, subscription gate, etc.) ────────────────
   if (error) {
+    if (error === 'locked') {
+      return (
+        <>
+          <button
+            onClick={() => navigate(`/brief/${briefId}`)}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
+          >
+            ← Back to Brief
+          </button>
+          <UpgradePrompt category={lockedCategory} variant="page" />
+        </>
+      )
+    }
     return (
       <>
         <button

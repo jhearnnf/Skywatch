@@ -10,9 +10,17 @@ async function connect() {
 }
 
 async function closeDatabase() {
-  await mongoose.connection.dropDatabase();
-  await mongoose.connection.close();
-  await mongod.stop();
+  if (mongoose.connection.readyState !== 1) {
+    try { if (mongod) await mongod.stop(); } catch { /* ignore */ }
+    return;
+  }
+  // Suppress any internal MongoDB driver errors during teardown
+  mongoose.connection.on('error', () => {});
+  try { await mongoose.connection.dropDatabase(); } catch { /* ignore */ }
+  await new Promise(resolve => {
+    mongoose.connection.close().then(resolve).catch(resolve);
+  });
+  try { if (mongod) await mongod.stop(); } catch { /* ignore */ }
 }
 
 async function clearDatabase() {

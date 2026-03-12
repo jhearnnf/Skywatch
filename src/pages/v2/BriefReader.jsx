@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
+import UpgradePrompt from '../../components/UpgradePrompt'
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
 function KeywordSheet({ kw, onClose }) {
@@ -160,6 +161,7 @@ export default function BriefReader() {
   const { start }      = useAppTutorial()
   const [brief, setBrief]       = useState(null)
   const [loading, setLoading]   = useState(true)
+  const [locked, setLocked]     = useState(false)
   const [sectionIdx, setSection] = useState(() => {
     const saved = sessionStorage.getItem(`sw_brief_sec_${briefId}`)
     return saved ? parseInt(saved, 10) : 0
@@ -170,10 +172,13 @@ export default function BriefReader() {
   const markingRef               = useRef(false)
 
   useEffect(() => {
-    fetch(`${API}/api/briefs/${briefId}`)
-      .then(r => r.json())
+    fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
+      .then(r => {
+        if (r.status === 403) { setLocked(true); return null }
+        return r.json()
+      })
       .then(data => {
-        if (data.data?.brief) setBrief(data.data.brief)
+        if (data?.data?.brief) setBrief(data.data.brief)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -191,17 +196,13 @@ export default function BriefReader() {
   const total    = sections.length
   const isLast   = sectionIdx >= total - 1
 
-  const markRead = useCallback(async () => {
+  const markRead = useCallback(() => {
     if (markingRef.current || !user) return
     markingRef.current = true
-    try {
-      await fetch(`${API}/api/briefs/${briefId}/read`, {
-        method: 'POST', credentials: 'include',
-      })
-      // Stamp today's date so Home page can show "mission complete" (user-scoped)
-      if (user?._id) localStorage.setItem(`sw_read_today_${user._id}`, new Date().toDateString())
-    } catch {}
-  }, [briefId, user, API])
+    // The GET /api/briefs/:id with credentials already creates the IntelligenceBriefRead record.
+    // Stamp today's date so Home page can show "mission complete" (user-scoped).
+    if (user?._id) localStorage.setItem(`sw_read_today_${user._id}`, new Date().toDateString())
+  }, [briefId, user])
 
   const handleContinue = () => {
     if (isLast) {
@@ -230,6 +231,20 @@ export default function BriefReader() {
         <div className="h-4 bg-slate-100 rounded w-3/4" />
         <div className="h-32 bg-slate-100 rounded-2xl" />
       </div>
+    )
+  }
+
+  if (locked) {
+    return (
+      <>
+        <button
+          onClick={() => navigate('/learn')}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
+        >
+          ← Back
+        </button>
+        <UpgradePrompt variant="page" />
+      </>
     )
   }
 

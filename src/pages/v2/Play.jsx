@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
+import { useAppSettings } from '../../context/AppSettingsContext'
+import { isCategoryLocked } from '../../utils/subscription'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 
 const GAME_MODES = [
@@ -44,6 +46,7 @@ export default function Play() {
   const { user, API } = useAuth()
   const navigate = useNavigate()
   const { start } = useAppTutorial()
+  const { settings } = useAppSettings()
   const [recentBriefs, setRecentBriefs] = useState([])
 
   // Tutorial on first visit
@@ -120,28 +123,43 @@ export default function Play() {
         </div>
       ) : recentBriefs.length > 0 ? (
         <div className="space-y-2">
-          {recentBriefs.map((brief, i) => (
-            <motion.div
-              key={brief._id}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
-            >
-              <Link
-                to={`/quiz/${brief._id}`}
-                className="flex items-center gap-3 bg-surface rounded-2xl px-4 py-3 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all card-shadow group"
+          {recentBriefs.map((brief, i) => {
+            const locked = isCategoryLocked(brief.category, user, settings)
+            return (
+              <motion.div
+                key={brief._id}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
               >
-                <div className="w-8 h-8 rounded-xl bg-brand-100 flex items-center justify-center shrink-0">
-                  <span className="text-brand-600 font-bold text-xs">Q</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
-                  <p className="text-xs text-slate-400">{brief.category}</p>
-                </div>
-                <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
-              </Link>
-            </motion.div>
-          ))}
+                {locked ? (
+                  <div className="flex items-center gap-3 bg-surface rounded-2xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed card-shadow">
+                    <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                      <span className="text-slate-400 font-bold text-xs">🔒</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                      <p className="text-xs text-slate-400">{brief.category}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <Link
+                    to={`/quiz/${brief._id}`}
+                    className="flex items-center gap-3 bg-surface rounded-2xl px-4 py-3 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all card-shadow group"
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-brand-100 flex items-center justify-center shrink-0">
+                      <span className="text-brand-600 font-bold text-xs">Q</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                      <p className="text-xs text-slate-400">{brief.category}</p>
+                    </div>
+                    <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                  </Link>
+                )}
+              </motion.div>
+            )
+          })}
         </div>
       ) : (
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center">

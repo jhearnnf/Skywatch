@@ -1190,6 +1190,1180 @@ function SubEmulator({ user, API, onTierChange }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// BRIEFS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BRIEF_CATEGORIES = [
+  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
+  'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
+]
+
+const BRIEF_SUBCATEGORIES = {
+  News: [],
+  Aircrafts: ['Fast Jet','ISR & Surveillance','Maritime Patrol','Transport & Tanker','Rotary Wing','Training Aircraft','Ground-Based Air Defence','Historic — WWII','Historic — Cold War','Historic — Post-Cold War'],
+  Bases: ['UK Active','UK Former','Overseas Permanent','Overseas Deployed / FOL'],
+  Ranks: ['Commissioned Officer','Non-Commissioned','Specialist Role'],
+  Squadrons: ['Active Front-Line','Training','Royal Auxiliary Air Force','Historic'],
+  Training: ['Initial Training','Flying Training','Ground Training & PME','Tactical & Combat Training'],
+  Roles: ['Fast Jet Pilot','Multi-Engine Pilot','Rotary Wing Pilot','Weapons Systems Operator','Intelligence Officer','Engineer Officer','Air Traffic Control Officer','RAF Regiment','Logistics & Supply','Medical & Nursing','Cyber & Information','Fighter Controller'],
+  Threats: ['State Actor Air','Surface-to-Air Missiles','Asymmetric & Non-State','Missiles & Stand-Off','Electronic & Cyber'],
+  Allies: ['NATO','Five Eyes','AUKUS','Bilateral & Framework Partners'],
+  Missions: ['World War I','World War II','Post-War & Cold War','Post-Cold War','War on Terror','NATO Standing Operations','Humanitarian & NEO'],
+  AOR: ['UK Home Air Defence','NATO AOR','Middle East & CENTCOM','Atlantic & GIUK Gap','Africa','Indo-Pacific','South Atlantic & Falklands'],
+  Tech: ['Weapons Systems','Sensors & Avionics','Electronic Warfare','Future Programmes','Command, Control & Comms'],
+  Terminology: ['Operational Concepts','Flying & Tactical','Air Traffic & Navigation','Intelligence & Planning','Maintenance & Support'],
+  Treaties: ['Founding & Core Alliances','Bilateral Defence Agreements','Arms Control & Non-Proliferation','Operational & Status Agreements'],
+}
+
+const EMPTY_DRAFT = {
+  title: '', subtitle: '', category: 'News', subcategory: '', historic: false,
+  descriptionSections: ['', '', ''],
+  keywords: [],
+  sources: [],
+}
+
+// Rough duplicate detection — returns true if headline is similar to an existing title
+function isSimilarTitle(headline, existingTitles) {
+  const h = headline.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
+  return existingTitles.some(t => {
+    const e = t.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
+    if (e === h) return true
+    // Overlap: if >60% of words in the headline appear in the existing title
+    const hWords = h.split(' ').filter(w => w.length > 3)
+    if (!hWords.length) return false
+    const matches = hWords.filter(w => e.includes(w))
+    return matches.length / hWords.length >= 0.6
+  })
+}
+
+function LeadsModal({ API, onClose, onGenerate }) {
+  const [tab,           setTab]           = useState('leads') // 'leads' | 'news'
+  const [leads,         setLeads]         = useState([])
+  const [search,        setSearch]        = useState('')
+  const [picked,        setPicked]        = useState(null)
+  const [busy,          setBusy]          = useState(null)
+  // News headlines
+  const [headlines,     setHeadlines]     = useState([])
+  const [existingTitles,setExistingTitles]= useState([])
+  const [newsBusy,      setNewsBusy]      = useState(false)
+  const [dupConfirm,    setDupConfirm]    = useState(null) // headline string awaiting confirmation
+
+  useEffect(() => {
+    fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (d.status === 'success') setLeads(d.data.leads) })
+      .catch(() => {})
+    // Pre-load existing titles for duplicate detection
+    fetch(`${API}/api/admin/briefs/titles`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (d.status === 'success') setExistingTitles(d.data.titles.map(t => t.title)) })
+      .catch(() => {})
+  }, [API])
+
+  const filtered = leads.filter(l =>
+    !search || l.text.toLowerCase().includes(search.toLowerCase()) || l.section.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const pickRandom = () => {
+    if (!filtered.length) return
+    setPicked(filtered[Math.floor(Math.random() * filtered.length)])
+  }
+
+  const generate = async (topicOrHeadline, isHeadline = false) => {
+    const key = typeof topicOrHeadline === 'string' ? topicOrHeadline : topicOrHeadline.text
+    setBusy(key)
+    try {
+      const body = isHeadline ? { headline: key } : { topic: key }
+      const res  = await fetch(`${API}/api/admin/ai/generate-brief`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        onGenerate(data.data.brief, isHeadline ? null : key)
+        onClose()
+      } else {
+        alert(`Generation failed: ${data.message}`)
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const fetchHeadlines = async () => {
+    setNewsBusy(true)
+    setHeadlines([])
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/news-headlines`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timestamp: new Date().toISOString() }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') setHeadlines(data.data.headlines ?? [])
+    } finally {
+      setNewsBusy(false)
+    }
+  }
+
+  const handleHeadlineClick = (headline) => {
+    if (isSimilarTitle(headline, existingTitles)) {
+      setDupConfirm(headline)
+    } else {
+      generate(headline, true)
+    }
+  }
+
+  // Group leads by section
+  const grouped = {}
+  for (const l of filtered) {
+    const sec = l.section || 'General'
+    if (!grouped[sec]) grouped[sec] = []
+    grouped[sec].push(l)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/70 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-surface rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+          <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+            {[{ id: 'leads', label: '📋 Leads' }, { id: 'news', label: '📡 Live News' }].map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${tab === t.id ? 'bg-surface text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none ml-auto">✕</button>
+        </div>
+
+        {/* ── Leads tab ── */}
+        {tab === 'leads' && (
+          <>
+            <div className="px-4 pt-3 pb-2 flex gap-2">
+              <input
+                value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search leads…"
+                className="flex-1 border border-slate-200 rounded-xl px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+              />
+              <button onClick={pickRandom} className="text-xs px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 font-semibold transition-colors hover:bg-amber-100">
+                Pick Random
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-4 py-2 space-y-4">
+              {Object.entries(grouped).map(([section, items]) => (
+                <div key={section}>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{section}</p>
+                  {items.map((lead, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-start justify-between gap-3 py-2 px-3 rounded-xl mb-1 transition-colors ${picked?.text === lead.text ? 'bg-amber-50 border border-amber-200' : 'hover:bg-slate-50'}`}
+                    >
+                      <p className="text-sm text-slate-700 flex-1">{lead.text}</p>
+                      <button
+                        onClick={() => generate(lead)}
+                        disabled={busy === lead.text}
+                        className="text-xs px-3 py-1 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold whitespace-nowrap hover:bg-brand-100 disabled:opacity-40"
+                      >
+                        {busy === lead.text ? '…' : 'Generate →'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {filtered.length === 0 && <p className="text-sm text-slate-400 text-center py-8">No leads found</p>}
+            </div>
+          </>
+        )}
+
+        {/* ── Live News tab ── */}
+        {tab === 'news' && (
+          <div className="overflow-y-auto flex-1 px-4 py-4">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs text-slate-500">Latest real RAF news headlines from the web.</p>
+              <button
+                onClick={fetchHeadlines}
+                disabled={newsBusy}
+                className="text-xs px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {newsBusy ? '⏳ Fetching…' : '🔄 Fetch Headlines'}
+              </button>
+            </div>
+
+            {headlines.length === 0 && !newsBusy && (
+              <p className="text-sm text-slate-400 text-center py-8">Press "Fetch Headlines" to load the latest RAF news.</p>
+            )}
+
+            {newsBusy && (
+              <div className="space-y-2">
+                {[1,2,3].map(i => (
+                  <div key={i} className="h-12 bg-slate-100 rounded-xl animate-pulse" />
+                ))}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {headlines.map((headline, i) => {
+                const isDup = isSimilarTitle(headline, existingTitles)
+                return (
+                  <div
+                    key={i}
+                    className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border transition-all
+                      ${isDup ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200 bg-surface hover:border-brand-300 hover:bg-brand-50/30'}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold leading-snug ${isDup ? 'text-slate-400' : 'text-slate-800'}`}>
+                        {headline}
+                      </p>
+                      {isDup && (
+                        <p className="text-[10px] text-amber-600 font-semibold mt-0.5">⚠️ Possible duplicate brief</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleHeadlineClick(headline)}
+                      disabled={busy === headline}
+                      className={`shrink-0 text-xs px-3 py-1.5 rounded-lg font-bold transition-colors whitespace-nowrap
+                        ${isDup
+                          ? 'border border-slate-300 text-slate-500 hover:bg-slate-100'
+                          : 'border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
+                        } disabled:opacity-40`}
+                    >
+                      {busy === headline ? '…' : isDup ? 'Create anyway' : 'Generate →'}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Duplicate confirmation overlay */}
+        {dupConfirm && (
+          <div className="absolute inset-0 bg-surface/95 rounded-2xl flex flex-col items-center justify-center p-6 text-center z-10">
+            <p className="text-2xl mb-3">⚠️</p>
+            <p className="font-bold text-slate-800 mb-2">Possible Duplicate</p>
+            <p className="text-sm text-slate-500 mb-6 max-w-xs">
+              A brief with a similar title already exists. Generate anyway?
+            </p>
+            <p className="text-xs font-semibold text-slate-700 bg-slate-100 rounded-xl px-3 py-2 mb-6 max-w-xs">
+              "{dupConfirm}"
+            </p>
+            <div className="flex gap-3 w-full max-w-xs">
+              <button onClick={() => setDupConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50">
+                Cancel
+              </button>
+              <button
+                onClick={() => { setDupConfirm(null); generate(dupConfirm, true) }}
+                className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm"
+              >
+                Generate Anyway
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BriefsTab({ API }) {
+  const [view,          setView]          = useState('list')
+  // List state
+  const [briefs,        setBriefs]        = useState([])
+  const [total,         setTotal]         = useState(0)
+  const [loading,       setLoading]       = useState(false)
+  const [page,          setPage]          = useState(1)
+  const [search,        setSearch]        = useState('')
+  const [category,      setCategory]      = useState('')
+  const [toast,         setToast]         = useState('')
+  const [showLeads,     setShowLeads]     = useState(false)
+  // Editor state
+  const [draft,         setDraft]         = useState({ ...EMPTY_DRAFT, descriptionSections: ['','',''] })
+  const [easyQuestions, setEasyQuestions] = useState([])
+  const [mediumQuestions,setMediumQuestions] = useState([])
+  const [media,         setMedia]         = useState([])
+  const [pendingImages, setPendingImages] = useState([])
+  const [qTab,          setQTab]          = useState('easy')
+  const [generating,    setGenerating]    = useState(null)
+  const [saveStatus,    setSaveStatus]    = useState(null)
+  const [briefId,       setBriefId]       = useState(null)
+  const [pendingLead,   setPendingLead]   = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  // Section open/close
+  const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: true, questions: true, images: true, sources: true })
+
+  const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }))
+
+  // ── Load list ───────────────────────────────────────────────────────────────
+  const loadList = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({ page, limit: 20 })
+      if (search)   params.set('search', search)
+      if (category) params.set('category', category)
+      const res  = await fetch(`${API}/api/admin/briefs?${params}`, { credentials: 'include' })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setBriefs(data.data.briefs)
+        setTotal(data.data.total)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [API, page, search, category])
+
+  useEffect(() => {
+    if (view === 'list') loadList()
+  }, [view, loadList])
+
+  // ── Open brief in editor ─────────────────────────────────────────────────
+  const openBrief = async (b) => {
+    const res  = await fetch(`${API}/api/admin/briefs/${b._id}`, { credentials: 'include' })
+    const data = await res.json()
+    if (data.status !== 'success') return
+    const br = data.data.brief
+    setDraft({
+      title:               br.title ?? '',
+      subtitle:            br.subtitle ?? '',
+      category:            br.category ?? 'News',
+      subcategory:         br.subcategory ?? '',
+      historic:            br.historic ?? false,
+      descriptionSections: br.descriptionSections?.length ? br.descriptionSections : ['','',''],
+      keywords:            br.keywords ?? [],
+      sources:             br.sources ?? [],
+    })
+    setEasyQuestions(br.quizQuestionsEasy?.map(q => ({
+      question: q.question,
+      answers: q.answers.map(a => ({ title: a.title })),
+      correctAnswerIndex: q.answers.findIndex(a => String(a._id) === String(q.correctAnswerId)),
+    })) ?? [])
+    setMediumQuestions(br.quizQuestionsMedium?.map(q => ({
+      question: q.question,
+      answers: q.answers.map(a => ({ title: a.title })),
+      correctAnswerIndex: q.answers.findIndex(a => String(a._id) === String(q.correctAnswerId)),
+    })) ?? [])
+    setMedia(br.media ?? [])
+    setPendingImages([])
+    setBriefId(String(br._id))
+    setQTab('easy')
+    setSaveStatus(null)
+    setView('editor')
+  }
+
+  const newBrief = () => {
+    setDraft({ ...EMPTY_DRAFT, descriptionSections: ['','',''] })
+    setEasyQuestions([])
+    setMediumQuestions([])
+    setMedia([])
+    setPendingImages([])
+    setBriefId(null)
+    setQTab('easy')
+    setSaveStatus(null)
+    setView('editor')
+  }
+
+  // ── Save brief ────────────────────────────────────────────────────────────
+  const saveBrief = async () => {
+    setSaveStatus('saving')
+    try {
+      const body = {
+        ...draft,
+        descriptionSections: draft.descriptionSections.filter(s => s.trim()),
+        reason: briefId ? 'Admin edit' : 'Admin create',
+      }
+      const url    = briefId ? `${API}/api/admin/briefs/${briefId}` : `${API}/api/admin/briefs`
+      const method = briefId ? 'PATCH' : 'POST'
+      const res    = await fetch(url, {
+        method, credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (data.status !== 'success') throw new Error(data.message)
+      const id = String(data.data.brief._id)
+      setBriefId(id)
+
+      // Save questions if present
+      if (easyQuestions.length > 0 || mediumQuestions.length > 0) {
+        await fetch(`${API}/api/admin/briefs/${id}/questions`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ easyQuestions, mediumQuestions }),
+        })
+      }
+
+      // Add any selected pending images
+      const selected = pendingImages.filter(img => img.selected)
+      for (const img of selected) {
+        await fetch(`${API}/api/admin/briefs/${id}/media`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url }),
+        })
+      }
+
+      // Reload full brief
+      const reloadRes  = await fetch(`${API}/api/admin/briefs/${id}`, { credentials: 'include' })
+      const reloadData = await reloadRes.json()
+      if (reloadData.status === 'success') {
+        const br = reloadData.data.brief
+        setMedia(br.media ?? [])
+        setPendingImages([])
+      }
+
+      // Mark lead complete if applicable
+      if (pendingLead) {
+        await fetch(`${API}/api/admin/intel-leads/mark-complete`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lead: pendingLead }),
+        }).catch(() => {})
+        setPendingLead(null)
+      }
+
+      setSaveStatus('saved')
+      setToast('Saved successfully')
+      loadList()
+    } catch (err) {
+      setSaveStatus('error')
+      setToast(`Error: ${err.message}`)
+    }
+  }
+
+  // ── Delete brief ──────────────────────────────────────────────────────────
+  const deleteBrief = async (reason) => {
+    await fetch(`${API}/api/admin/briefs/${briefId}`, {
+      method: 'DELETE', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+    setConfirmDelete(false)
+    setView('list')
+    setToast('Brief deleted')
+  }
+
+  // ── AI: Generate brief from lead ─────────────────────────────────────────
+  const handleLeadGenerate = (briefData, leadText) => {
+    setDraft({
+      title:               briefData.title ?? '',
+      subtitle:            briefData.subtitle ?? '',
+      category:            briefData.category ?? 'News',
+      subcategory:         '',
+      historic:            briefData.historic ?? false,
+      descriptionSections: Array.isArray(briefData.descriptionSections) && briefData.descriptionSections.length
+        ? briefData.descriptionSections
+        : ['','',''],
+      keywords:            Array.isArray(briefData.keywords) ? briefData.keywords : [],
+      sources:             Array.isArray(briefData.sources) ? briefData.sources : [],
+    })
+    setEasyQuestions([])
+    setMediumQuestions([])
+    setMedia([])
+    setPendingImages([])
+    setBriefId(null)
+    setPendingLead(leadText)
+    setView('editor')
+  }
+
+  // ── AI: Generate keywords ─────────────────────────────────────────────────
+  const generateKeywords = async () => {
+    setGenerating('keywords')
+    try {
+      const description = draft.descriptionSections.join(' ')
+      const res  = await fetch(`${API}/api/admin/ai/generate-keywords`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description, existingKeywords: [], needed: 10 }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setDraft(p => ({ ...p, keywords: data.data.keywords }))
+      }
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  // ── AI: Generate quiz questions ───────────────────────────────────────────
+  const generateQuestions = async () => {
+    setGenerating('questions')
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/generate-quiz`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: draft.title, description: draft.descriptionSections.join('\n\n') }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setEasyQuestions(data.data.easyQuestions ?? [])
+        setMediumQuestions(data.data.mediumQuestions ?? [])
+      }
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  // ── Save questions only ────────────────────────────────────────────────────
+  const saveQuestions = async () => {
+    if (!briefId) return
+    setGenerating('questions')
+    try {
+      await fetch(`${API}/api/admin/briefs/${briefId}/questions`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ easyQuestions, mediumQuestions }),
+      })
+      setToast('Questions saved')
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  // ── AI: Generate images ───────────────────────────────────────────────────
+  const generateImages = async () => {
+    setGenerating('images')
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/generate-image`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: draft.title, subtitle: draft.subtitle }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        const imgs = (data.data.images ?? []).map(img => ({ ...img, selected: true }))
+        setPendingImages(imgs)
+      }
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  // ── Add selected pending images ───────────────────────────────────────────
+  const addSelectedImages = async () => {
+    if (!briefId) return
+    const selected = pendingImages.filter(img => img.selected)
+    for (const img of selected) {
+      await fetch(`${API}/api/admin/briefs/${briefId}/media`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url }),
+      })
+    }
+    // Reload media
+    const res  = await fetch(`${API}/api/admin/briefs/${briefId}`, { credentials: 'include' })
+    const data = await res.json()
+    if (data.status === 'success') setMedia(data.data.brief.media ?? [])
+    setPendingImages([])
+    setToast('Images added')
+  }
+
+  // ── Remove media item ─────────────────────────────────────────────────────
+  const removeMedia = async (mediaId) => {
+    await fetch(`${API}/api/admin/briefs/${briefId}/media/${mediaId}`, {
+      method: 'DELETE', credentials: 'include',
+    })
+    setMedia(p => p.filter(m => String(m._id) !== String(mediaId)))
+  }
+
+  // ── Status badge helper ───────────────────────────────────────────────────
+  function BriefStatusPills({ brief }) {
+    const hasKeywords = (brief.keywords?.length ?? 0) >= 10
+    const hasEasy     = (brief.quizQuestionsEasy?.length ?? 0) >= 10
+    const hasMedium   = (brief.quizQuestionsMedium?.length ?? 0) >= 10
+    const hasQuiz     = hasEasy && hasMedium
+    const hasMedia    = (brief.media?.length ?? 0) > 0
+    return (
+      <span className="flex gap-1 items-center">
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasKeywords ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>K</span>
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasQuiz ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>Q</span>
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasMedia ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>M</span>
+      </span>
+    )
+  }
+
+  // ── Word count for description ────────────────────────────────────────────
+  const wordCount = draft.descriptionSections.join(' ').split(/\s+/).filter(Boolean).length
+
+  // ── Keyword verbatim warning ─────────────────────────────────────────────
+  const descLower = draft.descriptionSections.join(' ').toLowerCase()
+  const badKeywords = draft.keywords.filter(k => k.keyword && !descLower.includes(k.keyword.toLowerCase()))
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // LIST VIEW
+  // ──────────────────────────────────────────────────────────────────────────
+  if (view === 'list') {
+    const totalPages = Math.ceil(total / 20)
+    return (
+      <div>
+        <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
+        {showLeads && (
+          <LeadsModal
+            API={API}
+            onClose={() => setShowLeads(false)}
+            onGenerate={handleLeadGenerate}
+          />
+        )}
+
+        {/* Top bar */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <input
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1) }}
+            placeholder="Search briefs…"
+            className="flex-1 min-w-[160px] border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+          />
+          <select
+            value={category}
+            onChange={e => { setCategory(e.target.value); setPage(1) }}
+            className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+          >
+            <option value="">All Categories</option>
+            {BRIEF_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <button
+            onClick={newBrief}
+            className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-colors"
+          >
+            + New Brief
+          </button>
+          <button
+            onClick={() => setShowLeads(true)}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+          >
+            Leads
+          </button>
+        </div>
+
+        {/* Brief list */}
+        <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+          {loading && <p className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading…</p>}
+          {!loading && briefs.length === 0 && <p className="py-8 text-center text-slate-400 text-sm">No briefs found</p>}
+          {briefs.map((b, i) => (
+            <button
+              key={b._id}
+              onClick={() => openBrief(b)}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors ${i !== 0 ? 'border-t border-slate-100' : ''}`}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-800 truncate">{b.title}</p>
+                <p className="text-xs text-slate-400 truncate">{b.subtitle}</p>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 whitespace-nowrap">{b.category}</span>
+              <BriefStatusPills brief={b} />
+              <span className="text-slate-300 text-sm">›</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+            >
+              ← Prev
+            </button>
+            <span className="text-xs text-slate-400">Page {page} of {totalPages} ({total} total)</span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // EDITOR VIEW
+  // ──────────────────────────────────────────────────────────────────────────
+
+  const currentQuestions = qTab === 'easy' ? easyQuestions : mediumQuestions
+  const setCurrentQuestions = qTab === 'easy' ? setEasyQuestions : setMediumQuestions
+
+  const updateQuestion = (idx, field, value) => {
+    setCurrentQuestions(p => {
+      const next = [...p]
+      next[idx] = { ...next[idx], [field]: value }
+      return next
+    })
+  }
+
+  const updateAnswer = (qIdx, aIdx, value) => {
+    setCurrentQuestions(p => {
+      const next = [...p]
+      const answers = [...next[qIdx].answers]
+      answers[aIdx] = { title: value }
+      next[qIdx] = { ...next[qIdx], answers }
+      return next
+    })
+  }
+
+  return (
+    <div>
+      <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete Brief"
+          body="This will permanently delete the brief and all associated questions, reads, and results."
+          confirmLabel="Delete"
+          danger
+          onConfirm={deleteBrief}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+
+      {/* Top bar */}
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <button
+          onClick={() => setView('list')}
+          className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+        >
+          ← Briefs
+        </button>
+        <h2 className="font-bold text-slate-800 flex-1 truncate">
+          {draft.title || 'New Brief'}
+        </h2>
+        {pendingLead && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Lead</span>}
+        <button
+          onClick={saveBrief}
+          disabled={saveStatus === 'saving'}
+          className="text-xs px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold transition-colors disabled:opacity-40"
+        >
+          {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? '✓ Saved' : 'Save Brief'}
+        </button>
+        {briefId && (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 font-semibold hover:bg-red-50 transition-colors"
+          >
+            Delete
+          </button>
+        )}
+      </div>
+
+      {/* ── Section A: Core Fields ─────────────────────────────────────── */}
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <button
+          onClick={() => toggleSection('core')}
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+        >
+          <h3 className="font-bold text-slate-800">Core Fields</h3>
+          <span className="text-slate-400 text-xs">{openSections.core ? '▲' : '▼'}</span>
+        </button>
+        {openSections.core && (
+          <div className="px-5 py-4 space-y-3">
+            {/* Category */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Category</label>
+              <select
+                value={draft.category}
+                onChange={e => setDraft(p => ({ ...p, category: e.target.value, subcategory: '' }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+              >
+                {BRIEF_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            {/* Subcategory */}
+            {(BRIEF_SUBCATEGORIES[draft.category] ?? []).length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Subcategory</label>
+                <select
+                  value={draft.subcategory}
+                  onChange={e => setDraft(p => ({ ...p, subcategory: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                >
+                  <option value="">— none —</option>
+                  {(BRIEF_SUBCATEGORIES[draft.category] ?? []).map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
+            {/* Historic */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={draft.historic}
+                onChange={e => setDraft(p => ({ ...p, historic: e.target.checked }))}
+                className="rounded"
+              />
+              <span className="text-sm text-slate-700 font-medium">Historic (retired/outdated)</span>
+            </label>
+            {/* Title */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Title</label>
+              <input
+                type="text"
+                value={draft.title}
+                onChange={e => setDraft(p => ({ ...p, title: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+              />
+            </div>
+            {/* Subtitle */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Subtitle</label>
+              <input
+                type="text"
+                value={draft.subtitle}
+                onChange={e => setDraft(p => ({ ...p, subtitle: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Section B: Description ─────────────────────────────────────── */}
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <button
+          onClick={() => toggleSection('desc')}
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+        >
+          <h3 className="font-bold text-slate-800">Description Sections</h3>
+          <span className="text-slate-400 text-xs">{openSections.desc ? '▲' : '▼'}</span>
+        </button>
+        {openSections.desc && (
+          <div className="px-5 py-4 space-y-3">
+            {draft.descriptionSections.map((sec, idx) => (
+              <div key={idx}>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-500">Section {idx + 1}</label>
+                  <button
+                    onClick={() => setDraft(p => ({ ...p, descriptionSections: p.descriptionSections.filter((_, i) => i !== idx) }))}
+                    disabled={draft.descriptionSections.length <= 1}
+                    className="text-xs text-red-400 hover:text-red-600 disabled:opacity-30"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <textarea
+                  rows={4}
+                  value={sec}
+                  onChange={e => setDraft(p => {
+                    const s = [...p.descriptionSections]; s[idx] = e.target.value; return { ...p, descriptionSections: s }
+                  })}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-200"
+                />
+              </div>
+            ))}
+            <div className="flex items-center justify-between pt-1">
+              <button
+                onClick={() => setDraft(p => ({ ...p, descriptionSections: [...p.descriptionSections, ''] }))}
+                disabled={draft.descriptionSections.length >= 4}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+              >
+                + Add Section
+              </button>
+              <span className={`text-xs font-semibold ${wordCount > 240 ? 'text-red-500' : 'text-slate-400'}`}>
+                {wordCount} / 240 words
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Section C: Keywords ───────────────────────────────────────── */}
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <button
+          onClick={() => toggleSection('keywords')}
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-slate-800">Keywords</h3>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${draft.keywords.length >= 10 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+              {draft.keywords.length} / 10
+            </span>
+            {badKeywords.length > 0 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
+                {badKeywords.length} not in text
+              </span>
+            )}
+          </div>
+          <span className="text-slate-400 text-xs">{openSections.keywords ? '▲' : '▼'}</span>
+        </button>
+        {openSections.keywords && (
+          <div className="px-5 py-4 space-y-3">
+            {draft.keywords.map((kw, idx) => (
+              <div key={idx} className={`p-3 rounded-xl border ${!descLower.includes(kw.keyword?.toLowerCase()) && kw.keyword ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Keyword {idx + 1}</label>
+                  <button
+                    onClick={() => setDraft(p => ({ ...p, keywords: p.keywords.filter((_, i) => i !== idx) }))}
+                    className="text-xs text-red-400 hover:text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={kw.keyword}
+                  onChange={e => setDraft(p => {
+                    const kws = [...p.keywords]; kws[idx] = { ...kws[idx], keyword: e.target.value }; return { ...p, keywords: kws }
+                  })}
+                  placeholder="Keyword"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 mb-1.5"
+                />
+                <textarea
+                  rows={2}
+                  value={kw.generatedDescription ?? ''}
+                  onChange={e => setDraft(p => {
+                    const kws = [...p.keywords]; kws[idx] = { ...kws[idx], generatedDescription: e.target.value }; return { ...p, keywords: kws }
+                  })}
+                  placeholder="Description"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-200"
+                />
+              </div>
+            ))}
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setDraft(p => ({ ...p, keywords: [...p.keywords, { keyword: '', generatedDescription: '' }] }))}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+              >
+                + Add Keyword
+              </button>
+              <button
+                onClick={generateKeywords}
+                disabled={generating === 'keywords'}
+                className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
+              >
+                {generating === 'keywords' ? '↺ Generating…' : '↺ Generate Keywords'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Section D: Quiz Questions ─────────────────────────────────── */}
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <button
+          onClick={() => toggleSection('questions')}
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+        >
+          <h3 className="font-bold text-slate-800">Quiz Questions</h3>
+          <span className="text-slate-400 text-xs">{openSections.questions ? '▲' : '▼'}</span>
+        </button>
+        {openSections.questions && (
+          <div className="px-5 py-4">
+            {/* Tab switcher */}
+            <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-4">
+              {['easy', 'medium'].map(t => (
+                <button
+                  key={t}
+                  onClick={() => setQTab(t)}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all capitalize ${qTab === t ? 'bg-surface shadow text-slate-800' : 'text-slate-500'}`}
+                >
+                  {t} ({t === 'easy' ? easyQuestions.length : mediumQuestions.length})
+                </button>
+              ))}
+            </div>
+
+            {/* Questions list */}
+            <div className="space-y-4">
+              {currentQuestions.map((q, qIdx) => (
+                <div key={qIdx} className="border border-slate-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-slate-500">Q{qIdx + 1}</span>
+                    <button
+                      onClick={() => setCurrentQuestions(p => p.filter((_, i) => i !== qIdx))}
+                      className="text-xs text-red-400 hover:text-red-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={q.question}
+                    onChange={e => updateQuestion(qIdx, 'question', e.target.value)}
+                    placeholder="Question text"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 mb-3"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    {(q.answers ?? []).map((ans, aIdx) => (
+                      <label key={aIdx} className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name={`q-${qIdx}-correct`}
+                          checked={q.correctAnswerIndex === aIdx}
+                          onChange={() => updateQuestion(qIdx, 'correctAnswerIndex', aIdx)}
+                          className="shrink-0"
+                        />
+                        <input
+                          type="text"
+                          value={ans.title}
+                          onChange={e => updateAnswer(qIdx, aIdx, e.target.value)}
+                          placeholder={`Answer ${aIdx + 1}`}
+                          className="flex-1 border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-brand-200"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2 flex-wrap mt-4">
+              <button
+                onClick={generateQuestions}
+                disabled={generating === 'questions'}
+                className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
+              >
+                {generating === 'questions' ? '↺ Generating…' : '↺ Generate Questions'}
+              </button>
+              {briefId && (easyQuestions.length > 0 || mediumQuestions.length > 0) && (
+                <button
+                  onClick={saveQuestions}
+                  disabled={generating === 'questions'}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-40"
+                >
+                  Save Questions
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Section E: Images ─────────────────────────────────────────── */}
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <button
+          onClick={() => toggleSection('images')}
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+        >
+          <h3 className="font-bold text-slate-800">Images</h3>
+          <span className="text-slate-400 text-xs">{openSections.images ? '▲' : '▼'}</span>
+        </button>
+        {openSections.images && (
+          <div className="px-5 py-4">
+            {/* Existing media */}
+            {media.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {media.map(m => (
+                  <div key={m._id} className="relative group">
+                    <img src={m.mediaUrl} alt="" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
+                    <button
+                      onClick={() => removeMedia(m._id)}
+                      className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {media.length === 0 && <p className="text-sm text-slate-400 mb-4">No images yet</p>}
+
+            {/* Generate button */}
+            <button
+              onClick={generateImages}
+              disabled={generating === 'images'}
+              className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40 mb-4"
+            >
+              {generating === 'images' ? 'Generating…' : 'Generate 3 Images'}
+            </button>
+
+            {/* Pending images */}
+            {pendingImages.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-2">Preview — select to include:</p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  {pendingImages.map((img, i) => (
+                    <label key={i} className="relative cursor-pointer">
+                      <img src={img.url} alt="" className={`w-full h-32 object-cover rounded-xl border-2 transition-all ${img.selected ? 'border-brand-500' : 'border-slate-200 opacity-50'}`} />
+                      <input
+                        type="checkbox"
+                        checked={img.selected}
+                        onChange={e => setPendingImages(p => p.map((x, j) => j === i ? { ...x, selected: e.target.checked } : x))}
+                        className="absolute top-2 left-2"
+                      />
+                    </label>
+                  ))}
+                </div>
+                {briefId && (
+                  <button
+                    onClick={addSelectedImages}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors"
+                  >
+                    Add Selected Images
+                  </button>
+                )}
+                {!briefId && (
+                  <p className="text-xs text-slate-400">Save the brief first to add images.</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section F: Sources ────────────────────────────────────────── */}
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <button
+          onClick={() => toggleSection('sources')}
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+        >
+          <h3 className="font-bold text-slate-800">Sources</h3>
+          <span className="text-slate-400 text-xs">{openSections.sources ? '▲' : '▼'}</span>
+        </button>
+        {openSections.sources && (
+          <div className="px-5 py-4 space-y-3">
+            {draft.sources.map((src, idx) => (
+              <div key={idx} className="border border-slate-100 rounded-xl p-3 bg-slate-50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500">Source {idx + 1}</span>
+                  <button
+                    onClick={() => setDraft(p => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
+                    className="text-xs text-red-400 hover:text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={src.url}
+                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], url: e.target.value }; return { ...p, sources: s } })}
+                  placeholder="URL"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                />
+                <input
+                  type="text"
+                  value={src.siteName ?? ''}
+                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], siteName: e.target.value }; return { ...p, sources: s } })}
+                  placeholder="Site Name"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                />
+                <input
+                  type="text"
+                  value={src.articleDate ?? ''}
+                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], articleDate: e.target.value }; return { ...p, sources: s } })}
+                  placeholder="Date (YYYY-MM-DD)"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                />
+              </div>
+            ))}
+            <button
+              onClick={() => setDraft(p => ({ ...p, sources: [...p.sources, { url: '', siteName: '', articleDate: '' }] }))}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+            >
+              + Add Source
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1199,6 +2373,7 @@ const TABS = [
   { id: 'users',    label: 'Users',    icon: '👥'  },
   { id: 'problems', label: 'Reports',  icon: '🚩'  },
   { id: 'content',  label: 'Content',  icon: '✏️'  },
+  { id: 'briefs',   label: 'Briefs',   icon: '📄'  },
 ]
 
 export default function Admin() {
@@ -1270,12 +2445,13 @@ export default function Admin() {
             {tab === 'users'    && <UsersTab    API={API} />}
             {tab === 'problems' && <ProblemsTab API={API} />}
             {tab === 'content'  && <ContentTab  API={API} />}
+            {tab === 'briefs'   && <BriefsTab   API={API} />}
           </motion.div>
         </AnimatePresence>
 
         {/* Legacy tools link */}
         <p className="text-center text-xs text-slate-400 mt-8">
-          Intel Briefs editor, Tutorials, and AI generation tools are available in the{' '}
+          Tutorials and additional tools are available in the{' '}
           <button
             onClick={() => navigate('/admin-legacy')}
             className="text-brand-600 hover:text-brand-700 font-semibold"

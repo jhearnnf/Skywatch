@@ -249,6 +249,42 @@ export default function Profile() {
                 </div>
               </div>
 
+              {/* Subscription */}
+              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Subscription</p>
+                <Link
+                  to="/subscribe"
+                  className="flex items-center justify-between hover:bg-slate-50 rounded-xl px-1 py-1 -mx-1 transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">
+                      {(() => {
+                        const t = user.subscriptionTier ?? 'free'
+                        if (t === 'gold')   return '🥇'
+                        if (t === 'silver') return '🥈'
+                        if (t === 'trial')  return user.isTrialActive ? '⏳' : '🆓'
+                        return '🆓'
+                      })()}
+                    </span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">Current Plan</p>
+                      <p className="text-xs text-slate-400 capitalize">
+                      {user.subscriptionTier === 'trial' && !user.isTrialActive
+                        ? 'trial expired'
+                        : (user.subscriptionTier ?? 'free')}
+                    </p>
+                    </div>
+                  </div>
+                  <span className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-colors
+                    ${user.subscriptionTier === 'gold'   ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-200' :
+                      user.subscriptionTier === 'silver' ? 'bg-brand-100 text-brand-700 group-hover:bg-brand-200' :
+                                                           'bg-slate-100 text-slate-600 group-hover:bg-brand-100 group-hover:text-brand-700'}`}
+                  >
+                    {user.subscriptionTier === 'gold' || user.subscriptionTier === 'silver' ? 'Manage →' : 'Upgrade →'}
+                  </span>
+                </Link>
+              </div>
+
               {/* Links */}
               <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow space-y-2">
                 <Link to="/rankings" className="flex items-center justify-between py-2 px-1 text-sm font-semibold text-slate-700 hover:text-brand-600 transition-colors">

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import { AnimatePresence, motion } from 'framer-motion'
 
 import { AuthProvider, useAuth }          from './context/AuthContext'
+import { AppSettingsProvider }             from './context/AppSettingsContext'
 import { AppTutorialProvider }             from './context/AppTutorialContext'
 import AppShell                            from './components/layout/AppShell'
 import AircoinNotification                 from './components/AircoinNotification'
@@ -25,6 +26,7 @@ import Play           from './pages/v2/Play'
 import AircoinHistory from './pages/v2/AircoinHistory'
 import GameHistory    from './pages/v2/GameHistory'
 import ReportProblem  from './pages/v2/ReportProblem'
+import Subscription   from './pages/v2/Subscription'
 import NotFound       from './pages/v2/NotFound'
 
 // v2 admin
@@ -156,6 +158,7 @@ function AppRoutes() {
           <Route path="/play"             element={<PageWrapper><Play /></PageWrapper>} />
 
           {/* v2 protected pages */}
+          <Route path="/subscribe"        element={<PageWrapper><Subscription /></PageWrapper>} />
           <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
           <Route path="/aircoin-history"  element={<RequireAuth><PageWrapper><AircoinHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"     element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
@@ -175,10 +178,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppTutorialProvider>
-          <AppRoutes />
-          <NotifLayer />
-        </AppTutorialProvider>
+        <AppSettingsProvider>
+          <AppTutorialProvider>
+            <AppRoutes />
+            <NotifLayer />
+          </AppTutorialProvider>
+        </AppSettingsProvider>
       </AuthProvider>
     </BrowserRouter>
   )

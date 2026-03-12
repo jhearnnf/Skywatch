@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { CATEGORY_ICONS, SUBCATEGORIES } from '../../data/mockData'
 
 function BriefNode({ brief, index, isRead }) {
-  const locked = false // future: subscription gating
+  const locked = brief.isLocked ?? false
 
   return (
     <motion.div
@@ -89,7 +89,7 @@ export default function CategoryBriefs() {
   useEffect(() => {
     setLoading(true)
     Promise.all([
-      fetch(`${API}/api/briefs?category=${encodeURIComponent(category)}&limit=200`).then(r => r.json()),
+      fetch(`${API}/api/briefs?category=${encodeURIComponent(category)}&limit=200`, { credentials: 'include' }).then(r => r.json()),
       user
         ? fetch(`${API}/api/users/me/read-briefs`, { credentials: 'include' }).then(r => r.json())
         : Promise.resolve(null),

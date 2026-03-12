@@ -6,18 +6,12 @@ const AppSettings = require('../models/AppSettings');
 const User = require('../models/User');
 const AircoinLog = require('../models/AircoinLog');
 const { awardCoins } = require('../utils/awardCoins');
+const { effectiveTier, getAccessibleCategories } = require('../utils/subscription');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
 require('../models/GameQuizQuestion');
 
 // Gold ammo sentinel — treated as unlimited throughout
 const AMMO_GOLD = 9999;
-
-// Returns array of accessible categories for a tier, or null (= all) for gold
-function getAccessibleCategories(tier, settings) {
-  if (tier === 'gold') return null;
-  if (tier === 'silver' || tier === 'trial') return settings.silverCategories ?? [];
-  return settings.freeCategories ?? [];
-}
 
 function getTierAmmo(tier, settings) {
   if (tier === 'gold') return AMMO_GOLD;
@@ -47,7 +41,7 @@ router.get('/', optionalAuth, async (req, res) => {
 
     if (req.user && briefs.length > 0) {
       const settings = await AppSettings.getSettings();
-      const tier = req.user.isTrialActive ? 'trial' : req.user.subscriptionTier;
+      const tier = effectiveTier(req.user);
       const accessible = getAccessibleCategories(tier, settings);
 
       const briefIds = briefs.map(b => b._id);
@@ -74,7 +68,7 @@ router.get('/', optionalAuth, async (req, res) => {
 router.get('/category-counts', optionalAuth, async (req, res) => {
   try {
     const settings    = await AppSettings.getSettings();
-    const tier        = req.user ? (req.user.isTrialActive ? 'trial' : req.user.subscriptionTier) : 'free';
+    const tier        = effectiveTier(req.user);
     const accessible  = getAccessibleCategories(tier, settings); // null = gold (all)
     const match       = accessible !== null ? { category: { $in: accessible } } : {};
 
@@ -146,7 +140,7 @@ router.get('/unread-categories', optionalAuth, async (req, res) => {
       return res.json({ status: 'success', data: { categories } });
     }
 
-    const tier       = req.user.isTrialActive ? 'trial' : req.user.subscriptionTier;
+    const tier       = effectiveTier(req.user);
     const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
 
     // Get IDs of briefs this user has already read
@@ -189,7 +183,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
     if (req.user) {
       const settings = await AppSettings.getSettings();
-      const tier = req.user.isTrialActive ? 'trial' : req.user.subscriptionTier;
+      const tier = effectiveTier(req.user);
 
       // Category access check
       const accessible = getAccessibleCategories(tier, settings);

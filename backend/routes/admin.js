@@ -501,6 +501,16 @@ router.get('/briefs', async (req, res) => {
   }
 });
 
+// GET /api/admin/briefs/titles — lightweight title list for duplicate detection
+router.get('/briefs/titles', async (_req, res) => {
+  try {
+    const briefs = await IntelligenceBrief.find({}).select('title').lean();
+    res.json({ status: 'success', data: { titles: briefs.map(b => ({ _id: b._id, title: b.title })) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/admin/briefs/:id
 router.get('/briefs/:id', async (req, res) => {
   try {
@@ -564,6 +574,61 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
   }
 });
 
+// POST /api/admin/briefs/:id/questions — save quiz questions for a brief (no reason required)
+router.post('/briefs/:id/questions', async (req, res) => {
+  try {
+    const { easyQuestions = [], mediumQuestions = [] } = req.body;
+    const brief = await IntelligenceBrief.findById(req.params.id);
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+
+    const gameType = await GameType.findOne({ gameTitle: 'quiz' });
+    if (!gameType) return res.status(500).json({ message: 'Quiz game type not seeded — restart the server' });
+
+    // Delete existing questions for this brief
+    await GameQuizQuestion.deleteMany({ intelBriefId: req.params.id });
+
+    const createQuestions = async (questions, difficulty) => {
+      const ids = [];
+      for (const q of questions) {
+        const answers = q.answers.map(a => ({
+          _id: new mongoose.Types.ObjectId(),
+          title: a.title,
+        }));
+        const doc = await GameQuizQuestion.create({
+          gameTypeId:      gameType._id,
+          intelBriefId:    req.params.id,
+          difficulty,
+          question:        q.question,
+          answers,
+          correctAnswerId: answers[q.correctAnswerIndex]?._id ?? answers[0]._id,
+        });
+        ids.push(doc._id);
+      }
+      return ids;
+    };
+
+    const [easyIds, mediumIds] = await Promise.all([
+      createQuestions(easyQuestions, 'easy'),
+      createQuestions(mediumQuestions, 'medium'),
+    ]);
+
+    brief.quizQuestionsEasy   = easyIds;
+    brief.quizQuestionsMedium = mediumIds;
+    await brief.save();
+
+    await AdminAction.create({ userId: req.user._id, actionType: 'change_quiz_questions', reason: 'Generation save' });
+
+    const updatedBrief = await IntelligenceBrief.findById(req.params.id)
+      .populate('media')
+      .populate('quizQuestionsEasy')
+      .populate('quizQuestionsMedium');
+
+    res.json({ status: 'success', data: { brief: updatedBrief } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/admin/briefs/:id/media — add a media item to a brief
 router.post('/briefs/:id/media', async (req, res) => {
   try {
@@ -601,7 +666,12 @@ router.patch('/media/:mediaId', async (req, res) => {
 router.delete('/briefs/:id/media/:mediaId', async (req, res) => {
   try {
     await IntelligenceBrief.findByIdAndUpdate(req.params.id, { $pull: { media: req.params.mediaId } });
-    await Media.findByIdAndDelete(req.params.mediaId);
+    const mediaDoc = await Media.findByIdAndDelete(req.params.mediaId);
+    // If the media was stored locally, delete the file from disk
+    if (mediaDoc?.mediaUrl?.startsWith('/uploads/brief-images/')) {
+      const filePath = path.join(__dirname, '..', mediaDoc.mediaUrl);
+      fs.unlink(filePath, () => {}); // ignore errors if file missing
+    }
     res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -892,7 +962,13 @@ router.post('/ai/generate-quiz', async (req, res) => {
       content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 10 easy and 10 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Easy questions test direct recall of specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n3. Medium questions require understanding of context or relationships between facts stated in the description.\n4. The correct answer must be explicitly supported by the description.\n5. Wrong answers must be plausible but clearly incorrect based on the description.\n6. Exactly 10 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":[{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."}],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
     }], 'perplexity/sonar');
     const raw = data.choices?.[0]?.message?.content ?? '{}';
-    const generated = JSON.parse(raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
+    let generated;
+    try {
+      generated = JSON.parse(cleanJson(raw));
+    } catch (parseErr) {
+      console.error('[generate-quiz] JSON parse failed. Raw response:', raw.slice(0, 500));
+      throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
+    }
     res.json({ status: 'success', data: { easyQuestions: generated.easyQuestions ?? [], mediumQuestions: generated.mediumQuestions ?? [] } });
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -1,0 +1,484 @@
+/**
+ * admin.ai.test.js
+ *
+ * Tests for all AI generation routes in /api/admin/ai/*.
+ * External API calls (OpenRouter/Perplexity + Wikipedia) are mocked at the
+ * global fetch level so no real network requests are made.
+ *
+ * Routes covered:
+ *   POST /api/admin/ai/news-headlines
+ *   POST /api/admin/ai/generate-brief
+ *   POST /api/admin/ai/generate-keywords
+ *   POST /api/admin/ai/generate-quiz
+ *   POST /api/admin/ai/generate-image
+ */
+
+process.env.JWT_SECRET    = 'test_secret';
+process.env.OPENROUTER_KEY = 'test_key';
+
+const request = require('supertest');
+const app     = require('../../app');
+const db      = require('../helpers/setupDb');
+const { createUser, createAdminUser, createSettings, authCookie } = require('../helpers/factories');
+
+beforeAll(async () => { await db.connect(); });
+beforeEach(async () => { await createSettings(); });
+afterEach(async () => {
+  jest.restoreAllMocks();
+  await db.clearDatabase();
+});
+// Do not call db.closeDatabase() here — jest.spyOn(global.fetch) interacts
+// with Mongoose's internal teardown path causing MongoClientClosedError.
+// forceExit in jest.config.js handles process cleanup instead.
+afterAll(() => {});
+
+// ── fetch mock helpers ────────────────────────────────────────────────────────
+
+// Builds a mock Response-like object that global.fetch will return
+function mockFetchResponse(body, ok = true, status = 200) {
+  return Promise.resolve({
+    ok,
+    status,
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
+  });
+}
+
+function mockOpenRouter(content) {
+  return mockFetchResponse({
+    choices: [{ message: { content } }],
+  });
+}
+
+// ── POST /api/admin/ai/news-headlines ─────────────────────────────────────────
+
+describe('POST /api/admin/ai/news-headlines', () => {
+  it('returns array of headline strings from mocked AI', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(
+      mockOpenRouter('["RAF Typhoons deploy to Estonia","New F-35 squadron declared operational"]')
+    );
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines')
+      .set('Cookie', authCookie(admin._id))
+      .send({ timestamp: new Date().toISOString() });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(Array.isArray(res.body.data.headlines)).toBe(true);
+    expect(res.body.data.headlines).toContain('RAF Typhoons deploy to Estonia');
+  });
+
+  it('returns empty array when AI returns []', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter('[]'));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines')
+      .set('Cookie', authCookie(admin._id))
+      .send({ timestamp: new Date().toISOString() });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.headlines).toEqual([]);
+  });
+
+  it('returns 401 for unauthenticated request', async () => {
+    const res = await request(app)
+      .post('/api/admin/ai/news-headlines')
+      .send({ timestamp: new Date().toISOString() });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin user', async () => {
+    const user = await createUser();
+    const res  = await request(app)
+      .post('/api/admin/ai/news-headlines')
+      .set('Cookie', authCookie(user._id))
+      .send({ timestamp: new Date().toISOString() });
+    expect(res.status).toBe(403);
+  });
+});
+
+// ── POST /api/admin/ai/generate-brief ─────────────────────────────────────────
+
+describe('POST /api/admin/ai/generate-brief', () => {
+  const MOCK_BRIEF_JSON = JSON.stringify({
+    title: 'RAF Typhoon',
+    subtitle: 'Multi-role fast jet',
+    descriptionSections: [
+      'The Eurofighter Typhoon is a multi-role combat aircraft operated by the RAF.',
+      'The Typhoon entered service in 2003 at RAF Coningsby.',
+    ],
+    keywords: [
+      { keyword: 'Typhoon', generatedDescription: 'Multi-role fast jet' },
+      { keyword: 'RAF Coningsby', generatedDescription: 'RAF base in Lincolnshire' },
+    ],
+    sources: [{ url: 'https://raf.mod.uk', siteName: 'RAF', articleDate: '2024-01-01' }],
+  });
+
+  it('generates brief object from a headline', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(MOCK_BRIEF_JSON));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ headline: 'RAF Typhoons deployed to Falkland Islands' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.brief.title).toBe('RAF Typhoon');
+    expect(Array.isArray(res.body.data.brief.descriptionSections)).toBe(true);
+    expect(Array.isArray(res.body.data.brief.keywords)).toBe(true);
+  });
+
+  it('generates brief object from a topic', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(MOCK_BRIEF_JSON));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ topic: 'Eurofighter Typhoon' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.brief.title).toBe('RAF Typhoon');
+  });
+
+  it('returns 400 when neither headline nor topic is provided', async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/headline or topic/i);
+  });
+
+  it('strips keywords not present verbatim in descriptionSections', async () => {
+    const briefWithBadKeyword = JSON.stringify({
+      title: 'RAF Typhoon',
+      subtitle: 'Multi-role fast jet',
+      descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
+      keywords: [
+        { keyword: 'Typhoon', generatedDescription: 'A fast jet' },
+        { keyword: 'completely absent term xyz', generatedDescription: 'Should be stripped' },
+      ],
+      sources: [],
+    });
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(briefWithBadKeyword));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ topic: 'Typhoon' });
+
+    expect(res.status).toBe(200);
+    const keywords = res.body.data.brief.keywords;
+    expect(keywords.some(k => k.keyword === 'Typhoon')).toBe(true);
+    expect(keywords.some(k => k.keyword === 'completely absent term xyz')).toBe(false);
+  });
+
+  it('returns 500 with message when AI returns malformed JSON', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter('This is not JSON at all!!!'));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ topic: 'something' });
+
+    expect(res.status).toBe(500);
+    expect(res.body.message).toMatch(/not valid json/i);
+  });
+
+  it('returns 401 for unauthenticated request', async () => {
+    const res = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .send({ topic: 'Typhoon' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin user', async () => {
+    const user = await createUser();
+    const res  = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(user._id))
+      .send({ topic: 'Typhoon' });
+    expect(res.status).toBe(403);
+  });
+});
+
+// ── POST /api/admin/ai/generate-keywords ──────────────────────────────────────
+
+describe('POST /api/admin/ai/generate-keywords', () => {
+  const DESCRIPTION = 'The Typhoon is a multi-role combat aircraft. It operates from RAF Coningsby and RAF Lossiemouth.';
+
+  it('returns keywords array for a valid description', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(
+      mockOpenRouter(JSON.stringify({
+        keywords: [
+          { keyword: 'Typhoon', generatedDescription: 'A fast jet' },
+          { keyword: 'RAF Coningsby', generatedDescription: 'A base' },
+        ],
+      }))
+    );
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-keywords')
+      .set('Cookie', authCookie(admin._id))
+      .send({ description: DESCRIPTION, needed: 2 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(Array.isArray(res.body.data.keywords)).toBe(true);
+  });
+
+  it('returns 400 when description is missing', async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-keywords')
+      .set('Cookie', authCookie(admin._id))
+      .send({ needed: 5 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/description/i);
+  });
+
+  it('filters out keywords not present verbatim in description', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(
+      mockOpenRouter(JSON.stringify({
+        keywords: [
+          { keyword: 'Typhoon', generatedDescription: 'A fast jet' },
+          { keyword: 'invisible ghost word', generatedDescription: 'Not in text' },
+        ],
+      }))
+    );
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-keywords')
+      .set('Cookie', authCookie(admin._id))
+      .send({ description: DESCRIPTION });
+
+    expect(res.status).toBe(200);
+    const kws = res.body.data.keywords;
+    expect(kws.some(k => k.keyword === 'Typhoon')).toBe(true);
+    expect(kws.some(k => k.keyword === 'invisible ghost word')).toBe(false);
+  });
+
+  it('does not repeat existingKeywords', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(
+      mockOpenRouter(JSON.stringify({
+        keywords: [
+          { keyword: 'Typhoon', generatedDescription: 'A fast jet' },
+          { keyword: 'RAF Coningsby', generatedDescription: 'A base' },
+        ],
+      }))
+    );
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-keywords')
+      .set('Cookie', authCookie(admin._id))
+      .send({ description: DESCRIPTION, existingKeywords: ['Typhoon'], needed: 2 });
+
+    expect(res.status).toBe(200);
+    const kws = res.body.data.keywords;
+    expect(kws.some(k => k.keyword.toLowerCase() === 'typhoon')).toBe(false);
+  });
+
+  it('returns 401 for unauthenticated request', async () => {
+    const res = await request(app)
+      .post('/api/admin/ai/generate-keywords')
+      .send({ description: DESCRIPTION });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ── POST /api/admin/ai/generate-quiz ──────────────────────────────────────────
+
+describe('POST /api/admin/ai/generate-quiz', () => {
+  function makeQ(i) {
+    return {
+      question: `Question ${i}?`,
+      answers: Array.from({ length: 10 }, (_, j) => ({ title: `Answer ${j}` })),
+      correctAnswerIndex: 0,
+    };
+  }
+
+  const MOCK_QUIZ = JSON.stringify({
+    easyQuestions:   Array.from({ length: 10 }, (_, i) => makeQ(i)),
+    mediumQuestions: Array.from({ length: 10 }, (_, i) => makeQ(i + 10)),
+  });
+
+  it('returns easyQuestions and mediumQuestions arrays', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(MOCK_QUIZ));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-quiz')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Typhoon', description: 'The Typhoon is a fast jet.' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(Array.isArray(res.body.data.easyQuestions)).toBe(true);
+    expect(Array.isArray(res.body.data.mediumQuestions)).toBe(true);
+    expect(res.body.data.easyQuestions.length).toBe(10);
+  });
+
+  it('returns 400 when neither title nor description is provided', async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-quiz')
+      .set('Cookie', authCookie(admin._id))
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/title or description/i);
+  });
+
+  it('handles malformed AI JSON gracefully — returns 500 with message', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter('not json at all!!!'));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-quiz')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Typhoon', description: 'A fast jet.' });
+
+    expect(res.status).toBe(500);
+    expect(res.body.message).toMatch(/not valid json/i);
+  });
+
+  it('returns 401 for unauthenticated request', async () => {
+    const res = await request(app)
+      .post('/api/admin/ai/generate-quiz')
+      .send({ title: 'Typhoon', description: 'A fast jet.' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin user', async () => {
+    const user = await createUser();
+    const res  = await request(app)
+      .post('/api/admin/ai/generate-quiz')
+      .set('Cookie', authCookie(user._id))
+      .send({ title: 'Typhoon', description: 'A fast jet.' });
+    expect(res.status).toBe(403);
+  });
+});
+
+// ── POST /api/admin/ai/generate-image ─────────────────────────────────────────
+
+describe('POST /api/admin/ai/generate-image', () => {
+  // generate-image makes multiple fetch calls:
+  //   1. OpenRouter (GPT-4o-mini) → returns search terms array
+  //   2. Wikipedia search API    → returns page title
+  //   3. Wikipedia thumbnail API → returns image URL
+  //   4. Image download          → returns image buffer
+
+  function setupImageMocks() {
+    const mockFetch = jest.spyOn(global, 'fetch');
+
+    // Call 1: OpenRouter → search terms
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        choices: [{ message: { content: '["Eurofighter Typhoon"]' } }],
+      }),
+    });
+
+    // Call 2: Wikipedia search
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        query: { search: [{ title: 'Eurofighter Typhoon' }] },
+      }),
+    });
+
+    // Call 3: Wikipedia thumbnail
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        query: { pages: { '123': { thumbnail: { source: 'https://upload.wikimedia.org/test.jpg' } } } },
+      }),
+    });
+
+    // Call 4: Image download
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(Buffer.from('fake-image-data').buffer),
+    });
+
+    return mockFetch;
+  }
+
+  it('returns images array with url, term, wikiPage', async () => {
+    setupImageMocks();
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-image')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'RAF Typhoon', subtitle: 'Multi-role fast jet' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(Array.isArray(res.body.data.images)).toBe(true);
+    expect(res.body.data.images.length).toBeGreaterThan(0);
+    expect(res.body.data.images[0]).toHaveProperty('url');
+    expect(res.body.data.images[0]).toHaveProperty('term');
+    expect(res.body.data.images[0]).toHaveProperty('wikiPage');
+  });
+
+  it('returns 400 when title is missing', async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-image')
+      .set('Cookie', authCookie(admin._id))
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/title/i);
+  });
+
+  it('returns 500 with message when no Wikipedia images are found', async () => {
+    const mockFetch = jest.spyOn(global, 'fetch');
+
+    // OpenRouter → search terms
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        choices: [{ message: { content: '["Nonexistent Subject XYZ"]' } }],
+      }),
+    });
+
+    // Wikipedia search → no results
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ query: { search: [] } }),
+    });
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-image')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Nonexistent Subject XYZ' });
+
+    expect(res.status).toBe(500);
+    expect(typeof res.body.message).toBe('string');
+    expect(res.body.message.length).toBeGreaterThan(0);
+  });
+
+  it('returns 401 for unauthenticated request', async () => {
+    const res = await request(app)
+      .post('/api/admin/ai/generate-image')
+      .send({ title: 'Typhoon' });
+    expect(res.status).toBe(401);
+  });
+});

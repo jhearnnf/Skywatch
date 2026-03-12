@@ -37,9 +37,23 @@ router.post('/quiz/start', protect, async (req, res) => {
     const { briefId } = req.body;
     if (!briefId) return res.status(400).json({ message: 'briefId required' });
 
+    const { effectiveTier, canAccessCategory } = require('../utils/subscription');
+
+    const brief = await IntelligenceBrief.findById(briefId).select('category title');
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+
     const user = await User.findById(req.user._id);
     const difficulty  = user.difficultySetting ?? 'easy';
     const settings    = await AppSettings.getSettings();
+    const tier = effectiveTier(user);
+
+    if (!canAccessCategory(brief.category, tier, settings)) {
+      return res.status(403).json({
+        message: 'Upgrade your subscription to access quizzes for this category.',
+        category: brief.category,
+      });
+    }
+
     const answerCount = difficulty === 'easy' ? (settings.easyAnswerCount ?? 3) : (settings.mediumAnswerCount ?? 5);
 
     const allQuestions = await GameQuizQuestion.find({ intelBriefId: briefId, difficulty });
