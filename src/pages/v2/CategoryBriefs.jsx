@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { CATEGORY_ICONS, SUBCATEGORIES } from '../../data/mockData'
 
-function BriefNode({ brief, index, isRead }) {
+function BriefNode({ brief, index, isRead, quizPassed }) {
   const locked = brief.isLocked ?? false
 
   return (
@@ -59,6 +59,9 @@ function BriefNode({ brief, index, isRead }) {
             {isRead && (
               <span className="text-[10px] text-emerald-600 font-semibold">✓ Read</span>
             )}
+            {quizPassed && (
+              <span className="text-[10px] text-amber-600 font-semibold">★ Quiz Passed</span>
+            )}
           </div>
         </div>
 
@@ -77,11 +80,12 @@ export default function CategoryBriefs() {
   const { category }       = useParams()
   const { user, API }      = useAuth()
   const navigate           = useNavigate()
-  const [briefs, setBriefs]       = useState([])
-  const [readIds, setReadIds]     = useState(new Set())
-  const [loading, setLoading]     = useState(true)
-  const [activeSubcat, setSubcat] = useState('all')
-  const [search, setSearch]       = useState('')
+  const [briefs, setBriefs]         = useState([])
+  const [readIds, setReadIds]       = useState(new Set())
+  const [passedIds, setPassedIds]   = useState(new Set())
+  const [loading, setLoading]       = useState(true)
+  const [activeSubcat, setSubcat]   = useState('all')
+  const [search, setSearch]         = useState('')
 
   const icon  = CATEGORY_ICONS[category] ?? '📄'
   const subs  = SUBCATEGORIES[category]  ?? []
@@ -93,10 +97,14 @@ export default function CategoryBriefs() {
       user
         ? fetch(`${API}/api/users/me/read-briefs`, { credentials: 'include' }).then(r => r.json())
         : Promise.resolve(null),
+      user
+        ? fetch(`${API}/api/games/quiz/completed-brief-ids`, { credentials: 'include' }).then(r => r.json())
+        : Promise.resolve(null),
     ])
-      .then(([briefsData, readData]) => {
+      .then(([briefsData, readData, quizData]) => {
         setBriefs(briefsData.data?.briefs ?? [])
         if (readData?.data?.briefIds) setReadIds(new Set(readData.data.briefIds))
+        if (quizData?.data?.ids) setPassedIds(new Set(quizData.data.ids))
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -207,6 +215,7 @@ export default function CategoryBriefs() {
               brief={brief}
               index={i}
               isRead={readIds.has(brief._id)}
+              quizPassed={passedIds.has(brief._id)}
             />
           ))}
         </div>

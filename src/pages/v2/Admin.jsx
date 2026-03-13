@@ -124,7 +124,7 @@ function Toast({ msg, onClear }) {
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
-      className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm font-semibold px-5 py-2.5 rounded-full shadow-lg"
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-100 text-slate-900 text-sm font-semibold px-5 py-2.5 rounded-full shadow-lg"
     >
       {msg}
     </motion.div>
@@ -674,6 +674,7 @@ const TIER_COLORS = {
 }
 
 function UsersTab({ API }) {
+  const { refreshUser } = useAuth()
   const [users,   setUsers]   = useState([])
   const [q,       setQ]       = useState('')
   const [loading, setLoading] = useState(true)
@@ -712,6 +713,7 @@ function UsersTab({ API }) {
     setModal(null)
     setToast('Action completed')
     search ? runSearch() : loadAll()
+    refreshUser()
   }
 
   return (
@@ -1036,8 +1038,25 @@ function ContentTab({ API }) {
       .then(r => r.json())
       .then(d => {
         if (d.data?.settings) {
-          setDraft(d.data.settings)
-          setTutDraft(d.data.settings.tutorialContent ?? {})
+          const s = d.data.settings
+          // Pre-populate any empty fields with hardcoded defaults so inputs aren't blank on first visit
+          const merged = { ...s }
+          Object.entries({ ...EMAIL_DEFAULTS, ...CR_DEFAULTS }).forEach(([k, v]) => {
+            if (!merged[k]) merged[k] = v
+          })
+          setDraft(merged)
+          // Pre-populate tutorial fields from TUTORIAL_STEPS defaults where not yet overridden
+          const tut = { ...(s.tutorialContent ?? {}) }
+          TUTORIAL_META.forEach(({ key: tutKey }) => {
+            const steps = TUTORIAL_STEPS[tutKey] ?? []
+            steps.forEach((step, i) => {
+              const k = `${tutKey}_${i}`
+              if (!tut[k]?.title && !tut[k]?.body) {
+                tut[k] = { title: step.title ?? '', body: step.body ?? '' }
+              }
+            })
+          })
+          setTutDraft(tut)
         }
       })
   }, [API])
@@ -1730,14 +1749,21 @@ function BriefsTab({ API }) {
 
   // ── Delete brief ──────────────────────────────────────────────────────────
   const deleteBrief = async (reason) => {
-    await fetch(`${API}/api/admin/briefs/${briefId}`, {
+    const res  = await fetch(`${API}/api/admin/briefs/${briefId}`, {
       method: 'DELETE', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
     })
+    const data = await res.json()
     setConfirmDelete(false)
     setView('list')
-    setToast('Brief deleted')
+    if (data.leadError) {
+      setToast(`Brief deleted — ⚠ Lead file error: ${data.leadError}`)
+    } else if (!data.leadUnmarked) {
+      setToast('Brief deleted — ⚠ No matching entry found in leads file')
+    } else {
+      setToast('Brief deleted — lead file updated')
+    }
   }
 
   // ── AI: Generate brief from lead ─────────────────────────────────────────

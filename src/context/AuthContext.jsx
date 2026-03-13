@@ -41,6 +41,13 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  const refreshUser = useCallback(async () => {
+    const data = await fetch(`${API}/api/auth/me`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null)
+    setUser(data?.data?.user ?? null)
+  }, [])
+
   // Remove the front item from the notification queue (called by App when notif finishes)
   const shiftNotif = useCallback(() => {
     setNotifQueue(q => q.slice(1))
@@ -80,7 +87,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, setUser, logout, loading, API, notifQueue, shiftNotif, awardAircoins }}>
+    <AuthContext.Provider value={{ user, setUser, logout, loading, API, notifQueue, shiftNotif, awardAircoins, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

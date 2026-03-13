@@ -22,6 +22,29 @@ const fs                = require('fs');
 
 const LEADS_FILE = path.join(__dirname, '../../APPLICATION_INFO/intel_brief_leads.txt');
 
+function normaliseLeadTitle(s) {
+  return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// Returns { matched: bool, error: string|null }
+function unmarkLeadInFile(briefTitle) {
+  try {
+    const norm    = normaliseLeadTitle(briefTitle);
+    const content = fs.readFileSync(LEADS_FILE, 'utf8');
+    let matched   = false;
+    const updated = content.split('\n').map(line => {
+      if (!line.includes('[DB]')) return line;
+      const lineText = line.replace('[DB]', '').trimEnd();
+      if (normaliseLeadTitle(lineText) === norm) { matched = true; return lineText; }
+      return line;
+    });
+    if (matched) fs.writeFileSync(LEADS_FILE, updated.join('\n'), 'utf8');
+    return { matched, error: null };
+  } catch (err) {
+    return { matched: false, error: err.message };
+  }
+}
+
 router.use(protect, adminOnly);
 
 // Shared helper — all state-changing actions require a reason
@@ -565,6 +588,9 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
   try {
     const briefId = req.params.id;
 
+    // Fetch title before deletion so we can un-mark it in the leads file
+    const brief = await IntelligenceBrief.findById(briefId).select('title');
+
     // Collect question IDs before deleting so we can wipe their results
     const questionIds = await GameQuizQuestion.distinct('_id', { intelBriefId: briefId });
 
@@ -578,7 +604,9 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
     ]);
 
     await AdminAction.create({ userId: req.user._id, actionType: 'delete_brief', reason: req.body.reason });
-    res.json({ status: 'success' });
+
+    const leadResult = brief?.title ? unmarkLeadInFile(brief.title) : { matched: false, error: 'Brief title unavailable' };
+    res.json({ status: 'success', leadUnmarked: leadResult.matched, leadError: leadResult.error });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
