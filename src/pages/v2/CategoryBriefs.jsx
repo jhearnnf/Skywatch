@@ -103,8 +103,8 @@ export default function CategoryBriefs() {
     ])
       .then(([briefsData, readData, quizData]) => {
         setBriefs(briefsData.data?.briefs ?? [])
-        if (readData?.data?.briefIds) setReadIds(new Set(readData.data.briefIds))
-        if (quizData?.data?.ids) setPassedIds(new Set(quizData.data.ids))
+        setReadIds(new Set(readData?.data?.briefIds ?? []))
+        setPassedIds(new Set(quizData?.data?.ids    ?? []))
       })
       .catch(() => {})
       .finally(() => setLoading(false))

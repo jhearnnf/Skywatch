@@ -40,6 +40,10 @@ const appSettingsSchema = new mongoose.Schema({
     type: [String],
     default: ['News'],
   },
+  guestCategories: {
+    type: [String],
+    default: ['News'],
+  },
 
   // Sound volumes (0–100)
   volumeIntelBriefOpened: { type: Number, default: 100, min: 0, max: 100 },

@@ -13,11 +13,23 @@ function tierEffective(user) {
   return user.subscriptionTier ?? 'free'
 }
 
-function trialDaysLeft(user) {
-  if (!user?.trialStartDate) return 0
+function trialTimeLeft(user) {
+  if (!user?.trialStartDate) return { days: 0, hours: 0, ms: 0 }
   const end = new Date(user.trialStartDate)
   end.setDate(end.getDate() + (user.trialDurationDays || 5))
-  return Math.max(0, Math.ceil((end - Date.now()) / 86_400_000))
+  const ms   = Math.max(0, end - Date.now())
+  const days  = Math.floor(ms / 86_400_000)
+  const hours = Math.floor((ms % 86_400_000) / 3_600_000)
+  return { days, hours, ms }
+}
+
+function trialTimeLabel({ days, hours, ms }) {
+  if (ms === 0)      return 'Trial expired'
+  if (days === 0 && hours === 0) return 'Less than 1 hour remaining'
+  const parts = []
+  if (days  > 0) parts.push(`${days} day${days   !== 1 ? 's' : ''}`)
+  if (hours > 0) parts.push(`${hours} hour${hours !== 1 ? 's' : ''}`)
+  return `${parts.join(' ')} remaining`
 }
 
 // ── Category tag pill ─────────────────────────────────────────────────────
@@ -120,7 +132,7 @@ export default function Subscription() {
 
   const navigate   = useNavigate()
   const effective  = tierEffective(user)
-  const daysLeft   = effective === 'trial' ? trialDaysLeft(user) : 0
+  const timeLeft   = effective === 'trial' ? trialTimeLeft(user) : { days: 0, hours: 0, ms: 0 }
   const trialDays  = settings?.trialDurationDays ?? 5
 
   // Derive category sets from live settings
@@ -267,7 +279,7 @@ export default function Subscription() {
             </p>
             {effective === 'trial' && (
               <p className="text-xs text-amber-600 mt-0.5">
-                {daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining on trial
+                ⏳ {trialTimeLabel(timeLeft)}
               </p>
             )}
             {effective === 'free' && user.subscriptionTier === 'trial' && (

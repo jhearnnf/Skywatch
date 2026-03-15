@@ -4,6 +4,7 @@ const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createBrief, createSettings, authCookie } = require('../helpers/factories');
+const AircoinLog = require('../../models/AircoinLog');
 
 beforeAll(async () => {
   await db.connect();
@@ -108,5 +109,114 @@ describe('GET /api/users/leaderboard', () => {
       expect(u.password).toBeUndefined();
       expect(u.googleId).toBeUndefined();
     });
+  });
+});
+
+// ── GET /api/users/aircoins/history ───────────────────────────────────────
+describe('GET /api/users/aircoins/history', () => {
+  it('returns 401 without authentication', async () => {
+    const res = await request(app).get('/api/users/aircoins/history');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns logs and total for authenticated user', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    await AircoinLog.create({ userId: user._id, amount: 10, reason: 'brief_read',  label: 'Intel Brief Read' });
+    await AircoinLog.create({ userId: user._id, amount: 5,  reason: 'daily_brief', label: 'Daily Brief'      });
+
+    const res = await request(app)
+      .get('/api/users/aircoins/history')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    const { logs, total } = res.body.data;
+    expect(Array.isArray(logs)).toBe(true);
+    expect(logs.length).toBe(2);
+    expect(total).toBe(2);
+  });
+
+  it('returns most recent entries first', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    await AircoinLog.create({ userId: user._id, amount: 5,  reason: 'daily_brief', label: 'First'  });
+    await AircoinLog.create({ userId: user._id, amount: 20, reason: 'quiz',         label: 'Second' });
+
+    const res = await request(app)
+      .get('/api/users/aircoins/history')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const { logs } = res.body.data;
+    // Most recent first — "Second" was created last
+    expect(logs[0].label).toBe('Second');
+    expect(logs[1].label).toBe('First');
+  });
+
+  it('only returns logs belonging to the authenticated user', async () => {
+    const userA  = await createUser({ email: 'a@test.com' });
+    const userB  = await createUser({ email: 'b@test.com' });
+    const cookie = authCookie(userA._id);
+
+    await AircoinLog.create({ userId: userA._id, amount: 10, reason: 'brief_read', label: 'A log' });
+    await AircoinLog.create({ userId: userB._id, amount: 99, reason: 'brief_read', label: 'B log' });
+
+    const res = await request(app)
+      .get('/api/users/aircoins/history')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const { logs } = res.body.data;
+    expect(logs.every(l => l.userId?.toString() === userA._id.toString() || !l.userId)).toBe(true);
+    expect(logs.some(l => l.label === 'B log')).toBe(false);
+  });
+
+  it('respects the ?limit query param', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    for (let i = 0; i < 5; i++) {
+      await AircoinLog.create({ userId: user._id, amount: i + 1, reason: 'brief_read', label: `Entry ${i}` });
+    }
+
+    const res = await request(app)
+      .get('/api/users/aircoins/history?limit=3')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.logs.length).toBe(3);
+    expect(res.body.data.total).toBe(5); // total is unaffected by limit
+  });
+
+  it('returns an empty log array when user has no history', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    const res = await request(app)
+      .get('/api/users/aircoins/history')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.logs).toEqual([]);
+    expect(res.body.data.total).toBe(0);
+  });
+
+  it('each log entry contains amount, reason, and label', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    await AircoinLog.create({ userId: user._id, amount: 7, reason: 'daily_brief', label: 'Daily Brief' });
+
+    const res = await request(app)
+      .get('/api/users/aircoins/history')
+      .set('Cookie', cookie);
+
+    const entry = res.body.data.logs[0];
+    expect(entry.amount).toBe(7);
+    expect(entry.reason).toBe('daily_brief');
+    expect(entry.label).toBe('Daily Brief');
   });
 });

@@ -72,6 +72,33 @@ export default function LoginPage() {
     }
   }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // After any successful auth, redirect to the brief the guest was reading (if any),
+  // otherwise fall back to /home. New users see the difficulty screen first.
+  const consumePendingBrief = async () => {
+    const id = sessionStorage.getItem('sw_pending_brief')
+    if (!id) return null
+    sessionStorage.removeItem('sw_pending_brief')
+    try {
+      const res  = await fetch(`${API}/api/briefs/${id}/complete`, { method: 'POST', credentials: 'include' })
+      const data = await res.json()
+      if (res.ok && data?.data) {
+        // Store coin data for BriefReader to consume and display the notification
+        sessionStorage.setItem('sw_brief_coins', JSON.stringify(data.data))
+        // Update streak in auth state
+        if (data.data.loginStreak !== undefined) {
+          setUser(u => u ? {
+            ...u,
+            loginStreak:    data.data.loginStreak,
+            lastStreakDate: data.data.lastStreakDate ?? u.lastStreakDate,
+          } : u)
+        }
+      }
+    } catch { /* non-fatal — coins will be awarded on next visit */ }
+    // Signal BriefReader to start in completion state
+    sessionStorage.setItem('sw_brief_just_completed', id)
+    return id
+  }
+
   const handleGoogleCredential = async ({ credential }) => {
     setBusy(true); setError('')
     try {
@@ -83,11 +110,9 @@ export default function LoginPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
       setUser(data.data.user)
-      if (data.data.loginAircoinsEarned > 0) {
-        awardAircoins(data.data.loginAircoinsEarned, data.data.loginAircoinLabel, { rankPromotion: data.data.rankPromotion ?? null })
-      }
       if (data.data.isNew) { setView(VIEW.DIFFICULTY); return }
-      navigate('/home')
+      const briefId = await consumePendingBrief()
+      navigate(briefId ? `/brief/${briefId}` : '/home')
     } catch {
       setError('Google sign-in failed. Please try again.')
     } finally {
@@ -108,11 +133,9 @@ export default function LoginPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
       setUser(data.data.user)
-      if (data.data.loginAircoinsEarned > 0) {
-        awardAircoins(data.data.loginAircoinsEarned, data.data.loginAircoinLabel, { rankPromotion: data.data.rankPromotion ?? null })
-      }
       if (data.data.isNew) { setView(VIEW.DIFFICULTY); return }
-      navigate('/home')
+      const briefId = await consumePendingBrief()
+      navigate(briefId ? `/brief/${briefId}` : '/home')
     } catch {
       setError('Connection failed. Is the server running?')
     } finally {
@@ -132,7 +155,8 @@ export default function LoginPage() {
       if (data?.data?.user) setUser(data.data.user)
     } catch { /* non-fatal */ }
     finally { setBusy(false) }
-    navigate('/home')
+    const briefId = await consumePendingBrief()
+    navigate(briefId ? `/brief/${briefId}` : '/home')
   }
 
   const reset = (nextView) => { setError(''); setEmail(''); setPass(''); setView(nextView) }

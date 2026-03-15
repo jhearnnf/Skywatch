@@ -294,9 +294,9 @@ export default function QuizFlow() {
             setXP(earned)
             if (awardAircoins) {
               awardAircoins(earned, 'Quiz complete', {
-                cycleAfter:  data.data?.attempt?.cycleAircoins,
-                totalAfter:  data.data?.attempt?.totalAircoins,
-                rankPromotion: data.data?.rankPromotion,
+                cycleAfter:    data.data?.cycleAircoins,
+                totalAfter:    data.data?.attempt?.totalAircoins,
+                rankPromotion: data.data?.rankPromotion ?? null,
               })
             }
           }

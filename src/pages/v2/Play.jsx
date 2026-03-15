@@ -47,8 +47,9 @@ export default function Play() {
   const { start }     = useAppTutorial()
   const { settings }  = useAppSettings()
 
-  const [recentBriefs, setRecentBriefs] = useState([])
-  const [activeGame,   setActiveGame]   = useState(null)
+  const [recentBriefs,   setRecentBriefs]   = useState([])
+  const [passedBriefIds, setPassedBriefIds] = useState(new Set())
+  const [activeGame,     setActiveGame]     = useState(null)
 
   const quizRef      = useRef(null)
   const flashcardRef = useRef(null)
@@ -72,12 +73,16 @@ export default function Play() {
   // Clear highlight timer on unmount
   useEffect(() => () => clearTimeout(highlightTimerRef.current), [])
 
-  // Fetch recently read briefs for the quiz launcher
+  // Fetch recently read briefs + passed quiz IDs for the quiz launcher
   useEffect(() => {
-    if (!user) return
+    if (!user) { setRecentBriefs([]); setPassedBriefIds(new Set()); return }
     fetch(`${API}/api/briefs?limit=6`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => setRecentBriefs(data?.data?.briefs ?? []))
+      .catch(() => {})
+    fetch(`${API}/api/games/quiz/completed-brief-ids`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setPassedBriefIds(new Set(data?.data?.ids ?? [])))
       .catch(() => {})
   }, [user, API])
 
@@ -193,21 +198,35 @@ export default function Play() {
                               <p className="text-xs text-slate-400">{brief.category}</p>
                             </div>
                           </div>
-                        ) : (
-                          <Link
-                            to={`/quiz/${brief._id}`}
-                            className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group"
-                          >
-                            <div className="w-8 h-8 rounded-xl bg-brand-100 flex items-center justify-center shrink-0">
-                              <span className="text-brand-600 font-bold text-xs">Q</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
-                              <p className="text-xs text-slate-400">{brief.category}</p>
-                            </div>
-                            <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
-                          </Link>
-                        )}
+                        ) : (() => {
+                          const passed = passedBriefIds.has(brief._id)
+                          return (
+                            <Link
+                              to={`/quiz/${brief._id}`}
+                              className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all group
+                                ${passed
+                                  ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
+                                  : 'bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50'
+                                }`}
+                            >
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
+                                ${passed ? 'bg-emerald-100' : 'bg-brand-100'}`}
+                              >
+                                <span className={`font-bold text-xs ${passed ? 'text-emerald-600' : 'text-brand-600'}`}>
+                                  {passed ? '✓' : 'Q'}
+                                </span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                                <p className="text-xs text-slate-400">{brief.category}</p>
+                              </div>
+                              {passed
+                                ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Passed</span>
+                                : <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                              }
+                            </Link>
+                          )
+                        })()}
                       </motion.div>
                     )
                   })}

@@ -38,6 +38,7 @@ vi.mock('framer-motion', () => ({
 
 const MOCK_SETTINGS = {
   trialDurationDays: 7,
+  guestCategories: ['News'],
   freeCategories: ['News'],
   silverCategories: [],
   ammoFree: 0,

@@ -8,6 +8,8 @@ const intelligenceBriefReadSchema = new mongoose.Schema({
   ammunitionRemaining: { type: Number, default: 0, min: 0 },
   ammoDepletedAt:      { type: Date,   default: null },
 
+  coinsAwarded: { type: Boolean, default: false }, // true once POST /complete has awarded coins
+
   firstReadAt: { type: Date, default: Date.now },
   lastReadAt:  { type: Date, default: Date.now },
 });

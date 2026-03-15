@@ -522,7 +522,7 @@ function SettingsTab({ API }) {
       })
       const data = await res.json()
       if (data.status === 'success') {
-        awardAircoins(data.awarded, 'Test Coins', { cycleAfter: data.cycleAircoins, totalAfter: data.totalAircoins })
+        awardAircoins(data.awarded, 'Test Coins', { cycleAfter: data.cycleAircoins, totalAfter: data.totalAircoins, rankPromotion: data.rankPromotion ?? null })
         setToast(`✓ Awarded ${data.awarded} test coins`)
         setTestAmount('')
       }
@@ -551,10 +551,18 @@ function SettingsTab({ API }) {
       )}
 
       {/* ── Subscription ─────────────────────────────────────── */}
-      <Section title="Subscription" onSave={() => save('Update Subscription Settings', ['trialDurationDays', 'freeCategories', 'silverCategories'])}>
+      <Section title="Subscription" onSave={() => save('Update Subscription Settings', ['trialDurationDays', 'freeCategories', 'silverCategories', 'guestCategories'])}>
         <NumInput label="Trial duration (days)" value={draft.trialDurationDays} min={1} max={365} onChange={v => set('trialDurationDays', v)} />
 
         <div className="pt-3">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
+            Not signed in (Guest) categories
+            <span className="ml-2 bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] normal-case">Briefs outside these categories are locked for guests</span>
+          </p>
+          <CategoryGrid selected={draft.guestCategories} onChange={cat => toggleCat('guestCategories', cat)} />
+        </div>
+
+        <div className="pt-4">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
             Free tier categories
             <span className="ml-2 bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] normal-case">Gold = all categories always</span>
@@ -764,8 +772,8 @@ function UsersTab({ API }) {
                 </p>
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>
-              <span className={`text-[10px] font-bold px-2 py-1 rounded-full capitalize ${TIER_COLORS[u.subscriptionTier] ?? TIER_COLORS.free}`}>
-                {u.subscriptionTier}
+              <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${TIER_COLORS[u.subscriptionTier] ?? TIER_COLORS.free}`}>
+                {u.subscriptionTier === 'trial' && u.isTrialActive ? 'Trial (Silver)' : (u.subscriptionTier ?? 'free')}
               </span>
             </div>
 
@@ -1250,7 +1258,7 @@ function ContentTab({ API }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TIERS = ['free', 'trial', 'silver', 'gold']
-const TIER_LABELS = { free: 'Free', trial: 'Trial', silver: 'Silver', gold: 'Gold' }
+const TIER_LABELS = { free: 'Free', trial: 'Trial (Silver)', silver: 'Silver', gold: 'Gold' }
 const TIER_BTN = {
   free:   'bg-slate-100 text-slate-700 border-slate-200',
   trial:  'bg-amber-50  text-amber-700  border-amber-200',
@@ -1345,12 +1353,36 @@ function isSimilarTitle(headline, existingTitles) {
   })
 }
 
+function LeadRow({ lead, picked, busy, onGenerate }) {
+  return (
+    <div className={`flex items-start justify-between gap-3 py-2 px-3 rounded-xl mb-1 transition-colors ${picked?.text === lead.text ? 'bg-amber-50 border border-amber-200' : 'hover:bg-slate-50'}`}>
+      <p className="text-sm text-slate-700 flex-1">{lead.text}</p>
+      <button
+        onClick={() => onGenerate(lead)}
+        disabled={busy === lead.text}
+        className="text-xs px-3 py-1 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold whitespace-nowrap hover:bg-brand-100 disabled:opacity-40"
+      >
+        {busy === lead.text ? '…' : 'Generate →'}
+      </button>
+    </div>
+  )
+}
+
 function LeadsModal({ API, onClose, onGenerate }) {
-  const [tab,           setTab]           = useState('leads') // 'leads' | 'news'
-  const [leads,         setLeads]         = useState([])
-  const [search,        setSearch]        = useState('')
-  const [picked,        setPicked]        = useState(null)
-  const [busy,          setBusy]          = useState(null)
+  const [tab,             setTab]             = useState('leads') // 'leads' | 'news'
+  const [leads,           setLeads]           = useState([])
+  const [search,          setSearch]          = useState('')
+  const [picked,          setPicked]          = useState(null)
+  const [busy,            setBusy]            = useState(null)
+  const [openSections,    setOpenSections]    = useState(new Set())
+  const [openSubsections, setOpenSubsections] = useState(new Set())
+
+  const toggleSection = (sec) => setOpenSections(prev => {
+    const next = new Set(prev); next.has(sec) ? next.delete(sec) : next.add(sec); return next
+  })
+  const toggleSubsection = (key) => setOpenSubsections(prev => {
+    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next
+  })
   // News headlines
   const [headlines,     setHeadlines]     = useState([])
   const [existingTitles,setExistingTitles]= useState([])
@@ -1425,13 +1457,21 @@ function LeadsModal({ API, onClose, onGenerate }) {
     }
   }
 
-  // Group leads by section
+  // Group leads by section → subsection
   const grouped = {}
   for (const l of filtered) {
     const sec = l.section || 'General'
-    if (!grouped[sec]) grouped[sec] = []
-    grouped[sec].push(l)
+    const sub = l.subsection || ''
+    if (!grouped[sec]) grouped[sec] = {}
+    if (!grouped[sec][sub]) grouped[sec][sub] = []
+    grouped[sec][sub].push(l)
   }
+
+  // When searching, auto-expand everything so results are visible
+  const effectiveOpenSections    = search ? new Set(Object.keys(grouped)) : openSections
+  const effectiveOpenSubsections = search ? new Set(
+    Object.entries(grouped).flatMap(([sec, subs]) => Object.keys(subs).map(sub => `${sec}::${sub}`))
+  ) : openSubsections
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/70 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
@@ -1466,27 +1506,91 @@ function LeadsModal({ API, onClose, onGenerate }) {
                 Pick Random
               </button>
             </div>
-            <div className="overflow-y-auto flex-1 px-4 py-2 space-y-4">
-              {Object.entries(grouped).map(([section, items]) => (
-                <div key={section}>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{section}</p>
-                  {items.map((lead, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-start justify-between gap-3 py-2 px-3 rounded-xl mb-1 transition-colors ${picked?.text === lead.text ? 'bg-amber-50 border border-amber-200' : 'hover:bg-slate-50'}`}
+            <div className="overflow-y-auto flex-1 px-4 py-2">
+              {Object.entries(grouped).map(([section, subsections]) => {
+                const sectionOpen = effectiveOpenSections.has(section)
+                const totalCount  = Object.values(subsections).reduce((n, arr) => n + arr.length, 0)
+                const subKeys     = Object.keys(subsections)
+                const hasSubs     = !(subKeys.length === 1 && subKeys[0] === '')
+
+                return (
+                  <div key={section} className="border-b border-slate-100 last:border-b-0">
+                    {/* Section header */}
+                    <button
+                      onClick={() => toggleSection(section)}
+                      className="w-full flex items-center justify-between py-3 px-1 text-left group"
                     >
-                      <p className="text-sm text-slate-700 flex-1">{lead.text}</p>
-                      <button
-                        onClick={() => generate(lead)}
-                        disabled={busy === lead.text}
-                        className="text-xs px-3 py-1 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold whitespace-nowrap hover:bg-brand-100 disabled:opacity-40"
-                      >
-                        {busy === lead.text ? '…' : 'Generate →'}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ))}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{section}</span>
+                        <span className="text-[10px] bg-slate-100 text-slate-500 rounded-full px-1.5 py-0.5 font-bold">{totalCount}</span>
+                      </div>
+                      <span className={`text-slate-400 text-[10px] transition-transform duration-200 ${sectionOpen ? 'rotate-180' : ''}`}>▼</span>
+                    </button>
+
+                    {/* Section contents */}
+                    <AnimatePresence initial={false}>
+                      {sectionOpen && (
+                        <motion.div
+                          key="section-content"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: 'easeInOut' }}
+                          className="overflow-hidden"
+                        >
+                          {hasSubs ? (
+                            // Two-level: render subsection accordions
+                            <div className="pb-2">
+                              {subKeys.map(sub => {
+                                const subKey  = `${section}::${sub}`
+                                const subOpen = effectiveOpenSubsections.has(subKey)
+                                const items   = subsections[sub]
+                                return (
+                                  <div key={sub} className="ml-2 border-l-2 border-slate-100 pl-2 mb-1">
+                                    <button
+                                      onClick={() => toggleSubsection(subKey)}
+                                      className="w-full flex items-center justify-between py-2 px-2 text-left"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{sub || 'General'}</span>
+                                        <span className="text-[10px] bg-slate-100 text-slate-400 rounded-full px-1.5 py-0.5 font-bold">{items.length}</span>
+                                      </div>
+                                      <span className={`text-slate-300 text-[9px] transition-transform duration-200 ${subOpen ? 'rotate-180' : ''}`}>▼</span>
+                                    </button>
+                                    <AnimatePresence initial={false}>
+                                      {subOpen && (
+                                        <motion.div
+                                          key="sub-content"
+                                          initial={{ height: 0, opacity: 0 }}
+                                          animate={{ height: 'auto', opacity: 1 }}
+                                          exit={{ height: 0, opacity: 0 }}
+                                          transition={{ duration: 0.18, ease: 'easeInOut' }}
+                                          className="overflow-hidden"
+                                        >
+                                          {items.map((lead, i) => (
+                                            <LeadRow key={i} lead={lead} picked={picked} busy={busy} onGenerate={generate} />
+                                          ))}
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            // Single group: render items directly
+                            <div className="pb-2">
+                              {subsections[''].map((lead, i) => (
+                                <LeadRow key={i} lead={lead} picked={picked} busy={busy} onGenerate={generate} />
+                              ))}
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )
+              })}
               {filtered.length === 0 && <p className="text-sm text-slate-400 text-center py-8">No leads found</p>}
             </div>
           </>

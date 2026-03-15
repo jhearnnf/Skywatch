@@ -75,11 +75,18 @@ describe('GET /api/briefs/:id — category access', () => {
     expect(res.status).toBe(200);
   });
 
-  it('unauthenticated → 200 (no gate for guests)', async () => {
-    const brief = await createBrief({ category: 'Aircrafts' });
+  it('unauthenticated + guest category → 200', async () => {
+    const brief = await createBrief({ category: 'News' }); // News is in guestCategories
     const res   = await request(app)
       .get(`/api/briefs/${brief._id}`);
     expect(res.status).toBe(200);
+  });
+
+  it('unauthenticated + locked category → 403', async () => {
+    const brief = await createBrief({ category: 'Aircrafts' }); // not in guestCategories
+    const res   = await request(app)
+      .get(`/api/briefs/${brief._id}`);
+    expect(res.status).toBe(403);
   });
 
   it('active trial user + silver category → 200', async () => {
@@ -120,16 +127,17 @@ describe('GET /api/briefs — isLocked labelling', () => {
     expect(aircraftBrief.isLocked).toBe(true);
   });
 
-  it('unauthenticated: no isLocked field on briefs', async () => {
+  it('unauthenticated: isLocked reflects guest tier (News=false, Aircrafts=true)', async () => {
     await createBrief({ category: 'News' });
     await createBrief({ category: 'Aircrafts' });
 
     const res = await request(app).get('/api/briefs');
     expect(res.status).toBe(200);
     const briefs = res.body.data.briefs;
-    briefs.forEach(b => {
-      expect(b.isLocked).toBeUndefined();
-    });
+    const newsBrief     = briefs.find(b => b.category === 'News');
+    const aircraftBrief = briefs.find(b => b.category === 'Aircrafts');
+    expect(newsBrief.isLocked).toBe(false);
+    expect(aircraftBrief.isLocked).toBe(true);
   });
 });
 

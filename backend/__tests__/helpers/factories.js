@@ -24,6 +24,7 @@ async function createSettings(overrides = {}) {
         mediumAnswerCount:     5,
         freeCategories:        ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
         silverCategories:      ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
+        guestCategories:       ['News'],
         ...overrides,
       },
     },

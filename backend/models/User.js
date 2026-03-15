@@ -51,7 +51,11 @@ const userSchema = new mongoose.Schema(
     },
     tutorialsResetAt: { type: Date, default: null }, // admin-triggered; frontend clears localStorage tutorial keys when newer than last clear
 
-    // Login history (used for streak calculation)
+    // Reading streak (incremented on first brief read each calendar day)
+    loginStreak:    { type: Number, default: 0 },
+    lastStreakDate: { type: Date,   default: null },
+
+    // Login history (kept for session tracking)
     logins: [loginSchema],
 
     // Game tutorial tracking
@@ -97,21 +101,6 @@ userSchema.virtual('isTrialActive').get(function () {
   return new Date() < trialEnd;
 });
 
-// Calculate current login streak (consecutive days)
-userSchema.virtual('loginStreak').get(function () {
-  if (!this.logins?.length) return 0;
-  const dates = [...new Set(
-    this.logins.map(l => new Date(l.timestamp).toDateString())
-  )].sort((a, b) => new Date(b) - new Date(a));
-
-  let streak = 1;
-  for (let i = 1; i < dates.length; i++) {
-    const diff = (new Date(dates[i - 1]) - new Date(dates[i])) / (1000 * 60 * 60 * 24);
-    if (Math.round(diff) === 1) streak++;
-    else break;
-  }
-  return streak;
-});
 
 userSchema.set('toJSON', { virtuals: true });
 userSchema.set('toObject', { virtuals: true });

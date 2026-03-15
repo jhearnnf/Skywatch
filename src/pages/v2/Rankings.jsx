@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
@@ -22,11 +22,17 @@ function getLevelInfo(coins, levels) {
 export default function Rankings() {
   const { user, API } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const { start } = useAppTutorial()
 
   const [levels, setLevels] = useState(MOCK_LEVELS)
   const [ranks,  setRanks]  = useState(MOCK_RANKS?.map(r => ({ ...r, rankAbbreviation: r.abbreviation })) ?? [])
-  const [tab,    setTab]    = useState('levels') // 'levels' | 'ranks'
+  const [tab,    setTab]    = useState(location.state?.tab ?? 'levels') // 'levels' | 'ranks'
+
+  // Re-sync tab whenever the user navigates to this page (even if already here)
+  useEffect(() => {
+    setTab(location.state?.tab ?? 'levels')
+  }, [location.key])
 
   // Tutorial on first visit
   useEffect(() => {

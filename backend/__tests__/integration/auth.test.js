@@ -24,6 +24,7 @@ describe('POST /api/auth/register', () => {
     expect(res.body.data.user.email).toBe('newuser@test.com');
     expect(res.body.data.user.password).toBeUndefined(); // never exposed
     expect(res.headers['set-cookie']).toBeDefined();
+    expect(res.body.data.loginAircoinsEarned).toBe(0); // coins only on first brief read
   });
 
   it('returns 400 if email is missing', async () => {
@@ -68,6 +69,7 @@ describe('POST /api/auth/login', () => {
     expect(res.body.status).toBe('success');
     expect(res.body.data.user.email).toBe('loginme@test.com');
     expect(res.headers['set-cookie']).toBeDefined();
+    expect(res.body.data.loginAircoinsEarned).toBe(0); // coins only on first brief read
   });
 
   it('returns 401 with wrong password', async () => {

@@ -279,17 +279,22 @@ describe('GET /api/briefs?category=X — isLocked on category-filtered list', ()
     res.body.data.briefs.forEach(b => expect(b.isLocked).toBe(false));
   });
 
-  it('unauthenticated + any category → no isLocked field on briefs', async () => {
+  it('unauthenticated + locked category → isLocked:true on briefs (guest tier applied)', async () => {
     await createBrief({ category: SILVER_CAT });
 
     const res = await request(app).get(`/api/briefs?category=${SILVER_CAT}`);
     expect(res.status).toBe(200);
-    res.body.data.briefs.forEach(b => expect(b.isLocked).toBeUndefined());
+    // Guests get isLocked flag based on guestCategories setting
+    res.body.data.briefs.forEach(b => expect(b.isLocked).toBe(true));
   });
 });
 
-// ── GET /api/briefs/category-counts — tier filtering ─────────────────────
-describe('GET /api/briefs/category-counts — tier access filtering', () => {
+// ── GET /api/briefs/category-counts — public, all categories ─────────────
+//
+// category-counts is intentionally a public endpoint that returns ALL
+// categories regardless of tier. The frontend uses it to display brief
+// counts on locked category cards so guests can still see what's available.
+describe('GET /api/briefs/category-counts — returns all categories for all tiers', () => {
   beforeEach(async () => {
     await createSettings(S);
     await createBrief({ category: FREE_CAT });
@@ -297,16 +302,16 @@ describe('GET /api/briefs/category-counts — tier access filtering', () => {
     await createBrief({ category: GOLD_CAT });
   });
 
-  it('unauthenticated → only free categories in counts', async () => {
+  it('unauthenticated → all categories returned (including locked ones)', async () => {
     const res = await request(app).get('/api/briefs/category-counts');
     expect(res.status).toBe(200);
     const counts = res.body.data.counts;
     expect(counts[FREE_CAT]).toBe(1);
-    expect(counts[SILVER_CAT]).toBeUndefined();
-    expect(counts[GOLD_CAT]).toBeUndefined();
+    expect(counts[SILVER_CAT]).toBe(1);
+    expect(counts[GOLD_CAT]).toBe(1);
   });
 
-  it('free user → only free categories in counts', async () => {
+  it('free user → all categories returned (including locked ones)', async () => {
     const user = await createUser({ subscriptionTier: 'free' });
     const res  = await request(app)
       .get('/api/briefs/category-counts')
@@ -314,11 +319,11 @@ describe('GET /api/briefs/category-counts — tier access filtering', () => {
     expect(res.status).toBe(200);
     const counts = res.body.data.counts;
     expect(counts[FREE_CAT]).toBe(1);
-    expect(counts[SILVER_CAT]).toBeUndefined();
-    expect(counts[GOLD_CAT]).toBeUndefined();
+    expect(counts[SILVER_CAT]).toBe(1);
+    expect(counts[GOLD_CAT]).toBe(1);
   });
 
-  it('silver user → free + silver categories, not gold-only', async () => {
+  it('silver user → all categories returned', async () => {
     const user = await createUser({ subscriptionTier: 'silver' });
     const res  = await request(app)
       .get('/api/briefs/category-counts')
@@ -327,10 +332,10 @@ describe('GET /api/briefs/category-counts — tier access filtering', () => {
     const counts = res.body.data.counts;
     expect(counts[FREE_CAT]).toBe(1);
     expect(counts[SILVER_CAT]).toBe(1);
-    expect(counts[GOLD_CAT]).toBeUndefined();
+    expect(counts[GOLD_CAT]).toBe(1);
   });
 
-  it('gold user → all categories included in counts', async () => {
+  it('gold user → all categories returned', async () => {
     const user = await createUser({ subscriptionTier: 'gold' });
     const res  = await request(app)
       .get('/api/briefs/category-counts')
@@ -342,7 +347,7 @@ describe('GET /api/briefs/category-counts — tier access filtering', () => {
     expect(counts[GOLD_CAT]).toBe(1);
   });
 
-  it('active trial → same as silver (silver categories, not gold-only)', async () => {
+  it('active trial → all categories returned', async () => {
     const user = await createUser(activeTrial());
     const res  = await request(app)
       .get('/api/briefs/category-counts')
@@ -351,7 +356,7 @@ describe('GET /api/briefs/category-counts — tier access filtering', () => {
     const counts = res.body.data.counts;
     expect(counts[FREE_CAT]).toBe(1);
     expect(counts[SILVER_CAT]).toBe(1);
-    expect(counts[GOLD_CAT]).toBeUndefined();
+    expect(counts[GOLD_CAT]).toBe(1);
   });
 });
 

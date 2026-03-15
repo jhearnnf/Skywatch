@@ -39,17 +39,20 @@ router.get('/', optionalAuth, async (req, res) => {
 
     let briefsOut = briefs.map(b => b.toObject());
 
-    if (req.user && briefs.length > 0) {
-      const settings = await AppSettings.getSettings();
-      const tier = effectiveTier(req.user);
+    if (briefs.length > 0) {
+      const settings   = await AppSettings.getSettings();
+      const tier       = req.user ? effectiveTier(req.user) : 'guest';
       const accessible = getAccessibleCategories(tier, settings);
 
-      const briefIds = briefs.map(b => b._id);
-      const readRecords = await IntelligenceBriefRead.find({
-        userId: req.user._id,
-        intelBriefId: { $in: briefIds },
-      }).select('intelBriefId');
-      const readSet = new Set(readRecords.map(r => r.intelBriefId.toString()));
+      let readSet = new Set();
+      if (req.user) {
+        const briefIds   = briefs.map(b => b._id);
+        const readRecords = await IntelligenceBriefRead.find({
+          userId: req.user._id,
+          intelBriefId: { $in: briefIds },
+        }).select('intelBriefId');
+        readSet = new Set(readRecords.map(r => r.intelBriefId.toString()));
+      }
 
       briefsOut = briefsOut.map(b => ({
         ...b,
@@ -64,16 +67,11 @@ router.get('/', optionalAuth, async (req, res) => {
   }
 });
 
-// GET /api/briefs/category-counts — how many briefs exist per accessible category
-router.get('/category-counts', optionalAuth, async (req, res) => {
+// GET /api/briefs/category-counts — how many briefs exist per category (all categories, no tier filter)
+// Locking is a display concern handled on the frontend; counts are always visible.
+router.get('/category-counts', async (req, res) => {
   try {
-    const settings    = await AppSettings.getSettings();
-    const tier        = effectiveTier(req.user);
-    const accessible  = getAccessibleCategories(tier, settings); // null = gold (all)
-    const match       = accessible !== null ? { category: { $in: accessible } } : {};
-
     const rows = await IntelligenceBrief.aggregate([
-      { $match: match },
       { $group: { _id: '$category', count: { $sum: 1 } } },
     ]);
 
@@ -131,8 +129,8 @@ router.get('/unread-categories', optionalAuth, async (req, res) => {
     const settings   = await AppSettings.getSettings();
 
     if (!req.user) {
-      // Guests: only free-tier categories, all treated as unread
-      const accessible = getAccessibleCategories('free', settings) ?? [];
+      // Guests: only guest-tier categories, all treated as unread
+      const accessible = getAccessibleCategories('guest', settings) ?? [];
       const categories = briefsByCat
         .filter(c => accessible.includes(c._id))
         .map(c => ({ name: c._id, totalBriefs: c.total, unreadCount: c.total }))
@@ -175,22 +173,21 @@ router.get('/:id', optionalAuth, async (req, res) => {
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
     let readRecord = null;
-    let aircoinsEarned = 0;
-    let newTotalAircoins;
-    let newCycleAircoins;
-    let briefRankPromotion = null;
     let tierAmmo = 0;
 
-    if (req.user) {
+    // Category access check — applies to guests and authenticated users alike
+    {
       const settings = await AppSettings.getSettings();
-      const tier = effectiveTier(req.user);
-
-      // Category access check
+      const tier = req.user ? effectiveTier(req.user) : 'guest';
       const accessible = getAccessibleCategories(tier, settings);
       if (accessible !== null && !accessible.includes(brief.category)) {
         return res.status(403).json({ message: 'Upgrade your subscription to access this category.' });
       }
+    }
 
+    if (req.user) {
+      const settings = await AppSettings.getSettings();
+      const tier = effectiveTier(req.user);
       tierAmmo = getTierAmmo(tier, settings);
 
       readRecord = await IntelligenceBriefRead.findOne({
@@ -206,13 +203,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
           intelBriefId: brief._id,
           ammunitionRemaining: tierAmmo,
         });
-        aircoinsEarned = settings.aircoinsPerBriefRead ?? 5;
-        const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'brief_read', `Intel Brief Read: ${brief.title}`, brief._id);
-        newTotalAircoins  = coinResult.totalAircoins;
-        newCycleAircoins  = coinResult.cycleAircoins;
-        briefRankPromotion = coinResult.rankPromotion;
       } else if (readRecord.ammunitionRemaining === 0 && readRecord.ammoDepletedAt) {
-        // Ammo depleted — check if 24h have elapsed
         const elapsed = Date.now() - new Date(readRecord.ammoDepletedAt).getTime();
         if (elapsed >= AMMO_REGEN_MS) {
           readRecord = await IntelligenceBriefRead.findByIdAndUpdate(
@@ -222,7 +213,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
           );
         }
       } else if (readRecord.ammunitionRemaining === 0 && !readRecord.ammoDepletedAt) {
-        // Legacy record with zero ammo but no depletedAt — stamp it now
         const now = new Date();
         await IntelligenceBriefRead.findByIdAndUpdate(readRecord._id, { ammoDepletedAt: now });
         readRecord = Object.assign(readRecord.toObject(), { ammoDepletedAt: now });
@@ -230,7 +220,106 @@ router.get('/:id', optionalAuth, async (req, res) => {
     }
 
     const ammoMax = req.user ? tierAmmo : 0;
-    res.json({ status: 'success', data: { brief, readRecord, ammoMax, aircoinsEarned: aircoinsEarned ?? 0, newTotalAircoins, newCycleAircoins, rankPromotion: briefRankPromotion } });
+    res.json({ status: 'success', data: { brief, readRecord, ammoMax } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/briefs/:id/complete — award coins when user finishes reading a brief
+router.post('/:id/complete', protect, async (req, res) => {
+  try {
+    const brief = await IntelligenceBrief.findById(req.params.id);
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+
+    const settings = await AppSettings.getSettings();
+
+    // Idempotency: look up the read record to check if coins already awarded
+    let readRecord = await IntelligenceBriefRead.findOne({
+      userId: req.user._id,
+      intelBriefId: brief._id,
+    });
+
+    // If no read record exists the user never opened the brief — create one now
+    if (!readRecord) {
+      const tier   = effectiveTier(req.user);
+      const tierAmmo = getTierAmmo(tier, settings);
+      readRecord = await IntelligenceBriefRead.create({
+        userId: req.user._id,
+        intelBriefId: brief._id,
+        ammunitionRemaining: tierAmmo,
+      });
+    }
+
+    let aircoinsEarned   = 0;
+    let dailyCoinsEarned = 0;
+    let newTotalAircoins;
+    let newCycleAircoins;
+    let rankPromotion    = null;
+    let updatedLoginStreak = req.user.loginStreak ?? 0;
+
+    if (!readRecord.coinsAwarded) {
+      // ── Brief-read coins (first completion only) ──────────────────────
+      aircoinsEarned = settings.aircoinsPerBriefRead ?? 5;
+      const briefResult = await awardCoins(
+        req.user._id, aircoinsEarned, 'brief_read',
+        `Intel Brief Read: ${brief.title}`, brief._id
+      );
+      newTotalAircoins = briefResult.totalAircoins;
+      newCycleAircoins = briefResult.cycleAircoins;
+      if (briefResult.rankPromotion) rankPromotion = briefResult.rankPromotion;
+
+      // ── Daily streak reward (first completion of the calendar day) ────
+      const todayStr  = new Date().toDateString();
+      const lastStr   = req.user.lastStreakDate
+        ? new Date(req.user.lastStreakDate).toDateString()
+        : null;
+      const yesterStr = new Date(Date.now() - 86400000).toDateString();
+
+      if (lastStr !== todayStr) {
+        const currentStreak = req.user.loginStreak ?? 0;
+        const newStreak     = (lastStr === yesterStr) ? currentStreak + 1 : 1;
+        const base          = settings.aircoinsFirstLogin  ?? 5;
+        const bonus         = settings.aircoinsStreakBonus ?? 2;
+        dailyCoinsEarned    = base + (newStreak >= 2 ? bonus : 0);
+        const dailyLabel    = newStreak >= 2
+          ? `Daily Brief — ${newStreak}-day streak!`
+          : 'Daily Brief';
+        const dailyResult   = await awardCoins(
+          req.user._id, dailyCoinsEarned, 'daily_brief', dailyLabel
+        );
+        newTotalAircoins    = dailyResult.totalAircoins;
+        newCycleAircoins    = dailyResult.cycleAircoins;
+        if (dailyResult.rankPromotion) rankPromotion = dailyResult.rankPromotion;
+        updatedLoginStreak  = newStreak;
+        await User.findByIdAndUpdate(req.user._id, {
+          loginStreak: newStreak,
+          lastStreakDate: new Date(),
+        });
+      }
+
+      // Mark coins as awarded so re-completing the brief gives nothing
+      await IntelligenceBriefRead.findByIdAndUpdate(readRecord._id, { coinsAwarded: true });
+
+      // Stamp today so the Home page "mission complete" banner updates
+      // (This is a server-side complement to the client-side localStorage flag)
+    }
+
+    // Re-fetch lastStreakDate so the client can derive missionDone without localStorage
+    const freshUser = await User.findById(req.user._id).select('lastStreakDate');
+
+    res.json({
+      status: 'success',
+      data: {
+        aircoinsEarned,
+        dailyCoinsEarned,
+        loginStreak:     updatedLoginStreak,
+        lastStreakDate:  freshUser?.lastStreakDate ?? null,
+        newTotalAircoins,
+        newCycleAircoins,
+        rankPromotion,
+      },
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

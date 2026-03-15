@@ -227,3 +227,43 @@ describe('Play page — Intel Quiz section', () => {
     await waitFor(() => screen.getByText(/view game history/i))
   })
 })
+
+describe('Play page — Intel Quiz passed state', () => {
+  function renderWithPassedIds(briefs, passedIds = []) {
+    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '' })
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('completed-brief-ids')) {
+        return Promise.resolve({ json: async () => ({ data: { ids: passedIds } }) })
+      }
+      return Promise.resolve({ json: async () => ({ data: { briefs } }) })
+    })
+    render(<Play />)
+  }
+
+  it('shows "✓ Passed" badge on a brief whose quiz has been passed', async () => {
+    const briefs = [{ _id: 'b1', title: 'Typhoon FGR4', category: 'Aircrafts' }]
+    renderWithPassedIds(briefs, ['b1'])
+
+    await waitFor(() => expect(screen.getByText('✓ Passed')).toBeDefined())
+  })
+
+  it('does not show "✓ Passed" badge on a brief whose quiz has not been passed', async () => {
+    const briefs = [{ _id: 'b1', title: 'Typhoon FGR4', category: 'Aircrafts' }]
+    renderWithPassedIds(briefs, [])
+
+    await waitFor(() => screen.getByText('Typhoon FGR4'))
+    expect(screen.queryByText('✓ Passed')).toBeNull()
+  })
+
+  it('shows "✓ Passed" only on the passed brief when list is mixed', async () => {
+    const briefs = [
+      { _id: 'b1', title: 'Typhoon FGR4', category: 'Aircrafts' },
+      { _id: 'b2', title: 'RAF Lossiemouth', category: 'Bases' },
+    ]
+    renderWithPassedIds(briefs, ['b1'])
+
+    await waitFor(() => expect(screen.getByText('✓ Passed')).toBeDefined())
+    // Only one badge — b2 has not been passed
+    expect(screen.getAllByText('✓ Passed').length).toBe(1)
+  })
+})

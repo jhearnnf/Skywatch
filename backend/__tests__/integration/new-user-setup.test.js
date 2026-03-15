@@ -49,13 +49,13 @@ describe('New user — registration response', () => {
     expect(res.body.data.isNew).toBe(true);
   });
 
-  it('awards login aircoins on registration', async () => {
+  it('awards zero login aircoins on registration (coins come from first brief read)', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({ email: 'coins@test.com', password: 'Password123' });
 
     expect(res.status).toBe(201);
-    expect(res.body.data.loginAircoinsEarned).toBeGreaterThan(0);
+    expect(res.body.data.loginAircoinsEarned).toBe(0);
   });
 
   it('new user starts with zero totalAircoins before login bonus', async () => {
@@ -145,18 +145,14 @@ describe('New user — aircoins', () => {
     expect(count).toBe(0);
   });
 
-  it('registration creates exactly one AircoinLog entry (login bonus)', async () => {
+  it('registration creates no AircoinLog entry (coins only come from first brief read)', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({ email: 'firstlogin@test.com', password: 'Password123' });
 
     const userId = res.body.data.user._id;
     const count  = await AircoinLog.countDocuments({ userId });
-    expect(count).toBe(1);
-
-    const log = await AircoinLog.findOne({ userId });
-    expect(log.reason).toBe('login');
-    expect(log.amount).toBeGreaterThan(0);
+    expect(count).toBe(0);
   });
 });
 
@@ -222,6 +218,27 @@ describe('Admin reset-stats endpoint', () => {
     expect(count).toBe(0);
   });
 
+  it('resets loginStreak and lastStreakDate when intelBriefsRead is reset', async () => {
+    await User.findByIdAndUpdate(target._id, { loginStreak: 7, lastStreakDate: new Date() });
+
+    const res = await reset(['intelBriefsRead']);
+    expect(res.status).toBe(200);
+
+    const updated = await User.findById(target._id);
+    expect(updated.loginStreak).toBe(0);
+    expect(updated.lastStreakDate).toBeNull();
+  });
+
+  it('does NOT reset streak when only aircoins are reset', async () => {
+    await User.findByIdAndUpdate(target._id, { loginStreak: 5, lastStreakDate: new Date() });
+
+    const res = await reset(['aircoins']);
+    expect(res.status).toBe(200);
+
+    const updated = await User.findById(target._id);
+    expect(updated.loginStreak).toBe(5);
+  });
+
   it('resets tutorials — sets tutorialsResetAt to a recent timestamp', async () => {
     const before = new Date();
     const res    = await reset(['tutorials']);
@@ -253,6 +270,8 @@ describe('Admin reset-stats endpoint', () => {
     const updated   = await User.findById(target._id);
     expect(updated.totalAircoins).toBe(0);
     expect(updated.cycleAircoins).toBe(0);
+    expect(updated.loginStreak).toBe(0);
+    expect(updated.lastStreakDate).toBeNull();
     expect(updated.tutorialsResetAt).not.toBeNull();
 
     expect(await AircoinLog.countDocuments({ userId: target._id })).toBe(0);

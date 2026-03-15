@@ -102,7 +102,9 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
 }
 
 // ── Completion screen ─────────────────────────────────────────────────────
-function CompletionScreen({ brief, onQuiz, onBack }) {
+function CompletionScreen({ brief, onQuiz, onBack, user }) {
+  const [quizHovered, setQuizHovered] = useState(false)
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -137,12 +139,50 @@ function CompletionScreen({ brief, onQuiz, onBack }) {
       )}
 
       <div className="space-y-3">
-        <button
-          onClick={onQuiz}
-          className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-lg transition-colors shadow-lg shadow-brand-200"
-        >
-          🎮 Take the Quiz → Earn Aircoins
-        </button>
+        {user ? (
+          <button
+            onClick={onQuiz}
+            className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-lg transition-colors shadow-lg shadow-brand-200"
+          >
+            🎮 Take the Quiz → Earn Aircoins
+          </button>
+        ) : (
+          <>
+            <Link
+              to="/login"
+              onClick={() => sessionStorage.setItem('sw_pending_brief', brief._id)}
+              onMouseEnter={() => setQuizHovered(true)}
+              onMouseLeave={() => setQuizHovered(false)}
+              className="block w-full py-4 text-center bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-lg transition-colors shadow-lg shadow-brand-200"
+            >
+              {quizHovered ? '🔒 Sign In to Play' : '🎮 Play Knowledge Check'}
+            </Link>
+
+            {/* Secondary sign-up prompt */}
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-left">
+              <p className="text-sm font-bold text-amber-800 mb-1">💾 Save your progress</p>
+              <p className="text-xs text-amber-700 mb-3">
+                Create a free account to test yourself on this brief, play intel games, earn Aircoins, and track your reading streak.
+              </p>
+              <div className="flex gap-2">
+                <Link
+                  to="/login"
+                  onClick={() => sessionStorage.setItem('sw_pending_brief', brief._id)}
+                  className="flex-1 py-2 text-center text-sm font-bold bg-brand-600 hover:bg-brand-700 text-white rounded-xl transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  to="/login?register=1"
+                  onClick={() => sessionStorage.setItem('sw_pending_brief', brief._id)}
+                  className="flex-1 py-2 text-center text-sm font-bold border border-amber-300 text-amber-800 hover:bg-amber-100 rounded-xl transition-colors"
+                >
+                  Create Account
+                </Link>
+              </div>
+            </div>
+          </>
+        )}
         <button
           onClick={onBack}
           className="w-full py-3 border border-slate-200 text-slate-600 font-semibold rounded-2xl hover:bg-slate-50 transition-colors"
@@ -158,7 +198,7 @@ function CompletionScreen({ brief, onQuiz, onBack }) {
 export default function BriefReader() {
   const { briefId }    = useParams()
   const navigate       = useNavigate()
-  const { user, API }  = useAuth()
+  const { user, API, awardAircoins, setUser } = useAuth()
   const { start }      = useAppTutorial()
   const [brief, setBrief]       = useState(null)
   const [loading, setLoading]   = useState(true)
@@ -167,7 +207,14 @@ export default function BriefReader() {
     const saved = sessionStorage.getItem(`sw_brief_sec_${briefId}`)
     return saved ? parseInt(saved, 10) : 0
   })
-  const [done, setDone]          = useState(false)
+  const [done, setDone]          = useState(() => {
+    const justCompleted = sessionStorage.getItem('sw_brief_just_completed')
+    if (justCompleted === briefId) {
+      sessionStorage.removeItem('sw_brief_just_completed')
+      return true
+    }
+    return false
+  })
   const [activeKw, setActiveKw]  = useState(null)
   const [learnedKws, setLearned] = useState(new Set())
   const markingRef               = useRef(false)
@@ -186,6 +233,33 @@ export default function BriefReader() {
       .finally(() => setLoading(false))
   }, [briefId, API])
 
+  // Fire coin notification if we arrived here after a post-login brief completion
+  useEffect(() => {
+    const raw = sessionStorage.getItem('sw_brief_coins')
+    if (!raw) return
+    sessionStorage.removeItem('sw_brief_coins')
+    try {
+      const d           = JSON.parse(raw)
+      const briefCoins  = d.aircoinsEarned  ?? 0
+      const dailyCoins  = d.dailyCoinsEarned ?? 0
+      const totalEarned = briefCoins + dailyCoins
+      if (totalEarned > 0) {
+        awardAircoins(totalEarned, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
+          cycleAfter:    d.newCycleAircoins,
+          totalAfter:    d.newTotalAircoins,
+          rankPromotion: d.rankPromotion ?? null,
+        })
+      }
+      if (d.loginStreak !== undefined) {
+        setUser(u => u ? {
+          ...u,
+          loginStreak:    d.loginStreak,
+          lastStreakDate: d.lastStreakDate ?? u.lastStreakDate,
+        } : u)
+      }
+    } catch { /* malformed — skip */ }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Tutorial on first visit
   useEffect(() => {
     if (!loading && brief && !briefOpenedRef.current) {
@@ -203,9 +277,6 @@ export default function BriefReader() {
   const markRead = useCallback(() => {
     if (markingRef.current || !user) return
     markingRef.current = true
-    // The GET /api/briefs/:id with credentials already creates the IntelligenceBriefRead record.
-    // Stamp today's date so Home page can show "mission complete" (user-scoped).
-    if (user?._id) localStorage.setItem(`sw_read_today_${user._id}`, new Date().toDateString())
   }, [briefId, user])
 
   const handleContinue = () => {
@@ -213,6 +284,34 @@ export default function BriefReader() {
       markRead()
       sessionStorage.removeItem(`sw_brief_sec_${briefId}`)
       setDone(true)
+      // Award coins now that the user has finished reading
+      if (user) {
+        fetch(`${API}/api/briefs/${briefId}/complete`, {
+          method: 'POST',
+          credentials: 'include',
+        })
+          .then(r => r.json())
+          .then(data => {
+            const briefCoins = data?.data?.aircoinsEarned ?? 0
+            const dailyCoins = data?.data?.dailyCoinsEarned ?? 0
+            const totalEarned = briefCoins + dailyCoins
+            if (totalEarned > 0) {
+              awardAircoins(totalEarned, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
+                cycleAfter:    data.data.newCycleAircoins,
+                totalAfter:    data.data.newTotalAircoins,
+                rankPromotion: data.data.rankPromotion ?? null,
+              })
+            }
+            if (data?.data?.loginStreak !== undefined) {
+              setUser(u => u ? {
+                ...u,
+                loginStreak:    data.data.loginStreak,
+                lastStreakDate: data.data.lastStreakDate ?? u.lastStreakDate,
+              } : u)
+            }
+          })
+          .catch(() => {})
+      }
     } else {
       setSection(i => {
         const next = i + 1
@@ -307,6 +406,7 @@ export default function BriefReader() {
       {done ? (
         <CompletionScreen
           brief={brief}
+          user={user}
           onQuiz={() => navigate(`/quiz/${briefId}`)}
           onBack={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
         />

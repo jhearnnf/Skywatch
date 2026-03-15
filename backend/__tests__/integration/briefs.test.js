@@ -86,6 +86,120 @@ describe('GET /api/briefs', () => {
   });
 });
 
+// ── GET /api/briefs — isLocked per tier ───────────────────────────────────
+describe('GET /api/briefs — isLocked by subscription tier', () => {
+  beforeEach(async () => {
+    await createSettings({
+      guestCategories:  ['News'],
+      freeCategories:   ['News'],
+      silverCategories: ['News', 'Aircrafts'],
+    });
+  });
+
+  // ── Gold tier ──────────────────────────────────────────────────────────
+  it('gold-tier user: isLocked=false for every category', async () => {
+    const user   = await createUser({ subscriptionTier: 'gold' });
+    const cookie = authCookie(user._id);
+    await createBrief({ category: 'News' });
+    await createBrief({ category: 'Aircrafts' });
+    await createBrief({ category: 'Ranks' });
+
+    const res = await request(app).get('/api/briefs').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    res.body.data.briefs.forEach(b => {
+      expect(b.isLocked).toBe(false);
+    });
+  });
+
+  it('gold-tier user: accessible category (News) is not locked', async () => {
+    const user   = await createUser({ subscriptionTier: 'gold' });
+    const cookie = authCookie(user._id);
+    await createBrief({ category: 'News' });
+
+    const res = await request(app).get('/api/briefs').set('Cookie', cookie);
+
+    expect(res.body.data.briefs[0].isLocked).toBe(false);
+  });
+
+  it('gold-tier user: typically-locked category (Ranks) is not locked', async () => {
+    const user   = await createUser({ subscriptionTier: 'gold' });
+    const cookie = authCookie(user._id);
+    await createBrief({ category: 'Ranks' });
+
+    const res = await request(app).get('/api/briefs').set('Cookie', cookie);
+
+    expect(res.body.data.briefs[0].isLocked).toBe(false);
+  });
+
+  // ── Silver tier ────────────────────────────────────────────────────────
+  it('silver-tier user: isLocked=false for categories in silverCategories', async () => {
+    const user   = await createUser({ subscriptionTier: 'silver' });
+    const cookie = authCookie(user._id);
+    await createBrief({ category: 'Aircrafts' });
+
+    const res = await request(app).get('/api/briefs').set('Cookie', cookie);
+
+    expect(res.body.data.briefs[0].isLocked).toBe(false);
+  });
+
+  it('silver-tier user: isLocked=true for categories outside silverCategories', async () => {
+    const user   = await createUser({ subscriptionTier: 'silver' });
+    const cookie = authCookie(user._id);
+    await createBrief({ category: 'Ranks' }); // not in silverCategories
+
+    const res = await request(app).get('/api/briefs').set('Cookie', cookie);
+
+    expect(res.body.data.briefs[0].isLocked).toBe(true);
+  });
+
+  // ── Free tier ──────────────────────────────────────────────────────────
+  it('free-tier user: isLocked=false for categories in freeCategories', async () => {
+    const user   = await createUser({ subscriptionTier: 'free' });
+    const cookie = authCookie(user._id);
+    await createBrief({ category: 'News' });
+
+    const res = await request(app).get('/api/briefs').set('Cookie', cookie);
+
+    expect(res.body.data.briefs[0].isLocked).toBe(false);
+  });
+
+  it('free-tier user: isLocked=true for categories outside freeCategories', async () => {
+    const user   = await createUser({ subscriptionTier: 'free' });
+    const cookie = authCookie(user._id);
+    await createBrief({ category: 'Aircrafts' }); // not in freeCategories
+
+    const res = await request(app).get('/api/briefs').set('Cookie', cookie);
+
+    expect(res.body.data.briefs[0].isLocked).toBe(true);
+  });
+
+  // ── Guest (unauthenticated) ────────────────────────────────────────────
+  it('guest (no cookie): isLocked=false for categories in guestCategories', async () => {
+    await createBrief({ category: 'News' });
+
+    const res = await request(app).get('/api/briefs');
+
+    expect(res.body.data.briefs[0].isLocked).toBe(false);
+  });
+
+  it('guest (no cookie): isLocked=true for categories outside guestCategories', async () => {
+    await createBrief({ category: 'Aircrafts' });
+
+    const res = await request(app).get('/api/briefs');
+
+    expect(res.body.data.briefs[0].isLocked).toBe(true);
+  });
+
+  it('unauthenticated request does not expose isRead on any brief', async () => {
+    await createBrief({ category: 'News' });
+
+    const res = await request(app).get('/api/briefs');
+
+    expect(res.body.data.briefs[0].isRead).toBe(false);
+  });
+});
+
 // ── GET /api/briefs/:id ────────────────────────────────────────────────────
 describe('GET /api/briefs/:id', () => {
   it('returns a single brief by id', async () => {
@@ -112,19 +226,24 @@ describe('GET /api/briefs/:id', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.readRecord).not.toBeNull();
-    expect(res.body.data.aircoinsEarned).toBeGreaterThan(0); // coins awarded on first read
+    // Coins are NOT awarded on open — only on complete
+    expect(res.body.data.aircoinsEarned).toBeUndefined();
+    expect(res.body.data.dailyCoinsEarned).toBeUndefined();
   });
 
-  it('does not award coins on repeated fetches of the same brief', async () => {
+  it('does not award coins on repeated fetches — coins are deferred to /complete', async () => {
     const user   = await createUser();
     const brief  = await createBrief({ category: 'News' });
     const cookie = authCookie(user._id);
 
-    await openBrief(brief._id, cookie); // first visit — coins awarded
-    const res = await openBrief(brief._id, cookie); // second visit
+    const res1 = await openBrief(brief._id, cookie);
+    const res2 = await openBrief(brief._id, cookie);
 
-    expect(res.status).toBe(200);
-    expect(res.body.data.aircoinsEarned).toBe(0);
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+    // Neither response contains coin data
+    expect(res1.body.data.aircoinsEarned).toBeUndefined();
+    expect(res2.body.data.aircoinsEarned).toBeUndefined();
   });
 });
 
@@ -139,6 +258,91 @@ describe('GET /api/briefs/category-counts', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.counts).toBeDefined();
+  });
+
+  it('is a public endpoint — no cookie required', async () => {
+    await createBrief({ category: 'News' });
+    const res = await request(app).get('/api/briefs/category-counts');
+    expect(res.status).toBe(200);
+  });
+
+  it('returns counts for ALL categories regardless of tier — including locked ones', async () => {
+    // guestCategories = ['News'] by default — Aircrafts is locked for guests
+    await createBrief({ category: 'News' });
+    await createBrief({ category: 'Aircrafts' });
+
+    const res = await request(app).get('/api/briefs/category-counts');
+
+    expect(res.status).toBe(200);
+    const { counts } = res.body.data;
+    // Both categories must be present regardless of guest tier
+    expect(counts.News).toBe(1);
+    expect(counts.Aircrafts).toBe(1);
+  });
+
+  it('returns correct counts for multiple briefs per category', async () => {
+    await createBrief({ category: 'News' });
+    await createBrief({ category: 'News' });
+    await createBrief({ category: 'Ranks' });
+
+    const res = await request(app).get('/api/briefs/category-counts');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.counts.News).toBe(2);
+    expect(res.body.data.counts.Ranks).toBe(1);
+  });
+});
+
+// ── Guest category access (GET /api/briefs/:id) ───────────────────────────
+describe('GET /api/briefs/:id — guest category restriction', () => {
+  beforeEach(async () => {
+    // Ensure settings with guestCategories = ['News'] only
+    await createSettings({ guestCategories: ['News'] });
+  });
+
+  it('guest can read a brief in an accessible (guest) category', async () => {
+    const brief = await createBrief({ category: 'News' });
+    const res   = await request(app).get(`/api/briefs/${brief._id}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('guest is blocked (403) from reading a brief in a locked category', async () => {
+    const brief = await createBrief({ category: 'Aircrafts' });
+    const res   = await request(app).get(`/api/briefs/${brief._id}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('authenticated free-tier user can read a News brief', async () => {
+    const user   = await createUser({ subscriptionTier: 'free' });
+    const brief  = await createBrief({ category: 'News' });
+    const cookie = authCookie(user._id);
+
+    await createSettings({ freeCategories: ['News'], guestCategories: ['News'] });
+    const res = await request(app).get(`/api/briefs/${brief._id}`).set('Cookie', cookie);
+    expect(res.status).toBe(200);
+  });
+});
+
+// ── GET /api/briefs — guest isLocked flags ────────────────────────────────
+describe('GET /api/briefs — guest isLocked', () => {
+  beforeEach(async () => {
+    await createSettings({ guestCategories: ['News'] });
+  });
+
+  it('marks isLocked=false for briefs in guest-accessible categories', async () => {
+    await createBrief({ category: 'News' });
+    const res = await request(app).get('/api/briefs');
+    expect(res.status).toBe(200);
+    const brief = res.body.data.briefs.find(b => b.category === 'News');
+    expect(brief.isLocked).toBe(false);
+  });
+
+  it('marks isLocked=true for briefs in locked categories', async () => {
+    await createBrief({ category: 'Aircrafts' });
+    const res = await request(app).get('/api/briefs');
+    expect(res.status).toBe(200);
+    const brief = res.body.data.briefs.find(b => b.category === 'Aircrafts');
+    expect(brief.isLocked).toBe(true);
   });
 });
 

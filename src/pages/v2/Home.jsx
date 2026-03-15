@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
+import { useAppSettings } from '../../context/AppSettingsContext'
+import { isCategoryLocked } from '../../utils/subscription'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import { CATEGORIES, CATEGORY_ICONS, MOCK_LEVELS } from '../../data/mockData'
 
@@ -42,10 +44,50 @@ function XPRing({ pct = 0, level = 1, size = 72 }) {
 }
 
 // Category card
-function CategoryCard({ category, progress = 0, total = 0, done = 0, index = 0 }) {
-  const icon = CATEGORY_ICONS[category] ?? '📄'
-  const pct  = total > 0 ? Math.round((done / total) * 100) : 0
-  const complete = pct === 100
+function CategoryCard({ category, total = 0, done = 0, index = 0, locked = false }) {
+  const icon     = CATEGORY_ICONS[category] ?? '📄'
+  const pct      = total > 0 ? Math.round((done / total) * 100) : 0
+  const complete = !locked && pct === 100
+
+  const inner = (
+    <>
+      {/* Icon + label row */}
+      <div className="flex items-start justify-between">
+        <span className={`text-3xl transition-transform ${!locked ? 'group-hover:scale-110' : ''}`}>{icon}</span>
+        {locked
+          ? <span className="text-xs bg-slate-200 text-slate-500 rounded-full px-1.5 py-0.5 font-bold leading-none">🔒</span>
+          : complete && <span className="text-emerald-600 text-xs font-bold bg-emerald-100 px-2 py-0.5 rounded-full">✓ Done</span>
+        }
+      </div>
+
+      <div>
+        <p className="font-bold text-slate-800 text-sm">{category}</p>
+        <p className="text-xs text-slate-400 mt-0.5">{total} briefs</p>
+      </div>
+
+      {/* Progress bar — only for logged-in users on unlocked categories */}
+      {!locked && total > 0 && (
+        <div>
+          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <motion.div
+              className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-brand-500'}`}
+              initial={{ width: 0 }}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.6, delay: index * 0.05 + 0.3 }}
+            />
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1">{done}/{total} read</p>
+        </div>
+      )}
+    </>
+  )
+
+  const baseClass = `flex flex-col gap-3 rounded-2xl p-4 border transition-all card-shadow card-intel`
+  const stateClass = locked
+    ? 'border-slate-200 bg-surface opacity-60 cursor-not-allowed'
+    : complete
+      ? 'border-emerald-300 bg-emerald-50/40 hover:card-shadow-hover hover:-translate-y-0.5'
+      : 'bg-surface border-slate-200 hover:border-brand-400 hover:card-shadow-hover hover:-translate-y-0.5'
 
   return (
     <motion.div
@@ -53,59 +95,33 @@ function CategoryCard({ category, progress = 0, total = 0, done = 0, index = 0 }
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
     >
-      <Link
-        to={`/learn/${encodeURIComponent(category)}`}
-        className={`flex flex-col gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 group
-          ${complete ? 'border-emerald-300 bg-emerald-50/40 card-intel' : 'bg-surface border-slate-200 hover:border-brand-400 card-intel'}`}
-      >
-        {/* Icon + label */}
-        <div className="flex items-start justify-between">
-          <span className="text-3xl group-hover:scale-110 transition-transform">{icon}</span>
-          {complete && (
-            <span className="text-emerald-600 text-xs font-bold bg-emerald-100 px-2 py-0.5 rounded-full">
-              ✓ Done
-            </span>
-          )}
-        </div>
-
-        <div>
-          <p className="font-bold text-slate-800 text-sm">{category}</p>
-          <p className="text-xs text-slate-400 mt-0.5">{total} briefs</p>
-        </div>
-
-        {/* Progress bar */}
-        {total > 0 && (
-          <div>
-            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <motion.div
-                className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-brand-500'}`}
-                initial={{ width: 0 }}
-                animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.6, delay: index * 0.05 + 0.3 }}
-              />
-            </div>
-            <p className="text-[10px] text-slate-400 mt-1">{done}/{total} read</p>
-          </div>
-        )}
-      </Link>
+      {locked ? (
+        <div className={`${baseClass} ${stateClass}`}>{inner}</div>
+      ) : (
+        <Link to={`/learn/${encodeURIComponent(category)}`} className={`group ${baseClass} ${stateClass}`}>
+          {inner}
+        </Link>
+      )}
     </motion.div>
   )
 }
 
 export default function Home() {
-  const { user, API } = useAuth()
-  const { start }     = useAppTutorial()
-  const navigate      = useNavigate()
-  const [stats,        setStats]        = useState({}) // { [category]: { total, done } }
+  const { user, API }  = useAuth()
+  const { start }      = useAppTutorial()
+  const { settings }   = useAppSettings()
+  const navigate       = useNavigate()
+  const [counts,       setCounts]       = useState({}) // { [category]: total } — all categories
+  const [stats,        setStats]        = useState({}) // { [category]: { total, done } } — logged-in only
   const [missionDone,  setMissionDone]  = useState(false)
   const [latestBriefs, setLatestBriefs] = useState([])
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
 
-  // Check user-scoped daily mission flag
+  // Mission done if the user completed a brief today (server-authoritative via lastStreakDate)
   useEffect(() => {
-    if (!user?._id) { setMissionDone(false); return }
-    setMissionDone(localStorage.getItem(`sw_read_today_${user._id}`) === new Date().toDateString())
-  }, [user?._id])
+    if (!user?.lastStreakDate) { setMissionDone(false); return }
+    setMissionDone(new Date(user.lastStreakDate).toDateString() === new Date().toDateString())
+  }, [user?.lastStreakDate])
 
   // Start tutorial on first visit
   useEffect(() => {
@@ -113,9 +129,17 @@ export default function Home() {
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch per-category read counts
+  // Fetch total brief counts per category — available to all users including guests
   useEffect(() => {
-    if (!user) return
+    fetch(`${API}/api/briefs/category-counts`)
+      .then(r => r.json())
+      .then(data => { if (data.status === 'success') setCounts(data.data?.counts ?? {}) })
+      .catch(() => {})
+  }, [API])
+
+  // Fetch per-category read progress — logged-in users only
+  useEffect(() => {
+    if (!user) { setStats({}); return }
     fetch(`${API}/api/briefs/category-stats`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => { if (data.status === 'success') setStats(data.data?.stats ?? {}) })
@@ -124,7 +148,7 @@ export default function Home() {
 
   // Fetch latest 4 briefs for "keep learning" strip
   useEffect(() => {
-    fetch(`${API}/api/briefs?limit=4`)
+    fetch(`${API}/api/briefs?limit=4`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => setLatestBriefs(data.data?.briefs ?? []))
       .catch(() => {})
@@ -226,34 +250,56 @@ export default function Home() {
             <Link to="/learn" className="text-xs font-semibold text-brand-600 hover:text-brand-700">See all →</Link>
           </div>
           <div className="space-y-2">
-            {latestBriefs.map((brief, i) => (
-              <motion.div
-                key={brief._id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.06 }}
-              >
-                <Link
-                  to={`/brief/${brief._id}`}
-                  className={`flex items-center gap-3 rounded-2xl px-4 py-3 border transition-all card-shadow group hover:-translate-y-0.5
-                    ${brief.isRead
-                      ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300 card-intel'
-                      : 'bg-surface border-slate-200 hover:border-brand-400 card-intel'}`}
-                >
+            {latestBriefs.map((brief, i) => {
+              const locked = brief.isLocked
+
+              const inner = (
+                <>
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg
-                    ${brief.isRead ? 'bg-emerald-100/80' : 'bg-brand-100'}`}>
-                    {brief.isRead ? '✓' : (CATEGORY_ICONS[brief.category] ?? '📄')}
+                    ${locked ? 'bg-slate-100' : brief.isRead ? 'bg-emerald-100/80' : 'bg-brand-100'}`}>
+                    {locked ? '🔒' : brief.isRead ? '✓' : (CATEGORY_ICONS[brief.category] ?? '📄')}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold truncate ${brief.isRead ? 'text-emerald-800' : 'text-slate-800'}`}>
+                    <p className={`text-sm font-bold truncate ${locked ? 'text-slate-400' : brief.isRead ? 'text-emerald-800' : 'text-slate-800'}`}>
                       {brief.title}
                     </p>
-                    <p className="text-xs text-slate-400 truncate">{brief.category}</p>
+                    <p className="text-xs text-slate-400 truncate">
+                      {locked ? 'Sign in to read' : brief.category}
+                    </p>
                   </div>
-                  <span className={`text-slate-300 group-hover:text-brand-400 transition-colors ${brief.isRead ? 'text-emerald-300' : ''}`}>→</span>
-                </Link>
-              </motion.div>
-            ))}
+                  {!locked && (
+                    <span className={`transition-colors ${brief.isRead ? 'text-emerald-300 group-hover:text-emerald-500' : 'text-slate-300 group-hover:text-brand-400'}`}>→</span>
+                  )}
+                </>
+              )
+
+              const baseClass = `flex items-center gap-3 rounded-2xl px-4 py-3 border transition-all card-shadow card-intel`
+
+              return (
+                <motion.div
+                  key={brief._id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.06 }}
+                >
+                  {locked ? (
+                    <div className={`${baseClass} opacity-60 cursor-not-allowed bg-surface border-slate-200`}>
+                      {inner}
+                    </div>
+                  ) : (
+                    <Link
+                      to={`/brief/${brief._id}`}
+                      className={`group ${baseClass} hover:-translate-y-0.5
+                        ${brief.isRead
+                          ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
+                          : 'bg-surface border-slate-200 hover:border-brand-400'}`}
+                    >
+                      {inner}
+                    </Link>
+                  )}
+                </motion.div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -271,9 +317,10 @@ export default function Home() {
           <CategoryCard
             key={cat}
             category={cat}
-            total={stats[cat]?.total ?? 0}
+            total={counts[cat] ?? stats[cat]?.total ?? 0}
             done={stats[cat]?.done ?? 0}
             index={i}
+            locked={isCategoryLocked(cat, user, settings)}
           />
         ))}
       </div>

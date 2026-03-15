@@ -382,9 +382,16 @@ router.patch('/self/subscription', async (req, res) => {
       gold:   9999,
     };
 
+    // When setting trial tier, activate the trial window so isTrialActive returns true
+    const tierUpdate = { subscriptionTier: tier };
+    if (tier === 'trial') {
+      tierUpdate.trialStartDate    = new Date();
+      tierUpdate.trialDurationDays = settings.trialDurationDays ?? 7;
+    }
+
     // Update tier and reset all read record ammo counts for this user
     const [user] = await Promise.all([
-      User.findByIdAndUpdate(req.user._id, { subscriptionTier: tier }, { new: true }).select('-password'),
+      User.findByIdAndUpdate(req.user._id, tierUpdate, { new: true }).select('-password').populate('rank'),
       IntelligenceBriefRead.updateMany({ userId: req.user._id }, { ammunitionRemaining: ammoMap[tier] }),
     ]);
 
@@ -428,7 +435,11 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
 
     if (fields.includes('aircoins'))        { userUpdates.totalAircoins = 0; userUpdates.cycleAircoins = 0; userUpdates.rank = null; ops.push(AircoinLog.deleteMany({ userId: req.params.id })); }
     if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); }
-    if (fields.includes('intelBriefsRead')) ops.push(IntelligenceBriefRead.deleteMany({ userId: req.params.id }));
+    if (fields.includes('intelBriefsRead')) {
+      userUpdates.loginStreak    = 0;
+      userUpdates.lastStreakDate = null;
+      ops.push(IntelligenceBriefRead.deleteMany({ userId: req.params.id }));
+    }
     if (fields.includes('tutorials'))       { userUpdates.tutorialsResetAt = new Date(); }
 
     if (Object.keys(userUpdates).length) ops.push(User.findByIdAndUpdate(req.params.id, userUpdates));

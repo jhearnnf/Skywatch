@@ -24,27 +24,10 @@ const sendToken = (user, statusCode, res, extras = {}) => {
   res.status(statusCode).json({ status: 'success', data: { user, ...extras } });
 };
 
-// Returns { earned, label } — earned is 0 if user already logged in today
+// Records a login timestamp. Coins are no longer awarded at login —
+// the daily streak reward is given on the first brief read of each day instead.
 const recordLogin = async (user) => {
-  const todayStr = new Date().toDateString();
-  const alreadyTodayLogin = user.logins.some(
-    l => new Date(l.timestamp).toDateString() === todayStr
-  );
-
   user.logins.push({ timestamp: new Date() });
-
-  if (!alreadyTodayLogin) {
-    const streak   = user.loginStreak; // virtual already includes today's pushed login
-    const settings = await AppSettings.getSettings();
-    const base     = settings.aircoinsFirstLogin  ?? 5;
-    const bonus    = settings.aircoinsStreakBonus ?? 2;
-    const earned   = base + (streak >= 2 ? bonus : 0);
-    const label    = streak >= 2 ? `Daily Login — ${streak}-day streak bonus` : 'Daily Login';
-    await user.save(); // save logins array first
-    const coinResult = await awardCoins(user._id, earned, 'login', label);
-    return { earned, label, rankPromotion: coinResult.rankPromotion };
-  }
-
   await user.save();
   return { earned: 0, label: '', rankPromotion: null };
 };

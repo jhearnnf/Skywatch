@@ -35,23 +35,32 @@ export default function TopBar() {
           {user ? (
             <>
               {/* Streak */}
-              <div className="flex items-center gap-1 bg-amber-50 rounded-full px-3 py-1 border border-amber-200">
-                <span className="text-base">🔥</span>
-                <span className="text-sm font-bold text-amber-700">{user.loginStreak ?? 0}</span>
-              </div>
-
-              {/* Aircoins */}
-              <div className="flex items-center gap-1 bg-sky-50 rounded-full px-3 py-1 border border-sky-200">
-                <span className="text-base">⭐</span>
-                <span className="text-sm font-bold text-sky-700">{user.totalAircoins ?? 0}</span>
-              </div>
-
-              {/* Avatar */}
               <button
                 onClick={() => navigate('/profile')}
-                className="w-8 h-8 rounded-full bg-brand-100 border-2 border-brand-200 flex items-center justify-center text-sm font-bold text-brand-700 hover:border-brand-400 transition-colors"
+                className="flex items-center gap-1 bg-amber-50 rounded-full px-3 py-1 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-colors outline-none focus:outline-none"
+                aria-label="View profile"
               >
-                {(user.displayName || user.email || 'U')[0].toUpperCase()}
+                <span className="text-base">🔥</span>
+                <span className="text-sm font-bold text-amber-700">{user.loginStreak ?? 0}</span>
+              </button>
+
+              {/* Aircoins */}
+              <button
+                onClick={() => navigate('/rankings')}
+                className="flex items-center gap-1 bg-sky-50 rounded-full px-3 py-1 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-colors outline-none focus:outline-none"
+                aria-label="View agent levels"
+              >
+                <span className="text-base">⭐</span>
+                <span className="text-sm font-bold text-sky-700">{user.totalAircoins ?? 0}</span>
+              </button>
+
+              {/* Avatar / Rank */}
+              <button
+                onClick={() => navigate('/rankings', { state: { tab: 'ranks' } })}
+                className="w-8 h-8 rounded-full bg-brand-100 border-2 border-brand-200 flex items-center justify-center text-sm font-bold text-brand-700 hover:border-brand-400 transition-colors outline-none focus:outline-none"
+                aria-label="View RAF ranks"
+              >
+                {user.rank?.rankAbbreviation ?? user.rank?.abbreviation ?? (user.displayName || user.email || 'U')[0].toUpperCase()}
               </button>
             </>
           ) : (

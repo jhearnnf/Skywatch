@@ -6,6 +6,7 @@ import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import { MOCK_LEVELS, MOCK_LEADERBOARD } from '../../data/mockData'
 import { getMasterVolume, setMasterVolume } from '../../utils/sound'
+import { displayTier } from '../../utils/subscription'
 
 function getLevelInfo(coins) {
   const levels = MOCK_LEVELS
@@ -107,8 +108,9 @@ export default function Profile() {
     finally { setDiffBusy(false) }
   }
 
-  const coins    = user?.cycleAircoins ?? 0
-  const levelInfo = getLevelInfo(coins)
+  const cycleCoins = user?.cycleAircoins ?? 0   // drives XP bar (resets per rank cycle)
+  const totalCoins = user?.totalAircoins ?? 0   // lifetime total — shown in stats grid
+  const levelInfo  = getLevelInfo(cycleCoins)
   const rankDisplay = user?.rank && typeof user.rank === 'object' && user.rank.rankName
     ? `${user.rank.rankName} (${user.rank.rankAbbreviation})`
     : 'Unranked'
@@ -197,7 +199,7 @@ export default function Profile() {
             <StatCard label="Briefs Read"  value={stats.brifsRead}           icon="📋" />
             <StatCard label="Games Played" value={stats.gamesPlayed}         icon="🎯" onClick={user ? () => navigate('/game-history') : undefined} />
             <StatCard label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓" />
-            <StatCard label="Aircoins"     value={coins.toLocaleString()}     icon="⭐" onClick={user ? () => navigate('/aircoin-history') : undefined} />
+            <StatCard label="Aircoins"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/aircoin-history') : undefined} />
           </div>
 
           {user && (
@@ -250,40 +252,39 @@ export default function Profile() {
               </div>
 
               {/* Subscription */}
-              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Subscription</p>
-                <Link
-                  to="/subscribe"
-                  className="flex items-center justify-between hover:bg-slate-50 rounded-xl px-1 py-1 -mx-1 transition-colors group"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">
-                      {(() => {
-                        const t = user.subscriptionTier ?? 'free'
-                        if (t === 'gold')   return '🥇'
-                        if (t === 'silver') return '🥈'
-                        if (t === 'trial')  return user.isTrialActive ? '⏳' : '🆓'
-                        return '🆓'
-                      })()}
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-700">Current Plan</p>
-                      <p className="text-xs text-slate-400 capitalize">
-                      {user.subscriptionTier === 'trial' && !user.isTrialActive
-                        ? 'trial expired'
-                        : (user.subscriptionTier ?? 'free')}
-                    </p>
-                    </div>
+              {(() => {
+                const tier        = user.subscriptionTier ?? 'free'
+                const isGold      = tier === 'gold'
+                const isSilver    = tier === 'silver'
+                const isActiveTrial = tier === 'trial' && user.isTrialActive
+                const hasPaidPerks  = isGold || isSilver || isActiveTrial
+                const icon = isGold ? '🥇' : (isSilver || isActiveTrial) ? '🥈' : '🆓'
+                const badgeClass = isGold
+                  ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-200'
+                  : (isSilver || isActiveTrial)
+                    ? 'bg-brand-100 text-brand-700 group-hover:bg-brand-200'
+                    : 'bg-slate-100 text-slate-600 group-hover:bg-brand-100 group-hover:text-brand-700'
+                return (
+                  <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Subscription</p>
+                    <Link
+                      to="/subscribe"
+                      className="flex items-center justify-between hover:bg-slate-50 rounded-xl px-1 py-1 -mx-1 transition-colors group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{icon}</span>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">Current Plan</p>
+                          <p className="text-xs text-slate-400">{displayTier(user)}</p>
+                        </div>
+                      </div>
+                      <span className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-colors ${badgeClass}`}>
+                        {hasPaidPerks ? 'Manage →' : 'Upgrade →'}
+                      </span>
+                    </Link>
                   </div>
-                  <span className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-colors
-                    ${user.subscriptionTier === 'gold'   ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-200' :
-                      user.subscriptionTier === 'silver' ? 'bg-brand-100 text-brand-700 group-hover:bg-brand-200' :
-                                                           'bg-slate-100 text-slate-600 group-hover:bg-brand-100 group-hover:text-brand-700'}`}
-                  >
-                    {user.subscriptionTier === 'gold' || user.subscriptionTier === 'silver' ? 'Manage →' : 'Upgrade →'}
-                  </span>
-                </Link>
-              </div>
+                )
+              })()}
 
               {/* Links */}
               <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow space-y-2">

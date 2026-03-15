@@ -49,7 +49,7 @@ export default function Learn() {
 
   // Per-category progress for logged-in user
   useEffect(() => {
-    if (!user) return
+    if (!user) { setProgress({}); return }
     fetch(`${API}/api/briefs/category-stats`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => { if (data?.data?.stats) setProgress(data.data.stats) })
@@ -151,8 +151,8 @@ export default function Learn() {
                       )}
                     </div>
                     <div className="text-right shrink-0">
-                      {total > 0 && !locked && (
-                        <p className={`text-xs font-bold mb-0.5 ${complete ? 'text-emerald-600' : 'text-brand-600'}`}>{total}</p>
+                      {total > 0 && (
+                        <p className={`text-xs font-bold mb-0.5 ${locked ? 'text-slate-400' : complete ? 'text-emerald-600' : 'text-brand-600'}`}>{total}</p>
                       )}
                       {!locked && (
                         <span className={`transition-colors block ${complete ? 'text-emerald-300 group-hover:text-emerald-500' : 'text-slate-300 group-hover:text-brand-400'}`}>→</span>

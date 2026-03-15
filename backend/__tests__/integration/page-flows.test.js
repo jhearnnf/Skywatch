@@ -105,7 +105,7 @@ describe('Category page API calls', () => {
     expect(res.body.data.briefs[0].title).toBe('Typhoon Deep Dive');
   });
 
-  it('clicking a brief — GET /api/briefs/:id tracks read and awards coins', async () => {
+  it('clicking a brief — GET /api/briefs/:id tracks read (no coins on open)', async () => {
     const user   = await createUser();
     const brief  = await createBrief({ category: 'News' });
     const cookie = authCookie(user._id);
@@ -116,7 +116,8 @@ describe('Category page API calls', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.brief._id).toBe(brief._id.toString());
-    expect(res.body.data.aircoinsEarned).toBeGreaterThan(0);
+    // Coins are deferred to POST /complete, not awarded on open
+    expect(res.body.data.aircoinsEarned).toBeUndefined();
   });
 
   it('read-briefs list reflects the brief just opened', async () => {

@@ -2,6 +2,12 @@
   box-sizing: border-box;
 }
 
+/* Suppress focus rings on mouse/touch clicks; preserve them for keyboard nav */
+*:focus:not(:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 :root {
   font-family: system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
   line-height: 1.5;

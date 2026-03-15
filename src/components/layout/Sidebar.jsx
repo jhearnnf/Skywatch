@@ -48,10 +48,10 @@ export default function Sidebar() {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
               ${isActive
-                ? 'bg-brand-100 text-brand-600 border border-brand-200'
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                ? 'bg-brand-100 text-brand-600 border-brand-200'
+                : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
               }`
             }
           >
@@ -64,7 +64,7 @@ export default function Sidebar() {
           <NavLink
             to="/admin"
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all mt-2
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all mt-2 outline-none focus:outline-none
               ${isActive
                 ? 'bg-slate-200 text-slate-800'
                 : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
