@@ -65,7 +65,7 @@ router.get('/stats', async (_req, res) => {
     const [
       totalUsers, freeUsers, trialUsers, silverUsers, goldUsers,
       easyPlayers, mediumPlayers,
-      totalBrifsRead,
+      totalBrifsRead, totalBrifsOpened, readTimeAgg,
       totalGamesPlayed, totalGamesCompleted, totalPerfectScores, totalGamesWon,
       easyLost, mediumLost,
       totalGamesAbandoned,
@@ -81,7 +81,9 @@ router.get('/stats', async (_req, res) => {
       User.countDocuments({ subscriptionTier: 'gold' }),
       User.countDocuments({ difficultySetting: 'easy' }),
       User.countDocuments({ difficultySetting: 'medium' }),
-      IntelligenceBriefRead.countDocuments(),
+      IntelligenceBriefRead.countDocuments({ completed: true }),
+      IntelligenceBriefRead.countDocuments({ completed: false }),
+      IntelligenceBriefRead.aggregate([{ $group: { _id: null, total: { $sum: '$timeSpentSeconds' } } }]),
       GameSessionQuizAttempt.countDocuments({ status: { $in: ['completed', 'abandoned'] } }),
       GameSessionQuizAttempt.countDocuments({ status: 'completed' }),
       GameSessionQuizAttempt.countDocuments({ status: 'completed', percentageCorrect: 100 }),
@@ -158,7 +160,7 @@ router.get('/stats', async (_req, res) => {
             totalSeconds: booTimeAgg[0]?.total ?? 0,
           },
         },
-        briefs: { totalBrifsRead },
+        briefs: { totalBrifsRead, totalBrifsOpened, totalReadSeconds: readTimeAgg[0]?.total ?? 0 },
         tutorials: {
           viewed:  tutorialAgg[0]?.viewed  ?? 0,
           skipped: tutorialAgg[0]?.skipped ?? 0,
@@ -244,7 +246,7 @@ async function enrichUsersWithStats(users) {
 
   const [briefCounts, quizCounts, booCounts] = await Promise.all([
     IntelligenceBriefRead.aggregate([
-      { $match: { userId: { $in: userIds } } },
+      { $match: { userId: { $in: userIds }, completed: true } },
       { $group: { _id: '$userId', count: { $sum: 1 } } },
     ]),
     GameSessionQuizAttempt.aggregate([
@@ -316,8 +318,23 @@ router.get('/users/search', async (req, res) => {
 // POST /api/admin/users/:id/ban
 router.post('/users/:id/ban', requireReason, async (req, res) => {
   try {
+    if (req.params.id === req.user._id.toString()) {
+      return res.status(400).json({ message: 'You cannot ban your own account.' });
+    }
     await User.findByIdAndUpdate(req.params.id, { isBanned: true });
     await AdminAction.create({ userId: req.user._id, actionType: 'ban_user', reason: req.body.reason, targetUserId: req.params.id });
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/users/:id/unban
+router.post('/users/:id/unban', requireReason, async (req, res) => {
+  try {
+    const updated = await User.findByIdAndUpdate(req.params.id, { isBanned: false }, { new: true });
+    if (!updated) return res.status(404).json({ message: 'User not found.' });
+    await AdminAction.create({ userId: req.user._id, actionType: 'unban_user', reason: req.body.reason, targetUserId: req.params.id });
     res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });

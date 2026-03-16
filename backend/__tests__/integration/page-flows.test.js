@@ -120,7 +120,7 @@ describe('Category page API calls', () => {
     expect(res.body.data.aircoinsEarned).toBeUndefined();
   });
 
-  it('read-briefs list reflects the brief just opened', async () => {
+  it('opening a brief puts it in startedIds (not briefIds) on read-briefs list', async () => {
     const user   = await createUser();
     const brief  = await createBrief({ category: 'Aircrafts' });
     const cookie = authCookie(user._id);
@@ -131,7 +131,9 @@ describe('Category page API calls', () => {
       .get('/api/users/me/read-briefs')
       .set('Cookie', cookie);
 
-    expect(res.body.data.briefIds).toContain(brief._id.toString());
+    // Not completed yet — in startedIds only
+    expect(res.body.data.startedIds).toContain(brief._id.toString());
+    expect(res.body.data.briefIds).not.toContain(brief._id.toString());
   });
 });
 

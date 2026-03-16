@@ -68,12 +68,12 @@ describe('GET /api/briefs', () => {
     expect(res.body.data.briefs.length).toBe(3);
   });
 
-  it('marks isRead=true for briefs the user has opened', async () => {
+  it('marks isStarted=true (not isRead) for briefs the user has opened but not completed', async () => {
     const user  = await createUser();
     const brief = await createBrief({ category: 'News' });
     const cookie = authCookie(user._id);
 
-    // Opening a brief (GET /:id) is what creates the read record
+    // Opening creates a read record but does NOT complete it
     await openBrief(brief._id, cookie);
 
     const res = await request(app)
@@ -82,7 +82,26 @@ describe('GET /api/briefs', () => {
 
     expect(res.status).toBe(200);
     const found = res.body.data.briefs.find(b => b._id === brief._id.toString());
+    expect(found?.isRead).toBe(false);
+    expect(found?.isStarted).toBe(true);
+  });
+
+  it('marks isRead=true after the user completes a brief', async () => {
+    const user  = await createUser();
+    const brief = await createBrief({ category: 'News' });
+    const cookie = authCookie(user._id);
+
+    await openBrief(brief._id, cookie);
+    await request(app).post(`/api/briefs/${brief._id}/complete`).set('Cookie', cookie);
+
+    const res = await request(app)
+      .get('/api/briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const found = res.body.data.briefs.find(b => b._id === brief._id.toString());
     expect(found?.isRead).toBe(true);
+    expect(found?.isStarted).toBe(false);
   });
 });
 
@@ -351,11 +370,12 @@ describe('GET /api/briefs/category-stats', () => {
   it('returns per-category totals and done counts for logged-in user', async () => {
     const user   = await createUser();
     const brief1 = await createBrief({ category: 'News' });
-    await createBrief({ category: 'News' }); // brief2 — not read
+    await createBrief({ category: 'News' }); // brief2 — not completed
     const cookie = authCookie(user._id);
 
-    // Reading is tracked by fetching the brief
+    // Open and complete brief1 — only completed briefs count as "done"
     await openBrief(brief1._id, cookie);
+    await request(app).post(`/api/briefs/${brief1._id}/complete`).set('Cookie', cookie);
 
     const res = await request(app)
       .get('/api/briefs/category-stats')

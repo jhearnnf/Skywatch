@@ -39,7 +39,8 @@ export default function LoginPage() {
   const [error,     setError]    = useState('')
   const [busy,      setBusy]     = useState(false)
   const [diffText,  setDiffText] = useState(DIFFICULTY_DEFAULTS)
-  const googleBtnRef = useRef(null)
+  const googleBtnRef  = useRef(null)
+  const pendingUserRef = useRef(null)  // holds new-user object until difficulty is chosen
 
   useEffect(() => {
     fetch(`${API}/api/users/settings`)
@@ -109,8 +110,8 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
+      if (data.data.isNew) { pendingUserRef.current = data.data.user; setView(VIEW.DIFFICULTY); return }
       setUser(data.data.user)
-      if (data.data.isNew) { setView(VIEW.DIFFICULTY); return }
       const briefId = await consumePendingBrief()
       navigate(briefId ? `/brief/${briefId}` : '/home')
     } catch {
@@ -132,8 +133,8 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
+      if (data.data.isNew) { pendingUserRef.current = data.data.user; setView(VIEW.DIFFICULTY); return }
       setUser(data.data.user)
-      if (data.data.isNew) { setView(VIEW.DIFFICULTY); return }
       const briefId = await consumePendingBrief()
       navigate(briefId ? `/brief/${briefId}` : '/home')
     } catch {
@@ -152,7 +153,8 @@ export default function LoginPage() {
         body: JSON.stringify({ difficulty }),
       })
       const data = await res.json()
-      if (data?.data?.user) setUser(data.data.user)
+      setUser(data?.data?.user ?? pendingUserRef.current)
+      pendingUserRef.current = null
     } catch { /* non-fatal */ }
     finally { setBusy(false) }
     const briefId = await consumePendingBrief()

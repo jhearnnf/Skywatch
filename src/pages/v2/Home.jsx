@@ -256,19 +256,19 @@ export default function Home() {
               const inner = (
                 <>
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg
-                    ${locked ? 'bg-slate-100' : brief.isRead ? 'bg-emerald-100/80' : 'bg-brand-100'}`}>
-                    {locked ? '🔒' : brief.isRead ? '✓' : (CATEGORY_ICONS[brief.category] ?? '📄')}
+                    ${locked ? 'bg-slate-100' : brief.isRead ? 'bg-emerald-100/80' : brief.isStarted ? 'bg-amber-100/80' : 'bg-brand-100'}`}>
+                    {locked ? '🔒' : brief.isRead ? '✓' : brief.isStarted ? '◑' : (CATEGORY_ICONS[brief.category] ?? '📄')}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold truncate ${locked ? 'text-slate-400' : brief.isRead ? 'text-emerald-800' : 'text-slate-800'}`}>
+                    <p className={`text-sm font-bold truncate ${locked ? 'text-slate-400' : brief.isRead ? 'text-emerald-800' : brief.isStarted ? 'text-amber-900' : 'text-slate-800'}`}>
                       {brief.title}
                     </p>
                     <p className="text-xs text-slate-400 truncate">
-                      {locked ? 'Sign in to read' : brief.category}
+                      {locked ? 'Sign in to read' : brief.isStarted && !brief.isRead ? 'In Progress' : brief.category}
                     </p>
                   </div>
                   {!locked && (
-                    <span className={`transition-colors ${brief.isRead ? 'text-emerald-300 group-hover:text-emerald-500' : 'text-slate-300 group-hover:text-brand-400'}`}>→</span>
+                    <span className={`transition-colors ${brief.isRead ? 'text-emerald-300 group-hover:text-emerald-500' : brief.isStarted ? 'text-amber-300 group-hover:text-amber-500' : 'text-slate-300 group-hover:text-brand-400'}`}>→</span>
                   )}
                 </>
               )
@@ -292,7 +292,9 @@ export default function Home() {
                       className={`group ${baseClass} hover:-translate-y-0.5
                         ${brief.isRead
                           ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
-                          : 'bg-surface border-slate-200 hover:border-brand-400'}`}
+                          : brief.isStarted
+                            ? 'bg-amber-50/60 border-amber-200 hover:border-amber-300'
+                            : 'bg-surface border-slate-200 hover:border-brand-400'}`}
                     >
                       {inner}
                     </Link>

@@ -86,7 +86,7 @@ function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, 
 }
 
 // ── Results screen ────────────────────────────────────────────────────────
-function ResultsScreen({ score, total, xpEarned, won, onRetry, onBack }) {
+function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack }) {
   const pct     = total > 0 ? Math.round((score / total) * 100) : 0
   const perfect = score === total
 
@@ -134,15 +134,43 @@ function ResultsScreen({ score, total, xpEarned, won, onRetry, onBack }) {
         </div>
       </div>
 
-      {/* XP earned */}
+      {/* Aircoins earned */}
       {xpEarned > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 font-bold px-4 py-2 rounded-full mb-6 text-sm"
+          className="mb-6"
         >
-          ⭐ +{xpEarned} Aircoins earned!
+          <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 font-bold px-4 py-2 rounded-full mb-3 text-sm">
+            ⭐ +{xpEarned} Aircoins earned!
+          </div>
+          {breakdown.length > 0 && (
+            <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 text-left text-sm space-y-1.5 max-w-xs mx-auto">
+              {breakdown.map((item, i) => (
+                <div key={i} className="flex items-center justify-between gap-4">
+                  <span className="text-amber-700 font-medium">{item.label}</span>
+                  <span className="text-amber-800 font-extrabold shrink-0">+{item.amount}</span>
+                </div>
+              ))}
+              <div className="border-t border-amber-200 pt-1.5 mt-1 flex items-center justify-between">
+                <span className="text-amber-800 font-bold">Total</span>
+                <span className="text-amber-900 font-extrabold">+{xpEarned}</span>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
+
+      {/* Already earned — repeat win */}
+      {won && !isFirstAttempt && xpEarned === 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-500 font-semibold px-4 py-2 rounded-full mb-6 text-sm"
+        >
+          ✓ Already earned Aircoins for this brief
         </motion.div>
       )}
 
@@ -187,6 +215,8 @@ export default function QuizFlow() {
   const [done, setDone]              = useState(false)
   const [won, setWon]                = useState(false)
   const [xpEarned, setXP]            = useState(0)
+  const [breakdown, setBreakdown]    = useState([])
+  const [isFirstAttempt, setFirstAttempt] = useState(true)
 
   const questionStartRef = useRef(Date.now())
   const finishedRef      = useRef(false)
@@ -289,6 +319,8 @@ export default function QuizFlow() {
           const earned = data.data?.aircoinsEarned ?? 0
           const didWin = data.data?.won ?? false
           setWon(didWin)
+          setBreakdown(data.data?.breakdown ?? [])
+          setFirstAttempt(data.data?.isFirstAttempt ?? true)
           playSound(didWin ? 'quiz_complete_win' : 'quiz_complete_lose')
           if (earned > 0) {
             setXP(earned)
@@ -375,6 +407,8 @@ export default function QuizFlow() {
           score={score}
           total={totalQs}
           xpEarned={xpEarned}
+          breakdown={breakdown}
+          isFirstAttempt={isFirstAttempt}
           won={won}
           onRetry={handleRetry}
           onBack={() => navigate(`/brief/${briefId}`)}

@@ -196,9 +196,9 @@ export default function Profile() {
 
           {/* Stats grid */}
           <div className={`grid grid-cols-2 gap-3 ${!user ? 'opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
-            <StatCard label="Briefs Read"  value={stats.brifsRead}           icon="📋" />
+            <StatCard label="Briefs Read"  value={stats.brifsRead}           icon="📋" onClick={user ? () => navigate('/intel-brief-history') : undefined} />
             <StatCard label="Games Played" value={stats.gamesPlayed}         icon="🎯" onClick={user ? () => navigate('/game-history') : undefined} />
-            <StatCard label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓" />
+            <StatCard label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />
             <StatCard label="Aircoins"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/aircoin-history') : undefined} />
           </div>
 

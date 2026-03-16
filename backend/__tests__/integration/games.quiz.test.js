@@ -210,6 +210,10 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     // Perfect score bonus should apply (settings.aircoins100Percent = 15)
     // 5 correct × 10 + 15 bonus = 65
     expect(res.body.data.aircoinsEarned).toBe(65);
+    expect(res.body.data.isFirstAttempt).toBe(true);
+    expect(res.body.data.breakdown).toHaveLength(2);
+    expect(res.body.data.breakdown[0]).toMatchObject({ label: expect.stringMatching(/5 correct/i), amount: 50 });
+    expect(res.body.data.breakdown[1]).toMatchObject({ label: expect.stringMatching(/perfect score bonus/i), amount: 15 });
   });
 
   it('does not award coins on a failing score (< 60%)', async () => {
@@ -296,6 +300,8 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(true);
     expect(res.body.data.aircoinsEarned).toBe(0); // no coins on repeat
+    expect(res.body.data.isFirstAttempt).toBe(false);
+    expect(res.body.data.breakdown).toEqual([]);
   });
 });
 

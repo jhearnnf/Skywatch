@@ -33,9 +33,9 @@ const BRIEF = { _id: 'b1', title: 'Typhoon FGR4', category: 'Aircrafts', keyword
 
 const LOGGED_IN_USER = { _id: 'u1' }
 
-function makeFetch({ briefIds = [], passedIds = [] } = {}) {
+function makeFetch({ briefIds = [], startedIds = [], passedIds = [] } = {}) {
   return vi.fn().mockImplementation((url) => {
-    if (url.includes('read-briefs'))          return Promise.resolve({ json: async () => ({ data: { briefIds } }) })
+    if (url.includes('read-briefs'))          return Promise.resolve({ json: async () => ({ data: { briefIds, startedIds } }) })
     if (url.includes('completed-brief-ids'))  return Promise.resolve({ json: async () => ({ data: { ids: passedIds } }) })
     return Promise.resolve({ json: async () => ({ data: { briefs: [BRIEF] } }) })
   })
@@ -44,13 +44,10 @@ function makeFetch({ briefIds = [], passedIds = [] } = {}) {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('CategoryBriefs — stale read/quiz state cleared on logout', () => {
-  beforeEach(() => {
-    global.fetch = makeFetch({ briefIds: ['b1'], passedIds: ['b1'] })
-  })
-
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('shows read and quiz-passed indicators when logged in', async () => {
+  it('shows read and quiz-passed indicators when brief is completed', async () => {
+    global.fetch = makeFetch({ briefIds: ['b1'], passedIds: ['b1'] })
     mockUseAuth.mockReturnValue({ user: LOGGED_IN_USER, API: '' })
     render(<CategoryBriefs />)
 
@@ -60,19 +57,51 @@ describe('CategoryBriefs — stale read/quiz state cleared on logout', () => {
     })
   })
 
-  it('clears read indicators when user logs out', async () => {
+  it('shows in-progress indicator when brief is opened but not completed', async () => {
+    global.fetch = makeFetch({ startedIds: ['b1'] })
+    mockUseAuth.mockReturnValue({ user: LOGGED_IN_USER, API: '' })
+    render(<CategoryBriefs />)
+
+    await waitFor(() => {
+      expect(screen.getByText('◑ In Progress')).toBeDefined()
+      expect(screen.queryByText('✓ Read')).toBeNull()
+    })
+  })
+
+  it('shows completed (green) styling, not in-progress, when brief is completed', async () => {
+    global.fetch = makeFetch({ briefIds: ['b1'] })
+    mockUseAuth.mockReturnValue({ user: LOGGED_IN_USER, API: '' })
+    render(<CategoryBriefs />)
+
+    await waitFor(() => expect(screen.getByText('✓ Read')).toBeDefined())
+    expect(screen.queryByText('◑ In Progress')).toBeNull()
+  })
+
+  it('shows no read or in-progress indicators for a brief not yet opened', async () => {
+    global.fetch = makeFetch()
+    mockUseAuth.mockReturnValue({ user: LOGGED_IN_USER, API: '' })
+    render(<CategoryBriefs />)
+
+    await waitFor(() => screen.getByText('Typhoon FGR4'))
+    expect(screen.queryByText('✓ Read')).toBeNull()
+    expect(screen.queryByText('◑ In Progress')).toBeNull()
+  })
+
+  it('clears read and in-progress indicators when user logs out', async () => {
+    global.fetch = makeFetch({ briefIds: ['b1'], startedIds: [] })
     mockUseAuth.mockReturnValue({ user: LOGGED_IN_USER, API: '' })
     const { rerender } = render(<CategoryBriefs />)
 
     await waitFor(() => expect(screen.getByText('✓ Read')).toBeDefined())
 
-    // Simulate logout — guest fetch returns no read/quiz data
+    // Simulate logout
     global.fetch = makeFetch()
     mockUseAuth.mockReturnValue({ user: null, API: '' })
     rerender(<CategoryBriefs />)
 
     await waitFor(() => {
       expect(screen.queryByText('✓ Read')).toBeNull()
+      expect(screen.queryByText('◑ In Progress')).toBeNull()
       expect(screen.queryByText('★ Quiz Passed')).toBeNull()
     })
   })

@@ -60,9 +60,14 @@ const MULTI_SECTION_BRIEF = {
   ],
 }
 
-function makeGetResponse(brief) {
-  return { ok: true, json: async () => ({ data: { brief, readRecord: null, ammoMax: 3 } }) }
+// readRecord: null  → guest (no auth, no record)
+// readRecord: { coinsAwarded: false } → logged-in, first read (shows "Collect Aircoins" button)
+// readRecord: { coinsAwarded: true }  → logged-in, already completed (shows plain "Complete Brief")
+function makeGetResponse(brief, readRecord = null) {
+  return { ok: true, json: async () => ({ data: { brief, readRecord, ammoMax: 3 } }) }
 }
+const FRESH_READ_RECORD     = { _id: 'rr1', coinsAwarded: false, completed: false }
+const COMPLETED_READ_RECORD = { _id: 'rr1', coinsAwarded: true,  completed: true  }
 
 function makeCompleteResponse(overrides = {}) {
   return {
@@ -138,9 +143,9 @@ describe('BriefReader — complete brief coin awarding', () => {
       .mockResolvedValueOnce(makeCompleteResponse())
 
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
 
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
 
     await waitFor(() => {
       const calls = global.fetch.mock.calls.map(c => [c[0], c[1]])
@@ -156,9 +161,9 @@ describe('BriefReader — complete brief coin awarding', () => {
       .mockResolvedValueOnce(makeCompleteResponse({ aircoinsEarned: 5, dailyCoinsEarned: 5 }))
 
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
 
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
 
     await waitFor(() => {
       expect(mockAwardAircoins).toHaveBeenCalledWith(
@@ -175,8 +180,8 @@ describe('BriefReader — complete brief coin awarding', () => {
       .mockResolvedValueOnce(makeCompleteResponse({ aircoinsEarned: 5, dailyCoinsEarned: 0 }))
 
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
 
     await waitFor(() => {
       expect(mockAwardAircoins).toHaveBeenCalledWith(
@@ -189,7 +194,7 @@ describe('BriefReader — complete brief coin awarding', () => {
 
   it('does NOT call awardAircoins when complete returns 0 coins (idempotent re-complete)', async () => {
     global.fetch = vi.fn()
-      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF, COMPLETED_READ_RECORD))
       .mockResolvedValueOnce(makeCompleteResponse({ aircoinsEarned: 0, dailyCoinsEarned: 0 }))
 
     render(<BriefReader />)
@@ -208,8 +213,8 @@ describe('BriefReader — complete brief coin awarding', () => {
       .mockResolvedValueOnce(makeCompleteResponse({ loginStreak: 3 }))
 
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
 
     await waitFor(() => {
       expect(mockSetUser).toHaveBeenCalled()
@@ -218,6 +223,29 @@ describe('BriefReader — complete brief coin awarding', () => {
       const result  = updater({ _id: 'user1', loginStreak: 0 })
       expect(result.loginStreak).toBe(3)
     })
+  })
+
+  // ── Button text variants ─────────────────────────────────────────────────
+
+  it('logged-in user with coins not yet awarded sees "⭐ Complete Brief & Collect Aircoins"', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF, FRESH_READ_RECORD))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+  })
+
+  it('logged-in user who already collected coins sees plain "✓ Complete Brief"', async () => {
+    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF, COMPLETED_READ_RECORD))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('✓ Complete Brief'))
+    expect(screen.queryByText('⭐ Complete Brief & Collect Aircoins')).toBeNull()
+  })
+
+  it('guest user sees plain "✓ Complete Brief" (no aircoins to collect)', async () => {
+    setupGuest()
+    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('✓ Complete Brief'))
+    expect(screen.queryByText('⭐ Complete Brief & Collect Aircoins')).toBeNull()
   })
 
   it('clicking "Continue →" on a non-last section does NOT call /complete', async () => {
@@ -242,8 +270,8 @@ describe('BriefReader — complete brief coin awarding', () => {
       .mockResolvedValueOnce(makeCompleteResponse())
 
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
 
     await waitFor(() => expect(screen.getByText('Brief Complete!')).toBeDefined())
   })
@@ -300,8 +328,8 @@ describe('BriefReader — guest completion prompt', () => {
       .mockResolvedValueOnce(makeCompleteResponse())
 
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
 
     await waitFor(() => screen.getByText('Brief Complete!'))
     expect(screen.queryByText('💾 Save your progress')).toBeNull()
@@ -365,8 +393,8 @@ describe('BriefReader — guest completion prompt', () => {
       .mockResolvedValueOnce(makeCompleteResponse())
 
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
 
     await waitFor(() => expect(screen.getByText(/Take the Quiz/)).toBeDefined())
   })
@@ -391,8 +419,8 @@ describe('BriefReader — post-login brief completion', () => {
     render(<BriefReader />)
 
     await waitFor(() => expect(screen.getByText('Brief Complete!')).toBeDefined())
-    // Should NOT show the reading UI
-    expect(screen.queryByText('✓ Complete Brief')).toBeNull()
+    // Should NOT show the reading UI (neither button text variant)
+    expect(screen.queryByText(/Complete Brief/)).toBeNull()
   })
 
   it('calls awardAircoins with coin data from sw_brief_coins on mount', async () => {
@@ -438,6 +466,6 @@ describe('BriefReader — post-login brief completion', () => {
 
     await waitFor(() => screen.getByText('RAF Typhoon'))
     expect(screen.queryByText('Brief Complete!')).toBeNull()
-    expect(screen.getByText('✓ Complete Brief')).toBeDefined()
+    expect(screen.getByText('⭐ Complete Brief & Collect Aircoins')).toBeDefined()
   })
 })

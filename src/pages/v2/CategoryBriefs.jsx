@@ -4,8 +4,38 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { CATEGORY_ICONS, SUBCATEGORIES } from '../../data/mockData'
 
-function BriefNode({ brief, index, isRead, quizPassed }) {
+function BriefNode({ brief, index, isRead, isStarted, quizPassed }) {
   const locked = brief.isLocked ?? false
+
+  const cardClass = isRead
+    ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
+    : isStarted
+      ? 'bg-amber-50 border-amber-200 hover:border-amber-300'
+      : 'bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 card-shadow hover:card-shadow-hover'
+
+  const circleClass = isRead
+    ? 'bg-emerald-500 border-emerald-500 text-white'
+    : isStarted
+      ? 'bg-amber-400 border-amber-400 text-white'
+      : 'bg-surface border-slate-200 group-hover:border-brand-400'
+
+  const circleIcon = isRead
+    ? '✓'
+    : isStarted
+      ? '◑'
+      : locked ? '🔒' : CATEGORY_ICONS[brief.category] ?? '📄'
+
+  const titleClass = isRead
+    ? 'text-emerald-800'
+    : isStarted
+      ? 'text-amber-900'
+      : 'text-slate-800'
+
+  const arrowClass = isRead
+    ? 'text-emerald-300'
+    : isStarted
+      ? 'text-amber-300'
+      : 'text-slate-300 group-hover:text-brand-400'
 
   return (
     <motion.div
@@ -20,27 +50,18 @@ function BriefNode({ brief, index, isRead, quizPassed }) {
       <Link
         to={locked ? '#' : `/brief/${brief._id}`}
         className={`flex items-start gap-4 p-4 rounded-2xl border transition-all group
-          ${isRead
-            ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
-            : 'bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 card-shadow hover:card-shadow-hover'
-          }
+          ${cardClass}
           ${locked ? 'opacity-50 cursor-not-allowed' : 'hover:-translate-y-0.5 cursor-pointer'}`}
       >
         {/* Status circle */}
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 text-xl
-          border-2 transition-all
-          ${isRead
-            ? 'bg-emerald-500 border-emerald-500 text-white'
-            : 'bg-surface border-slate-200 group-hover:border-brand-400'
-          }`}
-        >
-          {isRead ? '✓' : (locked ? '🔒' : CATEGORY_ICONS[brief.category] ?? '📄')}
+        <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 text-xl border-2 transition-all ${circleClass}`}>
+          {circleIcon}
         </div>
 
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className={`font-bold text-sm leading-snug ${isRead ? 'text-emerald-800' : 'text-slate-800'}`}>
+            <p className={`font-bold text-sm leading-snug ${titleClass}`}>
               {brief.title}
             </p>
             {brief.historic && (
@@ -59,6 +80,9 @@ function BriefNode({ brief, index, isRead, quizPassed }) {
             {isRead && (
               <span className="text-[10px] text-emerald-600 font-semibold">✓ Read</span>
             )}
+            {isStarted && !isRead && (
+              <span className="text-[10px] text-amber-600 font-semibold">◑ In Progress</span>
+            )}
             {quizPassed && (
               <span className="text-[10px] text-amber-600 font-semibold">★ Quiz Passed</span>
             )}
@@ -67,9 +91,7 @@ function BriefNode({ brief, index, isRead, quizPassed }) {
 
         {/* Arrow */}
         {!locked && (
-          <div className={`text-slate-300 group-hover:text-brand-400 transition-colors mt-1 shrink-0 ${isRead ? 'text-emerald-300' : ''}`}>
-            →
-          </div>
+          <div className={`transition-colors mt-1 shrink-0 ${arrowClass}`}>→</div>
         )}
       </Link>
     </motion.div>
@@ -82,6 +104,7 @@ export default function CategoryBriefs() {
   const navigate           = useNavigate()
   const [briefs, setBriefs]         = useState([])
   const [readIds, setReadIds]       = useState(new Set())
+  const [startedIds, setStartedIds] = useState(new Set())
   const [passedIds, setPassedIds]   = useState(new Set())
   const [loading, setLoading]       = useState(true)
   const [activeSubcat, setSubcat]   = useState('all')
@@ -103,8 +126,9 @@ export default function CategoryBriefs() {
     ])
       .then(([briefsData, readData, quizData]) => {
         setBriefs(briefsData.data?.briefs ?? [])
-        setReadIds(new Set(readData?.data?.briefIds ?? []))
-        setPassedIds(new Set(quizData?.data?.ids    ?? []))
+        setReadIds(new Set(readData?.data?.briefIds   ?? []))
+        setStartedIds(new Set(readData?.data?.startedIds ?? []))
+        setPassedIds(new Set(quizData?.data?.ids      ?? []))
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -215,6 +239,7 @@ export default function CategoryBriefs() {
               brief={brief}
               index={i}
               isRead={readIds.has(brief._id)}
+              isStarted={startedIds.has(brief._id)}
               quizPassed={passedIds.has(brief._id)}
             />
           ))}

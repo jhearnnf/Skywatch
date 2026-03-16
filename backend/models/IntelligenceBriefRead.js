@@ -9,6 +9,7 @@ const intelligenceBriefReadSchema = new mongoose.Schema({
   ammoDepletedAt:      { type: Date,   default: null },
 
   coinsAwarded: { type: Boolean, default: false }, // true once POST /complete has awarded coins
+  completed:    { type: Boolean, default: false }, // true once user clicks "Complete Brief"
 
   firstReadAt: { type: Date, default: Date.now },
   lastReadAt:  { type: Date, default: Date.now },

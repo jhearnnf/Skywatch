@@ -277,10 +277,12 @@ function StatsTab({ API }) {
       <section>
         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Economy & Content</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Aircoins in System" value={fmtNum(games.totalAircoinsEarned)} color="amber" />
-          <StatCard label="Briefs Read"        value={fmtNum(briefs.totalBrifsRead)}     color="brand" />
-          <StatCard label="Tutorials Viewed"   value={fmtNum(tutorials.viewed)}          color="slate" />
-          <StatCard label="Tutorials Skipped"  value={fmtNum(tutorials.skipped)}         color="slate" />
+          <StatCard label="Aircoins in System" value={fmtNum(games.totalAircoinsEarned)}       color="amber" />
+          <StatCard label="Briefs Read"        value={fmtNum(briefs.totalBrifsRead)}           color="brand" />
+          <StatCard label="Briefs Opened"      value={fmtNum(briefs.totalBrifsOpened)}         color="slate" />
+          <StatCard label="Time Reading"       value={fmtSeconds(briefs.totalReadSeconds ?? 0)} color="brand" />
+          <StatCard label="Tutorials Viewed"   value={fmtNum(tutorials.viewed)}                color="slate" />
+          <StatCard label="Tutorials Skipped"  value={fmtNum(tutorials.skipped)}               color="slate" />
         </div>
       </section>
     </div>
@@ -713,12 +715,17 @@ function UsersTab({ API }) {
   const action = (label, endpoint, method = 'POST', extra = {}) => setModal({ label, endpoint, method, extra })
 
   const confirmAction = async (reason) => {
-    await fetch(`${API}${modal.endpoint}`, {
+    const res  = await fetch(`${API}${modal.endpoint}`, {
       method: modal.method, credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason, ...modal.extra }),
     })
+    const data = await res.json().catch(() => ({}))
     setModal(null)
+    if (!res.ok) {
+      setToast(data.message ?? 'Action failed')
+      return
+    }
     setToast('Action completed')
     search ? runSearch() : loadAll()
     refreshUser()
@@ -778,11 +785,12 @@ function UsersTab({ API }) {
             </div>
 
             {/* Stats row */}
-            <div className="grid grid-cols-4 sm:grid-cols-6 divide-x divide-slate-100 border-b border-slate-100">
+            <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-slate-100 border-b border-slate-100">
               {[
                 ['Coins', (u.totalAircoins ?? 0).toLocaleString()],
                 ['Streak', u.loginStreak ?? 0],
                 ['Logins', u.logins?.length ?? 0],
+                ['Briefs Read', u.profileStats?.brifsRead ?? 0],
                 ['Difficulty', u.difficultySetting ?? 'easy'],
                 ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })],
               ].map(([l, v]) => (
@@ -807,7 +815,7 @@ function UsersTab({ API }) {
                   Remove Admin
                 </button>
               )}
-              <button onClick={() => action(`${u.isBanned ? 'Unban' : 'Ban'} — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/ban`)}
+              <button onClick={() => action(`${u.isBanned ? 'Unban' : 'Ban'} — Agent ${u.agentNumber}`, u.isBanned ? `/api/admin/users/${u._id}/unban` : `/api/admin/users/${u._id}/ban`)}
                 className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors
                   ${u.isBanned
                     ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
@@ -2507,7 +2515,7 @@ function BriefsTab({ API }) {
               <div className="grid grid-cols-2 gap-3 mb-4">
                 {media.map(m => (
                   <div key={m._id} className="relative group">
-                    <img src={m.mediaUrl} alt="" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
+                    <img src={m.mediaUrl.startsWith('/') ? `${API}${m.mediaUrl}` : m.mediaUrl} alt="" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
                     <button
                       onClick={() => removeMedia(m._id)}
                       className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"

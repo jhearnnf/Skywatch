@@ -24,7 +24,8 @@ import Profile        from './pages/v2/Profile'
 import Rankings       from './pages/v2/Rankings'
 import Play           from './pages/v2/Play'
 import AircoinHistory from './pages/v2/AircoinHistory'
-import GameHistory    from './pages/v2/GameHistory'
+import GameHistory        from './pages/v2/GameHistory'
+import IntelBriefHistory from './pages/v2/IntelBriefHistory'
 import ReportProblem  from './pages/v2/ReportProblem'
 import Subscription   from './pages/v2/Subscription'
 import NotFound       from './pages/v2/NotFound'
@@ -134,8 +135,9 @@ function AppRoutes() {
           {/* v2 protected pages */}
           <Route path="/subscribe"        element={<PageWrapper><Subscription /></PageWrapper>} />
           <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
-          <Route path="/aircoin-history"  element={<RequireAuth><PageWrapper><AircoinHistory /></PageWrapper></RequireAuth>} />
-          <Route path="/game-history"     element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
+          <Route path="/aircoin-history"       element={<RequireAuth><PageWrapper><AircoinHistory /></PageWrapper></RequireAuth>} />
+          <Route path="/game-history"          element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
+          <Route path="/intel-brief-history"   element={<RequireAuth><PageWrapper><IntelBriefHistory /></PageWrapper></RequireAuth>} />
           <Route path="/admin"             element={<RequireAuth><PageWrapper><Admin /></PageWrapper></RequireAuth>} />
 
           {/* 404 */}

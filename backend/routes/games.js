@@ -172,7 +172,7 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
       if (correct === total) {
         const bonus = settings.aircoins100Percent ?? 15;
         aircoinsEarned += bonus;
-        breakdown.push({ label: 'PERFECT SCORE BONUS', amount: bonus });
+        breakdown.push({ label: 'Perfect score bonus', amount: bonus });
       }
       if (aircoinsEarned > 0) {
         const brief = await IntelligenceBrief.findById(attempt.intelBriefId).select('title').lean();

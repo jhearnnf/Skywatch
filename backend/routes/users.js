@@ -21,6 +21,7 @@ router.get('/stats', protect, async (req, res) => {
     const brifsRead = await IntelligenceBriefRead.countDocuments({
       userId: req.user._id,
       intelBriefId: { $in: validBriefIds },
+      completed: true,
     });
 
     const allAttempts = await GameSessionQuizAttempt.find({ userId: req.user._id, status: { $in: ['completed', 'abandoned'] } }).lean();
@@ -226,12 +227,16 @@ router.post('/report-problem', protect, async (req, res) => {
   }
 });
 
-// GET /api/users/me/read-briefs — list of brief IDs the current user has read
+// GET /api/users/me/read-briefs — list of brief IDs the current user has completed or started
 router.get('/me/read-briefs', protect, async (req, res) => {
   try {
-    const records = await IntelligenceBriefRead.find({ userId: req.user._id }).select('intelBriefId');
-    const briefIds = records.map(r => r.intelBriefId.toString());
-    res.json({ status: 'success', data: { briefIds } });
+    const [completedRecords, startedRecords] = await Promise.all([
+      IntelligenceBriefRead.find({ userId: req.user._id, completed: true  }).select('intelBriefId'),
+      IntelligenceBriefRead.find({ userId: req.user._id, completed: false }).select('intelBriefId'),
+    ]);
+    const briefIds   = completedRecords.map(r => r.intelBriefId.toString());
+    const startedIds = startedRecords.map(r => r.intelBriefId.toString());
+    res.json({ status: 'success', data: { briefIds, startedIds } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

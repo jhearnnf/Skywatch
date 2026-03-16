@@ -215,10 +215,59 @@ export default function BriefReader() {
     }
     return false
   })
-  const [activeKw, setActiveKw]  = useState(null)
-  const [learnedKws, setLearned] = useState(new Set())
-  const markingRef               = useRef(false)
-  const briefOpenedRef           = useRef(false)
+  const [activeKw, setActiveKw]    = useState(null)
+  const [learnedKws, setLearned]   = useState(new Set())
+  const [readRecord, setReadRecord] = useState(null)
+  const markingRef                 = useRef(false)
+  const briefOpenedRef             = useRef(false)
+  const accSecondsRef              = useRef(0)
+  const lastTickRef                = useRef(null)
+
+  // Flush accumulated read time to the server
+  const flushTime = useCallback(() => {
+    const secs = Math.round(accSecondsRef.current)
+    if (!user || secs < 1 || !brief) return
+    accSecondsRef.current = 0
+    fetch(`${API}/api/briefs/${briefId}/time`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seconds: secs }),
+    }).catch(() => {})
+  }, [user, brief, briefId, API])
+
+  // Accumulate read time while the user is on the page reading
+  useEffect(() => {
+    if (!user || loading || !brief || done) return
+
+    lastTickRef.current   = Date.now()
+    accSecondsRef.current = 0
+
+    const tick = () => {
+      if (document.hidden) return
+      const now   = Date.now()
+      const delta = (now - (lastTickRef.current ?? now)) / 1000
+      lastTickRef.current = now
+      // Ignore gaps > 2 min (tab suspended / device slept)
+      if (delta > 0 && delta < 120) accSecondsRef.current += delta
+    }
+
+    const interval = setInterval(() => { tick(); flushTime() }, 10_000)
+
+    const onVisibility = () => {
+      if (document.hidden) { tick(); flushTime() }
+      else lastTickRef.current = Date.now()
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisibility)
+      tick()
+      flushTime()
+    }
+  }, [user, loading, brief, done, flushTime])
 
   useEffect(() => {
     fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
@@ -228,6 +277,7 @@ export default function BriefReader() {
       })
       .then(data => {
         if (data?.data?.brief) setBrief(data.data.brief)
+        if (data?.data?.readRecord) setReadRecord(data.data.readRecord)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -395,7 +445,7 @@ export default function BriefReader() {
       {brief.media?.[0]?.mediaUrl && (
         <div className="rounded-2xl overflow-hidden mb-5 aspect-video bg-slate-100">
           <img
-            src={brief.media[0].mediaUrl.startsWith('/') ? `http://localhost:5000${brief.media[0].mediaUrl}` : brief.media[0].mediaUrl}
+            src={brief.media[0].mediaUrl.startsWith('/') ? `${API}${brief.media[0].mediaUrl}` : brief.media[0].mediaUrl}
             alt={brief.title}
             className="w-full h-full object-cover"
           />
@@ -485,7 +535,12 @@ export default function BriefReader() {
             whileTap={{ scale: 0.97 }}
             className="w-full py-4 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200"
           >
-            {isLast ? '✓ Complete Brief' : 'Continue →'}
+            {isLast
+              ? (user && !readRecord?.coinsAwarded
+                  ? '⭐ Complete Brief & Collect Aircoins'
+                  : '✓ Complete Brief')
+              : 'Continue →'
+            }
           </motion.button>
 
           {/* Sources */}

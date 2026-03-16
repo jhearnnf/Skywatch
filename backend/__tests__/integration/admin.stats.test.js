@@ -5,7 +5,7 @@
  *   users   section — totals, subscriptions, difficulty, logins, streaks
  *   games   section — played, completed, won (pass rate), perfect scores,
  *                     lost, abandoned, aircoins, quiz time, BOO sub-object
- *   briefs  section — totalBrifsRead
+ *   briefs  section — totalBrifsRead, totalBrifsOpened, totalReadSeconds
  *   tutorials section — viewed / skipped counts
  *
  * Auth guard:
@@ -261,30 +261,69 @@ describe('GET /api/admin/stats — games totals', () => {
 // ── briefs section ────────────────────────────────────────────────────────────
 
 describe('GET /api/admin/stats — briefs section', () => {
-  it('returns 0 when no briefs have been read', async () => {
+  it('returns 0 for all brief stats when no brief reads exist', async () => {
     const admin = await createAdminUser();
     const res   = await request(app)
       .get('/api/admin/stats')
       .set('Cookie', authCookie(admin._id));
+    const { briefs } = res.body.data;
 
-    expect(res.body.data.briefs.totalBrifsRead).toBe(0);
+    expect(briefs.totalBrifsRead).toBe(0);
+    expect(briefs.totalBrifsOpened).toBe(0);
+    expect(briefs.totalReadSeconds).toBe(0);
   });
 
-  it('counts total brief reads across all users', async () => {
+  it('counts only completed reads in totalBrifsRead', async () => {
     const admin = await createAdminUser();
     const user  = await createUser();
 
     await IntelligenceBriefRead.create([
-      { userId: user._id,  intelBriefId: new mongoose.Types.ObjectId() },
-      { userId: user._id,  intelBriefId: new mongoose.Types.ObjectId() },
-      { userId: admin._id, intelBriefId: new mongoose.Types.ObjectId() },
+      { userId: user._id,  intelBriefId: new mongoose.Types.ObjectId(), completed: true  },
+      { userId: user._id,  intelBriefId: new mongoose.Types.ObjectId(), completed: true  },
+      { userId: admin._id, intelBriefId: new mongoose.Types.ObjectId(), completed: false }, // opened, not completed
     ]);
 
     const res = await request(app)
       .get('/api/admin/stats')
       .set('Cookie', authCookie(admin._id));
 
-    expect(res.body.data.briefs.totalBrifsRead).toBe(3);
+    expect(res.body.data.briefs.totalBrifsRead).toBe(2);
+  });
+
+  it('counts opened-but-not-completed briefs in totalBrifsOpened', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    await IntelligenceBriefRead.create([
+      { userId: user._id, intelBriefId: new mongoose.Types.ObjectId(), completed: true  },
+      { userId: user._id, intelBriefId: new mongoose.Types.ObjectId(), completed: false },
+      { userId: user._id, intelBriefId: new mongoose.Types.ObjectId(), completed: false },
+    ]);
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    const { briefs } = res.body.data;
+
+    expect(briefs.totalBrifsRead).toBe(1);
+    expect(briefs.totalBrifsOpened).toBe(2);
+  });
+
+  it('sums timeSpentSeconds across all reads into totalReadSeconds', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    await IntelligenceBriefRead.create([
+      { userId: user._id, intelBriefId: new mongoose.Types.ObjectId(), completed: true,  timeSpentSeconds: 120 },
+      { userId: user._id, intelBriefId: new mongoose.Types.ObjectId(), completed: false, timeSpentSeconds: 45  },
+      { userId: user._id, intelBriefId: new mongoose.Types.ObjectId(), completed: true,  timeSpentSeconds: 0   },
+    ]);
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.briefs.totalReadSeconds).toBe(165);
   });
 });
 

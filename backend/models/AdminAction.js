@@ -2,6 +2,9 @@ const mongoose = require('mongoose');
 
 const ACTION_TYPES = [
   'ban_user',
+  'unban_user',
+  'delete_user',
+  'remove_admin',
   'reset_user_stats',
   'make_admin',
   'change_quiz_questions',

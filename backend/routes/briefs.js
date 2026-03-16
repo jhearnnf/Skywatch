@@ -44,20 +44,31 @@ router.get('/', optionalAuth, async (req, res) => {
       const tier       = req.user ? effectiveTier(req.user) : 'guest';
       const accessible = getAccessibleCategories(tier, settings);
 
-      let readSet = new Set();
+      let readSet    = new Set();
+      let startedSet = new Set();
       if (req.user) {
-        const briefIds   = briefs.map(b => b._id);
-        const readRecords = await IntelligenceBriefRead.find({
-          userId: req.user._id,
-          intelBriefId: { $in: briefIds },
-        }).select('intelBriefId');
-        readSet = new Set(readRecords.map(r => r.intelBriefId.toString()));
+        const briefIds = briefs.map(b => b._id);
+        const [readRecords, startedRecords] = await Promise.all([
+          IntelligenceBriefRead.find({
+            userId: req.user._id,
+            intelBriefId: { $in: briefIds },
+            completed: true,
+          }).select('intelBriefId'),
+          IntelligenceBriefRead.find({
+            userId: req.user._id,
+            intelBriefId: { $in: briefIds },
+            completed: false,
+          }).select('intelBriefId'),
+        ]);
+        readSet    = new Set(readRecords.map(r => r.intelBriefId.toString()));
+        startedSet = new Set(startedRecords.map(r => r.intelBriefId.toString()));
       }
 
       briefsOut = briefsOut.map(b => ({
         ...b,
-        isRead:   readSet.has(b._id.toString()),
-        isLocked: accessible !== null && !accessible.includes(b.category),
+        isRead:    readSet.has(b._id.toString()),
+        isStarted: startedSet.has(b._id.toString()),
+        isLocked:  accessible !== null && !accessible.includes(b.category),
       }));
     }
 
@@ -97,7 +108,7 @@ router.get('/category-stats', optionalAuth, async (req, res) => {
     if (req.user) {
       // How many briefs per category has this user read?
       const reads = await IntelligenceBriefRead.aggregate([
-        { $match: { userId: req.user._id } },
+        { $match: { userId: req.user._id, completed: true } },
         {
           $lookup: {
             from: 'intelligencebriefs',
@@ -142,7 +153,7 @@ router.get('/unread-categories', optionalAuth, async (req, res) => {
     const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
 
     // Get IDs of briefs this user has already read
-    const readRecords = await IntelligenceBriefRead.find({ userId: req.user._id })
+    const readRecords = await IntelligenceBriefRead.find({ userId: req.user._id, completed: true })
       .select('intelBriefId').lean();
     const readSet = new Set(readRecords.map(r => r.intelBriefId.toString()));
 
@@ -157,6 +168,47 @@ router.get('/unread-categories', optionalAuth, async (req, res) => {
       .sort((a, b) => b.unreadCount - a.unreadCount);
 
     res.json({ status: 'success', data: { categories } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/briefs/history — paginated list of briefs this user has read
+router.get('/history', protect, async (req, res) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.min(50, parseInt(req.query.limit) || 30);
+    const skip  = (page - 1) * limit;
+
+    const baseMatch = { userId: req.user._id, completed: true };
+
+    const [records, total, avgResult] = await Promise.all([
+      IntelligenceBriefRead.find(baseMatch)
+        .sort({ lastReadAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('intelBriefId', 'title category')
+        .lean(),
+      IntelligenceBriefRead.countDocuments(baseMatch),
+      IntelligenceBriefRead.aggregate([
+        { $match: baseMatch },
+        { $group: { _id: null, avg: { $avg: '$timeSpentSeconds' } } },
+      ]),
+    ]);
+
+    const avgTimeSeconds = avgResult[0]?.avg ? Math.round(avgResult[0].avg) : 0;
+
+    const reads = records.map(r => ({
+      _id:              r._id,
+      briefId:          r.intelBriefId?._id ?? null,
+      title:            r.intelBriefId?.title    ?? 'Unknown Brief',
+      category:         r.intelBriefId?.category ?? '',
+      timeSpentSeconds: r.timeSpentSeconds,
+      firstReadAt:      r.firstReadAt,
+      lastReadAt:       r.lastReadAt,
+    }));
+
+    res.json({ status: 'success', data: { reads, total, avgTimeSeconds } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -299,11 +351,14 @@ router.post('/:id/complete', protect, async (req, res) => {
       }
 
       // Mark coins as awarded so re-completing the brief gives nothing
-      await IntelligenceBriefRead.findByIdAndUpdate(readRecord._id, { coinsAwarded: true });
+      await IntelligenceBriefRead.findByIdAndUpdate(readRecord._id, { coinsAwarded: true, completed: true });
 
       // Stamp today so the Home page "mission complete" banner updates
       // (This is a server-side complement to the client-side localStorage flag)
     }
+
+    // Always mark completed (handles re-reads where coins were already awarded)
+    await IntelligenceBriefRead.findByIdAndUpdate(readRecord._id, { completed: true });
 
     // Re-fetch lastStreakDate so the client can derive missionDone without localStorage
     const freshUser = await User.findById(req.user._id).select('lastStreakDate');

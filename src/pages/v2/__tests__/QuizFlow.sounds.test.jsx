@@ -80,6 +80,8 @@ function makeFinishResponse(won = true) {
     data: {
       aircoinsEarned: won ? 10 : 0,
       won,
+      isFirstAttempt: true,
+      breakdown: won ? [{ label: '1 correct answer × 10', amount: 10 }] : [],
       attempt: { cycleAircoins: 10, totalAircoins: 100 },
     },
   }

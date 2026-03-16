@@ -6,7 +6,7 @@ import { useAppTutorial } from '../../context/AppTutorialContext'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { isCategoryLocked } from '../../utils/subscription'
 import TutorialModal from '../../components/tutorial/TutorialModal'
-import { CATEGORIES, CATEGORY_ICONS } from '../../data/mockData'
+import { CATEGORIES, CATEGORY_ICONS, SUBCATEGORIES } from '../../data/mockData'
 
 const DESCRIPTIONS = {
   News:        'The latest RAF news and operations.',
@@ -29,9 +29,10 @@ export default function Learn() {
   const { user, API } = useAuth()
   const { start } = useAppTutorial()
   const { settings } = useAppSettings()
-  const [counts,   setCounts]   = useState({}) // { [category]: total }
-  const [progress, setProgress] = useState({}) // { [category]: { total, done } }
-  const [search,   setSearch]   = useState('')
+  const [counts,      setCounts]      = useState({}) // { [category]: total }
+  const [progress,    setProgress]    = useState({}) // { [category]: { total, done } }
+  const [search,      setSearch]      = useState('')
+  const [briefTitles, setBriefTitles] = useState([]) // [{ title, category }]
 
   // Tutorial on first visit
   useEffect(() => {
@@ -56,10 +57,28 @@ export default function Learn() {
       .catch(() => {})
   }, [user, API])
 
-  const filtered = CATEGORIES.filter(cat =>
-    cat.toLowerCase().includes(search.toLowerCase()) ||
-    (DESCRIPTIONS[cat] ?? '').toLowerCase().includes(search.toLowerCase())
-  )
+  // All brief titles — used for search matching
+  useEffect(() => {
+    fetch(`${API}/api/briefs?limit=500`)
+      .then(r => r.json())
+      .then(data => {
+        const briefs = data?.data?.briefs ?? []
+        setBriefTitles(briefs.map(b => ({ title: b.title, category: b.category })))
+      })
+      .catch(() => {})
+  }, [API])
+
+  const q = search.toLowerCase()
+
+  const filtered = !q
+    ? CATEGORIES
+    : CATEGORIES.filter(cat => {
+        if (cat.toLowerCase().includes(q)) return true
+        if ((DESCRIPTIONS[cat] ?? '').toLowerCase().includes(q)) return true
+        if ((SUBCATEGORIES[cat] ?? []).some(sub => sub.toLowerCase().includes(q))) return true
+        if (briefTitles.some(b => b.category === cat && b.title.toLowerCase().includes(q))) return true
+        return false
+      })
 
   return (
     <>
@@ -75,7 +94,7 @@ export default function Learn() {
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search subjects…"
+          placeholder="Search subjects, subcategories, or briefs…"
           className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm bg-surface transition-all"
         />
         {search && (
