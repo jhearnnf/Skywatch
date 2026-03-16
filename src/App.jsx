@@ -16,7 +16,10 @@ import Home           from './pages/v2/Home'
 import Learn          from './pages/v2/Learn'
 import CategoryBriefs from './pages/v2/CategoryBriefs'
 import BriefReader    from './pages/v2/BriefReader'
-import QuizFlow       from './pages/v2/QuizFlow'
+import QuizFlow            from './pages/v2/QuizFlow'
+import BattleOfOrderFlow  from './pages/v2/BattleOfOrderFlow'
+import QuizBriefsList     from './pages/v2/QuizBriefsList'
+import BOOBriefsList      from './pages/v2/BOOBriefsList'
 
 // v2 pages (continued)
 import LoginPage      from './pages/v2/Login'
@@ -125,12 +128,15 @@ function AppRoutes() {
           <Route path="/learn"             element={<PageWrapper><Learn /></PageWrapper>} />
           <Route path="/learn/:category"   element={<PageWrapper><CategoryBriefs /></PageWrapper>} />
           <Route path="/brief/:briefId"    element={<PageWrapper><BriefReader /></PageWrapper>} />
-          <Route path="/quiz/:briefId"     element={<RequireAuth><PageWrapper><QuizFlow /></PageWrapper></RequireAuth>} />
+          <Route path="/quiz/:briefId"          element={<RequireAuth><PageWrapper><QuizFlow /></PageWrapper></RequireAuth>} />
+          <Route path="/battle-of-order/:briefId" element={<RequireAuth><PageWrapper><BattleOfOrderFlow /></PageWrapper></RequireAuth>} />
 
           {/* v2 pages */}
           <Route path="/profile"          element={<PageWrapper><Profile /></PageWrapper>} />
           <Route path="/rankings"         element={<PageWrapper><Rankings /></PageWrapper>} />
-          <Route path="/play"             element={<PageWrapper><Play /></PageWrapper>} />
+          <Route path="/play"                   element={<PageWrapper><Play /></PageWrapper>} />
+          <Route path="/play/quiz"              element={<RequireAuth><PageWrapper><QuizBriefsList /></PageWrapper></RequireAuth>} />
+          <Route path="/play/battle-of-order"   element={<RequireAuth><PageWrapper><BOOBriefsList /></PageWrapper></RequireAuth>} />
 
           {/* v2 protected pages */}
           <Route path="/subscribe"        element={<PageWrapper><Subscription /></PageWrapper>} />

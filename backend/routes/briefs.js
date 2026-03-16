@@ -420,4 +420,18 @@ router.post('/:id/use-ammo', protect, async (req, res) => {
   }
 });
 
+// GET /api/briefs/completed-brief-ids — all briefIds this user has fully read (completed: true)
+router.get('/completed-brief-ids', protect, async (req, res) => {
+  try {
+    const reads = await IntelligenceBriefRead.find({
+      userId:      req.user._id,
+      completed:   true,
+    }).select('intelBriefId').lean();
+    const ids = [...new Set(reads.map(r => r.intelBriefId.toString()))];
+    res.json({ status: 'success', data: { ids } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

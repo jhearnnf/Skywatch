@@ -834,11 +834,29 @@ function UsersTab({ API }) {
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Reset for testing</p>
               <div className="flex flex-wrap gap-2">
                 {[
-                  { label: 'Aircoins',      fields: ['aircoins'] },
-                  { label: 'Game History',  fields: ['gameHistory'] },
-                  { label: 'Briefs Read',   fields: ['intelBriefsRead'] },
-                  { label: 'Tutorials',     fields: ['tutorials'] },
-                ].map(({ label, fields }) => (
+                  {
+                    label:   'Aircoins',
+                    fields:  ['aircoins'],
+                    isReset: (u.totalAircoins ?? 0) === 0,
+                  },
+                  {
+                    label:   'Game History',
+                    fields:  ['gameHistory'],
+                    isReset: (u.profileStats?.quizzesPlayed ?? 0) === 0 && (u.profileStats?.booPlayed ?? 0) === 0,
+                  },
+                  {
+                    label:   'Briefs Read',
+                    fields:  ['intelBriefsRead'],
+                    isReset: (u.profileStats?.brifsRead ?? 0) === 0,
+                  },
+                  {
+                    label:   'Tutorials',
+                    fields:  ['tutorials'],
+                    isReset: !['welcome', 'intel_brief', 'user', 'load_up'].some(
+                      k => u.tutorials?.[k] === 'viewed' || u.tutorials?.[k] === 'skipped'
+                    ),
+                  },
+                ].map(({ label, fields, isReset }) => (
                   <button
                     key={label}
                     onClick={() => action(
@@ -847,7 +865,11 @@ function UsersTab({ API }) {
                       'POST',
                       { fields },
                     )}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 font-semibold transition-colors"
+                    className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
+                      isReset
+                        ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                        : 'border-amber-200 text-amber-700 hover:bg-amber-50'
+                    }`}
                   >
                     ↺ {label}
                   </button>

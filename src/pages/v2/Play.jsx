@@ -35,21 +35,28 @@ const GAME_MODES = [
   {
     key: 'battle-order',
     emoji: '🗺️',
-    title: 'Battle Order',
-    desc: 'Arrange squadrons, bases, and assets in correct operational order.',
-    available: false,
-    badge: 'Coming soon',
+    title: 'Battle of Order',
+    desc: 'Arrange aircraft, ranks, and missions in the correct order.',
+    available: true,
+    badge: null,
   },
 ]
+
+const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
 
 export default function Play() {
   const { user, API } = useAuth()
   const { start }     = useAppTutorial()
   const { settings }  = useAppSettings()
 
-  const [recentBriefs,   setRecentBriefs]   = useState([])
-  const [passedBriefIds, setPassedBriefIds] = useState(new Set())
-  const [activeGame,     setActiveGame]     = useState(null)
+  const [recentBriefs,          setRecentBriefs]          = useState([])
+  const [passedBriefIds,        setPassedBriefIds]        = useState(new Set())
+  const [readBriefIds,          setReadBriefIds]          = useState(new Set())
+  const [quizPlayableBriefIds,  setQuizPlayableBriefIds]  = useState(new Set())
+  const [booAvailableCategories,setBooAvailableCategories]= useState(new Set())
+  const [activeGame,            setActiveGame]            = useState(null)
+
+  const booBriefs = recentBriefs.filter(b => BOO_CATEGORIES.includes(b.category))
 
   const quizRef      = useRef(null)
   const flashcardRef = useRef(null)
@@ -73,9 +80,16 @@ export default function Play() {
   // Clear highlight timer on unmount
   useEffect(() => () => clearTimeout(highlightTimerRef.current), [])
 
-  // Fetch recently read briefs + passed quiz IDs for the quiz launcher
+  // Fetch recently read briefs + quiz/BOO state data
   useEffect(() => {
-    if (!user) { setRecentBriefs([]); setPassedBriefIds(new Set()); return }
+    if (!user) {
+      setRecentBriefs([])
+      setPassedBriefIds(new Set())
+      setReadBriefIds(new Set())
+      setQuizPlayableBriefIds(new Set())
+      setBooAvailableCategories(new Set())
+      return
+    }
     fetch(`${API}/api/briefs?limit=6`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => setRecentBriefs(data?.data?.briefs ?? []))
@@ -84,12 +98,54 @@ export default function Play() {
       .then(r => r.json())
       .then(data => setPassedBriefIds(new Set(data?.data?.ids ?? [])))
       .catch(() => {})
+    fetch(`${API}/api/briefs/completed-brief-ids`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setReadBriefIds(new Set(data?.data?.ids ?? [])))
+      .catch(() => {})
+    fetch(`${API}/api/games/quiz/playable-brief-ids`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setQuizPlayableBriefIds(new Set(data?.data?.ids ?? [])))
+      .catch(() => {})
+    fetch(`${API}/api/games/battle-of-order/available-categories`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setBooAvailableCategories(new Set(data?.data?.categories ?? [])))
+      .catch(() => {})
   }, [user, API])
+
+  // ── State helpers ─────────────────────────────────────────────────────────
+
+  // Returns: 'subscription-locked' | 'no-questions' | 'needs-read' | 'active' | 'passed'
+  function getQuizState(brief) {
+    if (isCategoryLocked(brief.category, user, settings)) return 'subscription-locked'
+    if (!quizPlayableBriefIds.has(brief._id)) return 'no-questions'
+    if (!readBriefIds.has(brief._id)) return 'needs-read'
+    if (passedBriefIds.has(brief._id)) return 'passed'
+    return 'active'
+  }
+
+  // Returns: 'subscription-locked' | 'no-data' | 'needs-quiz' | 'active'
+  function getBooState(brief) {
+    if (isCategoryLocked(brief.category, user, settings)) return 'subscription-locked'
+    if (!booAvailableCategories.has(brief.category)) return 'no-data'
+    if (!passedBriefIds.has(brief._id)) return 'needs-quiz'
+    return 'active'
+  }
+
+  const QUIZ_SORT = { 'active': 0, 'passed': 1, 'needs-read': 2, 'no-questions': 3, 'subscription-locked': 4 }
+  const BOO_SORT  = { 'active': 0, 'needs-quiz': 1, 'no-data': 2, 'subscription-locked': 3 }
+
+  const sortedQuizBriefs = [...recentBriefs].sort((a, b) =>
+    (QUIZ_SORT[getQuizState(a)] ?? 99) - (QUIZ_SORT[getQuizState(b)] ?? 99)
+  )
+  const sortedBooBriefs = [...booBriefs].sort((a, b) =>
+    (BOO_SORT[getBooState(a)] ?? 99) - (BOO_SORT[getBooState(b)] ?? 99)
+  )
+
+  // ── Card / scroll ─────────────────────────────────────────────────────────
 
   function handleCardClick(key) {
     const ref = sectionRefs[key]
     if (!ref?.current) return
-    // 56px = fixed TopBar (h-14) + 16px breathing room
     const OFFSET = 56 + 16
     const y = ref.current.getBoundingClientRect().top + window.scrollY - OFFSET
     window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
@@ -98,7 +154,6 @@ export default function Play() {
     highlightTimerRef.current = setTimeout(() => setActiveGame(null), 1500)
   }
 
-  // Each launcher section is a card; active state pulses the border brand-coloured
   function sectionClass(key) {
     const isActive = activeGame === key
     return [
@@ -162,7 +217,7 @@ export default function Play() {
                 <span className="text-lg">🧠</span>
                 <h2 className="font-bold text-slate-800">Intel Quiz</h2>
               </div>
-              <Link to="/learn" className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors">
+              <Link to="/play/quiz" className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors">
                 Browse briefs →
               </Link>
             </div>
@@ -177,18 +232,19 @@ export default function Play() {
                     Sign In
                   </Link>
                 </div>
-              ) : recentBriefs.length > 0 ? (
+              ) : sortedQuizBriefs.length > 0 ? (
                 <div className="space-y-2">
-                  {recentBriefs.map((brief, i) => {
-                    const locked = isCategoryLocked(brief.category, user, settings)
-                    return (
-                      <motion.div
-                        key={brief._id}
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.05 }}
-                      >
-                        {locked ? (
+                  {sortedQuizBriefs.map((brief, i) => {
+                    const state = getQuizState(brief)
+
+                    if (state === 'subscription-locked' || state === 'no-questions') {
+                      return (
+                        <motion.div
+                          key={brief._id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
                           <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed">
                             <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
                               <span className="text-slate-400 text-xs">🔒</span>
@@ -197,36 +253,73 @@ export default function Play() {
                               <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
                               <p className="text-xs text-slate-400">{brief.category}</p>
                             </div>
+                            <span className="text-xs text-slate-400 shrink-0">
+                              {state === 'subscription-locked' ? 'Upgrade plan' : 'No questions yet'}
+                            </span>
                           </div>
-                        ) : (() => {
-                          const passed = passedBriefIds.has(brief._id)
-                          return (
-                            <Link
-                              to={`/quiz/${brief._id}`}
-                              className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all group
-                                ${passed
-                                  ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
-                                  : 'bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50'
-                                }`}
-                            >
-                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
-                                ${passed ? 'bg-emerald-100' : 'bg-brand-100'}`}
-                              >
-                                <span className={`font-bold text-xs ${passed ? 'text-emerald-600' : 'text-brand-600'}`}>
-                                  {passed ? '✓' : 'Q'}
-                                </span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
-                                <p className="text-xs text-slate-400">{brief.category}</p>
-                              </div>
-                              {passed
-                                ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Passed</span>
-                                : <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
-                              }
-                            </Link>
-                          )
-                        })()}
+                        </motion.div>
+                      )
+                    }
+
+                    if (state === 'needs-read') {
+                      return (
+                        <motion.div
+                          key={brief._id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
+                          <Link
+                            to={`/brief/${brief._id}`}
+                            className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200 hover:border-amber-300 transition-all group"
+                          >
+                            <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                              <span className="font-bold text-xs text-amber-600">📖</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                              <p className="text-xs text-slate-400">{brief.category}</p>
+                            </div>
+                            <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">
+                              Read first →
+                            </span>
+                          </Link>
+                        </motion.div>
+                      )
+                    }
+
+                    const passed = state === 'passed'
+                    return (
+                      <motion.div
+                        key={brief._id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                      >
+                        <Link
+                          to={`/quiz/${brief._id}`}
+                          className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all group
+                            ${passed
+                              ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
+                              : 'bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50'
+                            }`}
+                        >
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
+                            ${passed ? 'bg-emerald-100' : 'bg-brand-100'}`}
+                          >
+                            <span className={`font-bold text-xs ${passed ? 'text-emerald-600' : 'text-brand-600'}`}>
+                              {passed ? '✓' : 'Q'}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                            <p className="text-xs text-slate-400">{brief.category}</p>
+                          </div>
+                          {passed
+                            ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Passed</span>
+                            : <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                          }
+                        </Link>
                       </motion.div>
                     )
                   })}
@@ -293,27 +386,119 @@ export default function Play() {
             </div>
           </div>
 
-          {/* Battle Order */}
+          {/* Battle of Order */}
           <div ref={battleRef} className={sectionClass('battle-order')}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">🗺️</span>
-                <h2 className="font-bold text-slate-800">Battle Order</h2>
+                <h2 className="font-bold text-slate-800">Battle of Order</h2>
               </div>
-              <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Coming soon</span>
+              <Link to="/play/battle-of-order" className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors">
+                Browse briefs →
+              </Link>
             </div>
             <div className="p-5">
-              <div className="space-y-2 mb-4">
-                {[1, 2, 3].map(n => (
-                  <div key={n} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-50">
-                    <span className="text-xs font-bold text-slate-400 w-4 shrink-0">{n}.</span>
-                    <div className="h-2.5 bg-slate-200 rounded-full flex-1" />
-                  </div>
-                ))}
-              </div>
-              <button disabled className="w-full py-2.5 bg-slate-100 text-slate-400 font-bold rounded-xl text-sm cursor-not-allowed">
-                Order Units
-              </button>
+              {!user ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-slate-500 mb-4">Sign in to play Battle of Order and earn Aircoins.</p>
+                  <Link
+                    to="/login"
+                    className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                </div>
+              ) : sortedBooBriefs.length > 0 ? (
+                <div className="space-y-2">
+                  {sortedBooBriefs.map((brief, i) => {
+                    const state = getBooState(brief)
+
+                    if (state === 'subscription-locked' || state === 'no-data') {
+                      return (
+                        <motion.div
+                          key={brief._id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
+                          <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed">
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                              <span className="text-slate-400 text-xs">🔒</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                              <p className="text-xs text-slate-400">{brief.category}</p>
+                            </div>
+                            <span className="text-xs text-slate-400 shrink-0">No data yet</span>
+                          </div>
+                        </motion.div>
+                      )
+                    }
+
+                    if (state === 'needs-quiz') {
+                      return (
+                        <motion.div
+                          key={brief._id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
+                          <Link
+                            to={`/quiz/${brief._id}`}
+                            className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200 hover:border-amber-300 transition-all group"
+                          >
+                            <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                              <span className="font-bold text-xs text-amber-600">🧠</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                              <p className="text-xs text-slate-400">{brief.category}</p>
+                            </div>
+                            <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">
+                              Pass quiz first →
+                            </span>
+                          </Link>
+                        </motion.div>
+                      )
+                    }
+
+                    return (
+                      <motion.div
+                        key={brief._id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                      >
+                        <Link
+                          to={`/battle-of-order/${brief._id}`}
+                          className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group"
+                        >
+                          <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 group-hover:bg-slate-700 transition-colors">
+                            <span className="font-bold text-xs text-white">⊞</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                            <p className="text-xs text-slate-400">{brief.category}</p>
+                          </div>
+                          <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                        </Link>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-sm text-slate-500 mb-4">
+                    Read briefs in eligible categories (Aircrafts, Ranks, Training, Missions, Tech, Treaties) to unlock Battle of Order.
+                  </p>
+                  <Link
+                    to="/learn"
+                    className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+                  >
+                    Explore Subjects
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
 

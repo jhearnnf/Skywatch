@@ -25,7 +25,6 @@ router.get('/stats', protect, async (req, res) => {
     });
 
     const allAttempts = await GameSessionQuizAttempt.find({ userId: req.user._id, status: { $in: ['completed', 'abandoned'] } }).lean();
-    const gamesPlayed = allAttempts.length;
 
     // Quiz avg: count every individually answered question (includes abandoned partial attempts)
     const quizResults  = await GameSessionQuizResult.find({ userId: req.user._id }).lean();
@@ -37,6 +36,7 @@ router.get('/stats', protect, async (req, res) => {
     const booPlayed  = booResults.length;
     const booWins    = booResults.filter(r => r.won).length;
 
+    const gamesPlayed    = allAttempts.length + booPlayed;
     const totalDataPoints = quizAnswered + booPlayed;
     const winPercent = totalDataPoints > 0 ? Math.round((quizCorrect + booWins) / totalDataPoints * 100) : 0;
 

@@ -158,7 +158,7 @@ describe('BriefReader — complete brief coin awarding', () => {
   it('calls awardAircoins with combined coins after completing', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
-      .mockResolvedValueOnce(makeCompleteResponse({ aircoinsEarned: 5, dailyCoinsEarned: 5 }))
+      .mockResolvedValue(makeCompleteResponse({ aircoinsEarned: 5, dailyCoinsEarned: 5 }))
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -177,7 +177,7 @@ describe('BriefReader — complete brief coin awarding', () => {
   it('uses "Brief read" label when only brief-read coins (no daily coins)', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
-      .mockResolvedValueOnce(makeCompleteResponse({ aircoinsEarned: 5, dailyCoinsEarned: 0 }))
+      .mockResolvedValue(makeCompleteResponse({ aircoinsEarned: 5, dailyCoinsEarned: 0 }))
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -210,7 +210,7 @@ describe('BriefReader — complete brief coin awarding', () => {
   it('updates loginStreak on user via setUser after complete', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
-      .mockResolvedValueOnce(makeCompleteResponse({ loginStreak: 3 }))
+      .mockResolvedValue(makeCompleteResponse({ loginStreak: 3 }))
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))

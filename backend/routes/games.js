@@ -196,6 +196,49 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
   }
 });
 
+// GET /api/games/quiz/playable-brief-ids — briefIds with enough questions for user's difficulty
+router.get('/quiz/playable-brief-ids', protect, async (req, res) => {
+  try {
+    const user       = await User.findById(req.user._id).select('difficultySetting').lean();
+    const difficulty = user.difficultySetting ?? 'easy';
+
+    const agg = await GameQuizQuestion.aggregate([
+      { $match: { difficulty } },
+      { $group: { _id: '$intelBriefId', count: { $sum: 1 } } },
+      { $match: { count: { $gte: 5 } } },
+    ]);
+    const ids = agg.map(r => r._id.toString());
+    res.json({ status: 'success', data: { ids } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/battle-of-order/available-categories — categories with enough BOO game data
+router.get('/battle-of-order/available-categories', protect, async (req, res) => {
+  try {
+    const user       = await User.findById(req.user._id).select('difficultySetting').lean();
+    const difficulty = user.difficultySetting ?? 'easy';
+    const needed     = difficulty === 'medium' ? 5 : 3;
+
+    const available = [];
+    for (const category of BATTLE_CATEGORIES) {
+      const orderTypes = ORDER_TYPES[category] ?? [];
+      for (const orderType of orderTypes) {
+        const fieldKey = REQUIRED_FIELD[orderType];
+        const count    = await IntelligenceBrief.countDocuments({
+          category,
+          [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
+        });
+        if (count >= needed) { available.push(category); break; }
+      }
+    }
+    res.json({ status: 'success', data: { categories: available } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/games/quiz/completed-brief-ids — all briefIds this user has ever won a quiz for
 router.get('/quiz/completed-brief-ids', protect, async (req, res) => {
   try {

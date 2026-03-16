@@ -120,6 +120,30 @@ async function createQuizQuestions(briefId, gameTypeId, count = 5, difficulty = 
   return questions;
 }
 
+// ── BOO Briefs ─────────────────────────────────────────────────────────────
+// Creates `count` Aircrafts briefs with topSpeedKph game data for BOO tests
+async function createBooBriefs(count, category = 'Aircrafts', overrides = {}) {
+  const briefs = [];
+  for (let i = 0; i < count; i++) {
+    const b = await IntelligenceBrief.create({
+      title:               overrides.title ?? `BOO Brief ${Date.now()}_${i}`,
+      subtitle:            '',
+      category,
+      descriptionSections: ['Section text.'],
+      keywords:            [],
+      sources:             [],
+      isPublished:         true,
+      gameData: {
+        topSpeedKph:     (i + 1) * 500,       // 500, 1000, 1500 … kph
+        yearIntroduced:  1980 + i * 5,
+        ...( overrides.gameData ?? {} ),
+      },
+    });
+    briefs.push(b);
+  }
+  return briefs;
+}
+
 module.exports = {
   createSettings,
   createGameType,
@@ -129,4 +153,5 @@ module.exports = {
   authCookie,
   createBrief,
   createQuizQuestions,
+  createBooBriefs,
 };

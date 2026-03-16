@@ -1,0 +1,344 @@
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+import BattleOfOrderFlow from '../BattleOfOrderFlow'
+
+// ── Mocks ─────────────────────────────────────────────────────────────────
+
+vi.mock('../../../utils/sound', () => ({ playSound: vi.fn() }))
+
+const mockNavigate = vi.fn()
+vi.mock('react-router-dom', () => ({
+  useParams:   () => ({ briefId: 'brief123' }),
+  useNavigate: () => mockNavigate,
+}))
+
+vi.mock('../../../context/AuthContext', () => ({
+  useAuth: () => ({
+    user:          { _id: 'user1' },
+    API:           '',
+    awardAircoins: vi.fn(),
+  }),
+}))
+
+vi.mock('framer-motion', () => ({
+  motion: {
+    div: ({ children, className, initial, animate, exit, transition, whileTap, ...rest }) =>
+      <div className={className} {...rest}>{children}</div>,
+    button: ({ children, className, onClick, disabled, initial, animate, exit, transition, whileTap, ...rest }) =>
+      <button className={className} onClick={onClick} disabled={disabled} {...rest}>{children}</button>,
+    circle: ({ children, ...rest }) => <circle>{children}</circle>,
+    p: ({ children, className, initial, animate, exit, transition, ...rest }) =>
+      <p className={className} {...rest}>{children}</p>,
+  },
+  AnimatePresence: ({ children }) => <>{children}</>,
+}))
+
+// ── Fixtures ──────────────────────────────────────────────────────────────
+
+const BRIEF_RESPONSE = {
+  data: { brief: { _id: 'brief123', title: 'Eurofighter Typhoon', category: 'Aircrafts' } },
+}
+
+const OPTIONS_MULTI = {
+  status: 'success',
+  data: {
+    available:  true,
+    difficulty: 'easy',
+    options: [
+      { orderType: 'speed' },
+      { orderType: 'year_introduced' },
+    ],
+  },
+}
+
+const OPTIONS_SINGLE = {
+  status: 'success',
+  data: {
+    available:  true,
+    difficulty: 'easy',
+    options: [{ orderType: 'speed' }],
+  },
+}
+
+const OPTIONS_UNAVAILABLE = {
+  status: 'success',
+  data: { available: false, reason: 'ineligible_category' },
+}
+
+const CHOICES = [
+  { choiceId: 'c1', briefTitle: 'Typhoon' },
+  { choiceId: 'c2', briefTitle: 'Tornado' },
+  { choiceId: 'c3', briefTitle: 'Hawk'    },
+]
+
+const GENERATE_RESPONSE = {
+  status: 'success',
+  data: { gameId: 'game1', category: 'Aircrafts', difficulty: 'easy', orderType: 'speed', choices: CHOICES },
+}
+
+const CORRECT_REVEAL = [
+  { choiceId: 'c3', briefTitle: 'Hawk',    correctOrder: 1, displayValue: '1000 kph' },
+  { choiceId: 'c2', briefTitle: 'Tornado', correctOrder: 2, displayValue: '2200 kph' },
+  { choiceId: 'c1', briefTitle: 'Typhoon', correctOrder: 3, displayValue: '2495 kph' },
+]
+
+function makeSubmitResponse({ won, aircoinsEarned = 0, alreadyCompleted = false }) {
+  return {
+    status: 'success',
+    data: { won, aircoinsEarned, alreadyCompleted, correctReveal: CORRECT_REVEAL },
+  }
+}
+
+function setupFetch({ options = OPTIONS_MULTI, won = true, aircoinsEarned = 8, alreadyCompleted = false } = {}) {
+  return vi.fn().mockImplementation((url) => {
+    if (url.includes('/api/briefs/'))
+      return Promise.resolve({ ok: true, status: 200, json: async () => BRIEF_RESPONSE })
+    if (url.includes('/options'))
+      return Promise.resolve({ ok: true, status: 200, json: async () => options })
+    if (url.includes('/generate'))
+      return Promise.resolve({ ok: true, status: 200, json: async () => GENERATE_RESPONSE })
+    if (url.includes('/submit'))
+      return Promise.resolve({ ok: true, status: 200, json: async () => makeSubmitResponse({ won, aircoinsEarned, alreadyCompleted }) })
+    if (url.includes('/abandon'))
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'success' }) })
+    return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
+  })
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+/**
+ * Render and advance through the roulette animation to the game screen.
+ * Requires fake timers to be active before calling.
+ */
+async function renderAndReachGame(fetchMock) {
+  global.fetch = fetchMock
+  render(<BattleOfOrderFlow />)
+  // Wait for the roulette screen to appear
+  await waitFor(() => screen.getByText('Battle of Order'))
+  // Advance past all roulette ticks + 900ms post-spin pause
+  await act(async () => { vi.advanceTimersByTime(20000) })
+  // Wait for game screen
+  await waitFor(() => screen.getByText('Submit Order →'))
+}
+
+async function renderAndReachResults(fetchMock) {
+  await renderAndReachGame(fetchMock)
+  fireEvent.click(screen.getByText('Submit Order →'))
+  await waitFor(() => screen.getByRole('button', { name: /try again/i }))
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────
+
+describe('BattleOfOrderFlow — roulette / selection screen', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockNavigate.mockClear()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('shows loading state on initial render', () => {
+    global.fetch = setupFetch()
+    render(<BattleOfOrderFlow />)
+    // Loading pulse elements visible before data arrives
+    expect(document.querySelector('.animate-pulse')).toBeTruthy()
+  })
+
+  it('shows roulette screen with "Battle of Order" heading', async () => {
+    global.fetch = setupFetch({ options: OPTIONS_MULTI })
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText('Battle of Order'))
+    expect(screen.getByText('Eurofighter Typhoon')).toBeDefined()
+  })
+
+  it('shows "Selecting challenge…" while roulette is spinning', async () => {
+    global.fetch = setupFetch({ options: OPTIONS_MULTI })
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText(/Selecting challenge/i))
+  })
+
+  it('shows difficulty badge on roulette screen', async () => {
+    global.fetch = setupFetch({ options: OPTIONS_MULTI })
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText(/Standard — 3 items/i))
+    expect(screen.getByText(/Standard — 3 items/i)).toBeDefined()
+  })
+
+  it('shows unavailable screen for ineligible category', async () => {
+    global.fetch = setupFetch({ options: OPTIONS_UNAVAILABLE })
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText('Battle of Order unavailable'))
+    expect(screen.getByText(/ineligible_category|doesn't support/i)).toBeDefined()
+  })
+
+  it('navigates back to brief when ← Back clicked on roulette screen', async () => {
+    global.fetch = setupFetch({ options: OPTIONS_MULTI })
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText(/Back to Brief/))
+    fireEvent.click(screen.getByText('← Back to Brief'))
+    expect(mockNavigate).toHaveBeenCalledWith('/brief/brief123')
+  })
+
+  it('advances to game screen after roulette spin completes (multi-option)', async () => {
+    global.fetch = setupFetch({ options: OPTIONS_MULTI })
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText('Battle of Order'))
+    await act(async () => { vi.advanceTimersByTime(20000) })
+
+    await waitFor(() => screen.getByText('Submit Order →'))
+    expect(screen.queryByText('Selecting challenge')).toBeNull()
+  })
+
+  it('advances to game screen after roulette spin completes (single-option)', async () => {
+    global.fetch = setupFetch({ options: OPTIONS_SINGLE })
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText('Battle of Order'))
+    await act(async () => { vi.advanceTimersByTime(20000) })
+
+    await waitFor(() => screen.getByText('Submit Order →'))
+  })
+})
+
+describe('BattleOfOrderFlow — game screen', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockNavigate.mockClear()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('shows all choice items on game screen', async () => {
+    await renderAndReachGame(setupFetch())
+
+    expect(screen.getByText('Typhoon')).toBeDefined()
+    expect(screen.getByText('Tornado')).toBeDefined()
+    expect(screen.getByText('Hawk')).toBeDefined()
+  })
+
+  it('shows a timer on the game screen', async () => {
+    await renderAndReachGame(setupFetch())
+    expect(screen.getByText(/\d{2}:\d{2}/)).toBeDefined()
+  })
+
+  it('shows difficulty badge on game screen', async () => {
+    await renderAndReachGame(setupFetch())
+    expect(screen.getByText(/Standard/i)).toBeDefined()
+  })
+
+  it('calls abandon and navigates back when Quit is clicked', async () => {
+    const fetchMock = setupFetch()
+    await renderAndReachGame(fetchMock)
+
+    fireEvent.click(screen.getByText('✕ Quit'))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/brief/brief123'))
+    // abandon should have been called
+    const calls = fetchMock.mock.calls.map(c => c[0])
+    expect(calls.some(u => u.includes('/abandon'))).toBe(true)
+  })
+})
+
+describe('BattleOfOrderFlow — results screen', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockNavigate.mockClear()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('shows win message and aircoins earned on a win', async () => {
+    await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 8 }))
+
+    expect(screen.getByText('Correct Order!')).toBeDefined()
+    expect(screen.getByText(/\+8 Aircoins earned/i)).toBeDefined()
+  })
+
+  it('shows loss message on a loss', async () => {
+    await renderAndReachResults(setupFetch({ won: false, aircoinsEarned: 0 }))
+
+    expect(screen.getByText('Not Quite!')).toBeDefined()
+    expect(screen.queryByText(/Aircoins earned/i)).toBeNull()
+  })
+
+  it('shows correct reveal with display values', async () => {
+    await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 8 }))
+
+    expect(screen.getByText('Hawk')).toBeDefined()
+    expect(screen.getByText('Tornado')).toBeDefined()
+    expect(screen.getByText('1000 kph')).toBeDefined()
+    expect(screen.getByText('2495 kph')).toBeDefined()
+  })
+
+  it('shows "already earned" message on repeat win with 0 coins', async () => {
+    await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 0, alreadyCompleted: true }))
+
+    expect(screen.getByText(/already earned Aircoins for this order type/i)).toBeDefined()
+    expect(screen.queryByText(/\+0 Aircoins/i)).toBeNull()
+  })
+
+  it('plays battle_of_order_won sound on win', async () => {
+    const { playSound } = await import('../../../utils/sound')
+    await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 8 }))
+
+    expect(playSound).toHaveBeenCalledWith('battle_of_order_won')
+    expect(playSound).not.toHaveBeenCalledWith('battle_of_order_lost')
+  })
+
+  it('plays battle_of_order_lost sound on loss', async () => {
+    const { playSound } = await import('../../../utils/sound')
+    await renderAndReachResults(setupFetch({ won: false, aircoinsEarned: 0 }))
+
+    expect(playSound).toHaveBeenCalledWith('battle_of_order_lost')
+    expect(playSound).not.toHaveBeenCalledWith('battle_of_order_won')
+  })
+
+  it('navigates back to brief when Back to Brief clicked', async () => {
+    await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 8 }))
+
+    fireEvent.click(screen.getByRole('button', { name: /back to brief/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/brief/brief123')
+  })
+
+  it('returns to roulette (not game) when Try Again clicked', async () => {
+    const fetchMock = setupFetch({ won: false, aircoinsEarned: 0 })
+    await renderAndReachResults(fetchMock)
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+
+    // Should show roulette screen again — NOT game screen yet
+    await waitFor(() => screen.getByText('Battle of Order'))
+    expect(screen.queryByText('Submit Order →')).toBeNull()
+  })
+
+  it('re-generates game after Try Again → roulette → game', async () => {
+    const fetchMock = setupFetch({ won: false, aircoinsEarned: 0 })
+    await renderAndReachResults(fetchMock)
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+
+    // Advance through the second roulette spin
+    await waitFor(() => screen.getByText('Battle of Order'))
+    await act(async () => { vi.advanceTimersByTime(20000) })
+    await waitFor(() => screen.getByText('Submit Order →'))
+
+    const calls = fetchMock.mock.calls.map(c => c[0])
+    expect(calls.filter(u => u.includes('/generate')).length).toBeGreaterThanOrEqual(2)
+  })
+})

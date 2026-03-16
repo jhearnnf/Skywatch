@@ -102,7 +102,7 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
 }
 
 // ── Completion screen ─────────────────────────────────────────────────────
-function CompletionScreen({ brief, onQuiz, onBack, user }) {
+function CompletionScreen({ brief, onQuiz, onBattleOrder, onBack, user }) {
   const [quizHovered, setQuizHovered] = useState(false)
 
   return (
@@ -140,12 +140,22 @@ function CompletionScreen({ brief, onQuiz, onBack, user }) {
 
       <div className="space-y-3">
         {user ? (
-          <button
-            onClick={onQuiz}
-            className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-lg transition-colors shadow-lg shadow-brand-200"
-          >
-            🎮 Take the Quiz → Earn Aircoins
-          </button>
+          <>
+            <button
+              onClick={onQuiz}
+              className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-lg transition-colors shadow-lg shadow-brand-200"
+            >
+              🎮 Take the Quiz → Earn Aircoins
+            </button>
+            {onBattleOrder && (
+              <button
+                onClick={onBattleOrder}
+                className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-2xl text-base transition-colors"
+              >
+                🗺️ Battle Order → Earn Aircoins
+              </button>
+            )}
+          </>
         ) : (
           <>
             <Link
@@ -218,10 +228,13 @@ export default function BriefReader() {
   const [activeKw, setActiveKw]    = useState(null)
   const [learnedKws, setLearned]   = useState(new Set())
   const [readRecord, setReadRecord] = useState(null)
+  const [booAvailable, setBooAvailable] = useState(false)
   const markingRef                 = useRef(false)
   const briefOpenedRef             = useRef(false)
   const accSecondsRef              = useRef(0)
   const lastTickRef                = useRef(null)
+
+  const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
 
   // Flush accumulated read time to the server
   const flushTime = useCallback(() => {
@@ -309,6 +322,15 @@ export default function BriefReader() {
       }
     } catch { /* malformed — skip */ }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check BOO availability once brief loads and user is authenticated
+  useEffect(() => {
+    if (!brief || !user || !BOO_CATEGORIES.includes(brief.category)) return
+    fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setBooAvailable(data.data?.available ?? false))
+      .catch(() => {})
+  }, [brief, user, briefId, API]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tutorial on first visit
   useEffect(() => {
@@ -458,6 +480,7 @@ export default function BriefReader() {
           brief={brief}
           user={user}
           onQuiz={() => navigate(`/quiz/${briefId}`)}
+          onBattleOrder={booAvailable ? () => navigate(`/battle-of-order/${briefId}`) : null}
           onBack={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
         />
       ) : (
