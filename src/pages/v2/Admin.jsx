@@ -683,6 +683,33 @@ const TIER_COLORS = {
   gold:   'bg-yellow-100 text-yellow-700',
 }
 
+function SubscriptionTierRow({ u, action }) {
+  const current = u.subscriptionTier ?? 'free'
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-slate-100">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1">Tier</p>
+      {['free', 'trial', 'silver', 'gold'].map(tier => (
+        <button
+          key={tier}
+          onClick={() => tier !== current && action(
+            `Change subscription — Agent ${u.agentNumber} → ${tier}`,
+            `/api/admin/users/${u._id}/subscription`,
+            'PATCH',
+            { tier },
+          )}
+          className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all
+            ${tier === current
+              ? TIER_BTN[tier] + ' ring-2 ring-offset-1 ring-slate-400 cursor-default'
+              : TIER_BTN[tier] + ' opacity-50 hover:opacity-100 cursor-pointer'
+            }`}
+        >
+          {tier.charAt(0).toUpperCase() + tier.slice(1)}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function UsersTab({ API }) {
   const { refreshUser } = useAuth()
   const [users,   setUsers]   = useState([])
@@ -828,6 +855,9 @@ function UsersTab({ API }) {
                 Delete
               </button>
             </div>
+
+            {/* Subscription tier */}
+            <SubscriptionTierRow u={u} action={action} />
 
             {/* Reset (testing) */}
             <div className="px-4 py-2.5">
@@ -2928,6 +2958,7 @@ const ACTION_TYPE_LABELS = {
   delete_brief:              { label: 'Delete Brief',          color: 'bg-red-100 text-red-700'       },
   regenerate_brief_cascade:  { label: 'Regenerate Brief',      color: 'bg-violet-100 text-violet-700' },
   award_test_coins:          { label: 'Award Coins',           color: 'bg-amber-100 text-amber-700'   },
+  change_subscription:       { label: 'Change Subscription',   color: 'bg-indigo-100 text-indigo-700' },
 }
 
 const ALL_ACTION_TYPES = Object.keys(ACTION_TYPE_LABELS)

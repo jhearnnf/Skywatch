@@ -17,6 +17,7 @@ const ACTION_TYPES = [
   'delete_brief',
   'regenerate_brief_cascade',
   'award_test_coins',
+  'change_subscription',
 ];
 
 const adminActionSchema = new mongoose.Schema({

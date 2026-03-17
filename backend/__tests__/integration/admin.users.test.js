@@ -174,3 +174,150 @@ describe('POST /api/admin/users/:id/unban', () => {
     expect(res.status).toBe(404);
   });
 });
+
+// ── subscription tier endpoint ─────────────────────────────────────────────
+
+describe('PATCH /api/admin/users/:id/subscription — auth guards', () => {
+  it('returns 401 for unauthenticated request', async () => {
+    const user = await createUser();
+    const res  = await request(app)
+      .patch(`/api/admin/users/${user._id}/subscription`)
+      .send({ tier: 'gold', reason: 'upgrade' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for a non-admin user', async () => {
+    const actor = await createUser();
+    const user  = await createUser();
+    const res   = await request(app)
+      .patch(`/api/admin/users/${user._id}/subscription`)
+      .set('Cookie', authCookie(actor._id))
+      .send({ tier: 'gold', reason: 'upgrade' });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('PATCH /api/admin/users/:id/subscription — validation', () => {
+  it('returns 400 when reason is missing', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+    const res   = await request(app)
+      .patch(`/api/admin/users/${user._id}/subscription`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ tier: 'gold' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for an invalid tier', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+    const res   = await request(app)
+      .patch(`/api/admin/users/${user._id}/subscription`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ tier: 'platinum', reason: 'test' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 for a non-existent user id', async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .patch(`/api/admin/users/${new mongoose.Types.ObjectId()}/subscription`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ tier: 'gold', reason: 'test' });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('PATCH /api/admin/users/:id/subscription — tier change', () => {
+  const User = require('../../models/User');
+  const AdminAction = require('../../models/AdminAction');
+
+  it('updates subscriptionTier on the target user (free → gold)', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser({ subscriptionTier: 'free' });
+
+    const res = await request(app)
+      .patch(`/api/admin/users/${user._id}/subscription`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ tier: 'gold', reason: 'manual upgrade' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+
+    const updated = await User.findById(user._id);
+    expect(updated.subscriptionTier).toBe('gold');
+  });
+
+  it('updates subscriptionTier (gold → free)', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser({ subscriptionTier: 'gold' });
+
+    await request(app)
+      .patch(`/api/admin/users/${user._id}/subscription`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ tier: 'free', reason: 'downgrade' });
+
+    const updated = await User.findById(user._id);
+    expect(updated.subscriptionTier).toBe('free');
+  });
+
+  it('sets trialStartDate and trialDurationDays when tier is trial', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser({ subscriptionTier: 'free' });
+
+    const before = new Date();
+
+    await request(app)
+      .patch(`/api/admin/users/${user._id}/subscription`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ tier: 'trial', reason: 'free trial grant' });
+
+    const updated = await User.findById(user._id);
+    expect(updated.subscriptionTier).toBe('trial');
+    expect(updated.trialStartDate).toBeDefined();
+    expect(new Date(updated.trialStartDate).getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(updated.trialDurationDays).toBeGreaterThan(0);
+  });
+
+  it('resets ammunitionRemaining on all read records for the target user', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser({ subscriptionTier: 'free' });
+    const other = await createUser();
+
+    // Create read records for both users
+    await IntelligenceBriefRead.create([
+      { userId: user._id,  intelBriefId: new mongoose.Types.ObjectId(), completed: true,  ammunitionRemaining: 0 },
+      { userId: user._id,  intelBriefId: new mongoose.Types.ObjectId(), completed: false, ammunitionRemaining: 0 },
+      { userId: other._id, intelBriefId: new mongoose.Types.ObjectId(), completed: true,  ammunitionRemaining: 0 },
+    ]);
+
+    await request(app)
+      .patch(`/api/admin/users/${user._id}/subscription`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ tier: 'gold', reason: 'upgrade to gold' });
+
+    const userRecords  = await IntelligenceBriefRead.find({ userId: user._id });
+    const otherRecords = await IntelligenceBriefRead.find({ userId: other._id });
+
+    // Gold ammo = 9999
+    expect(userRecords.every(r => r.ammunitionRemaining === 9999)).toBe(true);
+    // Other user's records must not be touched
+    expect(otherRecords[0].ammunitionRemaining).toBe(0);
+  });
+
+  it('logs an AdminAction with change_subscription type', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser({ subscriptionTier: 'free' });
+
+    await request(app)
+      .patch(`/api/admin/users/${user._id}/subscription`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ tier: 'silver', reason: 'gift subscription' });
+
+    const action = await AdminAction.findOne({ actionType: 'change_subscription' });
+    expect(action).not.toBeNull();
+    expect(action.userId.toString()).toBe(admin._id.toString());
+    expect(action.targetUserId.toString()).toBe(user._id.toString());
+    expect(action.reason).toBe('gift subscription');
+  });
+});

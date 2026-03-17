@@ -414,6 +414,48 @@ router.delete('/users/:id', requireReason, async (req, res) => {
   }
 });
 
+// PATCH /api/admin/users/:id/subscription — change a user's subscription tier
+router.patch('/users/:id/subscription', requireReason, async (req, res) => {
+  try {
+    const { tier } = req.body;
+    const valid = ['free', 'trial', 'silver', 'gold'];
+    if (!valid.includes(tier)) return res.status(400).json({ message: 'Invalid tier' });
+
+    const target = await User.findById(req.params.id);
+    if (!target) return res.status(404).json({ message: 'User not found' });
+
+    const settings = await AppSettings.getSettings();
+    const ammoMap = {
+      free:   settings.ammoFree   ?? 0,
+      trial:  settings.ammoSilver ?? 10,
+      silver: settings.ammoSilver ?? 10,
+      gold:   9999,
+    };
+
+    const tierUpdate = { subscriptionTier: tier };
+    if (tier === 'trial') {
+      tierUpdate.trialStartDate    = new Date();
+      tierUpdate.trialDurationDays = settings.trialDurationDays ?? 7;
+    }
+
+    const [user] = await Promise.all([
+      User.findByIdAndUpdate(req.params.id, tierUpdate, { new: true }).select('-password').populate('rank'),
+      IntelligenceBriefRead.updateMany({ userId: req.params.id }, { ammunitionRemaining: ammoMap[tier] }),
+    ]);
+
+    await AdminAction.create({
+      userId:       req.user._id,
+      actionType:   'change_subscription',
+      reason:       req.body.reason,
+      targetUserId: req.params.id,
+    });
+
+    res.json({ status: 'success', data: { user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // PATCH /api/admin/self/subscription — admin emulates a subscription tier on their own account
 router.patch('/self/subscription', async (req, res) => {
   try {
