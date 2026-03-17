@@ -1,8 +1,19 @@
 const jwt                  = require('jsonwebtoken');
+const mongoose             = require('mongoose');
 const User                 = require('../../models/User');
 const Rank                 = require('../../models/Rank');
 const IntelligenceBrief    = require('../../models/IntelligenceBrief');
+const IntelligenceBriefRead = require('../../models/IntelligenceBriefRead');
 const GameQuizQuestion     = require('../../models/GameQuizQuestion');
+const GameSessionQuizAttempt = require('../../models/GameSessionQuizAttempt');
+const GameSessionQuizResult  = require('../../models/GameSessionQuizResult');
+const GameOrderOfBattle    = require('../../models/GameOrderOfBattle');
+const GameSessionOrderOfBattleResult = require('../../models/GameSessionOrderOfBattleResult');
+const GameFlashcardRecall  = require('../../models/GameFlashcardRecall');
+const GameSessionFlashcardRecallResult = require('../../models/GameSessionFlashcardRecallResult');
+const GameWhosAtAircraft   = require('../../models/GameWhosAtAircraft');
+const GameSessionWhosAtAircraftResult  = require('../../models/GameSessionWhosAtAircraftResult');
+const AircoinLog           = require('../../models/AircoinLog');
 const GameType             = require('../../models/GameType');
 const AppSettings          = require('../../models/AppSettings');
 
@@ -144,6 +155,117 @@ async function createBooBriefs(count, category = 'Aircrafts', overrides = {}) {
   return briefs;
 }
 
+// ── IntelligenceBriefRead ──────────────────────────────────────────────────
+async function createReadRecord(userId, briefId, overrides = {}) {
+  return IntelligenceBriefRead.create({
+    userId,
+    intelBriefId: briefId,
+    completed:    overrides.completed !== undefined ? overrides.completed : true,
+    coinsAwarded: overrides.coinsAwarded ?? false,
+    ...overrides,
+  });
+}
+
+// ── GameSessionQuizAttempt (won) ───────────────────────────────────────────
+async function createPassedQuizAttempt(userId, briefId, overrides = {}) {
+  return GameSessionQuizAttempt.create({
+    userId,
+    intelBriefId:  briefId,
+    gameSessionId: `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    difficulty:    overrides.difficulty ?? 'easy',
+    status:        'completed',
+    won:           true,
+    ...overrides,
+  });
+}
+
+// ── GameOrderOfBattle + GameSessionOrderOfBattleResult (won) ──────────────
+async function createWonBooResult(userId, anchorBriefId, overrides = {}) {
+  const game = await GameOrderOfBattle.create({
+    anchorBriefId,
+    category:   overrides.category  ?? 'Aircrafts',
+    difficulty: overrides.difficulty ?? 'easy',
+    orderType:  overrides.orderType  ?? 'speed',
+    choices:    [],
+  });
+  const result = await GameSessionOrderOfBattleResult.create({
+    userId,
+    gameId: game._id,
+    won:    true,
+    userChoices: [],
+  });
+  return { game, result };
+}
+
+// ── GameSessionQuizResult ──────────────────────────────────────────────────
+async function createQuizResult(userId, questionId, overrides = {}) {
+  return GameSessionQuizResult.create({
+    userId,
+    questionId,
+    gameSessionId: overrides.gameSessionId ?? `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    isCorrect:     overrides.isCorrect ?? true,
+    ...overrides,
+  });
+}
+
+// ── AircoinLog ─────────────────────────────────────────────────────────────
+async function createAircoinLog(userId, briefId, overrides = {}) {
+  return AircoinLog.create({
+    userId,
+    briefId:  briefId ?? null,
+    amount:   overrides.amount ?? 10,
+    reason:   overrides.reason ?? 'brief_read',
+    label:    overrides.label  ?? 'Read brief',
+    ...overrides,
+  });
+}
+
+// ── GameFlashcardRecall + result ───────────────────────────────────────────
+async function createFlashcardGame(briefId, gameTypeId, overrides = {}) {
+  return GameFlashcardRecall.create({
+    gameTypeId,
+    cards: [{
+      intelBriefId:      briefId,
+      displayedQuestion: overrides.question ?? 'What is the Typhoon?',
+      displayedAnswer:   overrides.answer   ?? 'A fast jet.',
+    }],
+  });
+}
+
+async function createFlashcardResult(userId, gameId, overrides = {}) {
+  return GameSessionFlashcardRecallResult.create({
+    userId,
+    gameId,
+    gameSessionId: overrides.gameSessionId ?? `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    cardResults:   [],
+    aircoinsEarned: 0,
+    ...overrides,
+  });
+}
+
+// ── GameWhosAtAircraft + result ────────────────────────────────────────────
+async function createWhosAtAircraftGame(briefId, gameTypeId, overrides = {}) {
+  // Bypass the pre-save hook that validates category by using insertOne directly
+  return GameWhosAtAircraft.collection.insertOne({
+    _id:               new mongoose.Types.ObjectId(),
+    gameTypeId:        new mongoose.Types.ObjectId(gameTypeId),
+    intelBriefId:      new mongoose.Types.ObjectId(briefId),
+    silhouetteImageUrl: overrides.silhouetteImageUrl ?? 'https://example.com/silhouette.jpg',
+  });
+}
+
+async function createWhosAtAircraftResult(userId, gameId, overrides = {}) {
+  return GameSessionWhosAtAircraftResult.create({
+    userId,
+    gameId,
+    gameSessionId:   overrides.gameSessionId ?? `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    userAnswer:      overrides.userAnswer    ?? 'Typhoon',
+    isCorrect:       overrides.isCorrect     ?? true,
+    aircoinsEarned:  0,
+    ...overrides,
+  });
+}
+
 module.exports = {
   createSettings,
   createGameType,
@@ -153,5 +275,14 @@ module.exports = {
   authCookie,
   createBrief,
   createQuizQuestions,
+  createQuizResult,
   createBooBriefs,
+  createReadRecord,
+  createPassedQuizAttempt,
+  createWonBooResult,
+  createAircoinLog,
+  createFlashcardGame,
+  createFlashcardResult,
+  createWhosAtAircraftGame,
+  createWhosAtAircraftResult,
 };

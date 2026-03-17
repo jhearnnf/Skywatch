@@ -9,6 +9,8 @@ const {
   createSettings,
   createGameType,
   createQuizQuestions,
+  createReadRecord,
+  createPassedQuizAttempt,
   authCookie,
 } = require('../helpers/factories');
 
@@ -345,5 +347,140 @@ describe('GET /api/games/quiz/status/:briefId', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.hasCompleted).toBe(true);
+  });
+});
+
+// ── GET /api/games/quiz/recommended-briefs ────────────────────────────────
+describe('GET /api/games/quiz/recommended-briefs', () => {
+  it('returns 401 if not authenticated', async () => {
+    const res = await request(app).get('/api/games/quiz/recommended-briefs');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns empty array when no briefs have quiz questions', async () => {
+    const res = await request(app)
+      .get('/api/games/quiz/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.briefs).toHaveLength(0);
+  });
+
+  it('returns active briefs (read + playable + not passed) with quizState "active"', async () => {
+    const b = await createBrief({ category: 'News' });
+    await createQuizQuestions(b._id, gameType._id, 5, 'easy');
+    await createReadRecord(user._id, b._id);
+
+    const res = await request(app)
+      .get('/api/games/quiz/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const briefs = res.body.data.briefs;
+    expect(briefs).toHaveLength(1);
+    expect(briefs[0].quizState).toBe('active');
+    expect(briefs[0]._id.toString()).toBe(b._id.toString());
+  });
+
+  it('returns needs-read briefs (playable + not read) with quizState "needs-read"', async () => {
+    const b = await createBrief({ category: 'News' });
+    await createQuizQuestions(b._id, gameType._id, 5, 'easy');
+    // No read record created
+
+    const res = await request(app)
+      .get('/api/games/quiz/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const briefs = res.body.data.briefs;
+    expect(briefs).toHaveLength(1);
+    expect(briefs[0].quizState).toBe('needs-read');
+  });
+
+  it('returns passed briefs with quizState "passed"', async () => {
+    const b = await createBrief({ category: 'News' });
+    await createQuizQuestions(b._id, gameType._id, 5, 'easy');
+    await createReadRecord(user._id, b._id);
+    await createPassedQuizAttempt(user._id, b._id);
+
+    const res = await request(app)
+      .get('/api/games/quiz/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const briefs = res.body.data.briefs;
+    expect(briefs).toHaveLength(1);
+    expect(briefs[0].quizState).toBe('passed');
+  });
+
+  it('orders active before passed when both present', async () => {
+    const active = await createBrief({ category: 'News', title: 'Active Brief' });
+    const passed = await createBrief({ category: 'News', title: 'Passed Brief' });
+    await createQuizQuestions(active._id, gameType._id, 5, 'easy');
+    await createQuizQuestions(passed._id, gameType._id, 5, 'easy');
+    await createReadRecord(user._id, active._id);
+    await createReadRecord(user._id, passed._id);
+    await createPassedQuizAttempt(user._id, passed._id);
+
+    const res = await request(app)
+      .get('/api/games/quiz/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const briefs = res.body.data.briefs;
+    expect(briefs).toHaveLength(2);
+    expect(briefs[0].quizState).toBe('active');
+    expect(briefs[1].quizState).toBe('passed');
+  });
+
+  it('orders active before needs-read before passed', async () => {
+    const bActive    = await createBrief({ category: 'News', title: 'Active' });
+    const bNeedsRead = await createBrief({ category: 'News', title: 'NeedsRead' });
+    const bPassed    = await createBrief({ category: 'News', title: 'Passed' });
+    for (const b of [bActive, bNeedsRead, bPassed]) {
+      await createQuizQuestions(b._id, gameType._id, 5, 'easy');
+    }
+    await createReadRecord(user._id, bActive._id);
+    await createReadRecord(user._id, bPassed._id);
+    await createPassedQuizAttempt(user._id, bPassed._id);
+    // bNeedsRead has no read record
+
+    const res = await request(app)
+      .get('/api/games/quiz/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const states = res.body.data.briefs.map(b => b.quizState);
+    expect(states[0]).toBe('active');
+    expect(states[1]).toBe('needs-read');
+    expect(states[2]).toBe('passed');
+  });
+
+  it('respects the limit query parameter', async () => {
+    for (let i = 0; i < 4; i++) {
+      const b = await createBrief({ category: 'News', title: `Brief ${i}` });
+      await createQuizQuestions(b._id, gameType._id, 5, 'easy');
+      await createReadRecord(user._id, b._id);
+    }
+
+    const res = await request(app)
+      .get('/api/games/quiz/recommended-briefs?limit=2')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.briefs).toHaveLength(2);
+  });
+
+  it('does not return briefs with fewer than 5 questions', async () => {
+    const b = await createBrief({ category: 'News' });
+    await createQuizQuestions(b._id, gameType._id, 3, 'easy'); // only 3
+    await createReadRecord(user._id, b._id);
+
+    const res = await request(app)
+      .get('/api/games/quiz/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.briefs).toHaveLength(0);
   });
 });

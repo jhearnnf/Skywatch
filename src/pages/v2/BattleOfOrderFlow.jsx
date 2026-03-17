@@ -162,7 +162,6 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
     setItems(next)
     setDragIdx(null)
     setOverIdx(null)
-    playSound('battle_of_order_selection')
   }
   const handleDragEnd = () => { setDragIdx(null); setOverIdx(null) }
 
@@ -171,14 +170,12 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
     const next = [...items]
     ;[next[i - 1], next[i]] = [next[i], next[i - 1]]
     setItems(next)
-    playSound('battle_of_order_selection')
   }
   const moveDown = (i) => {
     if (i === items.length - 1) return
     const next = [...items]
     ;[next[i + 1], next[i]] = [next[i], next[i + 1]]
     setItems(next)
-    playSound('battle_of_order_selection')
   }
 
   const handleSubmit = () => {

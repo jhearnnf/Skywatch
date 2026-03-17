@@ -250,6 +250,24 @@ describe('BattleOfOrderFlow — game screen', () => {
     const calls = fetchMock.mock.calls.map(c => c[0])
     expect(calls.some(u => u.includes('/abandon'))).toBe(true)
   })
+
+  it('does NOT play battle_of_order_selection sound when moving items up or down', async () => {
+    const { playSound } = await import('../../../utils/sound')
+
+    await renderAndReachGame(setupFetch())
+    // Clear after roulette finishes so the roulette's own sound call doesn't pollute the assertion
+    vi.clearAllMocks()
+
+    // Click move-up on second item (index 1)
+    const moveUpBtns = screen.getAllByRole('button', { name: /move up/i })
+    fireEvent.click(moveUpBtns[1])
+
+    // Click move-down on first item (index 0)
+    const moveDownBtns = screen.getAllByRole('button', { name: /move down/i })
+    fireEvent.click(moveDownBtns[0])
+
+    expect(playSound).not.toHaveBeenCalledWith('battle_of_order_selection')
+  })
 })
 
 describe('BattleOfOrderFlow — results screen', () => {

@@ -18,14 +18,6 @@ vi.mock('../../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn() }),
 }))
 
-vi.mock('../../../context/AppSettingsContext', () => ({
-  useAppSettings: () => ({ settings: null }),
-}))
-
-vi.mock('../../../utils/subscription', () => ({
-  isCategoryLocked: () => false,
-}))
-
 vi.mock('../../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))
@@ -48,35 +40,25 @@ function renderAsGuest() {
 
 /**
  * Renders Play as a logged-in user.
- * - All provided briefs are treated as "playable" (have quiz questions) and "read" (fully read).
- * - No quizzes are passed yet.
- * - No BOO categories are available.
+ * quizBriefs and booBriefs must already have their state embedded
+ * (e.g. { _id, title, category, quizState: 'active' }).
+ * The backend recommended-briefs endpoints are mocked to return them directly.
  */
-function renderAsUser(briefs = []) {
-  const briefIds = briefs.map(b => b._id)
-  global.fetch = vi.fn().mockImplementation((url) => {
-    if (url.includes('playable-brief-ids')) {
-      return Promise.resolve({ json: async () => ({ data: { ids: briefIds } }) })
-    }
-    if (url.includes('briefs/completed-brief-ids')) {
-      return Promise.resolve({ json: async () => ({ data: { ids: briefIds } }) })
-    }
-    if (url.includes('quiz/completed-brief-ids')) {
-      return Promise.resolve({ json: async () => ({ data: { ids: [] } }) })
-    }
-    if (url.includes('available-categories')) {
-      return Promise.resolve({ json: async () => ({ data: { categories: [] } }) })
-    }
-    return Promise.resolve({ json: async () => ({ data: { briefs } }) })
-  })
+function renderAsUser({ quizBriefs = [], booBriefs = [] } = {}) {
   useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '' })
+  global.fetch = vi.fn().mockImplementation((url) => {
+    if (url.includes('quiz/recommended-briefs'))
+      return Promise.resolve({ json: async () => ({ data: { briefs: quizBriefs } }) })
+    if (url.includes('battle-of-order/recommended-briefs'))
+      return Promise.resolve({ json: async () => ({ data: { briefs: booBriefs } }) })
+    return Promise.resolve({ json: async () => ({ data: { briefs: [] } }) })
+  })
   render(<Play />)
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
-  // Component uses window.scrollTo (not scrollIntoView) for scroll-with-offset
   window.scrollTo = vi.fn()
   global.fetch = vi.fn().mockResolvedValue({ json: async () => ({ data: { briefs: [] } }) })
 })
@@ -98,8 +80,6 @@ describe('Play page — game cards', () => {
 
   // In jsdom, getBoundingClientRect() returns all zeros and scrollY=0,
   // so the offset formula yields Math.max(0, 0 + 0 - 72) = 0.
-  // These tests confirm scrollTo is called with smooth behaviour and a
-  // non-negative top value (the 72px TopBar+gap offset clamped by Math.max).
   it('clicking Intel Quiz card calls window.scrollTo with smooth behaviour', () => {
     renderAsGuest()
     fireEvent.click(screen.getByTestId('card-quiz'))
@@ -172,7 +152,6 @@ describe('Play page — game cards', () => {
 describe('Play page — launcher sections', () => {
   it('all 4 launcher section headings render', () => {
     renderAsGuest()
-    // Each section has an h2 — ensure all 4 are present
     const headings = screen.getAllByRole('heading', { level: 2 })
     const titles = headings.map(h => h.textContent)
     expect(titles).toContain('Intel Quiz')
@@ -205,13 +184,12 @@ describe('Play page — launcher sections', () => {
   })
 
   it('Battle of Order section shows eligible categories hint for logged-in users with no BOO briefs', async () => {
-    renderAsUser([])
+    renderAsUser({ quizBriefs: [], booBriefs: [] })
     await waitFor(() => screen.getByText(/Read briefs in eligible categories/i))
   })
 
   it('Intel Quiz section "Browse briefs" link points to /play/quiz', () => {
     renderAsGuest()
-    // Find browse links — quiz section is first
     const links = screen.getAllByRole('link', { name: /browse briefs/i })
     const quizBrowse = links.find(l => l.getAttribute('href') === '/play/quiz')
     expect(quizBrowse).toBeDefined()
@@ -231,26 +209,24 @@ describe('Play page — Intel Quiz section', () => {
     expect(screen.getByText(/sign in to take quizzes/i)).toBeDefined()
   })
 
-  it('shows Browse Briefs CTA when logged-in user has no recent briefs', async () => {
-    renderAsUser([])
+  it('shows Browse Briefs CTA when logged-in user has no quiz briefs', async () => {
+    renderAsUser({ quizBriefs: [] })
     await waitFor(() => screen.getByText('Browse Briefs', { selector: 'a' }))
   })
 
-  it('shows brief cards when user has recent briefs', async () => {
-    // Use non-BOO categories so briefs only appear in quiz section, not BOO section too
-    const briefs = [
-      { _id: 'b1', title: 'F-35 Lightning II', category: 'Bases' },
-      { _id: 'b2', title: 'RAF Lossiemouth', category: 'Bases' },
+  it('shows brief cards when user has quiz briefs', async () => {
+    const quizBriefs = [
+      { _id: 'b1', title: 'F-35 Lightning II', category: 'Bases', quizState: 'active' },
+      { _id: 'b2', title: 'RAF Lossiemouth',   category: 'Bases', quizState: 'active' },
     ]
-    renderAsUser(briefs)
+    renderAsUser({ quizBriefs })
     await waitFor(() => screen.getByText('F-35 Lightning II'))
     expect(screen.getByText('RAF Lossiemouth')).toBeDefined()
   })
 
   it('each brief card links to its quiz route', async () => {
-    // Use non-BOO category so the brief only appears once in quiz section
-    const briefs = [{ _id: 'brief42', title: 'Typhoon FGR4', category: 'Bases' }]
-    renderAsUser(briefs)
+    const quizBriefs = [{ _id: 'brief42', title: 'Typhoon FGR4', category: 'Bases', quizState: 'active' }]
+    renderAsUser({ quizBriefs })
     await waitFor(() => screen.getByText('Typhoon FGR4'))
     const link = screen.getByRole('link', { name: /typhoon fgr4/i })
     expect(link.getAttribute('href')).toBe('/quiz/brief42')
@@ -262,219 +238,133 @@ describe('Play page — Intel Quiz section', () => {
   })
 
   it('shows game history link for logged-in users', async () => {
-    renderAsUser([])
+    renderAsUser({})
     await waitFor(() => screen.getByText(/view game history/i))
   })
 })
 
-describe('Play page — Intel Quiz passed state', () => {
-  /**
-   * All provided briefs are treated as "playable" and "read".
-   * passedIds controls which quiz completions are returned.
-   */
-  function renderWithPassedIds(briefs, passedIds = []) {
-    const briefIds = briefs.map(b => b._id)
-    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '' })
-    global.fetch = vi.fn().mockImplementation((url) => {
-      if (url.includes('playable-brief-ids')) {
-        return Promise.resolve({ json: async () => ({ data: { ids: briefIds } }) })
-      }
-      if (url.includes('briefs/completed-brief-ids')) {
-        return Promise.resolve({ json: async () => ({ data: { ids: briefIds } }) })
-      }
-      if (url.includes('quiz/completed-brief-ids')) {
-        return Promise.resolve({ json: async () => ({ data: { ids: passedIds } }) })
-      }
-      if (url.includes('available-categories')) {
-        return Promise.resolve({ json: async () => ({ data: { categories: [] } }) })
-      }
-      return Promise.resolve({ json: async () => ({ data: { briefs } }) })
-    })
-    render(<Play />)
-  }
-
-  it('shows "✓ Passed" badge on a brief whose quiz has been passed', async () => {
-    const briefs = [{ _id: 'b1', title: 'Typhoon FGR4', category: 'Aircrafts' }]
-    renderWithPassedIds(briefs, ['b1'])
-
+describe('Play page — Intel Quiz states', () => {
+  it('shows "✓ Passed" badge on a passed brief', async () => {
+    const quizBriefs = [{ _id: 'b1', title: 'Typhoon FGR4', category: 'Aircrafts', quizState: 'passed' }]
+    renderAsUser({ quizBriefs })
     await waitFor(() => expect(screen.getByText('✓ Passed')).toBeDefined())
   })
 
-  it('does not show "✓ Passed" badge on a brief whose quiz has not been passed', async () => {
-    // Use non-BOO category so brief only appears in quiz section once
-    const briefs = [{ _id: 'b1', title: 'Typhoon FGR4', category: 'Bases' }]
-    renderWithPassedIds(briefs, [])
-
+  it('does not show "✓ Passed" badge on an active brief', async () => {
+    const quizBriefs = [{ _id: 'b1', title: 'Typhoon FGR4', category: 'Bases', quizState: 'active' }]
+    renderAsUser({ quizBriefs })
     await waitFor(() => screen.getByText('Typhoon FGR4'))
     expect(screen.queryByText('✓ Passed')).toBeNull()
   })
 
   it('shows "✓ Passed" only on the passed brief when list is mixed', async () => {
-    const briefs = [
-      { _id: 'b1', title: 'Typhoon FGR4', category: 'Aircrafts' },
-      { _id: 'b2', title: 'RAF Lossiemouth', category: 'Bases' },
+    const quizBriefs = [
+      { _id: 'b1', title: 'Typhoon FGR4',    category: 'Aircrafts', quizState: 'passed' },
+      { _id: 'b2', title: 'RAF Lossiemouth', category: 'Bases',     quizState: 'active' },
     ]
-    renderWithPassedIds(briefs, ['b1'])
-
+    renderAsUser({ quizBriefs })
     await waitFor(() => expect(screen.getByText('✓ Passed')).toBeDefined())
-    // Only one badge — b2 has not been passed
     expect(screen.getAllByText('✓ Passed').length).toBe(1)
   })
-})
 
-describe('Play page — locked and hint states', () => {
-  function renderWithFullState({ briefs = [], readIds = [], playableIds = [], passedIds = [], booCategories = [] } = {}) {
-    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '' })
-    global.fetch = vi.fn().mockImplementation((url) => {
-      if (url.includes('playable-brief-ids')) {
-        return Promise.resolve({ json: async () => ({ data: { ids: playableIds } }) })
-      }
-      if (url.includes('briefs/completed-brief-ids')) {
-        return Promise.resolve({ json: async () => ({ data: { ids: readIds } }) })
-      }
-      if (url.includes('quiz/completed-brief-ids')) {
-        return Promise.resolve({ json: async () => ({ data: { ids: passedIds } }) })
-      }
-      if (url.includes('available-categories')) {
-        return Promise.resolve({ json: async () => ({ data: { categories: booCategories } }) })
-      }
-      return Promise.resolve({ json: async () => ({ data: { briefs } }) })
-    })
-    render(<Play />)
-  }
-
-  it('shows "No questions yet" locked state for brief without quiz questions', async () => {
-    const briefs = [{ _id: 'b1', title: 'Locked Brief', category: 'Bases' }]
-    // b1 is NOT in playableIds → no-questions locked state
-    renderWithFullState({ briefs, readIds: ['b1'], playableIds: [], passedIds: [] })
-
+  it('shows "No questions yet" locked state for no-questions brief', async () => {
+    const quizBriefs = [{ _id: 'b1', title: 'Locked Brief', category: 'Bases', quizState: 'no-questions' }]
+    renderAsUser({ quizBriefs })
     await waitFor(() => screen.getByText('Locked Brief'))
     expect(screen.getByText('No questions yet')).toBeDefined()
   })
 
-  it('shows "Read first →" hint for brief that has questions but not been fully read', async () => {
-    const briefs = [{ _id: 'b1', title: 'Unread Brief', category: 'Bases' }]
-    // b1 is playable but NOT in readIds → needs-read hint
-    renderWithFullState({ briefs, readIds: [], playableIds: ['b1'], passedIds: [] })
-
+  it('shows "Read first →" hint for needs-read brief', async () => {
+    const quizBriefs = [{ _id: 'b1', title: 'Unread Brief', category: 'Bases', quizState: 'needs-read' }]
+    renderAsUser({ quizBriefs })
     await waitFor(() => screen.getByText('Unread Brief'))
     expect(screen.getByText('Read first →')).toBeDefined()
   })
 
   it('"Read first →" hint links to the brief page', async () => {
-    const briefs = [{ _id: 'b1', title: 'Unread Brief', category: 'Bases' }]
-    renderWithFullState({ briefs, readIds: [], playableIds: ['b1'], passedIds: [] })
-
+    const quizBriefs = [{ _id: 'b1', title: 'Unread Brief', category: 'Bases', quizState: 'needs-read' }]
+    renderAsUser({ quizBriefs })
     await waitFor(() => screen.getByText('Unread Brief'))
     const link = screen.getByRole('link', { name: /unread brief/i })
     expect(link.getAttribute('href')).toBe('/brief/b1')
   })
 
-  it('shows "No data yet" locked state for BOO brief in category with no data', async () => {
-    const briefs = [{ _id: 'b1', title: 'No Data Brief', category: 'Aircrafts' }]
-    // Aircrafts is a BOO category but NOT in booCategories → no-data locked state
-    renderWithFullState({
-      briefs,
-      readIds: ['b1'],
-      playableIds: ['b1'],
-      passedIds: ['b1'],
-      booCategories: [], // empty → no BOO data
-    })
-
-    await waitFor(() => screen.getAllByText('No Data Brief'))
-    // BOO section should show "No data yet"
-    expect(screen.getByText('No data yet')).toBeDefined()
-  })
-
-  it('shows "Pass quiz first →" hint in BOO section when quiz not yet passed', async () => {
-    const briefs = [{ _id: 'b1', title: 'Aircraft Brief', category: 'Aircrafts' }]
-    // Category has BOO data but quiz not passed → needs-quiz hint
-    renderWithFullState({
-      briefs,
-      readIds: ['b1'],
-      playableIds: ['b1'],
-      passedIds: [],
-      booCategories: ['Aircrafts'],
-    })
-
-    await waitFor(() => screen.getAllByText('Aircraft Brief'))
-    expect(screen.getByText('Pass quiz first →')).toBeDefined()
-  })
-
-  it('"Pass quiz first →" hint links to the quiz page', async () => {
-    const briefs = [{ _id: 'b1', title: 'Aircraft Brief', category: 'Aircrafts' }]
-    renderWithFullState({
-      briefs,
-      readIds: ['b1'],
-      playableIds: ['b1'],
-      passedIds: [],
-      booCategories: ['Aircrafts'],
-    })
-
-    await waitFor(() => screen.getAllByText('Aircraft Brief'))
-    // The hint link in BOO section points to the quiz
-    const hintLink = screen.getByRole('link', { name: /pass quiz first/i })
-    expect(hintLink.getAttribute('href')).toBe('/quiz/b1')
-  })
-
-  it('BOO section shows play link when quiz is passed and category has data', async () => {
-    const briefs = [{ _id: 'b1', title: 'Ready Brief', category: 'Aircrafts' }]
-    renderWithFullState({
-      briefs,
-      readIds: ['b1'],
-      playableIds: ['b1'],
-      passedIds: ['b1'],
-      booCategories: ['Aircrafts'],
-    })
-
-    await waitFor(() => screen.getAllByText('Ready Brief'))
-    // Should have a link to the BOO game
-    const booLinks = screen.getAllByRole('link').filter(l => l.getAttribute('href') === '/battle-of-order/b1')
-    expect(booLinks.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('active (not-yet-passed) briefs sort before passed briefs in quiz section', async () => {
-    const briefs = [
-      { _id: 'b1', title: 'Already Passed', category: 'Bases' },
-      { _id: 'b2', title: 'Not Yet Passed', category: 'Bases' },
+  it('active briefs appear before passed briefs (in the order returned by the server)', async () => {
+    // Backend returns active first — frontend must render in that order
+    const quizBriefs = [
+      { _id: 'b1', title: 'Not Yet Passed', category: 'Bases', quizState: 'active' },
+      { _id: 'b2', title: 'Already Passed',  category: 'Bases', quizState: 'passed' },
     ]
-    renderWithFullState({
-      briefs,
-      readIds: ['b1', 'b2'],
-      playableIds: ['b1', 'b2'],
-      passedIds: ['b1'],
-    })
-
+    renderAsUser({ quizBriefs })
     await waitFor(() => screen.getByText('Already Passed'))
+
     const links = screen.getAllByRole('link').filter(l =>
       l.getAttribute('href')?.startsWith('/quiz/')
     )
-    // Not Yet Passed should come before Already Passed
     const titles = links.map(l => l.textContent)
     const notYetIdx = titles.findIndex(t => t.includes('Not Yet Passed'))
     const passedIdx = titles.findIndex(t => t.includes('Already Passed'))
     expect(notYetIdx).toBeLessThan(passedIdx)
   })
+})
 
-  it('locked briefs sort after active and passed briefs in quiz section', async () => {
-    const briefs = [
-      { _id: 'b1', title: 'Locked Brief',  category: 'Bases' },
-      { _id: 'b2', title: 'Active Brief',  category: 'Bases' },
+describe('Play page — Battle of Order states', () => {
+  it('shows "No data yet" locked state for no-data brief', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'No Data Brief', category: 'Aircrafts', booState: 'no-data' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('No Data Brief'))
+    expect(screen.getByText('No data yet')).toBeDefined()
+  })
+
+  it('shows "Pass quiz first →" hint for needs-quiz brief', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Aircraft Brief', category: 'Aircrafts', booState: 'needs-quiz' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Aircraft Brief'))
+    expect(screen.getByText('Pass quiz first →')).toBeDefined()
+  })
+
+  it('"Pass quiz first →" hint links to the quiz page', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Aircraft Brief', category: 'Aircrafts', booState: 'needs-quiz' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Aircraft Brief'))
+    const hintLink = screen.getByRole('link', { name: /pass quiz first/i })
+    expect(hintLink.getAttribute('href')).toBe('/quiz/b1')
+  })
+
+  it('BOO section shows play link for active brief', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Ready Brief', category: 'Aircrafts', booState: 'active' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Ready Brief'))
+    const booLinks = screen.getAllByRole('link').filter(l => l.getAttribute('href') === '/battle-of-order/b1')
+    expect(booLinks.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('shows "✓ Played" badge on a completed BOO brief', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Played Brief', category: 'Aircrafts', booState: 'completed' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Played Brief'))
+    expect(screen.getByText('✓ Played')).toBeDefined()
+  })
+
+  it('completed BOO brief still links to the BOO game', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Played Brief', category: 'Aircrafts', booState: 'completed' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Played Brief'))
+    const links = screen.getAllByRole('link').filter(l => l.getAttribute('href') === '/battle-of-order/b1')
+    expect(links.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('active BOO briefs appear before completed briefs (in the order returned by the server)', async () => {
+    const booBriefs = [
+      { _id: 'b1', title: 'Not Yet Played', category: 'Aircrafts', booState: 'active'    },
+      { _id: 'b2', title: 'Already Played', category: 'Aircrafts', booState: 'completed' },
     ]
-    // b1 has no questions (locked), b2 is active
-    renderWithFullState({
-      briefs,
-      readIds: ['b1', 'b2'],
-      playableIds: ['b2'],
-      passedIds: [],
-    })
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Already Played'))
 
-    await waitFor(() => screen.getByText('Locked Brief'))
-
-    // Active Brief should be in the DOM before Locked Brief
     const container = document.body
-    const activePos = container.innerHTML.indexOf('Active Brief')
-    const lockedPos = container.innerHTML.indexOf('Locked Brief')
-    expect(activePos).toBeLessThan(lockedPos)
+    const activePos    = container.innerHTML.indexOf('Not Yet Played')
+    const completedPos = container.innerHTML.indexOf('Already Played')
+    expect(activePos).toBeLessThan(completedPos)
   })
 })

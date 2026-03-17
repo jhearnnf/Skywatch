@@ -1735,11 +1735,13 @@ function BriefsTab({ API }) {
   const [pendingImages, setPendingImages] = useState([])
   const [qTab,          setQTab]          = useState('easy')
   const [generating,    setGenerating]    = useState(null)
-  const [autoGenerating, setAutoGenerating] = useState(false)
+  const [autoGenerating,  setAutoGenerating]  = useState(false)
+  const [regeneratingAll, setRegeneratingAll] = useState(false)
   const [saveStatus,    setSaveStatus]    = useState(null)
   const [briefId,       setBriefId]       = useState(null)
   const [pendingLead,   setPendingLead]   = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmRegen,  setConfirmRegen]  = useState(false)
   // Section open/close
   const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: true, questions: true, images: true, sources: true })
 
@@ -2032,6 +2034,46 @@ function BriefsTab({ API }) {
     }
   }
 
+  // ── Regenerate description, keywords, and quiz questions (two-step) ──────
+  // Step 1: open confirmation modal
+  const regenerateAll = () => {
+    if (!briefId) return
+    setConfirmRegen(true)
+  }
+
+  // Step 2: cascade-delete user data, then call AI regeneration
+  const handleConfirmRegen = async (reason) => {
+    setConfirmRegen(false)
+    setRegeneratingAll(true)
+    try {
+      // Cascade: wipe all user stats / coins tied to this brief
+      const cascadeRes  = await fetch(`${API}/api/admin/briefs/${briefId}/confirm-regeneration`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+      const cascadeData = await cascadeRes.json()
+      if (cascadeData.status !== 'success') throw new Error(cascadeData.message ?? 'Cascade failed')
+
+      // AI regeneration
+      const regenRes  = await fetch(`${API}/api/admin/ai/regenerate-brief/${briefId}`, {
+        method: 'POST', credentials: 'include',
+      })
+      const regenData = await regenRes.json()
+      if (regenData.status !== 'success') throw new Error(regenData.message ?? 'Regeneration failed')
+
+      const { descriptionSections, keywords, easyQuestions, mediumQuestions } = regenData.data
+      setDraft(p => ({ ...p, descriptionSections, keywords }))
+      setEasyQuestions(easyQuestions ?? [])
+      setMediumQuestions(mediumQuestions ?? [])
+      setToast('Regenerated — review and save when ready')
+    } catch (err) {
+      setToast(`Regenerate failed: ${err.message}`)
+    } finally {
+      setRegeneratingAll(false)
+    }
+  }
+
   // ── Add selected pending images ───────────────────────────────────────────
   const addSelectedImages = async () => {
     if (!briefId) return
@@ -2211,6 +2253,16 @@ function BriefsTab({ API }) {
           onCancel={() => setConfirmDelete(false)}
         />
       )}
+      {confirmRegen && (
+        <ConfirmModal
+          title="Regenerate Brief Content"
+          body="This will delete all read history, quiz game stats, Battle of Order stats, Who's That Aircraft stats, Flashcard stats, and all Aircoins awarded for this brief — for every user. This cannot be undone."
+          confirmLabel="Confirm & Regenerate"
+          danger
+          onConfirm={handleConfirmRegen}
+          onCancel={() => setConfirmRegen(false)}
+        />
+      )}
 
       {/* Top bar */}
       <div className="flex items-center gap-3 mb-5 flex-wrap">
@@ -2224,9 +2276,18 @@ function BriefsTab({ API }) {
           {draft.title || 'New Brief'}
         </h2>
         {pendingLead && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Lead</span>}
+        {briefId && (
+          <button
+            onClick={regenerateAll}
+            disabled={regeneratingAll || autoGenerating || saveStatus === 'saving'}
+            className="text-xs px-3 py-1.5 rounded-lg border border-violet-300 bg-violet-50 text-violet-700 font-semibold hover:bg-violet-100 transition-colors disabled:opacity-40"
+          >
+            {regeneratingAll ? '↺ Regenerating…' : '↺ Regenerate All'}
+          </button>
+        )}
         <button
           onClick={saveBrief}
-          disabled={saveStatus === 'saving'}
+          disabled={saveStatus === 'saving' || regeneratingAll}
           className="text-xs px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold transition-colors disabled:opacity-40"
         >
           {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? '✓ Saved' : 'Save Brief'}
@@ -2421,7 +2482,7 @@ function BriefsTab({ API }) {
               </button>
               <button
                 onClick={generateKeywords}
-                disabled={generating === 'keywords'}
+                disabled={generating === 'keywords' || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
                 {generating === 'keywords' ? '↺ Generating…' : '↺ Generate Keywords'}
@@ -2502,7 +2563,7 @@ function BriefsTab({ API }) {
             <div className="flex gap-2 flex-wrap mt-4">
               <button
                 onClick={generateQuestions}
-                disabled={generating === 'questions' || autoGenerating}
+                disabled={generating === 'questions' || autoGenerating || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
                 {generating === 'questions' || autoGenerating ? '↺ Generating…' : '↺ Generate Questions'}

@@ -11,7 +11,8 @@ const AppSettings = require('../models/AppSettings');
 const User = require('../models/User');
 const AircoinLog = require('../models/AircoinLog');
 const { awardCoins } = require('../utils/awardCoins');
-const IntelligenceBrief = require('../models/IntelligenceBrief');
+const IntelligenceBrief     = require('../models/IntelligenceBrief');
+const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const GameOrderOfBattle = require('../models/GameOrderOfBattle');
 const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/GameOrderOfBattle');
 
@@ -249,6 +250,152 @@ router.get('/quiz/completed-brief-ids', protect, async (req, res) => {
     }).select('intelBriefId').lean();
     const ids = [...new Set(attempts.map(a => a.intelBriefId.toString()))];
     res.json({ status: 'success', data: { ids } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/battle-of-order/recommended-briefs?limit=6
+// Returns up to `limit` BOO-eligible briefs sorted by readiness: active → completed → needs-quiz → no-data
+// "active"    = category has BOO data + quiz passed + BOO not yet won
+// "completed" = category has BOO data + quiz passed + BOO already won
+// "needs-quiz"= category has BOO data + quiz not yet passed
+// "no-data"   = brief is in a BOO category but the category has no game data yet
+router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
+  try {
+    const limit    = Math.min(parseInt(req.query.limit, 10) || 6, 20);
+    const user     = await User.findById(req.user._id).lean();
+    const diff     = user.difficultySetting ?? 'easy';
+    const needed   = diff === 'medium' ? 5 : 3;
+    const settings = await AppSettings.getSettings();
+    const { effectiveTier, canAccessCategory } = require('../utils/subscription');
+    const tier = effectiveTier(user);
+
+    // Which BOO categories have enough game data?
+    const booCategories = new Set();
+    for (const category of BATTLE_CATEGORIES) {
+      for (const orderType of (ORDER_TYPES[category] ?? [])) {
+        const fieldKey = REQUIRED_FIELD[orderType];
+        const count = await IntelligenceBrief.countDocuments({
+          category,
+          [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
+        });
+        if (count >= needed) { booCategories.add(category); break; }
+      }
+    }
+
+    // All briefs in BOO categories accessible to this user
+    const allBooBriefs = await IntelligenceBrief.find({ category: { $in: BATTLE_CATEGORIES } })
+      .select('_id title category subcategory')
+      .sort({ createdAt: -1 })
+      .lean();
+    const accessible = allBooBriefs.filter(b => canAccessCategory(b.category, tier, settings));
+    if (accessible.length === 0) return res.json({ status: 'success', data: { briefs: [] } });
+
+    const accessibleIds = accessible.map(b => b._id);
+
+    // User's won quiz attempts for these briefs (quiz is prerequisite for BOO)
+    const passedQuizRecords = await GameSessionQuizAttempt.find({
+      userId: req.user._id, status: 'completed', won: true,
+      intelBriefId: { $in: accessibleIds },
+    }).select('intelBriefId').lean();
+    const passedQuizSet = new Set(passedQuizRecords.map(r => r.intelBriefId.toString()));
+
+    // User's won BOO results
+    const wonBooResults = await GameSessionOrderOfBattleResult.find({
+      userId: req.user._id, won: true,
+    }).populate({ path: 'gameId', select: 'anchorBriefId' }).lean();
+    const wonBooSet = new Set(
+      wonBooResults
+        .filter(r => r.gameId?.anchorBriefId)
+        .map(r => r.gameId.anchorBriefId.toString())
+    );
+
+    // Bucket each brief
+    const active = [], completed = [], needsQuiz = [], noData = [];
+    for (const brief of accessible) {
+      const id      = brief._id.toString();
+      const hasData = booCategories.has(brief.category);
+      if      (!hasData)                                   noData.push(brief);
+      else if (!passedQuizSet.has(id))                    needsQuiz.push(brief);
+      else if (wonBooSet.has(id))                         completed.push(brief);
+      else                                                active.push(brief);
+    }
+
+    const result = [];
+    const addBriefs = (list, state) => {
+      const remaining = limit - result.length;
+      if (remaining <= 0 || list.length === 0) return;
+      list.slice(0, remaining).forEach(b => result.push({ ...b, booState: state }));
+    };
+    addBriefs(active,    'active');
+    addBriefs(completed, 'completed');
+    addBriefs(needsQuiz, 'needs-quiz');
+    addBriefs(noData,    'no-data');
+
+    res.json({ status: 'success', data: { briefs: result } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/quiz/recommended-briefs?limit=6
+// Returns up to `limit` briefs sorted by quiz readiness: active → needs-read → passed
+// Subscription-locked categories are excluded. No-questions briefs are never returned.
+router.get('/quiz/recommended-briefs', protect, async (req, res) => {
+  try {
+    const limit    = Math.min(parseInt(req.query.limit, 10) || 6, 20);
+    const user     = await User.findById(req.user._id).lean();
+    const diff     = user.difficultySetting ?? 'easy';
+    const settings = await AppSettings.getSettings();
+    const { effectiveTier, canAccessCategory } = require('../utils/subscription');
+    const tier = effectiveTier(user);
+
+    // Brief IDs with enough questions for this difficulty
+    const groups = await GameQuizQuestion.aggregate([
+      { $match: { difficulty: diff } },
+      { $group: { _id: '$intelBriefId', count: { $sum: 1 } } },
+      { $match: { count: { $gte: 5 } } },
+    ]);
+    if (groups.length === 0) return res.json({ status: 'success', data: { briefs: [] } });
+
+    const playableIds = groups.map(g => g._id);
+
+    // User's completed read records
+    const readRecords = await IntelligenceBriefRead.find({
+      userId: req.user._id, completed: true,
+    }).select('intelBriefId').lean();
+    const readSet = new Set(readRecords.map(r => r.intelBriefId.toString()));
+
+    // User's won quiz attempts
+    const passedRecords = await GameSessionQuizAttempt.find({
+      userId: req.user._id, status: 'completed', won: true,
+    }).select('intelBriefId').lean();
+    const passedSet = new Set(passedRecords.map(r => r.intelBriefId.toString()));
+
+    const activeIds    = playableIds.filter(id => readSet.has(id.toString()) && !passedSet.has(id.toString()));
+    const needsReadIds = playableIds.filter(id => !readSet.has(id.toString()) && !passedSet.has(id.toString()));
+    const passedIds    = playableIds.filter(id => passedSet.has(id.toString()));
+
+    const result = [];
+    const addBriefs = async (ids, state) => {
+      if (result.length >= limit || ids.length === 0) return;
+      const docs = await IntelligenceBrief.find({ _id: { $in: ids } })
+        .select('_id title category subcategory')
+        .sort({ createdAt: -1 })
+        .limit(limit - result.length)
+        .lean();
+      for (const doc of docs) {
+        if (!canAccessCategory(doc.category, tier, settings)) continue;
+        result.push({ ...doc, quizState: state });
+      }
+    };
+
+    await addBriefs(activeIds,    'active');
+    await addBriefs(needsReadIds, 'needs-read');
+    await addBriefs(passedIds,    'passed');
+
+    res.json({ status: 'success', data: { briefs: result } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

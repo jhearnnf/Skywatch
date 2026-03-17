@@ -11,6 +11,7 @@
  *   POST /api/admin/ai/generate-keywords
  *   POST /api/admin/ai/generate-quiz
  *   POST /api/admin/ai/generate-image
+ *   POST /api/admin/ai/regenerate-brief/:id
  */
 
 process.env.JWT_SECRET    = 'test_secret';
@@ -19,7 +20,7 @@ process.env.OPENROUTER_KEY = 'test_key';
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
-const { createUser, createAdminUser, createSettings, authCookie } = require('../helpers/factories');
+const { createUser, createAdminUser, createSettings, authCookie, createBrief } = require('../helpers/factories');
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => { await createSettings(); });
@@ -480,5 +481,135 @@ describe('POST /api/admin/ai/generate-image', () => {
       .post('/api/admin/ai/generate-image')
       .send({ title: 'Typhoon' });
     expect(res.status).toBe(401);
+  });
+});
+
+// ── POST /api/admin/ai/regenerate-brief/:id ────────────────────────────────────
+
+describe('POST /api/admin/ai/regenerate-brief/:id', () => {
+  function makeQ(i) {
+    return {
+      question: `Question ${i}?`,
+      answers: Array.from({ length: 10 }, (_, j) => ({ title: `Answer option ${j} for question ${i}` })),
+      correctAnswerIndex: 0,
+    };
+  }
+
+  const MOCK_BRIEF_JSON = JSON.stringify({
+    descriptionSections: [
+      'The Typhoon is a multi-role combat aircraft operated by the RAF.',
+      'The Typhoon is based at RAF Coningsby in Lincolnshire.',
+    ],
+    keywords: [
+      { keyword: 'Typhoon', generatedDescription: 'Multi-role fast jet' },
+      { keyword: 'RAF Coningsby', generatedDescription: 'RAF base in Lincolnshire' },
+    ],
+  });
+
+  const MOCK_QUIZ_JSON = JSON.stringify({
+    easyQuestions:   Array.from({ length: 10 }, (_, i) => makeQ(i)),
+    mediumQuestions: Array.from({ length: 10 }, (_, i) => makeQ(i + 10)),
+  });
+
+  it('returns descriptionSections, keywords, easyQuestions, mediumQuestions on success', async () => {
+    const mockFetch = jest.spyOn(global, 'fetch');
+    mockFetch.mockResolvedValueOnce(mockOpenRouter(MOCK_BRIEF_JSON)); // generate-brief call
+    mockFetch.mockResolvedValueOnce(mockOpenRouter(MOCK_QUIZ_JSON));  // generate-quiz call
+
+    const brief = await createBrief({ title: 'Eurofighter Typhoon', category: 'Aircrafts' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-brief/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(Array.isArray(res.body.data.descriptionSections)).toBe(true);
+    expect(res.body.data.descriptionSections.length).toBeGreaterThan(0);
+    expect(Array.isArray(res.body.data.keywords)).toBe(true);
+    expect(Array.isArray(res.body.data.easyQuestions)).toBe(true);
+    expect(Array.isArray(res.body.data.mediumQuestions)).toBe(true);
+    expect(res.body.data.easyQuestions.length).toBe(10);
+    expect(res.body.data.mediumQuestions.length).toBe(10);
+  });
+
+  it('returns 404 when brief does not exist', async () => {
+    const { Types } = require('mongoose');
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-brief/${new Types.ObjectId()}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toMatch(/brief not found/i);
+  });
+
+  it('returns 500 with message when brief-generation AI returns malformed JSON', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce(mockOpenRouter('not json at all!!!'));
+
+    const brief = await createBrief({ title: 'Test Brief' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-brief/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(500);
+    expect(res.body.message).toMatch(/not valid json/i);
+  });
+
+  it('returns 500 with message when quiz-generation AI returns malformed JSON', async () => {
+    const mockFetch = jest.spyOn(global, 'fetch');
+    mockFetch.mockResolvedValueOnce(mockOpenRouter(MOCK_BRIEF_JSON)); // brief step succeeds
+    mockFetch.mockResolvedValueOnce(mockOpenRouter('not json!!!'));   // quiz step fails
+
+    const brief = await createBrief({ title: 'Test Brief' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-brief/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(500);
+    expect(res.body.message).toMatch(/not valid json/i);
+  });
+
+  it('strips keywords not present verbatim in the fresh descriptionSections', async () => {
+    const briefJsonWithBadKeyword = JSON.stringify({
+      descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
+      keywords: [
+        { keyword: 'Typhoon', generatedDescription: 'A fast jet' },
+        { keyword: 'completely absent phrase xyz', generatedDescription: 'Should be stripped' },
+      ],
+    });
+
+    const mockFetch = jest.spyOn(global, 'fetch');
+    mockFetch.mockResolvedValueOnce(mockOpenRouter(briefJsonWithBadKeyword));
+    mockFetch.mockResolvedValueOnce(mockOpenRouter(MOCK_QUIZ_JSON));
+
+    const brief = await createBrief({ title: 'Test Brief' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-brief/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const kws = res.body.data.keywords;
+    expect(kws.some(k => k.keyword === 'Typhoon')).toBe(true);
+    expect(kws.some(k => k.keyword === 'completely absent phrase xyz')).toBe(false);
+  });
+
+  it('returns 401 for unauthenticated request', async () => {
+    const brief = await createBrief();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-brief/${brief._id}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin user', async () => {
+    const brief = await createBrief();
+    const user  = await createUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-brief/${brief._id}`)
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(403);
   });
 });

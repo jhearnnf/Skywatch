@@ -5,9 +5,14 @@ const ProblemReport = require('../models/ProblemReport');
 const AdminAction = require('../models/AdminAction');
 const AppSettings = require('../models/AppSettings');
 const { sendWelcomeEmail } = require('../utils/email');
-const GameSessionQuizResult           = require('../models/GameSessionQuizResult');
-const GameSessionQuizAttempt          = require('../models/GameSessionQuizAttempt');
-const GameSessionOrderOfBattleResult  = require('../models/GameSessionOrderOfBattleResult');
+const GameSessionQuizResult               = require('../models/GameSessionQuizResult');
+const GameSessionQuizAttempt              = require('../models/GameSessionQuizAttempt');
+const GameSessionOrderOfBattleResult      = require('../models/GameSessionOrderOfBattleResult');
+const GameOrderOfBattle                   = require('../models/GameOrderOfBattle');
+const GameFlashcardRecall                 = require('../models/GameFlashcardRecall');
+const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashcardRecallResult');
+const GameWhosAtAircraft                  = require('../models/GameWhosAtAircraft');
+const GameSessionWhosAtAircraftResult     = require('../models/GameSessionWhosAtAircraftResult');
 const AircoinLog             = require('../models/AircoinLog');
 const { awardCoins }         = require('../utils/awardCoins');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
@@ -640,6 +645,94 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
   }
 });
 
+// POST /api/admin/briefs/:id/confirm-regeneration
+// Cascade-deletes all user game data and awarded coins tied to this brief,
+// then returns deletion counts. The admin has already confirmed a warning modal.
+// Must be called before POSTing to /ai/regenerate-brief/:id.
+router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) => {
+  try {
+    const briefId = req.params.id;
+    if (!await IntelligenceBrief.exists({ _id: briefId })) {
+      return res.status(404).json({ message: 'Brief not found' });
+    }
+
+    // ── Step 1: collect IDs before any deletion ──────────────────────────
+    const [questionIds, booGameIds, flashGameIds, waaGameIds] = await Promise.all([
+      GameQuizQuestion.distinct('_id', { intelBriefId: briefId }),
+      GameOrderOfBattle.distinct('_id', { anchorBriefId: briefId }),
+      GameFlashcardRecall.distinct('_id', { 'cards.intelBriefId': briefId }),
+      GameWhosAtAircraft.distinct('_id', { intelBriefId: briefId }),
+    ]);
+
+    // ── Step 2: reverse Aircoins per user ────────────────────────────────
+    // Group all brief-attributed log entries by userId and sum amounts
+    const coinGroups = await AircoinLog.aggregate([
+      { $match: { briefId: new mongoose.Types.ObjectId(briefId) } },
+      { $group: { _id: '$userId', total: { $sum: '$amount' } } },
+    ]);
+    await Promise.all(coinGroups.map(({ _id: userId, total }) =>
+      User.findByIdAndUpdate(userId, [
+        { $set: { totalAircoins: { $max: [0, { $subtract: ['$totalAircoins', total] }] } } },
+        { $set: { cycleAircoins: { $max: [0, { $subtract: ['$cycleAircoins', total] }] } } },
+      ])
+    ));
+
+    // ── Step 3: delete everything ────────────────────────────────────────
+    const [
+      briefReadResult,
+      quizQResult,
+      quizAttemptResult,
+      quizResultResult,
+      aircoinResult,
+      booResultResult,
+      booGameResult,
+      flashResultResult,
+      flashGameResult,
+      waaResultResult,
+      waaGameResult,
+    ] = await Promise.all([
+      IntelligenceBriefRead.deleteMany({ intelBriefId: briefId }),
+      GameQuizQuestion.deleteMany({ intelBriefId: briefId }),
+      GameSessionQuizAttempt.deleteMany({ intelBriefId: briefId }),
+      GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
+      AircoinLog.deleteMany({ briefId: new mongoose.Types.ObjectId(briefId) }),
+      GameSessionOrderOfBattleResult.deleteMany({ gameId: { $in: booGameIds } }),
+      GameOrderOfBattle.deleteMany({ anchorBriefId: briefId }),
+      GameSessionFlashcardRecallResult.deleteMany({ gameId: { $in: flashGameIds } }),
+      GameFlashcardRecall.deleteMany({ 'cards.intelBriefId': briefId }),
+      GameSessionWhosAtAircraftResult.deleteMany({ gameId: { $in: waaGameIds } }),
+      GameWhosAtAircraft.deleteMany({ intelBriefId: briefId }),
+    ]);
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'regenerate_brief_cascade',
+      reason:     req.body.reason,
+    });
+
+    res.json({
+      status: 'success',
+      data: {
+        coinsReversed:          coinGroups.reduce((s, g) => s + g.total, 0),
+        usersAffected:          coinGroups.length,
+        briefReadsDeleted:      briefReadResult.deletedCount,
+        quizQuestionsDeleted:   quizQResult.deletedCount,
+        quizAttemptsDeleted:    quizAttemptResult.deletedCount,
+        quizResultsDeleted:     quizResultResult.deletedCount,
+        aircoinLogsDeleted:     aircoinResult.deletedCount,
+        booResultsDeleted:      booResultResult.deletedCount,
+        booGamesDeleted:        booGameResult.deletedCount,
+        flashResultsDeleted:    flashResultResult.deletedCount,
+        flashGamesDeleted:      flashGameResult.deletedCount,
+        waaResultsDeleted:      waaResultResult.deletedCount,
+        waaGamesDeleted:        waaGameResult.deletedCount,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/admin/briefs/:id/questions — save quiz questions for a brief (no reason required)
 router.post('/briefs/:id/questions', async (req, res) => {
   try {
@@ -1036,6 +1129,75 @@ router.post('/ai/generate-quiz', async (req, res) => {
       throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
     }
     res.json({ status: 'success', data: { easyQuestions: generated.easyQuestions ?? [], mediumQuestions: generated.mediumQuestions ?? [] } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/regenerate-brief/:id
+// Regenerates description sections, keywords, and quiz questions for an existing brief.
+router.post('/ai/regenerate-brief/:id', async (req, res) => {
+  try {
+    const brief = await IntelligenceBrief.findById(req.params.id);
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+
+    // ── Step 1: regenerate description sections + keywords ─────────────────
+    const TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use plain, clear sentences. Introduce the subject for an RAF applicant building knowledge to enlist.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail an RAF applicant should know."\n  ],\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim somewhere in the descriptionSections above", "generatedDescription": "general RAF-specific definition of this term — e.g. what this aircraft/system/operation is, its role and capabilities — do NOT reference this intel brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "general RAF-specific definition"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "general RAF-specific definition"}\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words. Write each section as plain prose — no bullet points, no headers, no markdown.\n2. Write all sections first, then extract keywords — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere across the sections.\n3. Return exactly 10 keyword objects.\n4. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
+
+    const briefData = await openRouterChat([{
+      role: 'system',
+      content: 'You are a factual intelligence writer for a Royal Air Force training platform. The user is an RAF applicant who needs to gain sufficient knowledge about the modern RAF to join the ranks. Prioritise content that will genuinely help them prepare: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
+    }, {
+      role: 'user',
+      content: `Rewrite a comprehensive intelligence brief about this RAF topic: "${brief.title}"\n\nUsing verified facts from published sources, produce a reference-style brief suitable for an RAF applicant building knowledge to join the ranks. Where relevant, cover: training pathways and which training blocks/phases apply to this subject; RAF bases associated with this subject and which aircraft or squadrons are stationed there and what operations occur there; roles that interact with or are defined by this subject and how those roles relate to specific training pipelines; and the broader operational and modern-day RAF significance.\n\n${TOPIC_JSON_SHAPE}`,
+    }], 'perplexity/sonar', 4096);
+
+    const briefRaw = briefData.choices?.[0]?.message?.content ?? '{}';
+    let briefGenerated;
+    try {
+      briefGenerated = JSON.parse(cleanJson(briefRaw));
+    } catch (parseErr) {
+      console.error('[regenerate-brief] brief JSON parse failed. Raw:', briefRaw);
+      throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
+    }
+
+    // Safety net: discard keywords that don't appear verbatim in the sections
+    const descriptionSections = Array.isArray(briefGenerated.descriptionSections) ? briefGenerated.descriptionSections : [];
+    let keywords = Array.isArray(briefGenerated.keywords) ? briefGenerated.keywords : [];
+    if (descriptionSections.length) {
+      const descText = descriptionSections.join(' ').toLowerCase();
+      keywords = keywords.filter(k => k.keyword && descText.includes(k.keyword.toLowerCase()));
+    }
+
+    // ── Step 2: regenerate quiz questions from the fresh description ────────
+    const freshDescription = descriptionSections.join('\n\n');
+
+    const quizData = await openRouterChat([{
+      role: 'system',
+      content: 'You are a quiz question writer for a Royal Air Force training platform. The user is an RAF applicant who needs to gain sufficient knowledge about the modern RAF to join the ranks — favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context, as these are the areas most relevant to their application journey. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description.',
+    }, {
+      role: 'user',
+      content: `Intel Brief Title: ${brief.title}\n\nIntel Brief Description:\n"""\n${freshDescription}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 10 easy and 10 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Easy questions test direct recall of specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n3. Medium questions require understanding of context or relationships between facts stated in the description.\n4. The correct answer must be explicitly supported by the description.\n5. Wrong answers must be plausible but clearly incorrect based on the description.\n6. Exactly 10 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n7. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each) — never single words, never just a number or acronym alone.\n8. The correct answer must also be a complete sentence or meaningful phrase drawn directly from the description — never a single word or bare number.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":[{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."}],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
+    }], 'perplexity/sonar');
+
+    const quizRaw = quizData.choices?.[0]?.message?.content ?? '{}';
+    let quizGenerated;
+    try {
+      quizGenerated = JSON.parse(cleanJson(quizRaw));
+    } catch (parseErr) {
+      console.error('[regenerate-brief] quiz JSON parse failed. Raw:', quizRaw.slice(0, 500));
+      throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        descriptionSections,
+        keywords,
+        easyQuestions:   quizGenerated.easyQuestions   ?? [],
+        mediumQuestions: quizGenerated.mediumQuestions ?? [],
+      },
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

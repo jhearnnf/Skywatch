@@ -102,7 +102,7 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
 }
 
 // ── Completion screen ─────────────────────────────────────────────────────
-function CompletionScreen({ brief, onQuiz, onBattleOrder, onBack, user }) {
+function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user }) {
   const [quizHovered, setQuizHovered] = useState(false)
 
   return (
@@ -147,12 +147,21 @@ function CompletionScreen({ brief, onQuiz, onBattleOrder, onBack, user }) {
             >
               🎮 Take the Quiz → Earn Aircoins
             </button>
-            {onBattleOrder && (
+            {booState === 'available' && (
               <button
                 onClick={onBattleOrder}
                 className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-2xl text-base transition-colors"
               >
                 🗺️ Battle Order → Earn Aircoins
+              </button>
+            )}
+            {booState === 'locked-quiz' && (
+              <button
+                disabled
+                className="w-full py-4 border border-dashed border-slate-200 text-slate-400 font-semibold rounded-2xl text-sm cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <span>🗺️ Battle Order</span>
+                <span className="text-xs bg-slate-100 px-2 py-0.5 rounded-full">🔒 Pass the quiz first</span>
               </button>
             )}
           </>
@@ -228,7 +237,8 @@ export default function BriefReader() {
   const [activeKw, setActiveKw]    = useState(null)
   const [learnedKws, setLearned]   = useState(new Set())
   const [readRecord, setReadRecord] = useState(null)
-  const [booAvailable, setBooAvailable] = useState(false)
+  // 'unavailable' | 'locked-quiz' | 'available'
+  const [booState, setBooState] = useState('unavailable')
   const markingRef                 = useRef(false)
   const briefOpenedRef             = useRef(false)
   const accSecondsRef              = useRef(0)
@@ -323,14 +333,28 @@ export default function BriefReader() {
     } catch { /* malformed — skip */ }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Check BOO availability once brief loads and user is authenticated
+  // Check BOO availability + quiz prerequisite once the completion screen is shown
   useEffect(() => {
-    if (!brief || !user || !BOO_CATEGORIES.includes(brief.category)) return
-    fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(data => setBooAvailable(data.data?.available ?? false))
-      .catch(() => {})
-  }, [brief, user, briefId, API]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!done || !brief || !user || !BOO_CATEGORIES.includes(brief.category)) return
+    let cancelled = false
+    async function checkBoo() {
+      try {
+        const [booRes, quizRes] = await Promise.all([
+          fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' }),
+          fetch(`${API}/api/games/quiz/status/${briefId}`,                     { credentials: 'include' }),
+        ])
+        const [booData, quizData] = await Promise.all([booRes.json(), quizRes.json()])
+        if (cancelled) return
+        const booAvail   = booData.data?.available    ?? false
+        const quizPassed = quizData.data?.hasCompleted ?? false
+        if      (!booAvail)   setBooState('unavailable')
+        else if (!quizPassed) setBooState('locked-quiz')
+        else                  setBooState('available')
+      } catch { /* silently ignore */ }
+    }
+    checkBoo()
+    return () => { cancelled = true }
+  }, [done, brief, user, briefId, API]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tutorial on first visit
   useEffect(() => {
@@ -480,7 +504,8 @@ export default function BriefReader() {
           brief={brief}
           user={user}
           onQuiz={() => navigate(`/quiz/${briefId}`)}
-          onBattleOrder={booAvailable ? () => navigate(`/battle-of-order/${briefId}`) : null}
+          booState={booState}
+          onBattleOrder={booState === 'available' ? () => navigate(`/battle-of-order/${briefId}`) : null}
           onBack={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
         />
       ) : (

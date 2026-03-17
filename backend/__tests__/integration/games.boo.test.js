@@ -7,6 +7,8 @@ const {
   createUser,
   createSettings,
   createBooBriefs,
+  createPassedQuizAttempt,
+  createWonBooResult,
   authCookie,
 } = require('../helpers/factories');
 
@@ -317,5 +319,104 @@ describe('GET /api/games/battle-of-order/status/:briefId', () => {
       .get(`/api/games/battle-of-order/status/${briefs[0]._id}`);
 
     expect(res.status).toBe(401);
+  });
+});
+
+// ── GET /api/games/battle-of-order/recommended-briefs ─────────────────────
+describe('GET /api/games/battle-of-order/recommended-briefs', () => {
+  it('returns 401 if not authenticated', async () => {
+    const res = await request(app).get('/api/games/battle-of-order/recommended-briefs');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns empty array when no BOO briefs exist', async () => {
+    const res = await request(app)
+      .get('/api/games/battle-of-order/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.briefs).toHaveLength(0);
+  });
+
+  it('returns needs-quiz when quiz not passed but category has BOO data', async () => {
+    const briefs = await createBooBriefs(3, 'Aircrafts'); // >=3 needed for easy
+
+    const res = await request(app)
+      .get('/api/games/battle-of-order/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const returned = res.body.data.briefs;
+    expect(returned.length).toBeGreaterThan(0);
+    expect(returned[0].booState).toBe('needs-quiz');
+  });
+
+  it('returns active when quiz is passed and BOO not yet won', async () => {
+    const briefs = await createBooBriefs(3, 'Aircrafts');
+    const anchor = briefs[0];
+    await createPassedQuizAttempt(user._id, anchor._id);
+
+    const res = await request(app)
+      .get('/api/games/battle-of-order/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const active = res.body.data.briefs.find(b => b._id.toString() === anchor._id.toString());
+    expect(active).toBeDefined();
+    expect(active.booState).toBe('active');
+  });
+
+  it('returns completed when quiz is passed and BOO already won', async () => {
+    const briefs = await createBooBriefs(3, 'Aircrafts');
+    const anchor = briefs[0];
+    await createPassedQuizAttempt(user._id, anchor._id);
+    await createWonBooResult(user._id, anchor._id, { category: 'Aircrafts', orderType: 'speed' });
+
+    const res = await request(app)
+      .get('/api/games/battle-of-order/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const completed = res.body.data.briefs.find(b => b._id.toString() === anchor._id.toString());
+    expect(completed).toBeDefined();
+    expect(completed.booState).toBe('completed');
+  });
+
+  it('orders active before completed before needs-quiz', async () => {
+    const briefs = await createBooBriefs(3, 'Aircrafts');
+    const [bActive, bCompleted, bNeedsQuiz] = briefs;
+
+    // bActive: quiz passed, BOO not won
+    await createPassedQuizAttempt(user._id, bActive._id);
+
+    // bCompleted: quiz passed, BOO won
+    await createPassedQuizAttempt(user._id, bCompleted._id);
+    await createWonBooResult(user._id, bCompleted._id, { category: 'Aircrafts', orderType: 'speed' });
+
+    // bNeedsQuiz: quiz not passed (no action)
+
+    const res = await request(app)
+      .get('/api/games/battle-of-order/recommended-briefs')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const briefs2 = res.body.data.briefs;
+    const activeIdx    = briefs2.findIndex(b => b._id.toString() === bActive._id.toString());
+    const completedIdx = briefs2.findIndex(b => b._id.toString() === bCompleted._id.toString());
+    const needsQuizIdx = briefs2.findIndex(b => b._id.toString() === bNeedsQuiz._id.toString());
+
+    expect(activeIdx).toBeLessThan(completedIdx);
+    expect(completedIdx).toBeLessThan(needsQuizIdx);
+  });
+
+  it('respects the limit query parameter', async () => {
+    await createBooBriefs(5, 'Aircrafts');
+
+    const res = await request(app)
+      .get('/api/games/battle-of-order/recommended-briefs?limit=2')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.briefs).toHaveLength(2);
   });
 });

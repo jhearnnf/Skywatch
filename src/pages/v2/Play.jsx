@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
-import { useAppSettings } from '../../context/AppSettingsContext'
-import { isCategoryLocked } from '../../utils/subscription'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 
 const GAME_MODES = [
@@ -42,21 +40,13 @@ const GAME_MODES = [
   },
 ]
 
-const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
-
 export default function Play() {
   const { user, API } = useAuth()
   const { start }     = useAppTutorial()
-  const { settings }  = useAppSettings()
 
-  const [recentBriefs,          setRecentBriefs]          = useState([])
-  const [passedBriefIds,        setPassedBriefIds]        = useState(new Set())
-  const [readBriefIds,          setReadBriefIds]          = useState(new Set())
-  const [quizPlayableBriefIds,  setQuizPlayableBriefIds]  = useState(new Set())
-  const [booAvailableCategories,setBooAvailableCategories]= useState(new Set())
-  const [activeGame,            setActiveGame]            = useState(null)
-
-  const booBriefs = recentBriefs.filter(b => BOO_CATEGORIES.includes(b.category))
+  const [quizBriefs, setQuizBriefs] = useState([])
+  const [booBriefs,  setBooBriefs]  = useState([])
+  const [activeGame, setActiveGame] = useState(null)
 
   const quizRef      = useRef(null)
   const flashcardRef = useRef(null)
@@ -80,66 +70,22 @@ export default function Play() {
   // Clear highlight timer on unmount
   useEffect(() => () => clearTimeout(highlightTimerRef.current), [])
 
-  // Fetch recently read briefs + quiz/BOO state data
+  // Fetch recommended briefs for each game type
   useEffect(() => {
     if (!user) {
-      setRecentBriefs([])
-      setPassedBriefIds(new Set())
-      setReadBriefIds(new Set())
-      setQuizPlayableBriefIds(new Set())
-      setBooAvailableCategories(new Set())
+      setQuizBriefs([])
+      setBooBriefs([])
       return
     }
-    fetch(`${API}/api/briefs?limit=6`, { credentials: 'include' })
+    fetch(`${API}/api/games/quiz/recommended-briefs?limit=6`, { credentials: 'include' })
       .then(r => r.json())
-      .then(data => setRecentBriefs(data?.data?.briefs ?? []))
+      .then(data => setQuizBriefs(data?.data?.briefs ?? []))
       .catch(() => {})
-    fetch(`${API}/api/games/quiz/completed-brief-ids`, { credentials: 'include' })
+    fetch(`${API}/api/games/battle-of-order/recommended-briefs?limit=6`, { credentials: 'include' })
       .then(r => r.json())
-      .then(data => setPassedBriefIds(new Set(data?.data?.ids ?? [])))
-      .catch(() => {})
-    fetch(`${API}/api/briefs/completed-brief-ids`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(data => setReadBriefIds(new Set(data?.data?.ids ?? [])))
-      .catch(() => {})
-    fetch(`${API}/api/games/quiz/playable-brief-ids`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(data => setQuizPlayableBriefIds(new Set(data?.data?.ids ?? [])))
-      .catch(() => {})
-    fetch(`${API}/api/games/battle-of-order/available-categories`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(data => setBooAvailableCategories(new Set(data?.data?.categories ?? [])))
+      .then(data => setBooBriefs(data?.data?.briefs ?? []))
       .catch(() => {})
   }, [user, API])
-
-  // ── State helpers ─────────────────────────────────────────────────────────
-
-  // Returns: 'subscription-locked' | 'no-questions' | 'needs-read' | 'active' | 'passed'
-  function getQuizState(brief) {
-    if (isCategoryLocked(brief.category, user, settings)) return 'subscription-locked'
-    if (!quizPlayableBriefIds.has(brief._id)) return 'no-questions'
-    if (!readBriefIds.has(brief._id)) return 'needs-read'
-    if (passedBriefIds.has(brief._id)) return 'passed'
-    return 'active'
-  }
-
-  // Returns: 'subscription-locked' | 'no-data' | 'needs-quiz' | 'active'
-  function getBooState(brief) {
-    if (isCategoryLocked(brief.category, user, settings)) return 'subscription-locked'
-    if (!booAvailableCategories.has(brief.category)) return 'no-data'
-    if (!passedBriefIds.has(brief._id)) return 'needs-quiz'
-    return 'active'
-  }
-
-  const QUIZ_SORT = { 'active': 0, 'passed': 1, 'needs-read': 2, 'no-questions': 3, 'subscription-locked': 4 }
-  const BOO_SORT  = { 'active': 0, 'needs-quiz': 1, 'no-data': 2, 'subscription-locked': 3 }
-
-  const sortedQuizBriefs = [...recentBriefs].sort((a, b) =>
-    (QUIZ_SORT[getQuizState(a)] ?? 99) - (QUIZ_SORT[getQuizState(b)] ?? 99)
-  )
-  const sortedBooBriefs = [...booBriefs].sort((a, b) =>
-    (BOO_SORT[getBooState(a)] ?? 99) - (BOO_SORT[getBooState(b)] ?? 99)
-  )
 
   // ── Card / scroll ─────────────────────────────────────────────────────────
 
@@ -232,12 +178,12 @@ export default function Play() {
                     Sign In
                   </Link>
                 </div>
-              ) : sortedQuizBriefs.length > 0 ? (
+              ) : quizBriefs.length > 0 ? (
                 <div className="space-y-2">
-                  {sortedQuizBriefs.map((brief, i) => {
-                    const state = getQuizState(brief)
+                  {quizBriefs.map((brief, i) => {
+                    const state = brief.quizState
 
-                    if (state === 'subscription-locked' || state === 'no-questions') {
+                    if (state === 'no-questions') {
                       return (
                         <motion.div
                           key={brief._id}
@@ -253,9 +199,7 @@ export default function Play() {
                               <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
                               <p className="text-xs text-slate-400">{brief.category}</p>
                             </div>
-                            <span className="text-xs text-slate-400 shrink-0">
-                              {state === 'subscription-locked' ? 'Upgrade plan' : 'No questions yet'}
-                            </span>
+                            <span className="text-xs text-slate-400 shrink-0">No questions yet</span>
                           </div>
                         </motion.div>
                       )
@@ -408,12 +352,12 @@ export default function Play() {
                     Sign In
                   </Link>
                 </div>
-              ) : sortedBooBriefs.length > 0 ? (
+              ) : booBriefs.length > 0 ? (
                 <div className="space-y-2">
-                  {sortedBooBriefs.map((brief, i) => {
-                    const state = getBooState(brief)
+                  {booBriefs.map((brief, i) => {
+                    const state = brief.booState
 
-                    if (state === 'subscription-locked' || state === 'no-data') {
+                    if (state === 'no-data') {
                       return (
                         <motion.div
                           key={brief._id}
@@ -462,6 +406,7 @@ export default function Play() {
                       )
                     }
 
+                    const played = state === 'completed'
                     return (
                       <motion.div
                         key={brief._id}
@@ -471,16 +416,27 @@ export default function Play() {
                       >
                         <Link
                           to={`/battle-of-order/${brief._id}`}
-                          className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group"
+                          className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all group
+                            ${played
+                              ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
+                              : 'bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50'
+                            }`}
                         >
-                          <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center shrink-0 group-hover:bg-slate-700 transition-colors">
-                            <span className="font-bold text-xs text-white">⊞</span>
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
+                            ${played ? 'bg-emerald-100' : 'bg-slate-800 group-hover:bg-slate-700 transition-colors'}`}
+                          >
+                            <span className={`font-bold text-xs ${played ? 'text-emerald-600' : 'text-white'}`}>
+                              {played ? '✓' : '⊞'}
+                            </span>
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
                             <p className="text-xs text-slate-400">{brief.category}</p>
                           </div>
-                          <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                          {played
+                            ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Played</span>
+                            : <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                          }
                         </Link>
                       </motion.div>
                     )

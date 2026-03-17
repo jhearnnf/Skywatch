@@ -469,3 +469,74 @@ describe('BriefReader — post-login brief completion', () => {
     expect(screen.getByText('⭐ Complete Brief & Collect Aircoins')).toBeDefined()
   })
 })
+
+// ── BriefReader — BOO button state on completion screen ───────────────────
+
+describe('BriefReader — BOO button on completion screen', () => {
+  function makeBooResponse(available) {
+    return { ok: true, json: async () => ({ data: { available, options: [] } }) }
+  }
+  function makeQuizStatusResponse(hasCompleted) {
+    return { ok: true, json: async () => ({ data: { hasCompleted } }) }
+  }
+
+  beforeEach(() => {
+    setupLoggedIn()
+    sessionStorage.clear()
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  // BOO check fires AFTER done=true (on completion screen).
+  // Fetch call order: brief (1) → /complete (2) → /options (3) → /quiz/status (4)
+  it('shows active BOO button when BOO available and quiz passed', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValueOnce(makeBooResponse(true))
+      .mockResolvedValueOnce(makeQuizStatusResponse(true))
+
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+
+    await waitFor(() => screen.getByText('Brief Complete!'))
+    await waitFor(() => {
+      const btn = screen.getByText('🗺️ Battle Order → Earn Aircoins', { selector: 'button' })
+      expect(btn).not.toBeDisabled()
+    })
+  })
+
+  it('shows locked BOO button when BOO available but quiz not yet passed', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValueOnce(makeBooResponse(true))
+      .mockResolvedValueOnce(makeQuizStatusResponse(false))
+
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+
+    await waitFor(() => screen.getByText('Brief Complete!'))
+    await waitFor(() => {
+      expect(screen.getByText('🔒 Pass the quiz first')).toBeDefined()
+      const lockedBtn = screen.getByText('🔒 Pass the quiz first').closest('button')
+      expect(lockedBtn).toBeDisabled()
+    })
+  })
+
+  it('hides BOO button entirely when BOO not available for this category', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValueOnce(makeBooResponse(false))
+      .mockResolvedValueOnce(makeQuizStatusResponse(true))
+
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+
+    await waitFor(() => screen.getByText('Brief Complete!'))
+    expect(screen.queryByText(/battle order/i)).toBeNull()
+  })
+})
