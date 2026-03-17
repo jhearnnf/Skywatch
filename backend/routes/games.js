@@ -85,6 +85,7 @@ router.post('/quiz/start', protect, async (req, res) => {
       userId: req.user._id,
       intelBriefId: briefId,
       status: 'completed',
+      won: true,
     });
     const isFirstAttempt = !priorCompleted;
 

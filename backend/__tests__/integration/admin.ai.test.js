@@ -12,6 +12,7 @@
  *   POST /api/admin/ai/generate-quiz
  *   POST /api/admin/ai/generate-image
  *   POST /api/admin/ai/regenerate-brief/:id
+ *   POST /api/admin/ai/generate-rank-data/:id
  */
 
 process.env.JWT_SECRET    = 'test_secret';
@@ -611,5 +612,182 @@ describe('POST /api/admin/ai/regenerate-brief/:id', () => {
       .post(`/api/admin/ai/regenerate-brief/${brief._id}`)
       .set('Cookie', authCookie(user._id));
     expect(res.status).toBe(403);
+  });
+});
+
+// ── POST /api/admin/ai/regenerate-description/:id ──────────────────────────
+
+describe('POST /api/admin/ai/regenerate-description/:id', () => {
+  const MOCK_DESC_JSON = JSON.stringify({
+    descriptionSections: [
+      'The Typhoon is a multi-role combat aircraft operated by the RAF.',
+      'It is based primarily at RAF Coningsby in Lincolnshire.',
+    ],
+  });
+
+  it('returns descriptionSections array on success', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce(mockOpenRouter(MOCK_DESC_JSON));
+
+    const brief = await createBrief({ title: 'Eurofighter Typhoon' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(Array.isArray(res.body.data.descriptionSections)).toBe(true);
+    expect(res.body.data.descriptionSections.length).toBeGreaterThan(0);
+    expect(res.body.data.descriptionSections[0]).toContain('Typhoon');
+  });
+
+  it('response does NOT include keywords, easyQuestions, or mediumQuestions', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce(mockOpenRouter(MOCK_DESC_JSON));
+
+    const brief = await createBrief({ title: 'Eurofighter Typhoon' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.keywords).toBeUndefined();
+    expect(res.body.data.easyQuestions).toBeUndefined();
+    expect(res.body.data.mediumQuestions).toBeUndefined();
+  });
+
+  it('returns 404 when brief does not exist', async () => {
+    const { Types } = require('mongoose');
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-description/${new Types.ObjectId()}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toMatch(/brief not found/i);
+  });
+
+  it('returns 500 with message when AI returns malformed JSON', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce(mockOpenRouter('not json at all!!!'));
+
+    const brief = await createBrief({ title: 'Test Brief' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(500);
+    expect(res.body.message).toMatch(/not valid json/i);
+  });
+
+  it('returns 401 for unauthenticated request', async () => {
+    const brief = await createBrief();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin user', async () => {
+    const brief = await createBrief();
+    const user  = await createUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`)
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(403);
+  });
+});
+
+// ── POST /api/admin/ai/generate-rank-data/:id ─────────────────────────────────
+
+describe('POST /api/admin/ai/generate-rank-data/:id — auth guards', () => {
+  it('returns 401 for unauthenticated request', async () => {
+    const brief = await createBrief({ category: 'Ranks', title: 'Sergeant' });
+    const res   = await request(app).post(`/api/admin/ai/generate-rank-data/${brief._id}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin user', async () => {
+    const brief = await createBrief({ category: 'Ranks', title: 'Sergeant' });
+    const user  = await createUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/generate-rank-data/${brief._id}`)
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 404 for unknown brief id', async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-rank-data/000000000000000000000000')
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /api/admin/ai/generate-rank-data/:id — category guard', () => {
+  it('returns 400 for a non-Ranks brief', async () => {
+    const admin = await createAdminUser();
+    const brief = await createBrief({ category: 'Aircrafts', title: 'Typhoon' });
+    const res   = await request(app)
+      .post(`/api/admin/ai/generate-rank-data/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/not a ranks category/i);
+  });
+});
+
+describe('POST /api/admin/ai/generate-rank-data/:id — hierarchy lookup', () => {
+  const cases = [
+    { title: 'Marshal of the Royal Air Force', expected: 1  },
+    { title: 'Air Chief Marshal',              expected: 2  },
+    { title: 'Air Marshal',                    expected: 3  },
+    { title: 'Air Vice-Marshal',               expected: 4  },
+    { title: 'Air Commodore',                  expected: 5  },
+    { title: 'Group Captain',                  expected: 6  },
+    { title: 'Wing Commander',                 expected: 7  },
+    { title: 'Squadron Leader',                expected: 8  },
+    { title: 'Flight Lieutenant',              expected: 9  },
+    { title: 'Flying Officer',                 expected: 10 },
+    { title: 'Pilot Officer',                  expected: 11 },
+    { title: 'Warrant Officer (RAF)',           expected: 12 },
+    { title: 'Master Aircrew',                 expected: 13 },
+    { title: 'Flight Sergeant',                expected: 14 },
+    { title: 'Chief Technician',               expected: 15 },
+    { title: 'Sergeant (RAF)',                  expected: 16 },
+    { title: 'Corporal (RAF)',                  expected: 17 },
+    { title: 'Junior Technician',              expected: 18 },
+    { title: 'Senior Aircraftman / Senior Aircraftwoman', expected: 19 },
+    { title: 'Leading Aircraftman / Leading Aircraftwoman', expected: 20 },
+    { title: 'Aircraftman / Aircraftwoman',    expected: 21 },
+  ];
+
+  test.each(cases)('$title → #$expected', async ({ title, expected }) => {
+    const admin = await createAdminUser();
+    const brief = await createBrief({ category: 'Ranks', title });
+    const res   = await request(app)
+      .post(`/api/admin/ai/generate-rank-data/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.rankHierarchyOrder).toBe(expected);
+  });
+
+  it('returns 422 when title does not match any known rank', async () => {
+    const admin = await createAdminUser();
+    const brief = await createBrief({ category: 'Ranks', title: 'Unknown Custom Rank' });
+    const res   = await request(app)
+      .post(`/api/admin/ai/generate-rank-data/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(422);
+    expect(res.body.message).toMatch(/could not determine rank order/i);
+  });
+
+  it('Air Vice-Marshal resolves to #4, not confused with Air Marshal (#3)', async () => {
+    const admin = await createAdminUser();
+    const brief = await createBrief({ category: 'Ranks', title: 'Air Vice-Marshal' });
+    const res   = await request(app)
+      .post(`/api/admin/ai/generate-rank-data/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+    expect(res.body.data.rankHierarchyOrder).toBe(4);
   });
 });

@@ -308,3 +308,255 @@ describe('Admin Briefs — Regenerate All two-step flow', () => {
     expect(screen.getByText(/easy.*10|10.*easy/i) ?? screen.queryByText('10')).toBeDefined()
   })
 })
+
+// ── Tests: Generate Description button ────────────────────────────────────
+
+const DESC_RESPONSE = {
+  status: 'success',
+  data: {
+    descriptionSections: ['Brand new section alpha.', 'Brand new section beta.'],
+  },
+}
+
+describe('Admin Briefs — Generate Description button', () => {
+  beforeEach(() => { global.Audio = class { play = vi.fn().mockResolvedValue(undefined) } })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows "Generate Description" button inside the Description Sections panel when a brief is open', async () => {
+    global.fetch = vi.fn().mockImplementation(baseHandlers())
+    render(<Admin />)
+    await openBriefEditor()
+    expect(screen.getByRole('button', { name: /generate description/i })).toBeDefined()
+  })
+
+  it('button is absent in new-brief mode (no briefId)', async () => {
+    global.fetch = vi.fn().mockImplementation(baseHandlers())
+    render(<Admin />)
+    await navigateToBriefsTab()
+    fireEvent.click(await screen.findByRole('button', { name: /new brief/i }))
+    await screen.findByRole('button', { name: /save brief/i })
+    expect(screen.queryByRole('button', { name: /generate description/i })).toBeNull()
+  })
+
+  it('clicking does NOT open the cascade confirmation modal', async () => {
+    global.fetch = vi.fn().mockImplementation((url, opts) => {
+      if (url.includes('regenerate-description'))
+        return Promise.resolve({ ok: true, json: async () => DESC_RESPONSE })
+      return baseHandlers()(url, opts)
+    })
+    render(<Admin />)
+    await openBriefEditor()
+    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    // Modal text must NOT appear
+    await waitFor(() => {}, { timeout: 300 }).catch(() => {})
+    expect(screen.queryByText(/confirm & regenerate/i)).toBeNull()
+    expect(screen.queryByText(/delete all read history/i)).toBeNull()
+  })
+
+  it('shows "Generating…" label while request is in flight', async () => {
+    let resolveDesc
+    const descPromise = new Promise(resolve => { resolveDesc = resolve })
+    global.fetch = vi.fn().mockImplementation((url, opts) => {
+      if (url.includes('regenerate-description')) return descPromise
+      return baseHandlers()(url, opts)
+    })
+    render(<Admin />)
+    await openBriefEditor()
+    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await waitFor(() => screen.getByText(/↺ generating…/i))
+    resolveDesc({ ok: true, json: async () => DESC_RESPONSE })
+  })
+
+  it('updates description section textareas on success', async () => {
+    global.fetch = vi.fn().mockImplementation((url, opts) => {
+      if (url.includes('regenerate-description'))
+        return Promise.resolve({ ok: true, json: async () => DESC_RESPONSE })
+      return baseHandlers()(url, opts)
+    })
+    render(<Admin />)
+    await openBriefEditor()
+    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await waitFor(() => screen.getByDisplayValue('Brand new section alpha.'))
+    expect(screen.getByDisplayValue('Brand new section beta.')).toBeDefined()
+  })
+
+  it('does NOT modify keywords after a successful description generation', async () => {
+    global.fetch = vi.fn().mockImplementation((url, opts) => {
+      if (url.includes('regenerate-description'))
+        return Promise.resolve({ ok: true, json: async () => DESC_RESPONSE })
+      return baseHandlers()(url, opts)
+    })
+    render(<Admin />)
+    await openBriefEditor()
+    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await waitFor(() => screen.getByDisplayValue('Brand new section alpha.'))
+    // Original keyword from MOCK_BRIEF must still be in the editor
+    expect(screen.getByDisplayValue('Typhoon')).toBeDefined()
+  })
+
+  it('shows success toast after generation completes', async () => {
+    global.fetch = vi.fn().mockImplementation((url, opts) => {
+      if (url.includes('regenerate-description'))
+        return Promise.resolve({ ok: true, json: async () => DESC_RESPONSE })
+      return baseHandlers()(url, opts)
+    })
+    render(<Admin />)
+    await openBriefEditor()
+    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await waitFor(() => screen.getByText(/description generated — review and save/i))
+  })
+
+  it('shows error toast when the API returns an error response', async () => {
+    global.fetch = vi.fn().mockImplementation((url, opts) => {
+      if (url.includes('regenerate-description'))
+        return Promise.resolve({ ok: false, json: async () => ({ status: 'error', message: 'AI timeout' }) })
+      return baseHandlers()(url, opts)
+    })
+    render(<Admin />)
+    await openBriefEditor()
+    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await waitFor(() => screen.getByText(/generate description failed/i))
+  })
+
+  it('is disabled while regeneratingAll is in progress', async () => {
+    let resolveCascade
+    const cascadePromise = new Promise(resolve => { resolveCascade = resolve })
+    global.fetch = vi.fn().mockImplementation((url, opts) => {
+      if (url.includes('confirm-regeneration')) return cascadePromise
+      if (url.includes('ai/regenerate-brief'))  return Promise.resolve({ ok: true, json: async () => REGEN_RESPONSE })
+      return baseHandlers()(url, opts)
+    })
+    render(<Admin />)
+    await openBriefEditor()
+    // Start the full regen (opens modal)
+    await confirmRegenModal()
+    // While cascade is in flight, Generate Description must be disabled
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /generate description/i }).disabled).toBe(true)
+    })
+    resolveCascade({ ok: true, json: async () => CASCADE_SUCCESS })
+  })
+
+  it('does NOT automatically call saveBrief after generation completes', async () => {
+    global.fetch = vi.fn().mockImplementation((url, opts) => {
+      if (url.includes('regenerate-description'))
+        return Promise.resolve({ ok: true, json: async () => DESC_RESPONSE })
+      return baseHandlers()(url, opts)
+    })
+    render(<Admin />)
+    await openBriefEditor()
+    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await waitFor(() => screen.getByText(/description generated/i))
+    const calls = global.fetch.mock.calls.map(c => [c[0], c[1]])
+    const saveCalls = calls.filter(([url, opts]) =>
+      url.includes('/api/admin/briefs/brief1') && opts?.method === 'PATCH'
+    )
+    expect(saveCalls.length).toBe(0)
+  })
+})
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+// Builds a brief list handler that returns a single brief with the given shape
+function briefListHandler(briefOverrides) {
+  const brief = { ...MOCK_BRIEF, ...briefOverrides }
+  return (url, opts) => {
+    if (url.includes('/api/admin/briefs/brief1') && (!opts || opts.method !== 'POST'))
+      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { brief } }) })
+    if (url.includes('/api/admin/briefs') && !url.includes('brief1'))
+      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { briefs: [brief], total: 1 } }) })
+    return baseHandlers()(url, opts)
+  }
+}
+
+// Returns 10 fake ObjectId strings (simulates unpopulated quiz question refs)
+function fakeIds(n = 10) {
+  return Array.from({ length: n }, (_, i) => `60f1b2c3d4e5f6a7b8c9d${String(i).padStart(3, '0')}`)
+}
+
+// ── Tests: BriefStatusPills badges ────────────────────────────────────────
+
+describe('Admin Briefs — BriefStatusPills badges', () => {
+  beforeEach(() => { global.Audio = class { play = vi.fn().mockResolvedValue(undefined) } })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('K badge is green when brief has ≥10 keywords', async () => {
+    global.fetch = vi.fn().mockImplementation(briefListHandler({
+      keywords: Array.from({ length: 10 }, (_, i) => ({ keyword: `kw${i}`, generatedDescription: '' })),
+    }))
+    render(<Admin />)
+    await navigateToBriefsTab()
+    await screen.findByText('Eurofighter Typhoon')
+    expect(screen.getByText('K').className).toContain('bg-emerald-100')
+  })
+
+  it('K badge is grey when brief has <10 keywords', async () => {
+    global.fetch = vi.fn().mockImplementation(briefListHandler({ keywords: [{ keyword: 'one', generatedDescription: '' }] }))
+    render(<Admin />)
+    await navigateToBriefsTab()
+    await screen.findByText('Eurofighter Typhoon')
+    expect(screen.getByText('K').className).toContain('bg-slate-100')
+  })
+
+  it('Q badge is green when brief has ≥10 easy AND ≥10 medium question refs', async () => {
+    global.fetch = vi.fn().mockImplementation(briefListHandler({
+      quizQuestionsEasy:   fakeIds(10),
+      quizQuestionsMedium: fakeIds(10),
+    }))
+    render(<Admin />)
+    await navigateToBriefsTab()
+    await screen.findByText('Eurofighter Typhoon')
+    expect(screen.getByText('Q').className).toContain('bg-emerald-100')
+  })
+
+  it('Q badge is grey when brief has <10 easy question refs', async () => {
+    global.fetch = vi.fn().mockImplementation(briefListHandler({
+      quizQuestionsEasy:   fakeIds(5),
+      quizQuestionsMedium: fakeIds(10),
+    }))
+    render(<Admin />)
+    await navigateToBriefsTab()
+    await screen.findByText('Eurofighter Typhoon')
+    expect(screen.getByText('Q').className).toContain('bg-slate-100')
+  })
+
+  it('Q badge is grey when brief has <10 medium question refs', async () => {
+    global.fetch = vi.fn().mockImplementation(briefListHandler({
+      quizQuestionsEasy:   fakeIds(10),
+      quizQuestionsMedium: fakeIds(3),
+    }))
+    render(<Admin />)
+    await navigateToBriefsTab()
+    await screen.findByText('Eurofighter Typhoon')
+    expect(screen.getByText('Q').className).toContain('bg-slate-100')
+  })
+
+  it('Q badge is grey when both easy and medium question arrays are empty', async () => {
+    global.fetch = vi.fn().mockImplementation(briefListHandler({
+      quizQuestionsEasy:   [],
+      quizQuestionsMedium: [],
+    }))
+    render(<Admin />)
+    await navigateToBriefsTab()
+    await screen.findByText('Eurofighter Typhoon')
+    expect(screen.getByText('Q').className).toContain('bg-slate-100')
+  })
+
+  it('M badge is green when brief has at least one media item', async () => {
+    global.fetch = vi.fn().mockImplementation(briefListHandler({
+      media: [{ _id: 'media1', mediaType: 'picture', mediaUrl: 'https://example.com/img.jpg' }],
+    }))
+    render(<Admin />)
+    await navigateToBriefsTab()
+    await screen.findByText('Eurofighter Typhoon')
+    expect(screen.getByText('M').className).toContain('bg-emerald-100')
+  })
+
+  it('M badge is grey when brief has no media', async () => {
+    global.fetch = vi.fn().mockImplementation(briefListHandler({ media: [] }))
+    render(<Admin />)
+    await navigateToBriefsTab()
+    await screen.findByText('Eurofighter Typhoon')
+    expect(screen.getByText('M').className).toContain('bg-slate-100')
+  })
+})

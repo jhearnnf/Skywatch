@@ -101,6 +101,58 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
   )
 }
 
+// ── BOO stats panel ───────────────────────────────────────────────────────
+function StatRow({ label, value }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</span>
+      <span className="text-sm font-bold text-white">{value}</span>
+    </div>
+  )
+}
+
+function BooStatsPanel({ brief }) {
+  const gd  = brief.gameData
+  const cat = brief.category
+  if (!gd) return null
+
+  const stats = []
+
+  if (cat === 'Aircrafts') {
+    if (gd.topSpeedKph != null)
+      stats.push({ label: 'Top Speed', value: `${gd.topSpeedKph.toLocaleString()} km/h · ${Math.round(gd.topSpeedKph * 0.621).toLocaleString()} mph` })
+    if (gd.yearIntroduced != null)
+      stats.push({ label: 'Introduced', value: String(gd.yearIntroduced) })
+    if (gd.yearIntroduced != null)
+      stats.push({
+        label: 'Status',
+        value: gd.yearRetired != null ? `Retired ${gd.yearRetired}` : 'In Service',
+      })
+  } else if (cat === 'Ranks') {
+    if (gd.rankHierarchyOrder != null)
+      stats.push({ label: 'Seniority', value: `#${gd.rankHierarchyOrder}${gd.rankHierarchyOrder === 1 ? ' — Most Senior' : ''}` })
+  } else if (cat === 'Training') {
+    if (gd.trainingWeekStart != null && gd.trainingWeekEnd != null)
+      stats.push({ label: 'Duration', value: `Week ${gd.trainingWeekStart} – Week ${gd.trainingWeekEnd}` })
+  } else if (['Missions', 'Tech', 'Treaties'].includes(cat)) {
+    if (gd.startYear != null)
+      stats.push({ label: 'Period', value: `${gd.startYear} – ${gd.endYear != null ? gd.endYear : 'Present'}` })
+  }
+
+  if (stats.length === 0) return null
+
+  return (
+    <div className="bg-slate-800 rounded-2xl px-4 py-3 mb-5">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">⚔️ Battle Data</span>
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+        {stats.map(s => <StatRow key={s.label} label={s.label} value={s.value} />)}
+      </div>
+    </div>
+  )
+}
+
 // ── Completion screen ─────────────────────────────────────────────────────
 function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user }) {
   const [quizHovered, setQuizHovered] = useState(false)
@@ -486,6 +538,9 @@ export default function BriefReader() {
           <p className="text-sm text-slate-500 mt-1.5">{brief.subtitle}</p>
         )}
       </div>
+
+      {/* BOO stats */}
+      <BooStatsPanel brief={brief} />
 
       {/* Cover image */}
       {brief.media?.[0]?.mediaUrl && (

@@ -305,6 +305,47 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     expect(res.body.data.isFirstAttempt).toBe(false);
     expect(res.body.data.breakdown).toEqual([]);
   });
+
+  it('awards coins when user passes after a prior failed attempt', async () => {
+    // First attempt — fail
+    const { attemptId: a1 } = await runFullQuiz(false); // 0/5 correct
+    await request(app)
+      .post(`/api/games/quiz/attempt/${a1}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'completed' });
+
+    // Second attempt — pass with perfect score
+    const { attemptId: a2 } = await runFullQuiz(true); // 5/5 correct
+    const res = await request(app)
+      .post(`/api/games/quiz/attempt/${a2}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'completed' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.won).toBe(true);
+    expect(res.body.data.isFirstAttempt).toBe(true);  // no prior WIN, so still first
+    expect(res.body.data.aircoinsEarned).toBe(65);    // 5×10 + 15 bonus
+  });
+
+  it('does not award coins when user fails after a prior failed attempt', async () => {
+    // First attempt — fail
+    const { attemptId: a1 } = await runFullQuiz(false);
+    await request(app)
+      .post(`/api/games/quiz/attempt/${a1}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'completed' });
+
+    // Second attempt — also fail
+    const { attemptId: a2 } = await runFullQuiz(false);
+    const res = await request(app)
+      .post(`/api/games/quiz/attempt/${a2}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'completed' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.won).toBe(false);
+    expect(res.body.data.aircoinsEarned).toBe(0);
+  });
 });
 
 // ── GET /api/games/quiz/status/:briefId ───────────────────────────────────

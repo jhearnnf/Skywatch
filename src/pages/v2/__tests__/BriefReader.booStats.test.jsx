@@ -1,0 +1,194 @@
+import { render, screen, waitFor } from '@testing-library/react'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+import BriefReader from '../BriefReader'
+
+// ── Mocks ──────────────────────────────────────────────────────────────────
+
+vi.mock('../../../utils/sound', () => ({ playSound: vi.fn() }))
+
+vi.mock('react-router-dom', () => ({
+  useParams:   () => ({ briefId: 'brief123' }),
+  useNavigate: () => vi.fn(),
+  Link:        ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
+}))
+
+vi.mock('../../../context/AuthContext', () => ({
+  useAuth: () => ({
+    user:          { _id: 'user1', loginStreak: 0 },
+    API:           '',
+    awardAircoins: vi.fn(),
+    setUser:       vi.fn(),
+  }),
+}))
+
+vi.mock('../../../context/AppTutorialContext', () => ({
+  useAppTutorial: () => ({ start: vi.fn() }),
+}))
+
+vi.mock('../../../components/tutorial/TutorialModal', () => ({ default: () => null }))
+vi.mock('../../../components/UpgradePrompt',          () => ({ default: () => null }))
+
+vi.mock('framer-motion', () => ({
+  motion: {
+    div:    ({ children, className, onClick, style }) => <div className={className} onClick={onClick} style={style}>{children}</div>,
+    button: ({ children, className, onClick })        => <button className={className} onClick={onClick}>{children}</button>,
+    p:      ({ children, className })                 => <p className={className}>{children}</p>,
+  },
+  AnimatePresence: ({ children }) => <>{children}</>,
+}))
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function makeBrief(category, gameData = null) {
+  return {
+    _id:                 'brief123',
+    title:               'Test Brief',
+    subtitle:            '',
+    category,
+    descriptionSections: ['Some content here.'],
+    keywords:            [],
+    sources:             [],
+    media:               [],
+    gameData,
+  }
+}
+
+function setupFetch(brief) {
+  global.fetch = vi.fn().mockImplementation((url) => {
+    if (url.includes('battle-of-order/options'))
+      return Promise.resolve({ ok: true, json: async () => ({ data: { available: false } }) })
+    if (url.includes('quiz/status'))
+      return Promise.resolve({ ok: true, json: async () => ({ data: { hasCompleted: false } }) })
+    return Promise.resolve({ ok: true, json: async () => ({ data: { brief, readRecord: null, ammoMax: 3 } }) })
+  })
+}
+
+// ── Aircrafts ──────────────────────────────────────────────────────────────
+
+describe('BriefReader — BOO stats: Aircrafts', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows Top Speed (km/h and mph), Introduced, and In Service', async () => {
+    setupFetch(makeBrief('Aircrafts', { topSpeedKph: 2200, yearIntroduced: 2003, yearRetired: null }))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.getByText(/2,200 km\/h/)).toBeDefined()
+    expect(screen.getByText(/1,366 mph/)).toBeDefined()
+    expect(screen.getByText('2003')).toBeDefined()
+    expect(screen.getByText('In Service')).toBeDefined()
+  })
+
+  it('shows "Retired YEAR" when yearRetired is set', async () => {
+    setupFetch(makeBrief('Aircrafts', { topSpeedKph: 1800, yearIntroduced: 1976, yearRetired: 2019 }))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.getByText('Retired 2019')).toBeDefined()
+  })
+
+  it('omits Top Speed row when topSpeedKph is missing', async () => {
+    setupFetch(makeBrief('Aircrafts', { yearIntroduced: 2003 }))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.queryByText(/km\/h/)).toBeNull()
+    expect(screen.getByText('2003')).toBeDefined()
+  })
+
+  it('does not render the panel when gameData is null', async () => {
+    setupFetch(makeBrief('Aircrafts', null))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.queryByText(/battle data/i)).toBeNull()
+  })
+
+  it('does not render the panel when gameData has no relevant fields', async () => {
+    setupFetch(makeBrief('Aircrafts', {}))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.queryByText(/battle data/i)).toBeNull()
+  })
+})
+
+// ── Ranks ──────────────────────────────────────────────────────────────────
+
+describe('BriefReader — BOO stats: Ranks', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows seniority rank for a Ranks brief', async () => {
+    setupFetch(makeBrief('Ranks', { rankHierarchyOrder: 3 }))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.getByText('#3')).toBeDefined()
+  })
+
+  it('appends "Most Senior" label for rank #1', async () => {
+    setupFetch(makeBrief('Ranks', { rankHierarchyOrder: 1 }))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.getByText(/#1.*Most Senior/)).toBeDefined()
+  })
+})
+
+// ── Training ───────────────────────────────────────────────────────────────
+
+describe('BriefReader — BOO stats: Training', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows week range for a Training brief', async () => {
+    setupFetch(makeBrief('Training', { trainingWeekStart: 1, trainingWeekEnd: 12 }))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.getByText('Week 1 – Week 12')).toBeDefined()
+  })
+
+  it('does not render the panel when week data is missing', async () => {
+    setupFetch(makeBrief('Training', {}))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.queryByText(/battle data/i)).toBeNull()
+  })
+})
+
+// ── Missions / Tech / Treaties ─────────────────────────────────────────────
+
+describe('BriefReader — BOO stats: Missions / Tech / Treaties', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows start–end year period for a Missions brief', async () => {
+    setupFetch(makeBrief('Missions', { startYear: 2001, endYear: 2014 }))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.getByText('2001 – 2014')).toBeDefined()
+  })
+
+  it('shows "Present" when endYear is null (ongoing)', async () => {
+    setupFetch(makeBrief('Tech', { startYear: 2010, endYear: null }))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.getByText('2010 – Present')).toBeDefined()
+  })
+
+  it('shows period for Treaties category', async () => {
+    setupFetch(makeBrief('Treaties', { startYear: 1949, endYear: null }))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.getByText('1949 – Present')).toBeDefined()
+  })
+})
+
+// ── Non-BOO categories ─────────────────────────────────────────────────────
+
+describe('BriefReader — BOO stats: non-BOO categories', () => {
+  beforeEach(() => { sessionStorage.clear() })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('does not render the panel for a News brief even with gameData', async () => {
+    setupFetch(makeBrief('News', { startYear: 2020 }))
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
+    expect(screen.queryByText(/battle data/i)).toBeNull()
+  })
+})

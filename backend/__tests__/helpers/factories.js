@@ -14,6 +14,7 @@ const GameSessionFlashcardRecallResult = require('../../models/GameSessionFlashc
 const GameWhosAtAircraft   = require('../../models/GameWhosAtAircraft');
 const GameSessionWhosAtAircraftResult  = require('../../models/GameSessionWhosAtAircraftResult');
 const AircoinLog           = require('../../models/AircoinLog');
+const AdminAction          = require('../../models/AdminAction');
 const GameType             = require('../../models/GameType');
 const AppSettings          = require('../../models/AppSettings');
 
@@ -266,6 +267,16 @@ async function createWhosAtAircraftResult(userId, gameId, overrides = {}) {
   });
 }
 
+// ── AdminAction ────────────────────────────────────────────────────────────
+async function createAdminAction(adminId, overrides = {}) {
+  return AdminAction.create({
+    userId:     adminId,
+    actionType: overrides.actionType ?? 'edit_brief',
+    reason:     overrides.reason     ?? 'Test reason',
+    ...overrides,
+  });
+}
+
 module.exports = {
   createSettings,
   createGameType,
@@ -285,4 +296,5 @@ module.exports = {
   createFlashcardResult,
   createWhosAtAircraftGame,
   createWhosAtAircraftResult,
+  createAdminAction,
 };

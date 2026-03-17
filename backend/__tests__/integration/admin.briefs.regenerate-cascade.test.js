@@ -26,6 +26,7 @@ const {
   createWhosAtAircraftGame, createWhosAtAircraftResult,
 } = require('../helpers/factories');
 
+const IntelligenceBrief               = require('../../models/IntelligenceBrief');
 const IntelligenceBriefRead           = require('../../models/IntelligenceBriefRead');
 const GameQuizQuestion                = require('../../models/GameQuizQuestion');
 const GameSessionQuizAttempt          = require('../../models/GameSessionQuizAttempt');
@@ -253,6 +254,31 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — cascade deletions'
       .send({ reason: REASON });
 
     expect(await AircoinLog.countDocuments({ briefId: brief._id })).toBe(0);
+  });
+
+  it('clears quizQuestionsEasy and quizQuestionsMedium arrays on the brief document', async () => {
+    const gameType = await createGameType();
+    const admin    = await createAdminUser();
+    const brief    = await createBrief();
+
+    // Assign question IDs directly on the brief doc to simulate a populated brief
+    const easyQs   = await createQuizQuestions(brief._id, gameType._id, 3, 'easy');
+    const mediumQs = await createQuizQuestions(brief._id, gameType._id, 3, 'medium');
+    await IntelligenceBrief.findByIdAndUpdate(brief._id, {
+      $set: {
+        quizQuestionsEasy:   easyQs.map(q => q._id),
+        quizQuestionsMedium: mediumQs.map(q => q._id),
+      },
+    });
+
+    await request(app)
+      .post(`/api/admin/briefs/${brief._id}/confirm-regeneration`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: REASON });
+
+    const updated = await IntelligenceBrief.findById(brief._id);
+    expect(updated.quizQuestionsEasy).toHaveLength(0);
+    expect(updated.quizQuestionsMedium).toHaveLength(0);
   });
 });
 

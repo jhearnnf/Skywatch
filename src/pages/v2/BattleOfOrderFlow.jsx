@@ -299,8 +299,26 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
 }
 
 // ── Results screen ────────────────────────────────────────────────────────
-function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, orderType, onRetry, onBack }) {
+function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, userChoices, orderType, onRetry, onBack }) {
   const meta = ORDER_META[orderType] ?? { label: orderType, emoji: '📊' }
+
+  // Build a map from choiceId → correctOrder for quick lookup
+  const correctOrderMap = {}
+  correctReveal.forEach(item => { correctOrderMap[String(item.choiceId)] = item.correctOrder })
+
+  // Build user's order: sorted by userOrderNumber, annotated with briefTitle + displayValue from correctReveal
+  const userOrder = [...userChoices]
+    .sort((a, b) => a.userOrderNumber - b.userOrderNumber)
+    .map(uc => {
+      const revealed = correctReveal.find(r => String(r.choiceId) === String(uc.choiceId))
+      return {
+        userPosition:   uc.userOrderNumber,
+        correctPosition: revealed?.correctOrder ?? null,
+        briefTitle:     revealed?.briefTitle ?? '?',
+        displayValue:   revealed?.displayValue ?? null,
+        correct:        revealed?.correctOrder === uc.userOrderNumber,
+      }
+    })
 
   return (
     <motion.div
@@ -346,37 +364,72 @@ function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, o
         </motion.div>
       )}
 
-      {/* Correct order reveal */}
-      <div className="bg-surface rounded-2xl border border-slate-200 p-4 mb-6 text-left card-shadow">
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-          Correct Order — {meta.emoji} {meta.label}
-        </p>
-        <div className="space-y-2">
-          {correctReveal.map((item, i) => (
-            <motion.div
-              key={item.choiceId ?? i}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 + i * 0.08 }}
-              className="flex items-center gap-3"
-            >
-              <span className={`w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0
-                ${i === 0
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : i === correctReveal.length - 1
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-slate-100 text-slate-600'
-                }`}
+      {/* Order comparison */}
+      <div className="space-y-3 mb-6 text-left">
+
+        {/* Your order */}
+        <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Your Order</p>
+          <div className="space-y-2">
+            {userOrder.map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.05 + i * 0.06 }}
+                className="flex items-center gap-3"
               >
-                {item.correctOrder}
-              </span>
-              <span className="flex-1 text-sm font-semibold text-slate-800">{item.briefTitle}</span>
-              {item.displayValue && (
-                <span className="text-xs text-slate-400 font-medium shrink-0">{item.displayValue}</span>
-              )}
-            </motion.div>
-          ))}
+                <span className={`w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0
+                  ${item.correct ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}
+                >
+                  {item.userPosition}
+                </span>
+                <span className="flex-1 text-sm font-semibold text-slate-800 truncate">{item.briefTitle}</span>
+                {item.displayValue && (
+                  <span className="text-xs text-slate-400 font-medium shrink-0">{item.displayValue}</span>
+                )}
+                <span className={`text-xs font-bold shrink-0 ${item.correct ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {item.correct ? '✓' : `→ #${item.correctPosition}`}
+                </span>
+              </motion.div>
+            ))}
+          </div>
         </div>
+
+        {/* Correct order */}
+        {!won && (
+          <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+              Correct Order — {meta.emoji} {meta.label}
+            </p>
+            <div className="space-y-2">
+              {correctReveal.map((item, i) => (
+                <motion.div
+                  key={item.choiceId ?? i}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.2 + i * 0.06 }}
+                  className="flex items-center gap-3"
+                >
+                  <span className={`w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0
+                    ${i === 0
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : i === correctReveal.length - 1
+                      ? 'bg-amber-100 text-amber-700'
+                      : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {item.correctOrder}
+                  </span>
+                  <span className="flex-1 text-sm font-semibold text-slate-800 truncate">{item.briefTitle}</span>
+                  {item.displayValue && (
+                    <span className="text-xs text-slate-400 font-medium shrink-0">{item.displayValue}</span>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -418,6 +471,7 @@ export default function BattleOfOrderFlow() {
   const [aircoinsEarned, setAircoins]    = useState(0)
   const [alreadyCompleted, setAlreadyCompleted] = useState(false)
   const [correctReveal, setCorrectReveal]  = useState([])
+  const [lastUserChoices, setLastUserChoices] = useState([])
 
   const abandonedRef  = useRef(false)
   const storedOptions = useRef([])
@@ -488,6 +542,7 @@ export default function BattleOfOrderFlow() {
   }
 
   const handleSubmit = async (userChoices, timeTakenSeconds) => {
+    setLastUserChoices(userChoices)
     try {
       const res  = await fetch(`${API}/api/games/battle-of-order/submit`, {
         method:      'POST',
@@ -590,6 +645,7 @@ export default function BattleOfOrderFlow() {
         aircoinsEarned={aircoinsEarned}
         alreadyCompleted={alreadyCompleted}
         correctReveal={correctReveal}
+        userChoices={lastUserChoices}
         orderType={orderType}
         onRetry={handleRetry}
         onBack={() => navigate(`/brief/${briefId}`)}

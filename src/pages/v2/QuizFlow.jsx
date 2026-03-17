@@ -86,7 +86,7 @@ function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, 
 }
 
 // ── Results screen ────────────────────────────────────────────────────────
-function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack }) {
+function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack, booAvailable = false, onStartBoo }) {
   const pct     = total > 0 ? Math.round((score / total) * 100) : 0
   const perfect = score === total
 
@@ -175,6 +175,14 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
       )}
 
       <div className="space-y-3">
+        {booAvailable && onStartBoo && (
+          <button
+            onClick={onStartBoo}
+            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-base transition-colors"
+          >
+            ⚔️ Start Battle of Order
+          </button>
+        )}
         <button
           onClick={onRetry}
           className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors"
@@ -217,6 +225,7 @@ export default function QuizFlow() {
   const [xpEarned, setXP]            = useState(0)
   const [breakdown, setBreakdown]    = useState([])
   const [isFirstAttempt, setFirstAttempt] = useState(true)
+  const [booAvailable,   setBooAvailable] = useState(false)
 
   const questionStartRef = useRef(Date.now())
   const finishedRef      = useRef(false)
@@ -267,6 +276,15 @@ export default function QuizFlow() {
       return () => clearTimeout(t)
     }
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check BOO availability once quiz is done
+  useEffect(() => {
+    if (!done || !briefId) return
+    fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (d.data?.available) setBooAvailable(true) })
+      .catch(() => {})
+  }, [done]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const current  = questions[qIdx]
   const totalQs  = questions.length
@@ -412,6 +430,8 @@ export default function QuizFlow() {
           won={won}
           onRetry={handleRetry}
           onBack={() => navigate(`/brief/${briefId}`)}
+          booAvailable={(won || !isFirstAttempt) && booAvailable}
+          onStartBoo={() => navigate(`/battle-of-order/${briefId}`)}
         />
       </>
     )

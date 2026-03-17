@@ -54,12 +54,13 @@ function makeFinishResponse({ won, isFirstAttempt, breakdown, aircoinsEarned }) 
   return { ok: true, status: 200, json: async () => ({ data: { won, isFirstAttempt, breakdown, aircoinsEarned, attempt: { cycleAircoins: aircoinsEarned, totalAircoins: 100 } } }) }
 }
 
-function setupFetch(finishData) {
+function setupFetch(finishData, { booAvailable = false } = {}) {
   return vi.fn().mockImplementation((url) => {
-    if (url.includes('/api/briefs/'))              return Promise.resolve({ ok: true, status: 200, json: async () => BRIEF_RESPONSE })
-    if (url.includes('/api/games/quiz/start'))     return Promise.resolve({ ok: true, status: 200, json: async () => START_RESPONSE })
-    if (url.includes('/api/games/quiz/result'))    return Promise.resolve({ ok: true, status: 200, json: async () => RESULT_RESPONSE })
-    if (url.includes('/finish'))                   return Promise.resolve(makeFinishResponse(finishData))
+    if (url.includes('/api/briefs/'))                          return Promise.resolve({ ok: true, status: 200, json: async () => BRIEF_RESPONSE })
+    if (url.includes('/api/games/quiz/start'))                 return Promise.resolve({ ok: true, status: 200, json: async () => START_RESPONSE })
+    if (url.includes('/api/games/quiz/result'))                return Promise.resolve({ ok: true, status: 200, json: async () => RESULT_RESPONSE })
+    if (url.includes('/finish'))                               return Promise.resolve(makeFinishResponse(finishData))
+    if (url.includes('battle-of-order/options'))               return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { available: booAvailable } }) })
     return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
   })
 }
@@ -152,5 +153,77 @@ describe('QuizFlow — aircoins breakdown on results screen', () => {
     // Badge and total row both show +30
     const thirties = screen.getAllByText('+30')
     expect(thirties.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+// ── Tests: Battle of Order button ─────────────────────────────────────────
+
+describe('QuizFlow — Battle of Order button on results screen', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows BOO button when quiz is won and BOO is available', async () => {
+    global.fetch = setupFetch(
+      { won: true, isFirstAttempt: true, aircoinsEarned: 0, breakdown: [] },
+      { booAvailable: true },
+    )
+    await completeQuiz()
+    await waitFor(() => expect(screen.getByRole('button', { name: /start battle of order/i })).toBeDefined())
+  })
+
+  it('shows BOO button on a repeat win (prior win exists) when BOO is available', async () => {
+    global.fetch = setupFetch(
+      { won: true, isFirstAttempt: false, aircoinsEarned: 0, breakdown: [] },
+      { booAvailable: true },
+    )
+    await completeQuiz()
+    await waitFor(() => expect(screen.getByRole('button', { name: /start battle of order/i })).toBeDefined())
+  })
+
+  it('does not show BOO button when quiz is won but BOO is unavailable', async () => {
+    global.fetch = setupFetch(
+      { won: true, isFirstAttempt: true, aircoinsEarned: 0, breakdown: [] },
+      { booAvailable: false },
+    )
+    await completeQuiz()
+    await waitFor(() => screen.getByRole('button', { name: /try again/i }))
+    expect(screen.queryByRole('button', { name: /start battle of order/i })).toBeNull()
+  })
+
+  it('does not show BOO button when quiz is lost (no prior win)', async () => {
+    global.fetch = setupFetch(
+      { won: false, isFirstAttempt: true, aircoinsEarned: 0, breakdown: [] },
+      { booAvailable: true },
+    )
+    await completeQuiz()
+    await waitFor(() => screen.getByRole('button', { name: /try again/i }))
+    expect(screen.queryByRole('button', { name: /start battle of order/i })).toBeNull()
+  })
+
+  it('BOO button appears above Try Again button', async () => {
+    global.fetch = setupFetch(
+      { won: true, isFirstAttempt: true, aircoinsEarned: 0, breakdown: [] },
+      { booAvailable: true },
+    )
+    await completeQuiz()
+    await waitFor(() => screen.getByRole('button', { name: /start battle of order/i }))
+    const buttons = screen.getAllByRole('button')
+    const booIdx  = buttons.findIndex(b => /start battle of order/i.test(b.textContent))
+    const retryIdx = buttons.findIndex(b => /try again/i.test(b.textContent))
+    expect(booIdx).toBeLessThan(retryIdx)
+  })
+
+  it('clicking BOO button navigates to /battle-of-order/:briefId', async () => {
+    const mockNavigate = vi.fn()
+    vi.mocked(await import('react-router-dom')).useNavigate = () => mockNavigate
+
+    global.fetch = setupFetch(
+      { won: true, isFirstAttempt: true, aircoinsEarned: 0, breakdown: [] },
+      { booAvailable: true },
+    )
+    await completeQuiz()
+    await waitFor(() => screen.getByRole('button', { name: /start battle of order/i }))
+    fireEvent.click(screen.getByRole('button', { name: /start battle of order/i }))
+    expect(mockNavigate).toHaveBeenCalledWith('/battle-of-order/brief123')
   })
 })

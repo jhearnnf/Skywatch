@@ -1367,7 +1367,10 @@ const EMPTY_DRAFT = {
   descriptionSections: ['', '', ''],
   keywords: [],
   sources: [],
+  gameData: {},
 }
+
+const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
 
 // Rough duplicate detection — returns true if headline is similar to an existing title
 function isSimilarTitle(headline, existingTitles) {
@@ -1437,7 +1440,13 @@ function LeadsModal({ API, onClose, onGenerate }) {
 
   const pickRandom = () => {
     if (!filtered.length) return
-    setPicked(filtered[Math.floor(Math.random() * filtered.length)])
+    const lead = filtered[Math.floor(Math.random() * filtered.length)]
+    setPicked(lead)
+    // Ensure the section and subsection containing this lead are open
+    const sec = lead.section || 'General'
+    const sub = lead.subsection || ''
+    setOpenSections(prev => { const next = new Set(prev); next.add(sec); return next })
+    if (sub) setOpenSubsections(prev => { const next = new Set(prev); next.add(`${sec}::${sub}`); return next })
   }
 
   const generate = async (topicOrHeadline, isHeadline = false) => {
@@ -1445,7 +1454,9 @@ function LeadsModal({ API, onClose, onGenerate }) {
     const key  = lead ? lead.text : topicOrHeadline
     setBusy(key)
     try {
-      const body = isHeadline ? { headline: key } : { topic: key }
+      const body = isHeadline
+        ? { headline: key }
+        : { topic: key, category: leadSectionToCategory(lead?.section) }
       const res  = await fetch(`${API}/api/admin/ai/generate-brief`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -1743,7 +1754,7 @@ function BriefsTab({ API }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmRegen,  setConfirmRegen]  = useState(false)
   // Section open/close
-  const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: true, questions: true, images: true, sources: true })
+  const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: false, questions: false, images: true, sources: false, gameData: false })
 
   const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }))
 
@@ -1784,6 +1795,7 @@ function BriefsTab({ API }) {
       descriptionSections: br.descriptionSections?.length ? br.descriptionSections : ['','',''],
       keywords:            br.keywords ?? [],
       sources:             br.sources ?? [],
+      gameData:            br.gameData ?? {},
     })
     setEasyQuestions(br.quizQuestionsEasy?.map(q => ({
       question: q.question,
@@ -1924,6 +1936,7 @@ function BriefsTab({ API }) {
         : ['','',''],
       keywords:            Array.isArray(briefData.keywords) ? briefData.keywords : [],
       sources:             Array.isArray(briefData.sources) ? briefData.sources : [],
+      gameData:            (briefData.gameData && typeof briefData.gameData === 'object') ? briefData.gameData : {},
     })
     setEasyQuestions([])
     setMediumQuestions([])
@@ -2062,8 +2075,8 @@ function BriefsTab({ API }) {
       const regenData = await regenRes.json()
       if (regenData.status !== 'success') throw new Error(regenData.message ?? 'Regeneration failed')
 
-      const { descriptionSections, keywords, easyQuestions, mediumQuestions } = regenData.data
-      setDraft(p => ({ ...p, descriptionSections, keywords }))
+      const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData } = regenData.data
+      setDraft(p => ({ ...p, descriptionSections, keywords, ...(gameData ? { gameData } : {}) }))
       setEasyQuestions(easyQuestions ?? [])
       setMediumQuestions(mediumQuestions ?? [])
       setToast('Regenerated — review and save when ready')
@@ -2071,6 +2084,25 @@ function BriefsTab({ API }) {
       setToast(`Regenerate failed: ${err.message}`)
     } finally {
       setRegeneratingAll(false)
+    }
+  }
+
+  // ── Generate description sections only (no cascade, no keywords/questions) ─
+  const generateDescription = async () => {
+    if (!briefId) return
+    setGenerating('description')
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/regenerate-description/${briefId}`, {
+        method: 'POST', credentials: 'include',
+      })
+      const data = await res.json()
+      if (data.status !== 'success') throw new Error(data.message ?? 'Generation failed')
+      setDraft(p => ({ ...p, descriptionSections: data.data.descriptionSections }))
+      setToast('Description generated — review and save when ready')
+    } catch (err) {
+      setToast(`Generate description failed: ${err.message}`)
+    } finally {
+      setGenerating(null)
     }
   }
 
@@ -2272,9 +2304,10 @@ function BriefsTab({ API }) {
         >
           ← Briefs
         </button>
-        <h2 className="font-bold text-slate-800 flex-1 truncate">
-          {draft.title || 'New Brief'}
-        </h2>
+        <div className="flex-1 min-w-0">
+          <h2 className="font-bold text-slate-800 truncate">{draft.title || 'New Brief'}</h2>
+          {briefId && <p className="text-[10px] text-slate-400 font-mono truncate">{briefId}</p>}
+        </div>
         {pendingLead && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Lead</span>}
         {briefId && (
           <button
@@ -2405,7 +2438,7 @@ function BriefsTab({ API }) {
                 />
               </div>
             ))}
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
               <button
                 onClick={() => setDraft(p => ({ ...p, descriptionSections: [...p.descriptionSections, ''] }))}
                 disabled={draft.descriptionSections.length >= 4}
@@ -2413,6 +2446,15 @@ function BriefsTab({ API }) {
               >
                 + Add Section
               </button>
+              {briefId && (
+                <button
+                  onClick={generateDescription}
+                  disabled={generating === 'description' || regeneratingAll}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 font-semibold hover:bg-sky-100 transition-colors disabled:opacity-40"
+                >
+                  {generating === 'description' ? '↺ Generating…' : '↺ Generate Description'}
+                </button>
+              )}
               <span className={`text-xs font-semibold ${wordCount > 240 ? 'text-red-500' : 'text-slate-400'}`}>
                 {wordCount} / 240 words
               </span>
@@ -2421,7 +2463,165 @@ function BriefsTab({ API }) {
         )}
       </div>
 
-      {/* ── Section C: Keywords ───────────────────────────────────────── */}
+      {/* ── Section C: Images ─────────────────────────────────────────── */}
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <button
+          onClick={() => toggleSection('images')}
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+        >
+          <h3 className="font-bold text-slate-800">Images</h3>
+          <span className="text-slate-400 text-xs">{openSections.images ? '▲' : '▼'}</span>
+        </button>
+        {openSections.images && (
+          <div className="px-5 py-4">
+            {/* Existing media */}
+            {media.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {media.map(m => (
+                  <div key={m._id} className="relative group">
+                    <img src={m.mediaUrl.startsWith('/') ? `${API}${m.mediaUrl}` : m.mediaUrl} alt="" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
+                    <button
+                      onClick={() => removeMedia(m._id)}
+                      className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {media.length === 0 && <p className="text-sm text-slate-400 mb-4">No images yet</p>}
+
+            {/* Generate button */}
+            <button
+              onClick={generateImages}
+              disabled={generating === 'images' || autoGenerating}
+              className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40 mb-4"
+            >
+              {generating === 'images' || autoGenerating ? 'Generating…' : 'Generate 3 Images'}
+            </button>
+
+            {/* Pending images */}
+            {pendingImages.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-500 mb-2">Preview — select to include:</p>
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  {pendingImages.map((img, i) => (
+                    <label key={i} className="relative cursor-pointer">
+                      <img src={img.url} alt="" className={`w-full h-32 object-cover rounded-xl border-2 transition-all ${img.selected ? 'border-brand-500' : 'border-slate-200 opacity-50'}`} />
+                      <input
+                        type="checkbox"
+                        checked={img.selected}
+                        onChange={e => setPendingImages(p => p.map((x, j) => j === i ? { ...x, selected: e.target.checked } : x))}
+                        className="absolute top-2 left-2"
+                      />
+                    </label>
+                  ))}
+                </div>
+                {briefId && (
+                  <button
+                    onClick={addSelectedImages}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors"
+                  >
+                    Add Selected Images
+                  </button>
+                )}
+                {!briefId && (
+                  <p className="text-xs text-slate-400">Save the brief first to add images.</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section D: Game Data (BOO categories only) ─────────────────── */}
+      {BOO_CATEGORIES.includes(draft.category) && (
+        <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+          <button
+            onClick={() => toggleSection('gameData')}
+            className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+          >
+            <h3 className="font-bold text-slate-800">⚔️ Game Data</h3>
+            <span className="text-slate-400 text-xs">{openSections.gameData ? '▲' : '▼'}</span>
+          </button>
+          {openSections.gameData && (
+            <div className="px-5 py-4 space-y-3">
+              {draft.category === 'Aircrafts' && (
+                <AircraftDataSection draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
+              )}
+              {draft.category === 'Ranks' && (
+                <RankDataField draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
+              )}
+              {draft.category === 'Training' && (<>
+                <GameDataField label="Training Week Start" field="trainingWeekStart" draft={draft} setDraft={setDraft} />
+                <GameDataField label="Training Week End" field="trainingWeekEnd" draft={draft} setDraft={setDraft} />
+              </>)}
+              {['Missions', 'Tech', 'Treaties'].includes(draft.category) && (<>
+                <GameDataField label="Start Year" field="startYear" draft={draft} setDraft={setDraft} />
+                <GameDataField label="End Year (blank = ongoing)" field="endYear" draft={draft} setDraft={setDraft} nullable />
+              </>)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Section E: Sources ────────────────────────────────────────── */}
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <button
+          onClick={() => toggleSection('sources')}
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+        >
+          <h3 className="font-bold text-slate-800">Sources</h3>
+          <span className="text-slate-400 text-xs">{openSections.sources ? '▲' : '▼'}</span>
+        </button>
+        {openSections.sources && (
+          <div className="px-5 py-4 space-y-3">
+            {draft.sources.map((src, idx) => (
+              <div key={idx} className="border border-slate-100 rounded-xl p-3 bg-slate-50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500">Source {idx + 1}</span>
+                  <button
+                    onClick={() => setDraft(p => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
+                    className="text-xs text-red-400 hover:text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={src.url}
+                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], url: e.target.value }; return { ...p, sources: s } })}
+                  placeholder="URL"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                />
+                <input
+                  type="text"
+                  value={src.siteName ?? ''}
+                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], siteName: e.target.value }; return { ...p, sources: s } })}
+                  placeholder="Site Name"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                />
+                <input
+                  type="text"
+                  value={src.articleDate ?? ''}
+                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], articleDate: e.target.value }; return { ...p, sources: s } })}
+                  placeholder="Date (YYYY-MM-DD)"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                />
+              </div>
+            ))}
+            <button
+              onClick={() => setDraft(p => ({ ...p, sources: [...p.sources, { url: '', siteName: '', articleDate: '' }] }))}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+            >
+              + Add Source
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Section F: Keywords ───────────────────────────────────────── */}
       <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
         <button
           onClick={() => toggleSection('keywords')}
@@ -2492,7 +2692,7 @@ function BriefsTab({ API }) {
         )}
       </div>
 
-      {/* ── Section D: Quiz Questions ─────────────────────────────────── */}
+      {/* ── Section G: Quiz Questions ─────────────────────────────────── */}
       <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
         <button
           onClick={() => toggleSection('questions')}
@@ -2581,133 +2781,266 @@ function BriefsTab({ API }) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
 
-      {/* ── Section E: Images ─────────────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+function GameDataField({ label, field, draft, setDraft, nullable = false }) {
+  const val = draft.gameData?.[field]
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
+      <input
+        type="number"
+        value={val ?? ''}
+        onChange={e => {
+          const raw = e.target.value
+          const num = raw === '' ? (nullable ? null : undefined) : parseInt(raw, 10)
+          setDraft(p => ({ ...p, gameData: { ...p.gameData, [field]: raw === '' ? null : num } }))
+        }}
+        placeholder={nullable ? 'blank = null' : ''}
+        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+      />
+    </div>
+  )
+}
+
+function AircraftDataSection({ draft, setDraft, briefId, API }) {
+  const [busy, setBusy] = useState(false)
+  const [err,  setErr]  = useState(null)
+
+  const generate = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/generate-battle-order-data`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title:       draft.title,
+          description: draft.descriptionSections.join('\n\n'),
+          category:    'Aircrafts',
+        }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setDraft(p => ({ ...p, gameData: { ...p.gameData, ...data.data.gameData } }))
+      } else {
+        setErr(data.message ?? 'Generation failed')
+      }
+    } catch {
+      setErr('Generation failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <GameDataField label="Top Speed (km/h)" field="topSpeedKph" draft={draft} setDraft={setDraft} />
+      <GameDataField label="Year Introduced" field="yearIntroduced" draft={draft} setDraft={setDraft} />
+      <GameDataField label="Year Retired (blank = still in service)" field="yearRetired" draft={draft} setDraft={setDraft} nullable />
+      <div className="pt-1">
         <button
-          onClick={() => toggleSection('images')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+          onClick={generate}
+          disabled={busy}
+          className="text-xs px-3 py-2 rounded-xl border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors"
         >
-          <h3 className="font-bold text-slate-800">Images</h3>
-          <span className="text-slate-400 text-xs">{openSections.images ? '▲' : '▼'}</span>
+          {busy ? '↺ Generating…' : '↺ Generate Stats'}
         </button>
-        {openSections.images && (
-          <div className="px-5 py-4">
-            {/* Existing media */}
-            {media.length > 0 && (
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                {media.map(m => (
-                  <div key={m._id} className="relative group">
-                    <img src={m.mediaUrl.startsWith('/') ? `${API}${m.mediaUrl}` : m.mediaUrl} alt="" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
-                    <button
-                      onClick={() => removeMedia(m._id)}
-                      className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      ✕
-                    </button>
+        {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+      </div>
+    </>
+  )
+}
+
+function RankDataField({ draft, setDraft, briefId, API }) {
+  const [busy, setBusy] = useState(false)
+  const [err,  setErr]  = useState(null)
+
+  const lookup = async () => {
+    if (!briefId) return
+    setBusy(true)
+    setErr(null)
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/generate-rank-data/${briefId}`, {
+        method: 'POST', credentials: 'include',
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setDraft(p => ({ ...p, gameData: { ...p.gameData, rankHierarchyOrder: data.data.rankHierarchyOrder } }))
+      } else {
+        setErr(data.message ?? 'Lookup failed')
+      }
+    } catch {
+      setErr('Lookup failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-slate-500 mb-1">Seniority Order (1 = most senior)</label>
+      <div className="flex gap-2">
+        <input
+          type="number"
+          value={draft.gameData?.rankHierarchyOrder ?? ''}
+          onChange={e => {
+            const raw = e.target.value
+            setDraft(p => ({ ...p, gameData: { ...p.gameData, rankHierarchyOrder: raw === '' ? null : parseInt(raw, 10) } }))
+          }}
+          className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+        />
+        {briefId && (
+          <button
+            onClick={lookup}
+            disabled={busy}
+            className="text-xs px-3 py-2 rounded-xl border border-brand-300 bg-brand-50 text-brand-700 font-semibold whitespace-nowrap hover:bg-brand-100 disabled:opacity-40"
+          >
+            {busy ? '…' : 'Lookup Rank →'}
+          </button>
+        )}
+      </div>
+      {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOGS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ACTION_TYPE_LABELS = {
+  ban_user:                  { label: 'Ban User',              color: 'bg-red-100 text-red-700'       },
+  unban_user:                { label: 'Unban User',            color: 'bg-green-100 text-green-700'   },
+  delete_user:               { label: 'Delete User',           color: 'bg-red-100 text-red-700'       },
+  remove_admin:              { label: 'Remove Admin',          color: 'bg-orange-100 text-orange-700' },
+  reset_user_stats:          { label: 'Reset Stats',           color: 'bg-amber-100 text-amber-700'   },
+  make_admin:                { label: 'Make Admin',            color: 'bg-purple-100 text-purple-700' },
+  change_quiz_questions:     { label: 'Quiz Questions',        color: 'bg-blue-100 text-blue-700'     },
+  change_aircoins:           { label: 'Aircoins',              color: 'bg-amber-100 text-amber-700'   },
+  change_trial_duration:     { label: 'Trial Duration',        color: 'bg-slate-100 text-slate-600'   },
+  change_silver_categories:  { label: 'Silver Categories',     color: 'bg-slate-100 text-slate-600'   },
+  change_ammo_defaults:      { label: 'Ammo Defaults',         color: 'bg-slate-100 text-slate-600'   },
+  create_brief:              { label: 'Create Brief',          color: 'bg-emerald-100 text-emerald-700' },
+  edit_brief:                { label: 'Edit Brief',            color: 'bg-sky-100 text-sky-700'       },
+  delete_brief:              { label: 'Delete Brief',          color: 'bg-red-100 text-red-700'       },
+  regenerate_brief_cascade:  { label: 'Regenerate Brief',      color: 'bg-violet-100 text-violet-700' },
+  award_test_coins:          { label: 'Award Coins',           color: 'bg-amber-100 text-amber-700'   },
+}
+
+const ALL_ACTION_TYPES = Object.keys(ACTION_TYPE_LABELS)
+
+function ActionBadge({ type }) {
+  const meta = ACTION_TYPE_LABELS[type] ?? { label: type, color: 'bg-slate-100 text-slate-500' }
+  return (
+    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${meta.color}`}>
+      {meta.label}
+    </span>
+  )
+}
+
+function LogsTab({ API }) {
+  const [actions,    setActions]    = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [page,       setPage]       = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total,      setTotal]      = useState(0)
+  const [typeFilter, setTypeFilter] = useState('')
+
+  useEffect(() => {
+    setLoading(true)
+    const params = new URLSearchParams({ page, limit: 20 })
+    if (typeFilter) params.set('type', typeFilter)
+    fetch(`${API}/api/admin/actions?${params}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        setActions(d.data?.actions ?? [])
+        setTotal(d.data?.total ?? 0)
+        setTotalPages(d.data?.totalPages ?? 1)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [API, page, typeFilter])
+
+  const handleTypeChange = (e) => {
+    setTypeFilter(e.target.value)
+    setPage(1)
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-3">
+        <h2 className="text-base font-bold text-slate-800">Admin Action Logs</h2>
+        <select
+          value={typeFilter}
+          onChange={handleTypeChange}
+          className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600 bg-white focus:outline-none focus:ring-1 focus:ring-brand-400"
+        >
+          <option value="">All actions</option>
+          {ALL_ACTION_TYPES.map(t => (
+            <option key={t} value={t}>{ACTION_TYPE_LABELS[t].label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        {loading && <p className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading…</p>}
+        {!loading && actions.length === 0 && (
+          <p className="py-8 text-center text-slate-400 text-sm">No logs found</p>
+        )}
+        {!loading && actions.map((a, i) => {
+          const admin  = a.userId
+          const target = a.targetUserId
+          return (
+            <div
+              key={a._id}
+              className={`px-4 py-3 ${i !== 0 ? 'border-t border-slate-100' : ''}`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <ActionBadge type={a.actionType} />
+                    {target && (
+                      <span className="text-[10px] text-slate-400">
+                        → Agent {target.agentNumber ?? target.email ?? '?'}
+                      </span>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-            {media.length === 0 && <p className="text-sm text-slate-400 mb-4">No images yet</p>}
-
-            {/* Generate button */}
-            <button
-              onClick={generateImages}
-              disabled={generating === 'images' || autoGenerating}
-              className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40 mb-4"
-            >
-              {generating === 'images' || autoGenerating ? 'Generating…' : 'Generate 3 Images'}
-            </button>
-
-            {/* Pending images */}
-            {pendingImages.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-slate-500 mb-2">Preview — select to include:</p>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  {pendingImages.map((img, i) => (
-                    <label key={i} className="relative cursor-pointer">
-                      <img src={img.url} alt="" className={`w-full h-32 object-cover rounded-xl border-2 transition-all ${img.selected ? 'border-brand-500' : 'border-slate-200 opacity-50'}`} />
-                      <input
-                        type="checkbox"
-                        checked={img.selected}
-                        onChange={e => setPendingImages(p => p.map((x, j) => j === i ? { ...x, selected: e.target.checked } : x))}
-                        className="absolute top-2 left-2"
-                      />
-                    </label>
-                  ))}
+                  <p className="text-xs text-slate-600 truncate">{a.reason}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Agent {admin?.agentNumber ?? admin?.email ?? '?'}
+                  </p>
                 </div>
-                {briefId && (
-                  <button
-                    onClick={addSelectedImages}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors"
-                  >
-                    Add Selected Images
-                  </button>
-                )}
-                {!briefId && (
-                  <p className="text-xs text-slate-400">Save the brief first to add images.</p>
-                )}
+                <span className="text-[10px] text-slate-400 whitespace-nowrap shrink-0">
+                  {new Date(a.time).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )
+        })}
       </div>
 
-      {/* ── Section F: Sources ────────────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
-        <button
-          onClick={() => toggleSection('sources')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
-        >
-          <h3 className="font-bold text-slate-800">Sources</h3>
-          <span className="text-slate-400 text-xs">{openSections.sources ? '▲' : '▼'}</span>
-        </button>
-        {openSections.sources && (
-          <div className="px-5 py-4 space-y-3">
-            {draft.sources.map((src, idx) => (
-              <div key={idx} className="border border-slate-100 rounded-xl p-3 bg-slate-50 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500">Source {idx + 1}</span>
-                  <button
-                    onClick={() => setDraft(p => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
-                    className="text-xs text-red-400 hover:text-red-600"
-                  >
-                    Remove
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  value={src.url}
-                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], url: e.target.value }; return { ...p, sources: s } })}
-                  placeholder="URL"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
-                />
-                <input
-                  type="text"
-                  value={src.siteName ?? ''}
-                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], siteName: e.target.value }; return { ...p, sources: s } })}
-                  placeholder="Site Name"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
-                />
-                <input
-                  type="text"
-                  value={src.articleDate ?? ''}
-                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], articleDate: e.target.value }; return { ...p, sources: s } })}
-                  placeholder="Date (YYYY-MM-DD)"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
-                />
-              </div>
-            ))}
-            <button
-              onClick={() => setDraft(p => ({ ...p, sources: [...p.sources, { url: '', siteName: '', articleDate: '' }] }))}
-              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
-            >
-              + Add Source
-            </button>
-          </div>
-        )}
-      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs text-slate-400">Page {page} of {totalPages} ({total} total)</span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -2723,6 +3056,7 @@ const TABS = [
   { id: 'problems', label: 'Reports',  icon: '🚩'  },
   { id: 'content',  label: 'Content',  icon: '✏️'  },
   { id: 'briefs',   label: 'Briefs',   icon: '📄'  },
+  { id: 'logs',     label: 'Logs',     icon: '📋'  },
 ]
 
 export default function Admin() {
@@ -2795,6 +3129,7 @@ export default function Admin() {
             {tab === 'problems' && <ProblemsTab API={API} />}
             {tab === 'content'  && <ContentTab  API={API} />}
             {tab === 'briefs'   && <BriefsTab   API={API} />}
+            {tab === 'logs'     && <LogsTab     API={API} />}
           </motion.div>
         </AnimatePresence>
 
