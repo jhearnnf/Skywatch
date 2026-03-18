@@ -13,6 +13,7 @@ const allowedOrigins = [
 ].filter(Boolean)
 
 console.log('CORS allowed origins:', allowedOrigins)
+console.log('NODE_ENV:', process.env.NODE_ENV)
 
 app.use(cors({
   origin: (origin, cb) => {
