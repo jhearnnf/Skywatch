@@ -220,7 +220,7 @@ function StatsTab({ API }) {
   if (error) return <p className="text-sm text-red-500 py-8 text-center">{error}</p>
   if (!stats) return <div className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading stats…</div>
 
-  const { users, games, briefs, tutorials } = stats
+  const { users, games, briefs, tutorials, server } = stats
 
   const pct = (n, d) => d > 0 ? `${Math.round((n / d) * 100)}%` : '—'
 
@@ -283,6 +283,7 @@ function StatsTab({ API }) {
           <StatCard label="Time Reading"       value={fmtSeconds(briefs.totalReadSeconds ?? 0)} color="brand" />
           <StatCard label="Tutorials Viewed"   value={fmtNum(tutorials.viewed)}                color="slate" />
           <StatCard label="Tutorials Skipped"  value={fmtNum(tutorials.skipped)}               color="slate" />
+          <StatCard label="Uptime Since Deploy" value={fmtSeconds(server?.serverUptimeSeconds ?? 0)} color="emerald" />
         </div>
       </section>
     </div>

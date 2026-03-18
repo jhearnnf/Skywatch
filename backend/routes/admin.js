@@ -196,6 +196,9 @@ router.get('/stats', async (_req, res) => {
           viewed:  tutorialAgg[0]?.viewed  ?? 0,
           skipped: tutorialAgg[0]?.skipped ?? 0,
         },
+        server: {
+          serverUptimeSeconds: Math.floor(process.uptime()),
+        },
       },
     });
   } catch (err) {
