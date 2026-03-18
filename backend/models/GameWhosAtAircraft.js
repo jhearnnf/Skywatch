@@ -7,12 +7,11 @@ const gameWhosAtAircraftSchema = new mongoose.Schema({
 });
 
 // Validate that the referenced brief is in the 'Aircrafts' category
-gameWhosAtAircraftSchema.pre('save', async function (next) {
+gameWhosAtAircraftSchema.pre('save', async function () {
   const brief = await mongoose.model('IntelligenceBrief').findById(this.intelBriefId).select('category');
   if (brief && brief.category !== 'Aircrafts') {
-    return next(new Error("Who's That Aircraft: intel brief must be in the 'Aircrafts' category"));
+    throw new Error("Who's That Aircraft: intel brief must be in the 'Aircrafts' category");
   }
-  next();
 });
 
 module.exports = mongoose.model('GameWhosAtAircraft', gameWhosAtAircraftSchema);

@@ -10,15 +10,15 @@
     "test:watch": "jest --watch --runInBand"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
+    "bcryptjs": "^3.0.3",
     "cloudinary": "^2.9.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "google-auth-library": "^9.14.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "google-auth-library": "^10.6.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.5.0",
+    "mongoose": "^9.3.1",
     "resend": "^4.8.0",
     "stripe": "^16.3.0"
   },
