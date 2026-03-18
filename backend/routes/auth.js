@@ -16,10 +16,11 @@ const signToken = (id) =>
 
 const sendToken = (user, statusCode, res, extras = {}) => {
   const token = signToken(user._id);
+  const isProd = process.env.NODE_ENV === 'production'
   res.cookie('jwt', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
   user.password = undefined;
@@ -179,7 +180,8 @@ router.post('/google', async (req, res) => {
 
 // POST /api/auth/logout
 router.post('/logout', (_req, res) => {
-  res.cookie('jwt', '', { httpOnly: true, expires: new Date(0) });
+  const isProd = process.env.NODE_ENV === 'production'
+  res.cookie('jwt', '', { httpOnly: true, secure: isProd, sameSite: isProd ? 'none' : 'lax', expires: new Date(0) });
   res.json({ status: 'success' });
 });
 
