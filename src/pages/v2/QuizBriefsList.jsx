@@ -48,11 +48,20 @@ export default function QuizBriefsList() {
     return 'active'
   }
 
+  // Priority mode for the Available tab
+  const activeCount    = briefs.filter(b => getState(b) === 'active').length
+  const needsReadCount = briefs.filter(b => getState(b) === 'needs-read').length
+  const availableMode  = activeCount > 0 ? 'active' : needsReadCount > 0 ? 'needs-read' : 'all-passed'
+
   const filtered = briefs
     .filter(b => {
       const s = getState(b)
-      if (activeTab === 'Available')  return s === 'active' || s === 'needs-read'
-      if (activeTab === 'Completed')  return s === 'passed'
+      if (activeTab === 'Available') {
+        if (availableMode === 'active')     return s === 'active'
+        if (availableMode === 'needs-read') return s === 'needs-read'
+        return s === 'passed' // all-passed fallback
+      }
+      if (activeTab === 'Completed') return s === 'passed'
       return true
     })
     .filter(b => {
@@ -134,6 +143,20 @@ export default function QuizBriefsList() {
           <Link to="/learn" className="text-brand-600 font-semibold text-sm hover:text-brand-700">Browse all briefs →</Link>
         </div>
       ) : (
+        <>
+          {/* Contextual banner for Available tab */}
+          {activeTab === 'Available' && !search && availableMode === 'needs-read' && (
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-3">
+              <span className="text-base shrink-0">📖</span>
+              <p className="text-xs text-amber-800">Read these briefs to unlock their quizzes.</p>
+            </div>
+          )}
+          {activeTab === 'Available' && !search && availableMode === 'all-passed' && (
+            <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-3">
+              <span className="text-base shrink-0">🎉</span>
+              <p className="text-xs text-emerald-800">All quizzes complete — replay any below to keep sharp.</p>
+            </div>
+          )}
         <div className="space-y-2">
           {filtered.map((brief, i) => {
             const state = getState(brief)
@@ -223,6 +246,7 @@ export default function QuizBriefsList() {
             )
           })}
         </div>
+        </>
       )}
     </div>
   )
