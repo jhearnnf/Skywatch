@@ -26,6 +26,9 @@ dist
 dist-ssr
 *.local
 
+# Ableton metadata
+*.asd
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
