@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 
-const VIEW = { CHOICE: 'choice', SIGNIN: 'signin', REGISTER: 'register', DIFFICULTY: 'difficulty' }
+const VIEW = { CHOICE: 'choice', SIGNIN: 'signin', REGISTER: 'register', VERIFY: 'verify', DIFFICULTY: 'difficulty' }
 
 const DIFFICULTY_DEFAULTS = {
   title:         'Select Your Starting Level',
@@ -33,12 +33,15 @@ export default function LoginPage() {
   const { setUser, API, awardAircoins } = useAuth()
   const navigate = useNavigate()
 
-  const [view,      setView]     = useState(VIEW.CHOICE)
-  const [email,     setEmail]    = useState('')
-  const [pass,      setPass]     = useState('')
-  const [error,     setError]    = useState('')
-  const [busy,      setBusy]     = useState(false)
-  const [diffText,  setDiffText] = useState(DIFFICULTY_DEFAULTS)
+  const [view,           setView]          = useState(VIEW.CHOICE)
+  const [email,          setEmail]         = useState('')
+  const [pass,           setPass]          = useState('')
+  const [error,          setError]         = useState('')
+  const [busy,           setBusy]          = useState(false)
+  const [diffText,       setDiffText]      = useState(DIFFICULTY_DEFAULTS)
+  const [pendingEmail,   setPendingEmail]  = useState('')
+  const [code,           setCode]          = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
   const googleBtnRef  = useRef(null)
   const pendingUserRef = useRef(null)  // holds new-user object until difficulty is chosen
 
@@ -121,6 +124,13 @@ export default function LoginPage() {
     }
   }
 
+  // Cooldown ticker for resend button
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const t = setTimeout(() => setResendCooldown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [resendCooldown])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setBusy(true); setError('')
@@ -133,12 +143,59 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
+      // Register now returns { status: 'pending', email } — show verify screen
+      if (data.status === 'pending') {
+        setPendingEmail(data.email)
+        setCode('')
+        setResendCooldown(60)
+        setView(VIEW.VERIFY)
+        return
+      }
       if (data.data.isNew) { pendingUserRef.current = data.data.user; setView(VIEW.DIFFICULTY); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief()
       navigate(briefId ? `/brief/${briefId}` : '/home')
     } catch {
       setError('Connection failed. Is the server running?')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleVerify = async (e) => {
+    e.preventDefault()
+    setBusy(true); setError('')
+    try {
+      const res  = await fetch(`${API}/api/auth/verify-email`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: pendingEmail, code: code.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.message); return }
+      pendingUserRef.current = data.data.user
+      setView(VIEW.DIFFICULTY)
+    } catch {
+      setError('Connection failed. Is the server running?')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleResend = async () => {
+    if (resendCooldown > 0) return
+    setBusy(true); setError('')
+    try {
+      const res  = await fetch(`${API}/api/auth/resend-confirmation`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: pendingEmail }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.message); return }
+      setResendCooldown(60)
+    } catch {
+      setError('Failed to resend. Please try again.')
     } finally {
       setBusy(false)
     }
@@ -276,6 +333,71 @@ export default function LoginPage() {
 
               <button className="mt-3 w-full text-sm text-slate-400 hover:text-slate-600 transition-colors" onClick={() => reset(VIEW.CHOICE)}>
                 ← Back
+              </button>
+            </motion.div>
+          )}
+
+          {/* Email verification */}
+          {view === VIEW.VERIFY && (
+            <motion.div
+              key="verify"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="bg-surface rounded-3xl border border-slate-200 p-6 card-shadow"
+            >
+              <h2 className="text-xl font-extrabold text-slate-900 mb-1">Check your email</h2>
+              <p className="text-sm text-slate-500 mb-5">
+                We sent a 6-digit code to <strong>{pendingEmail}</strong>
+              </p>
+
+              <form onSubmit={handleVerify} noValidate className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5" htmlFor="code">Confirmation Code</label>
+                  <input
+                    id="code"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface-raised text-slate-800 placeholder:text-slate-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none text-xl tracking-[0.4em] text-center font-bold transition-all"
+                    placeholder="000000"
+                    value={code}
+                    onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    autoComplete="one-time-code"
+                    autoFocus
+                    required
+                  />
+                </div>
+
+                {error && (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-xl">{error}</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={busy || code.length < 6}
+                  className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-2xl transition-colors text-sm"
+                >
+                  {busy ? 'Verifying…' : 'Confirm Email'}
+                </button>
+              </form>
+
+              <p className="text-sm text-center text-slate-500 mt-4">
+                Didn&apos;t receive it?{' '}
+                <button
+                  onClick={handleResend}
+                  disabled={resendCooldown > 0 || busy}
+                  className="text-brand-600 font-semibold hover:text-brand-700 disabled:opacity-50 transition-colors"
+                >
+                  {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+                </button>
+              </p>
+
+              <button
+                className="mt-3 w-full text-sm text-slate-400 hover:text-slate-600 transition-colors"
+                onClick={() => { setError(''); setCode(''); setView(VIEW.REGISTER) }}
+              >
+                ← Use a different email
               </button>
             </motion.div>
           )}
