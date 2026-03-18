@@ -1893,7 +1893,7 @@ function BriefsTab({ API }) {
         await fetch(`${API}/api/admin/briefs/${id}/media`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url }),
+          body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId }),
         })
       }
 
@@ -2144,7 +2144,7 @@ function BriefsTab({ API }) {
       await fetch(`${API}/api/admin/briefs/${briefId}/media`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url }),
+        body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId }),
       })
     }
     // Reload media

@@ -24,6 +24,7 @@ const Media             = require('../models/Media');
 const mongoose          = require('mongoose');
 const path              = require('path');
 const fs                = require('fs');
+const { uploadBuffer, destroyAsset } = require('../utils/cloudinary');
 
 const LEADS_FILE = path.join(__dirname, '../../APPLICATION_INFO/intel_brief_leads.txt');
 
@@ -859,9 +860,14 @@ router.post('/briefs/:id/questions', async (req, res) => {
 // POST /api/admin/briefs/:id/media — add a media item to a brief
 router.post('/briefs/:id/media', async (req, res) => {
   try {
-    const { mediaType, mediaUrl, showOnSummary } = req.body;
+    const { mediaType, mediaUrl, cloudinaryPublicId, showOnSummary } = req.body;
     if (!mediaUrl || !mediaType) return res.status(400).json({ message: 'mediaType and mediaUrl required' });
-    const media = await Media.create({ mediaType, mediaUrl: mediaUrl.trim(), showOnSummary: showOnSummary !== false });
+    const media = await Media.create({
+      mediaType,
+      mediaUrl: mediaUrl.trim(),
+      ...(cloudinaryPublicId ? { cloudinaryPublicId } : {}),
+      showOnSummary: showOnSummary !== false,
+    });
     const brief = await IntelligenceBrief.findByIdAndUpdate(
       req.params.id,
       { $push: { media: media._id } },
@@ -894,10 +900,12 @@ router.delete('/briefs/:id/media/:mediaId', async (req, res) => {
   try {
     await IntelligenceBrief.findByIdAndUpdate(req.params.id, { $pull: { media: req.params.mediaId } });
     const mediaDoc = await Media.findByIdAndDelete(req.params.mediaId);
-    // If the media was stored locally, delete the file from disk
-    if (mediaDoc?.mediaUrl?.startsWith('/uploads/brief-images/')) {
+    // Delete the asset from Cloudinary, or fall back to local file for legacy images
+    if (mediaDoc?.cloudinaryPublicId) {
+      await destroyAsset(mediaDoc.cloudinaryPublicId).catch(() => {});
+    } else if (mediaDoc?.mediaUrl?.startsWith('/uploads/brief-images/')) {
       const filePath = path.join(__dirname, '..', mediaDoc.mediaUrl);
-      fs.unlink(filePath, () => {}); // ignore errors if file missing
+      fs.unlink(filePath, () => {});
     }
     res.json({ status: 'success' });
   } catch (err) {
@@ -1389,12 +1397,17 @@ router.post('/ai/regenerate-description/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/admin/media/brief-image — remove a locally stored brief image from disk
+// DELETE /api/admin/media/brief-image — remove a pending brief image (Cloudinary or legacy local)
 router.delete('/media/brief-image', async (req, res) => {
   try {
-    const { url } = req.body;
+    const { publicId, url } = req.body;
+    if (publicId) {
+      await destroyAsset(publicId).catch(() => {});
+      return res.json({ status: 'success' });
+    }
+    // Legacy: local file path
     if (!url || !url.startsWith('/uploads/brief-images/')) {
-      return res.status(400).json({ message: 'Invalid or non-local URL' });
+      return res.status(400).json({ message: 'publicId or valid local url required' });
     }
     const filePath = path.join(__dirname, '..', url);
     fs.unlink(filePath, (err) => {
@@ -1505,9 +1518,6 @@ router.post('/ai/generate-image', async (req, res) => {
     terms = terms.slice(0, 3);
 
     // Step 2 — fetch Wikipedia image for each term in parallel
-    const dir = path.join(__dirname, '..', 'uploads', 'brief-images');
-    fs.mkdirSync(dir, { recursive: true });
-
     const fetchOneImage = async (term, idx) => {
       const searchRes = await fetch(
         `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`
@@ -1525,12 +1535,10 @@ router.post('/ai/generate-image', async (req, res) => {
 
       const imgRes = await fetch(imageUrl, { headers: { 'User-Agent': 'Skywatch/1.0 (educational-platform)' } });
       if (!imgRes.ok) throw new Error(`Download failed (${imgRes.status})`);
-      const buffer   = Buffer.from(await imgRes.arrayBuffer());
-      const ext      = /\.(jpe?g|png|gif|webp|svg)(\?|$)/i.exec(imageUrl)?.[1]?.replace('jpeg', 'jpg') ?? 'jpg';
-      const filename = `brief-${Date.now()}-${idx}.${ext}`;
-      fs.writeFileSync(path.join(dir, filename), buffer);
+      const buffer = Buffer.from(await imgRes.arrayBuffer());
+      const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}-${idx}` });
 
-      return { url: `/uploads/brief-images/${filename}`, term, wikiPage: pageTitle };
+      return { url: result.secure_url, publicId: result.public_id, term, wikiPage: pageTitle };
     };
 
     const results = await Promise.allSettled(terms.map((term, i) => fetchOneImage(term, i)));
@@ -1544,19 +1552,16 @@ router.post('/ai/generate-image', async (req, res) => {
   }
 });
 
-// POST /api/admin/save-generated-image — receive base64 image from browser and save it locally
+// POST /api/admin/save-generated-image — receive base64 image from browser and upload to Cloudinary
 router.post('/save-generated-image', async (req, res) => {
   try {
     const { imageBase64 } = req.body;
     if (!imageBase64) return res.status(400).json({ message: 'imageBase64 required' });
 
-    const buffer   = Buffer.from(imageBase64, 'base64');
-    const dir      = path.join(__dirname, '..', 'uploads', 'brief-images');
-    fs.mkdirSync(dir, { recursive: true });
-    const filename = `brief-${Date.now()}.png`;
-    fs.writeFileSync(path.join(dir, filename), buffer);
+    const buffer = Buffer.from(imageBase64, 'base64');
+    const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}`, format: 'png' });
 
-    res.json({ status: 'success', data: { url: `/uploads/brief-images/${filename}` } });
+    res.json({ status: 'success', data: { url: result.secure_url, publicId: result.public_id } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
