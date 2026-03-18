@@ -11,6 +11,15 @@ import { TUTORIAL_STEPS } from '../../context/AppTutorialContext'
 
 const fmtNum = (n) => (n ?? 0).toLocaleString()
 
+function fmtUptime(s) {
+  if (!s) return '0s'
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
+  if (d) return `${d}d ${h}h ${m}m`
+  if (h) return `${h}h ${m}m`
+  if (m) return `${m}m ${sec}s`
+  return `${sec}s`
+}
+
 function fmtSeconds(s) {
   if (!s) return '0s'
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
@@ -283,7 +292,7 @@ function StatsTab({ API }) {
           <StatCard label="Time Reading"       value={fmtSeconds(briefs.totalReadSeconds ?? 0)} color="brand" />
           <StatCard label="Tutorials Viewed"   value={fmtNum(tutorials.viewed)}                color="slate" />
           <StatCard label="Tutorials Skipped"  value={fmtNum(tutorials.skipped)}               color="slate" />
-          <StatCard label="Uptime Since Deploy" value={fmtSeconds(server?.serverUptimeSeconds ?? 0)} color="emerald" />
+          <StatCard label="Uptime Since Deploy" value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="emerald" />
         </div>
       </section>
     </div>
