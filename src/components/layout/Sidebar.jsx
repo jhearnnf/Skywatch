@@ -23,13 +23,14 @@ const NAV_ITEMS = [
 
 function CrosshairLogo() {
   return (
-    <svg width="26" height="26" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-      <circle cx="14" cy="14" r="10" stroke="#5baaff" strokeWidth="1.8"/>
-      <circle cx="14" cy="14" r="3.5" stroke="#5baaff" strokeWidth="1.8"/>
-      <line x1="14" y1="1"  x2="14" y2="7"  stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="14" y1="21" x2="14" y2="27" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="1"  y1="14" x2="7"  y2="14" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="21" y1="14" x2="27" y2="14" stroke="#5baaff" strokeWidth="1.8" strokeLinecap="round"/>
+    <svg width="26" height="26" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      <circle cx="20" cy="20" r="17" stroke="#1d4ed8" strokeWidth="2.2"/>
+      <line x1="20" y1="1"  x2="20" y2="12" stroke="#1d4ed8" strokeWidth="2.2" strokeLinecap="round"/>
+      <line x1="20" y1="28" x2="20" y2="39" stroke="#1d4ed8" strokeWidth="2.2" strokeLinecap="round"/>
+      <line x1="1"  y1="20" x2="12" y2="20" stroke="#1d4ed8" strokeWidth="2.2" strokeLinecap="round"/>
+      <line x1="28" y1="20" x2="39" y2="20" stroke="#1d4ed8" strokeWidth="2.2" strokeLinecap="round"/>
+      <circle cx="20" cy="20" r="7" stroke="#5baaff" strokeWidth="1.8"/>
+      <circle cx="20" cy="20" r="2.5" fill="#5baaff"/>
     </svg>
   )
 }
