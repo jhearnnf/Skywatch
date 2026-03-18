@@ -12,7 +12,6 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/auth',   require('./routes/auth'));
 app.use('/api/briefs', require('./routes/briefs'));
