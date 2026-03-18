@@ -5,7 +5,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Sender — update to a verified domain before going to production.
 // In development, Resend allows sending from onboarding@resend.dev.
-const FROM = 'Skywatch <onboarding@resend.dev>';
+const FROM = 'Skywatch <noreply@skywatch.academy>';
 
 // Default copy — used when admin has not overridden the field.
 const DEFAULTS = {
