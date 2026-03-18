@@ -295,6 +295,14 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
 
     const accessibleIds = accessible.map(b => b._id);
 
+    // User's completed read records for these briefs
+    const readRecords = await IntelligenceBriefRead.find({
+      userId: req.user._id,
+      intelBriefId: { $in: accessibleIds },
+      completed: true,
+    }).select('intelBriefId').lean();
+    const readSet = new Set(readRecords.map(r => r.intelBriefId.toString()));
+
     // User's won quiz attempts for these briefs (quiz is prerequisite for BOO)
     const passedQuizRecords = await GameSessionQuizAttempt.find({
       userId: req.user._id, status: 'completed', won: true,
@@ -312,15 +320,16 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
         .map(r => r.gameId.anchorBriefId.toString())
     );
 
-    // Bucket each brief
-    const active = [], completed = [], needsQuiz = [], noData = [];
+    // Bucket each brief — full prerequisite chain: read → quiz → BOO
+    const active = [], completed = [], needsQuiz = [], needsRead = [], noData = [];
     for (const brief of accessible) {
       const id      = brief._id.toString();
       const hasData = booCategories.has(brief.category);
-      if      (!hasData)                                   noData.push(brief);
-      else if (!passedQuizSet.has(id))                    needsQuiz.push(brief);
-      else if (wonBooSet.has(id))                         completed.push(brief);
-      else                                                active.push(brief);
+      if      (!hasData)                 noData.push(brief);
+      else if (!readSet.has(id))         needsRead.push(brief);
+      else if (!passedQuizSet.has(id))   needsQuiz.push(brief);
+      else if (wonBooSet.has(id))        completed.push(brief);
+      else                               active.push(brief);
     }
 
     const result = [];
@@ -329,10 +338,11 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
       if (remaining <= 0 || list.length === 0) return;
       list.slice(0, remaining).forEach(b => result.push({ ...b, booState: state }));
     };
-    addBriefs(active,    'active');
-    addBriefs(completed, 'completed');
-    addBriefs(needsQuiz, 'needs-quiz');
-    addBriefs(noData,    'no-data');
+    addBriefs(active,     'active');
+    addBriefs(needsQuiz,  'needs-quiz');
+    addBriefs(needsRead,  'needs-read');
+    addBriefs(completed,  'completed');
+    addBriefs(noData,     'no-data');
 
     res.json({ status: 'success', data: { briefs: result } });
   } catch (err) {
@@ -378,23 +388,42 @@ router.get('/quiz/recommended-briefs', protect, async (req, res) => {
     const needsReadIds = playableIds.filter(id => !readSet.has(id.toString()) && !passedSet.has(id.toString()));
     const passedIds    = playableIds.filter(id => passedSet.has(id.toString()));
 
+
+    // For active briefs, sort by most recent read date so recently-read briefs appear first
+    const activeReadMap = new Map();
+    if (activeIds.length > 0) {
+      const activeReads = await IntelligenceBriefRead.find({
+        userId: req.user._id,
+        intelBriefId: { $in: activeIds },
+      }).select('intelBriefId lastReadAt').lean();
+      for (const r of activeReads) activeReadMap.set(r.intelBriefId.toString(), r.lastReadAt);
+    }
+    const activeIdsSorted = [...activeIds].sort((a, b) => {
+      const ta = activeReadMap.get(a.toString()) ?? 0;
+      const tb = activeReadMap.get(b.toString()) ?? 0;
+      return new Date(tb) - new Date(ta);
+    });
+
     const result = [];
     const addBriefs = async (ids, state) => {
       if (result.length >= limit || ids.length === 0) return;
+      // Fetch ALL docs for these ids (no DB-level limit) so we can reorder in JS
       const docs = await IntelligenceBrief.find({ _id: { $in: ids } })
         .select('_id title category subcategory')
-        .sort({ createdAt: -1 })
-        .limit(limit - result.length)
         .lean();
-      for (const doc of docs) {
+      const docMap = new Map(docs.map(d => [d._id.toString(), d]));
+      for (const id of ids) {
+        if (result.length >= limit) break;
+        const doc = docMap.get(id.toString());
+        if (!doc) continue;
         if (!canAccessCategory(doc.category, tier, settings)) continue;
         result.push({ ...doc, quizState: state });
       }
     };
 
-    await addBriefs(activeIds,    'active');
-    await addBriefs(needsReadIds, 'needs-read');
-    await addBriefs(passedIds,    'passed');
+    await addBriefs(activeIdsSorted, 'active');
+    await addBriefs(needsReadIds,    'needs-read');
+    await addBriefs(passedIds,       'passed');
 
     res.json({ status: 'success', data: { briefs: result } });
   } catch (err) {
@@ -425,6 +454,18 @@ router.get('/battle-of-order/options', protect, async (req, res) => {
 
     const anchor = await IntelligenceBrief.findById(briefId).select('category gameData').lean();
     if (!anchor) return res.status(404).json({ message: 'Brief not found' });
+
+    // Prerequisite 1: user must have completed the brief
+    const readRecord = await IntelligenceBriefRead.findOne({
+      userId: req.user._id, intelBriefId: briefId, completed: true,
+    }).lean();
+    if (!readRecord) return res.json({ status: 'success', data: { available: false, reason: 'not_read' } });
+
+    // Prerequisite 2: user must have passed the quiz
+    const quizPassed = await GameSessionQuizAttempt.findOne({
+      userId: req.user._id, intelBriefId: briefId, status: 'completed', won: true,
+    }).lean();
+    if (!quizPassed) return res.json({ status: 'success', data: { available: false, reason: 'quiz_not_passed' } });
 
     const category   = anchor.category;
     const orderTypes = ORDER_TYPES[category];
@@ -462,6 +503,18 @@ router.post('/battle-of-order/generate', protect, async (req, res) => {
 
     const anchor = await IntelligenceBrief.findById(briefId).select('category gameData title').lean();
     if (!anchor) return res.status(404).json({ message: 'Brief not found' });
+
+    // Prerequisite 1: user must have completed the brief
+    const readRecord = await IntelligenceBriefRead.findOne({
+      userId: req.user._id, intelBriefId: briefId, completed: true,
+    }).lean();
+    if (!readRecord) return res.status(403).json({ message: 'You must read and complete this brief first.' });
+
+    // Prerequisite 2: user must have passed the quiz
+    const quizPassed = await GameSessionQuizAttempt.findOne({
+      userId: req.user._id, intelBriefId: briefId, status: 'completed', won: true,
+    }).lean();
+    if (!quizPassed) return res.status(403).json({ message: 'You must pass the Intel Quiz for this brief first.' });
 
     const category        = anchor.category;
     const validOrderTypes = ORDER_TYPES[category];

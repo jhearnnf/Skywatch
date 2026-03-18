@@ -2526,6 +2526,9 @@ function BriefsTab({ API }) {
                     >
                       ✕
                     </button>
+                    <p className="text-[10px] text-slate-400 truncate mt-1 px-0.5">
+                      {m.cloudinaryPublicId ?? m.mediaUrl.split('/').pop().replace(/\.[^.]+$/, '')}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -2555,6 +2558,7 @@ function BriefsTab({ API }) {
                         onChange={e => setPendingImages(p => p.map((x, j) => j === i ? { ...x, selected: e.target.checked } : x))}
                         className="absolute top-2 left-2"
                       />
+                      <p className="text-[10px] text-slate-400 truncate mt-1 px-0.5">{img.wikiPage || img.term}</p>
                     </label>
                   ))}
                 </div>

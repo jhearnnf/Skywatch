@@ -620,7 +620,11 @@ export default function BattleOfOrderFlow() {
           <div className="text-4xl mb-3">🗺️</div>
           <p className="font-semibold text-slate-600 mb-1">Battle of Order unavailable</p>
           <p className="text-sm">
-            {unavailableReason === 'ineligible_category'
+            {unavailableReason === 'not_read'
+              ? 'You need to read and complete this brief before playing.'
+              : unavailableReason === 'quiz_not_passed'
+              ? 'You need to pass the Intel Quiz for this brief first.'
+              : unavailableReason === 'ineligible_category'
               ? "This brief's category doesn't support Battle of Order."
               : unavailableReason === 'insufficient_briefs'
               ? 'Not enough briefs in this category have game data yet.'

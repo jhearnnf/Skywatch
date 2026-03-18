@@ -176,7 +176,27 @@ describe('BattleOfOrderFlow — roulette / selection screen', () => {
     render(<BattleOfOrderFlow />)
 
     await waitFor(() => screen.getByText('Battle of Order unavailable'))
-    expect(screen.getByText(/ineligible_category|doesn't support/i)).toBeDefined()
+    expect(screen.getByText(/doesn't support Battle of Order/i)).toBeDefined()
+  })
+
+  it('shows "read and complete" message when brief has not been read', async () => {
+    global.fetch = setupFetch({
+      options: { status: 'success', data: { available: false, reason: 'not_read' } },
+    })
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText('Battle of Order unavailable'))
+    expect(screen.getByText(/read and complete this brief/i)).toBeDefined()
+  })
+
+  it('shows "pass the Intel Quiz" message when quiz not yet passed', async () => {
+    global.fetch = setupFetch({
+      options: { status: 'success', data: { available: false, reason: 'quiz_not_passed' } },
+    })
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText('Battle of Order unavailable'))
+    expect(screen.getByText(/pass the Intel Quiz/i)).toBeDefined()
   })
 
   it('navigates back to brief when ← Back clicked on roulette screen', async () => {

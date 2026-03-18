@@ -1,10 +1,19 @@
 // Returns the effective subscription tier for a user.
 // An expired trial is treated as 'free' — subscriptionTier stays 'trial' in the DB
 // but isTrialActive (a Mongoose virtual) will be false once the window has passed.
+function _isTrialActive(user) {
+  if (!user.trialStartDate) return false;
+  const trialEnd = new Date(user.trialStartDate);
+  trialEnd.setDate(trialEnd.getDate() + (user.trialDurationDays || 5));
+  return new Date() < trialEnd;
+}
+
 function effectiveTier(user) {
   if (!user) return 'free';
   if (user.subscriptionTier === 'trial') {
-    return user.isTrialActive ? 'trial' : 'free';
+    // isTrialActive is a Mongoose virtual — not present on .lean() objects, so compute it
+    const active = user.isTrialActive ?? _isTrialActive(user);
+    return active ? 'trial' : 'free';
   }
   return user.subscriptionTier ?? 'free';
 }

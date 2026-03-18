@@ -164,7 +164,7 @@ export default function Play() {
                 <h2 className="font-bold text-slate-800">Intel Quiz</h2>
               </div>
               <Link to="/play/quiz" className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors">
-                Browse briefs →
+                Browse intel quizzes →
               </Link>
             </div>
             <div className="p-5">
@@ -382,6 +382,33 @@ export default function Play() {
                             </div>
                             <span className="text-xs text-slate-400 shrink-0">No data yet</span>
                           </div>
+                        </motion.div>
+                      )
+                    }
+
+                    if (state === 'needs-read') {
+                      return (
+                        <motion.div
+                          key={brief._id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
+                          <Link
+                            to={`/brief/${brief._id}`}
+                            className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200 hover:border-amber-300 transition-all group"
+                          >
+                            <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                              <span className="font-bold text-xs text-amber-600">📖</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                              <p className="text-xs text-slate-400">{brief.category}</p>
+                            </div>
+                            <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">
+                              Read first →
+                            </span>
+                          </Link>
                         </motion.div>
                       )
                     }

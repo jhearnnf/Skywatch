@@ -125,6 +125,8 @@ appSettingsSchema.statics.getSettings = async function () {
     if (settings.ammoSilver <= 3)  updates.ammoSilver = 10;  // old default was 3
     if (!settings.freeCategories || settings.freeCategories.length === 0)
       updates.freeCategories = ['News'];
+    if (!settings.silverCategories || settings.silverCategories.length === 0)
+      updates.silverCategories = ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'];
     if (Object.keys(updates).length)
       settings = await this.findByIdAndUpdate(settings._id, updates, { new: true });
   }
