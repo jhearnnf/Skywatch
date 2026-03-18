@@ -9,7 +9,6 @@ export default function QuizBriefsList() {
   const { user, API } = useAuth()
 
   const [briefs,               setBriefs]               = useState([])
-  const [readBriefIds,         setReadBriefIds]         = useState(new Set())
   const [quizPlayableBriefIds, setQuizPlayableBriefIds] = useState(new Set())
   const [passedBriefIds,       setPassedBriefIds]       = useState(new Set())
   const [loading,              setLoading]              = useState(true)
@@ -18,7 +17,6 @@ export default function QuizBriefsList() {
 
   useEffect(() => {
     if (!user) {
-      setReadBriefIds(new Set())
       setQuizPlayableBriefIds(new Set())
       setPassedBriefIds(new Set())
       setLoading(false)
@@ -27,13 +25,11 @@ export default function QuizBriefsList() {
 
     Promise.all([
       fetch(`${API}/api/briefs?limit=200`, { credentials: 'include' }).then(r => r.json()),
-      fetch(`${API}/api/briefs/completed-brief-ids`,        { credentials: 'include' }).then(r => r.json()),
       fetch(`${API}/api/games/quiz/playable-brief-ids`,     { credentials: 'include' }).then(r => r.json()),
       fetch(`${API}/api/games/quiz/completed-brief-ids`,    { credentials: 'include' }).then(r => r.json()),
     ])
-      .then(([briefsData, readData, playableData, passedData]) => {
+      .then(([briefsData, playableData, passedData]) => {
         setBriefs(briefsData?.data?.briefs ?? [])
-        setReadBriefIds(new Set(readData?.data?.ids ?? []))
         setQuizPlayableBriefIds(new Set(playableData?.data?.ids ?? []))
         setPassedBriefIds(new Set(passedData?.data?.ids ?? []))
       })
@@ -44,7 +40,7 @@ export default function QuizBriefsList() {
   function getState(brief) {
     if (!quizPlayableBriefIds.has(brief._id)) return 'no-questions'
     if (passedBriefIds.has(brief._id)) return 'passed'
-    if (!readBriefIds.has(brief._id)) return 'needs-read'
+    if (!brief.isRead) return 'needs-read'
     return 'active'
   }
 
