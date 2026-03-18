@@ -17,7 +17,13 @@ export default function QuizBriefsList() {
   const [search,               setSearch]              = useState('')
 
   useEffect(() => {
-    if (!user) { setLoading(false); return }
+    if (!user) {
+      setReadBriefIds(new Set())
+      setQuizPlayableBriefIds(new Set())
+      setPassedBriefIds(new Set())
+      setLoading(false)
+      return
+    }
 
     Promise.all([
       fetch(`${API}/api/briefs?limit=200`, { credentials: 'include' }).then(r => r.json()),

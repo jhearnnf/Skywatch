@@ -18,7 +18,12 @@ export default function BOOBriefsList() {
   const [search,                setSearch]               = useState('')
 
   useEffect(() => {
-    if (!user) { setLoading(false); return }
+    if (!user) {
+      setPassedBriefIds(new Set())
+      setBooAvailableCategories(new Set())
+      setLoading(false)
+      return
+    }
 
     Promise.all([
       fetch(`${API}/api/briefs?limit=200`, { credentials: 'include' }).then(r => r.json()),

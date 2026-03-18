@@ -80,7 +80,7 @@ export default function Profile() {
   }, [API])
 
   useEffect(() => {
-    if (!user) return
+    if (!user) { setStats({ brifsRead: 0, gamesPlayed: 0, winPercent: 0 }); return }
     fetch(`${API}/api/users/stats`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => {

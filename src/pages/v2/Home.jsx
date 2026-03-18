@@ -146,13 +146,13 @@ export default function Home() {
       .catch(() => {})
   }, [user, API])
 
-  // Fetch latest 4 briefs for "keep learning" strip
+  // Fetch latest 4 briefs for "keep learning" strip — re-fetch on user change so isRead/isStarted resets after logout
   useEffect(() => {
     fetch(`${API}/api/briefs?limit=4`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => setLatestBriefs(data.data?.briefs ?? []))
       .catch(() => {})
-  }, [API])
+  }, [user, API])
 
   const today   = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
   const greeting = user
