@@ -291,6 +291,7 @@ export default function BriefReader() {
   const [readRecord, setReadRecord] = useState(null)
   // 'unavailable' | 'locked-quiz' | 'available'
   const [booState, setBooState] = useState('unavailable')
+  const [navDir, setNavDir]        = useState(1) // 1 = forward, -1 = backward
   const markingRef                 = useRef(false)
   const briefOpenedRef             = useRef(false)
   const accSecondsRef              = useRef(0)
@@ -427,6 +428,17 @@ export default function BriefReader() {
     markingRef.current = true
   }, [briefId, user])
 
+  const handleGoBack = () => {
+    if (sectionIdx <= 0) return
+    setNavDir(-1)
+    setSection(i => {
+      const prev = i - 1
+      sessionStorage.setItem(`sw_brief_sec_${briefId}`, String(prev))
+      return prev
+    })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const handleContinue = () => {
     if (isLast) {
       markRead()
@@ -461,6 +473,7 @@ export default function BriefReader() {
           .catch(() => {})
       }
     } else {
+      setNavDir(1)
       setSection(i => {
         const next = i + 1
         sessionStorage.setItem(`sw_brief_sec_${briefId}`, String(next))
@@ -603,9 +616,9 @@ export default function BriefReader() {
           <AnimatePresence mode="wait">
             <motion.div
               key={sectionIdx}
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: navDir * 20 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
+              exit={{ opacity: 0, x: navDir * -20 }}
               transition={{ duration: 0.25 }}
               className="bg-surface rounded-2xl p-5 border border-slate-200 mb-4 card-shadow"
             >
@@ -632,19 +645,30 @@ export default function BriefReader() {
             </motion.p>
           )}
 
-          {/* Continue button */}
-          <motion.button
-            onClick={handleContinue}
-            whileTap={{ scale: 0.97 }}
-            className="w-full py-4 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200"
-          >
-            {isLast
-              ? (user && !readRecord?.coinsAwarded
-                  ? '⭐ Complete Brief & Collect Aircoins'
-                  : '✓ Complete Brief')
-              : 'Continue →'
-            }
-          </motion.button>
+          {/* Continue / Back buttons */}
+          <div className="flex gap-3">
+            {sectionIdx > 0 && (
+              <button
+                onClick={handleGoBack}
+                aria-label="Previous section"
+                className="py-4 px-5 border border-slate-200 text-slate-500 font-semibold rounded-2xl hover:bg-slate-50 transition-colors"
+              >
+                ←
+              </button>
+            )}
+            <motion.button
+              onClick={handleContinue}
+              whileTap={{ scale: 0.97 }}
+              className="flex-1 py-4 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200"
+            >
+              {isLast
+                ? (user && !readRecord?.coinsAwarded
+                    ? '⭐ Complete Brief & Collect Aircoins'
+                    : '✓ Complete Brief')
+                : 'Continue →'
+              }
+            </motion.button>
+          </div>
 
           {/* Sources */}
           {brief.sources?.length > 0 && (
