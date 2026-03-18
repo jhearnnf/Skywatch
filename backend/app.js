@@ -6,8 +6,19 @@ const path         = require('path');
 
 const app = express();
 
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:5173',
+  'http://localhost:4173',
+].filter(Boolean)
+
+console.log('CORS allowed origins:', allowedOrigins)
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true)
+    cb(new Error(`CORS: origin ${origin} not allowed`))
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
