@@ -3,7 +3,7 @@
  * Tutorial steps can be overridden via AppSettings.tutorialContent (admin-editable).
  * Falls back to hardcoded defaults when no override is set.
  */
-import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 
@@ -102,12 +102,20 @@ function applyOverrides(steps, tutorialContent) {
 export function AppTutorialProvider({ children }) {
   const [active,          setActive]          = useState(null) // { name, steps, stepIndex }
   const [tutorialContent, setTutorialContent] = useState(null)
-  const location = useLocation()
-  const { user } = useAuth()
+  const location     = useLocation()
+  const { user, loading: authLoading } = useAuth()
+  const pendingRef   = useRef(null) // tutorial name waiting for auth to resolve
 
   // Keys are user-scoped so tutorials seen on one account don't suppress them on another
   const storageKey = useCallback((name) => {
     return user?._id ? `sw_tut_v2_${user._id}_${name}` : `sw_tut_v2_anon_${name}`
+  }, [user?._id])
+
+  // Check both user-scoped key AND anon key — so "seen as guest" counts when logged in
+  const hasSeen = useCallback((name) => {
+    if (user?._id && localStorage.getItem(`sw_tut_v2_${user._id}_${name}`)) return true
+    if (localStorage.getItem(`sw_tut_v2_anon_${name}`)) return true
+    return false
   }, [user?._id])
 
   // Load tutorial content overrides from public settings on mount
@@ -129,12 +137,23 @@ export function AppTutorialProvider({ children }) {
     return overridden[name] ?? null
   }, [tutorialContent])
 
+  // When auth finishes loading, fire any tutorial that was queued during the loading window
+  useEffect(() => {
+    if (authLoading || !pendingRef.current) return
+    const name = pendingRef.current
+    pendingRef.current = null
+    if (hasSeen(name)) return
+    const steps = getSteps(name)
+    if (steps?.length) setActive({ name, steps, stepIndex: 0 })
+  }, [authLoading, hasSeen, getSteps])
+
   const start = useCallback((name, force = false) => {
-    if (!force && localStorage.getItem(storageKey(name))) return
+    if (authLoading) { pendingRef.current = name; return }
+    if (!force && hasSeen(name)) return
     const steps = getSteps(name)
     if (!steps?.length) return
     setActive({ name, steps, stepIndex: 0 })
-  }, [getSteps, storageKey])
+  }, [authLoading, hasSeen, getSteps])
 
   const next = useCallback(() => {
     setActive(prev => {
