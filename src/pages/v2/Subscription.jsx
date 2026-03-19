@@ -1,8 +1,11 @@
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { CATEGORIES, CATEGORY_ICONS } from '../../data/mockData'
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function tierEffective(user) {
@@ -24,7 +27,7 @@ function trialTimeLeft(user) {
 }
 
 function trialTimeLabel({ days, hours, ms }) {
-  if (ms === 0)      return 'Trial expired'
+  if (ms === 0)               return 'Trial expired'
   if (days === 0 && hours === 0) return 'Less than 1 hour remaining'
   const parts = []
   if (days  > 0) parts.push(`${days} day${days   !== 1 ? 's' : ''}`)
@@ -56,7 +59,7 @@ function SkeletonTags() {
 }
 
 // ── Tier card ─────────────────────────────────────────────────────────────
-function TierCard({ tier, isCurrent, delay }) {
+function TierCard({ tier, isCurrent, delay, ctaButton }) {
   const isGold   = tier.id === 'gold'
   const isTrial  = tier.id === 'trial'
   const isSilver = tier.id === 'silver'
@@ -106,42 +109,186 @@ function TierCard({ tier, isCurrent, delay }) {
       {tier.categorySection}
 
       {/* CTA */}
-      <div className="mt-4">
-        {isCurrent ? (
-          <div className="w-full py-2.5 rounded-xl bg-emerald-100 text-emerald-700 font-bold text-sm text-center">
-            ✓ Current Plan
-          </div>
-        ) : (
-          <button
-            disabled
-            className="w-full py-2.5 rounded-xl font-bold text-sm cursor-not-allowed bg-slate-100 text-slate-400 border border-slate-200"
-            title="Payments coming soon"
-          >
-            {tier.id === 'free' ? 'Downgrade' : 'Upgrade'} — Coming Soon
-          </button>
-        )}
-      </div>
+      <div className="mt-4">{ctaButton}</div>
     </motion.div>
+  )
+}
+
+// ── CTA button helpers ────────────────────────────────────────────────────
+function CurrentPlanBadge() {
+  return (
+    <div className="w-full py-2.5 rounded-xl bg-emerald-100 text-emerald-700 font-bold text-sm text-center">
+      ✓ Current Plan
+    </div>
+  )
+}
+
+function ActionButton({ label, onClick, disabled = false, loading = false, variant = 'primary' }) {
+  const base = 'w-full py-2.5 rounded-xl font-bold text-sm transition-colors'
+  const styles = {
+    primary:  'bg-brand-600 hover:bg-brand-700 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed',
+    gold:     'bg-amber-500 hover:bg-amber-600 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed',
+    outline:  'border border-slate-300 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed',
+    disabled: 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200',
+  }
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled || loading}
+      className={`${base} ${styles[variant]}`}
+    >
+      {loading ? 'Loading…' : label}
+    </button>
   )
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function Subscription() {
-  const { user }             = useAuth()
-  const { settings, loading } = useAppSettings()
+  const { user, refreshUser }      = useAuth()
+  const { settings, loading }      = useAppSettings()
+  const navigate                   = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const navigate   = useNavigate()
+  const [actionLoading, setActionLoading] = useState(false)
+  const [banner, setBanner]               = useState(null) // { type: 'success'|'error'|'info', msg }
+
   const effective  = tierEffective(user)
   const timeLeft   = effective === 'trial' ? trialTimeLeft(user) : { days: 0, hours: 0, ms: 0 }
   const trialDays  = settings?.trialDurationDays ?? 5
 
-  // Derive category sets from live settings
-  const freeCategories   = settings?.freeCategories   ?? []
-  const silverCategories = settings?.silverCategories ?? []
-  const goldOnlyCategories = CATEGORIES.filter(c => !silverCategories.includes(c))
-  const silverExtraCategories = silverCategories.filter(c => !freeCategories.includes(c))
+  // Handle Stripe redirect return
+  useEffect(() => {
+    const stripeParam = searchParams.get('stripe')
+    if (stripeParam === 'success') {
+      setBanner({ type: 'success', msg: 'Payment successful! Your subscription is being activated — this may take a few seconds.' })
+      // Refresh user so tier updates if webhook has already fired
+      refreshUser()
+      setSearchParams({})
+    } else if (stripeParam === 'cancelled') {
+      setBanner({ type: 'info', msg: 'Checkout cancelled. No payment was taken.' })
+      setSearchParams({})
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Category sections for each tier ────────────────────────────────────
+  // ── Stripe actions ───────────────────────────────────────────────────
+  async function startCheckout(tier, trial = false) {
+    if (!user) { navigate('/login'); return }
+    setActionLoading(true)
+    setBanner(null)
+    try {
+      const res = await fetch(`${API}/api/stripe/create-checkout-session`, {
+        method:      'POST',
+        credentials: 'include',
+        headers:     { 'Content-Type': 'application/json' },
+        body:        JSON.stringify({ tier, trial }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to start checkout')
+      window.location.href = data.url
+    } catch (err) {
+      setBanner({ type: 'error', msg: err.message })
+      setActionLoading(false)
+    }
+  }
+
+  async function openPortal() {
+    if (!user) { navigate('/login'); return }
+    setActionLoading(true)
+    setBanner(null)
+    try {
+      const res = await fetch(`${API}/api/stripe/create-portal-session`, {
+        method:      'POST',
+        credentials: 'include',
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to open portal')
+      window.location.href = data.url
+    } catch (err) {
+      setBanner({ type: 'error', msg: err.message })
+      setActionLoading(false)
+    }
+  }
+
+  // ── Derive CTA for each tier ─────────────────────────────────────────
+  function getCtaButton(tierId, isCurrent) {
+    if (isCurrent && !user?.stripeSubscriptionId) return <CurrentPlanBadge />
+
+    if (!user) {
+      return <ActionButton label="Sign In to Continue" disabled variant="disabled" />
+    }
+
+    if (tierId === 'free') {
+      if (user.stripeSubscriptionId) {
+        return <ActionButton label="Manage Subscription" onClick={openPortal} loading={actionLoading} variant="outline" />
+      }
+      return <CurrentPlanBadge />
+    }
+
+    if (tierId === 'trial') {
+      if (isCurrent) return <CurrentPlanBadge />
+      if (user.trialStartDate) {
+        return <ActionButton label="Trial Already Used" disabled variant="disabled" />
+      }
+      if (['silver', 'gold'].includes(effective)) {
+        return <ActionButton label="Not Available" disabled variant="disabled" />
+      }
+      return (
+        <ActionButton
+          label={`Start ${trialDays}-Day Free Trial`}
+          onClick={() => startCheckout('silver', true)}
+          loading={actionLoading}
+          variant="primary"
+        />
+      )
+    }
+
+    if (tierId === 'silver') {
+      if (isCurrent) {
+        return user.stripeSubscriptionId
+          ? <ActionButton label="Manage Subscription" onClick={openPortal} loading={actionLoading} variant="outline" />
+          : <CurrentPlanBadge />
+      }
+      if (effective === 'gold' && user.stripeSubscriptionId) {
+        return <ActionButton label="Switch to Silver" onClick={openPortal} loading={actionLoading} variant="outline" />
+      }
+      return (
+        <ActionButton
+          label="Upgrade to Silver — £4.99/mo"
+          onClick={() => startCheckout('silver', false)}
+          loading={actionLoading}
+          variant="primary"
+        />
+      )
+    }
+
+    if (tierId === 'gold') {
+      if (isCurrent) {
+        return user.stripeSubscriptionId
+          ? <ActionButton label="Manage Subscription" onClick={openPortal} loading={actionLoading} variant="outline" />
+          : <CurrentPlanBadge />
+      }
+      if (user.stripeSubscriptionId) {
+        return <ActionButton label="Upgrade to Gold — £8.99/mo" onClick={openPortal} loading={actionLoading} variant="gold" />
+      }
+      return (
+        <ActionButton
+          label="Upgrade to Gold — £8.99/mo"
+          onClick={() => startCheckout('gold', false)}
+          loading={actionLoading}
+          variant="gold"
+        />
+      )
+    }
+
+    return null
+  }
+
+  // ── Derive category sets from live settings ───────────────────────────
+  const freeCategories         = settings?.freeCategories   ?? []
+  const silverCategories       = settings?.silverCategories ?? []
+  const goldOnlyCategories     = CATEGORIES.filter(c => !silverCategories.includes(c))
+  const silverExtraCategories  = silverCategories.filter(c => !freeCategories.includes(c))
+
   const freeCategorySection = (
     <div className="border-t border-slate-100 pt-3">
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Included subjects</p>
@@ -196,13 +343,13 @@ export default function Subscription() {
       id: 'trial',
       label: 'Trial',
       price: '£0',
-      period: `${trialDays} days free`,
+      period: `${trialDays} days free, then £4.99/mo`,
       badge: 'Try Free',
       features: [
         '✓ Full Silver access for the trial period',
         '✓ All Silver subject areas included',
         '✓ Advanced quiz difficulty',
-        `✓ ${trialDays}-day limited access`,
+        `✓ ${trialDays}-day free trial — card required`,
         '✗ Gold subjects locked',
       ],
       categorySection: trialSilverCategorySection,
@@ -217,7 +364,6 @@ export default function Subscription() {
         '✓ Everything in Free',
         '✓ Access to all Silver subjects',
         '✓ Advanced quiz difficulty',
-        '✓ Priority leaderboard visibility',
         '✗ Gold subjects locked',
       ],
       categorySection: trialSilverCategorySection,
@@ -225,15 +371,13 @@ export default function Subscription() {
     {
       id: 'gold',
       label: 'Gold',
-      price: '£9.99',
+      price: '£8.99',
       period: 'per month',
       badge: 'Full Access',
       features: [
         '✓ Everything in Silver',
         '✓ Access to ALL subject areas',
         '✓ All intel briefs & quizzes',
-        '✓ Exclusive Gold rank badge',
-        '✓ Early access to new content',
       ],
       categorySection: goldCategorySection,
     },
@@ -256,6 +400,21 @@ export default function Subscription() {
         <p className="text-sm text-slate-500 mt-1">Unlock more subject areas and advanced features.</p>
       </div>
 
+      {/* Stripe return banner */}
+      {banner && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`rounded-2xl p-4 mb-5 text-sm font-medium border
+            ${banner.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+              banner.type === 'error'   ? 'bg-red-50 border-red-200 text-red-700' :
+                                          'bg-brand-50 border-brand-200 text-brand-700'}`}
+        >
+          {banner.msg}
+          <button onClick={() => setBanner(null)} className="float-right opacity-50 hover:opacity-100">✕</button>
+        </motion.div>
+      )}
+
       {/* Current plan banner */}
       {user && (
         <motion.div
@@ -272,15 +431,14 @@ export default function Subscription() {
           </span>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold text-slate-800 capitalize">
-              Current plan: <span className={`font-extrabold
+              Current plan:{' '}
+              <span className={`font-extrabold
                 ${effective === 'gold' ? 'text-amber-600' : effective === 'silver' ? 'text-brand-600' : effective === 'trial' ? 'text-amber-600' : 'text-slate-600'}`}>
                 {effective}
               </span>
             </p>
             {effective === 'trial' && (
-              <p className="text-xs text-amber-600 mt-0.5">
-                ⏳ {trialTimeLabel(timeLeft)}
-              </p>
+              <p className="text-xs text-amber-600 mt-0.5">⏳ {trialTimeLabel(timeLeft)}</p>
             )}
             {effective === 'free' && user.subscriptionTier === 'trial' && (
               <p className="text-xs text-slate-500 mt-0.5">Your trial has expired</p>
@@ -291,6 +449,15 @@ export default function Subscription() {
               </p>
             )}
           </div>
+          {user.stripeSubscriptionId && (
+            <button
+              onClick={openPortal}
+              disabled={actionLoading}
+              className="text-xs font-semibold text-brand-600 hover:text-brand-800 whitespace-nowrap disabled:opacity-50"
+            >
+              {actionLoading ? 'Loading…' : 'Manage'}
+            </button>
+          )}
         </motion.div>
       )}
 
@@ -307,6 +474,7 @@ export default function Subscription() {
               tier={tier}
               isCurrent={isCurrent}
               delay={i * 0.07}
+              ctaButton={getCtaButton(tier.id, isCurrent)}
             />
           )
         })}
@@ -315,11 +483,7 @@ export default function Subscription() {
       {/* Footer note */}
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center mb-6">
         <p className="text-xs text-slate-500 leading-relaxed">
-          Online payments are coming soon. To upgrade your plan in the meantime,{' '}
-          <a href="mailto:support@skywatch.app" className="text-brand-600 font-semibold hover:underline">
-            contact support
-          </a>
-          .
+          Cancel anytime from your subscription settings. Payments are processed securely by Stripe.
         </p>
       </div>
 

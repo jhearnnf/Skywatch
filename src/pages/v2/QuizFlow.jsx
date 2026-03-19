@@ -4,7 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
-import UpgradePrompt from '../../components/UpgradePrompt'
+import LockedCategoryModal from '../../components/LockedCategoryModal'
+import { requiredTier } from '../../utils/subscription'
+import { useAppSettings } from '../../context/AppSettingsContext'
 import { playSound } from '../../utils/sound'
 
 // ── Single question card ──────────────────────────────────────────────────
@@ -207,6 +209,7 @@ export default function QuizFlow() {
   const { user, API, awardAircoins } = useAuth()
   const { start }        = useAppTutorial()
 
+  const { settings }                 = useAppSettings()
   const [loading, setLoading]        = useState(true)
   const [error, setError]            = useState(null)
   const [lockedCategory, setLockedCategory] = useState(null)
@@ -389,7 +392,11 @@ export default function QuizFlow() {
           >
             ← Back to Brief
           </button>
-          <UpgradePrompt category={lockedCategory} variant="page" />
+          <LockedCategoryModal
+            category={lockedCategory ?? ''}
+            tier={lockedCategory ? requiredTier(lockedCategory, settings) : 'silver'}
+            onClose={() => navigate(`/brief/${briefId}`)}
+          />
         </>
       )
     }

@@ -14,7 +14,7 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 // ── Tutorial default definitions ───────────────────────────────────────────
 export const TUTORIAL_STEPS = {
   home: [
-    { emoji: '👋', title: 'Welcome to Skywatch!',
+    { emoji: '👋', title: 'Welcome to SkyWatch!',
       body: 'Your personal RAF intelligence platform. You\'ll learn about aircraft, bases, roles, and operations — one brief at a time. This is designed to help you build real knowledge for your RAF application.' },
     { emoji: '✈️', title: 'Choose a Subject Area',
       body: 'Each card below is a subject — like a school subject but for the RAF. Tap any card to see all the intel briefs inside it. Start with any subject that interests you!' },

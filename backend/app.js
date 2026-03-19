@@ -6,6 +6,9 @@ const path         = require('path');
 
 const app = express();
 
+// Stripe webhook needs raw body — must be registered BEFORE express.json()
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), require('./routes/stripeWebhook'));
+
 const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:5173',
@@ -30,6 +33,7 @@ app.use('/api/briefs', require('./routes/briefs'));
 app.use('/api/games',  require('./routes/games'));
 app.use('/api/admin',  require('./routes/admin'));
 app.use('/api/users',  require('./routes/users'));
+app.use('/api/stripe', require('./routes/stripe'));
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 

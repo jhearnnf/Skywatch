@@ -6,7 +6,7 @@ import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import { MOCK_LEVELS, MOCK_LEADERBOARD } from '../../data/mockData'
 import { getMasterVolume, setMasterVolume } from '../../utils/sound'
-import { displayTier } from '../../utils/subscription'
+import { displayTier, isFreeUser } from '../../utils/subscription'
 
 function getLevelInfo(coins) {
   const levels = MOCK_LEVELS
@@ -137,6 +137,7 @@ export default function Profile() {
               <p className="font-extrabold text-lg text-slate-800 leading-tight truncate">{user.displayName || 'Agent'}</p>
               <p className="text-slate-600 text-sm">{rankDisplay}</p>
               <p className="text-slate-500 text-xs mt-0.5 intel-mono">Agent #{user.agentNumber ?? '———'}</p>
+              <p className="text-slate-400 text-xs mt-0.5 truncate">{user.email}</p>
             </div>
             <div className="text-right shrink-0">
               <p className="text-xs text-slate-500 intel-mono">Streak</p>
@@ -208,24 +209,49 @@ export default function Profile() {
               <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quiz Difficulty</p>
                 <div className="flex gap-2">
-                  {[
-                    { value: 'easy',   label: '🌱 Standard' },
-                    { value: 'medium', label: '🔥 Advanced' },
-                  ].map(opt => (
+                  {/* Standard — always available */}
+                  <button
+                    onClick={() => changeDifficulty('easy')}
+                    disabled={diffBusy}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                      ${(user.difficultySetting ?? 'easy') === 'easy'
+                        ? 'bg-brand-600 text-white'
+                        : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                      }`}
+                  >
+                    🌱 Standard
+                  </button>
+
+                  {/* Advanced — locked for free users */}
+                  {isFreeUser(user) ? (
                     <button
-                      key={opt.value}
-                      onClick={() => changeDifficulty(opt.value)}
+                      onClick={() => navigate('/subscribe')}
+                      title="Upgrade to Silver to unlock Advanced difficulty"
+                      className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-slate-50 border border-slate-200 text-slate-400 opacity-60 hover:opacity-80 transition-opacity"
+                    >
+                      🔒 Advanced
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => changeDifficulty('medium')}
                       disabled={diffBusy}
                       className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
-                        ${(user.difficultySetting ?? 'easy') === opt.value
+                        ${(user.difficultySetting ?? 'easy') === 'medium'
                           ? 'bg-brand-600 text-white'
                           : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
                         }`}
                     >
-                      {opt.label}
+                      🔥 Advanced
                     </button>
-                  ))}
+                  )}
                 </div>
+                {isFreeUser(user) && (
+                  <p className="text-xs text-slate-400 mt-2">
+                    <button onClick={() => navigate('/subscribe')} className="text-brand-500 font-semibold hover:underline">
+                      Upgrade to Silver
+                    </button>{' '}to unlock Advanced difficulty.
+                  </p>
+                )}
               </div>
 
               {/* Volume */}

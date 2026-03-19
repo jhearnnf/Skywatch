@@ -25,6 +25,20 @@ export function getAccessibleCategories(user, settings) {
   return settings.freeCategories ?? []
 }
 
+// Returns 'silver' or 'gold' — the minimum tier needed to access a category
+export function requiredTier(category, settings) {
+  const silver = settings?.silverCategories ?? []
+  return silver.includes(category) ? 'silver' : 'gold'
+}
+
+// Returns true if the user cannot access Advanced (medium) difficulty
+export function isFreeUser(user) {
+  if (!user) return true
+  const tier = user.subscriptionTier ?? 'free'
+  if (tier === 'trial') return !user.isTrialActive
+  return tier === 'free'
+}
+
 export function isCategoryLocked(category, user, settings) {
   const accessible = getAccessibleCategories(user, settings)
   if (accessible === null) return false      // gold

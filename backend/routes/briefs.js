@@ -233,7 +233,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       const tier = req.user ? effectiveTier(req.user) : 'guest';
       const accessible = getAccessibleCategories(tier, settings);
       if (accessible !== null && !accessible.includes(brief.category)) {
-        return res.status(403).json({ message: 'Upgrade your subscription to access this category.' });
+        return res.status(403).json({ message: 'Upgrade your subscription to access this category.', category: brief.category });
       }
     }
 

@@ -4,7 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
-import UpgradePrompt from '../../components/UpgradePrompt'
+import LockedCategoryModal from '../../components/LockedCategoryModal'
+import { requiredTier } from '../../utils/subscription'
+import { useAppSettings } from '../../context/AppSettingsContext'
 import { playSound } from '../../utils/sound'
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
@@ -271,9 +273,11 @@ export default function BriefReader() {
   const navigate       = useNavigate()
   const { user, API, awardAircoins, setUser } = useAuth()
   const { start }      = useAppTutorial()
+  const { settings }            = useAppSettings()
   const [brief, setBrief]       = useState(null)
   const [loading, setLoading]   = useState(true)
   const [locked, setLocked]     = useState(false)
+  const [lockedCategory, setLockedCategory] = useState(null)
   const [sectionIdx, setSection] = useState(() => {
     const saved = sessionStorage.getItem(`sw_brief_sec_${briefId}`)
     return saved ? parseInt(saved, 10) : 0
@@ -293,6 +297,7 @@ export default function BriefReader() {
   const [booState, setBooState] = useState('unavailable')
   const [navDir, setNavDir]        = useState(1) // 1 = forward, -1 = backward
   const markingRef                 = useRef(false)
+  const contentRef                 = useRef(null)
   const briefOpenedRef             = useRef(false)
   const accSecondsRef              = useRef(0)
   const lastTickRef                = useRef(null)
@@ -348,7 +353,10 @@ export default function BriefReader() {
   useEffect(() => {
     fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
       .then(r => {
-        if (r.status === 403) { setLocked(true); return null }
+        if (r.status === 403) {
+          r.json().then(d => setLockedCategory(d?.category ?? null)).catch(() => {})
+          setLocked(true); return null
+        }
         return r.json()
       })
       .then(data => {
@@ -436,7 +444,7 @@ export default function BriefReader() {
       sessionStorage.setItem(`sw_brief_sec_${briefId}`, String(prev))
       return prev
     })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const handleContinue = () => {
@@ -479,7 +487,7 @@ export default function BriefReader() {
         sessionStorage.setItem(`sw_brief_sec_${briefId}`, String(next))
         return next
       })
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }
 
@@ -508,7 +516,11 @@ export default function BriefReader() {
         >
           ← Back
         </button>
-        <UpgradePrompt variant="page" />
+        <LockedCategoryModal
+          category={lockedCategory ?? ''}
+          tier={lockedCategory ? requiredTier(lockedCategory, settings) : 'silver'}
+          onClose={() => navigate('/learn')}
+        />
       </>
     )
   }
@@ -578,6 +590,7 @@ export default function BriefReader() {
         />
       ) : (
         <>
+          <div ref={contentRef} />
           {/* Section progress bar */}
           {total > 1 && (
             <div className="mb-5">

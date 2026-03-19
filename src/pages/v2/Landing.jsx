@@ -246,7 +246,7 @@ export default function Landing() {
           <div className="text-5xl mb-4">🎯</div>
           <h2 className="text-3xl font-extrabold text-slate-900 mb-3">Ready to Begin?</h2>
           <p className="text-slate-600 text-lg mb-8 max-w-md mx-auto">
-            Join RAF applicants already using Skywatch to prepare for their selection journey.
+            Join RAF applicants already using SkyWatch to prepare for their selection journey.
           </p>
           <Link
             to={user ? '/home' : '/login?tab=register'}

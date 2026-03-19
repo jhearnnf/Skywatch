@@ -4,8 +4,9 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import { useAppSettings } from '../../context/AppSettingsContext'
-import { isCategoryLocked } from '../../utils/subscription'
+import { isCategoryLocked, requiredTier } from '../../utils/subscription'
 import TutorialModal from '../../components/tutorial/TutorialModal'
+import LockedCategoryModal from '../../components/LockedCategoryModal'
 import { CATEGORIES, CATEGORY_ICONS, MOCK_LEVELS } from '../../data/mockData'
 
 function getLevelInfo(coins) {
@@ -44,7 +45,7 @@ function XPRing({ pct = 0, level = 1, size = 72 }) {
 }
 
 // Category card
-function CategoryCard({ category, total = 0, done = 0, index = 0, locked = false }) {
+function CategoryCard({ category, total = 0, done = 0, index = 0, locked = false, onLockedClick }) {
   const icon     = CATEGORY_ICONS[category] ?? '📄'
   const pct      = total > 0 ? Math.round((done / total) * 100) : 0
   const complete = !locked && pct === 100
@@ -96,7 +97,7 @@ function CategoryCard({ category, total = 0, done = 0, index = 0, locked = false
       transition={{ delay: index * 0.05, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
     >
       {locked ? (
-        <div className={`${baseClass} ${stateClass}`}>{inner}</div>
+        <button onClick={onLockedClick} className={`w-full text-left ${baseClass} ${stateClass} cursor-pointer opacity-60 hover:opacity-80`}>{inner}</button>
       ) : (
         <Link to={`/learn/${encodeURIComponent(category)}`} className={`group ${baseClass} ${stateClass}`}>
           {inner}
@@ -115,6 +116,7 @@ export default function Home() {
   const [stats,        setStats]        = useState({}) // { [category]: { total, done } } — logged-in only
   const [missionDone,  setMissionDone]  = useState(false)
   const [latestBriefs, setLatestBriefs] = useState([])
+  const [lockedModal,  setLockedModal]  = useState(null) // { category, tier }
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
 
   // Mission done if the user completed a brief today (server-authoritative via lastStreakDate)
@@ -315,17 +317,29 @@ export default function Home() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {CATEGORIES.map((cat, i) => (
-          <CategoryCard
-            key={cat}
-            category={cat}
-            total={counts[cat] ?? stats[cat]?.total ?? 0}
-            done={stats[cat]?.done ?? 0}
-            index={i}
-            locked={isCategoryLocked(cat, user, settings)}
-          />
-        ))}
+        {CATEGORIES.map((cat, i) => {
+          const locked = isCategoryLocked(cat, user, settings)
+          return (
+            <CategoryCard
+              key={cat}
+              category={cat}
+              total={counts[cat] ?? stats[cat]?.total ?? 0}
+              done={stats[cat]?.done ?? 0}
+              index={i}
+              locked={locked}
+              onLockedClick={locked ? () => setLockedModal({ category: cat, tier: requiredTier(cat, settings) }) : undefined}
+            />
+          )
+        })}
       </div>
+
+      {lockedModal && (
+        <LockedCategoryModal
+          category={lockedModal.category}
+          tier={lockedModal.tier}
+          onClose={() => setLockedModal(null)}
+        />
+      )}
     </>
   )
 }

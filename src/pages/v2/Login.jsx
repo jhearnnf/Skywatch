@@ -283,7 +283,7 @@ export default function LoginPage() {
               className="bg-surface rounded-3xl border border-slate-200 p-6 card-shadow"
             >
               <h2 className="text-xl font-extrabold text-slate-900 mb-5">
-                {view === VIEW.SIGNIN ? 'Welcome back' : 'Join Skywatch'}
+                {view === VIEW.SIGNIN ? 'Welcome back' : 'Join SkyWatch'}
               </h2>
 
               <form onSubmit={handleSubmit} noValidate className="space-y-4">
@@ -419,28 +419,42 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-3">
-                {[
-                  { value: 'easy',   emoji: '🌱', label: diffText.easyLabel,   tag: diffText.easyTag,   flavor: diffText.easyFlavor   },
-                  { value: 'medium', emoji: '🔥', label: diffText.mediumLabel, tag: diffText.mediumTag, flavor: diffText.mediumFlavor },
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    onClick={() => handleDifficulty(opt.value)}
-                    disabled={busy}
-                    className="w-full text-left p-4 bg-surface rounded-2xl border-2 border-slate-200 hover:border-brand-400 hover:bg-brand-100 transition-all card-shadow disabled:opacity-50"
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="text-2xl">{opt.emoji}</span>
-                      <div>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <p className="font-bold text-slate-800 text-sm">{opt.label}</p>
-                          <span className="text-[10px] font-bold bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full">{opt.tag}</span>
-                        </div>
-                        <p className="text-xs text-slate-500">{opt.flavor}</p>
+                {/* Standard — always available */}
+                <button
+                  onClick={() => handleDifficulty('easy')}
+                  disabled={busy}
+                  className="w-full text-left p-4 bg-surface rounded-2xl border-2 border-slate-200 hover:border-brand-400 hover:bg-brand-100 transition-all card-shadow disabled:opacity-50"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl">🌱</span>
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="font-bold text-slate-800 text-sm">{diffText.easyLabel}</p>
+                        <span className="text-[10px] font-bold bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full">{diffText.easyTag}</span>
                       </div>
+                      <p className="text-xs text-slate-500">{diffText.easyFlavor}</p>
                     </div>
-                  </button>
-                ))}
+                  </div>
+                </button>
+
+                {/* Advanced — locked for free users (all new registrations) */}
+                <button
+                  onClick={() => navigate('/subscribe')}
+                  disabled={busy}
+                  className="w-full text-left p-4 bg-slate-50 rounded-2xl border-2 border-slate-200 opacity-60 transition-all card-shadow disabled:cursor-not-allowed"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="text-2xl">🔥</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="font-bold text-slate-500 text-sm">{diffText.mediumLabel}</p>
+                        <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">🔒 SILVER+</span>
+                      </div>
+                      <p className="text-xs text-slate-400">{diffText.mediumFlavor}</p>
+                      <p className="text-xs text-brand-500 font-semibold mt-1">Subscribe to Silver to unlock →</p>
+                    </div>
+                  </div>
+                </button>
               </div>
             </motion.div>
           )}

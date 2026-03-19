@@ -5,15 +5,15 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Sender — update to a verified domain before going to production.
 // In development, Resend allows sending from onboarding@resend.dev.
-const FROM = 'Skywatch <noreply@skywatch.academy>';
+const FROM = 'SkyWatch <noreply@skywatch.academy>';
 
 // Default copy — used when admin has not overridden the field.
 const DEFAULTS = {
-  subject: 'Welcome to Skywatch — Mission Briefing',
-  heading: 'Welcome to Skywatch',
+  subject: 'Welcome to SkyWatch — Mission Briefing',
+  heading: 'Welcome to SkyWatch',
   body:    'Your intelligence briefings are ready. Study RAF aircraft, ranks, bases, squadrons, and doctrine. Test your recall through gamified knowledge checks and earn Aircoins to climb the Intelligence Corps rank ladder.',
   cta:     'Begin Mission',
-  footer:  'Skywatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>If you didn&apos;t create this account, you can safely ignore this email.',
+  footer:  'SkyWatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>If you didn&apos;t create this account, you can safely ignore this email.',
 };
 
 // Send a welcome email to a newly registered agent.
@@ -94,7 +94,7 @@ async function sendConfirmationEmail({ email, code }) {
   const { error } = await resend.emails.send({
     from: FROM,
     to: email,
-    subject: 'Skywatch — Confirm Your Email',
+    subject: 'SkyWatch — Confirm Your Email',
     html: `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -118,7 +118,7 @@ async function sendConfirmationEmail({ email, code }) {
           </h1>
 
           <p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 28px;">
-            Enter the code below to complete your Skywatch registration. This code expires in <strong>15 minutes</strong>.
+            Enter the code below to complete your SkyWatch registration. This code expires in <strong>15 minutes</strong>.
           </p>
 
           <!-- Code block -->
@@ -135,11 +135,11 @@ async function sendConfirmationEmail({ email, code }) {
              style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;
                     font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;
                     padding:13px 30px;border-radius:6px;">
-            Open Skywatch
+            Open SkyWatch
           </a>
 
           <p style="font-size:11px;color:#94a3b8;margin:36px 0 0;padding-top:24px;border-top:1px solid #e2e8f0;line-height:1.6;">
-            Skywatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>
+            SkyWatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>
             If you didn&apos;t request this code, you can safely ignore this email.
           </p>
 

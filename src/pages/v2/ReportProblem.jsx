@@ -114,7 +114,7 @@ export default function ReportProblem() {
       </div>
 
       <p className="text-xs text-slate-400 text-center mt-4">
-        Reports are reviewed by the Skywatch team. We aim to respond within 48 hours.
+        Reports are reviewed by the SkyWatch team. We aim to respond within 48 hours.
       </p>
     </div>
   )

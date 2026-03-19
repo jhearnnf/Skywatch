@@ -1,7 +1,7 @@
 {
   "name": "skywatch-backend",
   "version": "1.0.0",
-  "description": "Skywatch API server",
+  "description": "SkyWatch API server",
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",

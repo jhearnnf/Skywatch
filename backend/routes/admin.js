@@ -1007,7 +1007,7 @@ async function openRouterChat(messages, model, maxTokens = 2048) {
       'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
-      'X-Title': 'Skywatch',
+      'X-Title': 'SkyWatch',
     },
     body: JSON.stringify({ model, messages, max_tokens: maxTokens }),
   });
@@ -1503,7 +1503,7 @@ router.post('/ai/generate-image', async (req, res) => {
         'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
-        'X-Title': 'Skywatch',
+        'X-Title': 'SkyWatch',
       },
       body: JSON.stringify({
         model: 'openai/gpt-4o-mini',
@@ -1537,7 +1537,7 @@ router.post('/ai/generate-image', async (req, res) => {
       const imageUrl  = Object.values(thumbData.query?.pages ?? {})[0]?.thumbnail?.source;
       if (!imageUrl) throw new Error(`No image on Wikipedia for "${pageTitle}"`);
 
-      const imgRes = await fetch(imageUrl, { headers: { 'User-Agent': 'Skywatch/1.0 (educational-platform)' } });
+      const imgRes = await fetch(imageUrl, { headers: { 'User-Agent': 'SkyWatch/1.0 (educational-platform)' } });
       if (!imgRes.ok) throw new Error(`Download failed (${imgRes.status})`);
       const buffer = Buffer.from(await imgRes.arrayBuffer());
       const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}-${idx}` });

@@ -4,8 +4,9 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import { useAppSettings } from '../../context/AppSettingsContext'
-import { isCategoryLocked } from '../../utils/subscription'
+import { isCategoryLocked, requiredTier } from '../../utils/subscription'
 import TutorialModal from '../../components/tutorial/TutorialModal'
+import LockedCategoryModal from '../../components/LockedCategoryModal'
 import { CATEGORIES, CATEGORY_ICONS, SUBCATEGORIES } from '../../data/mockData'
 
 const DESCRIPTIONS = {
@@ -33,6 +34,7 @@ export default function Learn() {
   const [progress,    setProgress]    = useState({}) // { [category]: { total, done } }
   const [search,      setSearch]      = useState('')
   const [briefTitles, setBriefTitles] = useState([]) // [{ title, category }]
+  const [lockedModal, setLockedModal] = useState(null) // { category, tier }
 
   // Tutorial on first visit
   useEffect(() => {
@@ -83,6 +85,14 @@ export default function Learn() {
   return (
     <>
       <TutorialModal />
+
+      {lockedModal && (
+        <LockedCategoryModal
+          category={lockedModal.category}
+          tier={lockedModal.tier}
+          onClose={() => setLockedModal(null)}
+        />
+      )}
 
       <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Subject Areas</h1>
       <p className="text-sm text-slate-500 mb-4">Choose a subject to start reading intel briefs.</p>
@@ -181,7 +191,12 @@ export default function Learn() {
                 )
 
                 return locked ? (
-                  <div className={cardClass}>{inner}</div>
+                  <button
+                    onClick={() => setLockedModal({ category: cat, tier: requiredTier(cat, settings) })}
+                    className={`w-full text-left ${cardClass} hover:opacity-80`}
+                  >
+                    {inner}
+                  </button>
                 ) : (
                   <Link to={`/learn/${encodeURIComponent(cat)}`} className={`group ${cardClass}`}>
                     {inner}

@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { protect } = require('../middleware/auth');
 const User = require('../models/User');
+const { effectiveTier } = require('../utils/subscription');
 const GameSessionQuizResult           = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt          = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult  = require('../models/GameSessionOrderOfBattleResult');
@@ -64,6 +65,12 @@ router.patch('/me/difficulty', protect, async (req, res) => {
     const { difficulty } = req.body;
     if (!['easy', 'medium'].includes(difficulty)) {
       return res.status(400).json({ message: 'difficulty must be easy or medium' });
+    }
+    if (difficulty === 'medium') {
+      const tier = effectiveTier(req.user);
+      if (!['silver', 'gold', 'trial'].includes(tier)) {
+        return res.status(403).json({ message: 'Advanced difficulty requires a Silver subscription or higher.' });
+      }
     }
     const user = await User.findByIdAndUpdate(
       req.user._id,

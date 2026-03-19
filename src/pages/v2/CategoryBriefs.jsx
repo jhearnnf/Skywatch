@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
+import { useAppSettings } from '../../context/AppSettingsContext'
+import { requiredTier } from '../../utils/subscription'
+import LockedCategoryModal from '../../components/LockedCategoryModal'
 import { CATEGORY_ICONS, SUBCATEGORIES } from '../../data/mockData'
 
-function BriefNode({ brief, index, isRead, isStarted, quizPassed }) {
+function BriefNode({ brief, index, isRead, isStarted, quizPassed, onLockedClick }) {
   const locked = brief.isLocked ?? false
 
   const cardClass = isRead
@@ -47,53 +50,69 @@ function BriefNode({ brief, index, isRead, isStarted, quizPassed }) {
       {/* Connector line (not on last item) */}
       <div className="absolute left-6 top-14 bottom-0 w-0.5 bg-slate-200 -z-10" aria-hidden="true" />
 
-      <Link
-        to={locked ? '#' : `/brief/${brief._id}`}
-        className={`flex items-start gap-4 p-4 rounded-2xl border transition-all group
-          ${cardClass}
-          ${locked ? 'opacity-50 cursor-not-allowed' : 'hover:-translate-y-0.5 cursor-pointer'}`}
-      >
-        {/* Status circle */}
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 text-xl border-2 transition-all ${circleClass}`}>
-          {circleIcon}
-        </div>
+      {(() => {
+        const inner = (
+          <>
+            {/* Status circle */}
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 text-xl border-2 transition-all ${circleClass}`}>
+              {circleIcon}
+            </div>
 
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <p className={`font-bold text-sm leading-snug ${titleClass}`}>
-              {brief.title}
-            </p>
-            {brief.historic && (
-              <span className="text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full shrink-0">
-                Historic
-              </span>
-            )}
-          </div>
-          {brief.subtitle && (
-            <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{brief.subtitle}</p>
-          )}
-          <div className="flex items-center gap-3 mt-2">
-            {brief.keywords?.length > 0 && (
-              <span className="text-[10px] text-slate-400">🔑 {brief.keywords.length} keywords</span>
-            )}
-            {isRead && (
-              <span className="text-[10px] text-emerald-600 font-semibold">✓ Read</span>
-            )}
-            {isStarted && !isRead && (
-              <span className="text-[10px] text-amber-600 font-semibold">◑ In Progress</span>
-            )}
-            {quizPassed && (
-              <span className="text-[10px] text-amber-600 font-semibold">★ Quiz Passed</span>
-            )}
-          </div>
-        </div>
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <p className={`font-bold text-sm leading-snug ${titleClass}`}>
+                  {brief.title}
+                </p>
+                {brief.historic && (
+                  <span className="text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full shrink-0">
+                    Historic
+                  </span>
+                )}
+              </div>
+              {brief.subtitle && (
+                <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{brief.subtitle}</p>
+              )}
+              <div className="flex items-center gap-3 mt-2">
+                {brief.keywords?.length > 0 && (
+                  <span className="text-[10px] text-slate-400">🔑 {brief.keywords.length} keywords</span>
+                )}
+                {isRead && (
+                  <span className="text-[10px] text-emerald-600 font-semibold">✓ Read</span>
+                )}
+                {isStarted && !isRead && (
+                  <span className="text-[10px] text-amber-600 font-semibold">◑ In Progress</span>
+                )}
+                {quizPassed && (
+                  <span className="text-[10px] text-amber-600 font-semibold">★ Quiz Passed</span>
+                )}
+              </div>
+            </div>
 
-        {/* Arrow */}
-        {!locked && (
-          <div className={`transition-colors mt-1 shrink-0 ${arrowClass}`}>→</div>
-        )}
-      </Link>
+            {/* Arrow / lock hint */}
+            {locked
+              ? <div className="text-slate-400 mt-1 shrink-0 text-xs font-semibold">Unlock →</div>
+              : <div className={`transition-colors mt-1 shrink-0 ${arrowClass}`}>→</div>
+            }
+          </>
+        )
+
+        return locked ? (
+          <button
+            onClick={onLockedClick}
+            className={`w-full text-left flex items-start gap-4 p-4 rounded-2xl border transition-all group ${cardClass} opacity-50 hover:opacity-75`}
+          >
+            {inner}
+          </button>
+        ) : (
+          <Link
+            to={`/brief/${brief._id}`}
+            className={`flex items-start gap-4 p-4 rounded-2xl border transition-all group ${cardClass} hover:-translate-y-0.5 cursor-pointer`}
+          >
+            {inner}
+          </Link>
+        )
+      })()}
     </motion.div>
   )
 }
@@ -101,6 +120,7 @@ function BriefNode({ brief, index, isRead, isStarted, quizPassed }) {
 export default function CategoryBriefs() {
   const { category }       = useParams()
   const { user, API }      = useAuth()
+  const { settings }       = useAppSettings()
   const navigate           = useNavigate()
   const [briefs, setBriefs]         = useState([])
   const [readIds, setReadIds]       = useState(new Set())
@@ -109,6 +129,7 @@ export default function CategoryBriefs() {
   const [loading, setLoading]       = useState(true)
   const [activeSubcat, setSubcat]   = useState('all')
   const [search, setSearch]         = useState('')
+  const [lockedModal, setLockedModal] = useState(null)
 
   const icon  = CATEGORY_ICONS[category] ?? '📄'
   const subs  = SUBCATEGORIES[category]  ?? []
@@ -241,9 +262,20 @@ export default function CategoryBriefs() {
               isRead={readIds.has(brief._id)}
               isStarted={startedIds.has(brief._id)}
               quizPassed={passedIds.has(brief._id)}
+              onLockedClick={brief.isLocked
+                ? () => setLockedModal({ category: brief.category, tier: requiredTier(brief.category, settings) })
+                : undefined}
             />
           ))}
         </div>
+      )}
+
+      {lockedModal && (
+        <LockedCategoryModal
+          category={lockedModal.category}
+          tier={lockedModal.tier}
+          onClose={() => setLockedModal(null)}
+        />
       )}
     </div>
   )

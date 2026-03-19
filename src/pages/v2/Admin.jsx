@@ -1078,11 +1078,11 @@ function ProblemsTab({ API }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMAIL_DEFAULTS = {
-  welcomeEmailSubject: 'Welcome to Skywatch — Mission Briefing',
-  welcomeEmailHeading: 'Welcome to Skywatch',
+  welcomeEmailSubject: 'Welcome to SkyWatch — Mission Briefing',
+  welcomeEmailHeading: 'Welcome to SkyWatch',
   welcomeEmailBody:    'Your intelligence briefings are ready.',
   welcomeEmailCta:     'Begin Mission',
-  welcomeEmailFooter:  'Skywatch — Intelligence Study Platform.',
+  welcomeEmailFooter:  'SkyWatch — Intelligence Study Platform.',
 }
 
 const CR_DEFAULTS = {

@@ -1,5 +1,5 @@
 /**
- * NOTE: Read tracking in Skywatch works via GET /api/briefs/:id (authenticated).
+ * NOTE: Read tracking in SkyWatch works via GET /api/briefs/:id (authenticated).
  * The first fetch of a brief creates an IntelligenceBriefRead record.
  * The frontend also calls POST /api/briefs/:id/read, but that route does not exist;
  * however, reads are already tracked by the GET so the quiz/progress still works.
