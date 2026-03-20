@@ -55,6 +55,8 @@ const appSettingsSchema = new mongoose.Schema({
   volumeRankPromotion:      { type: Number, default: 100, min: 0, max: 100 },
   volumeQuizCompleteWin:    { type: Number, default: 100, min: 0, max: 100 },
   volumeQuizCompleteLose:   { type: Number, default: 100, min: 0, max: 100 },
+  volumeQuizAnswerCorrect:  { type: Number, default: 100, min: 0, max: 100 },
+  volumeQuizAnswerIncorrect:{ type: Number, default: 100, min: 0, max: 100 },
   volumeStandDown:            { type: Number, default: 100, min: 0, max: 100 },
   volumeTargetLockedKeyword:  { type: Number, default: 100, min: 0, max: 100 },
 
@@ -70,6 +72,8 @@ const appSettingsSchema = new mongoose.Schema({
   soundEnabledRankPromotion:       { type: Boolean, default: true },
   soundEnabledQuizCompleteWin:     { type: Boolean, default: true },
   soundEnabledQuizCompleteLose:    { type: Boolean, default: true },
+  soundEnabledQuizAnswerCorrect:   { type: Boolean, default: true },
+  soundEnabledQuizAnswerIncorrect: { type: Boolean, default: true },
   soundEnabledBattleOfOrderWon:       { type: Boolean, default: true },
   soundEnabledBattleOfOrderLost:      { type: Boolean, default: true },
   soundEnabledBattleOfOrderSelection: { type: Boolean, default: true },

@@ -360,7 +360,9 @@ export default function QuizFlow() {
     setAnswered(true)
     if (String(answerId) === String(current.correctAnswerId)) {
       setScore(s => s + 1)
-      playSound('fire')
+      playSound('quiz_answer_correct')
+    } else {
+      playSound('quiz_answer_incorrect')
     }
     submitResult(answerId)
   }

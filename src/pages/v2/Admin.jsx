@@ -332,6 +332,8 @@ const SOUND_GROUPS = [
   {
     title: 'Quiz',
     sounds: [
+      { key: 'volumeQuizAnswerCorrect',   enabledKey: 'soundEnabledQuizAnswerCorrect',   label: 'Answer Correct',   sound: 'quiz_answer_correct'   },
+      { key: 'volumeQuizAnswerIncorrect', enabledKey: 'soundEnabledQuizAnswerIncorrect', label: 'Answer Incorrect', sound: 'quiz_answer_incorrect' },
       { key: 'volumeQuizCompleteWin',  enabledKey: 'soundEnabledQuizCompleteWin',  label: 'Quiz Won',  sound: 'quiz_complete_win'  },
       { key: 'volumeQuizCompleteLose', enabledKey: 'soundEnabledQuizCompleteLose', label: 'Quiz Fail', sound: 'quiz_complete_lose' },
     ],

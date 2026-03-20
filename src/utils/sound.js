@@ -28,6 +28,8 @@ function fetchSettings() {
         volumeFirstBriefComplete: 100, soundEnabledFirstBriefComplete: true,
         volumeQuizCompleteWin: 100,  soundEnabledQuizCompleteWin: true,
         volumeQuizCompleteLose: 100, soundEnabledQuizCompleteLose: true,
+        volumeQuizAnswerCorrect: 100,  soundEnabledQuizAnswerCorrect: true,
+        volumeQuizAnswerIncorrect: 100, soundEnabledQuizAnswerIncorrect: true,
         volumeBattleOfOrderWon: 100,       soundEnabledBattleOfOrderWon: true,
         volumeBattleOfOrderLost: 100,      soundEnabledBattleOfOrderLost: true,
         volumeBattleOfOrderSelection: 100, soundEnabledBattleOfOrderSelection: true,
@@ -209,6 +211,14 @@ export function playSound(name, { onAudio } = {}) {
         file       = 'stand_down.mp3'
         volumeKey  = 'volumeStandDown'
         enabledKey = 'soundEnabledStandDown'
+      } else if (name === 'quiz_answer_correct') {
+        file       = 'quiz_answer_correct.mp3'
+        volumeKey  = 'volumeQuizAnswerCorrect'
+        enabledKey = 'soundEnabledQuizAnswerCorrect'
+      } else if (name === 'quiz_answer_incorrect') {
+        file       = 'quiz_answer_incorrect.mp3'
+        volumeKey  = 'volumeQuizAnswerIncorrect'
+        enabledKey = 'soundEnabledQuizAnswerIncorrect'
       } else {
         file = name
       }

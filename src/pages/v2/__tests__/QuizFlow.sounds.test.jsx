@@ -134,22 +134,40 @@ describe('QuizFlow — sound wiring', () => {
     vi.restoreAllMocks()
   })
 
-  it('plays "fire" when a correct answer is selected', async () => {
+  it('plays "quiz_answer_correct" when a correct answer is selected', async () => {
     global.fetch = setupFetch()
     await renderAndLoad()
 
     fireEvent.click(screen.getByText('Multirole stealth fighter'))
 
-    expect(playSound).toHaveBeenCalledWith('fire')
+    expect(playSound).toHaveBeenCalledWith('quiz_answer_correct')
   })
 
-  it('does NOT play "fire" when a wrong answer is selected', async () => {
+  it('plays "quiz_answer_incorrect" when a wrong answer is selected', async () => {
     global.fetch = setupFetch()
     await renderAndLoad()
 
     fireEvent.click(screen.getByText('Heavy bomber'))
 
-    expect(playSound).not.toHaveBeenCalledWith('fire')
+    expect(playSound).toHaveBeenCalledWith('quiz_answer_incorrect')
+  })
+
+  it('does NOT play "quiz_answer_incorrect" when a correct answer is selected', async () => {
+    global.fetch = setupFetch()
+    await renderAndLoad()
+
+    fireEvent.click(screen.getByText('Multirole stealth fighter'))
+
+    expect(playSound).not.toHaveBeenCalledWith('quiz_answer_incorrect')
+  })
+
+  it('does NOT play "quiz_answer_correct" when a wrong answer is selected', async () => {
+    global.fetch = setupFetch()
+    await renderAndLoad()
+
+    fireEvent.click(screen.getByText('Heavy bomber'))
+
+    expect(playSound).not.toHaveBeenCalledWith('quiz_answer_correct')
   })
 
   it('plays "quiz_complete_win" when quiz is completed with a win', async () => {
@@ -185,13 +203,13 @@ describe('QuizFlow — sound wiring', () => {
     expect(playSound).not.toHaveBeenCalledWith('quiz_complete_win')
   })
 
-  it('fires "fire" only once per correct answer (not duplicated)', async () => {
+  it('plays "quiz_answer_correct" only once per correct answer (not duplicated)', async () => {
     global.fetch = setupFetch()
     await renderAndLoad()
 
     fireEvent.click(screen.getByText('Multirole stealth fighter'))
 
-    const fireCalls = playSound.mock.calls.filter(c => c[0] === 'fire')
-    expect(fireCalls).toHaveLength(1)
+    const correctCalls = playSound.mock.calls.filter(c => c[0] === 'quiz_answer_correct')
+    expect(correctCalls).toHaveLength(1)
   })
 })
