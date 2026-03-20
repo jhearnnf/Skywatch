@@ -2325,7 +2325,7 @@ function BriefsTab({ API }) {
       {confirmRegen && (
         <ConfirmModal
           title="Regenerate Brief Content"
-          body="This will delete all read history, quiz game stats, Battle of Order stats, Who's That Aircraft stats, Flashcard stats, and all Aircoins awarded for this brief — for every user. This cannot be undone."
+          body="This will delete all read history, quiz game stats, Battle of Order stats, Where's That Aircraft stats, Flashcard stats, and all Aircoins awarded for this brief — for every user. This cannot be undone."
           confirmLabel="Confirm & Regenerate"
           danger
           onConfirm={handleConfirmRegen}

@@ -706,7 +706,7 @@ router.post('/whos-that-aircraft/result', protect, async (req, res) => {
 
     let rankPromotion = null;
     if (aircoinsEarned > 0) {
-      const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'whos_at_aircraft', "Who's That Aircraft — correct identification");
+      const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'whos_at_aircraft', "Where's That Aircraft — correct identification");
       rankPromotion = coinResult.rankPromotion;
     }
 

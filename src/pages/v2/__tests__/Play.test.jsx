@@ -74,7 +74,7 @@ describe('Play page — game cards', () => {
     renderAsGuest()
     expect(screen.getAllByText('Intel Quiz').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Flashcard Recall').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText("Who's that Aircraft?").length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText("Where's that Aircraft?").length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Battle of Order').length).toBeGreaterThanOrEqual(1)
   })
 
@@ -92,7 +92,7 @@ describe('Play page — game cards', () => {
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
   })
 
-  it("clicking Who's that Aircraft? card calls window.scrollTo with smooth behaviour", () => {
+  it("clicking Where's that Aircraft? card calls window.scrollTo with smooth behaviour", () => {
     renderAsGuest()
     fireEvent.click(screen.getByTestId('card-whos-that-aircraft'))
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
@@ -156,7 +156,7 @@ describe('Play page — launcher sections', () => {
     const titles = headings.map(h => h.textContent)
     expect(titles).toContain('Intel Quiz')
     expect(titles).toContain('Flashcard Recall')
-    expect(titles).toContain("Who's that Aircraft?")
+    expect(titles).toContain("Where's that Aircraft?")
     expect(titles).toContain('Battle of Order')
   })
 
@@ -165,7 +165,7 @@ describe('Play page — launcher sections', () => {
     expect(screen.getByRole('button', { name: /start drill/i })).toBeDisabled()
   })
 
-  it("Who's that Aircraft? section has a disabled 'Identify Aircraft' button", () => {
+  it("Where's that Aircraft? section has a disabled 'Identify Aircraft' button", () => {
     renderAsGuest()
     const btn = screen.getByText('Identify Aircraft', { selector: 'button' })
     expect(btn).toBeDisabled()

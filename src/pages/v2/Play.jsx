@@ -25,7 +25,7 @@ const GAME_MODES = [
   {
     key: 'whos-that-aircraft',
     emoji: '✈️',
-    title: "Who's that Aircraft?",
+    title: "Where's that Aircraft?",
     desc: 'Identify aircraft from silhouettes and match them to their squadrons.',
     available: false,
     badge: 'Coming soon',
@@ -319,7 +319,7 @@ export default function Play() {
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">✈️</span>
-                <h2 className="font-bold text-slate-800">Who's that Aircraft?</h2>
+                <h2 className="font-bold text-slate-800">Where's that Aircraft?</h2>
               </div>
               <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Coming soon</span>
             </div>

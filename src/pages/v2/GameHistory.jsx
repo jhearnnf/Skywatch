@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 
 const TYPE_LABELS = {
   quiz:            'Intel Brief Quiz',
-  whos_at_aircraft:"Who's That Aircraft",
+  whos_at_aircraft:"Where's That Aircraft",
   order_of_battle: 'Battle of Order',
   flashcard:       'Flashcard Recall',
 }

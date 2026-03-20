@@ -7,7 +7,7 @@ const REASON_LABELS = {
   brief_read:      'Intel Brief Read',
   quiz:            'Quiz Completed',
   order_of_battle: 'Battle of Order',
-  whos_at_aircraft:"Who's That Aircraft",
+  whos_at_aircraft:"Where's That Aircraft",
   flashcard:       'Flashcard Recall',
   admin:           'Admin Award',
   login:           'Daily Login',
