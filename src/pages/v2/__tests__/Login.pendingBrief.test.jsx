@@ -11,6 +11,7 @@ const mockUseAuth     = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
+  useLocation: () => ({ search: '' }),
   Link: ({ children, to }) => <a href={to}>{children}</a>,
 }))
 
@@ -74,8 +75,7 @@ describe('Login — pending brief redirect', () => {
 
   it('navigates to /home when no pending brief after login', async () => {
     global.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: null }) }) // settings
-      .mockResolvedValueOnce(makeAuthResponse())                                 // login
+      .mockResolvedValueOnce(makeAuthResponse()) // login
 
     render(<LoginPage />)
     fireEvent.click(screen.getByText('Sign In with Email'))
@@ -91,7 +91,6 @@ describe('Login — pending brief redirect', () => {
     sessionStorage.setItem('sw_pending_brief', 'brief123')
 
     global.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: null }) })
       .mockResolvedValueOnce(makeAuthResponse())
       .mockResolvedValueOnce(makeCompleteResponse())
 
@@ -110,7 +109,6 @@ describe('Login — pending brief redirect', () => {
     sessionStorage.setItem('sw_pending_brief', 'brief123')
 
     global.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: null }) })
       .mockResolvedValueOnce(makeAuthResponse())
       .mockResolvedValueOnce(makeCompleteResponse())
 
@@ -129,7 +127,6 @@ describe('Login — pending brief redirect', () => {
     sessionStorage.setItem('sw_pending_brief', 'brief123')
 
     global.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: null }) })
       .mockResolvedValueOnce(makeAuthResponse())
       .mockResolvedValueOnce(makeCompleteResponse({ aircoinsEarned: 5, dailyCoinsEarned: 5, newTotalAircoins: 10, newCycleAircoins: 10 }))
 
@@ -146,11 +143,10 @@ describe('Login — pending brief redirect', () => {
     expect(coins.newTotalAircoins).toBe(10)
   })
 
-  it('new user: navigates to /brief/:id after selecting difficulty (not before)', async () => {
+  it('new user: navigates to /brief/:id immediately after auto-setting standard difficulty', async () => {
     sessionStorage.setItem('sw_pending_brief', 'brief123')
 
     global.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: null }) })          // settings
       .mockResolvedValueOnce(makeAuthResponse({ isNew: true }))                          // register
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { user: {} } }) }) // difficulty PATCH
       .mockResolvedValueOnce({ ok: true, json: async () => ({}) })                      // /complete
@@ -162,13 +158,8 @@ describe('Login — pending brief redirect', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }))
 
-    // Difficulty screen shown — navigate not yet called
-    await waitFor(() => screen.getByText('Standard'))
-    expect(mockNavigate).not.toHaveBeenCalled()
-
-    // Pick difficulty
-    fireEvent.click(screen.getByText('Standard'))
-
+    // Should navigate without any difficulty screen interaction
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/brief/brief123'))
+    expect(screen.queryByText('Standard')).toBeNull()
   })
 })

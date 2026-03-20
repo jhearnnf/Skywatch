@@ -25,6 +25,7 @@ function fetchSettings() {
         volumeAircoin: 100,          soundEnabledAircoin: true,
         volumeLevelUp: 100,          soundEnabledLevelUp: true,
         volumeRankPromotion: 100,    soundEnabledRankPromotion: true,
+        volumeFirstBriefComplete: 100, soundEnabledFirstBriefComplete: true,
         volumeQuizCompleteWin: 100,  soundEnabledQuizCompleteWin: true,
         volumeQuizCompleteLose: 100, soundEnabledQuizCompleteLose: true,
         volumeBattleOfOrderWon: 100,       soundEnabledBattleOfOrderWon: true,
@@ -200,6 +201,10 @@ export function playSound(name, { onAudio } = {}) {
         file       = 'quiz_complete_lose.mp3'
         volumeKey  = 'volumeQuizCompleteLose'
         enabledKey = 'soundEnabledQuizCompleteLose'
+      } else if (name === 'first_brief_complete') {
+        file       = 'first_brief_complete.mp3'
+        volumeKey  = 'volumeFirstBriefComplete'
+        enabledKey = 'soundEnabledFirstBriefComplete'
       } else if (name === 'stand_down') {
         file       = 'stand_down.mp3'
         volumeKey  = 'volumeStandDown'

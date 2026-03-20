@@ -317,7 +317,8 @@ const SOUND_GROUPS = [
   {
     title: 'Navigation',
     sounds: [
-      { key: 'volumeIntelBriefOpened', enabledKey: 'soundEnabledIntelBriefOpened', label: 'Brief Opened', sound: 'intel_brief_opened' },
+      { key: 'volumeIntelBriefOpened',    enabledKey: 'soundEnabledIntelBriefOpened',    label: 'Brief Opened',   sound: 'intel_brief_opened'    },
+      { key: 'volumeFirstBriefComplete',  enabledKey: 'soundEnabledFirstBriefComplete',  label: 'Brief Complete (Guest)', sound: 'first_brief_complete' },
     ],
   },
   {
@@ -606,14 +607,10 @@ function SettingsTab({ API }) {
 
       {/* ── Game ────────────────────────────────────────────── */}
       <Section title="Game Options" onSave={() => save('Update Game Options', [
-        'ammoFree', 'ammoSilver', 'easyAnswerCount', 'mediumAnswerCount',
+        'easyAnswerCount', 'mediumAnswerCount',
         'passThresholdEasy', 'passThresholdMedium',
       ])}>
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-1 pb-2">Brief Ammunition</p>
-        <NumInput label="Ammo per brief — Free tier"         value={draft.ammoFree}   min={0} max={99} onChange={v => set('ammoFree', v)} />
-        <NumInput label="Ammo per brief — Silver / Trial"    value={draft.ammoSilver} min={0} max={99} onChange={v => set('ammoSilver', v)} hint="Gold = unlimited always" />
-
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Quiz Answer Count</p>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-1 pb-2">Quiz Answer Count</p>
         <NumInput label="Answers shown — Easy"   value={draft.easyAnswerCount}   min={2} max={10} onChange={v => set('easyAnswerCount', v)} />
         <NumInput label="Answers shown — Medium" value={draft.mediumAnswerCount} min={2} max={10} onChange={v => set('mediumAnswerCount', v)} />
 
@@ -623,18 +620,12 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'disableLoadingBar'])}>
+      <Section title="Feature Flags" onSave={() => save('Update Feature Flags', ['useLiveLeaderboard'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
           checked={draft.useLiveLeaderboard ?? false}
           onChange={v => set('useLiveLeaderboard', v)}
-        />
-        <Toggle
-          label="Disable Loading Bar"
-          hint="Briefs load instantly with no animation — useful for testing"
-          checked={draft.disableLoadingBar ?? false}
-          onChange={v => set('disableLoadingBar', v)}
         />
       </Section>
 
@@ -1100,7 +1091,7 @@ const TUTORIAL_META = [
   { key: 'quiz',        label: 'Quiz' },
   { key: 'play',        label: 'Play Hub' },
   { key: 'profile',     label: 'Profile Page' },
-  { key: 'rankings',    label: 'Rankings Page' },
+  { key: 'rankings',    label: 'Progression Page' },
 ]
 
 function ContentTab({ API }) {

@@ -274,6 +274,7 @@ export default function CategoryBriefs() {
         <LockedCategoryModal
           category={lockedModal.category}
           tier={lockedModal.tier}
+          user={user}
           onClose={() => setLockedModal(null)}
         />
       )}

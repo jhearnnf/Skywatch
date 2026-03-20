@@ -57,6 +57,23 @@ export const MOCK_RANKS = [
   { rankNumber: 19, rankName: 'Marshal of the RAF',   abbreviation: 'MRAF',    rankType: 'commissioned_officer' },
 ]
 
+export const CATEGORY_DESCRIPTIONS = {
+  News:        'The latest RAF news and operations.',
+  Aircrafts:   'Fast jets, transport, rotary wing, and more.',
+  Bases:       'UK and overseas RAF stations.',
+  Ranks:       'Commissioned officers and NCOs.',
+  Squadrons:   'Active, reserve, and historic squadrons.',
+  Training:    'From IOT to advanced flying training.',
+  Roles:       'Every trade and branch explained.',
+  Threats:     'Air threats, SAMs, and electronic warfare.',
+  Allies:      'NATO, Five Eyes, and bilateral partners.',
+  Missions:    'Operations from WWII to today.',
+  AOR:         'Area of responsibility and global deployments.',
+  Tech:        'Weapons, sensors, and future programmes.',
+  Terminology: 'Key RAF terminology and concepts.',
+  Treaties:    'Alliances, agreements, and arms control.',
+}
+
 export const CATEGORIES = [
   'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',

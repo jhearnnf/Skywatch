@@ -7,6 +7,7 @@ import BriefReader from '../BriefReader'
 const mockAwardAircoins = vi.hoisted(() => vi.fn())
 const mockSetUser       = vi.hoisted(() => vi.fn())
 const mockUseAuth       = vi.hoisted(() => vi.fn())
+const mockNavigate      = vi.hoisted(() => vi.fn())
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -14,8 +15,12 @@ vi.mock('../../../utils/sound', () => ({ playSound: vi.fn() }))
 
 vi.mock('react-router-dom', () => ({
   useParams:   () => ({ briefId: 'brief123' }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   Link:        ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
+}))
+
+vi.mock('../../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
 }))
 
 vi.mock('../../../context/AuthContext', () => ({
@@ -283,107 +288,104 @@ describe('BriefReader — guest completion prompt', () => {
   beforeEach(() => {
     setupGuest()
     sessionStorage.clear()
+    mockNavigate.mockClear()
+    vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'test-client-id')
+    window.google = {
+      accounts: { id: { initialize: vi.fn(), prompt: vi.fn(), renderButton: vi.fn() } },
+    }
   })
 
-  afterEach(() => { vi.restoreAllMocks() })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllEnvs()
+    delete window.google
+  })
 
-  it('guest sees sign-in prompt after completing a brief', async () => {
+  async function completeAsGuest() {
     global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF))
-
     render(<BriefReader />)
     await waitFor(() => screen.getByText('✓ Complete Brief'))
     fireEvent.click(screen.getByText('✓ Complete Brief'))
+    await waitFor(() => screen.getByText('Brief Complete!'))
+  }
 
-    await waitFor(() => expect(screen.getByText('💾 Save your progress')).toBeDefined())
+  it('guest sees "Don\'t lose this progress" sign-up panel after completing a brief', async () => {
+    await completeAsGuest()
+    expect(screen.getByText('Don\'t lose this progress')).toBeDefined()
   })
 
-  it('guest sees Sign In and Create Account links', async () => {
-    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF))
+  it('guest sees investment hook with coin reward', async () => {
+    await completeAsGuest()
+    expect(screen.getByText('5 Aircoins waiting to be claimed')).toBeDefined()
+  })
 
-    render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
-
-    await waitFor(() => {
-      expect(screen.getByText('Sign In')).toBeDefined()
-      expect(screen.getByText('Create Account')).toBeDefined()
-    })
+  it('guest sees email input and Continue button', async () => {
+    await completeAsGuest()
+    expect(screen.getByPlaceholderText('your@email.com')).toBeDefined()
+    expect(screen.getByText('Continue →')).toBeDefined()
   })
 
   it('guest does not see the quiz button', async () => {
-    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF))
-
-    render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
-
-    await waitFor(() => screen.getByText('Brief Complete!'))
+    await completeAsGuest()
     expect(screen.queryByText(/Take the Quiz/)).toBeNull()
   })
 
-  it('logged-in user does NOT see the sign-in prompt', async () => {
+  it('guest clicking Continue without email navigates to /login?tab=register', async () => {
+    await completeAsGuest()
+    fireEvent.click(screen.getByText('Continue →'))
+    expect(mockNavigate).toHaveBeenCalledWith('/login?tab=register')
+  })
+
+  it('guest clicking Continue with email pre-fills the URL', async () => {
+    await completeAsGuest()
+    const input = screen.getByPlaceholderText('your@email.com')
+    fireEvent.change(input, { target: { value: 'agent@raf.mod.uk' } })
+    fireEvent.click(screen.getByText('Continue →'))
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/login?tab=register&email=agent%40raf.mod.uk'
+    )
+  })
+
+  it('guest clicking Continue saves pending brief to sessionStorage', async () => {
+    await completeAsGuest()
+    fireEvent.click(screen.getByText('Continue →'))
+    expect(sessionStorage.getItem('sw_pending_brief')).toBe('brief123')
+  })
+
+  it('guest clicking Sign in saves pending brief and navigates to /login', async () => {
+    await completeAsGuest()
+    fireEvent.click(screen.getByText('Sign in'))
+    expect(sessionStorage.getItem('sw_pending_brief')).toBe('brief123')
+    expect(mockNavigate).toHaveBeenCalledWith('/login')
+  })
+
+  it('Google One Tap prompt is called on mount for guests', async () => {
+    await completeAsGuest()
+    expect(window.google.accounts.id.prompt).toHaveBeenCalled()
+  })
+
+  it('Google One Tap is NOT called for logged-in users', async () => {
     setupLoggedIn()
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
       .mockResolvedValueOnce(makeCompleteResponse())
-
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
     fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
-
     await waitFor(() => screen.getByText('Brief Complete!'))
-    expect(screen.queryByText('💾 Save your progress')).toBeNull()
+    expect(window.google.accounts.id.prompt).not.toHaveBeenCalled()
   })
 
-  it('clicking "Play Knowledge Check" saves briefId to sessionStorage', async () => {
-    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF))
-
+  it('logged-in user does NOT see the sign-up panel', async () => {
+    setupLoggedIn()
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(makeCompleteResponse())
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
-
-    const btn = await waitFor(() => screen.getByText('🎮 Play Knowledge Check'))
-    fireEvent.click(btn)
-
-    expect(sessionStorage.getItem('sw_pending_brief')).toBe('brief123')
-  })
-
-  it('clicking "Sign In" in the amber card saves briefId to sessionStorage', async () => {
-    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF))
-
-    render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
-
-    await waitFor(() => screen.getByText('Sign In'))
-    fireEvent.click(screen.getByText('Sign In'))
-
-    expect(sessionStorage.getItem('sw_pending_brief')).toBe('brief123')
-  })
-
-  it('guest sees "Play Knowledge Check" button', async () => {
-    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF))
-
-    render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
-
-    await waitFor(() => expect(screen.getByText('🎮 Play Knowledge Check')).toBeDefined())
-  })
-
-  it('hovering "Play Knowledge Check" swaps text to "Sign In to Play", mouse-out reverts', async () => {
-    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF))
-
-    render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
-
-    const btn = await waitFor(() => screen.getByText('🎮 Play Knowledge Check'))
-    fireEvent.mouseEnter(btn)
-    expect(screen.getByText('🔒 Sign In to Play')).toBeDefined()
-
-    fireEvent.mouseLeave(btn)
-    expect(screen.getByText('🎮 Play Knowledge Check')).toBeDefined()
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    await waitFor(() => screen.getByText('Brief Complete!'))
+    expect(screen.queryByText('Don\'t lose this progress')).toBeNull()
   })
 
   it('logged-in user sees the quiz button', async () => {
@@ -391,12 +393,62 @@ describe('BriefReader — guest completion prompt', () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
       .mockResolvedValueOnce(makeCompleteResponse())
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    await waitFor(() => expect(screen.getByText(/Take the Quiz/)).toBeDefined())
+  })
+})
+
+// ── First-brief heading ───────────────────────────────────────────────────────
+
+describe('BriefReader — first brief detection', () => {
+  beforeEach(() => {
+    setupLoggedIn()
+    mockAwardAircoins.mockClear()
+    sessionStorage.clear()
+    localStorage.removeItem('skywatch_first_brief')
+  })
+
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows "Mission Complete" heading on first ever brief completion', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(makeCompleteResponse())
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
     fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
 
-    await waitFor(() => expect(screen.getByText(/Take the Quiz/)).toBeDefined())
+    await waitFor(() => expect(screen.getByText('🎖️ First Brief — Mission Complete!')).toBeDefined())
+  })
+
+  it('shows standard "Brief Complete!" heading when not the first brief', async () => {
+    localStorage.setItem('skywatch_first_brief', '1')
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(makeCompleteResponse())
+
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+
+    await waitFor(() => expect(screen.getByText('Brief Complete!')).toBeDefined())
+    expect(screen.queryByText('🎖️ First Brief — Mission Complete!')).toBeNull()
+  })
+
+  it('sets skywatch_first_brief in localStorage after first completion', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(makeCompleteResponse())
+
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+    fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+
+    await waitFor(() => screen.getByText('🎖️ First Brief — Mission Complete!'))
+    expect(localStorage.getItem('skywatch_first_brief')).toBe('1')
   })
 })
 

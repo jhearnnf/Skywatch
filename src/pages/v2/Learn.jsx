@@ -7,24 +7,7 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import { isCategoryLocked, requiredTier } from '../../utils/subscription'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import LockedCategoryModal from '../../components/LockedCategoryModal'
-import { CATEGORIES, CATEGORY_ICONS, SUBCATEGORIES } from '../../data/mockData'
-
-const DESCRIPTIONS = {
-  News:        'The latest RAF news and operations.',
-  Aircrafts:   'Fast jets, transport, rotary wing, and more.',
-  Bases:       'UK and overseas RAF stations.',
-  Ranks:       'Commissioned officers and NCOs.',
-  Squadrons:   'Active, reserve, and historic squadrons.',
-  Training:    'From IOT to advanced flying training.',
-  Roles:       'Every trade and branch explained.',
-  Threats:     'Air threats, SAMs, and electronic warfare.',
-  Allies:      'NATO, Five Eyes, and bilateral partners.',
-  Missions:    'Operations from WWII to today.',
-  AOR:         'Area of responsibility and global deployments.',
-  Tech:        'Weapons, sensors, and future programmes.',
-  Terminology: 'Key RAF terminology and concepts.',
-  Treaties:    'Alliances, agreements, and arms control.',
-}
+import { CATEGORIES, CATEGORY_ICONS, CATEGORY_DESCRIPTIONS, SUBCATEGORIES } from '../../data/mockData'
 
 export default function Learn() {
   const { user, API } = useAuth()
@@ -76,7 +59,7 @@ export default function Learn() {
     ? CATEGORIES
     : CATEGORIES.filter(cat => {
         if (cat.toLowerCase().includes(q)) return true
-        if ((DESCRIPTIONS[cat] ?? '').toLowerCase().includes(q)) return true
+        if ((CATEGORY_DESCRIPTIONS[cat] ?? '').toLowerCase().includes(q)) return true
         if ((SUBCATEGORIES[cat] ?? []).some(sub => sub.toLowerCase().includes(q))) return true
         if (briefTitles.some(b => b.category === cat && b.title.toLowerCase().includes(q))) return true
         return false
@@ -90,6 +73,7 @@ export default function Learn() {
         <LockedCategoryModal
           category={lockedModal.category}
           tier={lockedModal.tier}
+          user={user}
           onClose={() => setLockedModal(null)}
         />
       )}
@@ -164,7 +148,7 @@ export default function Learn() {
                         <p className="font-bold text-slate-800">{cat}</p>
                         {complete && !locked && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">✓ Done</span>}
                       </div>
-                      <p className="text-xs text-slate-400 truncate">{DESCRIPTIONS[cat] ?? ''}</p>
+                      <p className="text-xs text-slate-400 truncate">{CATEGORY_DESCRIPTIONS[cat] ?? ''}</p>
                       {user && total > 0 && !locked && (
                         <div className="mt-1.5">
                           <div className="h-1 bg-slate-100 rounded-full overflow-hidden">

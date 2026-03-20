@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
+import WelcomeAgentFlow from '../../components/onboarding/WelcomeAgentFlow'
 
 const FEATURES = [
   { icon: '✈️', title: 'Learn About the RAF',        body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — written for RAF applicants.' },
@@ -61,6 +63,7 @@ function CornerBrackets({ size = 18, color = '#5baaff', opacity = 0.4 }) {
 
 export default function Landing() {
   const { user } = useAuth()
+  const [showOnboarding, setShowOnboarding] = useState(false)
 
   return (
     <div className="min-h-screen" style={{ background: '#06101e' }}>
@@ -114,13 +117,23 @@ export default function Landing() {
           </motion.p>
 
           <motion.div variants={fadeUp} custom={3} className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link
-              to={user ? '/home' : '/login?tab=register'}
-              className="bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-all hover:shadow-lg hover:-translate-y-0.5"
-              style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)' }}
-            >
-              {user ? 'Continue Learning' : 'Start for Free →'}
-            </Link>
+            {user ? (
+              <Link
+                to="/home"
+                className="bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-all hover:shadow-lg hover:-translate-y-0.5"
+                style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)' }}
+              >
+                Continue Learning
+              </Link>
+            ) : (
+              <button
+                onClick={() => setShowOnboarding(true)}
+                className="bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-all hover:shadow-lg hover:-translate-y-0.5"
+                style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)' }}
+              >
+                Start for Free →
+              </button>
+            )}
             <Link
               to="/learn"
               className="bg-surface hover:bg-surface-raised text-slate-700 font-bold px-8 py-4 rounded-2xl text-lg border border-slate-200 transition-all hover:-translate-y-0.5"
@@ -248,13 +261,23 @@ export default function Landing() {
           <p className="text-slate-600 text-lg mb-8 max-w-md mx-auto">
             Join RAF applicants already using SkyWatch to prepare for their selection journey.
           </p>
-          <Link
-            to={user ? '/home' : '/login?tab=register'}
-            className="inline-block bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-colors"
-            style={{ boxShadow: '0 0 20px rgba(91,170,255,0.3)' }}
-          >
-            {user ? 'Go to Home →' : 'Create Free Account →'}
-          </Link>
+          {user ? (
+            <Link
+              to="/home"
+              className="inline-block bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-colors"
+              style={{ boxShadow: '0 0 20px rgba(91,170,255,0.3)' }}
+            >
+              Go to Home →
+            </Link>
+          ) : (
+            <button
+              onClick={() => setShowOnboarding(true)}
+              className="inline-block bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-colors"
+              style={{ boxShadow: '0 0 20px rgba(91,170,255,0.3)' }}
+            >
+              Create Free Account →
+            </button>
+          )}
         </motion.div>
       </section>
 
@@ -262,6 +285,13 @@ export default function Landing() {
       <footer className="py-8 px-5 border-t border-slate-200 text-center">
         <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR RAF APPLICANTS</p>
       </footer>
+
+      {/* ── Onboarding overlay ────────────────────────────── */}
+      <AnimatePresence>
+        {showOnboarding && (
+          <WelcomeAgentFlow onClose={() => setShowOnboarding(false)} />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

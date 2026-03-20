@@ -156,8 +156,49 @@ function BooStatsPanel({ brief }) {
 }
 
 // ── Completion screen ─────────────────────────────────────────────────────
-function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user }) {
-  const [quizHovered, setQuizHovered] = useState(false)
+function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user, isFirstCompletion, coinReward }) {
+  const navigate         = useNavigate()
+  const { API, setUser } = useAuth()
+  const [email, setEmail] = useState('')
+  const googleBtnRef     = useRef(null)
+
+  // Google One Tap + inline button — guests only
+  useEffect(() => {
+    if (user) return
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId || !window.google) return
+
+    const handleCredential = async (response) => {
+      try {
+        const res  = await fetch(`${API}/api/auth/google`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ credential: response.credential }),
+        })
+        const data = await res.json()
+        if (data?.data?.user) setUser(data.data.user)
+      } catch { /* ignore */ }
+    }
+
+    window.google.accounts.id.initialize({ client_id: clientId, callback: handleCredential })
+    window.google.accounts.id.prompt() // One Tap overlay
+    if (googleBtnRef.current) {
+      window.google.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'outline', size: 'large', text: 'signup_with', width: 280, logo_alignment: 'center',
+      })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleEmailContinue() {
+    sessionStorage.setItem('sw_pending_brief', brief._id)
+    navigate(`/login?tab=register${email ? `&email=${encodeURIComponent(email)}` : ''}`)
+  }
+
+  const heading    = isFirstCompletion && user ? '🎖️ First Brief — Mission Complete!' : 'Brief Complete!'
+  const subheading = isFirstCompletion && user
+    ? 'Your first intel brief is done. Now test what you\'ve learned.'
+    : 'You\'ve read all sections of this brief.'
 
   return (
     <motion.div
@@ -173,8 +214,8 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
       >
         🎉
       </motion.div>
-      <h2 className="text-2xl font-extrabold text-slate-900 mb-2">Brief Complete!</h2>
-      <p className="text-slate-500 mb-8">You've read all sections of this brief.</p>
+      <h2 className="text-2xl font-extrabold text-slate-900 mb-2">{heading}</h2>
+      <p className="text-slate-500 mb-8">{subheading}</p>
 
       {/* Keywords learned */}
       {brief.keywords?.length > 0 && (
@@ -221,38 +262,75 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
           </>
         ) : (
           <>
-            <Link
-              to="/login"
-              onClick={() => sessionStorage.setItem('sw_pending_brief', brief._id)}
-              onMouseEnter={() => setQuizHovered(true)}
-              onMouseLeave={() => setQuizHovered(false)}
-              className="block w-full py-4 text-center bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-lg transition-colors shadow-lg shadow-brand-200"
-            >
-              {quizHovered ? '🔒 Sign In to Play' : '🎮 Play Knowledge Check'}
-            </Link>
-
-            {/* Secondary sign-up prompt */}
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-left">
-              <p className="text-sm font-bold text-amber-800 mb-1">💾 Save your progress</p>
-              <p className="text-xs text-amber-700 mb-3">
-                Create a free account to test yourself on this brief, play intel games, earn Aircoins, and track your reading streak.
-              </p>
-              <div className="flex gap-2">
-                <Link
-                  to="/login"
-                  onClick={() => sessionStorage.setItem('sw_pending_brief', brief._id)}
-                  className="flex-1 py-2 text-center text-sm font-bold bg-brand-600 hover:bg-brand-700 text-white rounded-xl transition-colors"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  to="/login?register=1"
-                  onClick={() => sessionStorage.setItem('sw_pending_brief', brief._id)}
-                  className="flex-1 py-2 text-center text-sm font-bold border border-amber-300 text-amber-800 hover:bg-amber-100 rounded-xl transition-colors"
-                >
-                  Create Account
-                </Link>
+            {/* Investment hook */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left flex items-center gap-3">
+              <span className="text-2xl shrink-0">⭐</span>
+              <div>
+                <p className="text-sm font-bold text-slate-700">{coinReward} Aircoins waiting to be claimed</p>
+                <p className="text-xs text-slate-500">Sign up to collect your reward and keep your streak</p>
               </div>
+            </div>
+
+            {/* Sign-up panel */}
+            <div className="bg-surface border border-slate-200 rounded-2xl p-5 text-left card-shadow">
+              <p className="font-bold text-slate-900 mb-3">Don't lose this progress</p>
+              <ul className="space-y-1.5 mb-5">
+                <li className="flex items-center gap-2 text-sm text-slate-700">
+                  <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                  Claim your {coinReward} Aircoins for this brief
+                </li>
+                <li className="flex items-center gap-2 text-sm text-slate-700">
+                  <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                  Take the quiz — test what you've just learned
+                </li>
+                <li className="flex items-center gap-2 text-sm text-slate-700">
+                  <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                  Track your reading streak
+                </li>
+                <li className="flex items-center gap-2 text-sm text-slate-700">
+                  <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                  5-day Silver trial included on sign-up
+                </li>
+              </ul>
+
+              {/* Google button (fallback if One Tap suppressed) */}
+              <div ref={googleBtnRef} className="flex justify-center mb-3" />
+              {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+                <p className="text-xs text-slate-400 text-center mb-3">Google sign-in unavailable</p>
+              )}
+
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 h-px bg-slate-100" />
+                <span className="text-xs text-slate-400">or continue with email</span>
+                <div className="flex-1 h-px bg-slate-100" />
+              </div>
+
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleEmailContinue() }}
+                  placeholder="your@email.com"
+                  className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm"
+                />
+                <button
+                  onClick={handleEmailContinue}
+                  className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+                >
+                  Continue →
+                </button>
+              </div>
+
+              <p className="text-center text-xs text-slate-400">
+                Already have an account?{' '}
+                <button
+                  onClick={() => { sessionStorage.setItem('sw_pending_brief', brief._id); navigate('/login?tab=signin') }}
+                  className="text-brand-600 font-semibold hover:underline"
+                >
+                  Sign in
+                </button>
+              </p>
             </div>
           </>
         )}
@@ -282,6 +360,7 @@ export default function BriefReader() {
     const saved = sessionStorage.getItem(`sw_brief_sec_${briefId}`)
     return saved ? parseInt(saved, 10) : 0
   })
+  const [isFirstCompletion, setIsFirstCompletion] = useState(false)
   const [done, setDone]          = useState(() => {
     const justCompleted = sessionStorage.getItem('sw_brief_just_completed')
     if (justCompleted === briefId) {
@@ -419,7 +498,7 @@ export default function BriefReader() {
 
   // Tutorial on first visit
   useEffect(() => {
-    if (!loading && brief && !briefOpenedRef.current) {
+    if (!loading && brief && !briefOpenedRef.current && !done) {
       briefOpenedRef.current = true
       playSound('intel_brief_opened')
       const t = setTimeout(() => start('briefReader'), 800)
@@ -449,6 +528,10 @@ export default function BriefReader() {
 
   const handleContinue = () => {
     if (isLast) {
+      const first = !localStorage.getItem('skywatch_first_brief')
+      if (first) localStorage.setItem('skywatch_first_brief', '1')
+      setIsFirstCompletion(first)
+      if (!user) playSound('first_brief_complete')
       markRead()
       sessionStorage.removeItem(`sw_brief_sec_${briefId}`)
       setDone(true)
@@ -519,6 +602,7 @@ export default function BriefReader() {
         <LockedCategoryModal
           category={lockedCategory ?? ''}
           tier={lockedCategory ? requiredTier(lockedCategory, settings) : 'silver'}
+          user={user}
           onClose={() => navigate('/learn')}
         />
       </>
@@ -583,6 +667,8 @@ export default function BriefReader() {
         <CompletionScreen
           brief={brief}
           user={user}
+          isFirstCompletion={isFirstCompletion}
+          coinReward={settings?.aircoinsPerBriefRead ?? 5}
           onQuiz={() => navigate(`/quiz/${briefId}`)}
           booState={booState}
           onBattleOrder={booState === 'available' ? () => navigate(`/battle-of-order/${briefId}`) : null}

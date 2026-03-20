@@ -41,7 +41,7 @@ const TUTORIAL_LABELS = [
   { key: 'quiz',        label: '🎯 Quiz',         emoji: '🎯' },
   { key: 'play',        label: '🎮 Play Hub',     emoji: '🎮' },
   { key: 'profile',     label: '👤 Profile',      emoji: '👤' },
-  { key: 'rankings',    label: '🏆 Rankings',     emoji: '🏆' },
+  { key: 'rankings',    label: '🏆 Progression',  emoji: '🏆' },
 ]
 
 export default function Profile() {
@@ -357,6 +357,24 @@ export default function Profile() {
             })}
             {leaderboard.length === 0 && (
               <li className="px-4 py-6 text-center text-sm text-slate-400">No agents yet</li>
+            )}
+            {/* Pinned "you" row — shown when the signed-in user isn't in the visible list */}
+            {user?.agentNumber && !leaderboard.some(a => a.agentNumber === user.agentNumber) && (
+              <>
+                <li className="px-4 py-1.5 flex items-center gap-3">
+                  <span className="w-7 shrink-0" />
+                  <span className="text-slate-300 text-lg leading-none tracking-tighter">•••</span>
+                </li>
+                <li className="flex items-center gap-3 px-4 py-3 bg-brand-50">
+                  <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-extrabold shrink-0 bg-slate-100 text-slate-500">
+                    —
+                  </span>
+                  <span className="flex-1 text-sm font-semibold text-brand-700">
+                    Agent {user.agentNumber} <span className="text-xs text-brand-500">(You)</span>
+                  </span>
+                  <span className="text-sm font-bold text-amber-600">⭐ {(user.totalAircoins ?? 0).toLocaleString()}</span>
+                </li>
+              </>
             )}
           </ol>
         </motion.div>

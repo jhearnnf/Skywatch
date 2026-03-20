@@ -5,7 +5,8 @@ import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import LockedCategoryModal from '../../components/LockedCategoryModal'
-import { requiredTier } from '../../utils/subscription'
+import { requiredTier, isFreeUser, isCategoryLocked } from '../../utils/subscription'
+import { CATEGORY_ICONS } from '../../data/mockData'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { playSound } from '../../utils/sound'
 
@@ -87,10 +88,18 @@ function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, 
   )
 }
 
+// Priority order for the locked-category upsell teaser
+const UPSELL_PRIORITY = ['Threats', 'Tech', 'Missions', 'Allies', 'Squadrons', 'Bases']
+
 // ── Results screen ────────────────────────────────────────────────────────
-function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack, booAvailable = false, onStartBoo }) {
+function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack, onBrowse, booAvailable = false, onStartBoo, user, settings }) {
   const pct     = total > 0 ? Math.round((score / total) * 100) : 0
   const perfect = score === total
+
+  // Pick the first priority category that is locked for this user
+  const upsellCategory = (won && user && isFreeUser(user))
+    ? UPSELL_PRIORITY.find(c => isCategoryLocked(c, user, settings)) ?? null
+    : null
 
   return (
     <motion.div
@@ -197,7 +206,40 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
         >
           Back to Brief
         </button>
+        <button
+          onClick={onBrowse}
+          className="w-full py-3 text-slate-500 font-semibold text-sm hover:text-slate-700 transition-colors"
+        >
+          Browse More Briefs →
+        </button>
       </div>
+
+      {/* Locked category upsell — win only, free signed-in users */}
+      {upsellCategory && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="mt-5 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left"
+        >
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">Unlock next</p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl">{CATEGORY_ICONS[upsellCategory]}</span>
+              <div>
+                <p className="font-bold text-slate-800 text-sm">{upsellCategory}</p>
+                <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">🔒 SILVER+</span>
+              </div>
+            </div>
+            <a
+              href="/subscribe"
+              className="shrink-0 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
+            >
+              5-day free trial →
+            </a>
+          </div>
+        </motion.div>
+      )}
     </motion.div>
   )
 }
@@ -395,6 +437,7 @@ export default function QuizFlow() {
           <LockedCategoryModal
             category={lockedCategory ?? ''}
             tier={lockedCategory ? requiredTier(lockedCategory, settings) : 'silver'}
+            user={user}
             onClose={() => navigate(`/brief/${briefId}`)}
           />
         </>
@@ -437,8 +480,11 @@ export default function QuizFlow() {
           won={won}
           onRetry={handleRetry}
           onBack={() => navigate(`/brief/${briefId}`)}
+          onBrowse={() => navigate('/learn')}
           booAvailable={(won || !isFirstAttempt) && booAvailable}
           onStartBoo={() => navigate(`/battle-of-order/${briefId}`)}
+          user={user}
+          settings={settings}
         />
       </>
     )

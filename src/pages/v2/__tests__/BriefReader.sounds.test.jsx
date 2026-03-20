@@ -22,6 +22,10 @@ vi.mock('../../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn() }),
 }))
 
+vi.mock('../../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
+}))
+
 vi.mock('../../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))
@@ -92,6 +96,17 @@ describe('BriefReader — sound wiring', () => {
     })
 
     expect(playSound.mock.calls.filter(c => c[0] === 'intel_brief_opened')).toHaveLength(1)
+  })
+
+  it('does NOT play intel_brief_opened when mounting into completion screen post-login', async () => {
+    sessionStorage.setItem('sw_brief_just_completed', 'brief123')
+    global.fetch = makeFetchOk()
+
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Brief Complete!'))
+
+    expect(playSound).not.toHaveBeenCalledWith('intel_brief_opened')
+    sessionStorage.clear()
   })
 
   it('does NOT play intel_brief_opened before data arrives', () => {

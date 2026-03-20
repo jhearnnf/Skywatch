@@ -13,6 +13,7 @@ vi.mock('react-router-dom', () => ({
 }))
 
 vi.mock('../../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
+vi.mock('../../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: { freeCategories: ['News'] } }) }))
 
 vi.mock('../../../data/mockData', () => ({
   CATEGORY_ICONS: { Aircrafts: '✈️' },

@@ -45,3 +45,12 @@ export function isCategoryLocked(category, user, settings) {
   if (accessible.length === 0) return false  // settings not loaded — fail open
   return !accessible.includes(category)
 }
+
+// Returns why a category is locked: 'signin' (guest), 'upgrade' (wrong tier), or null (accessible)
+export function lockReason(category, user, settings) {
+  const accessible = getAccessibleCategories(user, settings)
+  if (accessible === null) return null
+  if (accessible.length === 0) return null
+  if (accessible.includes(category)) return null
+  return user ? 'upgrade' : 'signin'
+}

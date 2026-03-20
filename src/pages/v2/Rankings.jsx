@@ -80,7 +80,7 @@ export default function Rankings() {
       <div className="flex gap-2 mb-5">
         {[
           { key: 'levels', label: '🎖 Agent Levels' },
-          { key: 'ranks',  label: '🪖 RAF Ranks' },
+          { key: 'ranks',  label: '🎖️ RAF Ranks' },
         ].map(t => (
           <button
             key={t.key}

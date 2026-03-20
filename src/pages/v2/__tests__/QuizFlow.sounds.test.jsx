@@ -26,6 +26,10 @@ vi.mock('../../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn() }),
 }))
 
+vi.mock('../../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
+}))
+
 vi.mock('../../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))

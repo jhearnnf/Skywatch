@@ -337,6 +337,7 @@ export default function Home() {
         <LockedCategoryModal
           category={lockedModal.category}
           tier={lockedModal.tier}
+          user={user}
           onClose={() => setLockedModal(null)}
         />
       )}

@@ -17,7 +17,7 @@ const NAV_ITEMS = [
   { to: '/home',     emoji: '🏠', label: 'Home'       },
   { to: '/learn',    emoji: '✈️',  label: 'Learn'      },
   { to: '/play',     emoji: '🎮', label: 'Play'       },
-  { to: '/rankings', emoji: '🏆', label: 'Rankings'   },
+  { to: '/rankings', emoji: '🏆', label: 'Progression' },
   { to: '/profile',  emoji: '👤', label: 'Profile'    },
 ]
 

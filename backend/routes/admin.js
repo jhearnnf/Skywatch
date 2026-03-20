@@ -25,27 +25,21 @@ const mongoose          = require('mongoose');
 const path              = require('path');
 const fs                = require('fs');
 const { uploadBuffer, destroyAsset } = require('../utils/cloudinary');
-
-const LEADS_FILE = path.join(__dirname, '../../APPLICATION_INFO/intel_brief_leads.txt');
+const IntelLead = require('../models/IntelLead');
 
 function normaliseLeadTitle(s) {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 // Returns { matched: bool, error: string|null }
-function unmarkLeadInFile(briefTitle) {
+async function unmarkLeadInDb(briefTitle) {
   try {
-    const norm    = normaliseLeadTitle(briefTitle);
-    const content = fs.readFileSync(LEADS_FILE, 'utf8');
-    let matched   = false;
-    const updated = content.split('\n').map(line => {
-      if (!line.includes('[DB]')) return line;
-      const lineText = line.replace('[DB]', '').trimEnd();
-      if (normaliseLeadTitle(lineText) === norm) { matched = true; return lineText; }
-      return line;
-    });
-    if (matched) fs.writeFileSync(LEADS_FILE, updated.join('\n'), 'utf8');
-    return { matched, error: null };
+    const norm  = normaliseLeadTitle(briefTitle);
+    const leads = await IntelLead.find({ isPublished: true }).select('text');
+    const match = leads.find(l => normaliseLeadTitle(l.text) === norm);
+    if (!match) return { matched: false, error: null };
+    await IntelLead.updateOne({ _id: match._id }, { isPublished: false });
+    return { matched: true, error: null };
   } catch (err) {
     return { matched: false, error: err.message };
   }
@@ -709,7 +703,7 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
 
     await AdminAction.create({ userId: req.user._id, actionType: 'delete_brief', reason: req.body.reason });
 
-    const leadResult = brief?.title ? unmarkLeadInFile(brief.title) : { matched: false, error: 'Brief title unavailable' };
+    const leadResult = brief?.title ? await unmarkLeadInDb(brief.title) : { matched: false, error: 'Brief title unavailable' };
     res.json({ status: 'success', leadUnmarked: leadResult.matched, leadError: leadResult.error });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1161,56 +1155,33 @@ router.post('/ai/generate-brief', async (req, res) => {
   }
 });
 
-// GET /api/admin/intel-leads — parse intel_brief_leads.txt, return topics not yet marked [DB]
-router.get('/intel-leads', (req, res) => {
+// GET /api/admin/intel-leads — return unpublished leads from DB
+router.get('/intel-leads', async (req, res) => {
   try {
-    const content = fs.readFileSync(LEADS_FILE, 'utf8');
-    const lines = content.split('\n');
-    const leads = [];
-    let currentSection = '';
-    let currentSubsection = '';
-
-    const SKIP = /^(SKYWATCH|Comprehensive seeding|All topics|LEGEND|END OF|Total categories|Approximate total|\[DB\]\s*=|News briefs are excluded)/i;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      if (trimmed.startsWith('=')) continue;
-      if (/^SECTION\s+\d+:/i.test(trimmed)) { currentSection = trimmed; currentSubsection = ''; continue; }
-      if (trimmed.startsWith('---') && trimmed.endsWith('---')) {
-        currentSubsection = trimmed.replace(/^-+\s*/, '').replace(/\s*-+$/, '');
-        continue;
-      }
-      if (SKIP.test(trimmed)) continue;
-      if (trimmed.endsWith('[DB]')) continue; // already published
-
-      leads.push({ text: trimmed, section: currentSection, subsection: currentSubsection });
-    }
-
+    const leads = await IntelLead.find({ isPublished: false })
+      .select('text section subsection')
+      .sort({ section: 1, subsection: 1, text: 1 })
+      .lean();
     res.json({ status: 'success', data: { leads } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// POST /api/admin/intel-leads/mark-complete — append [DB] to a lead line in the file
-router.post('/intel-leads/mark-complete', (req, res) => {
+// POST /api/admin/intel-leads/mark-complete — mark a lead as published in DB
+router.post('/intel-leads/mark-complete', async (req, res) => {
   try {
     const { lead } = req.body;
     if (!lead) return res.status(400).json({ message: 'lead required' });
 
-    const content = fs.readFileSync(LEADS_FILE, 'utf8');
-    let found = false;
-    const updated = content.split('\n').map(line => {
-      if (line.trim() === lead.trim() && !line.includes('[DB]')) {
-        found = true;
-        return line.trimEnd() + ' [DB]';
-      }
-      return line;
-    });
+    const result = await IntelLead.updateOne(
+      { text: lead.trim(), isPublished: false },
+      { isPublished: true }
+    );
 
-    if (!found) return res.status(404).json({ message: 'Lead not found or already marked' });
-    fs.writeFileSync(LEADS_FILE, updated.join('\n'), 'utf8');
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'Lead not found or already marked' });
+    }
     res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });

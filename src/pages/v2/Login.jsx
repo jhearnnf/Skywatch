@@ -1,20 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 
-const VIEW = { CHOICE: 'choice', SIGNIN: 'signin', REGISTER: 'register', VERIFY: 'verify', DIFFICULTY: 'difficulty' }
-
-const DIFFICULTY_DEFAULTS = {
-  title:         'Select Your Starting Level',
-  subtitle:      'Choose your quiz difficulty. You can change this anytime from your profile.',
-  easyLabel:     'Standard',
-  easyTag:       'STANDARD',
-  easyFlavor:    'Direct recall questions. Perfect for your first attempt.',
-  mediumLabel:   'Advanced',
-  mediumTag:     'ADVANCED',
-  mediumFlavor:  'Contextual questions requiring deeper understanding.',
-}
+const VIEW = { CHOICE: 'choice', SIGNIN: 'signin', REGISTER: 'register', VERIFY: 'verify' }
 
 function CrosshairLogo() {
   return (
@@ -33,38 +22,25 @@ function CrosshairLogo() {
 export default function LoginPage() {
   const { setUser, API, awardAircoins } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
-  const [view,           setView]          = useState(VIEW.CHOICE)
-  const [email,          setEmail]         = useState('')
+  const params      = new URLSearchParams(location.search)
+  const initTab     = params.get('tab')
+  const initEmail   = params.get('email') ?? ''
+
+  const [view,           setView]          = useState(
+    initTab === 'register' ? VIEW.REGISTER :
+    initTab === 'signin'   ? VIEW.SIGNIN   :
+    VIEW.CHOICE
+  )
+  const [email,          setEmail]         = useState(initEmail)
   const [pass,           setPass]          = useState('')
   const [error,          setError]         = useState('')
   const [busy,           setBusy]          = useState(false)
-  const [diffText,       setDiffText]      = useState(DIFFICULTY_DEFAULTS)
   const [pendingEmail,   setPendingEmail]  = useState('')
   const [code,           setCode]          = useState('')
   const [resendCooldown, setResendCooldown] = useState(0)
   const googleBtnRef  = useRef(null)
-  const pendingUserRef = useRef(null)  // holds new-user object until difficulty is chosen
-
-  useEffect(() => {
-    fetch(`${API}/api/users/settings`)
-      .then(r => r.json())
-      .then(d => {
-        if (!d?.data) return
-        const s = d.data
-        setDiffText({
-          title:        s.combatReadinessTitle        || DIFFICULTY_DEFAULTS.title,
-          subtitle:     s.combatReadinessSubtitle     || DIFFICULTY_DEFAULTS.subtitle,
-          easyLabel:    s.combatReadinessEasyLabel    || DIFFICULTY_DEFAULTS.easyLabel,
-          easyTag:      s.combatReadinessEasyTag      || DIFFICULTY_DEFAULTS.easyTag,
-          easyFlavor:   s.combatReadinessEasyFlavor   || DIFFICULTY_DEFAULTS.easyFlavor,
-          mediumLabel:  s.combatReadinessMediumLabel  || DIFFICULTY_DEFAULTS.mediumLabel,
-          mediumTag:    s.combatReadinessMediumTag    || DIFFICULTY_DEFAULTS.mediumTag,
-          mediumFlavor: s.combatReadinessMediumFlavor || DIFFICULTY_DEFAULTS.mediumFlavor,
-        })
-      })
-      .catch(() => {})
-  }, [API])
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
@@ -104,6 +80,20 @@ export default function LoginPage() {
     return id
   }
 
+  // New users always start on Standard difficulty — set it silently, no screen shown
+  const finishNewUser = async (user) => {
+    setUser(user)
+    try {
+      await fetch(`${API}/api/users/me/difficulty`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ difficulty: 'easy' }),
+      })
+    } catch { /* non-fatal — default is already easy on the backend */ }
+    const briefId = await consumePendingBrief()
+    navigate(briefId ? `/brief/${briefId}` : '/home')
+  }
+
   const handleGoogleCredential = async ({ credential }) => {
     setBusy(true); setError('')
     try {
@@ -114,7 +104,7 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
-      if (data.data.isNew) { pendingUserRef.current = data.data.user; setView(VIEW.DIFFICULTY); return }
+      if (data.data.isNew) { await finishNewUser(data.data.user); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief()
       navigate(briefId ? `/brief/${briefId}` : '/home')
@@ -152,7 +142,7 @@ export default function LoginPage() {
         setView(VIEW.VERIFY)
         return
       }
-      if (data.data.isNew) { pendingUserRef.current = data.data.user; setView(VIEW.DIFFICULTY); return }
+      if (data.data.isNew) { await finishNewUser(data.data.user); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief()
       navigate(briefId ? `/brief/${briefId}` : '/home')
@@ -174,8 +164,7 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
-      pendingUserRef.current = data.data.user
-      setView(VIEW.DIFFICULTY)
+      await finishNewUser(data.data.user)
     } catch {
       setError('Connection failed. Is the server running?')
     } finally {
@@ -200,23 +189,6 @@ export default function LoginPage() {
     } finally {
       setBusy(false)
     }
-  }
-
-  const handleDifficulty = async (difficulty) => {
-    setBusy(true)
-    try {
-      const res  = await fetch(`${API}/api/users/me/difficulty`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ difficulty }),
-      })
-      const data = await res.json()
-      setUser(data?.data?.user ?? pendingUserRef.current)
-      pendingUserRef.current = null
-    } catch { /* non-fatal */ }
-    finally { setBusy(false) }
-    const briefId = await consumePendingBrief()
-    navigate(briefId ? `/brief/${briefId}` : '/home')
   }
 
   const reset = (nextView) => { setError(''); setEmail(''); setPass(''); setView(nextView) }
@@ -403,61 +375,6 @@ export default function LoginPage() {
             </motion.div>
           )}
 
-          {/* Difficulty chooser — shown after new account */}
-          {view === VIEW.DIFFICULTY && (
-            <motion.div
-              key="difficulty"
-              initial={{ opacity: 0, scale: 0.97 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              className="bg-surface rounded-3xl border border-slate-200 p-6 card-shadow"
-            >
-              <div className="text-center mb-6">
-                <span className="text-4xl">🎯</span>
-                <h2 className="text-xl font-extrabold text-slate-900 mt-2">{diffText.title}</h2>
-                <p className="text-sm text-slate-500 mt-1">{diffText.subtitle}</p>
-              </div>
-
-              <div className="space-y-3">
-                {/* Standard — always available */}
-                <button
-                  onClick={() => handleDifficulty('easy')}
-                  disabled={busy}
-                  className="w-full text-left p-4 bg-surface rounded-2xl border-2 border-slate-200 hover:border-brand-400 hover:bg-brand-100 transition-all card-shadow disabled:opacity-50"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl">🌱</span>
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <p className="font-bold text-slate-800 text-sm">{diffText.easyLabel}</p>
-                        <span className="text-[10px] font-bold bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full">{diffText.easyTag}</span>
-                      </div>
-                      <p className="text-xs text-slate-500">{diffText.easyFlavor}</p>
-                    </div>
-                  </div>
-                </button>
-
-                {/* Advanced — locked for free users (all new registrations) */}
-                <button
-                  onClick={() => navigate('/subscribe')}
-                  disabled={busy}
-                  className="w-full text-left p-4 bg-slate-50 rounded-2xl border-2 border-slate-200 opacity-60 transition-all card-shadow disabled:cursor-not-allowed"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl">🔥</span>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <p className="font-bold text-slate-500 text-sm">{diffText.mediumLabel}</p>
-                        <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">🔒 SILVER+</span>
-                      </div>
-                      <p className="text-xs text-slate-400">{diffText.mediumFlavor}</p>
-                      <p className="text-xs text-brand-500 font-semibold mt-1">Subscribe to Silver to unlock →</p>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            </motion.div>
-          )}
 
         </AnimatePresence>
 
