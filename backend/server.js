@@ -24,8 +24,7 @@ mongoose
     await require('./migrations/migrateDescriptionSections')();
     await require('./seeds/seedRanks')();
     await require('./seeds/seedBriefs')();
-    await require('./seeds/seedLeads')();
-    await require('./models/Media').ensurePlaceholderForBriefs();
+await require('./models/Media').ensurePlaceholderForBriefs();
     await seedGameTypes();
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
