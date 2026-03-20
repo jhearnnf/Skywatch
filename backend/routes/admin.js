@@ -1061,6 +1061,15 @@ function lookupRankHierarchy(title) {
   return null;
 }
 
+function hasStaleSource(sources) {
+  if (!Array.isArray(sources) || sources.length === 0) return false;
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  return sources.some(s => {
+    if (!s.articleDate) return true;
+    return new Date(s.articleDate).getTime() < cutoff;
+  });
+}
+
 function booGameDataShape(category) {
   if (category === 'Aircrafts')
     return '"gameData": {"topSpeedKph": 2400, "yearIntroduced": 1976, "yearRetired": null}';
@@ -1149,7 +1158,8 @@ router.post('/ai/generate-brief', async (req, res) => {
       const rankOrder = lookupRankHierarchy(brief.title);
       if (rankOrder !== null) brief.gameData = { rankHierarchyOrder: rankOrder };
     }
-    res.json({ status: 'success', data: { brief } });
+    const staleSourceWarning = isNews && hasStaleSource(brief.sources);
+    res.json({ status: 'success', data: { brief: { ...brief, staleSourceWarning } } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

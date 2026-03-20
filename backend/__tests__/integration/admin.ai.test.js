@@ -197,6 +197,85 @@ describe('POST /api/admin/ai/generate-brief', () => {
     expect(res.body.message).toMatch(/not valid json/i);
   });
 
+  it('sets staleSourceWarning: true for a news headline with a source older than 24 hours', async () => {
+    const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const staleJson = JSON.stringify({
+      title: 'RAF Typhoon', subtitle: 'Multi-role fast jet',
+      descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
+      keywords: [{ keyword: 'Typhoon', generatedDescription: 'A fast jet' }],
+      sources: [{ url: 'https://raf.mod.uk', siteName: 'RAF', articleDate: staleDate }],
+    });
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(staleJson));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ headline: 'RAF Typhoons deployed overseas' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.brief.staleSourceWarning).toBe(true);
+  });
+
+  it('sets staleSourceWarning: false for a news headline with all sources within 24 hours', async () => {
+    const freshDate = new Date().toISOString().slice(0, 10);
+    const freshJson = JSON.stringify({
+      title: 'RAF Typhoon', subtitle: 'Multi-role fast jet',
+      descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
+      keywords: [{ keyword: 'Typhoon', generatedDescription: 'A fast jet' }],
+      sources: [{ url: 'https://raf.mod.uk', siteName: 'RAF', articleDate: freshDate }],
+    });
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(freshJson));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ headline: 'RAF Typhoons deployed overseas' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.brief.staleSourceWarning).toBe(false);
+  });
+
+  it('sets staleSourceWarning: true for a news headline when articleDate is missing', async () => {
+    const noDateJson = JSON.stringify({
+      title: 'RAF Typhoon', subtitle: 'Multi-role fast jet',
+      descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
+      keywords: [{ keyword: 'Typhoon', generatedDescription: 'A fast jet' }],
+      sources: [{ url: 'https://raf.mod.uk', siteName: 'RAF' }],
+    });
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(noDateJson));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ headline: 'RAF Typhoons deployed overseas' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.brief.staleSourceWarning).toBe(true);
+  });
+
+  it('does not set staleSourceWarning for a topic brief (non-news)', async () => {
+    const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const staleJson = JSON.stringify({
+      title: 'RAF Typhoon', subtitle: 'Multi-role fast jet',
+      descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
+      keywords: [{ keyword: 'Typhoon', generatedDescription: 'A fast jet' }],
+      sources: [{ url: 'https://raf.mod.uk', siteName: 'RAF', articleDate: staleDate }],
+    });
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(staleJson));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ topic: 'Eurofighter Typhoon' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.brief.staleSourceWarning).toBe(false);
+  });
+
   it('returns 401 for unauthenticated request', async () => {
     const res = await request(app)
       .post('/api/admin/ai/generate-brief')

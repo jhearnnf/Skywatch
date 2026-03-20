@@ -1782,8 +1782,9 @@ function BriefsTab({ API }) {
   const [saveStatus,    setSaveStatus]    = useState(null)
   const [briefId,       setBriefId]       = useState(null)
   const [pendingLead,   setPendingLead]   = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [confirmRegen,  setConfirmRegen]  = useState(false)
+  const [confirmDelete,     setConfirmDelete]     = useState(false)
+  const [confirmRegen,      setConfirmRegen]      = useState(false)
+  const [staleSourceWarning, setStaleSourceWarning] = useState(false)
   // Section open/close
   const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: false, questions: false, images: true, sources: false, gameData: false })
 
@@ -1843,6 +1844,7 @@ function BriefsTab({ API }) {
     setBriefId(String(br._id))
     setQTab('easy')
     setSaveStatus(null)
+    setStaleSourceWarning(false)
     setView('editor')
   }
 
@@ -1855,6 +1857,7 @@ function BriefsTab({ API }) {
     setBriefId(null)
     setQTab('easy')
     setSaveStatus(null)
+    setStaleSourceWarning(false)
     setView('editor')
   }
 
@@ -1975,6 +1978,7 @@ function BriefsTab({ API }) {
     setPendingImages([])
     setBriefId(null)
     setPendingLead(lead ? lead.text : null)
+    setStaleSourceWarning(briefData.staleSourceWarning ?? false)
     setView('editor')
 
     // Auto-generate questions and images in parallel
@@ -2365,6 +2369,18 @@ function BriefsTab({ API }) {
           </button>
         )}
       </div>
+
+      {/* ── Stale source warning ───────────────────────────────────────── */}
+      {staleSourceWarning && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 mb-4">
+          <span className="text-amber-500 text-sm mt-px">⚠️</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">This news is potentially outdated</p>
+            <p className="text-xs text-amber-600 mt-0.5">One or more sources are older than 24 hours or have no date. Verify the content is current before publishing.</p>
+          </div>
+          <button onClick={() => setStaleSourceWarning(false)} className="text-amber-400 hover:text-amber-600 text-lg leading-none">×</button>
+        </div>
+      )}
 
       {/* ── Section A: Core Fields ─────────────────────────────────────── */}
       <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
