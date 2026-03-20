@@ -34,6 +34,12 @@ function parseLeadsFile(content) {
 
 module.exports = async function seedLeads() {
   try {
+    const existing = await IntelLead.countDocuments();
+    if (existing > 0) {
+      console.log(`seedLeads: ${existing} leads already in DB, skipping`);
+      return;
+    }
+
     if (!fs.existsSync(LEADS_FILE)) {
       console.log('seedLeads: leads file not found, skipping');
       return;
