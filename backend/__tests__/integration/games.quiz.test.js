@@ -3,6 +3,7 @@ process.env.JWT_SECRET = 'test_secret';
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
+const GameSessionQuizAttempt = require('../../models/GameSessionQuizAttempt');
 const {
   createUser,
   createBrief,
@@ -247,6 +248,47 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(false);
     expect(res.body.data.aircoinsEarned).toBe(0);
+  });
+
+  it('stores abandoned status correctly in the DB', async () => {
+    await createQuizQuestions(brief._id, gameType._id, 5, 'easy');
+    const startRes = await request(app)
+      .post('/api/games/quiz/start')
+      .set('Cookie', cookie)
+      .send({ briefId: brief._id });
+    const { attemptId } = startRes.body.data;
+
+    await request(app)
+      .post(`/api/games/quiz/attempt/${attemptId}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'abandoned' });
+
+    const record = await GameSessionQuizAttempt.findById(attemptId);
+    expect(record.status).toBe('abandoned');
+    expect(record.won).toBe(false);
+    expect(record.aircoinsEarned).toBe(0);
+  });
+
+  it('abandoned attempts are counted in /api/users/stats gamesPlayed (quiz-specific behaviour)', async () => {
+    await createQuizQuestions(brief._id, gameType._id, 5, 'easy');
+    const startRes = await request(app)
+      .post('/api/games/quiz/start')
+      .set('Cookie', cookie)
+      .send({ briefId: brief._id });
+    const { attemptId } = startRes.body.data;
+
+    await request(app)
+      .post(`/api/games/quiz/attempt/${attemptId}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'abandoned' });
+
+    const statsRes = await request(app)
+      .get('/api/users/stats')
+      .set('Cookie', cookie);
+
+    expect(statsRes.status).toBe(200);
+    // Quiz abandoned attempts are included in gamesPlayed (per-question answering model)
+    expect(statsRes.body.data.gamesPlayed).toBe(1);
   });
 
   it('returns 400 for invalid status value', async () => {

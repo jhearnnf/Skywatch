@@ -18,6 +18,7 @@ import CategoryBriefs from './pages/v2/CategoryBriefs'
 import BriefReader    from './pages/v2/BriefReader'
 import QuizFlow            from './pages/v2/QuizFlow'
 import BattleOfOrderFlow  from './pages/v2/BattleOfOrderFlow'
+import WhereAircraftGame  from './pages/v2/WhereAircraftGame'
 import QuizBriefsList     from './pages/v2/QuizBriefsList'
 import BOOBriefsList      from './pages/v2/BOOBriefsList'
 
@@ -130,6 +131,7 @@ function AppRoutes() {
           <Route path="/brief/:briefId"    element={<PageWrapper><BriefReader /></PageWrapper>} />
           <Route path="/quiz/:briefId"          element={<RequireAuth><PageWrapper><QuizFlow /></PageWrapper></RequireAuth>} />
           <Route path="/battle-of-order/:briefId" element={<RequireAuth><PageWrapper><BattleOfOrderFlow /></PageWrapper></RequireAuth>} />
+          <Route path="/wheres-that-aircraft/:aircraftBriefId" element={<RequireAuth><PageWrapper><WhereAircraftGame /></PageWrapper></RequireAuth>} />
 
           {/* v2 pages */}
           <Route path="/profile"          element={<PageWrapper><Profile /></PageWrapper>} />

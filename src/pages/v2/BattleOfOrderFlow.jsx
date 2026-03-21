@@ -473,8 +473,10 @@ export default function BattleOfOrderFlow() {
   const [correctReveal, setCorrectReveal]  = useState([])
   const [lastUserChoices, setLastUserChoices] = useState([])
 
-  const abandonedRef  = useRef(false)
-  const storedOptions = useRef([])
+  const abandonedRef     = useRef(false)
+  const gameStartTimeRef = useRef(null)
+  const gameIdRef        = useRef(null)
+  const storedOptions    = useRef([])
 
   const generateGame = useCallback(async (selectedOrderType) => {
     setScreen('generating')
@@ -492,10 +494,12 @@ export default function BattleOfOrderFlow() {
         return
       }
       setGameId(data.data.gameId)
+      gameIdRef.current = data.data.gameId
       setChoices(data.data.choices)
       setOrderType(selectedOrderType)
       setDifficulty(data.data.difficulty ?? 'easy')
-      abandonedRef.current = false
+      abandonedRef.current     = false
+      gameStartTimeRef.current = Date.now()
       setScreen('game')
     } catch {
       setUnavailableReason('error')
@@ -536,6 +540,26 @@ export default function BattleOfOrderFlow() {
     }
     init()
   }, [briefId, API]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Abandon on unmount (covers back-navigation / navbar clicks) ──────────
+  useEffect(() => {
+    return () => {
+      if (!gameIdRef.current || abandonedRef.current) return
+      abandonedRef.current = true
+      fetch(`${API}/api/games/battle-of-order/abandon`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify({
+          gameId: gameIdRef.current,
+          timeTakenSeconds: gameStartTimeRef.current
+            ? Math.round((Date.now() - gameStartTimeRef.current) / 1000)
+            : null,
+        }),
+      }).catch(() => {})
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRouletteSelect = (selectedOrderType) => {
     generateGame(selectedOrderType)
@@ -583,7 +607,12 @@ export default function BattleOfOrderFlow() {
         method:      'POST',
         credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },
-        body:        JSON.stringify({ gameId }),
+        body:        JSON.stringify({
+          gameId,
+          timeTakenSeconds: gameStartTimeRef.current
+            ? Math.round((Date.now() - gameStartTimeRef.current) / 1000)
+            : null,
+        }),
       }).catch(() => {})
     }
     navigate(`/brief/${briefId}`)

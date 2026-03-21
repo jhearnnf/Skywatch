@@ -30,6 +30,9 @@ function fetchSettings() {
         volumeQuizCompleteLose: 100, soundEnabledQuizCompleteLose: true,
         volumeQuizAnswerCorrect: 100,  soundEnabledQuizAnswerCorrect: true,
         volumeQuizAnswerIncorrect: 100, soundEnabledQuizAnswerIncorrect: true,
+        volumeWhereAircraftWin: 100,             soundEnabledWhereAircraftWin: true,
+        volumeWhereAircraftLose: 100,            soundEnabledWhereAircraftLose: true,
+        volumeWhereAircraftMissionDetected: 100, soundEnabledWhereAircraftMissionDetected: true,
         volumeBattleOfOrderWon: 100,       soundEnabledBattleOfOrderWon: true,
         volumeBattleOfOrderLost: 100,      soundEnabledBattleOfOrderLost: true,
         volumeBattleOfOrderSelection: 100, soundEnabledBattleOfOrderSelection: true,
@@ -152,6 +155,16 @@ export function playSound(name, { onAudio } = {}) {
       return Promise.resolve()
     }
 
+    // Where's That Aircraft — mission detected: bypasses the queue
+    if (name === 'where_aircraft_mission_detected') {
+      if (settings.soundEnabledWhereAircraftMissionDetected === false) return Promise.resolve()
+      const volume = masterVol(Math.min(1, Math.max(0, (settings.volumeWhereAircraftMissionDetected ?? 100) / 100)))
+      const audio  = new Audio('/sounds/where_aircraft_mission_detected.mp3')
+      audio.volume = volume
+      audio.play().catch(() => {})
+      return Promise.resolve()
+    }
+
     // Battle of Order sounds — all bypass the queue
     if (name === 'battle_of_order_won' || name === 'battle_of_order_lost' || name === 'battle_of_order_selection') {
       const enabledKey = name === 'battle_of_order_won'       ? 'soundEnabledBattleOfOrderWon'
@@ -219,6 +232,14 @@ export function playSound(name, { onAudio } = {}) {
         file       = 'quiz_answer_incorrect.mp3'
         volumeKey  = 'volumeQuizAnswerIncorrect'
         enabledKey = 'soundEnabledQuizAnswerIncorrect'
+      } else if (name === 'where_aircraft_win') {
+        file       = 'where_aircraft_win.mp3'
+        volumeKey  = 'volumeWhereAircraftWin'
+        enabledKey = 'soundEnabledWhereAircraftWin'
+      } else if (name === 'where_aircraft_lose') {
+        file       = 'where_aircraft_lose.mp3'
+        volumeKey  = 'volumeWhereAircraftLose'
+        enabledKey = 'soundEnabledWhereAircraftLose'
       } else {
         file = name
       }

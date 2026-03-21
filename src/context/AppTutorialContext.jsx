@@ -77,6 +77,14 @@ export const TUTORIAL_STEPS = {
     { emoji: '⭐', title: 'How to Level Up',
       body: 'Earn Aircoins by reading briefs and completing quizzes. Collect enough Aircoins and your level increases automatically — the Aircoins bar shows your progress to the next level.' },
   ],
+  wheres_aircraft: [
+    { emoji: '✈️', title: "Where's That Aircraft?",
+      body: 'This mission has two rounds. First, you\'ll be shown an aircraft image and asked to identify it from 5 options. Stay sharp — one wrong move and the mission is over!' },
+    { emoji: '🗺️', title: 'Round 2 — Find the Base',
+      body: 'If you identify the aircraft correctly, Round 2 begins! A UK map appears with RAF bases marked. Select the home base(s) for that aircraft to complete the mission.' },
+    { emoji: '🪙', title: 'Earn Aircoins',
+      body: 'Correct identification earns coins. A correct base selection earns more. Complete both rounds successfully for a full mission bonus. The more you read, the more missions become available!' },
+  ],
 }
 
 // Apply admin-configured overrides to the default steps.

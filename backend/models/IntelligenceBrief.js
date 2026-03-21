@@ -168,6 +168,10 @@ const intelligenceBriefSchema = new mongoose.Schema(
       endYear:            { type: Number },   // null = ongoing
     },
 
+    // Aircraft briefs only — references to Bases IntelligenceBrief documents
+    // Used by Where's That Aircraft game to link aircraft to their home bases
+    associatedBaseBriefIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+
     // 10 questions per difficulty — references to GameQuizQuestion
     quizQuestionsEasy: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'GameQuizQuestion' }],

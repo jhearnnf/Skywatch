@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import LockedCategoryModal from '../../components/LockedCategoryModal'
+import MissionDetectedModal from '../../components/MissionDetectedModal'
 import { requiredTier } from '../../utils/subscription'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { playSound } from '../../utils/sound'
@@ -141,16 +142,34 @@ function BooStatsPanel({ brief }) {
       stats.push({ label: 'Period', value: `${gd.startYear} – ${gd.endYear != null ? gd.endYear : 'Present'}` })
   }
 
-  if (stats.length === 0) return null
+  const homeBases = cat === 'Aircrafts' ? (brief.associatedBaseBriefIds ?? []) : []
+
+  if (stats.length === 0 && homeBases.length === 0) return null
 
   return (
     <div className="bg-slate-800 rounded-2xl px-4 py-3 mb-5">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">⚔️ Battle Data</span>
-      </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
-        {stats.map(s => <StatRow key={s.label} label={s.label} value={s.value} />)}
-      </div>
+      {stats.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">⚔️ Battle Data</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+            {stats.map(s => <StatRow key={s.label} label={s.label} value={s.value} />)}
+          </div>
+        </>
+      )}
+      {homeBases.length > 0 && (
+        <div className={stats.length > 0 ? 'mt-3 pt-3 border-t border-slate-700' : ''}>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">🗺️ Home Base{homeBases.length > 1 ? 's' : ''}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {homeBases.map(b => (
+              <span key={b._id ?? b} className="text-xs font-semibold bg-slate-700 text-slate-200 px-2 py-0.5 rounded-full">
+                {b.title ?? b}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -374,6 +393,7 @@ export default function BriefReader() {
   const [readRecord, setReadRecord] = useState(null)
   // 'unavailable' | 'locked-quiz' | 'available'
   const [booState, setBooState] = useState('unavailable')
+  const [missionData, setMissionData] = useState(null) // spawn-check result when spawn: true
   const [navDir, setNavDir]        = useState(1) // 1 = forward, -1 = backward
   const markingRef                 = useRef(false)
   const contentRef                 = useRef(null)
@@ -561,6 +581,27 @@ export default function BriefReader() {
               } : u)
             }
           })
+          .then(() => {
+            // Spawn-check for Where's That Aircraft (Aircrafts category only)
+            if (brief?.category !== 'Aircrafts') return
+            fetch(`${API}/api/games/wheres-aircraft/spawn-check`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ briefId }),
+            })
+              .then(r => r.json())
+              .then(d => {
+                if (d?.data?.spawn) {
+                  setMissionData({
+                    aircraftBriefId: d.data.aircraftBriefId,
+                    aircraftTitle:   d.data.aircraftTitle,
+                    mediaUrl:        d.data.mediaUrl,
+                  })
+                }
+              })
+              .catch(() => {})
+          })
           .catch(() => {})
       }
     } else {
@@ -623,6 +664,16 @@ export default function BriefReader() {
     <>
       <TutorialModal />
       <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} />
+
+      {/* Where's That Aircraft — mission spawn */}
+      {missionData && (
+        <MissionDetectedModal
+          aircraftBriefId={missionData.aircraftBriefId}
+          aircraftTitle={missionData.aircraftTitle}
+          mediaUrl={missionData.mediaUrl}
+          onDismiss={() => setMissionData(null)}
+        />
+      )}
 
       {/* Back */}
       <button

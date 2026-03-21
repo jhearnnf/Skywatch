@@ -35,13 +35,14 @@ function StatCard({ label, value, icon, onClick }) {
 }
 
 const TUTORIAL_LABELS = [
-  { key: 'home',        label: '🏠 Home',         emoji: '🏠' },
-  { key: 'learn',       label: '📚 Learn',        emoji: '📚' },
-  { key: 'briefReader', label: '📋 Brief Reader', emoji: '📋' },
-  { key: 'quiz',        label: '🎯 Quiz',         emoji: '🎯' },
-  { key: 'play',        label: '🎮 Play Hub',     emoji: '🎮' },
-  { key: 'profile',     label: '👤 Profile',      emoji: '👤' },
-  { key: 'rankings',    label: '🏆 Progression',  emoji: '🏆' },
+  { key: 'home',            label: '🏠 Home',                       emoji: '🏠' },
+  { key: 'learn',           label: '📚 Learn',                      emoji: '📚' },
+  { key: 'briefReader',     label: '📋 Brief Reader',               emoji: '📋' },
+  { key: 'quiz',            label: '🎯 Quiz',                       emoji: '🎯' },
+  { key: 'play',            label: '🎮 Play Hub',                   emoji: '🎮' },
+  { key: 'wheres_aircraft', label: "✈️ Where's That Aircraft",     emoji: '✈️' },
+  { key: 'profile',         label: '👤 Profile',                    emoji: '👤' },
+  { key: 'rankings',        label: '🏆 Progression',                emoji: '🏆' },
 ]
 
 export default function Profile() {

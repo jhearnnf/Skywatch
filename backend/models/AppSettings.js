@@ -57,6 +57,9 @@ const appSettingsSchema = new mongoose.Schema({
   volumeQuizCompleteLose:   { type: Number, default: 100, min: 0, max: 100 },
   volumeQuizAnswerCorrect:  { type: Number, default: 100, min: 0, max: 100 },
   volumeQuizAnswerIncorrect:{ type: Number, default: 100, min: 0, max: 100 },
+  volumeWhereAircraftWin:             { type: Number, default: 100, min: 0, max: 100 },
+  volumeWhereAircraftLose:            { type: Number, default: 100, min: 0, max: 100 },
+  volumeWhereAircraftMissionDetected: { type: Number, default: 100, min: 0, max: 100 },
   volumeStandDown:            { type: Number, default: 100, min: 0, max: 100 },
   volumeTargetLockedKeyword:  { type: Number, default: 100, min: 0, max: 100 },
 
@@ -74,6 +77,14 @@ const appSettingsSchema = new mongoose.Schema({
   soundEnabledQuizCompleteLose:    { type: Boolean, default: true },
   soundEnabledQuizAnswerCorrect:   { type: Boolean, default: true },
   soundEnabledQuizAnswerIncorrect: { type: Boolean, default: true },
+  soundEnabledWhereAircraftWin:             { type: Boolean, default: true },
+  soundEnabledWhereAircraftLose:            { type: Boolean, default: true },
+  soundEnabledWhereAircraftMissionDetected: { type: Boolean, default: true },
+
+  // Where's That Aircraft — coin awards
+  aircoinsWhereAircraftRound1: { type: Number, default: 5,  min: 0 },
+  aircoinsWhereAircraftRound2: { type: Number, default: 10, min: 0 },
+  aircoinsWhereAircraftBonus:  { type: Number, default: 5,  min: 0 },
   soundEnabledBattleOfOrderWon:       { type: Boolean, default: true },
   soundEnabledBattleOfOrderLost:      { type: Boolean, default: true },
   soundEnabledBattleOfOrderSelection: { type: Boolean, default: true },

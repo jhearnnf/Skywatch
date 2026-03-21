@@ -3,6 +3,7 @@ process.env.JWT_SECRET = 'test_secret';
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
+const GameSessionOrderOfBattleResult = require('../../models/GameSessionOrderOfBattleResult');
 const {
   createUser,
   createSettings,
@@ -295,6 +296,47 @@ describe('POST /api/games/battle-of-order/abandon', () => {
       .send({});
 
     expect(res.status).toBe(200);
+  });
+
+  it('stores abandoned=true, won=false, aircoinsEarned=0 in the DB', async () => {
+    const briefs = await createBooBriefs(3, 'Aircrafts');
+    const genRes = await request(app)
+      .post('/api/games/battle-of-order/generate')
+      .set('Cookie', cookie)
+      .send({ briefId: briefs[0]._id, orderType: 'speed' });
+    const { gameId } = genRes.body.data;
+
+    await request(app)
+      .post('/api/games/battle-of-order/abandon')
+      .set('Cookie', cookie)
+      .send({ gameId, timeTakenSeconds: 7 });
+
+    const record = await GameSessionOrderOfBattleResult.findOne({ gameId });
+    expect(record).toBeTruthy();
+    expect(record.abandoned).toBe(true);
+    expect(record.won).toBe(false);
+    expect(record.aircoinsEarned).toBe(0);
+    expect(record.timeTakenSeconds).toBe(7);
+  });
+
+  it('abandoned games are NOT counted in /api/users/stats gamesPlayed', async () => {
+    const briefs = await createBooBriefs(3, 'Aircrafts');
+    const genRes = await request(app)
+      .post('/api/games/battle-of-order/generate')
+      .set('Cookie', cookie)
+      .send({ briefId: briefs[0]._id, orderType: 'speed' });
+
+    await request(app)
+      .post('/api/games/battle-of-order/abandon')
+      .set('Cookie', cookie)
+      .send({ gameId: genRes.body.data.gameId, timeTakenSeconds: 5 });
+
+    const statsRes = await request(app)
+      .get('/api/users/stats')
+      .set('Cookie', cookie);
+
+    expect(statsRes.status).toBe(200);
+    expect(statsRes.body.data.gamesPlayed).toBe(0);
   });
 });
 

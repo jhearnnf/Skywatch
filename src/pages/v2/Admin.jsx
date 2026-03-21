@@ -346,6 +346,14 @@ const SOUND_GROUPS = [
       { key: 'volumeBattleOfOrderLost',      enabledKey: 'soundEnabledBattleOfOrderLost',      label: 'Game Lost',  sound: 'battle_of_order_lost'      },
     ],
   },
+  {
+    title: "Where's That Aircraft",
+    sounds: [
+      { key: 'volumeWhereAircraftMissionDetected', enabledKey: 'soundEnabledWhereAircraftMissionDetected', label: 'Mission Detected', sound: 'where_aircraft_mission_detected' },
+      { key: 'volumeWhereAircraftWin',             enabledKey: 'soundEnabledWhereAircraftWin',             label: 'Mission Complete', sound: 'where_aircraft_win'              },
+      { key: 'volumeWhereAircraftLose',            enabledKey: 'soundEnabledWhereAircraftLose',            label: 'Mission Failed',   sound: 'where_aircraft_lose'             },
+    ],
+  },
 ]
 
 const ALL_SOUND_KEYS = SOUND_GROUPS.flatMap(g => g.sounds.flatMap(s => [s.key, s.enabledKey]))
@@ -596,6 +604,7 @@ function SettingsTab({ API }) {
         'aircoinsPerWinEasy', 'aircoinsPerWinMedium', 'aircoinsPerBriefRead',
         'aircoinsFirstLogin', 'aircoinsStreakBonus', 'aircoins100Percent',
         'aircoinsOrderOfBattleEasy', 'aircoinsOrderOfBattleMedium',
+        'aircoinsWhereAircraftRound1', 'aircoinsWhereAircraftRound2', 'aircoinsWhereAircraftBonus',
       ])}>
         <NumInput label="Per correct answer — Easy quiz"   value={draft.aircoinsPerWinEasy}          onChange={v => set('aircoinsPerWinEasy', v)} />
         <NumInput label="Per correct answer — Medium quiz" value={draft.aircoinsPerWinMedium}        onChange={v => set('aircoinsPerWinMedium', v)} />
@@ -605,6 +614,9 @@ function SettingsTab({ API }) {
         <NumInput label="Streak login bonus"               value={draft.aircoinsStreakBonus}         onChange={v => set('aircoinsStreakBonus', v)} />
         <NumInput label="Battle of Order — Easy win"       value={draft.aircoinsOrderOfBattleEasy}   onChange={v => set('aircoinsOrderOfBattleEasy', v)} />
         <NumInput label="Battle of Order — Medium win"     value={draft.aircoinsOrderOfBattleMedium} onChange={v => set('aircoinsOrderOfBattleMedium', v)} />
+        <NumInput label="Where's That Aircraft — Round 1 correct" value={draft.aircoinsWhereAircraftRound1 ?? 5}  onChange={v => set('aircoinsWhereAircraftRound1', v)} />
+        <NumInput label="Where's That Aircraft — Round 2 correct" value={draft.aircoinsWhereAircraftRound2 ?? 10} onChange={v => set('aircoinsWhereAircraftRound2', v)} />
+        <NumInput label="Where's That Aircraft — Full mission bonus" value={draft.aircoinsWhereAircraftBonus ?? 5}  onChange={v => set('aircoinsWhereAircraftBonus', v)} />
       </Section>
 
       {/* ── Game ────────────────────────────────────────────── */}
@@ -1087,13 +1099,14 @@ const CR_DEFAULTS = {
 
 // Tutorial names in display order with friendly labels
 const TUTORIAL_META = [
-  { key: 'home',        label: 'Home Page' },
-  { key: 'learn',       label: 'Learn Page' },
-  { key: 'briefReader', label: 'Brief Reader' },
-  { key: 'quiz',        label: 'Quiz' },
-  { key: 'play',        label: 'Play Hub' },
-  { key: 'profile',     label: 'Profile Page' },
-  { key: 'rankings',    label: 'Progression Page' },
+  { key: 'home',           label: 'Home Page' },
+  { key: 'learn',          label: 'Learn Page' },
+  { key: 'briefReader',    label: 'Brief Reader' },
+  { key: 'quiz',           label: 'Quiz' },
+  { key: 'play',           label: 'Play Hub' },
+  { key: 'wheres_aircraft', label: "Where's That Aircraft" },
+  { key: 'profile',        label: 'Profile Page' },
+  { key: 'rankings',       label: 'Progression Page' },
 ]
 
 function ContentTab({ API }) {
@@ -1331,8 +1344,11 @@ const TIER_BTN = {
 
 function SubEmulator({ user, API, onTierChange }) {
   const [busy, setBusy] = useState(false)
+  const effectiveTier = (user.subscriptionTier === 'trial' && !user.isTrialActive)
+    ? 'free'
+    : (user.subscriptionTier ?? 'free')
   const setTier = async (tier) => {
-    if (tier === user.subscriptionTier || busy) return
+    if (tier === effectiveTier || busy) return
     setBusy(true)
     const res  = await fetch(`${API}/api/admin/self/subscription`, {
       method: 'PATCH', credentials: 'include',
@@ -1356,7 +1372,7 @@ function SubEmulator({ user, API, onTierChange }) {
             onClick={() => setTier(tier)}
             disabled={busy}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all
-              ${user.subscriptionTier === tier
+              ${effectiveTier === tier
                 ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900 scale-105 ' + TIER_BTN[tier]
                 : TIER_BTN[tier] + ' opacity-60 hover:opacity-100'
               }`}
@@ -1365,6 +1381,58 @@ function SubEmulator({ user, API, onTierChange }) {
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GENERATE BASES BUTTON
+// ─────────────────────────────────────────────────────────────────────────────
+
+function GenerateBasesButton({ title, body, basesBriefs, API, onResult }) {
+  const [status, setStatus] = useState(null) // null | 'loading' | 'done' | 'error'
+  const [msg, setMsg]       = useState('')
+
+  const generate = async () => {
+    if (!title) { setStatus('error'); setMsg('Brief needs a title first'); return }
+    setStatus('loading')
+    setMsg('')
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/generate-bases`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          body: typeof body === 'string' ? body : JSON.stringify(body),
+          basesBriefs: basesBriefs.map(b => ({ _id: b._id, title: b.title })),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.message || 'Failed')
+      const ids = data.data?.baseIds ?? []
+      onResult(ids)
+      setStatus('done')
+      setMsg(ids.length ? `${ids.length} base${ids.length > 1 ? 's' : ''} selected` : 'No matching bases found')
+    } catch (err) {
+      setStatus('error')
+      setMsg(err.message)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1 shrink-0">
+      <button
+        onClick={generate}
+        disabled={status === 'loading'}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-all"
+      >
+        {status === 'loading' ? '...' : '✦ Generate'}
+      </button>
+      {msg && (
+        <p className={`text-[10px] ${status === 'error' ? 'text-red-500' : status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
+          {msg}
+        </p>
+      )}
     </div>
   )
 }
@@ -1401,6 +1469,7 @@ const EMPTY_DRAFT = {
   keywords: [],
   sources: [],
   gameData: {},
+  associatedBaseBriefIds: [],
 }
 
 const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
@@ -1789,6 +1858,7 @@ function BriefsTab({ API }) {
   const [staleSourceWarning, setStaleSourceWarning] = useState(false)
   // Section open/close
   const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: false, questions: false, images: true, sources: false, gameData: false })
+  const [allBasesBriefs, setAllBasesBriefs] = useState([]) // for the Aircraft home-bases picker
 
   const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }))
 
@@ -1830,6 +1900,7 @@ function BriefsTab({ API }) {
       keywords:            br.keywords ?? [],
       sources:             br.sources ?? [],
       gameData:            br.gameData ?? {},
+      associatedBaseBriefIds: (br.associatedBaseBriefIds ?? []).map(b => String(b._id ?? b)),
     })
     setEasyQuestions(br.quizQuestionsEasy?.map(q => ({
       question: q.question,
@@ -1847,6 +1918,13 @@ function BriefsTab({ API }) {
     setQTab('easy')
     setSaveStatus(null)
     setStaleSourceWarning(false)
+    // Pre-load bases briefs for Aircraft home-base picker
+    if (br.category === 'Aircrafts' && allBasesBriefs.length === 0) {
+      fetch(`${API}/api/admin/briefs?category=Bases&limit=100`, { credentials: 'include' })
+        .then(r => r.json())
+        .then(d => { if (d.data?.briefs) setAllBasesBriefs(d.data.briefs) })
+        .catch(() => {})
+    }
     setView('editor')
   }
 
@@ -2398,26 +2476,51 @@ function BriefsTab({ API }) {
             {/* Category */}
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1">Category</label>
-              <select
-                value={draft.category}
-                onChange={e => setDraft(p => ({ ...p, category: e.target.value, subcategory: '' }))}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
-              >
-                {BRIEF_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {BRIEF_CATEGORIES.map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => {
+                      setDraft(p => ({ ...p, category: c, subcategory: '' }))
+                      if (c === 'Aircrafts' && allBasesBriefs.length === 0) {
+                        fetch(`${API}/api/admin/briefs?category=Bases&limit=100`, { credentials: 'include' })
+                          .then(r => r.json())
+                          .then(d => { if (d.data?.briefs) setAllBasesBriefs(d.data.briefs) })
+                          .catch(() => {})
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
+                      ${draft.category === c
+                        ? 'bg-brand-600 text-white border-brand-600'
+                        : 'bg-surface text-slate-600 border-slate-200 hover:border-brand-300'
+                      }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
             </div>
             {/* Subcategory */}
             {(BRIEF_SUBCATEGORIES[draft.category] ?? []).length > 0 && (
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">Subcategory</label>
-                <select
-                  value={draft.subcategory}
-                  onChange={e => setDraft(p => ({ ...p, subcategory: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
-                >
-                  <option value="">— none —</option>
-                  {(BRIEF_SUBCATEGORIES[draft.category] ?? []).map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {(BRIEF_SUBCATEGORIES[draft.category] ?? []).map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setDraft(p => ({ ...p, subcategory: p.subcategory === s ? '' : s }))}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
+                        ${draft.subcategory === s
+                          ? 'bg-brand-600 text-white border-brand-600'
+                          : 'bg-surface text-slate-600 border-slate-200 hover:border-brand-300'
+                        }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {/* Historic */}
@@ -2616,6 +2719,57 @@ function BriefsTab({ API }) {
               </>)}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Section D2: Home Bases (Aircraft only) ─────────────────── */}
+      {draft.category === 'Aircrafts' && (
+        <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+          <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-slate-800">🗺️ Home Bases</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Link base briefs for the Where's That Aircraft game</p>
+            </div>
+            {allBasesBriefs.length > 0 && (
+              <GenerateBasesButton
+                title={draft.title}
+                body={draft.body}
+                basesBriefs={allBasesBriefs}
+                API={API}
+                onResult={ids => setDraft(p => ({ ...p, associatedBaseBriefIds: ids }))}
+              />
+            )}
+          </div>
+          <div className="px-5 py-4">
+            {allBasesBriefs.length === 0 ? (
+              <p className="text-sm text-slate-400">No bases briefs available — create some first.</p>
+            ) : (
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {allBasesBriefs.map(b => {
+                  const checked = (draft.associatedBaseBriefIds ?? []).includes(String(b._id))
+                  return (
+                    <label key={b._id} className="flex items-center gap-2 cursor-pointer py-1">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={e => setDraft(p => {
+                          const ids = p.associatedBaseBriefIds ?? []
+                          return {
+                            ...p,
+                            associatedBaseBriefIds: e.target.checked
+                              ? [...ids, String(b._id)]
+                              : ids.filter(id => id !== String(b._id)),
+                          }
+                        })}
+                        className="rounded"
+                      />
+                      <span className="text-sm text-slate-700">{b.title}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

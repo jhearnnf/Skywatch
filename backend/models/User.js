@@ -60,6 +60,10 @@ const userSchema = new mongoose.Schema(
 
     // Game tutorial tracking
     gameTypesSeen: [gameTutorialSchema],
+
+    // Where's That Aircraft — spawn tracking
+    whereAircraftReadsSinceLastGame: { type: Number, default: 0 },
+    whereAircraftSpawnThreshold:     { type: Number, default: 3 }, // randomly set 2–5 on each spawn
   },
   { timestamps: true }
 );

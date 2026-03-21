@@ -5,13 +5,15 @@ import { useAuth } from '../../context/AuthContext'
 
 const TYPE_LABELS = {
   quiz:            'Intel Brief Quiz',
-  whos_at_aircraft:"Where's That Aircraft",
+  whos_at_aircraft:"Where's That Aircraft (legacy)",
+  wheres_aircraft: "Where's That Aircraft",
   order_of_battle: 'Battle of Order',
   flashcard:       'Flashcard Recall',
 }
 const TYPE_ICONS = {
   quiz:            '🎯',
   whos_at_aircraft:'✈️',
+  wheres_aircraft: '✈️',
   order_of_battle: '📋',
   flashcard:       '🃏',
 }
@@ -52,6 +54,12 @@ function StatusBadge({ session }) {
     if (session.abandoned) return <span className={`${cls} bg-slate-100 text-slate-500`}>Abandoned</span>
     if (session.won)       return <span className={`${cls} bg-emerald-100 text-emerald-700`}>Victory</span>
     return <span className={`${cls} bg-red-100 text-red-600`}>Defeat</span>
+  }
+  if (session.type === 'wheres_aircraft') {
+    if (session.status === 'abandoned') return <span className={`${cls} bg-slate-100 text-slate-500`}>Abandoned</span>
+    if (session.won)                   return <span className={`${cls} bg-amber-100 text-amber-700`}>Full Mission</span>
+    if (session.status === 'partial')  return <span className={`${cls} bg-emerald-100 text-emerald-700`}>Round 1 Only</span>
+    return <span className={`${cls} bg-red-100 text-red-600`}>Mission Failed</span>
   }
   if (session.isCorrect) return <span className={`${cls} bg-emerald-100 text-emerald-700`}>Correct</span>
   return <span className={`${cls} bg-red-100 text-red-600`}>Incorrect</span>

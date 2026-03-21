@@ -13,6 +13,7 @@ const GameFlashcardRecall                 = require('../models/GameFlashcardReca
 const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashcardRecallResult');
 const GameWhosAtAircraft                  = require('../models/GameWhosAtAircraft');
 const GameSessionWhosAtAircraftResult     = require('../models/GameSessionWhosAtAircraftResult');
+const GameSessionWhereAircraftResult      = require('../models/GameSessionWhereAircraftResult');
 const AircoinLog             = require('../models/AircoinLog');
 const { awardCoins }         = require('../utils/awardCoins');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
@@ -686,8 +687,8 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
   try {
     const briefId = req.params.id;
 
-    // Fetch title before deletion so we can un-mark it in the leads file
-    const brief = await IntelligenceBrief.findById(briefId).select('title');
+    // Fetch brief before deletion to get title + category
+    const brief = await IntelligenceBrief.findById(briefId).select('title category');
 
     // Collect question IDs before deleting so we can wipe their results
     const questionIds = await GameQuizQuestion.distinct('_id', { intelBriefId: briefId });
@@ -699,6 +700,12 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
       GameSessionQuizAttempt.deleteMany({ intelBriefId: briefId }),
       GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
       AircoinLog.deleteMany({ briefId }),
+      // Where's That Aircraft cascade
+      GameSessionWhereAircraftResult.deleteMany({ aircraftBriefId: briefId }),
+      // If this is a Bases brief, remove it from all aircraft's associatedBaseBriefIds
+      brief?.category === 'Bases'
+        ? IntelligenceBrief.updateMany({}, { $pull: { associatedBaseBriefIds: new mongoose.Types.ObjectId(briefId) } })
+        : Promise.resolve(),
     ]);
 
     await AdminAction.create({ userId: req.user._id, actionType: 'delete_brief', reason: req.body.reason });
@@ -743,6 +750,8 @@ router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) 
     ));
 
     // ── Step 3: delete everything ────────────────────────────────────────
+    const regenBrief = await IntelligenceBrief.findById(briefId).select('category').lean();
+
     const [
       briefReadResult,
       quizQResult,
@@ -755,6 +764,7 @@ router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) 
       flashGameResult,
       waaResultResult,
       waaGameResult,
+      whereAircraftResult,
     ] = await Promise.all([
       IntelligenceBriefRead.deleteMany({ intelBriefId: briefId }),
       GameQuizQuestion.deleteMany({ intelBriefId: briefId }),
@@ -767,8 +777,14 @@ router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) 
       GameFlashcardRecall.deleteMany({ 'cards.intelBriefId': briefId }),
       GameSessionWhosAtAircraftResult.deleteMany({ gameId: { $in: waaGameIds } }),
       GameWhosAtAircraft.deleteMany({ intelBriefId: briefId }),
-      IntelligenceBrief.findByIdAndUpdate(briefId, { $set: { quizQuestionsEasy: [], quizQuestionsMedium: [] } }),
+      GameSessionWhereAircraftResult.deleteMany({ aircraftBriefId: briefId }),
+      IntelligenceBrief.findByIdAndUpdate(briefId, { $set: { quizQuestionsEasy: [], quizQuestionsMedium: [], associatedBaseBriefIds: [] } }),
     ]);
+
+    // If this is a Bases brief, remove it from all aircraft's associatedBaseBriefIds
+    if (regenBrief?.category === 'Bases') {
+      await IntelligenceBrief.updateMany({}, { $pull: { associatedBaseBriefIds: new mongoose.Types.ObjectId(briefId) } });
+    }
 
     await AdminAction.create({
       userId:     req.user._id,
@@ -790,8 +806,9 @@ router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) 
         booGamesDeleted:        booGameResult.deletedCount,
         flashResultsDeleted:    flashResultResult.deletedCount,
         flashGamesDeleted:      flashGameResult.deletedCount,
-        waaResultsDeleted:      waaResultResult.deletedCount,
-        waaGamesDeleted:        waaGameResult.deletedCount,
+        waaResultsDeleted:          waaResultResult.deletedCount,
+        waaGamesDeleted:            waaGameResult.deletedCount,
+        whereAircraftResultsDeleted: whereAircraftResult.deletedCount,
       },
     });
   } catch (err) {
@@ -1229,6 +1246,39 @@ router.post('/ai/generate-keywords', async (req, res) => {
       .slice(0, needed);
 
     res.json({ status: 'success', data: { keywords } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/generate-bases
+// Given an aircraft brief title + body and a list of available base briefs,
+// asks the AI which bases are home bases for this aircraft.
+router.post('/ai/generate-bases', async (req, res) => {
+  try {
+    const { title, body, basesBriefs } = req.body;
+    if (!title) return res.status(400).json({ message: 'title required' });
+    if (!Array.isArray(basesBriefs) || basesBriefs.length === 0)
+      return res.status(400).json({ message: 'basesBriefs required' });
+
+    const baseList = basesBriefs.map(b => `- "${b.title}" (id: ${b._id})`).join('\n');
+
+    const data = await openRouterChat([{
+      role: 'system',
+      content: 'You are an expert on Royal Air Force aircraft and their operating bases. Given an aircraft brief and a list of RAF base briefs, identify which bases are home bases for that aircraft. Only select bases where the aircraft is currently stationed or has a known permanent/primary operating presence. Return ONLY valid JSON — no markdown, no code blocks.',
+    }, {
+      role: 'user',
+      content: `Aircraft: "${title}"\n\nBrief body:\n"""\n${body ?? ''}\n"""\n\nAvailable base briefs:\n${baseList}\n\nReturn the IDs of bases that are home bases for this aircraft. Only include bases where this aircraft type is stationed. If none match, return an empty array.\n\nReturn ONLY valid JSON: {"baseIds":["id1","id2"]}`,
+    }], 'perplexity/sonar', 512);
+
+    const raw = data.choices?.[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(cleanJson(raw));
+    const validIds = new Set(basesBriefs.map(b => String(b._id)));
+    const baseIds = (Array.isArray(parsed.baseIds) ? parsed.baseIds : [])
+      .map(String)
+      .filter(id => validIds.has(id));
+
+    res.json({ status: 'success', data: { baseIds } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -2,9 +2,10 @@ const router = require('express').Router();
 const { protect } = require('../middleware/auth');
 const User = require('../models/User');
 const { effectiveTier } = require('../utils/subscription');
-const GameSessionQuizResult           = require('../models/GameSessionQuizResult');
-const GameSessionQuizAttempt          = require('../models/GameSessionQuizAttempt');
-const GameSessionOrderOfBattleResult  = require('../models/GameSessionOrderOfBattleResult');
+const GameSessionQuizResult              = require('../models/GameSessionQuizResult');
+const GameSessionQuizAttempt             = require('../models/GameSessionQuizAttempt');
+const GameSessionOrderOfBattleResult     = require('../models/GameSessionOrderOfBattleResult');
+const GameSessionWhereAircraftResult     = require('../models/GameSessionWhereAircraftResult');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const ProblemReport = require('../models/ProblemReport');
@@ -37,9 +38,14 @@ router.get('/stats', protect, async (req, res) => {
     const booPlayed  = booResults.length;
     const booWins    = booResults.filter(r => r.won).length;
 
-    const gamesPlayed    = allAttempts.length + booPlayed;
-    const totalDataPoints = quizAnswered + booPlayed;
-    const winPercent = totalDataPoints > 0 ? Math.round((quizCorrect + booWins) / totalDataPoints * 100) : 0;
+    // Where's That Aircraft: completed (non-abandoned) games only
+    const wtaResults = await GameSessionWhereAircraftResult.find({ userId: req.user._id, status: 'completed' }).lean();
+    const wtaPlayed  = wtaResults.length;
+    const wtaWins    = wtaResults.filter(r => r.won).length;
+
+    const gamesPlayed     = allAttempts.length + booPlayed + wtaPlayed;
+    const totalDataPoints = quizAnswered + booPlayed + wtaPlayed;
+    const winPercent = totalDataPoints > 0 ? Math.round((quizCorrect + booWins + wtaWins) / totalDataPoints * 100) : 0;
 
     res.json({
       status: 'success',

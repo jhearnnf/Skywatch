@@ -274,6 +274,7 @@ export default function QuizFlow() {
 
   const questionStartRef = useRef(Date.now())
   const finishedRef      = useRef(false)
+  const attemptIdRef     = useRef(null)
 
   // Load brief info + start quiz session
   useEffect(() => {
@@ -304,6 +305,7 @@ export default function QuizFlow() {
         setBrief(briefData.data?.brief ?? null)
         setQuestions(startData.data?.questions ?? [])
         setAttemptId(startData.data?.attemptId ?? null)
+        attemptIdRef.current = startData.data?.attemptId ?? null
         setSession(startData.data?.gameSessionId ?? null)
         setDifficulty(startData.data?.difficulty ?? 'easy')
       } catch {
@@ -321,6 +323,21 @@ export default function QuizFlow() {
       return () => clearTimeout(t)
     }
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Abandon on unmount (covers back-navigation / navbar clicks) ─────────
+  useEffect(() => {
+    return () => {
+      if (!attemptIdRef.current || finishedRef.current) return
+      finishedRef.current = true
+      fetch(`${API}/api/games/quiz/attempt/${attemptIdRef.current}/finish`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify({ status: 'abandoned' }),
+      }).catch(() => {})
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check BOO availability once quiz is done
   useEffect(() => {

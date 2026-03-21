@@ -5,6 +5,7 @@ const GameSessionQuizResult  = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult    = require('../models/GameSessionOrderOfBattleResult');
 const GameSessionWhosAtAircraftResult   = require('../models/GameSessionWhosAtAircraftResult');
+const GameSessionWhereAircraftResult    = require('../models/GameSessionWhereAircraftResult');
 const GameSessionFlashcardRecallResult  = require('../models/GameSessionFlashcardRecallResult');
 const GameQuizQuestion = require('../models/GameQuizQuestion');
 const AppSettings = require('../models/AppSettings');
@@ -737,6 +738,257 @@ router.post('/flashcard-recall/result', protect, async (req, res) => {
   }
 });
 
+// ── Where's That Aircraft ─────────────────────────────────────────────────
+
+// POST /api/games/wheres-aircraft/spawn-check
+// Called after an Aircraft brief read is completed.
+// Increments the user's counter; spawns a game if prerequisites are met.
+router.post('/wheres-aircraft/spawn-check', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Prerequisites: ≥2 completed Bases reads AND ≥2 completed Aircrafts reads
+    const [basesCount, aircraftCount] = await Promise.all([
+      IntelligenceBriefRead.countDocuments({ userId, completed: true,
+        intelBriefId: { $in: await IntelligenceBrief.distinct('_id', { category: 'Bases' }) },
+      }),
+      IntelligenceBriefRead.countDocuments({ userId, completed: true,
+        intelBriefId: { $in: await IntelligenceBrief.distinct('_id', { category: 'Aircrafts' }) },
+      }),
+    ]);
+
+    if (basesCount < 2 || aircraftCount < 2) {
+      return res.json({ status: 'success', data: { spawn: false } });
+    }
+
+    // Fetch current spawn state
+    const user = await User.findById(userId).select('whereAircraftReadsSinceLastGame whereAircraftSpawnThreshold');
+    const newCount = (user.whereAircraftReadsSinceLastGame ?? 0) + 1;
+
+    if (newCount < (user.whereAircraftSpawnThreshold ?? 3)) {
+      await User.findByIdAndUpdate(userId, { whereAircraftReadsSinceLastGame: newCount });
+      return res.json({ status: 'success', data: { spawn: false } });
+    }
+
+    // Spawn! Find eligible aircraft briefs:
+    // - user has read the aircraft brief
+    // - brief has ≥1 associatedBaseBriefIds
+    // - user has also read at least one of those base briefs
+    const readAircraftIds = (await IntelligenceBriefRead.find({ userId, completed: true })
+      .distinct('intelBriefId'));
+
+    const eligibleAircraft = await IntelligenceBrief.find({
+      _id: { $in: readAircraftIds },
+      category: 'Aircrafts',
+      'associatedBaseBriefIds.0': { $exists: true },
+    }).select('_id title associatedBaseBriefIds media').populate('media', 'mediaUrl').lean();
+
+    const readBaseIds = new Set(
+      (await IntelligenceBriefRead.distinct('intelBriefId', { userId, completed: true,
+        intelBriefId: { $in: await IntelligenceBrief.distinct('_id', { category: 'Bases' }) },
+      })).map(id => id.toString())
+    );
+
+    const eligible = eligibleAircraft.filter(b =>
+      b.associatedBaseBriefIds.some(id => readBaseIds.has(id.toString()))
+    );
+
+    if (eligible.length === 0) {
+      // No eligible briefs yet — increment counter but don't spawn
+      await User.findByIdAndUpdate(userId, { whereAircraftReadsSinceLastGame: newCount });
+      return res.json({ status: 'success', data: { spawn: false } });
+    }
+
+    // Exclude aircraft the user has already won, unless they've cleared all eligible ones
+    const wonAircraftIds = new Set(
+      (await GameSessionWhereAircraftResult.distinct('aircraftBriefId', { userId, won: true }))
+        .map(id => id.toString())
+    );
+    const unplayed = eligible.filter(b => !wonAircraftIds.has(b._id.toString()));
+    const pool = unplayed.length > 0 ? unplayed : eligible; // fall back to all if all won
+
+    // Pick a random aircraft from the pool
+    const aircraft = pool[Math.floor(Math.random() * pool.length)];
+    const mediaUrl = aircraft.media?.[0]?.mediaUrl ?? null;
+
+    // Reset counter; set new random threshold 2–5
+    const newThreshold = 2 + Math.floor(Math.random() * 4);
+    await User.findByIdAndUpdate(userId, {
+      whereAircraftReadsSinceLastGame: 0,
+      whereAircraftSpawnThreshold: newThreshold,
+    });
+
+    // Fetch base brief names for the eligible bases
+    const eligibleBaseIds = aircraft.associatedBaseBriefIds.filter(id => readBaseIds.has(id.toString()));
+    const baseBriefs = await IntelligenceBrief.find(
+      { _id: { $in: eligibleBaseIds } }
+    ).select('_id title').lean();
+
+    res.json({ status: 'success', data: {
+      spawn: true,
+      aircraftBriefId: aircraft._id,
+      aircraftTitle:   aircraft.title,
+      mediaUrl,
+      baseBriefCount:  baseBriefs.length,
+    }});
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/wheres-aircraft/round1
+// Returns aircraft name options (1 correct + 4 random wrong) and records round 1 result.
+router.post('/wheres-aircraft/round1', protect, async (req, res) => {
+  try {
+    const { aircraftBriefId, gameSessionId } = req.body;
+    if (!aircraftBriefId || !gameSessionId) {
+      return res.status(400).json({ message: 'aircraftBriefId and gameSessionId required' });
+    }
+
+    const correct = await IntelligenceBrief.findById(aircraftBriefId).select('_id title media associatedBaseBriefIds').populate('media', 'mediaUrl').lean();
+    if (!correct) return res.status(404).json({ message: 'Aircraft brief not found' });
+
+    // Pick 4 other random aircraft brief titles (regardless of user read status)
+    const others = await IntelligenceBrief.aggregate([
+      { $match: { category: 'Aircrafts', _id: { $ne: correct._id } } },
+      { $sample: { size: 4 } },
+      { $project: { _id: 1, title: 1 } },
+    ]);
+
+    const options = [
+      { _id: correct._id, title: correct.title, isCorrect: true },
+      ...others.map(o => ({ _id: o._id, title: o.title, isCorrect: false })),
+    ].sort(() => Math.random() - 0.5);
+
+    const mediaUrl = correct.media?.[0]?.mediaUrl ?? null;
+
+    res.json({ status: 'success', data: {
+      gameSessionId,
+      mediaUrl,
+      aircraftBriefId: correct._id,
+      options,
+      baseCount: correct.associatedBaseBriefIds?.length ?? 0,
+    }});
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/wheres-aircraft/round2
+// Returns base options and records the full session result.
+router.post('/wheres-aircraft/round2', protect, async (req, res) => {
+  try {
+    const { aircraftBriefId, gameSessionId } = req.body;
+    if (!aircraftBriefId || !gameSessionId) {
+      return res.status(400).json({ message: 'aircraftBriefId and gameSessionId required' });
+    }
+
+    const aircraft = await IntelligenceBrief.findById(aircraftBriefId)
+      .select('associatedBaseBriefIds title').lean();
+    if (!aircraft) return res.status(404).json({ message: 'Aircraft brief not found' });
+
+    // Fetch all base briefs the user has read (for map highlighting)
+    const userId = req.user._id;
+    const readBaseIds = new Set(
+      (await IntelligenceBriefRead.distinct('intelBriefId', { userId, completed: true,
+        intelBriefId: { $in: await IntelligenceBrief.distinct('_id', { category: 'Bases' }) },
+      })).map(id => id.toString())
+    );
+
+    const correctBaseIds = aircraft.associatedBaseBriefIds ?? [];
+
+    // Fetch names for all base briefs for the map
+    const allBases = await IntelligenceBrief.find({ category: 'Bases' }).select('_id title').lean();
+
+    const basesWithReadStatus = allBases.map(b => ({
+      _id:     b._id,
+      title:   b.title,
+      isRead:  readBaseIds.has(b._id.toString()),
+      isCorrect: correctBaseIds.map(id => id.toString()).includes(b._id.toString()),
+    }));
+
+    const settings = await AppSettings.getSettings();
+
+    res.json({ status: 'success', data: {
+      gameSessionId,
+      aircraftTitle:    aircraft.title,
+      correctBaseIds,
+      correctBaseCount: correctBaseIds.length,
+      bases:            basesWithReadStatus,
+      round1Aircoins:   settings.aircoinsWhereAircraftRound1 ?? 5,
+    }});
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/wheres-aircraft/submit
+// Final submission — records full result and awards coins.
+router.post('/wheres-aircraft/submit', protect, async (req, res) => {
+  try {
+    const {
+      aircraftBriefId, gameSessionId,
+      round1Correct, round2Attempted, round2Correct,
+      selectedBaseIds, correctBaseIds,
+      timeTakenSeconds,
+      status, // 'completed' | 'abandoned'
+      round1AlreadyAwarded, // true if frontend already called awardAircoins for round 1
+    } = req.body;
+
+    if (!aircraftBriefId || !gameSessionId) {
+      return res.status(400).json({ message: 'aircraftBriefId and gameSessionId required' });
+    }
+
+    const settings = await AppSettings.getSettings();
+    const won = !!(round1Correct && round2Attempted && round2Correct);
+
+    let aircoinsEarned = 0;
+    if (status === 'abandoned') {
+      // no coins
+    } else if (status === 'round1_only') {
+      // User passed round 1 then abandoned — only award round 1 coins if not already given
+      if (round1Correct && !round1AlreadyAwarded) aircoinsEarned += (settings.aircoinsWhereAircraftRound1 ?? 5);
+    } else {
+      // 'completed' — full award logic
+      // Skip round 1 coins if frontend already awarded them (to avoid double-notification)
+      if (round1Correct && !round1AlreadyAwarded) aircoinsEarned += (settings.aircoinsWhereAircraftRound1 ?? 5);
+      if (round2Attempted && round2Correct) {
+        aircoinsEarned += (settings.aircoinsWhereAircraftRound2 ?? 10);
+        if (round1Correct) aircoinsEarned += (settings.aircoinsWhereAircraftBonus ?? 5); // full completion bonus
+      }
+    }
+
+    await GameSessionWhereAircraftResult.create({
+      userId: req.user._id,
+      aircraftBriefId,
+      gameSessionId,
+      status: status ?? 'completed',
+      round1Correct:   !!round1Correct,
+      round2Attempted: !!round2Attempted,
+      round2Correct:   !!round2Correct,
+      selectedBaseIds: selectedBaseIds ?? [],
+      correctBaseIds:  correctBaseIds  ?? [],
+      won,
+      aircoinsEarned,
+      timeTakenSeconds: timeTakenSeconds ?? 0,
+    });
+
+    let rankPromotion = null;
+    if (aircoinsEarned > 0) {
+      const coinResult = await awardCoins(
+        req.user._id, aircoinsEarned, 'wheres_aircraft',
+        `Where's That Aircraft — ${won ? 'full completion' : 'partial'}`,
+        aircraftBriefId
+      );
+      rankPromotion = coinResult.rankPromotion;
+    }
+
+    res.status(201).json({ status: 'success', data: { won, aircoinsEarned, rankPromotion } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/games/history — unified game history across all game types
 router.get('/history', protect, async (req, res) => {
   try {
@@ -744,7 +996,7 @@ router.get('/history', protect, async (req, res) => {
     const page   = Math.max(1, parseInt(req.query.page)  || 1);
     const limit  = Math.min(50, parseInt(req.query.limit) || 20);
 
-    const [quizAttempts, whos, oob, flash] = await Promise.all([
+    const [quizAttempts, whos, oob, flash, whereAircraft] = await Promise.all([
       GameSessionQuizAttempt.find({ userId, status: { $in: ['completed', 'abandoned'] } })
         .populate('intelBriefId', 'title')
         .sort({ timeStarted: -1 })
@@ -752,6 +1004,10 @@ router.get('/history', protect, async (req, res) => {
       GameSessionWhosAtAircraftResult.find({ userId }).sort({ createdAt: -1 }).lean(),
       GameSessionOrderOfBattleResult.find({ userId }).populate({ path: 'gameId', select: 'category difficulty orderType anchorBriefId', populate: { path: 'anchorBriefId', select: 'title' } }).sort({ createdAt: -1 }).lean(),
       GameSessionFlashcardRecallResult.find({ userId }).sort({ createdAt: -1 }).lean(),
+      GameSessionWhereAircraftResult.find({ userId })
+        .populate('aircraftBriefId', 'title')
+        .sort({ createdAt: -1 })
+        .lean(),
     ]);
 
     const sessions = [
@@ -782,6 +1038,22 @@ router.get('/history', protect, async (req, res) => {
         status:          r.isCorrect ? 'correct' : 'incorrect',
         isCorrect:       r.isCorrect,
         userAnswer:      r.userAnswer,
+        aircoinsEarned:  r.aircoinsEarned,
+        timeTakenSeconds: r.timeTakenSeconds,
+        canDrillDown:    false,
+      })),
+      ...whereAircraft.map(r => ({
+        _id:             r._id,
+        type:            'wheres_aircraft',
+        gameSessionId:   r.gameSessionId,
+        date:            r.createdAt,
+        status:          r.status === 'abandoned' ? 'abandoned' : r.won ? 'won' : r.round1Correct ? 'partial' : 'lost',
+        won:             r.won,
+        briefTitle:      r.aircraftBriefId?.title ?? 'Unknown Aircraft',
+        briefId:         r.aircraftBriefId?._id,
+        round1Correct:   r.round1Correct,
+        round2Attempted: r.round2Attempted,
+        round2Correct:   r.round2Correct,
         aircoinsEarned:  r.aircoinsEarned,
         timeTakenSeconds: r.timeTakenSeconds,
         canDrillDown:    false,
