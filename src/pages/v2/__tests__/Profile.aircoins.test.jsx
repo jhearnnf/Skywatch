@@ -75,7 +75,7 @@ function setupAuth(userOverrides = {}) {
 function makeFetch() {
   return vi.fn().mockImplementation((url) => {
     if (url.includes('/api/users/stats')) {
-      return Promise.resolve({ ok: true, json: async () => ({ data: { brifsRead: 5, gamesPlayed: 3, winPercent: 67 } }) })
+      return Promise.resolve({ ok: true, json: async () => ({ data: { brifsRead: 5, gamesPlayed: 3, abandonedGames: 1, winPercent: 67 } }) })
     }
     return Promise.resolve({ ok: true, json: async () => ({}) })
   })

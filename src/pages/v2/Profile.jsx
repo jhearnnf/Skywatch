@@ -19,14 +19,19 @@ function getLevelInfo(coins) {
   return { level: lvl.levelNumber, progress: Math.min(100, Math.round((earned / cap) * 100)), current: earned, next: cap }
 }
 
-function StatCard({ label, value, icon, onClick }) {
+function StatCard({ label, value, icon, onClick, badge }) {
   const Tag = onClick ? 'button' : 'div'
   return (
     <Tag
       onClick={onClick}
-      className={`flex flex-col items-center gap-1 bg-surface rounded-2xl p-3 border border-slate-200 card-shadow text-center
+      className={`relative flex flex-col items-center gap-1 bg-surface rounded-2xl p-3 border border-slate-200 card-shadow text-center
         ${onClick ? 'hover:border-brand-300 hover:bg-brand-50 transition-all cursor-pointer' : ''}`}
     >
+      {badge != null && badge > 0 && (
+        <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold text-slate-400 bg-slate-100 rounded-full px-1.5 py-0.5 leading-none pointer-events-none">
+          {badge} abandoned
+        </span>
+      )}
       <span className="text-xl">{icon}</span>
       <span className="text-lg font-extrabold text-slate-900">{value}</span>
       <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
@@ -50,7 +55,7 @@ export default function Profile() {
   const navigate = useNavigate()
   const { start, replay } = useAppTutorial()
 
-  const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, winPercent: 0 })
+  const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0 })
   const [levels,      setLevels]      = useState(MOCK_LEVELS)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
   const [diffBusy,    setDiffBusy]    = useState(false)
@@ -81,14 +86,15 @@ export default function Profile() {
   }, [API])
 
   useEffect(() => {
-    if (!user) { setStats({ brifsRead: 0, gamesPlayed: 0, winPercent: 0 }); return }
+    if (!user) { setStats({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0 }); return }
     fetch(`${API}/api/users/stats`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         if (data?.data) setStats({
-          brifsRead:   data.data.brifsRead   ?? 0,
-          gamesPlayed: data.data.gamesPlayed ?? 0,
-          winPercent:  data.data.winPercent  ?? 0,
+          brifsRead:      data.data.brifsRead      ?? 0,
+          gamesPlayed:    data.data.gamesPlayed    ?? 0,
+          abandonedGames: data.data.abandonedGames ?? 0,
+          winPercent:     data.data.winPercent     ?? 0,
         })
       })
       .catch(() => {})
@@ -199,7 +205,7 @@ export default function Profile() {
           {/* Stats grid */}
           <div className={`grid grid-cols-2 gap-3 ${!user ? 'opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
             <StatCard label="Briefs Read"  value={stats.brifsRead}           icon="📋" onClick={user ? () => navigate('/intel-brief-history') : undefined} />
-            <StatCard label="Games Played" value={stats.gamesPlayed}         icon="🎯" onClick={user ? () => navigate('/game-history') : undefined} />
+            <StatCard label="Games Played" value={stats.gamesPlayed} icon="🎯" badge={stats.abandonedGames} onClick={user ? () => navigate('/game-history') : undefined} />
             <StatCard label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />
             <StatCard label="Aircoins"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/aircoin-history') : undefined} />
           </div>

@@ -56,6 +56,44 @@ function KeywordSheet({ kw, onClose }) {
   )
 }
 
+// ── Media carousel ────────────────────────────────────────────────────────
+function MediaCarousel({ media, title, API }) {
+  const [idx, setIdx] = useState(0)
+  const images = media.filter(m => m?.mediaUrl)
+  if (!images.length) return null
+  const src = images[idx].mediaUrl.startsWith('/') ? `${API}${images[idx].mediaUrl}` : images[idx].mediaUrl
+  const multi = images.length > 1
+  return (
+    <div className="relative rounded-2xl overflow-hidden mb-5 aspect-video bg-slate-100 group">
+      <img src={src} alt={title} className="w-full h-full object-cover" />
+      {multi && (
+        <>
+          <button
+            onClick={() => setIdx(i => (i - 1 + images.length) % images.length)}
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
+            aria-label="Previous image"
+          >‹</button>
+          <button
+            onClick={() => setIdx(i => (i + 1) % images.length)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
+            aria-label="Next image"
+          >›</button>
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+            {images.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setIdx(i)}
+                className={`w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? 'bg-white' : 'bg-white/40'}`}
+                aria-label={`Image ${i + 1}`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Render one section with highlighted keywords ──────────────────────────
 function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
   if (!text) return null
@@ -702,15 +740,9 @@ export default function BriefReader() {
       {/* BOO stats */}
       <BooStatsPanel brief={brief} />
 
-      {/* Cover image */}
+      {/* Cover image(s) */}
       {brief.media?.[0]?.mediaUrl && (
-        <div className="rounded-2xl overflow-hidden mb-5 aspect-video bg-slate-100">
-          <img
-            src={brief.media[0].mediaUrl.startsWith('/') ? `${API}${brief.media[0].mediaUrl}` : brief.media[0].mediaUrl}
-            alt={brief.title}
-            className="w-full h-full object-cover"
-          />
-        </div>
+        <MediaCarousel media={brief.media} title={brief.title} API={API} />
       )}
 
       {/* Completion screen */}

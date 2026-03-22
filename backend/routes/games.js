@@ -992,9 +992,11 @@ router.post('/wheres-aircraft/submit', protect, async (req, res) => {
 // GET /api/games/history — unified game history across all game types
 router.get('/history', protect, async (req, res) => {
   try {
-    const userId = req.user._id;
-    const page   = Math.max(1, parseInt(req.query.page)  || 1);
-    const limit  = Math.min(50, parseInt(req.query.limit) || 20);
+    const userId       = req.user._id;
+    const page         = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit        = Math.min(50, parseInt(req.query.limit) || 20);
+    const typeFilter   = req.query.type   || 'all';
+    const resultFilter = req.query.result || 'all';
 
     const [quizAttempts, whos, oob, flash, whereAircraft] = await Promise.all([
       GameSessionQuizAttempt.find({ userId, status: { $in: ['completed', 'abandoned'] } })
@@ -1011,25 +1013,33 @@ router.get('/history', protect, async (req, res) => {
     ]);
 
     const sessions = [
-      ...quizAttempts.map(a => ({
-        _id:              a._id,
-        type:             'quiz',
-        gameSessionId:    a.gameSessionId,
-        date:             a.timeStarted,
-        status:           a.status,
-        briefTitle:       a.intelBriefId?.title ?? 'Unknown Brief',
-        briefId:          a.intelBriefId?._id,
-        difficulty:       a.difficulty,
-        correctAnswers:   a.correctAnswers,
-        totalQuestions:   a.totalQuestions,
-        percentageCorrect: a.percentageCorrect,
-        aircoinsEarned:   a.aircoinsEarned,
-        isFirstAttempt:   a.isFirstAttempt,
-        timeTakenSeconds: a.timeFinished && a.timeStarted
-          ? Math.round((new Date(a.timeFinished) - new Date(a.timeStarted)) / 1000)
-          : null,
-        canDrillDown: a.status === 'completed',
-      })),
+      ...quizAttempts.map(a => {
+        let resultCategory;
+        if (a.status === 'abandoned')        resultCategory = 'abandoned';
+        else if (a.percentageCorrect === 100) resultCategory = 'perfect';
+        else if (a.percentageCorrect >= 60)   resultCategory = 'passed';
+        else                                  resultCategory = 'failed';
+        return {
+          _id:              a._id,
+          type:             'quiz',
+          gameSessionId:    a.gameSessionId,
+          date:             a.timeStarted,
+          status:           a.status,
+          briefTitle:       a.intelBriefId?.title ?? 'Unknown Brief',
+          briefId:          a.intelBriefId?._id,
+          difficulty:       a.difficulty,
+          correctAnswers:   a.correctAnswers,
+          totalQuestions:   a.totalQuestions,
+          percentageCorrect: a.percentageCorrect,
+          aircoinsEarned:   a.aircoinsEarned,
+          isFirstAttempt:   a.isFirstAttempt,
+          timeTakenSeconds: a.timeFinished && a.timeStarted
+            ? Math.round((new Date(a.timeFinished) - new Date(a.timeStarted)) / 1000)
+            : null,
+          canDrillDown:    a.status === 'completed',
+          resultCategory,
+        };
+      }),
       ...whos.map(r => ({
         _id:             r._id,
         type:            'whos_at_aircraft',
@@ -1041,23 +1051,32 @@ router.get('/history', protect, async (req, res) => {
         aircoinsEarned:  r.aircoinsEarned,
         timeTakenSeconds: r.timeTakenSeconds,
         canDrillDown:    false,
+        resultCategory:  r.isCorrect ? 'passed' : 'failed',
       })),
-      ...whereAircraft.map(r => ({
-        _id:             r._id,
-        type:            'wheres_aircraft',
-        gameSessionId:   r.gameSessionId,
-        date:            r.createdAt,
-        status:          r.status === 'abandoned' ? 'abandoned' : r.won ? 'won' : r.round1Correct ? 'partial' : 'lost',
-        won:             r.won,
-        briefTitle:      r.aircraftBriefId?.title ?? 'Unknown Aircraft',
-        briefId:         r.aircraftBriefId?._id,
-        round1Correct:   r.round1Correct,
-        round2Attempted: r.round2Attempted,
-        round2Correct:   r.round2Correct,
-        aircoinsEarned:  r.aircoinsEarned,
-        timeTakenSeconds: r.timeTakenSeconds,
-        canDrillDown:    false,
-      })),
+      ...whereAircraft.map(r => {
+        let resultCategory;
+        if (r.status === 'abandoned')    resultCategory = 'abandoned';
+        else if (r.won)                  resultCategory = 'perfect';
+        else if (r.round1Correct)        resultCategory = 'passed';
+        else                             resultCategory = 'failed';
+        return {
+          _id:             r._id,
+          type:            'wheres_aircraft',
+          gameSessionId:   r.gameSessionId,
+          date:            r.createdAt,
+          status:          r.status === 'abandoned' ? 'abandoned' : r.won ? 'won' : r.round1Correct ? 'partial' : 'lost',
+          won:             r.won,
+          briefTitle:      r.aircraftBriefId?.title ?? 'Unknown Aircraft',
+          briefId:         r.aircraftBriefId?._id,
+          round1Correct:   r.round1Correct,
+          round2Attempted: r.round2Attempted,
+          round2Correct:   r.round2Correct,
+          aircoinsEarned:  r.aircoinsEarned,
+          timeTakenSeconds: r.timeTakenSeconds,
+          canDrillDown:    r.status !== 'abandoned',
+          resultCategory,
+        };
+      }),
       ...oob.map(r => ({
         _id:           r._id,
         type:          'order_of_battle',
@@ -1072,28 +1091,40 @@ router.get('/history', protect, async (req, res) => {
         aircoinsEarned:   r.aircoinsEarned,
         timeTakenSeconds: r.timeTakenSeconds ?? null,
         canDrillDown:     !r.abandoned,
+        resultCategory:   r.abandoned ? 'abandoned' : r.won ? 'passed' : 'failed',
       })),
       ...flash.map(r => {
         const recalled = r.cardResults?.filter(c => c.recalled).length ?? 0;
         const total    = r.cardResults?.length ?? 0;
+        const perfect  = recalled === total && total > 0;
         return {
           _id:             r._id,
           type:            'flashcard',
           gameSessionId:   r.gameSessionId,
           date:            r.createdAt,
-          status:          recalled === total && total > 0 ? 'perfect' : 'completed',
+          status:          perfect ? 'perfect' : 'completed',
           recalled,
           cardCount:       total,
           aircoinsEarned:  r.aircoinsEarned,
           canDrillDown:    false,
+          resultCategory:  perfect ? 'perfect' : 'passed',
         };
       }),
     ];
 
-    sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const VALID_TYPES   = ['quiz', 'order_of_battle', 'wheres_aircraft', 'flashcard', 'whos_at_aircraft'];
+    const VALID_RESULTS = ['perfect', 'passed', 'failed', 'abandoned'];
 
-    const total     = sessions.length;
-    const paginated = sessions.slice((page - 1) * limit, page * limit);
+    const filtered = sessions.filter(s => {
+      if (typeFilter   !== 'all' && VALID_TYPES.includes(typeFilter)   && s.type           !== typeFilter)   return false;
+      if (resultFilter !== 'all' && VALID_RESULTS.includes(resultFilter) && s.resultCategory !== resultFilter) return false;
+      return true;
+    });
+
+    filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const total     = filtered.length;
+    const paginated = filtered.slice((page - 1) * limit, page * limit);
     res.json({ status: 'success', data: { sessions: paginated, total, page, limit } });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1176,6 +1207,36 @@ router.get('/history/battle-of-order/:sessionId', protect, async (req, res) => {
       orderType: game.orderType,
       difficulty: game.difficulty,
       items,
+    }});
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/history/wheres-aircraft/:sessionId — round breakdown for a WTA session
+router.get('/history/wheres-aircraft/:sessionId', protect, async (req, res) => {
+  try {
+    const session = await GameSessionWhereAircraftResult.findOne({
+      _id:    req.params.sessionId,
+      userId: req.user._id,
+    })
+      .populate('aircraftBriefId',  'title')
+      .populate('selectedBaseIds',  'title')
+      .populate('correctBaseIds',   'title')
+      .lean();
+
+    if (!session) return res.status(404).json({ message: 'Session not found' });
+
+    res.json({ status: 'success', data: {
+      aircraftName:    session.aircraftBriefId?.title ?? 'Unknown Aircraft',
+      status:          session.status,
+      round1Correct:   session.round1Correct,
+      round2Attempted: session.round2Attempted,
+      round2Correct:   session.round2Correct,
+      selectedBases:   (session.selectedBaseIds ?? []).map(b => ({ _id: b._id, title: b.title })),
+      correctBases:    (session.correctBaseIds  ?? []).map(b => ({ _id: b._id, title: b.title })),
+      won:             session.won,
+      aircoinsEarned:  session.aircoinsEarned,
     }});
   } catch (err) {
     res.status(500).json({ message: err.message });

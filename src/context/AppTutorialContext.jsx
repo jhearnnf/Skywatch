@@ -72,7 +72,7 @@ export const TUTORIAL_STEPS = {
   rankings: [
     { emoji: '🎖️', title: 'Level Progression',
       body: 'The Agent Level tab shows your progress through Levels 1–10. Each level requires more Aircoins than the last. Reach Level 10 to trigger a Rank Promotion!' },
-    { emoji: '🪖', title: 'RAF Ranks',
+    { emoji: '🏅', title: 'RAF Ranks',
       body: 'The RAF Ranks tab shows all real RAF rank designations. Earn rank promotions by reaching Level 10 repeatedly — working your way up from Aircraftman to Marshal of the RAF.' },
     { emoji: '⭐', title: 'How to Level Up',
       body: 'Earn Aircoins by reading briefs and completing quizzes. Collect enough Aircoins and your level increases automatically — the Aircoins bar shows your progress to the next level.' },
@@ -82,7 +82,7 @@ export const TUTORIAL_STEPS = {
       body: 'This mission has two rounds. First, you\'ll be shown an aircraft image and asked to identify it from 5 options. Stay sharp — one wrong move and the mission is over!' },
     { emoji: '🗺️', title: 'Round 2 — Find the Base',
       body: 'If you identify the aircraft correctly, Round 2 begins! A UK map appears with RAF bases marked. Select the home base(s) for that aircraft to complete the mission.' },
-    { emoji: '🪙', title: 'Earn Aircoins',
+    { emoji: '⭐', title: 'Earn Aircoins',
       body: 'Correct identification earns coins. A correct base selection earns more. Complete both rounds successfully for a full mission bonus. The more you read, the more missions become available!' },
   ],
 }

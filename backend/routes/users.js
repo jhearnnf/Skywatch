@@ -26,7 +26,8 @@ router.get('/stats', protect, async (req, res) => {
       completed: true,
     });
 
-    const allAttempts = await GameSessionQuizAttempt.find({ userId: req.user._id, status: { $in: ['completed', 'abandoned'] } }).lean();
+    const completedQuizAttempts = await GameSessionQuizAttempt.countDocuments({ userId: req.user._id, status: 'completed' });
+    const abandonedQuizAttempts = await GameSessionQuizAttempt.countDocuments({ userId: req.user._id, status: 'abandoned' });
 
     // Quiz avg: count every individually answered question (includes abandoned partial attempts)
     const quizResults  = await GameSessionQuizResult.find({ userId: req.user._id }).lean();
@@ -34,16 +35,19 @@ router.get('/stats', protect, async (req, res) => {
     const quizCorrect  = quizResults.filter(r => r.isCorrect).length;
 
     // BOO avg: each non-abandoned game counts as 100 (win) or 0 (loss)
-    const booResults = await GameSessionOrderOfBattleResult.find({ userId: req.user._id, abandoned: false }).lean();
-    const booPlayed  = booResults.length;
-    const booWins    = booResults.filter(r => r.won).length;
+    const booResults   = await GameSessionOrderOfBattleResult.find({ userId: req.user._id, abandoned: false }).lean();
+    const booPlayed    = booResults.length;
+    const booWins      = booResults.filter(r => r.won).length;
+    const booAbandoned = await GameSessionOrderOfBattleResult.countDocuments({ userId: req.user._id, abandoned: true });
 
     // Where's That Aircraft: completed (non-abandoned) games only
-    const wtaResults = await GameSessionWhereAircraftResult.find({ userId: req.user._id, status: 'completed' }).lean();
-    const wtaPlayed  = wtaResults.length;
-    const wtaWins    = wtaResults.filter(r => r.won).length;
+    const wtaResults   = await GameSessionWhereAircraftResult.find({ userId: req.user._id, status: 'completed' }).lean();
+    const wtaPlayed    = wtaResults.length;
+    const wtaWins      = wtaResults.filter(r => r.won).length;
+    const wtaAbandoned = await GameSessionWhereAircraftResult.countDocuments({ userId: req.user._id, status: 'abandoned' });
 
-    const gamesPlayed     = allAttempts.length + booPlayed + wtaPlayed;
+    const gamesPlayed    = completedQuizAttempts + booPlayed + wtaPlayed;
+    const abandonedGames = abandonedQuizAttempts + booAbandoned + wtaAbandoned;
     const totalDataPoints = quizAnswered + booPlayed + wtaPlayed;
     const winPercent = totalDataPoints > 0 ? Math.round((quizCorrect + booWins + wtaWins) / totalDataPoints * 100) : 0;
 
@@ -56,6 +60,7 @@ router.get('/stats', protect, async (req, res) => {
         rank:             user.rank,
         brifsRead,
         gamesPlayed,
+        abandonedGames,
         winPercent,
         totalAircoins:    user.totalAircoins,
       },

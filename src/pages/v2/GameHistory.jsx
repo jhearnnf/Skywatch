@@ -128,6 +128,83 @@ function QuizDrillDown({ attemptId, API }) {
   )
 }
 
+function WtaDrillDown({ sessionId, API }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`${API}/api/games/history/wheres-aircraft/${sessionId}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(json => {
+        if (json.status === 'success') setData(json.data)
+        else throw new Error(json.message || 'Failed to load')
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [sessionId, API])
+
+  if (loading) return <div className="px-4 py-3 text-xs text-slate-400 animate-pulse">Loading mission data…</div>
+  if (error)   return <div className="px-4 py-3 text-xs text-red-500">{error}</div>
+  if (!data)   return null
+
+  const correctIds = new Set((data.correctBases ?? []).map(b => String(b._id)))
+
+  return (
+    <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 space-y-3">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mission Breakdown — {data.aircraftName}</p>
+
+      {/* Round 1 */}
+      <div className={`rounded-xl p-3 border text-xs ${data.round1Correct ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-slate-700">Round 1 — Identify Aircraft</span>
+          <span className={data.round1Correct ? 'text-emerald-700 font-bold' : 'text-red-600 font-bold'}>
+            {data.round1Correct ? '✓ Correct' : '✗ Incorrect'}
+          </span>
+        </div>
+      </div>
+
+      {/* Round 2 */}
+      {!data.round2Attempted ? (
+        <div className="rounded-xl p-3 border border-slate-200 bg-white text-xs text-slate-400 italic">
+          Round 2 not reached
+        </div>
+      ) : (
+        <div className="rounded-xl border border-slate-200 overflow-hidden text-xs">
+          <div className="flex items-center justify-between px-3 py-2 bg-white border-b border-slate-100">
+            <span className="font-bold text-slate-700">Round 2 — Locate Bases</span>
+            <span className={data.round2Correct ? 'text-emerald-700 font-bold' : 'text-red-600 font-bold'}>
+              {data.round2Correct ? '✓ Correct' : '✗ Incorrect'}
+            </span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {/* Correct bases */}
+            {(data.correctBases ?? []).map(base => {
+              const selected = (data.selectedBases ?? []).some(s => String(s._id) === String(base._id))
+              return (
+                <div key={String(base._id)} className={`flex items-center justify-between px-3 py-2 ${selected ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                  <span className="text-slate-700">{base.title}</span>
+                  <span className={selected ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold'}>
+                    {selected ? '✓ Selected' : '✗ Missed'}
+                  </span>
+                </div>
+              )
+            })}
+            {/* Wrongly selected bases */}
+            {(data.selectedBases ?? []).filter(s => !correctIds.has(String(s._id))).map(base => (
+              <div key={String(base._id)} className="flex items-center justify-between px-3 py-2 bg-red-50">
+                <span className="text-slate-700">{base.title}</span>
+                <span className="text-red-500 font-bold">✗ Wrong</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BooOrderDrillDown({ sessionId, API }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
@@ -269,8 +346,9 @@ function SessionRow({ session, API, index }) {
             transition={{ duration: 0.2 }}
             style={{ overflow: 'hidden' }}
           >
-            {session.type === 'quiz' && <QuizDrillDown attemptId={session._id} API={API} />}
+            {session.type === 'quiz'            && <QuizDrillDown     attemptId={session._id}  API={API} />}
             {session.type === 'order_of_battle' && <BooOrderDrillDown sessionId={session._id} API={API} />}
+            {session.type === 'wheres_aircraft' && <WtaDrillDown      sessionId={session._id} API={API} />}
           </motion.div>
         )}
       </AnimatePresence>
@@ -282,18 +360,23 @@ export default function GameHistory() {
   const { user, API } = useAuth()
   const navigate = useNavigate()
 
-  const [sessions, setSessions] = useState([])
-  const [total,    setTotal]    = useState(0)
-  const [page,     setPage]     = useState(1)
-  const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState(null)
+  const [sessions,      setSessions]      = useState([])
+  const [total,         setTotal]         = useState(0)
+  const [page,          setPage]          = useState(1)
+  const [loading,       setLoading]       = useState(true)
+  const [error,         setError]         = useState(null)
+  const [typeFilter,    setTypeFilter]    = useState('all')
+  const [resultFilter,  setResultFilter]  = useState('all')
 
   const LIMIT = 20
 
-  const fetchHistory = useCallback(async (p) => {
+  const fetchHistory = useCallback(async (p, type, result) => {
     setLoading(true); setError(null)
     try {
-      const res  = await fetch(`${API}/api/games/history?page=${p}&limit=${LIMIT}`, { credentials: 'include' })
+      const params = new URLSearchParams({ page: p, limit: LIMIT })
+      if (type   !== 'all') params.set('type',   type)
+      if (result !== 'all') params.set('result', result)
+      const res  = await fetch(`${API}/api/games/history?${params}`, { credentials: 'include' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || 'Failed to load history')
       setSessions(json.data.sessions)
@@ -307,8 +390,11 @@ export default function GameHistory() {
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
-    fetchHistory(page)
-  }, [user, page, fetchHistory, navigate])
+    fetchHistory(page, typeFilter, resultFilter)
+  }, [user, page, typeFilter, resultFilter, fetchHistory, navigate])
+
+  const changeTypeFilter = (val) => { setTypeFilter(val); setPage(1) }
+  const changeResultFilter = (val) => { setResultFilter(val); setPage(1) }
 
   const totalPages = Math.ceil(total / LIMIT)
 
@@ -316,12 +402,56 @@ export default function GameHistory() {
     <div className="max-w-lg mx-auto">
 
       {/* Header */}
-      <div className="mb-5">
+      <div className="mb-4">
         <button onClick={() => navigate('/profile')} className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1">
           ← Back
         </button>
         <h1 className="text-2xl font-extrabold text-slate-900">Game History</h1>
         <p className="text-sm text-slate-500 mt-0.5">{total} session{total !== 1 ? 's' : ''} on record.</p>
+      </div>
+
+      {/* Filters */}
+      <div className="space-y-2 mb-4">
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { val: 'all',             label: 'All Types' },
+            { val: 'quiz',            label: '🎯 Quiz' },
+            { val: 'order_of_battle', label: '📋 Battle of Order' },
+            { val: 'wheres_aircraft', label: "✈️ Where's That Aircraft" },
+            { val: 'flashcard',       label: '🃏 Flashcard' },
+          ].map(({ val, label }) => (
+            <button
+              key={val}
+              onClick={() => changeTypeFilter(val)}
+              className={`text-[11px] font-bold px-2.5 py-1 rounded-full transition-all
+                ${typeFilter === val
+                  ? 'bg-brand-600 text-white'
+                  : 'bg-surface border border-slate-200 text-slate-500 hover:border-brand-300'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { val: 'all',       label: 'All Results' },
+            { val: 'perfect',   label: '⭐ Perfect' },
+            { val: 'passed',    label: '✓ Passed' },
+            { val: 'failed',    label: '✗ Failed' },
+            { val: 'abandoned', label: '— Abandoned' },
+          ].map(({ val, label }) => (
+            <button
+              key={val}
+              onClick={() => changeResultFilter(val)}
+              className={`text-[11px] font-bold px-2.5 py-1 rounded-full transition-all
+                ${resultFilter === val
+                  ? 'bg-brand-600 text-white'
+                  : 'bg-surface border border-slate-200 text-slate-500 hover:border-brand-300'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && (

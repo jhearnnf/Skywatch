@@ -140,12 +140,18 @@ describe('Play page — game cards', () => {
   it('unavailable game cards show "Coming soon" badge', () => {
     renderAsGuest()
     expect(screen.getByTestId('card-flashcard').textContent).toMatch(/coming soon/i)
-    expect(screen.getByTestId('card-whos-that-aircraft').textContent).toMatch(/coming soon/i)
   })
 
   it('Battle of Order card has no "Coming soon" badge (it is now available)', () => {
     renderAsGuest()
     expect(screen.getByTestId('card-battle-order').textContent).not.toMatch(/coming soon/i)
+  })
+
+  it('available game mode cards do not show "Play now" badge', () => {
+    renderAsGuest()
+    expect(screen.getByTestId('card-quiz').textContent).not.toMatch(/play now/i)
+    expect(screen.getByTestId('card-whos-that-aircraft').textContent).not.toMatch(/play now/i)
+    expect(screen.getByTestId('card-battle-order').textContent).not.toMatch(/play now/i)
   })
 })
 
@@ -165,10 +171,14 @@ describe('Play page — launcher sections', () => {
     expect(screen.getByRole('button', { name: /start drill/i })).toBeDisabled()
   })
 
-  it("Where's that Aircraft? section has a disabled 'Identify Aircraft' button", () => {
+  it("Where's that Aircraft? section prompts user to learn about aircrafts", () => {
     renderAsGuest()
-    const btn = screen.getByText('Identify Aircraft', { selector: 'button' })
-    expect(btn).toBeDisabled()
+    expect(screen.getByText(/learn about aircrafts for these random missions to appear/i)).toBeDefined()
+  })
+
+  it("Where's that Aircraft? section shows bases hint", () => {
+    renderAsGuest()
+    expect(screen.getByText(/bases knowledge is also required/i)).toBeDefined()
   })
 
   it('Battle of Order section shows sign-in prompt for guests', () => {
@@ -188,9 +198,9 @@ describe('Play page — launcher sections', () => {
     await waitFor(() => screen.getByText(/Read briefs in eligible categories/i))
   })
 
-  it('Intel Quiz section "Browse briefs" link points to /play/quiz', () => {
+  it('Intel Quiz section "Browse intel quizzes" link points to /play/quiz', () => {
     renderAsGuest()
-    const links = screen.getAllByRole('link', { name: /browse briefs/i })
+    const links = screen.getAllByRole('link', { name: /browse intel quizzes/i })
     const quizBrowse = links.find(l => l.getAttribute('href') === '/play/quiz')
     expect(quizBrowse).toBeDefined()
   })
@@ -255,6 +265,20 @@ describe('Play page — Intel Quiz states', () => {
     renderAsUser({ quizBriefs })
     await waitFor(() => screen.getByText('Typhoon FGR4'))
     expect(screen.queryByText('✓ Passed')).toBeNull()
+  })
+
+  it('shows "Play now" badge on an active (unlocked) quiz brief', async () => {
+    const quizBriefs = [{ _id: 'b1', title: 'Typhoon FGR4', category: 'Bases', quizState: 'active' }]
+    renderAsUser({ quizBriefs })
+    await waitFor(() => screen.getByText('Typhoon FGR4'))
+    expect(screen.getByText('Play now')).toBeDefined()
+  })
+
+  it('does not show "Play now" badge on a passed quiz brief', async () => {
+    const quizBriefs = [{ _id: 'b1', title: 'Typhoon FGR4', category: 'Aircrafts', quizState: 'passed' }]
+    renderAsUser({ quizBriefs })
+    await waitFor(() => screen.getByText('Typhoon FGR4'))
+    expect(screen.queryByText('Play now')).toBeNull()
   })
 
   it('shows "✓ Passed" only on the passed brief when list is mixed', async () => {
@@ -337,6 +361,20 @@ describe('Play page — Battle of Order states', () => {
     await waitFor(() => screen.getByText('Ready Brief'))
     const booLinks = screen.getAllByRole('link').filter(l => l.getAttribute('href') === '/battle-of-order/b1')
     expect(booLinks.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('shows "Play now" badge on an active (unlocked) BOO brief', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Ready Brief', category: 'Aircrafts', booState: 'active' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Ready Brief'))
+    expect(screen.getByText('Play now')).toBeDefined()
+  })
+
+  it('does not show "Play now" badge on a completed BOO brief', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Played Brief', category: 'Aircrafts', booState: 'completed' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Played Brief'))
+    expect(screen.queryByText('Play now')).toBeNull()
   })
 
   it('shows "✓ Played" badge on a completed BOO brief', async () => {

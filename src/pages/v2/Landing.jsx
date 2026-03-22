@@ -17,7 +17,7 @@ const PREVIEW_CATEGORIES = [
   { emoji: '✈️', label: 'Aircrafts'   },
   { emoji: '🏔️', label: 'Bases'       },
   { emoji: '🎯', label: 'Training'    },
-  { emoji: '🪖', label: 'Roles'       },
+  { emoji: '🛡️', label: 'Roles'       },
   { emoji: '🚀', label: 'Missions'    },
   { emoji: '🎖️', label: 'Ranks'       },
   { emoji: '⚡', label: 'Squadrons'   },

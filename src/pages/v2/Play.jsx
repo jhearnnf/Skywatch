@@ -26,7 +26,7 @@ const GAME_MODES = [
     key: 'whos-that-aircraft',
     emoji: '✈️',
     title: "Where's that Aircraft?",
-    desc: 'Read aircraft and bases briefs to unlock identification missions — then locate their home base on the map.',
+    desc: 'Random identification missions that appear as you learn. Spot the aircraft, then locate its home base on the map.',
     available: true,
     badge: null,
   },
@@ -268,7 +268,7 @@ export default function Play() {
                           </div>
                           {passed
                             ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Passed</span>
-                            : <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                            : <span className="text-[10px] font-bold bg-brand-100 text-brand-600 px-2 py-0.5 rounded-full shrink-0">Play now</span>
                           }
                         </Link>
                       </motion.div>
@@ -323,27 +323,20 @@ export default function Play() {
               </div>
             </div>
             <div className="p-5">
-              <p className="text-sm text-slate-500 mb-4">
-                Read aircraft and bases briefs to unlock identification missions. When you're ready, a mission will appear automatically after completing an aircraft brief.
+              <Link to="/learn/Aircrafts" className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group mb-3">
+                <span className="text-xl shrink-0">✈️</span>
+                <p className="text-sm font-semibold text-slate-700 leading-snug">
+                  Learn about aircrafts for these random missions to appear
+                </p>
+                <span className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto shrink-0">→</span>
+              </Link>
+              <p className="text-xs text-slate-400 px-1">
+                Bases knowledge is also required — missions won't appear without it.
               </p>
-              <div className="space-y-2 mb-4">
-                <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
-                  <span className="text-base shrink-0">📖</span>
-                  <span className="text-sm text-slate-600"><span className="font-semibold">Step 1</span> — Read ≥2 aircraft briefs and ≥2 bases briefs</span>
-                </div>
-                <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
-                  <span className="text-base shrink-0">⚡</span>
-                  <span className="text-sm text-slate-600"><span className="font-semibold">Step 2</span> — A mission spawns automatically as you keep reading</span>
-                </div>
-                <div className="flex items-center gap-3 bg-brand-50 rounded-xl px-4 py-3 border border-brand-200">
-                  <span className="text-base shrink-0">🗺️</span>
-                  <span className="text-sm text-slate-600"><span className="font-semibold">Round 2</span> — Identify the aircraft, then locate its home base on a UK map</span>
-                </div>
-              </div>
               {!user && (
                 <Link
                   to="/login"
-                  className="inline-flex w-full justify-center px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+                  className="inline-flex w-full justify-center px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors mt-4"
                 >
                   Sign In to Play
                 </Link>
@@ -483,7 +476,7 @@ export default function Play() {
                           </div>
                           {played
                             ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Played</span>
-                            : <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                            : <span className="text-[10px] font-bold bg-brand-100 text-brand-600 px-2 py-0.5 rounded-full shrink-0">Play now</span>
                           }
                         </Link>
                       </motion.div>

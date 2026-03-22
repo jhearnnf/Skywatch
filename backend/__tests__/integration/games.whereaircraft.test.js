@@ -478,3 +478,126 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ── GET /api/games/history/wheres-aircraft/:sessionId ─────────────────────
+describe('GET /api/games/history/wheres-aircraft/:sessionId', () => {
+  it('returns round breakdown for a completed session', async () => {
+    const session = await GameSessionWhereAircraftResult.create({
+      userId:          user._id,
+      aircraftBriefId: aircraftBrief._id,
+      gameSessionId:   'drill-down-test',
+      status:          'completed',
+      round1Correct:   true,
+      round2Attempted: true,
+      round2Correct:   true,
+      selectedBaseIds: [baseBrief1._id],
+      correctBaseIds:  [baseBrief1._id],
+      won:             true,
+      aircoinsEarned:  20,
+    });
+
+    const res = await request(app)
+      .get(`/api/games/history/wheres-aircraft/${session._id}`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const { data } = res.body;
+    expect(data.aircraftName).toBe('Eurofighter Typhoon');
+    expect(data.round1Correct).toBe(true);
+    expect(data.round2Attempted).toBe(true);
+    expect(data.round2Correct).toBe(true);
+    expect(data.won).toBe(true);
+    expect(data.correctBases).toHaveLength(1);
+    expect(data.correctBases[0].title).toBe('RAF Coningsby');
+    expect(data.selectedBases).toHaveLength(1);
+    expect(data.selectedBases[0].title).toBe('RAF Coningsby');
+  });
+
+  it('returns round1_only session with empty round 2 base lists', async () => {
+    const session = await GameSessionWhereAircraftResult.create({
+      userId:          user._id,
+      aircraftBriefId: aircraftBrief._id,
+      gameSessionId:   'drill-down-r1only',
+      status:          'round1_only',
+      round1Correct:   true,
+      round2Attempted: false,
+      round2Correct:   false,
+      selectedBaseIds: [],
+      correctBaseIds:  [baseBrief1._id],
+      won:             false,
+      aircoinsEarned:  5,
+    });
+
+    const res = await request(app)
+      .get(`/api/games/history/wheres-aircraft/${session._id}`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const { data } = res.body;
+    expect(data.round1Correct).toBe(true);
+    expect(data.round2Attempted).toBe(false);
+    expect(data.selectedBases).toHaveLength(0);
+    expect(data.correctBases).toHaveLength(1);
+  });
+
+  it('shows wrong bases in selectedBases when user picked incorrectly', async () => {
+    const session = await GameSessionWhereAircraftResult.create({
+      userId:          user._id,
+      aircraftBriefId: aircraftBrief._id,
+      gameSessionId:   'drill-down-wrong',
+      status:          'completed',
+      round1Correct:   true,
+      round2Attempted: true,
+      round2Correct:   false,
+      selectedBaseIds: [baseBrief2._id],   // wrong base selected
+      correctBaseIds:  [baseBrief1._id],   // correct base was baseBrief1
+      won:             false,
+      aircoinsEarned:  5,
+    });
+
+    const res = await request(app)
+      .get(`/api/games/history/wheres-aircraft/${session._id}`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const { data } = res.body;
+    expect(data.correctBases[0].title).toBe('RAF Coningsby');
+    expect(data.selectedBases[0].title).toBe('RAF Lossiemouth');
+  });
+
+  it('returns 404 when session belongs to a different user', async () => {
+    const otherUser   = await createUser({ email: 'other@test.com' });
+    const otherCookie = authCookie(otherUser._id);
+
+    const session = await GameSessionWhereAircraftResult.create({
+      userId:          user._id,
+      aircraftBriefId: aircraftBrief._id,
+      gameSessionId:   'other-user-session',
+      status:          'completed',
+      won:             true,
+      aircoinsEarned:  20,
+    });
+
+    const res = await request(app)
+      .get(`/api/games/history/wheres-aircraft/${session._id}`)
+      .set('Cookie', otherCookie);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 401 when not authenticated', async () => {
+    const session = await GameSessionWhereAircraftResult.create({
+      userId:          user._id,
+      aircraftBriefId: aircraftBrief._id,
+      gameSessionId:   'unauth-session',
+      status:          'completed',
+      won:             true,
+      aircoinsEarned:  20,
+    });
+
+    const res = await request(app)
+      .get(`/api/games/history/wheres-aircraft/${session._id}`);
+
+    expect(res.status).toBe(401);
+  });
+});

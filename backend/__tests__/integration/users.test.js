@@ -3,8 +3,13 @@ process.env.JWT_SECRET = 'test_secret';
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
-const { createUser, createBrief, createSettings, authCookie } = require('../helpers/factories');
+const { createUser, createBrief, createSettings, authCookie, createPassedQuizAttempt, createWonBooResult, createBooBriefs } = require('../helpers/factories');
 const AircoinLog = require('../../models/AircoinLog');
+const GameSessionQuizAttempt             = require('../../models/GameSessionQuizAttempt');
+const GameSessionOrderOfBattleResult     = require('../../models/GameSessionOrderOfBattleResult');
+const GameSessionWhereAircraftResult     = require('../../models/GameSessionWhereAircraftResult');
+const GameOrderOfBattle                  = require('../../models/GameOrderOfBattle');
+const mongoose                           = require('mongoose');
 
 beforeAll(async () => {
   await db.connect();
@@ -29,6 +34,7 @@ describe('GET /api/users/stats', () => {
     expect(data.agentNumber).toBeDefined();
     expect(data.brifsRead).toBe(0);
     expect(data.gamesPlayed).toBe(0);
+    expect(data.abandonedGames).toBe(0);
     expect(data.winPercent).toBe(0);
     expect(data.totalAircoins).toBe(0);
   });
@@ -36,6 +42,57 @@ describe('GET /api/users/stats', () => {
   it('returns 401 if not authenticated', async () => {
     const res = await request(app).get('/api/users/stats');
     expect(res.status).toBe(401);
+  });
+
+  it('gamesPlayed excludes abandoned games and abandonedGames counts them', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+    const brief  = await createBrief();
+
+    // 2 completed quiz attempts
+    await createPassedQuizAttempt(user._id, brief._id);
+    await createPassedQuizAttempt(user._id, brief._id);
+
+    // 1 abandoned quiz attempt
+    await GameSessionQuizAttempt.create({
+      userId:        user._id,
+      intelBriefId:  brief._id,
+      gameSessionId: `abandoned-quiz-${Date.now()}`,
+      difficulty:    'easy',
+      status:        'abandoned',
+    });
+
+    // 1 abandoned BOO result
+    const booGame = await GameOrderOfBattle.create({
+      anchorBriefId: brief._id,
+      category:      'Aircrafts',
+      difficulty:    'easy',
+      orderType:     'speed',
+      choices:       [],
+    });
+    await GameSessionOrderOfBattleResult.create({
+      userId:    user._id,
+      gameId:    booGame._id,
+      abandoned: true,
+      userChoices: [],
+    });
+
+    // 1 abandoned WTA result
+    await GameSessionWhereAircraftResult.create({
+      userId:          user._id,
+      aircraftBriefId: brief._id,
+      gameSessionId:   `abandoned-wta-${Date.now()}`,
+      status:          'abandoned',
+    });
+
+    const res = await request(app)
+      .get('/api/users/stats')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const { data } = res.body;
+    expect(data.gamesPlayed).toBe(2);    // only completed quiz attempts
+    expect(data.abandonedGames).toBe(3); // 1 quiz + 1 BOO + 1 WTA
   });
 });
 

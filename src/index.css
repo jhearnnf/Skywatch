@@ -9,7 +9,7 @@
 }
 
 :root {
-  font-family: system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
   line-height: 1.5;
   font-weight: 400;
   color: #0f172a;

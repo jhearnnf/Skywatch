@@ -86,7 +86,7 @@ export const CATEGORY_ICONS = {
   Ranks:       '🎖️',
   Squadrons:   '⚡',
   Training:    '🎯',
-  Roles:       '🪖',
+  Roles:       '🛡️',
   Threats:     '⚠️',
   Allies:      '🤝',
   Missions:    '🚀',

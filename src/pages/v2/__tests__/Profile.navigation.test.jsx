@@ -76,7 +76,7 @@ function makeFetch() {
     if (url.includes('/api/users/stats')) {
       return Promise.resolve({
         ok: true,
-        json: async () => ({ data: { brifsRead: 8, gamesPlayed: 4, winPercent: 75 } }),
+        json: async () => ({ data: { brifsRead: 8, gamesPlayed: 4, abandonedGames: 2, winPercent: 75 } }),
       })
     }
     return Promise.resolve({ ok: true, json: async () => ({}) })
@@ -110,11 +110,16 @@ describe('Profile — stat card navigation', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/game-history')
   })
 
-  it('clicking "Games Played" navigates to /game-history', async () => {
+  it('clicking "Games Played" card navigates to /game-history', async () => {
     render(<Profile />)
     await waitFor(() => screen.getByText('Games Played'))
     fireEvent.click(screen.getByText('Games Played').closest('button'))
     expect(mockNavigate).toHaveBeenCalledWith('/game-history')
+  })
+
+  it('shows abandoned badge when abandonedGames > 0', async () => {
+    render(<Profile />)
+    await waitFor(() => screen.getByText(/2 abandoned/))
   })
 
   it('clicking "Aircoins" navigates to /aircoin-history', async () => {

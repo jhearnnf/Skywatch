@@ -430,6 +430,280 @@ function SoundRowV2({ label, sound, value, onChange, enabled, onToggle }) {
   )
 }
 
+// ── Client-side economy calculation (pure functions) ──────────────────────
+function calcEconomyScenario(sim, rates, difficulty) {
+  const isNormal = difficulty === 'normal'
+  const wtaRate  = (rates.aircoinsWhereAircraftRound1 ?? 5)
+                 + (rates.aircoinsWhereAircraftRound2 ?? 10)
+                 + (rates.aircoinsWhereAircraftBonus  ?? 5)
+  const reads = (sim.totalBriefs     ?? 0) * (rates.aircoinsPerBriefRead ?? 5)
+  const quiz  = isNormal
+    ? (sim.totalEasyQ   ?? 0) * (rates.aircoinsPerWinEasy    ?? 10) + (sim.briefsWithEasyQ   ?? 0) * (rates.aircoins100Percent ?? 15)
+    : (sim.totalMediumQ ?? 0) * (rates.aircoinsPerWinMedium  ?? 20) + (sim.briefsWithMediumQ ?? 0) * (rates.aircoins100Percent ?? 15)
+  const boo   = (sim.booEligibleBriefs ?? 0) * (isNormal ? (rates.aircoinsOrderOfBattleEasy ?? 8) : (rates.aircoinsOrderOfBattleMedium ?? 18))
+  const wta   = (sim.wtaBriefs ?? 0) * wtaRate
+  return { reads, quiz, boo, wta, total: reads + quiz + boo + wta }
+}
+
+function calcEconomyProgression(totalCoins, cycleThreshold, totalRanks, ranks, levels) {
+  const fullCycles      = totalRanks > 0 ? Math.floor(totalCoins / cycleThreshold) : 0
+  const completedCycles = Math.min(fullCycles, totalRanks)
+  const atMaxRank       = totalRanks > 0 && completedCycles >= totalRanks
+  const cycleCoins      = atMaxRank ? totalCoins - totalRanks * cycleThreshold : totalCoins % cycleThreshold
+  let finalLevel = 1, cumulative = 0
+  for (const lv of (levels ?? [])) {
+    if (lv.aircoinsToNextLevel === null) { finalLevel = lv.levelNumber; break }
+    cumulative += lv.aircoinsToNextLevel
+    if (cycleCoins < cumulative) { finalLevel = lv.levelNumber; break }
+    finalLevel = lv.levelNumber + 1
+  }
+  const finalRank     = completedCycles > 0 ? (ranks ?? [])[completedCycles - 1] : null
+  const coinsToMaxOut = totalRanks * cycleThreshold
+  const shortfall     = Math.max(0, coinsToMaxOut - totalCoins)
+  return { completedCycles, atMaxRank, cycleCoins, finalLevel, finalRank, coinsToMaxOut, shortfall }
+}
+
+function CeilingSimInput({ label, sub, field, sim, onSetField, max }) {
+  const val    = sim[field] ?? 0
+  const capped = max !== undefined && max > 0 && val >= max
+  return (
+    <div>
+      <label className="block text-xs font-medium text-slate-600 mb-0.5">{label}</label>
+      {sub && <p className="text-[11px] text-slate-400 mb-1 leading-none">{sub}</p>}
+      <input
+        type="number" min={0}
+        value={val}
+        onChange={e => onSetField(field, e.target.value)}
+        className={`w-full border rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-200 ${capped ? 'border-amber-300 bg-amber-50' : 'border-slate-200'}`}
+      />
+      {max !== undefined && (
+        <p className={`text-[11px] mt-0.5 leading-none ${capped ? 'text-amber-500 font-medium' : 'text-slate-400'}`}>
+          max {max.toLocaleString()}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function CeilingLevelInput({ index, value, onSetLevel }) {
+  const from = index + 1
+  const to   = index + 2
+  return (
+    <div>
+      <label className="block text-[11px] font-medium text-slate-500 mb-1 text-center">L{from}→{to}</label>
+      <input
+        type="number" min={1}
+        value={value}
+        onChange={e => onSetLevel(index, e.target.value)}
+        className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-mono text-center outline-none focus:ring-2 focus:ring-brand-200"
+      />
+    </div>
+  )
+}
+
+function CeilingScenarioColumn({ label, difficulty, sim, meta, simCycleThreshold }) {
+  const fmt         = n => (n ?? 0).toLocaleString()
+  const scenario    = calcEconomyScenario(sim, meta.rates, difficulty)
+  const progression = calcEconomyProgression(scenario.total, simCycleThreshold, meta.totalRanks, meta.ranks, sim.levels)
+  const maxed       = progression.atMaxRank && progression.finalLevel === 10
+  return (
+    <div className="flex-1 min-w-0">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">{label}</p>
+      <table className="w-full text-sm mb-3">
+        <tbody>
+          <tr className="border-b border-slate-100">
+            <td className="py-1 text-slate-500 pr-3">Brief reads</td>
+            <td className="py-1 text-right font-mono font-medium text-slate-700">{fmt(scenario.reads)}</td>
+          </tr>
+          <tr className="border-b border-slate-100">
+            <td className="py-1 text-slate-500 pr-3">Quiz</td>
+            <td className="py-1 text-right font-mono font-medium text-slate-700">{fmt(scenario.quiz)}</td>
+          </tr>
+          <tr className="border-b border-slate-100">
+            <td className="py-1 text-slate-500 pr-3">Battle of Order</td>
+            <td className="py-1 text-right font-mono font-medium text-slate-700">{fmt(scenario.boo)}</td>
+          </tr>
+          <tr className="border-b border-slate-100">
+            <td className="py-1 text-slate-500 pr-3">Where's That Aircraft</td>
+            <td className="py-1 text-right font-mono font-medium text-slate-700">{fmt(scenario.wta)}</td>
+          </tr>
+          <tr>
+            <td className="pt-2 font-bold text-slate-700 pr-3">Total</td>
+            <td className="pt-2 text-right font-mono font-bold text-slate-900">{fmt(scenario.total)}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div className={`rounded-xl px-3 py-2 text-sm ${maxed ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
+        <p className={`font-bold ${maxed ? 'text-green-700' : 'text-amber-700'}`}>
+          {progression.finalRank ? progression.finalRank.rankName : 'No rank'} — Level {progression.finalLevel}
+        </p>
+        <p className="text-xs mt-0.5 text-slate-500">
+          {progression.completedCycles} of {meta.totalRanks} rank{meta.totalRanks !== 1 ? 's' : ''} earned
+        </p>
+        {!maxed && <p className="text-xs mt-0.5 text-amber-600">{fmt(progression.shortfall)} coins short of max rank</p>}
+        {maxed  && <p className="text-xs mt-0.5 text-green-600">Max rank + Level 10 reachable</p>}
+      </div>
+    </div>
+  )
+}
+
+function AircoinsCeiling({ API }) {
+  const [meta,    setMeta]    = useState(null)   // rates, ranks, levels, cycleThreshold, totalRanks
+  const [sim,     setSim]     = useState(null)   // editable content inputs
+  const [dbSim,   setDbSim]   = useState(null)   // last DB snapshot for reset
+  const [busy,    setBusy]    = useState(false)
+  const [error,   setError]   = useState('')
+
+  const runCheck = async () => {
+    setBusy(true); setError('')
+    try {
+      const res  = await fetch(`${API}/api/admin/economy-viability`, { credentials: 'include' })
+      const data = await res.json()
+      if (data.status === 'success') {
+        const { rates, cycleThreshold, totalRanks, ranks, levels, content } = data.data
+        setMeta({ rates, cycleThreshold, totalRanks, ranks, levels })
+        const snapshot = {
+          totalBriefs:       content.totalBriefs,
+          wtaBriefs:         content.wtaBriefs,
+          booEligibleBriefs: content.booEligibleBriefs,
+          briefsWithEasyQ:   content.briefsWithEasyQ,
+          totalEasyQ:        content.totalEasyQ,
+          briefsWithMediumQ: content.briefsWithMediumQ,
+          totalMediumQ:      content.totalMediumQ,
+          levels:            levels.filter(l => l.aircoinsToNextLevel !== null),
+        }
+        setSim(snapshot)
+        setDbSim(snapshot)
+      } else {
+        setError(data.message ?? 'Check failed')
+      }
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const setField = (key, raw) => {
+    const val = parseInt(raw, 10)
+    const n   = isNaN(val) ? 0 : Math.max(0, val)
+    setSim(p => {
+      const next = { ...p, [key]: n }
+      // Brief-subset fields can't exceed totalBriefs
+      const total = next.totalBriefs
+      next.wtaBriefs         = Math.min(next.wtaBriefs,         total)
+      next.booEligibleBriefs = Math.min(next.booEligibleBriefs, total)
+      next.briefsWithEasyQ   = Math.min(next.briefsWithEasyQ,   total)
+      next.briefsWithMediumQ = Math.min(next.briefsWithMediumQ, total)
+      // Question totals can't exceed briefs × 10 (max 10 questions per brief)
+      next.totalEasyQ   = Math.min(next.totalEasyQ,   next.briefsWithEasyQ   * 10)
+      next.totalMediumQ = Math.min(next.totalMediumQ, next.briefsWithMediumQ * 10)
+      return next
+    })
+  }
+
+  const setLevel = (index, raw) => {
+    const val = parseInt(raw, 10)
+    setSim(p => {
+      const levels = [...p.levels]
+      levels[index] = { ...levels[index], aircoinsToNextLevel: isNaN(val) ? 1 : Math.max(1, val) }
+      return { ...p, levels }
+    })
+  }
+
+  const simCycleThreshold = sim ? sim.levels.reduce((acc, l) => acc + (l.aircoinsToNextLevel ?? 0), 0) : 0
+
+  const fmt = n => (n ?? 0).toLocaleString()
+
+  return (
+    <Section title="Aircoins Ceiling">
+      <p className="text-xs text-slate-400 mb-3">
+        Economy viability check — max coins achievable with perfect play.
+        Excludes daily streak bonuses and Flashcard Recall.
+      </p>
+      <div className="flex items-center gap-3 mb-4">
+        <button
+          onClick={runCheck}
+          disabled={busy}
+          className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
+        >
+          {busy ? 'Loading…' : sim ? 'Refresh from DB' : 'Run Check'}
+        </button>
+        {sim && dbSim && (
+          <button
+            onClick={() => setSim(dbSim)}
+            className="px-3 py-2 text-xs text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+          >
+            Reset to DB values
+          </button>
+        )}
+      </div>
+      {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+      {sim && meta && (
+        <>
+          {/* Simulation inputs */}
+          <div className="bg-slate-50 rounded-xl p-4 mb-5 border border-slate-200 space-y-4">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Simulation inputs</p>
+
+            {/* Briefs row */}
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Briefs</p>
+              <div className="grid grid-cols-3 gap-3">
+                <CeilingSimInput label="Total"        sub="used for reads"      field="totalBriefs"       sim={sim} onSetField={setField} />
+                <CeilingSimInput label="WTA-enabled"  sub="aircraft with bases" field="wtaBriefs"         sim={sim} onSetField={setField} max={sim.totalBriefs} />
+                <CeilingSimInput label="BOO-eligible" sub="with game data"      field="booEligibleBriefs" sim={sim} onSetField={setField} max={sim.totalBriefs} />
+              </div>
+            </div>
+
+            {/* Quiz rows */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Easy Quiz</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <CeilingSimInput label="Briefs" sub="earns 100% bonus" field="briefsWithEasyQ"   sim={sim} onSetField={setField} max={sim.totalBriefs} />
+                  <CeilingSimInput label="Questions"                     field="totalEasyQ"         sim={sim} onSetField={setField} max={sim.briefsWithEasyQ * 10} />
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Medium Quiz</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <CeilingSimInput label="Briefs" sub="earns 100% bonus" field="briefsWithMediumQ" sim={sim} onSetField={setField} max={sim.totalBriefs} />
+                  <CeilingSimInput label="Questions"                     field="totalMediumQ"       sim={sim} onSetField={setField} max={sim.briefsWithMediumQ * 10} />
+                </div>
+              </div>
+            </div>
+
+            {/* Level thresholds */}
+            <div>
+              <div className="flex items-baseline justify-between mb-2">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Level Thresholds</p>
+                <p className="text-[11px] text-slate-400">
+                  Cycle: <span className="font-mono font-semibold text-slate-600">{fmt(simCycleThreshold)}</span> coins per rank
+                </p>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {sim.levels.map((lv, i) => (
+                  <CeilingLevelInput key={lv.levelNumber} index={i} value={lv.aircoinsToNextLevel} onSetLevel={setLevel} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Results */}
+          <div className="text-xs text-slate-400 mb-4">
+            {meta.totalRanks} total ranks &nbsp;·&nbsp; WTA: {fmt((meta.rates.aircoinsWhereAircraftRound1 ?? 5) + (meta.rates.aircoinsWhereAircraftRound2 ?? 10) + (meta.rates.aircoinsWhereAircraftBonus ?? 5))} coins/brief
+          </div>
+          <div className="flex gap-6">
+            <CeilingScenarioColumn label="Normal (Easy)"     difficulty="normal"   sim={sim} meta={meta} simCycleThreshold={simCycleThreshold} />
+            <div className="w-px bg-slate-200" />
+            <CeilingScenarioColumn label="Advanced (Medium)" difficulty="advanced" sim={sim} meta={meta} simCycleThreshold={simCycleThreshold} />
+          </div>
+        </>
+      )}
+    </Section>
+  )
+}
+
 function Section({ title, children, onSave, saving }) {
   return (
     <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
@@ -662,6 +936,9 @@ function SettingsTab({ API }) {
           </div>
         ))}
       </Section>
+
+      {/* ── Aircoins Ceiling ────────────────────────────────── */}
+      <AircoinsCeiling API={API} />
 
       {/* ── Award Test Coins ────────────────────────────────── */}
       <Section title="Award Test Coins">
@@ -2061,10 +2338,10 @@ function BriefsTab({ API }) {
     setStaleSourceWarning(briefData.staleSourceWarning ?? false)
     setView('editor')
 
-    // Auto-generate questions and images in parallel
+    // Auto-generate questions, images, and keywords in parallel
     setAutoGenerating(true)
     try {
-      const [qRes, imgRes] = await Promise.all([
+      const [qRes, imgRes, kwRes] = await Promise.all([
         fetch(`${API}/api/admin/ai/generate-quiz`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -2075,14 +2352,22 @@ function BriefsTab({ API }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title, subtitle }),
         }),
+        fetch(`${API}/api/admin/ai/generate-keywords`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description, existingKeywords: [], needed: 10 }),
+        }),
       ])
-      const [qData, imgData] = await Promise.all([qRes.json(), imgRes.json()])
+      const [qData, imgData, kwData] = await Promise.all([qRes.json(), imgRes.json(), kwRes.json()])
       if (qData.status === 'success') {
         setEasyQuestions(qData.data.easyQuestions ?? [])
         setMediumQuestions(qData.data.mediumQuestions ?? [])
       }
       if (imgData.status === 'success') {
         setPendingImages((imgData.data.images ?? []).map(img => ({ ...img, selected: true })))
+      }
+      if (kwData.status === 'success') {
+        setDraft(p => ({ ...p, keywords: kwData.data.keywords ?? [] }))
       }
     } finally {
       setAutoGenerating(false)
