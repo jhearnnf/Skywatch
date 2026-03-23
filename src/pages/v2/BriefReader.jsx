@@ -507,20 +507,21 @@ export default function BriefReader() {
         return r.json()
       })
       .then(data => {
-        if (data?.data?.brief) {
-          setBrief(data.data.brief)
-          if (data.data.brief.category === 'Aircrafts' && user) {
-            fetch(`${API}/api/users/me/wta-spawn`, { credentials: 'include' })
-              .then(r => r.json())
-              .then(d => { if (d?.data) setWtaSpawn(d.data) })
-              .catch(() => {})
-          }
-        }
+        if (data?.data?.brief) setBrief(data.data.brief)
         if (data?.data?.readRecord) setReadRecord(data.data.readRecord)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [briefId, API])
+
+  // Fetch WTA spawn status whenever brief or user resolves — handles mobile where auth loads after brief
+  useEffect(() => {
+    if (!brief || brief.category !== 'Aircrafts' || !user) return
+    fetch(`${API}/api/users/me/wta-spawn`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (d?.data) setWtaSpawn(d.data) })
+      .catch(() => {})
+  }, [brief, user, API])
 
   // Fire coin notification if we arrived here after a post-login brief completion
   useEffect(() => {
