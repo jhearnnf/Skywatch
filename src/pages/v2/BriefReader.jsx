@@ -433,6 +433,7 @@ export default function BriefReader() {
   const [booState, setBooState] = useState('unavailable')
   const [missionData,       setMissionData]       = useState(null)  // spawn-check result when spawn: true
   const [spawnCheckPending, setSpawnCheckPending] = useState(false) // true while spawn-check is in-flight
+  const [wtaSpawn,          setWtaSpawn]          = useState(null)  // { remaining, prereqsMet } from API
   const [navDir, setNavDir]        = useState(1) // 1 = forward, -1 = backward
   const markingRef                 = useRef(false)
   const contentRef                 = useRef(null)
@@ -506,7 +507,15 @@ export default function BriefReader() {
         return r.json()
       })
       .then(data => {
-        if (data?.data?.brief) setBrief(data.data.brief)
+        if (data?.data?.brief) {
+          setBrief(data.data.brief)
+          if (data.data.brief.category === 'Aircrafts' && user) {
+            fetch(`${API}/api/users/me/wta-spawn`, { credentials: 'include' })
+              .then(r => r.json())
+              .then(d => { if (d?.data) setWtaSpawn(d.data) })
+              .catch(() => {})
+          }
+        }
         if (data?.data?.readRecord) setReadRecord(data.data.readRecord)
       })
       .catch(() => {})
@@ -631,7 +640,8 @@ export default function BriefReader() {
           .then(() => {
             // Spawn-check for Where's That Aircraft (Aircrafts category only)
             if (brief?.category !== 'Aircrafts') return
-            setSpawnCheckPending(true)
+            const willSpawn = wtaSpawn?.prereqsMet && wtaSpawn?.remaining === 1
+            if (willSpawn) setSpawnCheckPending(true)
             fetch(`${API}/api/games/wheres-aircraft/spawn-check`, {
               method: 'POST',
               credentials: 'include',
@@ -730,7 +740,7 @@ export default function BriefReader() {
             className="w-14 h-14 rounded-full border-2 border-red-500"
           />
           <p className="text-xs font-bold tracking-[0.3em] text-red-400 uppercase">
-            Scanning for mission data…
+            Incoming message
           </p>
         </motion.div>
       )}

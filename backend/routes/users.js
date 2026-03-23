@@ -245,13 +245,23 @@ router.post('/report-problem', protect, async (req, res) => {
   }
 });
 
-// GET /api/users/me/wta-spawn — current WTA spawn counter for the logged-in user
+// GET /api/users/me/wta-spawn — current WTA spawn counter + prerequisite status for the logged-in user
 router.get('/me/wta-spawn', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('whereAircraftReadsSinceLastGame whereAircraftSpawnThreshold');
+    const userId = req.user._id;
+    const [user, basesIds, aircraftIds] = await Promise.all([
+      User.findById(userId).select('whereAircraftReadsSinceLastGame whereAircraftSpawnThreshold'),
+      IntelligenceBrief.distinct('_id', { category: 'Bases' }),
+      IntelligenceBrief.distinct('_id', { category: 'Aircrafts' }),
+    ]);
+    const [basesRead, aircraftsRead] = await Promise.all([
+      IntelligenceBriefRead.countDocuments({ userId, completed: true, intelBriefId: { $in: basesIds } }),
+      IntelligenceBriefRead.countDocuments({ userId, completed: true, intelBriefId: { $in: aircraftIds } }),
+    ]);
     const readsSince = user.whereAircraftReadsSinceLastGame ?? 0;
     const threshold  = user.whereAircraftSpawnThreshold     ?? 3;
-    res.json({ status: 'success', data: { readsSince, threshold, remaining: Math.max(0, threshold - readsSince) } });
+    const prereqsMet = basesRead >= 2 && aircraftsRead >= 2;
+    res.json({ status: 'success', data: { readsSince, threshold, remaining: Math.max(0, threshold - readsSince), prereqsMet, basesRead, aircraftsRead } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
