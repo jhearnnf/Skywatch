@@ -264,7 +264,7 @@ export default function Profile() {
               {/* Volume */}
               <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
                 <div className="flex justify-between items-center mb-3">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">App Volume</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Skywatch Volume</p>
                   <span className="text-sm font-bold text-brand-600">{masterVol}%</span>
                 </div>
                 <input
