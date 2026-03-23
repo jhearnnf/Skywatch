@@ -60,6 +60,7 @@ export default function Profile() {
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
   const [diffBusy,    setDiffBusy]    = useState(false)
   const [masterVol,   setMasterVol]   = useState(() => getMasterVolume())
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
   const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'tutorials'
 
   // Tutorial on first visit
@@ -262,16 +263,20 @@ export default function Profile() {
               </div>
 
               {/* Volume */}
-              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+              <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${isIOS ? ' opacity-50' : ''}`}>
                 <div className="flex justify-between items-center mb-3">
                   <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Skywatch Volume</p>
-                  <span className="text-sm font-bold text-brand-600">{masterVol}%</span>
+                  {isIOS
+                    ? <span className="text-xs text-slate-400">Use device buttons</span>
+                    : <span className="text-sm font-bold text-brand-600">{masterVol}%</span>
+                  }
                 </div>
                 <input
                   type="range"
-                  className="w-full accent-brand-500 cursor-pointer"
+                  className="w-full accent-brand-500 cursor-pointer disabled:cursor-not-allowed"
                   min={0} max={100}
                   value={masterVol}
+                  disabled={isIOS}
                   onChange={e => {
                     const v = Number(e.target.value)
                     setMasterVol(v)
@@ -280,7 +285,10 @@ export default function Profile() {
                   aria-label="App volume"
                 />
                 <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                  <span>Mute</span><span>Max</span>
+                  {isIOS
+                    ? <span className="w-full text-center">Volume is controlled by your device buttons on iOS</span>
+                    : <><span>Mute</span><span>Max</span></>
+                  }
                 </div>
               </div>
 
