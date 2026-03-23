@@ -59,8 +59,8 @@ export default function Profile() {
   const [levels,      setLevels]      = useState(MOCK_LEVELS)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
   const [diffBusy,    setDiffBusy]    = useState(false)
-  const [masterVol,   setMasterVol]   = useState(() => getMasterVolume())
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  const [masterVol,   setMasterVol]   = useState(() => isIOS ? 100 : getMasterVolume())
   const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'tutorials'
 
   // Tutorial on first visit
