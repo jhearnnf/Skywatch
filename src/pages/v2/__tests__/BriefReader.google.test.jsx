@@ -4,9 +4,10 @@ import BriefReader from '../BriefReader'
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
-const mockNavigate = vi.hoisted(() => vi.fn())
-const mockSetUser  = vi.hoisted(() => vi.fn())
-const mockUseAuth  = vi.hoisted(() => vi.fn())
+const mockNavigate      = vi.hoisted(() => vi.fn())
+const mockSetUser       = vi.hoisted(() => vi.fn())
+const mockAwardAircoins = vi.hoisted(() => vi.fn())
+const mockUseAuth       = vi.hoisted(() => vi.fn())
 
 vi.mock('../../../utils/sound', () => ({ playSound: vi.fn() }))
 
@@ -53,7 +54,7 @@ function makeGetResponse() {
   return { ok: true, json: async () => ({ data: { brief: BRIEF, readRecord: null, ammoMax: 3 } }) }
 }
 
-function makeCompleteResponse() {
+function makeCompleteResponse(overrides = {}) {
   return {
     ok: true,
     json: async () => ({
@@ -61,6 +62,7 @@ function makeCompleteResponse() {
       data: {
         aircoinsEarned: 5, dailyCoinsEarned: 5,
         loginStreak: 1, newTotalAircoins: 10, newCycleAircoins: 10, rankPromotion: null,
+        ...overrides,
       },
     }),
   }
@@ -75,9 +77,10 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
     googleCallback = null
     mockNavigate.mockClear()
     mockSetUser.mockClear()
+    mockAwardAircoins.mockClear()
     sessionStorage.clear()
 
-    mockUseAuth.mockReturnValue({ user: null, setUser: mockSetUser, API: '', awardAircoins: vi.fn() })
+    mockUseAuth.mockReturnValue({ user: null, setUser: mockSetUser, API: '', awardAircoins: mockAwardAircoins })
 
     vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'test-client-id')
     window.google = {
@@ -98,7 +101,6 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
   })
 
   async function reachCompletionScreen() {
-    // All fetches (brief GET + mark-started) return the guest brief response
     global.fetch = vi.fn().mockResolvedValue(makeGetResponse())
     render(<BriefReader />)
     await waitFor(() => screen.getByText('✓ Complete Brief'))
@@ -106,10 +108,9 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
     await waitFor(() => screen.getByText('Brief Complete!'))
   }
 
-  it('calls /complete and navigates to brief after Google sign-in on completion screen', async () => {
+  it('calls /complete and awardAircoins after Google sign-in on completion screen', async () => {
     await reachCompletionScreen()
 
-    // Now wire up the auth + complete responses
     global.fetch = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { user: { _id: 'u1' } } }) }) // /api/auth/google
       .mockResolvedValueOnce(makeCompleteResponse()) // /api/briefs/brief123/complete
@@ -121,12 +122,12 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
       const completeCalled = global.fetch.mock.calls.some(([url]) => url.includes('/complete'))
       expect(completeCalled).toBe(true)
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/brief/brief123', { replace: true })
-    expect(sessionStorage.getItem('sw_brief_coins')).not.toBeNull()
-    expect(sessionStorage.getItem('sw_brief_just_completed')).toBe('brief123')
+    expect(mockAwardAircoins).toHaveBeenCalledWith(10, 'Daily Brief', expect.objectContaining({
+      cycleAfter: 10, totalAfter: 10,
+    }))
   })
 
-  it('clears sw_pending_brief from sessionStorage after consuming it', async () => {
+  it('does not navigate away — user stays on completion screen', async () => {
     await reachCompletionScreen()
 
     global.fetch = vi.fn()
@@ -136,15 +137,15 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
     expect(googleCallback).not.toBeNull()
     await googleCallback({ credential: 'fake-token' })
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
-    expect(sessionStorage.getItem('sw_pending_brief')).toBeNull()
+    await waitFor(() => expect(mockAwardAircoins).toHaveBeenCalled())
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 
-  it('does NOT call /complete if Google auth fails', async () => {
+  it('does not call /complete or awardAircoins if Google auth fails', async () => {
     await reachCompletionScreen()
 
     global.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: false, json: async () => ({ message: 'Auth failed' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: null }) }) // no user in response
 
     expect(googleCallback).not.toBeNull()
     await googleCallback({ credential: 'bad-token' })
@@ -152,6 +153,6 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
     const completeCalled = global.fetch.mock.calls.some(([url]) => url.includes('/complete'))
     expect(completeCalled).toBe(false)
-    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(mockAwardAircoins).not.toHaveBeenCalled()
   })
 })

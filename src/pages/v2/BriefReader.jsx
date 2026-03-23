@@ -9,7 +9,6 @@ import MissionDetectedModal from '../../components/MissionDetectedModal'
 import { requiredTier } from '../../utils/subscription'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { playSound } from '../../utils/sound'
-import { consumePendingBrief } from '../../utils/pendingBrief'
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
 function KeywordSheet({ kw, onClose }) {
@@ -215,8 +214,8 @@ function BooStatsPanel({ brief }) {
 
 // ── Completion screen ─────────────────────────────────────────────────────
 function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user, isFirstCompletion, coinReward }) {
-  const navigate         = useNavigate()
-  const { API, setUser } = useAuth()
+  const navigate                    = useNavigate()
+  const { API, setUser, awardAircoins } = useAuth()
   const [email, setEmail] = useState('')
   const googleBtnRef     = useRef(null)
 
@@ -228,18 +227,34 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
 
     const handleCredential = async (response) => {
       try {
-        const res  = await fetch(`${API}/api/auth/google`, {
+        // 1. Authenticate
+        const authRes  = await fetch(`${API}/api/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({ credential: response.credential }),
         })
-        const data = await res.json()
-        if (data?.data?.user) {
-          setUser(data.data.user)
-          sessionStorage.setItem('sw_pending_brief', brief._id)
-          const briefId = await consumePendingBrief({ API, setUser, navigate })
-          if (briefId) navigate(`/brief/${briefId}`, { replace: true })
+        const authData = await authRes.json()
+        if (!authData?.data?.user) return
+        setUser(authData.data.user)
+
+        // 2. Complete the brief now that we're authenticated — cookie is set by the auth response above
+        const completeRes  = await fetch(`${API}/api/briefs/${brief._id}/complete`, {
+          method: 'POST', credentials: 'include',
+        })
+        const completeData = await completeRes.json()
+
+        // 3. Award coins directly — no navigation needed, we're already on the completion screen
+        if (completeRes.ok && completeData?.data) {
+          const d     = completeData.data
+          const total = (d.aircoinsEarned ?? 0) + (d.dailyCoinsEarned ?? 0)
+          if (total > 0) {
+            awardAircoins(total, d.dailyCoinsEarned > 0 ? 'Daily Brief' : 'Brief read', {
+              cycleAfter:    d.newCycleAircoins,
+              totalAfter:    d.newTotalAircoins,
+              rankPromotion: d.rankPromotion ?? null,
+            })
+          }
         }
       } catch { /* ignore */ }
     }
