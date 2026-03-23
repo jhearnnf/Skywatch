@@ -13,7 +13,7 @@ import { playSound } from '../utils/sound'
  *   mediaUrl         — cover image URL (may be null)
  *   onDismiss        — called when user declines / closes
  */
-export default function MissionDetectedModal({ aircraftBriefId, aircraftTitle, mediaUrl, onDismiss }) {
+export default function MissionDetectedModal({ aircraftBriefId, aircraftTitle, mediaUrl, onAccept, onDismiss }) {
   const navigate = useNavigate()
 
   // Prevent body scroll while modal is open + play stinger
@@ -24,6 +24,7 @@ export default function MissionDetectedModal({ aircraftBriefId, aircraftTitle, m
   }, [])
 
   function handleAccept() {
+    onAccept?.()
     navigate(`/wheres-that-aircraft/${aircraftBriefId}`)
   }
 

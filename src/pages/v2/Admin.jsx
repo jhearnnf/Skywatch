@@ -780,11 +780,15 @@ function SettingsTab({ API }) {
   const [toast,    setToast]    = useState('')
   const [testAmount, setTestAmount] = useState('')
   const [coinBusy,   setCoinBusy]   = useState(false)
+  const [wtaSpawn,   setWtaSpawn]   = useState(null)
 
   const load = useCallback(() => {
     fetch(`${API}/api/admin/settings`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => { const s = d.data?.settings; if (s) { setSettings(s); setDraft(s) } })
+    fetch(`${API}/api/users/me/wta-spawn`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (d.data) setWtaSpawn(d.data) })
   }, [API])
 
   useEffect(() => { load() }, [load])
@@ -905,6 +909,29 @@ function SettingsTab({ API }) {
         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-1">Pass Threshold</p>
         <PctSlider label="Easy"   value={draft.passThresholdEasy}   onChange={v => set('passThresholdEasy', v)} />
         <PctSlider label="Medium" value={draft.passThresholdMedium} onChange={v => set('passThresholdMedium', v)} />
+
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Where's That Aircraft — Next Spawn</p>
+        {wtaSpawn ? (
+          <div className="flex items-center gap-3 text-sm">
+            <div className="flex gap-1">
+              {Array.from({ length: wtaSpawn.threshold }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-4 h-4 rounded-sm ${i < wtaSpawn.readsSince ? 'bg-brand-500' : 'bg-slate-200'}`}
+                />
+              ))}
+            </div>
+            <span className="text-slate-600">
+              {wtaSpawn.readsSince}/{wtaSpawn.threshold} aircraft briefs read
+              {wtaSpawn.remaining > 0
+                ? <> — <span className="font-semibold text-slate-800">{wtaSpawn.remaining} more to spawn</span></>
+                : <> — <span className="font-semibold text-green-600">ready to spawn</span></>
+              }
+            </span>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400">Loading…</p>
+        )}
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}

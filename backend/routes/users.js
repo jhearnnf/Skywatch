@@ -245,6 +245,18 @@ router.post('/report-problem', protect, async (req, res) => {
   }
 });
 
+// GET /api/users/me/wta-spawn — current WTA spawn counter for the logged-in user
+router.get('/me/wta-spawn', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('whereAircraftReadsSinceLastGame whereAircraftSpawnThreshold');
+    const readsSince = user.whereAircraftReadsSinceLastGame ?? 0;
+    const threshold  = user.whereAircraftSpawnThreshold     ?? 3;
+    res.json({ status: 'success', data: { readsSince, threshold, remaining: Math.max(0, threshold - readsSince) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/users/me/read-briefs — list of brief IDs the current user has completed or started
 router.get('/me/read-briefs', protect, async (req, res) => {
   try {

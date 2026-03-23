@@ -431,13 +431,22 @@ export default function BriefReader() {
   const [readRecord, setReadRecord] = useState(null)
   // 'unavailable' | 'locked-quiz' | 'available'
   const [booState, setBooState] = useState('unavailable')
-  const [missionData, setMissionData] = useState(null) // spawn-check result when spawn: true
+  const [missionData,       setMissionData]       = useState(null)  // spawn-check result when spawn: true
+  const [spawnCheckPending, setSpawnCheckPending] = useState(false) // true while spawn-check is in-flight
   const [navDir, setNavDir]        = useState(1) // 1 = forward, -1 = backward
   const markingRef                 = useRef(false)
   const contentRef                 = useRef(null)
   const briefOpenedRef             = useRef(false)
   const accSecondsRef              = useRef(0)
   const lastTickRef                = useRef(null)
+
+  // Layer 2 safety net: if user navigated away before spawn modal appeared, restore it
+  useEffect(() => {
+    const pending = localStorage.getItem('pendingWtaGame')
+    if (pending) {
+      try { setMissionData(JSON.parse(pending)) } catch { localStorage.removeItem('pendingWtaGame') }
+    }
+  }, [])
 
   const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
 
@@ -622,6 +631,7 @@ export default function BriefReader() {
           .then(() => {
             // Spawn-check for Where's That Aircraft (Aircrafts category only)
             if (brief?.category !== 'Aircrafts') return
+            setSpawnCheckPending(true)
             fetch(`${API}/api/games/wheres-aircraft/spawn-check`, {
               method: 'POST',
               credentials: 'include',
@@ -630,15 +640,18 @@ export default function BriefReader() {
             })
               .then(r => r.json())
               .then(d => {
+                setSpawnCheckPending(false)
                 if (d?.data?.spawn) {
-                  setMissionData({
+                  const data = {
                     aircraftBriefId: d.data.aircraftBriefId,
                     aircraftTitle:   d.data.aircraftTitle,
                     mediaUrl:        d.data.mediaUrl,
-                  })
+                  }
+                  localStorage.setItem('pendingWtaGame', JSON.stringify(data))
+                  setMissionData(data)
                 }
               })
-              .catch(() => {})
+              .catch(() => { setSpawnCheckPending(false) })
           })
           .catch(() => {})
       }
@@ -703,13 +716,33 @@ export default function BriefReader() {
       <TutorialModal />
       <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} />
 
+      {/* Layer 1: block navigation while spawn-check is in-flight */}
+      {spawnCheckPending && (
+        <motion.div
+          key="spawn-check-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 z-[300] bg-slate-950/85 flex flex-col items-center justify-center gap-5 pointer-events-all"
+        >
+          <motion.div
+            animate={{ scale: [1, 1.5, 1], opacity: [0.6, 0.1, 0.6] }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+            className="w-14 h-14 rounded-full border-2 border-red-500"
+          />
+          <p className="text-xs font-bold tracking-[0.3em] text-red-400 uppercase">
+            Scanning for mission data…
+          </p>
+        </motion.div>
+      )}
+
       {/* Where's That Aircraft — mission spawn */}
       {missionData && (
         <MissionDetectedModal
           aircraftBriefId={missionData.aircraftBriefId}
           aircraftTitle={missionData.aircraftTitle}
           mediaUrl={missionData.mediaUrl}
-          onDismiss={() => setMissionData(null)}
+          onAccept={() => localStorage.removeItem('pendingWtaGame')}
+          onDismiss={() => { localStorage.removeItem('pendingWtaGame'); setMissionData(null) }}
         />
       )}
 
