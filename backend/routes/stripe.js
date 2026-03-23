@@ -42,6 +42,7 @@ router.post('/create-checkout-session', protect, async (req, res) => {
       success_url:          `${clientUrl}/subscribe?stripe=success`,
       cancel_url:           `${clientUrl}/subscribe?stripe=cancelled`,
       metadata:             { userId: user._id.toString(), tier, isTrial: trial ? 'true' : 'false' },
+      allow_promotion_codes: true,
       subscription_data: {
         metadata:           { userId: user._id.toString(), tier },
         ...(trial ? { trial_period_days: 5 } : {}),
