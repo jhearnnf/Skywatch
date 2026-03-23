@@ -911,7 +911,13 @@ function SettingsTab({ API }) {
         <PctSlider label="Medium" value={draft.passThresholdMedium} onChange={v => set('passThresholdMedium', v)} />
 
         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Where's That Aircraft — Next Spawn</p>
-        {wtaSpawn ? (
+        {!wtaSpawn ? (
+          <p className="text-xs text-slate-400">Loading…</p>
+        ) : !wtaSpawn.prereqsMet ? (
+          <p className="text-xs text-slate-400">
+            Prerequisites not met — requires ≥2 Bases reads ({wtaSpawn.basesRead ?? 0}/2) and ≥2 Aircrafts reads ({wtaSpawn.aircraftsRead ?? 0}/2).
+          </p>
+        ) : (
           <div className="flex items-center gap-3 text-sm">
             <div className="flex gap-1">
               {Array.from({ length: wtaSpawn.threshold }).map((_, i) => (
@@ -929,8 +935,6 @@ function SettingsTab({ API }) {
               }
             </span>
           </div>
-        ) : (
-          <p className="text-xs text-slate-400">Loading…</p>
         )}
       </Section>
 
