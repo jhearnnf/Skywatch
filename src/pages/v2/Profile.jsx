@@ -51,7 +51,7 @@ const TUTORIAL_LABELS = [
 ]
 
 export default function Profile() {
-  const { user, setUser, API } = useAuth()
+  const { user, setUser, API, logout } = useAuth()
   const navigate = useNavigate()
   const { start, replay } = useAppTutorial()
 
@@ -417,6 +417,17 @@ export default function Profile() {
             ))}
           </div>
         </motion.div>
+      )}
+
+      {user && (
+        <div className="mt-6 flex justify-center">
+          <button
+            onClick={logout}
+            className="text-sm text-slate-400 hover:text-slate-600 transition-colors py-2 px-4"
+          >
+            Sign out
+          </button>
+        </div>
       )}
 
     </div>

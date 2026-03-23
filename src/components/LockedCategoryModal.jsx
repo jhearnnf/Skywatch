@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { CATEGORY_ICONS, CATEGORY_DESCRIPTIONS } from '../data/mockData'
+import { consumePendingBrief } from '../utils/pendingBrief'
 
 const TIER_CONFIG = {
   silver: {
@@ -78,6 +79,8 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, o
           if (data?.data?.user) {
             setUser(data.data.user)
             onClose()
+            const briefId = await consumePendingBrief({ API, setUser, navigate })
+            if (briefId) navigate(`/brief/${briefId}`)
           }
         } catch { /* ignore */ }
       },

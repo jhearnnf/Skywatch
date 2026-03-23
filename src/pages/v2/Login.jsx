@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
+import { consumePendingBrief } from '../../utils/pendingBrief'
+import { ONBOARDING_KEY } from '../../components/onboarding/WelcomeAgentFlow'
 
 const VIEW = { CHOICE: 'choice', SIGNIN: 'signin', REGISTER: 'register', VERIFY: 'verify' }
 
@@ -53,33 +55,6 @@ export default function LoginPage() {
     }
   }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // After any successful auth, redirect to the brief the guest was reading (if any),
-  // otherwise fall back to /home. New users see the difficulty screen first.
-  const consumePendingBrief = async () => {
-    const id = sessionStorage.getItem('sw_pending_brief')
-    if (!id) return null
-    sessionStorage.removeItem('sw_pending_brief')
-    try {
-      const res  = await fetch(`${API}/api/briefs/${id}/complete`, { method: 'POST', credentials: 'include' })
-      const data = await res.json()
-      if (res.ok && data?.data) {
-        // Store coin data for BriefReader to consume and display the notification
-        sessionStorage.setItem('sw_brief_coins', JSON.stringify(data.data))
-        // Update streak in auth state
-        if (data.data.loginStreak !== undefined) {
-          setUser(u => u ? {
-            ...u,
-            loginStreak:    data.data.loginStreak,
-            lastStreakDate: data.data.lastStreakDate ?? u.lastStreakDate,
-          } : u)
-        }
-      }
-    } catch { /* non-fatal — coins will be awarded on next visit */ }
-    // Signal BriefReader to start in completion state
-    sessionStorage.setItem('sw_brief_just_completed', id)
-    return id
-  }
-
   // New users always start on Standard difficulty — set it silently, no screen shown
   const finishNewUser = async (user) => {
     setUser(user)
@@ -90,7 +65,11 @@ export default function LoginPage() {
         body: JSON.stringify({ difficulty: 'easy' }),
       })
     } catch { /* non-fatal — default is already easy on the backend */ }
-    const briefId = await consumePendingBrief()
+    // If the user never went through the landing-page CRO flow, flag Home to show it
+    if (!localStorage.getItem(ONBOARDING_KEY)) {
+      sessionStorage.setItem('sw_pending_onboarding', '1')
+    }
+    const briefId = await consumePendingBrief({ API, setUser, navigate })
     navigate(briefId ? `/brief/${briefId}` : '/home')
   }
 
@@ -106,7 +85,7 @@ export default function LoginPage() {
       if (!res.ok) { setError(data.message); return }
       if (data.data.isNew) { await finishNewUser(data.data.user); return }
       setUser(data.data.user)
-      const briefId = await consumePendingBrief()
+      const briefId = await consumePendingBrief({ API, setUser, navigate })
       navigate(briefId ? `/brief/${briefId}` : '/home')
     } catch {
       setError('Google sign-in failed. Please try again.')
@@ -144,7 +123,7 @@ export default function LoginPage() {
       }
       if (data.data.isNew) { await finishNewUser(data.data.user); return }
       setUser(data.data.user)
-      const briefId = await consumePendingBrief()
+      const briefId = await consumePendingBrief({ API, setUser, navigate })
       navigate(briefId ? `/brief/${briefId}` : '/home')
     } catch {
       setError('Connection failed. Is the server running?')

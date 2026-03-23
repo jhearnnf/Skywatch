@@ -7,6 +7,7 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import { isCategoryLocked, requiredTier } from '../../utils/subscription'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import LockedCategoryModal from '../../components/LockedCategoryModal'
+import WelcomeAgentFlow from '../../components/onboarding/WelcomeAgentFlow'
 import { CATEGORIES, CATEGORY_ICONS, MOCK_LEVELS } from '../../data/mockData'
 
 function getLevelInfo(coins) {
@@ -117,6 +118,7 @@ export default function Home() {
   const [missionDone,  setMissionDone]  = useState(false)
   const [latestBriefs, setLatestBriefs] = useState([])
   const [lockedModal,  setLockedModal]  = useState(null) // { category, tier }
+  const [showCROFlow,  setShowCROFlow]  = useState(false)
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
 
   // Mission done if the user completed a brief today (server-authoritative via lastStreakDate)
@@ -130,6 +132,14 @@ export default function Home() {
     const t = setTimeout(() => start('home'), 600)
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show WelcomeAgentFlow for new users who bypassed the landing-page CRO flow
+  useEffect(() => {
+    if (sessionStorage.getItem('sw_pending_onboarding')) {
+      sessionStorage.removeItem('sw_pending_onboarding')
+      setShowCROFlow(true)
+    }
+  }, [])
 
   // Fetch total brief counts per category — available to all users including guests
   useEffect(() => {
@@ -164,6 +174,7 @@ export default function Home() {
   return (
     <>
       <TutorialModal />
+      {showCROFlow && <WelcomeAgentFlow onClose={() => setShowCROFlow(false)} />}
 
       {/* Greeting + stats */}
       <div className="mb-6">
