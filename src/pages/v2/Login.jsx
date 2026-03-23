@@ -55,9 +55,12 @@ export default function LoginPage() {
     }
   }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // New users always start on Standard difficulty — set it silently, no screen shown
-  const finishNewUser = async (user) => {
-    setUser(user)
+  // New users always start on Standard difficulty — set it silently, no screen shown.
+  // NOTE: setUser is called AFTER navigate so LoginRoute's <Navigate to="/home"> guard
+  // never fires — by the time user state changes, LoginRoute is no longer in the tree.
+  // The JWT cookie is set by the auth response, so all fetch calls below work without
+  // setUser having been called first.
+  const finishNewUser = async (userObj) => {
     try {
       await fetch(`${API}/api/users/me/difficulty`, {
         method: 'PATCH', credentials: 'include',
@@ -70,7 +73,10 @@ export default function LoginPage() {
       sessionStorage.setItem('sw_pending_onboarding', '1')
     }
     const briefId = await consumePendingBrief({ API, setUser, navigate })
+    // Navigate first — LoginRoute is no longer rendered when setUser fires below,
+    // so <Navigate to="/home"> cannot interrupt the intended destination.
     navigate(briefId ? `/brief/${briefId}` : '/home')
+    setUser(userObj)
   }
 
   const handleGoogleCredential = async ({ credential }) => {

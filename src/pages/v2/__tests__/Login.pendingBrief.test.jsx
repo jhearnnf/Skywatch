@@ -162,4 +162,30 @@ describe('Login — pending brief redirect', () => {
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/brief/brief123'))
     expect(screen.queryByText('Standard')).toBeNull()
   })
+
+  it('new user: navigate is called before setUser to prevent LoginRoute flashing /home', async () => {
+    sessionStorage.setItem('sw_pending_brief', 'brief123')
+
+    const callOrder = []
+    mockNavigate.mockImplementation(() => callOrder.push('navigate'))
+    mockSetUser.mockImplementation(() => callOrder.push('setUser'))
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeAuthResponse({ isNew: true }))                          // register
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { user: {} } }) })  // difficulty PATCH
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) })                      // /complete
+
+    render(<LoginPage />)
+    fireEvent.click(screen.getByText('Create Account'))
+    fireEvent.change(screen.getByLabelText('Email'),    { target: { value: 'new@b.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }))
+
+    await waitFor(() => expect(callOrder).toContain('navigate'))
+    await waitFor(() => expect(callOrder).toContain('setUser'))
+
+    const navIdx     = callOrder.indexOf('navigate')
+    const setUserIdx = callOrder.indexOf('setUser')
+    expect(navIdx).toBeLessThan(setUserIdx)
+  })
 })
