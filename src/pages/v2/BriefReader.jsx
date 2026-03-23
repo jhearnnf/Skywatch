@@ -9,6 +9,7 @@ import MissionDetectedModal from '../../components/MissionDetectedModal'
 import { requiredTier } from '../../utils/subscription'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { playSound } from '../../utils/sound'
+import { consumePendingBrief } from '../../utils/pendingBrief'
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
 function KeywordSheet({ kw, onClose }) {
@@ -234,7 +235,12 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
           body: JSON.stringify({ credential: response.credential }),
         })
         const data = await res.json()
-        if (data?.data?.user) setUser(data.data.user)
+        if (data?.data?.user) {
+          setUser(data.data.user)
+          sessionStorage.setItem('sw_pending_brief', brief._id)
+          const briefId = await consumePendingBrief({ API, setUser, navigate })
+          if (briefId) navigate(`/brief/${briefId}`, { replace: true })
+        }
       } catch { /* ignore */ }
     }
 
