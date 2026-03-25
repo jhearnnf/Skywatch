@@ -1,6 +1,9 @@
+const crypto               = require('crypto');
 const jwt                  = require('jsonwebtoken');
 const mongoose             = require('mongoose');
 const User                 = require('../../models/User');
+const PasswordResetToken     = require('../../models/PasswordResetToken');
+const PasswordResetRateLimit = require('../../models/PasswordResetRateLimit');
 const Rank                 = require('../../models/Rank');
 const IntelligenceBrief    = require('../../models/IntelligenceBrief');
 const IntelligenceBriefRead = require('../../models/IntelligenceBriefRead');
@@ -17,6 +20,7 @@ const AircoinLog           = require('../../models/AircoinLog');
 const AdminAction          = require('../../models/AdminAction');
 const GameType             = require('../../models/GameType');
 const AppSettings          = require('../../models/AppSettings');
+const IntelLead            = require('../../models/IntelLead');
 
 // ── AppSettings ────────────────────────────────────────────────────────────
 async function createSettings(overrides = {}) {
@@ -267,6 +271,22 @@ async function createWhosAtAircraftResult(userId, gameId, overrides = {}) {
   });
 }
 
+// ── PasswordResetToken ─────────────────────────────────────────────────────
+async function createPasswordResetToken(email, overrides = {}) {
+  const rawToken  = overrides.rawToken ?? crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const doc = await PasswordResetToken.findOneAndUpdate(
+    { email: email.toLowerCase() },
+    {
+      tokenHash,
+      expiresAt: overrides.expiresAt ?? new Date(Date.now() + 60 * 60 * 1000),
+      usedAt:    overrides.usedAt    ?? null,
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+  return { doc, rawToken, tokenHash };
+}
+
 // ── AdminAction ────────────────────────────────────────────────────────────
 async function createAdminAction(adminId, overrides = {}) {
   return AdminAction.create({
@@ -277,8 +297,24 @@ async function createAdminAction(adminId, overrides = {}) {
   });
 }
 
+// ── IntelLead ──────────────────────────────────────────────────────────────
+async function createLead(overrides = {}) {
+  return IntelLead.create({
+    title:       overrides.title      ?? `Test Lead ${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    nickname:    overrides.nickname   ?? '',
+    subtitle:    overrides.subtitle   ?? '',
+    category:    overrides.category   ?? 'News',
+    subcategory: overrides.subcategory ?? '',
+    section:     overrides.section    ?? '',
+    subsection:  overrides.subsection ?? '',
+    isPublished: overrides.isPublished !== undefined ? overrides.isPublished : false,
+    ...overrides,
+  });
+}
+
 module.exports = {
   createSettings,
+  createLead,
   createGameType,
   createRank,
   createUser,
@@ -297,4 +333,5 @@ module.exports = {
   createWhosAtAircraftGame,
   createWhosAtAircraftResult,
   createAdminAction,
+  createPasswordResetToken,
 };

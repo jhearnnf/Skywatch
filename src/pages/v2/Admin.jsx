@@ -1793,7 +1793,10 @@ const EMPTY_DRAFT = {
   keywords: [],
   sources: [],
   gameData: {},
-  associatedBaseBriefIds: [],
+  associatedBaseBriefIds:     [],
+  associatedSquadronBriefIds: [],
+  associatedAircraftBriefIds: [],
+  relatedBriefIds:            [],
 }
 
 const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
@@ -1814,14 +1817,22 @@ function isSimilarTitle(headline, existingTitles) {
 
 function LeadRow({ lead, picked, busy, onGenerate }) {
   return (
-    <div className={`flex items-start justify-between gap-3 py-2 px-3 rounded-xl mb-1 transition-colors ${picked?.text === lead.text ? 'bg-amber-50 border border-amber-200' : 'hover:bg-slate-50'}`}>
-      <p className="text-sm text-slate-700 flex-1">{lead.text}</p>
+    <div className={`flex items-start justify-between gap-3 py-2 px-3 rounded-xl mb-1 transition-colors ${picked?.title === lead.title ? 'bg-amber-50 border border-amber-200' : 'hover:bg-slate-50'}`}>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-slate-700">{lead.title}</p>
+        {lead.nickname && (
+          <p className="text-[11px] text-slate-400 mt-0.5">"{lead.nickname}"</p>
+        )}
+        {lead.subtitle && (
+          <p className="text-[11px] text-slate-400 mt-0.5 truncate">{lead.subtitle}</p>
+        )}
+      </div>
       <button
         onClick={() => onGenerate(lead)}
-        disabled={busy === lead.text}
+        disabled={busy === lead.title}
         className="text-xs px-3 py-1 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold whitespace-nowrap hover:bg-brand-100 disabled:opacity-40"
       >
-        {busy === lead.text ? '…' : 'Generate →'}
+        {busy === lead.title ? '…' : 'Generate →'}
       </button>
     </div>
   )
@@ -1835,6 +1846,8 @@ function LeadsModal({ API, onClose, onGenerate }) {
   const [busy,            setBusy]            = useState(null)
   const [openSections,    setOpenSections]    = useState(new Set())
   const [openSubsections, setOpenSubsections] = useState(new Set())
+  const [resetBusy,       setResetBusy]       = useState(false)
+  const [resetConfirm,    setResetConfirm]    = useState(false)
 
   const toggleSection = (sec) => setOpenSections(prev => {
     const next = new Set(prev); next.has(sec) ? next.delete(sec) : next.add(sec); return next
@@ -1861,7 +1874,10 @@ function LeadsModal({ API, onClose, onGenerate }) {
   }, [API])
 
   const filtered = leads.filter(l =>
-    !search || l.text.toLowerCase().includes(search.toLowerCase()) || l.section.toLowerCase().includes(search.toLowerCase())
+    !search ||
+    (l.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
+    (l.nickname ?? '').toLowerCase().includes(search.toLowerCase()) ||
+    (l.section ?? '').toLowerCase().includes(search.toLowerCase())
   )
 
   const pickRandom = () => {
@@ -1877,7 +1893,7 @@ function LeadsModal({ API, onClose, onGenerate }) {
 
   const generate = async (topicOrHeadline, isHeadline = false) => {
     const lead = typeof topicOrHeadline === 'string' ? null : topicOrHeadline
-    const key  = lead ? lead.text : topicOrHeadline
+    const key  = lead ? lead.title : topicOrHeadline
     setBusy(key)
     try {
       const body = isHeadline
@@ -1897,6 +1913,33 @@ function LeadsModal({ API, onClose, onGenerate }) {
       }
     } finally {
       setBusy(null)
+    }
+  }
+
+  const resetLeads = async () => {
+    setResetBusy(true)
+    setResetConfirm(false)
+    try {
+      const res  = await fetch(`${API}/api/admin/leads/reset`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Admin reset leads and stubs' }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        // Reload the leads list
+        fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
+          .then(r => r.json())
+          .then(d => { if (d.status === 'success') setLeads(d.data.leads) })
+          .catch(() => {})
+        alert(`Reset complete: ${data.data.leadsInserted} leads, ${data.data.stubsCreated} stub briefs`)
+      } else {
+        alert(`Reset failed: ${data.message}`)
+      }
+    } catch (err) {
+      alert(`Reset error: ${err.message}`)
+    } finally {
+      setResetBusy(false)
     }
   }
 
@@ -1972,6 +2015,28 @@ function LeadsModal({ API, onClose, onGenerate }) {
               <button onClick={pickRandom} className="text-xs px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 font-semibold transition-colors hover:bg-amber-100">
                 Pick Random
               </button>
+            </div>
+            <div className="px-4 pb-2 flex items-center gap-2">
+              {!resetConfirm ? (
+                <button
+                  onClick={() => setResetConfirm(true)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition-colors"
+                >
+                  🔄 Reset All Leads & Stubs
+                </button>
+              ) : (
+                <>
+                  <span className="text-xs text-red-600 font-semibold">Wipes all briefs — confirm?</span>
+                  <button
+                    onClick={resetLeads}
+                    disabled={resetBusy}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {resetBusy ? '…' : 'Yes, Reset'}
+                  </button>
+                  <button onClick={() => setResetConfirm(false)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+                </>
+              )}
             </div>
             <div className="overflow-y-auto flex-1 px-4 py-2">
               {Object.entries(grouped).map(([section, subsections]) => {
@@ -2182,7 +2247,9 @@ function BriefsTab({ API }) {
   const [staleSourceWarning, setStaleSourceWarning] = useState(false)
   // Section open/close
   const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: false, questions: false, images: true, sources: false, gameData: false })
-  const [allBasesBriefs, setAllBasesBriefs] = useState([]) // for the Aircraft home-bases picker
+  const [allBasesBriefs,     setAllBasesBriefs]     = useState([]) // Bases briefs for Aircraft/Squadrons picker
+  const [allSquadronsBriefs, setAllSquadronsBriefs] = useState([]) // Squadrons briefs for Bases/Aircraft picker
+  const [allAircraftBriefs,  setAllAircraftBriefs]  = useState([]) // Aircraft briefs for Bases/Squadrons picker
 
   const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }))
 
@@ -2224,7 +2291,10 @@ function BriefsTab({ API }) {
       keywords:            br.keywords ?? [],
       sources:             br.sources ?? [],
       gameData:            br.gameData ?? {},
-      associatedBaseBriefIds: (br.associatedBaseBriefIds ?? []).map(b => String(b._id ?? b)),
+      associatedBaseBriefIds:     (br.associatedBaseBriefIds     ?? []).map(b => String(b._id ?? b)),
+      associatedSquadronBriefIds: (br.associatedSquadronBriefIds ?? []).map(b => String(b._id ?? b)),
+      associatedAircraftBriefIds: (br.associatedAircraftBriefIds ?? []).map(b => String(b._id ?? b)),
+      relatedBriefIds:            (br.relatedBriefIds            ?? []).map(b => String(b._id ?? b)),
     })
     setEasyQuestions(br.quizQuestionsEasy?.map(q => ({
       question: q.question,
@@ -2242,13 +2312,21 @@ function BriefsTab({ API }) {
     setQTab('easy')
     setSaveStatus(null)
     setStaleSourceWarning(false)
-    // Pre-load bases briefs for Aircraft home-base picker
-    if (br.category === 'Aircrafts' && allBasesBriefs.length === 0) {
-      fetch(`${API}/api/admin/briefs?category=Bases&limit=100`, { credentials: 'include' })
-        .then(r => r.json())
-        .then(d => { if (d.data?.briefs) setAllBasesBriefs(d.data.briefs) })
-        .catch(() => {})
-    }
+    // Pre-load briefs for linked-brief pickers
+    const needsBases     = ['Aircrafts', 'Squadrons'].includes(br.category)
+    const needsSquadrons = ['Bases', 'Aircrafts'].includes(br.category)
+    const needsAircraft  = ['Bases', 'Squadrons'].includes(br.category)
+    const fetches = []
+    if (needsBases     && allBasesBriefs.length === 0)
+      fetches.push(fetch(`${API}/api/admin/briefs?category=Bases&limit=200`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllBasesBriefs(d.data.briefs) }).catch(() => {}))
+    if (needsSquadrons && allSquadronsBriefs.length === 0)
+      fetches.push(fetch(`${API}/api/admin/briefs?category=Squadrons&limit=200`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllSquadronsBriefs(d.data.briefs) }).catch(() => {}))
+    if (needsAircraft  && allAircraftBriefs.length === 0)
+      fetches.push(fetch(`${API}/api/admin/briefs?category=Aircrafts&limit=200`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllAircraftBriefs(d.data.briefs) }).catch(() => {}))
+    if (fetches.length) Promise.all(fetches).catch(() => {})
     setView('editor')
   }
 
@@ -2319,7 +2397,7 @@ function BriefsTab({ API }) {
         await fetch(`${API}/api/admin/intel-leads/mark-complete`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lead: pendingLead }),
+          body: JSON.stringify({ title: pendingLead }),
         }).catch(() => {})
         setPendingLead(null)
       }
@@ -2381,7 +2459,7 @@ function BriefsTab({ API }) {
     setMedia([])
     setPendingImages([])
     setBriefId(null)
-    setPendingLead(lead ? lead.text : null)
+    setPendingLead(lead ? lead.title : null)
     setStaleSourceWarning(briefData.staleSourceWarning ?? false)
     setView('editor')
 
@@ -2815,12 +2893,15 @@ function BriefsTab({ API }) {
                     type="button"
                     onClick={() => {
                       setDraft(p => ({ ...p, category: c, subcategory: '' }))
-                      if (c === 'Aircrafts' && allBasesBriefs.length === 0) {
-                        fetch(`${API}/api/admin/briefs?category=Bases&limit=100`, { credentials: 'include' })
-                          .then(r => r.json())
-                          .then(d => { if (d.data?.briefs) setAllBasesBriefs(d.data.briefs) })
-                          .catch(() => {})
-                      }
+                      if (['Aircrafts', 'Squadrons'].includes(c) && allBasesBriefs.length === 0)
+                        fetch(`${API}/api/admin/briefs?category=Bases&limit=200`, { credentials: 'include' })
+                          .then(r => r.json()).then(d => { if (d.data?.briefs) setAllBasesBriefs(d.data.briefs) }).catch(() => {})
+                      if (['Bases', 'Aircrafts'].includes(c) && allSquadronsBriefs.length === 0)
+                        fetch(`${API}/api/admin/briefs?category=Squadrons&limit=200`, { credentials: 'include' })
+                          .then(r => r.json()).then(d => { if (d.data?.briefs) setAllSquadronsBriefs(d.data.briefs) }).catch(() => {})
+                      if (['Bases', 'Squadrons'].includes(c) && allAircraftBriefs.length === 0)
+                        fetch(`${API}/api/admin/briefs?category=Aircrafts&limit=200`, { credentials: 'include' })
+                          .then(r => r.json()).then(d => { if (d.data?.briefs) setAllAircraftBriefs(d.data.briefs) }).catch(() => {})
                     }}
                     className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
                       ${draft.category === c
@@ -3054,56 +3135,91 @@ function BriefsTab({ API }) {
         </div>
       )}
 
-      {/* ── Section D2: Home Bases (Aircraft only) ─────────────────── */}
-      {draft.category === 'Aircrafts' && (
-        <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
-            <div>
-              <h3 className="font-bold text-slate-800">🗺️ Home Bases</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Link base briefs for the Where's That Aircraft game</p>
-            </div>
-            {allBasesBriefs.length > 0 && (
-              <GenerateBasesButton
-                title={draft.title}
-                body={draft.body}
-                basesBriefs={allBasesBriefs}
-                API={API}
-                onResult={ids => setDraft(p => ({ ...p, associatedBaseBriefIds: ids }))}
-              />
-            )}
-          </div>
-          <div className="px-5 py-4">
-            {allBasesBriefs.length === 0 ? (
-              <p className="text-sm text-slate-400">No bases briefs available — create some first.</p>
-            ) : (
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {allBasesBriefs.map(b => {
-                  const checked = (draft.associatedBaseBriefIds ?? []).includes(String(b._id))
-                  return (
-                    <label key={b._id} className="flex items-center gap-2 cursor-pointer py-1">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={e => setDraft(p => {
-                          const ids = p.associatedBaseBriefIds ?? []
-                          return {
-                            ...p,
-                            associatedBaseBriefIds: e.target.checked
-                              ? [...ids, String(b._id)]
-                              : ids.filter(id => id !== String(b._id)),
-                          }
-                        })}
-                        className="rounded"
-                      />
-                      <span className="text-sm text-slate-700">{b.title}</span>
-                    </label>
-                  )
-                })}
+      {/* ── Section D2: Linked Briefs ────────────────────────────────── */}
+      {(() => {
+        const cat = draft.category
+        const linkedSections = []
+
+        if (['Aircrafts', 'Squadrons'].includes(cat))
+          linkedSections.push({
+            label: '🗺️ Home Bases', desc: 'Link base briefs', field: 'associatedBaseBriefIds', pool: allBasesBriefs,
+          })
+        if (['Bases', 'Aircrafts'].includes(cat))
+          linkedSections.push({
+            label: '✈️ Squadrons', desc: 'Link squadron briefs', field: 'associatedSquadronBriefIds', pool: allSquadronsBriefs,
+          })
+        if (['Bases', 'Squadrons'].includes(cat))
+          linkedSections.push({
+            label: '🛩️ Aircraft', desc: 'Link aircraft briefs', field: 'associatedAircraftBriefIds', pool: allAircraftBriefs,
+          })
+        linkedSections.push({
+          label: '🔗 Related Briefs', desc: 'Generic cross-category links', field: 'relatedBriefIds', pool: [
+            ...allBasesBriefs, ...allSquadronsBriefs, ...allAircraftBriefs,
+          ].filter((b, i, arr) => arr.findIndex(x => String(x._id) === String(b._id)) === i),
+        })
+
+        if (linkedSections.every(s => s.label !== '🗺️ Home Bases') && linkedSections.every(s => s.label !== '✈️ Squadrons') && linkedSections.every(s => s.label !== '🛩️ Aircraft'))
+          return null
+
+        return (
+          <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-800">🕸️ Linked Briefs</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Connect related briefs to build the knowledge graph</p>
               </div>
-            )}
+              {cat === 'Aircrafts' && allBasesBriefs.length > 0 && (
+                <GenerateBasesButton
+                  title={draft.title}
+                  body={draft.body}
+                  basesBriefs={allBasesBriefs}
+                  API={API}
+                  onResult={ids => setDraft(p => ({ ...p, associatedBaseBriefIds: ids }))}
+                />
+              )}
+            </div>
+            <div className="px-5 py-4 space-y-5">
+              {linkedSections.map(sec => (
+                <div key={sec.field}>
+                  <p className="text-xs font-bold text-slate-600 mb-1">{sec.label}</p>
+                  <p className="text-[11px] text-slate-400 mb-2">{sec.desc}</p>
+                  {sec.pool.length === 0 ? (
+                    <p className="text-xs text-slate-400">No briefs available yet.</p>
+                  ) : (
+                    <div className="space-y-1 max-h-40 overflow-y-auto border border-slate-100 rounded-xl p-2">
+                      {sec.pool.map(b => {
+                        const checked = (draft[sec.field] ?? []).includes(String(b._id))
+                        return (
+                          <label key={b._id} className="flex items-center gap-2 cursor-pointer py-0.5">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={e => setDraft(p => {
+                                const ids = p[sec.field] ?? []
+                                return {
+                                  ...p,
+                                  [sec.field]: e.target.checked
+                                    ? [...ids, String(b._id)]
+                                    : ids.filter(id => id !== String(b._id)),
+                                }
+                              })}
+                              className="rounded"
+                            />
+                            <span className="text-sm text-slate-700">{b.title}</span>
+                            {b.status === 'stub' && (
+                              <span className="text-[10px] text-slate-400 ml-auto">stub</span>
+                            )}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── Section E: Sources ────────────────────────────────────────── */}
       <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">

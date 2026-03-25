@@ -3,10 +3,12 @@ const bcrypt      = require('bcryptjs');
 const crypto      = require('crypto');
 const jwt         = require('jsonwebtoken');
 const User        = require('../models/User');
-const PendingRegistration = require('../models/PendingRegistration');
+const PendingRegistration    = require('../models/PendingRegistration');
+const PasswordResetToken     = require('../models/PasswordResetToken');
+const PasswordResetRateLimit = require('../models/PasswordResetRateLimit');
 const AppSettings = require('../models/AppSettings');
 const AircoinLog  = require('../models/AircoinLog');
-const { sendWelcomeEmail, sendConfirmationEmail } = require('../utils/email');
+const { sendWelcomeEmail, sendConfirmationEmail, sendPasswordResetEmail } = require('../utils/email');
 const { awardCoins }       = require('../utils/awardCoins');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -139,6 +141,90 @@ router.post('/login', async (req, res) => {
 
     const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
     sendToken(user, 200, res, { loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Password Reset ────────────────────────────────────────────────────────────
+
+// POST /api/auth/forgot-password — request a password reset link
+// Always returns the same neutral 200 response; never reveals if an email exists.
+// Google-only accounts (no stored password) are silently skipped.
+// Rate limited to 2 requests per email per 24 hours.
+router.post('/forgot-password', async (req, res) => {
+  const NEUTRAL_MSG = 'If your account matches the email provided, a password reset link has been dispatched.';
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email required' });
+
+    const normEmail = email.toLowerCase().trim();
+    const window24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Rate limit check — prune old timestamps and count remaining
+    const rateLimitDoc = await PasswordResetRateLimit.findOne({ email: normEmail });
+    const recentCount  = rateLimitDoc
+      ? rateLimitDoc.requestTimestamps.filter(t => t > window24h).length
+      : 0;
+
+    if (recentCount >= 2) {
+      return res.status(429).json({ message: 'Password reset limit reached. Please try again in 24 hours.' });
+    }
+
+    // Look up user — only proceed if account has a stored password (not Google-only)
+    const user = await User.findOne({ email: normEmail }).select('+password');
+    if (user && user.password) {
+      const rawToken  = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+      await PasswordResetToken.findOneAndUpdate(
+        { email: normEmail },
+        { tokenHash, expiresAt: new Date(Date.now() + 60 * 60 * 1000), usedAt: null },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+
+      const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/login?tab=reset-password&token=${rawToken}`;
+      sendPasswordResetEmail({ email: normEmail, resetUrl }); // fire and forget — non-fatal
+    }
+
+    // Record this request for rate limiting regardless of user existence
+    await PasswordResetRateLimit.findOneAndUpdate(
+      { email: normEmail },
+      { $push: { requestTimestamps: new Date() } },
+      { upsert: true }
+    );
+
+    res.status(200).json({ message: NEUTRAL_MSG });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/auth/reset-password — set a new password using a valid reset token
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return res.status(400).json({ message: 'Token and new password required' });
+    if (newPassword.length < 8) return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    if (!/^[0-9a-f]{64}$/.test(token)) return res.status(400).json({ message: 'Invalid reset token' });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const doc       = await PasswordResetToken.findOne({ tokenHash });
+
+    if (!doc)          return res.status(400).json({ message: 'This reset link is invalid or has expired.' });
+    if (doc.usedAt)    return res.status(400).json({ message: 'This reset link has already been used.' });
+    if (new Date() > doc.expiresAt) return res.status(400).json({ message: 'This reset link is invalid or has expired.' });
+
+    const user = await User.findOne({ email: doc.email }).select('+password');
+    if (!user) return res.status(400).json({ message: 'Account not found.' });
+
+    doc.usedAt = new Date();
+    await doc.save();
+
+    user.password = newPassword; // pre-save hook hashes it
+    await user.save();
+
+    res.status(200).json({ status: 'success', message: 'Password updated. You can now sign in.' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

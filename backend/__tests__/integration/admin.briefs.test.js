@@ -743,3 +743,104 @@ describe('POST /api/admin/briefs — category and subcategory validation', () =>
     expect(res.status).toBe(200);
   });
 });
+
+// ── Relationship arrays ────────────────────────────────────────────────────
+
+describe('Brief relationship arrays', () => {
+  it('PATCH can set associatedSquadronBriefIds, associatedAircraftBriefIds, relatedBriefIds', async () => {
+    const admin    = await createAdminUser();
+    const base     = await createBrief({ category: 'Bases',     title: 'RAF Lossiemouth' });
+    const squadron = await createBrief({ category: 'Squadrons', title: 'No. 617 Squadron' });
+    const aircraft = await createBrief({ category: 'Aircrafts', title: 'Typhoon FGR4' });
+    const related  = await createBrief({ category: 'Terminology', title: 'QRA' });
+
+    const res = await request(app)
+      .patch(`/api/admin/briefs/${base._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        associatedSquadronBriefIds: [squadron._id],
+        associatedAircraftBriefIds: [aircraft._id],
+        relatedBriefIds:            [related._id],
+        reason: 'Link test',
+      });
+
+    expect(res.status).toBe(200);
+    const updated = await IntelligenceBrief.findById(base._id);
+    expect(updated.associatedSquadronBriefIds.map(String)).toContain(String(squadron._id));
+    expect(updated.associatedAircraftBriefIds.map(String)).toContain(String(aircraft._id));
+    expect(updated.relatedBriefIds.map(String)).toContain(String(related._id));
+  });
+
+  it('GET /api/briefs/:id populates all four relationship arrays with title, category, status', async () => {
+    const base     = await createBrief({ category: 'News', title: 'RAF Coningsby News' });
+    const squadron = await createBrief({ category: 'Squadrons', title: 'No. 3 Squadron' });
+
+    await IntelligenceBrief.findByIdAndUpdate(base._id, {
+      associatedSquadronBriefIds: [squadron._id],
+    });
+
+    const user = await createAdminUser();
+    const res = await request(app).get(`/api/briefs/${base._id}`).set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(200);
+
+    const populated = res.body.data.brief.associatedSquadronBriefIds;
+    expect(populated).toHaveLength(1);
+    expect(populated[0].title).toBe('No. 3 Squadron');
+    expect(populated[0].category).toBe('Squadrons');
+    expect(populated[0]).toHaveProperty('status');
+  });
+
+  it('DELETE brief removes its ID from all relationship arrays on other briefs', async () => {
+    const admin    = await createAdminUser();
+    const base     = await createBrief({ category: 'Bases',     title: 'RAF Marham' });
+    const squadron = await createBrief({ category: 'Squadrons', title: 'No. 617 Squadron' });
+    const aircraft = await createBrief({ category: 'Aircrafts', title: 'F-35B' });
+
+    // Link base → squadron, aircraft
+    await IntelligenceBrief.findByIdAndUpdate(base._id, {
+      associatedSquadronBriefIds: [squadron._id],
+      associatedAircraftBriefIds: [aircraft._id],
+    });
+    // Also link squadron → base (via associatedBaseBriefIds)
+    await IntelligenceBrief.findByIdAndUpdate(squadron._id, {
+      associatedBaseBriefIds: [base._id],
+    });
+
+    // Delete the squadron brief
+    await request(app)
+      .delete(`/api/admin/briefs/${squadron._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: 'Cascade test' });
+
+    const updatedBase = await IntelligenceBrief.findById(base._id);
+    expect(updatedBase.associatedSquadronBriefIds.map(String)).not.toContain(String(squadron._id));
+  });
+
+  it('stub briefs have status: stub and empty descriptionSections', async () => {
+    const stub = await IntelligenceBrief.create({
+      title: 'Stub Brief',
+      category: 'Aircrafts',
+      status: 'stub',
+      descriptionSections: [],
+      keywords: [],
+      sources: [],
+    });
+    expect(stub.status).toBe('stub');
+    expect(stub.descriptionSections).toHaveLength(0);
+  });
+
+  it('POST /api/briefs/:id/complete returns 400 for stub briefs', async () => {
+    const user = await createAdminUser({ isAdmin: false });
+    const stub = await IntelligenceBrief.create({
+      title: 'Stub', category: 'Aircrafts', status: 'stub',
+      descriptionSections: [], keywords: [], sources: [],
+    });
+
+    const res = await request(app)
+      .post(`/api/briefs/${stub._id}/complete`)
+      .set('Cookie', authCookie(user._id))
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+});

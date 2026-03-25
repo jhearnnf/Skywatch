@@ -157,4 +157,67 @@ async function sendConfirmationEmail({ email, code }) {
   if (error) throw new Error(error.message);
 }
 
-module.exports = { sendWelcomeEmail, sendConfirmationEmail };
+// Send a password reset link to an existing agent.
+// Errors are caught internally so a mail failure never blocks the route response.
+async function sendPasswordResetEmail({ email, resetUrl }) {
+  try {
+    const s = await AppSettings.getSettings();
+    if (s.emailPasswordResetEnabled === false) return;
+
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: email,
+      subject: 'SkyWatch — Password Reset Request',
+      html: `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f8ff;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8ff;padding:48px 20px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
+
+        <!-- Blue accent bar -->
+        <tr><td style="background:linear-gradient(90deg,#1d4ed8 0%,#3b82f6 100%);height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+        <!-- Body -->
+        <tr><td style="padding:40px 36px;">
+
+          <p style="font-size:11px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#1d4ed8;margin:0 0 24px;">
+            Classified Transmission
+          </p>
+
+          <h1 style="font-size:26px;font-weight:800;color:#0f172a;letter-spacing:-0.02em;margin:0 0 8px;line-height:1.2;">
+            Reset Your Password
+          </h1>
+
+          <p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 32px;">
+            A password reset was requested for this SkyWatch account. Click the button below to set a new password. This link expires in <strong>1 hour</strong>.<br><br>
+            If you did not request a password reset, you can safely ignore this transmission.
+          </p>
+
+          <a href="${resetUrl}"
+             style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;
+                    font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;
+                    padding:13px 30px;border-radius:6px;">
+            Reset Password
+          </a>
+
+          <p style="font-size:11px;color:#94a3b8;margin:36px 0 0;padding-top:24px;border-top:1px solid #e2e8f0;line-height:1.6;">
+            SkyWatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>
+            If you didn&apos;t request this reset, you can safely ignore this email.
+          </p>
+
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+    });
+    if (error) throw new Error(error.message);
+  } catch (err) {
+    console.error('[email] Password reset email failed for', email, '—', err.message);
+  }
+}
+
+module.exports = { sendWelcomeEmail, sendConfirmationEmail, sendPasswordResetEmail };

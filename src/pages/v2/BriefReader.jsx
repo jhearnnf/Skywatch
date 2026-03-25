@@ -152,10 +152,25 @@ function StatRow({ label, value }) {
   )
 }
 
-function BooStatsPanel({ brief }) {
-  const gd  = brief.gameData
+function BriefPill({ b, navigate }) {
+  const isStub = b.status === 'stub'
+  return (
+    <button
+      onClick={() => navigate(`/brief/${b._id}`)}
+      className={`text-xs font-semibold px-2 py-0.5 rounded-full transition-opacity ${
+        isStub
+          ? 'bg-slate-600 text-slate-400 opacity-60 hover:opacity-80'
+          : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+      }`}
+    >
+      {isStub ? `🔒 ${b.title}` : b.title}
+    </button>
+  )
+}
+
+function BooStatsPanel({ brief, navigate }) {
+  const gd  = brief.gameData ?? {}
   const cat = brief.category
-  if (!gd) return null
 
   const stats = []
 
@@ -180,9 +195,23 @@ function BooStatsPanel({ brief }) {
       stats.push({ label: 'Period', value: `${gd.startYear} – ${gd.endYear != null ? gd.endYear : 'Present'}` })
   }
 
-  const homeBases = cat === 'Aircrafts' ? (brief.associatedBaseBriefIds ?? []) : []
+  // Typed relationship sections per category
+  const bases     = (brief.associatedBaseBriefIds     ?? []).filter(b => b?._id)
+  const squadrons = (brief.associatedSquadronBriefIds ?? []).filter(b => b?._id)
+  const aircraft  = (brief.associatedAircraftBriefIds ?? []).filter(b => b?._id)
+  const related   = (brief.relatedBriefIds            ?? []).filter(b => b?._id)
 
-  if (stats.length === 0 && homeBases.length === 0) return null
+  const sections = []
+  if (['Aircrafts', 'Squadrons'].includes(cat) && bases.length > 0)
+    sections.push({ label: `🗺️ Home Base${bases.length > 1 ? 's' : ''}`, items: bases })
+  if (['Bases', 'Aircrafts'].includes(cat) && squadrons.length > 0)
+    sections.push({ label: '✈️ Squadrons', items: squadrons })
+  if (['Bases', 'Squadrons'].includes(cat) && aircraft.length > 0)
+    sections.push({ label: '🛩️ Aircraft', items: aircraft })
+  if (related.length > 0)
+    sections.push({ label: '🔗 Related', items: related })
+
+  if (stats.length === 0 && sections.length === 0) return null
 
   return (
     <div className="bg-slate-800 rounded-2xl px-4 py-3 mb-5">
@@ -196,25 +225,62 @@ function BooStatsPanel({ brief }) {
           </div>
         </>
       )}
-      {homeBases.length > 0 && (
-        <div className={stats.length > 0 ? 'mt-3 pt-3 border-t border-slate-700' : ''}>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">🗺️ Home Base{homeBases.length > 1 ? 's' : ''}</span>
+      {sections.map((sec, i) => (
+        <div key={sec.label} className={stats.length > 0 || i > 0 ? 'mt-3 pt-3 border-t border-slate-700' : ''}>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">{sec.label}</span>
           <div className="flex flex-wrap gap-1.5">
-            {homeBases.map(b => (
-              <span key={b._id ?? b} className="text-xs font-semibold bg-slate-700 text-slate-200 px-2 py-0.5 rounded-full">
-                {b.title ?? b}
-              </span>
-            ))}
+            {sec.items.map(b => <BriefPill key={b._id} b={b} navigate={navigate} />)}
           </div>
         </div>
-      )}
+      ))}
+    </div>
+  )
+}
+
+// ── Continue Learning cards ───────────────────────────────────────────────
+function ContinueLearning({ brief, navigate }) {
+  const seen = new Set()
+  const cards = [
+    ...(brief.associatedBaseBriefIds     ?? []),
+    ...(brief.associatedSquadronBriefIds ?? []),
+    ...(brief.associatedAircraftBriefIds ?? []),
+    ...(brief.relatedBriefIds            ?? []),
+  ]
+    .filter(b => b?._id && !seen.has(String(b._id)) && seen.add(String(b._id)))
+    .slice(0, 5)
+
+  if (cards.length === 0) return null
+
+  return (
+    <div className="bg-surface rounded-2xl p-4 border border-slate-200 mb-6 card-shadow">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+        📡 Continue Learning
+      </p>
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {cards.map(b => (
+          <button
+            key={b._id}
+            onClick={() => navigate(`/brief/${b._id}`)}
+            className="shrink-0 flex flex-col gap-1 p-3 rounded-xl border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all text-left w-36"
+          >
+            <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wide">
+              {b.category}
+            </span>
+            <span className={`text-xs font-semibold leading-tight ${b.status === 'stub' ? 'text-slate-400' : 'text-slate-700'}`}>
+              {b.status === 'stub' ? `🔒 ${b.title}` : b.title}
+            </span>
+            {b.status === 'stub' && (
+              <span className="text-[10px] text-slate-400 font-medium">Coming soon</span>
+            )}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
 
 // ── Completion screen ─────────────────────────────────────────────────────
-function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user, isFirstCompletion, coinReward }) {
-  const navigate                    = useNavigate()
+function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user, isFirstCompletion, coinReward, navigate }) {
   const { API, setUser, awardAircoins } = useAuth()
   const [email, setEmail] = useState('')
   const googleBtnRef     = useRef(null)
@@ -310,6 +376,9 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
           </div>
         </div>
       )}
+
+      {/* Continue Learning */}
+      <ContinueLearning brief={brief} navigate={navigate} />
 
       <div className="space-y-3">
         {user ? (
@@ -482,7 +551,7 @@ export default function BriefReader() {
 
   // Accumulate read time while the user is on the page reading
   useEffect(() => {
-    if (!user || loading || !brief || done) return
+    if (!user || loading || !brief || done || brief.status === 'stub') return
 
     lastTickRef.current   = Date.now()
     accSecondsRef.current = 0
@@ -776,6 +845,108 @@ export default function BriefReader() {
     )
   }
 
+  if (brief.status === 'stub') {
+    return (
+      <>
+        <button
+          onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
+        >
+          ← {brief.category}
+        </button>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-xs font-bold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full border border-brand-200">
+            {brief.category}
+          </span>
+          {brief.subcategory && (
+            <span className="text-xs text-slate-400 font-medium">{brief.subcategory}</span>
+          )}
+        </div>
+        <h1 className="text-2xl font-extrabold text-slate-900 leading-tight mb-6">{brief.title}</h1>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-slate-900 rounded-2xl p-8 text-center"
+        >
+          <div className="text-5xl mb-4">🔒</div>
+          <h2 className="text-xl font-extrabold text-white mb-2 tracking-wide">
+            Intelligence Surveillance Underway
+          </h2>
+          <p className="text-slate-400 text-sm leading-relaxed max-w-xs mx-auto">
+            Our analysts are currently compiling this brief. Check back here soon for the full intelligence report.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <motion.div
+              animate={{ opacity: [0.3, 1, 0.3] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              className="flex items-center gap-2 text-xs font-bold tracking-[0.2em] text-red-400 uppercase"
+            >
+              <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+              Surveillance Active
+            </motion.div>
+          </div>
+        </motion.div>
+        <button
+          onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          className="mt-5 w-full py-3 border border-slate-200 text-slate-600 font-semibold rounded-2xl hover:bg-slate-50 transition-colors"
+        >
+          ← Back to {brief.category}
+        </button>
+      </>
+    )
+  }
+
+  if (!sections.length && !done) {
+    return (
+      <>
+        <button
+          onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
+        >
+          ← {brief.category}
+        </button>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="text-xs font-bold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full border border-brand-200">
+            {brief.category}
+          </span>
+          {brief.subcategory && (
+            <span className="text-xs text-slate-400 font-medium">{brief.subcategory}</span>
+          )}
+        </div>
+        <h1 className="text-2xl font-extrabold text-slate-900 leading-tight mb-6">{brief.title}</h1>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-slate-900 rounded-2xl p-8 text-center"
+        >
+          <div className="text-5xl mb-4">🔒</div>
+          <h2 className="text-xl font-extrabold text-white mb-2 tracking-wide">
+            Intelligence Surveillance Underway
+          </h2>
+          <p className="text-slate-400 text-sm leading-relaxed max-w-xs mx-auto">
+            Our analysts are currently compiling this brief. Check back here soon for the full intelligence report.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <motion.div
+              animate={{ opacity: [0.3, 1, 0.3] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+              className="flex items-center gap-2 text-xs font-bold tracking-[0.2em] text-red-400 uppercase"
+            >
+              <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+              Surveillance Active
+            </motion.div>
+          </div>
+        </motion.div>
+        <button
+          onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          className="mt-5 w-full py-3 border border-slate-200 text-slate-600 font-semibold rounded-2xl hover:bg-slate-50 transition-colors"
+        >
+          ← Back to {brief.category}
+        </button>
+      </>
+    )
+  }
+
   return (
     <>
       <TutorialModal />
@@ -836,7 +1007,7 @@ export default function BriefReader() {
       </div>
 
       {/* BOO stats */}
-      <BooStatsPanel brief={brief} />
+      <BooStatsPanel brief={brief} navigate={navigate} />
 
       {/* Cover image(s) */}
       {brief.media?.[0]?.mediaUrl && (
@@ -854,6 +1025,7 @@ export default function BriefReader() {
           booState={booState}
           onBattleOrder={booState === 'available' ? () => navigate(`/battle-of-order/${briefId}`) : null}
           onBack={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          navigate={navigate}
         />
       ) : (
         <>

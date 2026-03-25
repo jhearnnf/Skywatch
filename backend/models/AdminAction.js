@@ -18,6 +18,7 @@ const ACTION_TYPES = [
   'regenerate_brief_cascade',
   'award_test_coins',
   'change_subscription',
+  'reset_leads',
 ];
 
 const adminActionSchema = new mongoose.Schema({

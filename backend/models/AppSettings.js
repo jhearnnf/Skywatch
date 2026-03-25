@@ -101,8 +101,9 @@ const appSettingsSchema = new mongoose.Schema({
   tutorialContent: { type: mongoose.Schema.Types.Mixed, default: {} },
 
   // Email feature flags
-  emailWelcomeEnabled:      { type: Boolean, default: true },
-  emailConfirmationEnabled: { type: Boolean, default: true },
+  emailWelcomeEnabled:        { type: Boolean, default: true },
+  emailConfirmationEnabled:   { type: Boolean, default: true },
+  emailPasswordResetEnabled:  { type: Boolean, default: true },
 
   // Welcome email — all fields optional; absent or empty falls back to hardcoded defaults in email.js
   welcomeEmailSubject: { type: String, default: '' },

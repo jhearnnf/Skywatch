@@ -4,7 +4,8 @@
  * Integration tests for:
  *   GET  /api/admin/intel-leads
  *   POST /api/admin/intel-leads/mark-complete
- *   seedLeads parser
+ *   POST /api/admin/leads/reset
+ *   seedLeads (unit tests)
  */
 
 process.env.JWT_SECRET = 'test_secret';
@@ -12,82 +13,48 @@ process.env.JWT_SECRET = 'test_secret';
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
-const { createSettings, createAdminUser, authCookie } = require('../helpers/factories');
-const IntelLead = require('../../models/IntelLead');
-const { parseLeadsFile } = require('../../seeds/seedLeads');
+const { createSettings, createAdminUser, authCookie, createLead } = require('../helpers/factories');
+const IntelLead         = require('../../models/IntelLead');
+const IntelligenceBrief = require('../../models/IntelligenceBrief');
+const seedLeads         = require('../../seeds/seedLeads');
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => { await createSettings(); });
 afterEach(async () => { await db.clearDatabase(); });
 afterAll(() => {});
 
-// ── Parser unit tests ──────────────────────────────────────────────────────
+// ── seedLeads unit tests ────────────────────────────────────────────────────
 
-describe('parseLeadsFile', () => {
-  const SAMPLE = `
-================================================================================
-SKYWATCH — HEADER
-================================================================================
+describe('seedLeads', () => {
+  it('inserts leads with title, nickname, subtitle fields', async () => {
+    await seedLeads();
+    const count = await IntelLead.countDocuments();
+    expect(count).toBeGreaterThan(0);
 
-LEGEND
-  [DB]  = published
-
-================================================================================
-SECTION 1: RAF RANKS
-================================================================================
-
---- COMMISSIONED OFFICER RANKS ---
-Air Chief Marshal
-Air Marshal [DB]
-
---- NON-COMMISSIONED RANKS ---
-Flight Sergeant
-
-================================================================================
-SECTION 2: RAF SQUADRONS
-================================================================================
-
---- ACTIVE FRONT-LINE SQUADRONS ---
-No. 1 Squadron RAF
-No. 617 Squadron RAF (The Dambusters) [DB]
-
-END OF FILE
-`.trim();
-
-  it('returns one entry per lead line', () => {
-    const leads = parseLeadsFile(SAMPLE);
-    expect(leads).toHaveLength(5);
+    const lead = await IntelLead.findOne({ title: 'No. 617 Squadron RAF' });
+    expect(lead).toBeTruthy();
+    expect(lead.nickname).toBe('The Dambusters');
+    expect(lead.subtitle).toBeTruthy();
+    expect(lead.category).toBe('Squadrons');
   });
 
-  it('marks [DB] lines as isPublished: true and strips the tag from text', () => {
-    const leads = parseLeadsFile(SAMPLE);
-    const marshal = leads.find(l => l.text === 'Air Marshal');
-    expect(marshal.isPublished).toBe(true);
+  it('creates a stub IntelligenceBrief for every lead', async () => {
+    await seedLeads();
+    const leadCount = await IntelLead.countDocuments();
+    const stubCount = await IntelligenceBrief.countDocuments({ status: 'stub' });
+    expect(stubCount).toBe(leadCount);
   });
 
-  it('marks non-[DB] lines as isPublished: false', () => {
-    const leads = parseLeadsFile(SAMPLE);
-    const acm = leads.find(l => l.text === 'Air Chief Marshal');
-    expect(acm.isPublished).toBe(false);
+  it('all seeded leads have isPublished: false', async () => {
+    await seedLeads();
+    const published = await IntelLead.countDocuments({ isPublished: true });
+    expect(published).toBe(0);
   });
 
-  it('strips [DB] from text so text does not contain the tag', () => {
-    const leads = parseLeadsFile(SAMPLE);
-    expect(leads.every(l => !l.text.includes('[DB]'))).toBe(true);
-  });
-
-  it('attaches section and subsection correctly', () => {
-    const leads = parseLeadsFile(SAMPLE);
-    const fs    = leads.find(l => l.text === 'Flight Sergeant');
-    expect(fs.section).toBe('SECTION 1: RAF RANKS');
-    expect(fs.subsection).toBe('NON-COMMISSIONED RANKS');
-  });
-
-  it('skips header/legend/footer lines', () => {
-    const leads = parseLeadsFile(SAMPLE);
-    expect(leads.find(l => l.text.includes('SKYWATCH'))).toBeUndefined();
-    expect(leads.find(l => l.text.includes('LEGEND'))).toBeUndefined();
-    expect(leads.find(l => l.text.includes('END OF'))).toBeUndefined();
+  it('all seeded stubs have no descriptionSections', async () => {
+    await seedLeads();
+    const withContent = await IntelligenceBrief.countDocuments({ descriptionSections: { $ne: [] } });
+    expect(withContent).toBe(0);
   });
 });
 
@@ -118,11 +85,9 @@ describe('POST /api/admin/intel-leads/mark-complete — auth guards', () => {
 
 describe('GET /api/admin/intel-leads', () => {
   it('returns only unpublished leads', async () => {
-    await IntelLead.create([
-      { text: 'Unpublished Lead A', section: 'S1', subsection: 'sub1', isPublished: false },
-      { text: 'Published Lead B',   section: 'S1', subsection: 'sub1', isPublished: true  },
-      { text: 'Unpublished Lead C', section: 'S2', subsection: 'sub2', isPublished: false },
-    ]);
+    await createLead({ title: 'Unpublished Lead A', isPublished: false });
+    await createLead({ title: 'Published Lead B',   isPublished: true  });
+    await createLead({ title: 'Unpublished Lead C', isPublished: false });
 
     const user   = await createAdminUser();
     const cookie = authCookie(user._id);
@@ -134,7 +99,7 @@ describe('GET /api/admin/intel-leads', () => {
   });
 
   it('returns empty array when all leads are published', async () => {
-    await IntelLead.create({ text: 'Done Lead', section: 'S1', subsection: 's', isPublished: true });
+    await createLead({ title: 'Done Lead', isPublished: true });
 
     const user   = await createAdminUser();
     const cookie = authCookie(user._id);
@@ -144,25 +109,46 @@ describe('GET /api/admin/intel-leads', () => {
     expect(res.body.data.leads).toHaveLength(0);
   });
 
-  it('returns text, section, subsection fields', async () => {
-    await IntelLead.create({ text: 'My Lead', section: 'SECTION 1', subsection: 'SUBSEC', isPublished: false });
+  it('returns title, nickname, subtitle, section, subsection fields', async () => {
+    await createLead({
+      title:      'RAF Lossiemouth',
+      nickname:   '',
+      subtitle:   'Scotland\'s primary fast jet base',
+      section:    'RAF BASES',
+      subsection: 'UK Active',
+      category:   'Bases',
+    });
 
     const user   = await createAdminUser();
     const cookie = authCookie(user._id);
     const res = await request(app).get('/api/admin/intel-leads').set('Cookie', cookie);
 
     const lead = res.body.data.leads[0];
-    expect(lead.text).toBe('My Lead');
-    expect(lead.section).toBe('SECTION 1');
-    expect(lead.subsection).toBe('SUBSEC');
+    expect(lead.title).toBe('RAF Lossiemouth');
+    expect(lead.subtitle).toBe('Scotland\'s primary fast jet base');
+    expect(lead.section).toBe('RAF BASES');
+    expect(lead.subsection).toBe('UK Active');
+  });
+
+  it('does NOT return the nickname/title/subtitle keys as undefined on leads without them', async () => {
+    await createLead({ title: 'Plain Lead' });
+
+    const user   = await createAdminUser();
+    const cookie = authCookie(user._id);
+    const res = await request(app).get('/api/admin/intel-leads').set('Cookie', cookie);
+
+    const lead = res.body.data.leads[0];
+    expect(lead.title).toBe('Plain Lead');
+    expect(lead.nickname).toBe('');
+    expect(lead.subtitle).toBe('');
   });
 });
 
 // ── POST /api/admin/intel-leads/mark-complete ──────────────────────────────
 
 describe('POST /api/admin/intel-leads/mark-complete', () => {
-  it('marks a lead as published', async () => {
-    await IntelLead.create({ text: 'Typhoon FGR4', section: 'S1', subsection: 's', isPublished: false });
+  it('marks a lead as published by title', async () => {
+    await createLead({ title: 'Typhoon FGR4', isPublished: false });
 
     const user   = await createAdminUser();
     const cookie = authCookie(user._id);
@@ -172,11 +158,11 @@ describe('POST /api/admin/intel-leads/mark-complete', () => {
       .send({ lead: 'Typhoon FGR4' });
 
     expect(res.status).toBe(200);
-    const updated = await IntelLead.findOne({ text: 'Typhoon FGR4' });
+    const updated = await IntelLead.findOne({ title: 'Typhoon FGR4' });
     expect(updated.isPublished).toBe(true);
   });
 
-  it('returns 404 when lead text does not exist', async () => {
+  it('returns 404 when lead title does not exist', async () => {
     const user   = await createAdminUser();
     const cookie = authCookie(user._id);
     const res = await request(app)
@@ -188,7 +174,7 @@ describe('POST /api/admin/intel-leads/mark-complete', () => {
   });
 
   it('returns 404 when lead is already published', async () => {
-    await IntelLead.create({ text: 'Already Done', section: 'S1', subsection: 's', isPublished: true });
+    await createLead({ title: 'Already Done', isPublished: true });
 
     const user   = await createAdminUser();
     const cookie = authCookie(user._id);
@@ -211,8 +197,8 @@ describe('POST /api/admin/intel-leads/mark-complete', () => {
     expect(res.status).toBe(400);
   });
 
-  it('trims whitespace from the lead text when matching', async () => {
-    await IntelLead.create({ text: 'Padded Lead', section: 'S1', subsection: 's', isPublished: false });
+  it('trims whitespace from the lead title when matching', async () => {
+    await createLead({ title: 'Padded Lead', isPublished: false });
 
     const user   = await createAdminUser();
     const cookie = authCookie(user._id);
@@ -222,7 +208,66 @@ describe('POST /api/admin/intel-leads/mark-complete', () => {
       .send({ lead: '  Padded Lead  ' });
 
     expect(res.status).toBe(200);
-    const updated = await IntelLead.findOne({ text: 'Padded Lead' });
+    const updated = await IntelLead.findOne({ title: 'Padded Lead' });
     expect(updated.isPublished).toBe(true);
+  });
+});
+
+// ── POST /api/admin/leads/reset ───────────────────────────────────────────
+
+describe('POST /api/admin/leads/reset', () => {
+  it('returns 401 for unauthenticated request', async () => {
+    const res = await request(app).post('/api/admin/leads/reset').send({ reason: 'test' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin user', async () => {
+    const user   = await createAdminUser({ isAdmin: false });
+    const cookie = authCookie(user._id);
+    const res = await request(app)
+      .post('/api/admin/leads/reset')
+      .set('Cookie', cookie)
+      .send({ reason: 'test' });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 when no reason provided', async () => {
+    const user   = await createAdminUser();
+    const cookie = authCookie(user._id);
+    const res = await request(app)
+      .post('/api/admin/leads/reset')
+      .set('Cookie', cookie)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('wipes leads and creates new leads + stub briefs', async () => {
+    // Pre-populate some old leads so we can verify they are replaced
+    await createLead({ title: 'Old Lead To Be Wiped' });
+
+    const user   = await createAdminUser();
+    const cookie = authCookie(user._id);
+    const res = await request(app)
+      .post('/api/admin/leads/reset')
+      .set('Cookie', cookie)
+      .send({ reason: 'Resetting for new schema' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.leadsInserted).toBeGreaterThan(0);
+    expect(res.body.data.stubsCreated).toBeGreaterThan(0);
+
+    // Old lead should be gone
+    const oldLead = await IntelLead.findOne({ title: 'Old Lead To Be Wiped' });
+    expect(oldLead).toBeNull();
+
+    // Stub briefs should exist
+    const stubs = await IntelligenceBrief.find({ status: 'stub' });
+    expect(stubs.length).toBe(res.body.data.stubsCreated);
+    // Each stub should have at least title and category
+    stubs.forEach(s => {
+      expect(s.title).toBeTruthy();
+      expect(s.category).toBeTruthy();
+    });
   });
 });

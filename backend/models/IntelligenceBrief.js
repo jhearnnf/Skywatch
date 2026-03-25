@@ -168,9 +168,18 @@ const intelligenceBriefSchema = new mongoose.Schema(
       endYear:            { type: Number },   // null = ongoing
     },
 
-    // Aircraft briefs only — references to Bases IntelligenceBrief documents
-    // Used by Where's That Aircraft game to link aircraft to their home bases
-    associatedBaseBriefIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+    // Relationship arrays — typed links between brief categories
+    // Aircraft/Squadron briefs → home Bases
+    associatedBaseBriefIds:     [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+    // Bases/Aircraft briefs → Squadrons
+    associatedSquadronBriefIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+    // Bases/Squadron briefs → Aircraft
+    associatedAircraftBriefIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+    // Generic catch-all for any cross-category link (Terminology, Roles, etc.)
+    relatedBriefIds:            [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+
+    // 'stub' = title/category only, no content yet. 'published' = full brief.
+    status: { type: String, enum: ['stub', 'published'], default: 'published' },
 
     // 10 questions per difficulty — references to GameQuizQuestion
     quizQuestionsEasy: {

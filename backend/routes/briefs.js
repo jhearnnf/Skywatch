@@ -221,7 +221,10 @@ router.get('/:id', optionalAuth, async (req, res) => {
       .populate('media')
       .populate('quizQuestionsEasy')
       .populate('quizQuestionsMedium')
-      .populate('associatedBaseBriefIds', '_id title');
+      .populate('associatedBaseBriefIds',     '_id title category status')
+      .populate('associatedSquadronBriefIds', '_id title category status')
+      .populate('associatedAircraftBriefIds', '_id title category status')
+      .populate('relatedBriefIds',            '_id title subtitle category status');
 
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
@@ -284,6 +287,7 @@ router.post('/:id/complete', protect, async (req, res) => {
   try {
     const brief = await IntelligenceBrief.findById(req.params.id);
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    if (brief.status === 'stub' || !brief.descriptionSections?.length) return res.status(400).json({ message: 'Brief has no content yet' });
 
     const settings = await AppSettings.getSettings();
 
@@ -385,6 +389,9 @@ router.post('/:id/complete', protect, async (req, res) => {
 router.patch('/:id/time', protect, async (req, res) => {
   try {
     const { seconds } = req.body;
+    const brief = await IntelligenceBrief.findById(req.params.id).select('status');
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    if (brief.status === 'stub') return res.status(400).json({ message: 'Brief is not yet available' });
     await IntelligenceBriefRead.findOneAndUpdate(
       { userId: req.user._id, intelBriefId: req.params.id },
       { $inc: { timeSpentSeconds: seconds }, lastReadAt: new Date() }
@@ -398,6 +405,9 @@ router.patch('/:id/time', protect, async (req, res) => {
 // POST /api/briefs/:id/use-ammo — decrement ammo by 1 on keyword click
 router.post('/:id/use-ammo', protect, async (req, res) => {
   try {
+    const stubCheck = await IntelligenceBrief.findById(req.params.id).select('status');
+    if (!stubCheck) return res.status(404).json({ message: 'Brief not found' });
+    if (stubCheck.status === 'stub') return res.status(400).json({ message: 'Brief is not yet available' });
     const record = await IntelligenceBriefRead.findOne({
       userId: req.user._id,
       intelBriefId: req.params.id,

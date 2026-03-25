@@ -8,31 +8,40 @@ import LockedCategoryModal from '../../components/LockedCategoryModal'
 import { CATEGORY_ICONS, SUBCATEGORIES } from '../../data/mockData'
 
 function BriefNode({ brief, index, isRead, isStarted, quizPassed, onLockedClick }) {
-  const locked = brief.isLocked ?? false
+  const locked  = brief.isLocked ?? false
+  const isStub  = brief.status === 'stub'
 
-  const cardClass = isRead
-    ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
-    : isStarted
-      ? 'bg-amber-50 border-amber-200 hover:border-amber-300'
-      : 'bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 card-shadow hover:card-shadow-hover'
+  const cardClass = isStub
+    ? 'bg-slate-50 border-slate-200 hover:border-slate-300'
+    : isRead
+      ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
+      : isStarted
+        ? 'bg-amber-50 border-amber-200 hover:border-amber-300'
+        : 'bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 card-shadow hover:card-shadow-hover'
 
-  const circleClass = isRead
-    ? 'bg-emerald-500 border-emerald-500 text-white'
-    : isStarted
-      ? 'bg-amber-400 border-amber-400 text-white'
-      : 'bg-surface border-slate-200 group-hover:border-brand-400'
+  const circleClass = isStub
+    ? 'bg-slate-100 border-slate-300 text-slate-400'
+    : isRead
+      ? 'bg-emerald-500 border-emerald-500 text-white'
+      : isStarted
+        ? 'bg-amber-400 border-amber-400 text-white'
+        : 'bg-surface border-slate-200 group-hover:border-brand-400'
 
-  const circleIcon = isRead
-    ? '✓'
-    : isStarted
-      ? '◑'
-      : locked ? '🔒' : CATEGORY_ICONS[brief.category] ?? '📄'
+  const circleIcon = isStub
+    ? '🔒'
+    : isRead
+      ? '✓'
+      : isStarted
+        ? '◑'
+        : locked ? '🔒' : CATEGORY_ICONS[brief.category] ?? '📄'
 
-  const titleClass = isRead
-    ? 'text-emerald-800'
-    : isStarted
-      ? 'text-amber-900'
-      : 'text-slate-800'
+  const titleClass = isStub
+    ? 'text-slate-400'
+    : isRead
+      ? 'text-emerald-800'
+      : isStarted
+        ? 'text-amber-900'
+        : 'text-slate-800'
 
   const arrowClass = isRead
     ? 'text-emerald-300'
@@ -64,29 +73,38 @@ function BriefNode({ brief, index, isRead, isStarted, quizPassed, onLockedClick 
                 <p className={`font-bold text-sm leading-snug ${titleClass}`}>
                   {brief.title}
                 </p>
-                {brief.historic && (
-                  <span className="text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full shrink-0">
-                    Historic
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {isStub && (
+                    <span className="text-[10px] font-bold bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded-full tracking-wide">
+                      CLASSIFIED
+                    </span>
+                  )}
+                  {brief.historic && !isStub && (
+                    <span className="text-[10px] font-semibold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">
+                      Historic
+                    </span>
+                  )}
+                </div>
               </div>
               {brief.subtitle && (
                 <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{brief.subtitle}</p>
               )}
-              <div className="flex items-center gap-3 mt-2">
-                {brief.keywords?.length > 0 && (
-                  <span className="text-[10px] text-slate-400">🔑 {brief.keywords.length} keywords</span>
-                )}
-                {isRead && (
-                  <span className="text-[10px] text-emerald-600 font-semibold">✓ Read</span>
-                )}
-                {isStarted && !isRead && (
-                  <span className="text-[10px] text-amber-600 font-semibold">◑ In Progress</span>
-                )}
-                {quizPassed && (
-                  <span className="text-[10px] text-amber-600 font-semibold">★ Quiz Passed</span>
-                )}
-              </div>
+              {!isStub && (
+                <div className="flex items-center gap-3 mt-2">
+                  {brief.keywords?.length > 0 && (
+                    <span className="text-[10px] text-slate-400">🔑 {brief.keywords.length} keywords</span>
+                  )}
+                  {isRead && (
+                    <span className="text-[10px] text-emerald-600 font-semibold">✓ Read</span>
+                  )}
+                  {isStarted && !isRead && (
+                    <span className="text-[10px] text-amber-600 font-semibold">◑ In Progress</span>
+                  )}
+                  {quizPassed && (
+                    <span className="text-[10px] text-amber-600 font-semibold">★ Quiz Passed</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Arrow / lock hint */}
@@ -107,7 +125,7 @@ function BriefNode({ brief, index, isRead, isStarted, quizPassed, onLockedClick 
         ) : (
           <Link
             to={`/brief/${brief._id}`}
-            className={`flex items-start gap-4 p-4 rounded-2xl border transition-all group ${cardClass} hover:-translate-y-0.5 cursor-pointer`}
+            className={`flex items-start gap-4 p-4 rounded-2xl border transition-all group ${cardClass} hover:-translate-y-0.5 cursor-pointer ${isStub ? 'opacity-55 hover:opacity-75' : ''}`}
           >
             {inner}
           </Link>

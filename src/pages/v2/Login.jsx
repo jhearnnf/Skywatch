@@ -6,7 +6,15 @@ import { useAuth } from '../../context/AuthContext'
 import { consumePendingBrief } from '../../utils/pendingBrief'
 import { ONBOARDING_KEY } from '../../components/onboarding/WelcomeAgentFlow'
 
-const VIEW = { CHOICE: 'choice', SIGNIN: 'signin', REGISTER: 'register', VERIFY: 'verify' }
+const VIEW = {
+  CHOICE:          'choice',
+  SIGNIN:          'signin',
+  REGISTER:        'register',
+  VERIFY:          'verify',
+  FORGOT_PASSWORD: 'forgot-password',
+  RESET_SENT:      'reset-sent',
+  RESET_PASSWORD:  'reset-password',
+}
 
 function CrosshairLogo() {
   return (
@@ -33,9 +41,11 @@ export default function LoginPage() {
   const pendingBriefParam = params.get('pendingBrief') ?? ''
 
   const [view,           setView]          = useState(
-    initTab === 'register' ? VIEW.REGISTER :
-    initTab === 'signin'   ? VIEW.SIGNIN   :
-    initTab === 'verify'   ? VIEW.VERIFY   :
+    initTab === 'register'       ? VIEW.REGISTER        :
+    initTab === 'signin'         ? VIEW.SIGNIN          :
+    initTab === 'verify'         ? VIEW.VERIFY          :
+    initTab === 'forgot-password'? VIEW.FORGOT_PASSWORD :
+    initTab === 'reset-password' ? VIEW.RESET_PASSWORD  :
     VIEW.CHOICE
   )
   const [email,          setEmail]         = useState(initEmail)
@@ -45,6 +55,11 @@ export default function LoginPage() {
   const [pendingEmail,   setPendingEmail]  = useState(initTab === 'verify' ? initEmail : '')
   const [code,           setCode]          = useState('')
   const [resendCooldown, setResendCooldown] = useState(0)
+  const [forgotEmail,    setForgotEmail]    = useState('')
+  const [resetToken,     setResetToken]     = useState(initTab === 'reset-password' ? (params.get('token') ?? '') : '')
+  const [newPass,        setNewPass]        = useState('')
+  const [confirmPass,    setConfirmPass]    = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const googleBtnRef  = useRef(null)
 
   // Belt-and-suspenders: if the URL carries a pendingBrief param (set by BriefReader/LockedCategoryModal),
@@ -187,7 +202,53 @@ export default function LoginPage() {
     }
   }
 
-  const reset = (nextView) => { setError(''); setEmail(''); setPass(''); setView(nextView) }
+  const reset = (nextView) => {
+    setError(''); setEmail(''); setPass(''); setForgotEmail(''); setSuccessMessage(''); setView(nextView)
+  }
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault()
+    setBusy(true); setError('')
+    try {
+      const res  = await fetch(`${API}/api/auth/forgot-password`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      })
+      const data = await res.json()
+      // Only surface the rate-limit error inline; all other responses show the neutral sent screen
+      if (res.status === 429) { setError(data.message); return }
+      setView(VIEW.RESET_SENT)
+    } catch {
+      setError('Connection failed. Is the server running?')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault()
+    setError('')
+    if (newPass !== confirmPass) { setError('Passwords do not match.'); return }
+    if (newPass.length < 8) { setError('Password must be at least 8 characters.'); return }
+    setBusy(true)
+    try {
+      const res  = await fetch(`${API}/api/auth/reset-password`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, newPassword: newPass }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.message); return }
+      setNewPass(''); setConfirmPass('')
+      setSuccessMessage('Password updated. You can now sign in.')
+      setView(VIEW.SIGNIN)
+    } catch {
+      setError('Connection failed. Is the server running?')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#06101e' }}>
@@ -280,6 +341,10 @@ export default function LoginPage() {
                   />
                 </div>
 
+                {successMessage && (
+                  <p className="text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-xl">{successMessage}</p>
+                )}
+
                 {error && (
                   <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-xl">{error}</p>
                 )}
@@ -291,6 +356,18 @@ export default function LoginPage() {
                 >
                   {busy ? 'Please wait…' : view === VIEW.SIGNIN ? 'Sign In' : 'Create Account'}
                 </button>
+
+                {view === VIEW.SIGNIN && (
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                      onClick={() => { setError(''); setSuccessMessage(''); setView(VIEW.FORGOT_PASSWORD) }}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
               </form>
 
               <p className="text-sm text-center text-slate-500 mt-4">
@@ -371,6 +448,145 @@ export default function LoginPage() {
             </motion.div>
           )}
 
+
+          {/* Forgot password */}
+          {view === VIEW.FORGOT_PASSWORD && (
+            <motion.div
+              key="forgot"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="bg-surface rounded-3xl border border-slate-200 p-6 card-shadow"
+            >
+              <h2 className="text-xl font-extrabold text-slate-900 mb-2">Reset Password</h2>
+              <p className="text-sm text-slate-500 mb-5">
+                Enter your account email and a reset link will be dispatched if it matches our records.
+              </p>
+
+              <form onSubmit={handleForgotPassword} noValidate className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5" htmlFor="forgot-email">Email</label>
+                  <input
+                    id="forgot-email" type="email"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface-raised text-slate-800 placeholder:text-slate-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none text-sm transition-all"
+                    placeholder="agent@example.com"
+                    value={forgotEmail}
+                    onChange={e => setForgotEmail(e.target.value)}
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+
+                {error && (
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-xl">{error}</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-2xl transition-colors text-sm"
+                >
+                  {busy ? 'Please wait…' : 'Dispatch Reset Link'}
+                </button>
+              </form>
+
+              <button className="mt-4 w-full text-sm text-slate-400 hover:text-slate-600 transition-colors" onClick={() => reset(VIEW.SIGNIN)}>
+                ← Back to Sign In
+              </button>
+            </motion.div>
+          )}
+
+          {/* Reset link sent */}
+          {view === VIEW.RESET_SENT && (
+            <motion.div
+              key="reset-sent"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="bg-surface rounded-3xl border border-slate-200 p-6 card-shadow space-y-4"
+            >
+              <h2 className="text-xl font-extrabold text-slate-900">Transmission Dispatched</h2>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                If your account matches the email provided, a password reset link has been dispatched.
+                Check your inbox — the link expires in 1 hour.
+              </p>
+              <button
+                onClick={() => reset(VIEW.SIGNIN)}
+                className="w-full py-3.5 border-2 border-slate-200 hover:border-brand-300 hover:bg-brand-50 text-slate-700 font-bold rounded-2xl transition-all text-sm"
+              >
+                Back to Sign In
+              </button>
+            </motion.div>
+          )}
+
+          {/* Set new password */}
+          {view === VIEW.RESET_PASSWORD && (
+            <motion.div
+              key="reset-password"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="bg-surface rounded-3xl border border-slate-200 p-6 card-shadow"
+            >
+              <h2 className="text-xl font-extrabold text-slate-900 mb-2">Set New Password</h2>
+
+              {!resetToken ? (
+                <>
+                  <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-xl mb-4">
+                    No reset token found. Please request a new reset link.
+                  </p>
+                  <button
+                    onClick={() => reset(VIEW.FORGOT_PASSWORD)}
+                    className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl transition-colors text-sm"
+                  >
+                    Request Reset Link
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-500 mb-5">Choose a new password for your account.</p>
+                  <form onSubmit={handleResetPassword} noValidate className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5" htmlFor="new-password">New Password</label>
+                      <input
+                        id="new-password" type="password"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface-raised text-slate-800 placeholder:text-slate-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none text-sm transition-all"
+                        placeholder="Min. 8 characters"
+                        value={newPass}
+                        onChange={e => setNewPass(e.target.value)}
+                        autoComplete="new-password"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5" htmlFor="confirm-password">Confirm Password</label>
+                      <input
+                        id="confirm-password" type="password"
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface-raised text-slate-800 placeholder:text-slate-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none text-sm transition-all"
+                        placeholder="Re-enter your password"
+                        value={confirmPass}
+                        onChange={e => setConfirmPass(e.target.value)}
+                        autoComplete="new-password"
+                        required
+                      />
+                    </div>
+
+                    {error && (
+                      <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-xl">{error}</p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={busy}
+                      className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-2xl transition-colors text-sm"
+                    >
+                      {busy ? 'Please wait…' : 'Update Password'}
+                    </button>
+                  </form>
+                </>
+              )}
+            </motion.div>
+          )}
 
         </AnimatePresence>
 

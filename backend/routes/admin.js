@@ -29,6 +29,7 @@ const path              = require('path');
 const fs                = require('fs');
 const { uploadBuffer, destroyAsset } = require('../utils/cloudinary');
 const IntelLead = require('../models/IntelLead');
+const seedLeads = require('../seeds/seedLeads');
 
 function normaliseLeadTitle(s) {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -38,8 +39,8 @@ function normaliseLeadTitle(s) {
 async function unmarkLeadInDb(briefTitle) {
   try {
     const norm  = normaliseLeadTitle(briefTitle);
-    const leads = await IntelLead.find({ isPublished: true }).select('text');
-    const match = leads.find(l => normaliseLeadTitle(l.text) === norm);
+    const leads = await IntelLead.find({ isPublished: true }).select('title');
+    const match = leads.find(l => normaliseLeadTitle(l.title) === norm);
     if (!match) return { matched: false, error: null };
     await IntelLead.updateOne({ _id: match._id }, { isPublished: false });
     return { matched: true, error: null };
@@ -704,10 +705,13 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
       AircoinLog.deleteMany({ briefId }),
       // Where's That Aircraft cascade
       GameSessionWhereAircraftResult.deleteMany({ aircraftBriefId: briefId }),
-      // If this is a Bases brief, remove it from all aircraft's associatedBaseBriefIds
-      brief?.category === 'Bases'
-        ? IntelligenceBrief.updateMany({}, { $pull: { associatedBaseBriefIds: new mongoose.Types.ObjectId(briefId) } })
-        : Promise.resolve(),
+      // Remove deleted brief from all relationship arrays across the collection
+      IntelligenceBrief.updateMany({}, { $pull: {
+        associatedBaseBriefIds:     new mongoose.Types.ObjectId(briefId),
+        associatedSquadronBriefIds: new mongoose.Types.ObjectId(briefId),
+        associatedAircraftBriefIds: new mongoose.Types.ObjectId(briefId),
+        relatedBriefIds:            new mongoose.Types.ObjectId(briefId),
+      } }),
     ]);
 
     await AdminAction.create({ userId: req.user._id, actionType: 'delete_brief', reason: req.body.reason });
@@ -780,13 +784,23 @@ router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) 
       GameSessionWhosAtAircraftResult.deleteMany({ gameId: { $in: waaGameIds } }),
       GameWhosAtAircraft.deleteMany({ intelBriefId: briefId }),
       GameSessionWhereAircraftResult.deleteMany({ aircraftBriefId: briefId }),
-      IntelligenceBrief.findByIdAndUpdate(briefId, { $set: { quizQuestionsEasy: [], quizQuestionsMedium: [], associatedBaseBriefIds: [] } }),
+      IntelligenceBrief.findByIdAndUpdate(briefId, { $set: {
+        quizQuestionsEasy:          [],
+        quizQuestionsMedium:        [],
+        associatedBaseBriefIds:     [],
+        associatedSquadronBriefIds: [],
+        associatedAircraftBriefIds: [],
+        relatedBriefIds:            [],
+      } }),
     ]);
 
-    // If this is a Bases brief, remove it from all aircraft's associatedBaseBriefIds
-    if (regenBrief?.category === 'Bases') {
-      await IntelligenceBrief.updateMany({}, { $pull: { associatedBaseBriefIds: new mongoose.Types.ObjectId(briefId) } });
-    }
+    // Remove from all other briefs' relationship arrays
+    await IntelligenceBrief.updateMany({}, { $pull: {
+      associatedBaseBriefIds:     new mongoose.Types.ObjectId(briefId),
+      associatedSquadronBriefIds: new mongoose.Types.ObjectId(briefId),
+      associatedAircraftBriefIds: new mongoose.Types.ObjectId(briefId),
+      relatedBriefIds:            new mongoose.Types.ObjectId(briefId),
+    } });
 
     await AdminAction.create({
       userId:     req.user._id,
@@ -1181,8 +1195,8 @@ router.post('/ai/generate-brief', async (req, res) => {
 router.get('/intel-leads', async (req, res) => {
   try {
     const leads = await IntelLead.find({ isPublished: false })
-      .select('text section subsection')
-      .sort({ section: 1, subsection: 1, text: 1 })
+      .select('title nickname subtitle category subcategory section subsection')
+      .sort({ section: 1, subsection: 1, title: 1 })
       .lean();
     res.json({ status: 'success', data: { leads } });
   } catch (err) {
@@ -1197,7 +1211,7 @@ router.post('/intel-leads/mark-complete', async (req, res) => {
     if (!lead) return res.status(400).json({ message: 'lead required' });
 
     const result = await IntelLead.updateOne(
-      { text: lead.trim(), isPublished: false },
+      { title: lead.trim(), isPublished: false },
       { isPublished: true }
     );
 
@@ -1205,6 +1219,23 @@ router.post('/intel-leads/mark-complete', async (req, res) => {
       return res.status(404).json({ message: 'Lead not found or already marked' });
     }
     res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/leads/reset — wipe all leads + briefs, re-seed leads, create stub briefs
+router.post('/leads/reset', requireReason, async (req, res) => {
+  try {
+    await seedLeads();
+
+    const [leadCount, briefCount] = await Promise.all([
+      IntelLead.countDocuments(),
+      IntelligenceBrief.countDocuments({ status: 'stub' }),
+    ]);
+
+    await AdminAction.create({ userId: req.user._id, actionType: 'reset_leads', reason: req.body.reason });
+    res.json({ status: 'success', data: { leadsInserted: leadCount, stubsCreated: briefCount } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
