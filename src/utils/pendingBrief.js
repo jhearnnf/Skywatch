@@ -7,14 +7,16 @@ export const PENDING_BRIEF_KEY = 'sw_pending_brief'
  * Returns the brief ID if one was consumed, otherwise null.
  */
 export async function consumePendingBrief({ API, setUser, navigate }) {
-  const id = sessionStorage.getItem(PENDING_BRIEF_KEY)
+  const id = localStorage.getItem(PENDING_BRIEF_KEY)
   if (!id) return null
-  sessionStorage.removeItem(PENDING_BRIEF_KEY)
   try {
     const res  = await fetch(`${API}/api/briefs/${id}/complete`, { method: 'POST', credentials: 'include' })
     const data = await res.json()
     if (res.ok && data?.data) {
+      // Fetch succeeded — remove from localStorage now so BriefReader's fallback doesn't re-fire
+      localStorage.removeItem(PENDING_BRIEF_KEY)
       sessionStorage.setItem('sw_brief_coins', JSON.stringify(data.data))
+      sessionStorage.setItem('sw_brief_just_completed', id)
       if (data.data.loginStreak !== undefined && setUser) {
         setUser(u => u ? {
           ...u,
@@ -23,7 +25,7 @@ export async function consumePendingBrief({ API, setUser, navigate }) {
         } : u)
       }
     }
-  } catch { /* non-fatal — coins will be awarded on next visit */ }
-  sessionStorage.setItem('sw_brief_just_completed', id)
+    // If fetch returned non-ok, leave localStorage intact so BriefReader's fallback fires
+  } catch { /* non-fatal — localStorage stays so BriefReader fallback can award coins */ }
   return id
 }

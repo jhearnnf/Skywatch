@@ -100,7 +100,7 @@ describe('Login — new user auto-standard difficulty', () => {
   })
 
   it('navigates to /brief/:id after registration when a pending brief exists', async () => {
-    sessionStorage.setItem('sw_pending_brief', 'brief99')
+    localStorage.setItem('sw_pending_brief', 'brief99')
     global.fetch = vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { user: NEW_USER, isNew: true } }) }) // register
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { user: NEW_USER } }) })              // difficulty PATCH

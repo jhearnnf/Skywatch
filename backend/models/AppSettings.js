@@ -100,6 +100,10 @@ const appSettingsSchema = new mongoose.Schema({
   // Absent or empty fields fall back to the hardcoded defaults in TutorialContext.
   tutorialContent: { type: mongoose.Schema.Types.Mixed, default: {} },
 
+  // Email feature flags
+  emailWelcomeEnabled:      { type: Boolean, default: true },
+  emailConfirmationEnabled: { type: Boolean, default: true },
+
   // Welcome email — all fields optional; absent or empty falls back to hardcoded defaults in email.js
   welcomeEmailSubject: { type: String, default: '' },
   welcomeEmailHeading: { type: String, default: '' },

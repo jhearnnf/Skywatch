@@ -67,6 +67,7 @@ describe('Login — pending brief redirect', () => {
     mockSetUser.mockClear()
     mockAwardAircoins.mockClear()
     sessionStorage.clear()
+    localStorage.clear()
     // Stub settings fetch (non-critical)
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: null }) })
   })
@@ -88,7 +89,7 @@ describe('Login — pending brief redirect', () => {
   })
 
   it('navigates to /brief/:id and calls /complete when a pending brief is set', async () => {
-    sessionStorage.setItem('sw_pending_brief', 'brief123')
+    localStorage.setItem('sw_pending_brief', 'brief123')
 
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeAuthResponse())
@@ -105,8 +106,8 @@ describe('Login — pending brief redirect', () => {
     expect(completeCalled).toBe(true)
   })
 
-  it('clears sw_pending_brief and writes sw_brief_just_completed after consuming it', async () => {
-    sessionStorage.setItem('sw_pending_brief', 'brief123')
+  it('sets sw_post_login_destination so LoginRoute can redirect to brief if navigate races setUser', async () => {
+    localStorage.setItem('sw_pending_brief', 'brief123')
 
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeAuthResponse())
@@ -119,12 +120,44 @@ describe('Login — pending brief redirect', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign In' }))
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
-    expect(sessionStorage.getItem('sw_pending_brief')).toBeNull()
+    expect(sessionStorage.getItem('sw_post_login_destination')).toBe('/brief/brief123')
+  })
+
+  it('does NOT set sw_post_login_destination when there is no pending brief', async () => {
+    // no sw_pending_brief in localStorage
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeAuthResponse()) // login
+
+    render(<LoginPage />)
+    fireEvent.click(screen.getByText('Sign In with Email'))
+    fireEvent.change(screen.getByLabelText('Email'),    { target: { value: 'a@b.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/home'))
+    expect(sessionStorage.getItem('sw_post_login_destination')).toBeNull()
+  })
+
+  it('clears sw_pending_brief and writes sw_brief_just_completed after consuming it', async () => {
+    localStorage.setItem('sw_pending_brief', 'brief123')
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeAuthResponse())
+      .mockResolvedValueOnce(makeCompleteResponse())
+
+    render(<LoginPage />)
+    fireEvent.click(screen.getByText('Sign In with Email'))
+    fireEvent.change(screen.getByLabelText('Email'),    { target: { value: 'a@b.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
+    expect(localStorage.getItem('sw_pending_brief')).toBeNull()
     expect(sessionStorage.getItem('sw_brief_just_completed')).toBe('brief123')
   })
 
   it('writes sw_brief_coins with the complete response data', async () => {
-    sessionStorage.setItem('sw_pending_brief', 'brief123')
+    localStorage.setItem('sw_pending_brief', 'brief123')
 
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeAuthResponse())
@@ -143,8 +176,26 @@ describe('Login — pending brief redirect', () => {
     expect(coins.newTotalAircoins).toBe(10)
   })
 
+  it('new user: sets sw_post_login_destination so LoginRoute can redirect to brief if navigate races setUser', async () => {
+    localStorage.setItem('sw_pending_brief', 'brief123')
+
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeAuthResponse({ isNew: true }))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { user: {} } }) }) // difficulty PATCH
+      .mockResolvedValueOnce(makeCompleteResponse())                                    // /complete
+
+    render(<LoginPage />)
+    fireEvent.click(screen.getByText('Create Account'))
+    fireEvent.change(screen.getByLabelText('Email'),    { target: { value: 'new@b.com' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }))
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/brief/brief123'))
+    expect(sessionStorage.getItem('sw_post_login_destination')).toBe('/brief/brief123')
+  })
+
   it('new user: navigates to /brief/:id immediately after auto-setting standard difficulty', async () => {
-    sessionStorage.setItem('sw_pending_brief', 'brief123')
+    localStorage.setItem('sw_pending_brief', 'brief123')
 
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeAuthResponse({ isNew: true }))                          // register
@@ -164,7 +215,7 @@ describe('Login — pending brief redirect', () => {
   })
 
   it('new user: navigate is called before setUser to prevent LoginRoute flashing /home', async () => {
-    sessionStorage.setItem('sw_pending_brief', 'brief123')
+    localStorage.setItem('sw_pending_brief', 'brief123')
 
     const callOrder = []
     mockNavigate.mockImplementation(() => callOrder.push('navigate'))

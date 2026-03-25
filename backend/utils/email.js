@@ -23,6 +23,8 @@ async function sendWelcomeEmail({ email, agentNumber }) {
     const appUrl  = process.env.CLIENT_URL || 'http://localhost:5173';
     const s       = await AppSettings.getSettings();
 
+    if (s.emailWelcomeEnabled === false) return;
+
     const subject = s.welcomeEmailSubject?.trim() || DEFAULTS.subject;
     const heading = s.welcomeEmailHeading?.trim() || DEFAULTS.heading;
     const body    = s.welcomeEmailBody?.trim()    || DEFAULTS.body;
@@ -91,6 +93,8 @@ async function sendWelcomeEmail({ email, agentNumber }) {
 // Errors are caught internally so a mail failure returns a clear message to the caller.
 async function sendConfirmationEmail({ email, code }) {
   const appUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const s = await AppSettings.getSettings();
+  if (s.emailConfirmationEnabled === false) return;
   const { error } = await resend.emails.send({
     from: FROM,
     to: email,
@@ -131,7 +135,7 @@ async function sendConfirmationEmail({ email, code }) {
             </p>
           </div>
 
-          <a href="${appUrl}/login"
+          <a href="${appUrl}/login?tab=verify&email=${encodeURIComponent(email)}"
              style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;
                     font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;
                     padding:13px 30px;border-radius:6px;">

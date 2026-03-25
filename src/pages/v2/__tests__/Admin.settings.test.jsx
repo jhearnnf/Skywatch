@@ -405,22 +405,16 @@ describe('Admin — Settings tab: Feature Flags', () => {
     await waitFor(() => expect(toggle.className).toContain('bg-brand-500'))
   })
 
-  it('Disable Loading Bar toggle reflects settings and can be toggled', async () => {
+  it('Live Leaderboard toggle starts off and cannot be found alongside a removed Disable Loading Bar', async () => {
     global.fetch = setupFetch()
     render(<Admin />)
 
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
-    await waitFor(() => screen.getByText('Disable Loading Bar'))
+    await waitFor(() => screen.getByText('Live Leaderboard'))
 
-    const row = screen.getByText('Disable Loading Bar').closest('div').parentElement
-    const toggle = within(row).getByRole('button')
-
-    // Starts off
-    expect(toggle.className).toContain('bg-slate-200')
-
-    fireEvent.click(toggle)
-    await waitFor(() => expect(toggle.className).toContain('bg-brand-500'))
+    // "Disable Loading Bar" was removed from the Admin UI — should not appear
+    expect(screen.queryByText('Disable Loading Bar')).toBeNull()
   })
 })
 
@@ -434,16 +428,16 @@ describe('Admin — Settings tab: Aircoins & Game options', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows correct ammo values from settings', async () => {
+  it('shows correct aircoins streak bonus value from settings', async () => {
     global.fetch = setupFetch()
     render(<Admin />)
 
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
 
-    // ammoFree = 0, ammoSilver = 3
+    // aircoinsStreakBonus = 2 (unique value in MOCK_SETTINGS)
     await waitFor(() => {
-      expect(screen.getByDisplayValue('3')).toBeDefined() // ammoSilver
+      expect(screen.getByDisplayValue('2')).toBeDefined()
     })
   })
 

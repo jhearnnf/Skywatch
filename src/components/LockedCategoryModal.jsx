@@ -35,7 +35,7 @@ const TIER_CONFIG = {
   },
 }
 
-export default function LockedCategoryModal({ category, tier = 'silver', user, onClose }) {
+export default function LockedCategoryModal({ category, tier = 'silver', user, pendingBriefId = null, onClose }) {
   const navigate           = useNavigate()
   const { API, setUser }   = useAuth()
   const { settings }       = useAppSettings()
@@ -91,8 +91,9 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, o
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleEmailContinue() {
+    if (pendingBriefId) localStorage.setItem('sw_pending_brief', pendingBriefId)
     onClose()
-    navigate(`/login?tab=register${email ? `&email=${encodeURIComponent(email)}` : ''}`)
+    navigate(`/login?tab=register${pendingBriefId ? `&pendingBrief=${pendingBriefId}` : ''}${email ? `&email=${encodeURIComponent(email)}` : ''}`)
   }
 
   // Show up to 3 free categories as a sample

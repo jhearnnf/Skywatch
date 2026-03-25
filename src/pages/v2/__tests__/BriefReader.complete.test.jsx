@@ -145,7 +145,9 @@ describe('BriefReader — complete brief coin awarding', () => {
   it('calls POST /api/briefs/:id/complete when "Complete Brief" is clicked', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: {} }) }) // wta-spawn
       .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValue({ ok: true, json: async () => ({}) })
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -200,7 +202,9 @@ describe('BriefReader — complete brief coin awarding', () => {
   it('does NOT call awardAircoins when complete returns 0 coins (idempotent re-complete)', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF, COMPLETED_READ_RECORD))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: {} }) }) // wta-spawn
       .mockResolvedValueOnce(makeCompleteResponse({ aircoinsEarned: 0, dailyCoinsEarned: 0 }))
+      .mockResolvedValue({ ok: true, json: async () => ({}) })
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('✓ Complete Brief'))
@@ -272,7 +276,9 @@ describe('BriefReader — complete brief coin awarding', () => {
   it('shows completion screen after clicking "Complete Brief"', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: {} }) }) // wta-spawn
       .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValue({ ok: true, json: async () => ({}) })
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -288,6 +294,9 @@ describe('BriefReader — guest completion prompt', () => {
   beforeEach(() => {
     setupGuest()
     sessionStorage.clear()
+    localStorage.clear()
+    // Prevent "First Brief — Mission Complete!" heading for logged-in user tests in this block
+    localStorage.setItem('skywatch_first_brief', '1')
     mockNavigate.mockClear()
     vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'test-client-id')
     window.google = {
@@ -330,10 +339,10 @@ describe('BriefReader — guest completion prompt', () => {
     expect(screen.queryByText(/Take the Quiz/)).toBeNull()
   })
 
-  it('guest clicking Continue without email navigates to /login?tab=register', async () => {
+  it('guest clicking Continue without email navigates to /login?tab=register with pendingBrief param', async () => {
     await completeAsGuest()
     fireEvent.click(screen.getByText('Continue →'))
-    expect(mockNavigate).toHaveBeenCalledWith('/login?tab=register')
+    expect(mockNavigate).toHaveBeenCalledWith('/login?tab=register&pendingBrief=brief123')
   })
 
   it('guest clicking Continue with email pre-fills the URL', async () => {
@@ -342,21 +351,21 @@ describe('BriefReader — guest completion prompt', () => {
     fireEvent.change(input, { target: { value: 'agent@raf.mod.uk' } })
     fireEvent.click(screen.getByText('Continue →'))
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/login?tab=register&email=agent%40raf.mod.uk'
+      '/login?tab=register&pendingBrief=brief123&email=agent%40raf.mod.uk'
     )
   })
 
-  it('guest clicking Continue saves pending brief to sessionStorage', async () => {
+  it('saves pending brief to localStorage', async () => {
     await completeAsGuest()
     fireEvent.click(screen.getByText('Continue →'))
-    expect(sessionStorage.getItem('sw_pending_brief')).toBe('brief123')
+    expect(localStorage.getItem('sw_pending_brief')).toBe('brief123')
   })
 
-  it('guest clicking Sign in saves pending brief and navigates to /login', async () => {
+  it('saves pending brief to localStorage and navigates to /login?tab=signin with pendingBrief param', async () => {
     await completeAsGuest()
     fireEvent.click(screen.getByText('Sign in'))
-    expect(sessionStorage.getItem('sw_pending_brief')).toBe('brief123')
-    expect(mockNavigate).toHaveBeenCalledWith('/login')
+    expect(localStorage.getItem('sw_pending_brief')).toBe('brief123')
+    expect(mockNavigate).toHaveBeenCalledWith('/login?tab=signin&pendingBrief=brief123')
   })
 
   it('Google One Tap prompt is called on mount for guests', async () => {
@@ -364,11 +373,17 @@ describe('BriefReader — guest completion prompt', () => {
     expect(window.google.accounts.id.prompt).toHaveBeenCalled()
   })
 
+  // For logged-in user tests: SINGLE_SECTION_BRIEF has category 'Aircrafts', which triggers
+  // a wta-spawn fetch after the brief loads. Fetch order: brief → wta-spawn → /complete → ...
+  const SAFE_EMPTY = { ok: true, json: async () => ({ data: {} }) }
+
   it('Google One Tap is NOT called for logged-in users', async () => {
     setupLoggedIn()
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(SAFE_EMPTY)           // wta-spawn
       .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValue(SAFE_EMPTY)               // boo-options, quiz-status, spawn-check
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
     fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -380,7 +395,9 @@ describe('BriefReader — guest completion prompt', () => {
     setupLoggedIn()
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(SAFE_EMPTY)           // wta-spawn
       .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValue(SAFE_EMPTY)               // boo-options, quiz-status, spawn-check
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
     fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -392,7 +409,9 @@ describe('BriefReader — guest completion prompt', () => {
     setupLoggedIn()
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(SAFE_EMPTY)           // wta-spawn
       .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValue(SAFE_EMPTY)               // boo-options, quiz-status, spawn-check
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
     fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -412,10 +431,17 @@ describe('BriefReader — first brief detection', () => {
 
   afterEach(() => { vi.restoreAllMocks() })
 
+  // Fetch order for Aircrafts-category briefs with logged-in user:
+  //   brief → wta-spawn → /complete → boo-options + quiz-status (concurrent) → spawn-check
+  const WTA_SPAWN_EMPTY = { ok: true, json: async () => ({ data: null }) }
+  const CATCH_ALL       = { ok: true, json: async () => ({}) }
+
   it('shows "Mission Complete" heading on first ever brief completion', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(WTA_SPAWN_EMPTY)
       .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValue(CATCH_ALL)
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -428,7 +454,9 @@ describe('BriefReader — first brief detection', () => {
     localStorage.setItem('skywatch_first_brief', '1')
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(WTA_SPAWN_EMPTY)
       .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValue(CATCH_ALL)
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -441,7 +469,9 @@ describe('BriefReader — first brief detection', () => {
   it('sets skywatch_first_brief in localStorage after first completion', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(WTA_SPAWN_EMPTY)
       .mockResolvedValueOnce(makeCompleteResponse())
+      .mockResolvedValue(CATCH_ALL)
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -535,17 +565,25 @@ describe('BriefReader — BOO button on completion screen', () => {
   beforeEach(() => {
     setupLoggedIn()
     sessionStorage.clear()
+    // Prevent "First Brief — Mission Complete!" heading — these tests check for 'Brief Complete!'
+    localStorage.setItem('skywatch_first_brief', '1')
   })
   afterEach(() => vi.restoreAllMocks())
 
-  // BOO check fires AFTER done=true (on completion screen).
-  // Fetch call order: brief (1) → /complete (2) → /options (3) → /quiz/status (4)
+  // Actual fetch call order for Aircrafts-category briefs with logged-in user:
+  //   brief (1) → wta-spawn (2) → /complete (3) → /boo-options (4) → /quiz/status (5) → spawn-check (6)
+  // wta-spawn fires from useEffect when brief+user both resolve (Aircrafts category only).
+  // spawn-check fires inside /complete's .then() chain — safe to leave unmocked (caught by .catch).
+  const WTA_SPAWN_EMPTY = { ok: true, json: async () => ({ data: null }) }
+
   it('shows active BOO button when BOO available and quiz passed', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(WTA_SPAWN_EMPTY)
       .mockResolvedValueOnce(makeCompleteResponse())
       .mockResolvedValueOnce(makeBooResponse(true))
       .mockResolvedValueOnce(makeQuizStatusResponse(true))
+      .mockResolvedValue({ ok: true, json: async () => ({ data: {} }) }) // spawn-check catch-all
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -561,9 +599,11 @@ describe('BriefReader — BOO button on completion screen', () => {
   it('shows locked BOO button when BOO available but quiz not yet passed', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(WTA_SPAWN_EMPTY)
       .mockResolvedValueOnce(makeCompleteResponse())
       .mockResolvedValueOnce(makeBooResponse(true))
       .mockResolvedValueOnce(makeQuizStatusResponse(false))
+      .mockResolvedValue({ ok: true, json: async () => ({ data: {} }) })
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -580,9 +620,11 @@ describe('BriefReader — BOO button on completion screen', () => {
   it('hides BOO button entirely when BOO not available for this category', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
+      .mockResolvedValueOnce(WTA_SPAWN_EMPTY)
       .mockResolvedValueOnce(makeCompleteResponse())
       .mockResolvedValueOnce(makeBooResponse(false))
       .mockResolvedValueOnce(makeQuizStatusResponse(true))
+      .mockResolvedValue({ ok: true, json: async () => ({ data: {} }) })
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))

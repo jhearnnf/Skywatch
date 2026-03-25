@@ -1522,6 +1522,22 @@ function ContentTab({ API }) {
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
       {modal && <ConfirmModal title={modal.label} onConfirm={modal.isTutorial ? confirmSaveTutorials : confirmSave} onCancel={() => setModal(null)} />}
 
+      {/* ── Email Settings ────────────────────────────────────────── */}
+      <Section title="Email Settings" onSave={() => save('Update Email Settings', ['emailWelcomeEnabled', 'emailConfirmationEnabled'])}>
+        <Toggle
+          label="Send welcome email"
+          hint="When off, new users will not receive a welcome email after registering"
+          checked={draft.emailWelcomeEnabled !== false}
+          onChange={v => setDraft(p => ({ ...p, emailWelcomeEnabled: v }))}
+        />
+        <Toggle
+          label="Require email confirmation"
+          hint="When off, new users are registered instantly without entering a confirmation code"
+          checked={draft.emailConfirmationEnabled !== false}
+          onChange={v => setDraft(p => ({ ...p, emailConfirmationEnabled: v }))}
+        />
+      </Section>
+
       {/* ── Welcome Email ─────────────────────────────────────────── */}
       <Section title="Welcome Email" onSave={() => save('Update Welcome Email', ['welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
         {field('welcomeEmailSubject', 'Subject',  EMAIL_DEFAULTS.welcomeEmailSubject)}

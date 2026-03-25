@@ -269,8 +269,8 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleEmailContinue() {
-    sessionStorage.setItem('sw_pending_brief', brief._id)
-    navigate(`/login?tab=register${email ? `&email=${encodeURIComponent(email)}` : ''}`)
+    localStorage.setItem('sw_pending_brief', brief._id)
+    navigate(`/login?tab=register&pendingBrief=${brief._id}${email ? `&email=${encodeURIComponent(email)}` : ''}`)
   }
 
   const heading    = isFirstCompletion && user ? '🎖️ First Brief — Mission Complete!' : 'Brief Complete!'
@@ -403,7 +403,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
               <p className="text-center text-xs text-slate-400">
                 Already have an account?{' '}
                 <button
-                  onClick={() => { sessionStorage.setItem('sw_pending_brief', brief._id); navigate('/login?tab=signin') }}
+                  onClick={() => { localStorage.setItem('sw_pending_brief', brief._id); navigate(`/login?tab=signin&pendingBrief=${brief._id}`) }}
                   className="text-brand-600 font-semibold hover:underline"
                 >
                   Sign in
@@ -439,14 +439,9 @@ export default function BriefReader() {
     return saved ? parseInt(saved, 10) : 0
   })
   const [isFirstCompletion, setIsFirstCompletion] = useState(false)
-  const [done, setDone]          = useState(() => {
-    const justCompleted = sessionStorage.getItem('sw_brief_just_completed')
-    if (justCompleted === briefId) {
-      sessionStorage.removeItem('sw_brief_just_completed')
-      return true
-    }
-    return false
-  })
+  const [done, setDone]          = useState(
+    () => sessionStorage.getItem('sw_brief_just_completed') === briefId
+  )
   const [activeKw, setActiveKw]    = useState(null)
   const [learnedKws, setLearned]   = useState(new Set())
   const [readRecord, setReadRecord] = useState(null)
@@ -544,8 +539,19 @@ export default function BriefReader() {
       .catch(() => {})
   }, [brief, user, API])
 
-  // Fire coin notification if we arrived here after a post-login brief completion
+  // Clean up the sw_brief_just_completed signal after mount (kept out of the lazy
+  // init to avoid render-phase side effects, which React can invoke multiple times)
   useEffect(() => {
+    if (sessionStorage.getItem('sw_brief_just_completed') === briefId) {
+      sessionStorage.removeItem('sw_brief_just_completed')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fire coin notification if we arrived here after a post-login brief completion.
+  // Depends on [user] so it waits until auth resolves — prevents stale sessionStorage
+  // from triggering a phantom notification when a logged-out user visits a brief.
+  useEffect(() => {
+    if (!user) return
     const raw = sessionStorage.getItem('sw_brief_coins')
     if (!raw) return
     sessionStorage.removeItem('sw_brief_coins')
@@ -569,7 +575,33 @@ export default function BriefReader() {
         } : u)
       }
     } catch { /* malformed — skip */ }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fallback: if user just logged in and this brief was the pending one, complete it
+  // here rather than relying purely on the sessionStorage signal from consumePendingBrief
+  useEffect(() => {
+    if (!user || !brief) return
+    const pendingId = localStorage.getItem('sw_pending_brief')
+    if (!pendingId || pendingId !== String(brief._id)) return
+    localStorage.removeItem('sw_pending_brief')
+    fetch(`${API}/api/briefs/${brief._id}/complete`, { method: 'POST', credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (!data?.data) return
+        const briefCoins  = data.data.aircoinsEarned  ?? 0
+        const dailyCoins  = data.data.dailyCoinsEarned ?? 0
+        const total = briefCoins + dailyCoins
+        if (total > 0) {
+          awardAircoins(total, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
+            cycleAfter:    data.data.newCycleAircoins,
+            totalAfter:    data.data.newTotalAircoins,
+            rankPromotion: data.data.rankPromotion ?? null,
+          })
+        }
+        setDone(true)
+      })
+      .catch(() => {})
+  }, [user, brief]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check BOO availability + quiz prerequisite once the completion screen is shown
   useEffect(() => {
@@ -727,6 +759,7 @@ export default function BriefReader() {
           category={lockedCategory ?? ''}
           tier={lockedCategory ? requiredTier(lockedCategory, settings) : 'silver'}
           user={user}
+          pendingBriefId={briefId}
           onClose={() => navigate('/learn')}
         />
       </>

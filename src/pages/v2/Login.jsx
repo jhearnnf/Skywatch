@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
@@ -26,23 +27,31 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const params      = new URLSearchParams(location.search)
-  const initTab     = params.get('tab')
-  const initEmail   = params.get('email') ?? ''
+  const params           = new URLSearchParams(location.search)
+  const initTab          = params.get('tab')
+  const initEmail        = params.get('email') ?? ''
+  const pendingBriefParam = params.get('pendingBrief') ?? ''
 
   const [view,           setView]          = useState(
     initTab === 'register' ? VIEW.REGISTER :
     initTab === 'signin'   ? VIEW.SIGNIN   :
+    initTab === 'verify'   ? VIEW.VERIFY   :
     VIEW.CHOICE
   )
   const [email,          setEmail]         = useState(initEmail)
   const [pass,           setPass]          = useState('')
   const [error,          setError]         = useState('')
   const [busy,           setBusy]          = useState(false)
-  const [pendingEmail,   setPendingEmail]  = useState('')
+  const [pendingEmail,   setPendingEmail]  = useState(initTab === 'verify' ? initEmail : '')
   const [code,           setCode]          = useState('')
   const [resendCooldown, setResendCooldown] = useState(0)
   const googleBtnRef  = useRef(null)
+
+  // Belt-and-suspenders: if the URL carries a pendingBrief param (set by BriefReader/LockedCategoryModal),
+  // persist it to localStorage immediately so consumePendingBrief can find it even if storage was lost.
+  useEffect(() => {
+    if (pendingBriefParam) localStorage.setItem('sw_pending_brief', pendingBriefParam)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
@@ -56,10 +65,7 @@ export default function LoginPage() {
   }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // New users always start on Standard difficulty — set it silently, no screen shown.
-  // NOTE: setUser is called AFTER navigate so LoginRoute's <Navigate to="/home"> guard
-  // never fires — by the time user state changes, LoginRoute is no longer in the tree.
-  // The JWT cookie is set by the auth response, so all fetch calls below work without
-  // setUser having been called first.
+  // JWT cookie is set by the auth response before this runs, so all fetches work.
   const finishNewUser = async (userObj) => {
     try {
       await fetch(`${API}/api/users/me/difficulty`, {
@@ -73,9 +79,12 @@ export default function LoginPage() {
       sessionStorage.setItem('sw_pending_onboarding', '1')
     }
     const briefId = await consumePendingBrief({ API, setUser, navigate })
-    // Navigate first — LoginRoute is no longer rendered when setUser fires below,
-    // so <Navigate to="/home"> cannot interrupt the intended destination.
-    navigate(briefId ? `/brief/${briefId}` : '/home')
+    // Store destination so LoginRoute uses it even if the navigate below loses
+    // a React 18 scheduling race against setUser (see LoginRoute in App.jsx).
+    if (briefId) sessionStorage.setItem('sw_post_login_destination', `/brief/${briefId}`)
+    // flushSync commits the navigate synchronously before setUser fires, so
+    // LoginRoute is already removed (or isPresent=false) when auth state changes.
+    flushSync(() => navigate(briefId ? `/brief/${briefId}` : '/home'))
     setUser(userObj)
   }
 
@@ -92,6 +101,7 @@ export default function LoginPage() {
       if (data.data.isNew) { await finishNewUser(data.data.user); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief({ API, setUser, navigate })
+      if (briefId) sessionStorage.setItem('sw_post_login_destination', `/brief/${briefId}`)
       navigate(briefId ? `/brief/${briefId}` : '/home')
     } catch {
       setError('Google sign-in failed. Please try again.')
@@ -130,6 +140,7 @@ export default function LoginPage() {
       if (data.data.isNew) { await finishNewUser(data.data.user); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief({ API, setUser, navigate })
+      if (briefId) sessionStorage.setItem('sw_post_login_destination', `/brief/${briefId}`)
       navigate(briefId ? `/brief/${briefId}` : '/home')
     } catch {
       setError('Connection failed. Is the server running?')

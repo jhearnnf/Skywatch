@@ -305,7 +305,9 @@ describe('Admin Briefs — Regenerate All two-step flow', () => {
     await confirmRegenModal()
 
     await waitFor(() => screen.getByText(/regenerated — review and save/i))
-    expect(screen.getByText(/easy.*10|10.*easy/i) ?? screen.queryByText('10')).toBeDefined()
+    // Quiz Questions section is collapsed by default — expand it to see the tab counts
+    fireEvent.click(screen.getByText('Quiz Questions'))
+    await waitFor(() => expect(screen.getByText(/easy.*10|10.*easy/i)).toBeDefined())
   })
 })
 
@@ -390,8 +392,10 @@ describe('Admin Briefs — Generate Description button', () => {
     await openBriefEditor()
     fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
     await waitFor(() => screen.getByDisplayValue('Brand new section alpha.'))
+    // Keywords section is collapsed by default — expand it to see the keyword inputs
+    fireEvent.click(screen.getByText('Keywords'))
     // Original keyword from MOCK_BRIEF must still be in the editor
-    expect(screen.getByDisplayValue('Typhoon')).toBeDefined()
+    await waitFor(() => expect(screen.getByDisplayValue('Typhoon')).toBeDefined())
   })
 
   it('shows success toast after generation completes', async () => {

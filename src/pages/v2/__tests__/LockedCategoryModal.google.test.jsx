@@ -92,6 +92,7 @@ describe('LockedCategoryModal — Google sign-in awards pending brief coins', ()
     mockNavigate.mockClear()
     mockSetUser.mockClear()
     sessionStorage.clear()
+    localStorage.clear()
   })
 
   afterEach(() => {
@@ -101,7 +102,7 @@ describe('LockedCategoryModal — Google sign-in awards pending brief coins', ()
   })
 
   it('calls /complete and navigates to brief when sw_pending_brief is set', async () => {
-    sessionStorage.setItem('sw_pending_brief', 'brief42')
+    localStorage.setItem('sw_pending_brief', 'brief42')
 
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGoogleAuthResponse()) // /api/auth/google
@@ -136,8 +137,8 @@ describe('LockedCategoryModal — Google sign-in awards pending brief coins', ()
     expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining('/brief/'))
   })
 
-  it('clears sw_pending_brief from sessionStorage after consuming it', async () => {
-    sessionStorage.setItem('sw_pending_brief', 'brief42')
+  it('clears sw_pending_brief from localStorage after consuming it', async () => {
+    localStorage.setItem('sw_pending_brief', 'brief42')
 
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGoogleAuthResponse())
@@ -148,6 +149,6 @@ describe('LockedCategoryModal — Google sign-in awards pending brief coins', ()
     await googleCallback?.({ credential: 'fake-token' })
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/brief/brief42'))
-    expect(sessionStorage.getItem('sw_pending_brief')).toBeNull()
+    expect(localStorage.getItem('sw_pending_brief')).toBeNull()
   })
 })

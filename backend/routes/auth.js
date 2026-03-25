@@ -38,6 +38,7 @@ const recordLogin = async (user) => {
 // ── Email / Password ──────────────────────────────────────────────────────────
 
 // POST /api/auth/register — validate and send confirmation code (does not create User yet)
+// If emailConfirmationEnabled is false, skip verification and create the User immediately.
 router.post('/register', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -46,6 +47,16 @@ router.post('/register', async (req, res) => {
 
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) return res.status(409).json({ message: 'Email already registered' });
+
+    const settings = await AppSettings.getSettings();
+
+    if (settings.emailConfirmationEnabled === false) {
+      // Instant registration — no verification step
+      const user = await User.create({ email: email.toLowerCase(), password });
+      sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
+      const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
+      return sendToken(user, 201, res, { isNew: true, loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
+    }
 
     const code      = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes

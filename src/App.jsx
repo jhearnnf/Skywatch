@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useIsPresent } from 'framer-motion'
 
 import { AuthProvider, useAuth }          from './context/AuthContext'
 import { AppSettingsProvider }             from './context/AppSettingsContext'
@@ -102,9 +102,24 @@ function RequireAuth({ children }) {
 }
 
 // ── Login wrapper (redirect if already authed) ─────────────────────────────
+// Three-layer defence against finishNewUser()'s navigate racing against setUser():
+//   1. flushSync in finishNewUser commits the navigate synchronously (Login.jsx)
+//   2. useIsPresent() is false during AnimatePresence exit — no redirect fires then
+//   3. sw_post_login_destination: if navigate lost the race and we DO redirect here,
+//      we send the user to the brief they just completed rather than /home
 function LoginRoute() {
-  const { user } = useAuth()
-  if (user) return <Navigate to="/home" replace />
+  const { user, loading } = useAuth()
+  const isPresent = useIsPresent()
+
+  // Clean up the stored destination whenever this component unmounts, whether the
+  // navigate in finishNewUser won the race or we redirected via <Navigate> below.
+  useEffect(() => () => sessionStorage.removeItem('sw_post_login_destination'), [])
+
+  if (loading) return <LoadingScreen />
+  if (user && isPresent) {
+    const dest = sessionStorage.getItem('sw_post_login_destination') || '/home'
+    return <Navigate to={dest} replace />
+  }
   return <LoginPage />
 }
 
