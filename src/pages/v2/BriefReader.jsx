@@ -265,6 +265,7 @@ function ContinueLearning({ brief, navigate }) {
     ...(brief.relatedBriefIds            ?? []),
   ]
     .filter(b => b?._id && !seen.has(String(b._id)) && seen.add(String(b._id)))
+    .sort((a, b) => (a.status === 'stub' ? 1 : 0) - (b.status === 'stub' ? 1 : 0))
     .slice(0, 5)
 
   if (cards.length === 0) return null
@@ -510,6 +511,125 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
   )
 }
 
+// ── Already-read screen ──────────────────────────────────────────────────
+const BOO_CATS = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
+
+function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) {
+  const showBoo    = BOO_CATS.includes(brief.category)
+  const booVisible = showBoo && booState !== 'unavailable'
+
+  return (
+    <div>
+      {/* Back */}
+      <button
+        onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
+      >
+        ← {brief.category}
+      </button>
+
+      {/* Brief header */}
+      <div className="mb-5">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-bold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full border border-brand-200">
+            {brief.category}
+          </span>
+          {brief.subcategory && (
+            <span className="text-xs text-slate-400 font-medium">{brief.subcategory}</span>
+          )}
+        </div>
+        <h1 className="text-2xl font-extrabold text-slate-900 leading-tight">{brief.title}</h1>
+        {brief.subtitle && (
+          <p className="text-sm text-slate-500 mt-1.5">{brief.subtitle}</p>
+        )}
+      </div>
+
+      {/* Read badge */}
+      <div className="flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 mb-6">
+        <span className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
+          <span className="text-white text-xs font-bold">✓</span>
+        </span>
+        <div>
+          <p className="text-sm font-bold text-emerald-800">Intel brief classified as read</p>
+          <p className="text-xs text-emerald-600">You've completed this brief before</p>
+        </div>
+      </div>
+
+      {/* Game cards */}
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Test your knowledge</p>
+      <div className="space-y-3 mb-6">
+
+        {/* Quiz card */}
+        {quizPassed === null ? (
+          <div className="h-20 bg-slate-100 rounded-2xl animate-pulse" />
+        ) : (
+          <button
+            onClick={() => navigate(`/quiz/${brief._id}`)}
+            className={`w-full text-left flex items-center gap-4 p-4 rounded-2xl border transition-all group
+              ${quizPassed
+                ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
+                : 'bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 card-shadow hover:card-shadow-hover'
+              }`}
+          >
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 text-xl
+              ${quizPassed ? 'bg-emerald-100' : 'bg-brand-100'}`}
+            >
+              🧠
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm text-slate-800">Intel Quiz</p>
+              <p className={`text-xs mt-0.5 ${quizPassed ? 'text-emerald-600' : 'text-slate-400'}`}>
+                {quizPassed ? '✓ Passed' : 'Test your understanding of this brief'}
+              </p>
+            </div>
+            <span className={`text-sm font-bold shrink-0 ${quizPassed ? 'text-emerald-600' : 'text-brand-600 group-hover:text-brand-700'}`}>
+              {quizPassed ? 'Replay →' : 'Take Quiz →'}
+            </span>
+          </button>
+        )}
+
+        {/* BOO card */}
+        {booVisible && quizPassed !== null && (
+          booState === 'available' ? (
+            <button
+              onClick={() => navigate(`/battle-of-order/${brief._id}`)}
+              className="w-full text-left flex items-center gap-4 p-4 rounded-2xl border bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group card-shadow hover:card-shadow-hover"
+            >
+              <div className="w-11 h-11 rounded-xl bg-brand-100 flex items-center justify-center shrink-0 text-xl">
+                🗺️
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-slate-800">Battle of Order</p>
+                <p className="text-xs text-slate-400 mt-0.5">Rank and order {brief.category.toLowerCase()} by performance data</p>
+              </div>
+              <span className="text-sm font-bold text-brand-600 group-hover:text-brand-700 shrink-0">Play →</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50 opacity-60">
+              <div className="w-11 h-11 rounded-xl bg-slate-200 flex items-center justify-center shrink-0 text-xl">
+                🗺️
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-slate-500">Battle of Order</p>
+                <p className="text-xs text-slate-400 mt-0.5">Pass the quiz to unlock</p>
+              </div>
+              <span className="text-xs font-semibold text-slate-400 shrink-0">🔒 Locked</span>
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Re-read button */}
+      <button
+        onClick={onReRead}
+        className="w-full py-3 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+      >
+        ↩ Re-read Intel Brief
+      </button>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────
 export default function BriefReader() {
   const { briefId }    = useParams()
@@ -533,7 +653,9 @@ export default function BriefReader() {
   const [learnedKws, setLearned]   = useState(new Set())
   const [readRecord, setReadRecord] = useState(null)
   // 'unavailable' | 'locked-quiz' | 'available'
-  const [booState, setBooState] = useState('unavailable')
+  const [booState, setBooState]   = useState('unavailable')
+  const [quizPassed, setQuizPassed] = useState(null) // null=loading, true/false once fetched
+  const [reReadMode, setReReadMode] = useState(false)
   const [missionData,       setMissionData]       = useState(null)  // spawn-check result when spawn: true
   const [spawnCheckPending, setSpawnCheckPending] = useState(false) // true while spawn-check is in-flight
   const [wtaSpawn,          setWtaSpawn]          = useState(null)  // { remaining, prereqsMet } from API
@@ -552,7 +674,7 @@ export default function BriefReader() {
     }
   }, [])
 
-  const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
+  const BOO_CATEGORIES = BOO_CATS
 
   // Flush accumulated read time to the server
   const flushTime = useCallback(() => {
@@ -690,28 +812,32 @@ export default function BriefReader() {
       .catch(() => {})
   }, [user, brief]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Check BOO availability + quiz prerequisite once the completion screen is shown
+  // Check quiz status + BOO availability once the brief is completed (covers both
+  // the fresh CompletionScreen and returning visits via the AlreadyReadScreen)
   useEffect(() => {
-    if (!done || !brief || !user || !BOO_CATEGORIES.includes(brief.category)) return
+    if (!(done || readRecord?.completed) || !brief || !user) return
     let cancelled = false
-    async function checkBoo() {
+    async function check() {
       try {
-        const [booRes, quizRes] = await Promise.all([
-          fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' }),
-          fetch(`${API}/api/games/quiz/status/${briefId}`,                     { credentials: 'include' }),
-        ])
-        const [booData, quizData] = await Promise.all([booRes.json(), quizRes.json()])
+        const quizRes  = await fetch(`${API}/api/games/quiz/status/${briefId}`, { credentials: 'include' })
+        const quizData = await quizRes.json()
         if (cancelled) return
-        const booAvail   = booData.data?.available    ?? false
-        const quizPassed = quizData.data?.hasCompleted ?? false
-        if      (!booAvail)   setBooState('unavailable')
-        else if (!quizPassed) setBooState('locked-quiz')
-        else                  setBooState('available')
+        const passed = quizData.data?.hasCompleted ?? false
+        setQuizPassed(passed)
+
+        if (!BOO_CATEGORIES.includes(brief.category)) return
+        const booRes  = await fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' })
+        const booData = await booRes.json()
+        if (cancelled) return
+        const booAvail = booData.data?.available ?? false
+        if      (!booAvail) setBooState('unavailable')
+        else if (!passed)   setBooState('locked-quiz')
+        else                setBooState('available')
       } catch { /* silently ignore */ }
     }
-    checkBoo()
+    check()
     return () => { cancelled = true }
-  }, [done, brief, user, briefId, API]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [done, readRecord?.completed, brief, user, briefId, API]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tutorial on first visit
   useEffect(() => {
@@ -978,6 +1104,19 @@ export default function BriefReader() {
           ← Back to {brief.category}
         </button>
       </>
+    )
+  }
+
+  // Already-read screen: shown when returning to a previously completed brief
+  if (readRecord?.completed && user && !reReadMode && !done) {
+    return (
+      <AlreadyReadScreen
+        brief={brief}
+        quizPassed={quizPassed}
+        booState={booState}
+        onReRead={() => setReReadMode(true)}
+        navigate={navigate}
+      />
     )
   }
 

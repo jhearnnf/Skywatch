@@ -844,3 +844,116 @@ describe('Brief relationship arrays', () => {
     expect(res.status).toBe(400);
   });
 });
+
+// ── Stub promotion via POST /api/admin/briefs ─────────────────────────────────
+
+describe('POST /api/admin/briefs — stub promotion', () => {
+  it('upgrades a stub to published when same title+category is POSTed, preserving _id', async () => {
+    const admin = await createAdminUser();
+    const stub  = await IntelligenceBrief.create({
+      title: 'Boeing P-8A Poseidon MRA1', category: 'Aircrafts', status: 'stub',
+      descriptionSections: [], keywords: [], sources: [],
+    });
+    const stubId = String(stub._id);
+
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        title: 'Boeing P-8A Poseidon MRA1',
+        category: 'Aircrafts',
+        descriptionSections: ['The P-8A Poseidon is a maritime patrol aircraft.'],
+        reason: 'Generate from stub',
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    // Must return the same _id as the stub
+    expect(String(res.body.data.brief._id)).toBe(stubId);
+    // Status must now be published
+    expect(res.body.data.brief.status).toBe('published');
+    // Content must be filled in
+    expect(res.body.data.brief.descriptionSections).toHaveLength(1);
+
+    // DB: original stub document should now be published
+    const inDb = await IntelligenceBrief.findById(stubId);
+    expect(inDb.status).toBe('published');
+    expect(inDb.descriptionSections[0]).toMatch(/Poseidon/);
+
+    // DB: no duplicate document should exist
+    const count = await IntelligenceBrief.countDocuments({ title: 'Boeing P-8A Poseidon MRA1', category: 'Aircrafts' });
+    expect(count).toBe(1);
+  });
+
+  it('preserves and merges existing relationship arrays from the stub', async () => {
+    const admin    = await createAdminUser();
+    const base     = await createBrief({ category: 'Bases', title: 'RAF Lossiemouth' });
+    const stub     = await IntelligenceBrief.create({
+      title: 'P-8A Test Aircraft', category: 'Aircrafts', status: 'stub',
+      descriptionSections: [], keywords: [], sources: [],
+      associatedBaseBriefIds: [base._id],
+    });
+
+    const newBase = await createBrief({ category: 'Bases', title: 'RAF Kinloss' });
+
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        title: 'P-8A Test Aircraft',
+        category: 'Aircrafts',
+        descriptionSections: ['Maritime patrol aircraft.'],
+        associatedBaseBriefIds: [String(newBase._id)],
+        reason: 'Promote stub',
+      });
+
+    expect(res.status).toBe(200);
+    const ids = res.body.data.brief.associatedBaseBriefIds.map(String);
+    // Both old and new base should be present
+    expect(ids).toContain(String(base._id));
+    expect(ids).toContain(String(newBase._id));
+  });
+
+  it('still returns 409 when a published brief with same title+category already exists', async () => {
+    const admin = await createAdminUser();
+    await createBrief({ title: 'Typhoon FGR4', category: 'Aircrafts' }); // published (default)
+
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Typhoon FGR4', category: 'Aircrafts', reason: 'Duplicate test' });
+
+    expect(res.status).toBe(409);
+  });
+
+  it('existing briefs referencing the stub _id now resolve to the promoted brief', async () => {
+    const admin    = await createAdminUser();
+    const stub     = await IntelligenceBrief.create({
+      title: 'P-8A Link Test', category: 'Aircrafts', status: 'stub',
+      descriptionSections: [], keywords: [], sources: [],
+    });
+    const base = await createBrief({ category: 'Bases', title: 'RAF Test Base' });
+    // Link base → stub
+    await IntelligenceBrief.findByIdAndUpdate(base._id, {
+      associatedAircraftBriefIds: [stub._id],
+    });
+
+    // Promote stub
+    await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        title: 'P-8A Link Test', category: 'Aircrafts',
+        descriptionSections: ['Full content.'],
+        reason: 'Promote',
+      });
+
+    // Base still references the same _id, which is now published
+    const updatedStub = await IntelligenceBrief.findById(stub._id);
+    expect(updatedStub.status).toBe('published');
+
+    // The base's associatedAircraftBriefIds still has the stub _id (now promoted)
+    const updatedBase = await IntelligenceBrief.findById(base._id);
+    expect(updatedBase.associatedAircraftBriefIds.map(String)).toContain(String(stub._id));
+  });
+});

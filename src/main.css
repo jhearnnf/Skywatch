@@ -204,3 +204,38 @@ body::before {
   height: 1em;
   vertical-align: middle;
 }
+
+/* Play page — game engagement theme */
+
+/* Play page — game engagement theme */
+
+/* Warm body override: amber bg + glow fixed to viewport (no corner clipping) */
+body.play-mode {
+  background-color: #100d06;
+  background-image:
+    radial-gradient(
+      ellipse 90% 55% at 50% 0%,
+      rgba(251, 146, 60, 0.26) 0%,
+      rgba(234, 88, 12, 0.10) 48%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 45% 25% at 88% 5%,
+      rgba(251, 190, 60, 0.09) 0%,
+      transparent 55%
+    );
+  background-attachment: fixed;
+}
+
+body.play-mode::before {
+  background-image:
+    linear-gradient(rgba(251, 146, 60, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(251, 146, 60, 0.04) 1px, transparent 1px);
+}
+
+.play-page { /* no background needed — glow lives on body now */ }
+
+/* Amber-tinted card shadows in play mode */
+body.play-mode .card-shadow {
+  box-shadow: 0 1px 3px rgba(0,0,0,.55), 0 4px 16px rgba(251, 146, 60, 0.12);
+}

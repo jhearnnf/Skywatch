@@ -67,6 +67,12 @@ export default function Play() {
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Warm engagement theme while on Play page
+  useEffect(() => {
+    document.body.classList.add('play-mode')
+    return () => document.body.classList.remove('play-mode')
+  }, [])
+
   // Clear highlight timer on unmount
   useEffect(() => () => clearTimeout(highlightTimerRef.current), [])
 
@@ -111,7 +117,7 @@ export default function Play() {
   return (
     <>
       <TutorialModal />
-      <div>
+      <div className="play-page">
         <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Play</h1>
         <p className="text-sm text-slate-500 mb-6">Test your RAF knowledge with training games.</p>
 

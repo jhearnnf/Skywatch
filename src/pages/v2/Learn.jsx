@@ -13,11 +13,12 @@ export default function Learn() {
   const { user, API } = useAuth()
   const { start } = useAppTutorial()
   const { settings } = useAppSettings()
-  const [counts,      setCounts]      = useState({}) // { [category]: total }
-  const [progress,    setProgress]    = useState({}) // { [category]: { total, done } }
-  const [search,      setSearch]      = useState('')
-  const [briefTitles, setBriefTitles] = useState([]) // [{ title, category }]
-  const [lockedModal, setLockedModal] = useState(null) // { category, tier }
+  const [counts,               setCounts]               = useState({}) // { [category]: total }
+  const [progress,             setProgress]             = useState({}) // { [category]: { total, done } }
+  const [search,               setSearch]               = useState('')
+  const [debouncedSearch,      setDebouncedSearch]      = useState('')
+  const [searchMatchCategories,setSearchMatchCategories] = useState(null) // Set<string> | null
+  const [lockedModal,          setLockedModal]          = useState(null) // { category, tier }
 
   // Tutorial on first visit
   useEffect(() => {
@@ -42,16 +43,26 @@ export default function Learn() {
       .catch(() => {})
   }, [user, API])
 
-  // All brief titles — used for search matching
+  // Debounce search input
   useEffect(() => {
-    fetch(`${API}/api/briefs?limit=500`)
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Server-side brief title search — only fires when user has typed something
+  useEffect(() => {
+    if (!debouncedSearch.trim()) {
+      setSearchMatchCategories(null)
+      return
+    }
+    fetch(`${API}/api/briefs?search=${encodeURIComponent(debouncedSearch)}&limit=50`)
       .then(r => r.json())
       .then(data => {
         const briefs = data?.data?.briefs ?? []
-        setBriefTitles(briefs.map(b => ({ title: b.title, category: b.category })))
+        setSearchMatchCategories(new Set(briefs.map(b => b.category)))
       })
-      .catch(() => {})
-  }, [API])
+      .catch(() => setSearchMatchCategories(null))
+  }, [debouncedSearch, API])
 
   const q = search.toLowerCase()
 
@@ -61,7 +72,7 @@ export default function Learn() {
         if (cat.toLowerCase().includes(q)) return true
         if ((CATEGORY_DESCRIPTIONS[cat] ?? '').toLowerCase().includes(q)) return true
         if ((SUBCATEGORIES[cat] ?? []).some(sub => sub.toLowerCase().includes(q))) return true
-        if (briefTitles.some(b => b.category === cat && b.title.toLowerCase().includes(q))) return true
+        if (searchMatchCategories?.has(cat)) return true
         return false
       })
 

@@ -637,6 +637,25 @@ router.get('/briefs/titles', async (_req, res) => {
   }
 });
 
+// GET /api/admin/briefs/duplicates — find all briefs with duplicate normalised titles
+router.get('/briefs/duplicates', async (req, res) => {
+  try {
+    const briefs = await IntelligenceBrief.find({}, '_id title category dateAdded status').lean();
+    const groups = {};
+    for (const b of briefs) {
+      const key = b.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(b);
+    }
+    const duplicates = Object.values(groups)
+      .filter(g => g.length > 1)
+      .map(g => g.sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded)));
+    res.json({ status: 'success', data: { duplicates } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/admin/briefs/related-pool — lightweight list for the Related Briefs picker
 // Excludes categories covered by typed link pickers (Bases/Squadrons/Aircrafts/Missions/Training)
 const TYPED_LINK_CATEGORIES = ['Bases', 'Squadrons', 'Aircrafts', 'Missions', 'Training'];
@@ -680,7 +699,42 @@ router.post('/briefs', requireReason, async (req, res) => {
         return res.status(400).json({ message: `"${fields.subcategory}" is not a valid subcategory for ${fields.category}` });
       }
     }
-    const brief = await IntelligenceBrief.create(fields);
+    let existing = null;
+    if (fields.title && fields.category) {
+      existing = await IntelligenceBrief.findOne({
+        title: { $regex: new RegExp(`^${fields.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        category: fields.category,
+      });
+      if (existing && existing.status === 'published') {
+        return res.status(409).json({ message: `A brief titled "${fields.title}" already exists in ${fields.category}` });
+      }
+    }
+    let brief;
+    if (existing && existing.status === 'stub') {
+      // Promote stub to published brief in place, preserving its _id so all
+      // existing cross-references (associatedAircraftBriefIds etc.) stay valid.
+      const mergeIds = (old, incoming = []) => {
+        const seen = new Set(old.map(String));
+        return [...old, ...incoming.filter(id => !seen.has(String(id)))];
+      };
+      const upgradedFields = {
+        ...fields,
+        status: 'published',
+        associatedBaseBriefIds:     mergeIds(existing.associatedBaseBriefIds,     fields.associatedBaseBriefIds),
+        associatedSquadronBriefIds: mergeIds(existing.associatedSquadronBriefIds, fields.associatedSquadronBriefIds),
+        associatedAircraftBriefIds: mergeIds(existing.associatedAircraftBriefIds, fields.associatedAircraftBriefIds),
+        associatedMissionBriefIds:  mergeIds(existing.associatedMissionBriefIds,  fields.associatedMissionBriefIds),
+        associatedTrainingBriefIds: mergeIds(existing.associatedTrainingBriefIds, fields.associatedTrainingBriefIds),
+        relatedBriefIds:            mergeIds(existing.relatedBriefIds,            fields.relatedBriefIds),
+      };
+      brief = await IntelligenceBrief.findByIdAndUpdate(
+        existing._id,
+        upgradedFields,
+        { new: true, runValidators: true }
+      ).populate('media');
+    } else {
+      brief = await IntelligenceBrief.create(fields);
+    }
     await AdminAction.create({ userId: req.user._id, actionType: 'create_brief', reason });
     res.json({ status: 'success', data: { brief } });
   } catch (err) {
@@ -732,7 +786,12 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
 
     await AdminAction.create({ userId: req.user._id, actionType: 'delete_brief', reason: req.body.reason });
 
-    const leadResult = brief?.title ? await unmarkLeadInDb(brief.title) : { matched: false, error: 'Brief title unavailable' };
+    let leadResult = { matched: false, error: null };
+    if (brief?.title) {
+      // Only unmark the lead if no other brief with this title still exists
+      const sibling = await IntelligenceBrief.findOne({ title: brief.title, _id: { $ne: briefId } });
+      if (!sibling) leadResult = await unmarkLeadInDb(brief.title);
+    }
     res.json({ status: 'success', leadUnmarked: leadResult.matched, leadError: leadResult.error });
   } catch (err) {
     res.status(500).json({ message: err.message });

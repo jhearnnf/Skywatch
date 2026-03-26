@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, afterEach } from 'vitest'
 import QuizBriefsList from '../QuizBriefsList'
 
@@ -22,136 +22,181 @@ import { useAuth } from '../../../context/AuthContext'
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * Set up fetch mock and render QuizBriefsList.
- *
- * briefs should include isRead: true/false on each object — this is now used
- * directly by getState() instead of a separate completed-brief-ids call.
- *
- * @param {object[]} briefs      — briefs with isRead flag set per brief
- * @param {string[]} playableIds — IDs that have quiz questions
- * @param {string[]} passedIds   — IDs the user has passed the quiz for
+ * Mock the new single endpoint /api/games/quiz/briefs.
+ * The endpoint returns { briefs, total, page, totalPages, availableMode }
+ * where each brief has a quizState field.
  */
-function setup({ briefs = [], playableIds = [], passedIds = [] } = {}) {
-  useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '' })
-  global.fetch = vi.fn().mockImplementation((url) => {
-    if (url.includes('/api/games/quiz/playable-brief-ids'))
-      return Promise.resolve({ json: async () => ({ data: { ids: playableIds } }) })
-    if (url.includes('/api/games/quiz/completed-brief-ids'))
-      return Promise.resolve({ json: async () => ({ data: { ids: passedIds } }) })
-    if (url.includes('/api/briefs'))
-      return Promise.resolve({ json: async () => ({ data: { briefs } }) })
-    return Promise.resolve({ json: async () => ({}) })
+function mockEndpoint({ briefs = [], availableMode = null, totalPages = 1 } = {}) {
+  global.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      data: { briefs, total: briefs.length, page: 1, totalPages, availableMode },
+    }),
   })
+}
+
+function setup(opts = {}) {
+  useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '' })
+  mockEndpoint(opts)
   render(<QuizBriefsList />)
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
 afterEach(() => { vi.restoreAllMocks() })
 
-describe('QuizBriefsList — Available tab priority logic', () => {
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
-  it('shows only active briefs when active ones exist (not needs-read alongside them)', async () => {
+describe('QuizBriefsList — Available tab (server-driven)', () => {
+  it('renders active briefs returned by the server', async () => {
     setup({
-      briefs: [
-        { _id: 'b1', title: 'Active Brief',     category: 'Aircrafts', isRead: true  },
-        { _id: 'b2', title: 'Needs Read Brief', category: 'Aircrafts', isRead: false },
-      ],
-      playableIds: ['b1', 'b2'],
-      passedIds:   [],
+      briefs: [{ _id: 'b1', title: 'Active Brief', category: 'Aircrafts', quizState: 'active' }],
+      availableMode: 'active',
     })
-
     await waitFor(() => screen.getByText('Active Brief'))
-    expect(screen.queryByText('Needs Read Brief')).toBeNull()
   })
 
-  it('shows needs-read briefs when there are no active ones', async () => {
+  it('renders needs-read briefs with "Read first" badge', async () => {
     setup({
-      briefs:      [{ _id: 'b1', title: 'Needs Read Brief', category: 'Aircrafts', isRead: false }],
-      playableIds: ['b1'],
-      passedIds:   [],
+      briefs: [{ _id: 'b1', title: 'Unread Brief', category: 'Aircrafts', quizState: 'needs-read' }],
+      availableMode: 'needs-read',
     })
-
-    await waitFor(() => screen.getByText('Needs Read Brief'))
+    await waitFor(() => screen.getByText('Unread Brief'))
+    expect(screen.getByText(/read first/i)).toBeDefined()
   })
 
-  it('shows the "read to unlock" banner when in needs-read mode', async () => {
+  it('shows "read to unlock" banner when availableMode=needs-read', async () => {
     setup({
-      briefs:      [{ _id: 'b1', title: 'Needs Read Brief', category: 'Aircrafts', isRead: false }],
-      playableIds: ['b1'],
-      passedIds:   [],
+      briefs: [{ _id: 'b1', title: 'Unread Brief', category: 'Aircrafts', quizState: 'needs-read' }],
+      availableMode: 'needs-read',
     })
-
     await waitFor(() => screen.getByText(/read these briefs to unlock their quizzes/i))
   })
 
-  it('does not show the "read to unlock" banner when active briefs exist', async () => {
+  it('does not show "read to unlock" banner when availableMode=active', async () => {
     setup({
-      briefs:      [{ _id: 'b1', title: 'Active Brief', category: 'Aircrafts', isRead: true }],
-      playableIds: ['b1'],
-      passedIds:   [],
+      briefs: [{ _id: 'b1', title: 'Active Brief', category: 'Aircrafts', quizState: 'active' }],
+      availableMode: 'active',
     })
-
     await waitFor(() => screen.getByText('Active Brief'))
     expect(screen.queryByText(/read these briefs to unlock their quizzes/i)).toBeNull()
   })
 
-  it('shows passed briefs with "all complete" banner when everything is passed', async () => {
+  it('shows "all quizzes complete" banner when availableMode=all-passed', async () => {
+    setup({ briefs: [], availableMode: 'all-passed' })
+    // Empty list triggers the empty state message, not the all-complete banner.
+    // all-passed banner is shown when briefs list is non-empty in the fallback.
+    // Re-setup with a passed brief so the list is non-empty:
+    vi.restoreAllMocks()
     setup({
-      briefs:      [{ _id: 'b1', title: 'Passed Brief', category: 'Aircrafts', isRead: true }],
-      playableIds: ['b1'],
-      passedIds:   ['b1'],
+      briefs: [{ _id: 'b1', title: 'Passed Brief', category: 'Aircrafts', quizState: 'passed' }],
+      availableMode: 'all-passed',
     })
-
-    await waitFor(() => screen.getByText('Passed Brief'))
-    expect(screen.getByText(/all quizzes complete/i)).toBeDefined()
+    await waitFor(() => screen.getByText(/all quizzes complete/i))
   })
+})
 
-  it('does not show "all complete" banner when there are active briefs', async () => {
+describe('QuizBriefsList — Completed tab', () => {
+  it('fetches completed state when Completed tab is clicked', async () => {
     setup({
-      briefs:      [{ _id: 'b1', title: 'Active Brief', category: 'Aircrafts', isRead: true }],
-      playableIds: ['b1'],
-      passedIds:   [],
+      briefs: [{ _id: 'b1', title: 'Active Brief', category: 'Aircrafts', quizState: 'active' }],
+      availableMode: 'active',
     })
-
     await waitFor(() => screen.getByText('Active Brief'))
-    expect(screen.queryByText(/all quizzes complete/i)).toBeNull()
-  })
 
-  it('active briefs are shown before needs-read in the All tab', async () => {
-    setup({
-      briefs: [
-        { _id: 'b1', title: 'Needs Read Brief', category: 'Aircrafts', isRead: false },
-        { _id: 'b2', title: 'Active Brief',     category: 'Aircrafts', isRead: true  },
-      ],
-      playableIds: ['b1', 'b2'],
-      passedIds:   [],
+    // Switch to Completed tab — a new fetch fires with state=completed
+    mockEndpoint({
+      briefs: [{ _id: 'b2', title: 'Passed Brief', category: 'Aircrafts', quizState: 'passed' }],
     })
-
-    await waitFor(() => screen.getByText('Active Brief'))
-    const allTab = screen.getByRole('button', { name: 'All' })
-    allTab.click()
-
-    await waitFor(() => screen.getByText('Needs Read Brief'))
-    const html = document.body.innerHTML
-    expect(html.indexOf('Active Brief')).toBeLessThan(html.indexOf('Needs Read Brief'))
-  })
-
-  it('Completed tab always shows passed briefs regardless of active state', async () => {
-    setup({
-      briefs: [
-        { _id: 'b1', title: 'Active Brief', category: 'Aircrafts', isRead: true },
-        { _id: 'b2', title: 'Passed Brief', category: 'Aircrafts', isRead: true },
-      ],
-      playableIds: ['b1', 'b2'],
-      passedIds:   ['b2'],
-    })
-
-    await waitFor(() => screen.getByText('Active Brief'))
-    const completedTab = screen.getByRole('button', { name: 'Completed' })
-    completedTab.click()
+    fireEvent.click(screen.getByRole('button', { name: 'Completed' }))
 
     await waitFor(() => screen.getByText('Passed Brief'))
     expect(screen.queryByText('Active Brief')).toBeNull()
+  })
+
+  it('shows ✓ Passed badge on passed briefs', async () => {
+    useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '' })
+    mockEndpoint({
+      briefs: [{ _id: 'b1', title: 'Passed Brief', category: 'Aircrafts', quizState: 'passed' }],
+    })
+    render(<QuizBriefsList />)
+    // Click Completed tab
+    mockEndpoint({
+      briefs: [{ _id: 'b1', title: 'Passed Brief', category: 'Aircrafts', quizState: 'passed' }],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Completed' }))
+    await waitFor(() => screen.getByText(/✓ Passed/i))
+  })
+})
+
+describe('QuizBriefsList — All tab', () => {
+  it('fetches all state when All tab is clicked', async () => {
+    setup({
+      briefs: [{ _id: 'b1', title: 'Active Brief', category: 'Aircrafts', quizState: 'active' }],
+      availableMode: 'active',
+    })
+    await waitFor(() => screen.getByText('Active Brief'))
+
+    mockEndpoint({
+      briefs: [
+        { _id: 'b1', title: 'Active Brief', category: 'Aircrafts', quizState: 'active' },
+        { _id: 'b2', title: 'Passed Brief', category: 'Aircrafts', quizState: 'passed' },
+      ],
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+
+    await waitFor(() => screen.getByText('Passed Brief'))
+    expect(screen.getByText('Active Brief')).toBeDefined()
+  })
+})
+
+describe('QuizBriefsList — Load More', () => {
+  it('shows Load More button when hasMore is true (totalPages > 1)', async () => {
+    setup({
+      briefs: [{ _id: 'b1', title: 'Brief 1', category: 'Aircrafts', quizState: 'active' }],
+      totalPages: 2,
+      availableMode: 'active',
+    })
+    await waitFor(() => screen.getByRole('button', { name: /load more/i }))
+  })
+
+  it('does not show Load More when on last page', async () => {
+    setup({
+      briefs: [{ _id: 'b1', title: 'Brief 1', category: 'Aircrafts', quizState: 'active' }],
+      totalPages: 1,
+      availableMode: 'active',
+    })
+    await waitFor(() => screen.getByText('Brief 1'))
+    expect(screen.queryByRole('button', { name: /load more/i })).toBeNull()
+  })
+
+  it('appends briefs when Load More is clicked', async () => {
+    setup({
+      briefs: [{ _id: 'b1', title: 'Brief 1', category: 'Aircrafts', quizState: 'active' }],
+      totalPages: 2,
+      availableMode: 'active',
+    })
+    await waitFor(() => screen.getByText('Brief 1'))
+
+    mockEndpoint({
+      briefs: [{ _id: 'b2', title: 'Brief 2', category: 'Aircrafts', quizState: 'active' }],
+      totalPages: 2,
+    })
+    fireEvent.click(screen.getByRole('button', { name: /load more/i }))
+
+    await waitFor(() => screen.getByText('Brief 2'))
+    expect(screen.getByText('Brief 1')).toBeDefined()
+  })
+})
+
+describe('QuizBriefsList — empty and unauthenticated states', () => {
+  it('shows sign-in prompt when user is null', () => {
+    useAuth.mockReturnValue({ user: null, API: '' })
+    global.fetch = vi.fn()
+    render(<QuizBriefsList />)
+    expect(screen.getAllByText(/sign in/i).length).toBeGreaterThan(0)
+  })
+
+  it('shows empty state when no briefs returned', async () => {
+    setup({ briefs: [], availableMode: null })
+    await waitFor(() => screen.getByText(/no briefs in this category yet/i))
   })
 })

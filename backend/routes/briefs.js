@@ -32,11 +32,14 @@ router.get('/', optionalAuth, async (req, res) => {
     if (dateFrom) filter.dateAdded = { $gte: new Date(dateFrom) };
     if (status) filter.status = status;
 
-    const briefs = await IntelligenceBrief.find(filter)
-      .populate('media')
-      .sort({ dateAdded: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+    const [briefs, total] = await Promise.all([
+      IntelligenceBrief.find(filter)
+        .populate('media')
+        .sort({ dateAdded: -1 })
+        .skip((page - 1) * limit)
+        .limit(Number(limit)),
+      IntelligenceBrief.countDocuments(filter),
+    ]);
 
     let briefsOut = briefs.map(b => b.toObject());
 
@@ -73,7 +76,7 @@ router.get('/', optionalAuth, async (req, res) => {
       }));
     }
 
-    res.json({ status: 'success', data: { briefs: briefsOut } });
+    res.json({ status: 'success', data: { briefs: briefsOut, total } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

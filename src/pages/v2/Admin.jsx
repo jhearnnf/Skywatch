@@ -2196,7 +2196,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   useEffect(() => {
     if (openLeads) {
       setShowLeads(true)
-      onBootstrapConsumed?.()
+      setTimeout(() => onBootstrapConsumed?.(), 0)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   // Editor state
@@ -2224,8 +2224,39 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const [allTrainingsBriefs, setAllTrainingsBriefs] = useState([]) // Training briefs for Roles picker
   const [allRelatedPool,     setAllRelatedPool]     = useState([]) // All non-typed-link briefs for Related picker
   const [relatedSearch,      setRelatedSearch]      = useState('')
+  const [dupePanel,          setDupePanel]          = useState(false)
+  const [dupeGroups,         setDupeGroups]         = useState(null)
+  const [dupesLoading,       setDupesLoading]       = useState(false)
 
   const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }))
+
+  // ── Find duplicates ──────────────────────────────────────────────────────────
+  const findDuplicates = async () => {
+    setDupesLoading(true)
+    setDupePanel(true)
+    try {
+      const res  = await fetch(`${API}/api/admin/briefs/duplicates`, { credentials: 'include' })
+      const data = await res.json()
+      setDupeGroups(data.data?.duplicates ?? [])
+    } catch {
+      setDupeGroups([])
+    } finally {
+      setDupesLoading(false)
+    }
+  }
+
+  const deleteOlderDupe = async (brief) => {
+    await fetch(`${API}/api/admin/briefs/${brief._id}`, {
+      method: 'DELETE', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Delete duplicate brief' }),
+    })
+    setToast('Duplicate deleted')
+    loadList()
+    const res  = await fetch(`${API}/api/admin/briefs/duplicates`, { credentials: 'include' })
+    const data = await res.json()
+    setDupeGroups(data.data?.duplicates ?? [])
+  }
 
   // ── Load list ───────────────────────────────────────────────────────────────
   const loadList = useCallback(async () => {
@@ -2784,7 +2815,49 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
           >
             Leads
           </button>
+          <button
+            onClick={findDuplicates}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+          >
+            Find Duplicates
+          </button>
         </div>
+
+        {/* Duplicates panel */}
+        {dupePanel && (
+          <div className="mb-4 bg-surface border border-slate-200 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-slate-700">Duplicate Briefs</p>
+              <button onClick={() => setDupePanel(false)} className="text-xs text-slate-400 hover:text-slate-600">✕ Close</button>
+            </div>
+            {dupesLoading && <p className="text-sm text-slate-400 animate-pulse">Scanning…</p>}
+            {!dupesLoading && dupeGroups !== null && dupeGroups.length === 0 && (
+              <p className="text-sm text-emerald-600 font-medium">No duplicates found.</p>
+            )}
+            {!dupesLoading && dupeGroups && dupeGroups.map((group, gi) => (
+              <div key={gi} className="mb-3 last:mb-0 border border-amber-200 bg-amber-50 rounded-xl p-3">
+                <p className="text-xs font-bold text-amber-700 mb-2">{group[0].title} — {group.length} copies ({group[0].category})</p>
+                {group.map((b, bi) => (
+                  <div key={b._id} className="flex items-center justify-between gap-2 py-1 border-t border-amber-100 first:border-0">
+                    <div>
+                      <span className="text-xs text-slate-700">{new Date(b.dateAdded).toLocaleDateString('en-GB')} · {b.status ?? 'published'}</span>
+                      <span className="ml-2 text-[10px] text-slate-400">{b._id}</span>
+                    </div>
+                    {bi === 0 && (
+                      <button
+                        onClick={() => deleteOlderDupe(b)}
+                        className="text-xs px-2 py-1 rounded-lg bg-red-100 text-red-700 font-semibold hover:bg-red-200 transition-colors whitespace-nowrap"
+                      >
+                        Delete Older
+                      </button>
+                    )}
+                    {bi > 0 && <span className="text-[10px] text-emerald-600 font-semibold">Keep</span>}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Brief list */}
         <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
@@ -3860,19 +3933,10 @@ export default function Admin() {
   const { user, setUser, loading, API } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [tab, setTab] = useState('stats')
+  const [tab, setTab] = useState(() => location.state?.openLeads ? 'briefs' : 'stats')
   const [unsolvedCount, setUnsolvedCount] = useState(null)
-  const [leadsInitialSearch, setLeadsInitialSearch] = useState('')
-  const [openLeadsOnMount,   setOpenLeadsOnMount]   = useState(false)
-
-  useEffect(() => {
-    const s = location.state
-    if (s?.openLeads) {
-      setTab('briefs')
-      setLeadsInitialSearch(s.leadsSearch ?? '')
-      setOpenLeadsOnMount(true)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const [leadsInitialSearch, setLeadsInitialSearch] = useState(() => location.state?.leadsSearch ?? '')
+  const [openLeadsOnMount,   setOpenLeadsOnMount]   = useState(() => !!location.state?.openLeads)
 
   useEffect(() => {
     if (!loading && (!user || !user.isAdmin)) navigate('/home', { replace: true })

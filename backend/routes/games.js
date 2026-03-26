@@ -257,6 +257,198 @@ router.get('/quiz/completed-brief-ids', protect, async (req, res) => {
   }
 });
 
+// GET /api/games/quiz/briefs?state=available|completed|all&page=1&limit=20&search=
+// Paginated brief list with server-computed quizState per brief.
+// state=available : playable briefs the user has NOT yet passed
+// state=completed : briefs the user HAS passed (won ≥ threshold)
+// state=all       : all playable briefs
+// Each brief has quizState: 'active' | 'needs-read' | 'passed'
+// Response also includes availableMode for the 'available' tab banner.
+router.get('/quiz/briefs', protect, async (req, res) => {
+  try {
+    const state  = ['available', 'completed', 'all'].includes(req.query.state) ? req.query.state : 'all';
+    const page   = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit  = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const search = req.query.search?.trim() || '';
+
+    const { effectiveTier, canAccessCategory } = require('../utils/subscription');
+    const diff     = req.user.difficultySetting ?? 'easy';
+    const settings = await AppSettings.getSettings();
+    const tier     = effectiveTier(req.user);
+
+    // Brief IDs that have ≥5 questions at user's difficulty
+    const groups = await GameQuizQuestion.aggregate([
+      { $match: { difficulty: diff } },
+      { $group: { _id: '$intelBriefId', count: { $sum: 1 } } },
+      { $match: { count: { $gte: 5 } } },
+    ]);
+    const playableIds = groups.map(g => g._id);
+
+    // User's completed read records
+    const readRecords = await IntelligenceBriefRead.find({
+      userId: req.user._id, completed: true,
+    }).select('intelBriefId').lean();
+    const readSet = new Set(readRecords.map(r => r.intelBriefId.toString()));
+
+    // User's won quiz attempts
+    const passedRecords = await GameSessionQuizAttempt.find({
+      userId: req.user._id, status: 'completed', won: true,
+    }).select('intelBriefId').lean();
+    const passedSet = new Set(passedRecords.map(r => r.intelBriefId.toString()));
+
+    // Determine candidate IDs based on requested state
+    let candidateIds;
+    if (state === 'completed') {
+      // Passed briefs — shown even if questions were later removed
+      candidateIds = [...passedSet].map(id => new (require('mongoose').Types.ObjectId)(id));
+    } else if (state === 'available') {
+      candidateIds = playableIds.filter(id => !passedSet.has(id.toString()));
+    } else {
+      candidateIds = playableIds;
+    }
+
+    if (candidateIds.length === 0) {
+      // For available state: if playable briefs exist but all are passed, signal all-passed
+      const availableMode = state === 'available' && playableIds.length > 0 ? 'all-passed' : null;
+      return res.json({ status: 'success', data: { briefs: [], total: 0, page, totalPages: 0, availableMode } });
+    }
+
+    // Fetch all matching docs (in-memory sort by state is needed for correct pagination)
+    const dbFilter = { _id: { $in: candidateIds } };
+    if (search) dbFilter.$or = [{ title: new RegExp(search, 'i') }, { subtitle: new RegExp(search, 'i') }];
+
+    const allDocs = await IntelligenceBrief
+      .find(dbFilter)
+      .select('_id title category subcategory dateAdded')
+      .sort({ dateAdded: -1 })
+      .lean();
+
+    // Annotate with quizState + apply subscription filter
+    // (completed tab skips the filter — past completions are always visible)
+    const annotated = allDocs
+      .filter(b => state === 'completed' || canAccessCategory(b.category, tier, settings))
+      .map(b => {
+        const id = b._id.toString();
+        const quizState = passedSet.has(id) ? 'passed' : readSet.has(id) ? 'active' : 'needs-read';
+        return { _id: b._id, title: b.title, category: b.category, subcategory: b.subcategory, quizState };
+      });
+
+    // Sort: active → needs-read → passed (consistent with previous client-side sort)
+    const STATE_ORDER = { active: 0, 'needs-read': 1, passed: 2 };
+    annotated.sort((a, b) => (STATE_ORDER[a.quizState] ?? 99) - (STATE_ORDER[b.quizState] ?? 99));
+
+    const total      = annotated.length;
+    const totalPages = Math.ceil(total / limit) || 0;
+    const briefs     = annotated.slice((page - 1) * limit, page * limit);
+
+    // Compute availableMode for the available tab banner (full dataset, not just this page)
+    let availableMode = null;
+    if (state === 'available') {
+      if (annotated.some(b => b.quizState === 'active'))      availableMode = 'active';
+      else if (annotated.some(b => b.quizState === 'needs-read')) availableMode = 'needs-read';
+      else availableMode = 'all-passed';
+    }
+
+    res.json({ status: 'success', data: { briefs, total, page, totalPages, availableMode } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/battle-of-order/briefs?state=available|completed|all&page=1&limit=20&search=
+// Paginated brief list with server-computed booState per brief.
+// state=available : BOO-category briefs the user has NOT yet won a BOO game for
+// state=completed : briefs the user HAS won a BOO game for
+// state=all       : all BOO-category briefs
+// Each brief has booState: 'active' | 'needs-quiz' | 'needs-read' | 'no-data' | 'completed'
+router.get('/battle-of-order/briefs', protect, async (req, res) => {
+  try {
+    const state  = ['available', 'completed', 'all'].includes(req.query.state) ? req.query.state : 'all';
+    const page   = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit  = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const search = req.query.search?.trim() || '';
+
+    const { effectiveTier, canAccessCategory } = require('../utils/subscription');
+    const diff     = req.user.difficultySetting ?? 'easy';
+    const needed   = diff === 'medium' ? 5 : 3;
+    const settings = await AppSettings.getSettings();
+    const tier     = effectiveTier(req.user);
+
+    // Which BOO categories have enough game data?
+    const booCategories = new Set();
+    for (const category of BATTLE_CATEGORIES) {
+      for (const orderType of (ORDER_TYPES[category] ?? [])) {
+        const fieldKey = REQUIRED_FIELD[orderType];
+        const count = await IntelligenceBrief.countDocuments({
+          category,
+          [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
+        });
+        if (count >= needed) { booCategories.add(category); break; }
+      }
+    }
+
+    // User's won BOO results
+    const wonBooResults = await GameSessionOrderOfBattleResult.find({
+      userId: req.user._id, won: true,
+    }).populate({ path: 'gameId', select: 'anchorBriefId' }).lean();
+    const wonBooSet = new Set(
+      wonBooResults
+        .filter(r => r.gameId?.anchorBriefId)
+        .map(r => r.gameId.anchorBriefId.toString())
+    );
+
+    // DB filter by state
+    const dbFilter = { category: { $in: BATTLE_CATEGORIES } };
+    if (state === 'completed') dbFilter._id = { $in: [...wonBooSet].map(id => new (require('mongoose').Types.ObjectId)(id)) };
+    if (state === 'available') dbFilter._id = { $nin: [...wonBooSet].map(id => new (require('mongoose').Types.ObjectId)(id)) };
+    if (search) dbFilter.$or = [{ title: new RegExp(search, 'i') }, { subtitle: new RegExp(search, 'i') }];
+
+    const allDocs = await IntelligenceBrief
+      .find(dbFilter)
+      .select('_id title category subcategory dateAdded')
+      .sort({ dateAdded: -1 })
+      .lean();
+
+    // User's read records + passed quiz (fetched after getting brief IDs)
+    const briefIds = allDocs.map(b => b._id);
+    const [readRecords, passedQuizRecords] = await Promise.all([
+      IntelligenceBriefRead.find({ userId: req.user._id, intelBriefId: { $in: briefIds }, completed: true })
+        .select('intelBriefId').lean(),
+      GameSessionQuizAttempt.find({ userId: req.user._id, status: 'completed', won: true, intelBriefId: { $in: briefIds } })
+        .select('intelBriefId').lean(),
+    ]);
+    const readSet       = new Set(readRecords.map(r => r.intelBriefId.toString()));
+    const passedQuizSet = new Set(passedQuizRecords.map(r => r.intelBriefId.toString()));
+
+    // Annotate + subscription filter
+    const annotated = allDocs
+      .filter(b => canAccessCategory(b.category, tier, settings))
+      .map(b => {
+        const id = b._id.toString();
+        const hasData = booCategories.has(b.category);
+        let booState;
+        if      (wonBooSet.has(id))      booState = 'completed';
+        else if (!hasData)               booState = 'no-data';
+        else if (!readSet.has(id))       booState = 'needs-read';
+        else if (!passedQuizSet.has(id)) booState = 'needs-quiz';
+        else                             booState = 'active';
+        return { _id: b._id, title: b.title, category: b.category, subcategory: b.subcategory, booState };
+      });
+
+    // Sort: active → needs-quiz → needs-read → completed → no-data
+    const STATE_ORDER = { active: 0, 'needs-quiz': 1, 'needs-read': 2, completed: 3, 'no-data': 4 };
+    annotated.sort((a, b) => (STATE_ORDER[a.booState] ?? 99) - (STATE_ORDER[b.booState] ?? 99));
+
+    const total      = annotated.length;
+    const totalPages = Math.ceil(total / limit) || 0;
+    const briefs     = annotated.slice((page - 1) * limit, page * limit);
+
+    res.json({ status: 'success', data: { briefs, total, page, totalPages } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/games/battle-of-order/recommended-briefs?limit=6
 // Returns up to `limit` BOO-eligible briefs sorted by readiness: active → completed → needs-quiz → no-data
 // "active"    = category has BOO data + quiz passed + BOO not yet won

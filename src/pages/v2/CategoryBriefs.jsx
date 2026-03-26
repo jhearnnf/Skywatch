@@ -140,23 +140,30 @@ export default function CategoryBriefs() {
   const { user, API }      = useAuth()
   const { settings }       = useAppSettings()
   const navigate           = useNavigate()
-  const [briefs, setBriefs]         = useState([])
-  const [readIds, setReadIds]       = useState(new Set())
-  const [startedIds, setStartedIds] = useState(new Set())
-  const [passedIds, setPassedIds]   = useState(new Set())
-  const [loading, setLoading]       = useState(true)
-  const [activeSubcat, setSubcat]   = useState('all')
-  const [search, setSearch]         = useState('')
+  const [briefs,      setBriefs]      = useState([])
+  const [total,       setTotal]       = useState(0)
+  const [hasMore,     setHasMore]     = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page,        setPage]        = useState(1)
+  const [readIds,     setReadIds]     = useState(new Set())
+  const [startedIds,  setStartedIds]  = useState(new Set())
+  const [passedIds,   setPassedIds]   = useState(new Set())
+  const [loading,     setLoading]     = useState(true)
+  const [activeSubcat, setSubcat]     = useState('all')
+  const [search,      setSearch]      = useState('')
   const [lockedModal, setLockedModal] = useState(null)
 
+  const LIMIT = 30
   const icon        = CATEGORY_ICONS[category] ?? '📄'
   const subs        = SUBCATEGORIES[category]  ?? []
   const isPageLocked = settings ? isCategoryLocked(category, user, settings) : false
 
   useEffect(() => {
     setLoading(true)
+    setPage(1)
+    setBriefs([])
     Promise.all([
-      fetch(`${API}/api/briefs?category=${encodeURIComponent(category)}&limit=200`, { credentials: 'include' }).then(r => r.json()),
+      fetch(`${API}/api/briefs?category=${encodeURIComponent(category)}&limit=${LIMIT}&page=1`, { credentials: 'include' }).then(r => r.json()),
       user
         ? fetch(`${API}/api/users/me/read-briefs`, { credentials: 'include' }).then(r => r.json())
         : Promise.resolve(null),
@@ -165,7 +172,11 @@ export default function CategoryBriefs() {
         : Promise.resolve(null),
     ])
       .then(([briefsData, readData, quizData]) => {
-        setBriefs(briefsData.data?.briefs ?? [])
+        const incoming = briefsData.data?.briefs ?? []
+        const tot      = briefsData.data?.total  ?? incoming.length
+        setBriefs(incoming)
+        setTotal(tot)
+        setHasMore(incoming.length < tot)
         setReadIds(new Set(readData?.data?.briefIds   ?? []))
         setStartedIds(new Set(readData?.data?.startedIds ?? []))
         setPassedIds(new Set(quizData?.data?.ids      ?? []))
@@ -174,12 +185,31 @@ export default function CategoryBriefs() {
       .finally(() => setLoading(false))
   }, [category, user, API])
 
+  async function handleLoadMore() {
+    const next = page + 1
+    setPage(next)
+    setLoadingMore(true)
+    try {
+      const data = await fetch(
+        `${API}/api/briefs?category=${encodeURIComponent(category)}&limit=${LIMIT}&page=${next}`,
+        { credentials: 'include' }
+      ).then(r => r.json())
+      const incoming = data?.data?.briefs ?? []
+      setBriefs(prev => {
+        const updated = [...prev, ...incoming]
+        setHasMore(updated.length < (data?.data?.total ?? updated.length))
+        return updated
+      })
+    } catch {}
+    finally { setLoadingMore(false) }
+  }
+
   const filtered = briefs
     .filter(b => activeSubcat === 'all' || b.subcategory === activeSubcat)
     .filter(b => !search || b.title?.toLowerCase().includes(search.toLowerCase()) || b.subtitle?.toLowerCase().includes(search.toLowerCase()))
 
   const totalRead = briefs.filter(b => readIds.has(b._id)).length
-  const pct       = briefs.length > 0 ? Math.round((totalRead / briefs.length) * 100) : 0
+  const pct       = total > 0 ? Math.round((totalRead / total) * 100) : 0
 
   if (isPageLocked) {
     return (
@@ -283,21 +313,32 @@ export default function CategoryBriefs() {
           <p className="font-semibold">No briefs in this section yet.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map((brief, i) => (
-            <BriefNode
-              key={brief._id}
-              brief={brief}
-              index={i}
-              isRead={readIds.has(brief._id)}
-              isStarted={startedIds.has(brief._id)}
-              quizPassed={passedIds.has(brief._id)}
-              onLockedClick={brief.isLocked
-                ? () => setLockedModal({ category: brief.category, tier: requiredTier(brief.category, settings) })
-                : undefined}
-            />
-          ))}
-        </div>
+        <>
+          <div className="space-y-3">
+            {filtered.map((brief, i) => (
+              <BriefNode
+                key={brief._id}
+                brief={brief}
+                index={i}
+                isRead={readIds.has(brief._id)}
+                isStarted={startedIds.has(brief._id)}
+                quizPassed={passedIds.has(brief._id)}
+                onLockedClick={brief.isLocked
+                  ? () => setLockedModal({ category: brief.category, tier: requiredTier(brief.category, settings) })
+                  : undefined}
+              />
+            ))}
+          </div>
+          {hasMore && !search && activeSubcat === 'all' && (
+            <button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="w-full mt-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:border-brand-300 hover:text-brand-600 disabled:opacity-40 transition-all"
+            >
+              {loadingMore ? 'Loading…' : 'Load More'}
+            </button>
+          )}
+        </>
       )}
 
       {lockedModal && (

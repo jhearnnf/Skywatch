@@ -1,74 +1,86 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 
 const TABS = ['Available', 'Completed', 'All']
+const TAB_STATE = { Available: 'available', Completed: 'completed', All: 'all' }
+const LIMIT = 20
 
 export default function QuizBriefsList() {
   const { user, API } = useAuth()
 
-  const [briefs,               setBriefs]               = useState([])
-  const [quizPlayableBriefIds, setQuizPlayableBriefIds] = useState(new Set())
-  const [passedBriefIds,       setPassedBriefIds]       = useState(new Set())
-  const [loading,              setLoading]              = useState(true)
-  const [activeTab,            setActiveTab]            = useState('Available')
-  const [search,               setSearch]              = useState('')
+  const [briefs,        setBriefs]        = useState([])
+  const [hasMore,       setHasMore]       = useState(false)
+  const [availableMode, setAvailableMode] = useState(null)
+  const [loading,       setLoading]       = useState(true)
+  const [loadingMore,   setLoadingMore]   = useState(false)
+  const [error,         setError]         = useState(null)
+  const [activeTab,     setActiveTab]     = useState('Available')
+  const [search,        setSearch]        = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [page,          setPage]          = useState(1)
 
+  // Debounce search input
   useEffect(() => {
-    if (!user) {
-      setQuizPlayableBriefIds(new Set())
-      setPassedBriefIds(new Set())
-      setLoading(false)
-      return
-    }
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
 
-    Promise.all([
-      fetch(`${API}/api/briefs?limit=200`, { credentials: 'include' }).then(r => r.json()),
-      fetch(`${API}/api/games/quiz/playable-brief-ids`,     { credentials: 'include' }).then(r => r.json()),
-      fetch(`${API}/api/games/quiz/completed-brief-ids`,    { credentials: 'include' }).then(r => r.json()),
-    ])
-      .then(([briefsData, playableData, passedData]) => {
-        setBriefs(briefsData?.data?.briefs ?? [])
-        setQuizPlayableBriefIds(new Set(playableData?.data?.ids ?? []))
-        setPassedBriefIds(new Set(passedData?.data?.ids ?? []))
+  const fetchBriefs = useCallback(async (pageNum, reset) => {
+    if (!user) return
+    if (reset) { setLoading(true); setError(null) }
+    else       setLoadingMore(true)
+
+    try {
+      const params = new URLSearchParams({
+        state: TAB_STATE[activeTab],
+        page:  pageNum,
+        limit: LIMIT,
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
       })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [user, API])
+      const res  = await fetch(`${API}/api/games/quiz/briefs?${params}`, { credentials: 'include' })
+      const data = await res.json()
 
-  function getState(brief) {
-    if (!quizPlayableBriefIds.has(brief._id)) return 'no-questions'
-    if (passedBriefIds.has(brief._id)) return 'passed'
-    if (!brief.isRead) return 'needs-read'
-    return 'active'
+      if (!res.ok) {
+        setError(data?.message ?? 'Failed to load briefs')
+        return
+      }
+
+      const incoming = data?.data?.briefs ?? []
+      setBriefs(prev => reset ? incoming : [...prev, ...incoming])
+      setHasMore(pageNum < (data?.data?.totalPages ?? 0))
+      if (reset) setAvailableMode(data?.data?.availableMode ?? null)
+    } catch (err) {
+      setError('Connection error — is the server running?')
+    }
+    finally {
+      setLoading(false)
+      setLoadingMore(false)
+    }
+  }, [user, API, activeTab, debouncedSearch])
+
+  // Reset + fetch when tab or search changes
+  useEffect(() => {
+    if (!user) { setLoading(false); return }
+    setPage(1)
+    setBriefs([])
+    fetchBriefs(1, true)
+  }, [activeTab, debouncedSearch, user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleTabChange(tab) {
+    if (tab === activeTab) return
+    setActiveTab(tab)
+    setSearch('')
+    setDebouncedSearch('')
+    setError(null)
   }
 
-  // Priority mode for the Available tab
-  const activeCount    = briefs.filter(b => getState(b) === 'active').length
-  const needsReadCount = briefs.filter(b => getState(b) === 'needs-read').length
-  const availableMode  = activeCount > 0 ? 'active' : needsReadCount > 0 ? 'needs-read' : 'all-passed'
-
-  const filtered = briefs
-    .filter(b => {
-      const s = getState(b)
-      if (activeTab === 'Available') {
-        if (availableMode === 'active')     return s === 'active'
-        if (availableMode === 'needs-read') return s === 'needs-read'
-        return s === 'passed' // all-passed fallback
-      }
-      if (activeTab === 'Completed') return s === 'passed'
-      return true
-    })
-    .filter(b => {
-      if (!search.trim()) return true
-      const q = search.toLowerCase()
-      return b.title.toLowerCase().includes(q) || b.category?.toLowerCase().includes(q)
-    })
-    .sort((a, b) => {
-      const ORDER = { 'active': 0, 'needs-read': 1, 'passed': 2, 'no-questions': 3 }
-      return (ORDER[getState(a)] ?? 99) - (ORDER[getState(b)] ?? 99)
-    })
+  function handleLoadMore() {
+    const next = page + 1
+    setPage(next)
+    fetchBriefs(next, false)
+  }
 
   return (
     <div>
@@ -110,7 +122,7 @@ export default function QuizBriefsList() {
         {TABS.map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => handleTabChange(tab)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all
               ${activeTab === tab
                 ? 'bg-white text-slate-800 shadow-sm'
@@ -127,59 +139,76 @@ export default function QuizBriefsList() {
           <p className="font-semibold text-slate-600 mb-2">Sign in to track your quiz progress</p>
           <Link to="/login" className="text-brand-600 font-semibold text-sm hover:text-brand-700">Sign In →</Link>
         </div>
+      ) : error ? (
+        <div className="text-center py-16 text-slate-400">
+          <p className="font-semibold text-red-600 mb-1">Something went wrong</p>
+          <p className="text-xs text-slate-400 mb-3">{error}</p>
+          <button
+            onClick={() => fetchBriefs(1, true)}
+            className="text-brand-600 font-semibold text-sm hover:text-brand-700"
+          >
+            Try again →
+          </button>
+        </div>
       ) : loading ? (
         <div className="space-y-3 animate-pulse">
           {[...Array(6)].map((_, i) => <div key={i} className="h-16 bg-slate-100 rounded-xl" />)}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : briefs.length === 0 ? (
         <div className="text-center py-16 text-slate-400">
           <p className="font-semibold text-slate-600 mb-1">
-            {search ? 'No briefs match your search' : 'No briefs in this category yet'}
+            {debouncedSearch ? 'No briefs match your search' : 'No briefs in this category yet'}
           </p>
           <Link to="/learn" className="text-brand-600 font-semibold text-sm hover:text-brand-700">Browse all briefs →</Link>
         </div>
       ) : (
         <>
           {/* Contextual banner for Available tab */}
-          {activeTab === 'Available' && !search && availableMode === 'needs-read' && (
+          {activeTab === 'Available' && !debouncedSearch && availableMode === 'needs-read' && (
             <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-3">
               <span className="text-base shrink-0">📖</span>
               <p className="text-xs text-amber-800">Read these briefs to unlock their quizzes.</p>
             </div>
           )}
-          {activeTab === 'Available' && !search && availableMode === 'all-passed' && (
+          {activeTab === 'Available' && !debouncedSearch && availableMode === 'all-passed' && (
             <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-3">
               <span className="text-base shrink-0">🎉</span>
               <p className="text-xs text-emerald-800">All quizzes complete — replay any below to keep sharp.</p>
             </div>
           )}
-        <div className="space-y-2">
-          {filtered.map((brief, i) => {
-            const state = getState(brief)
 
-            if (state === 'no-questions') {
-              return (
-                <motion.div
-                  key={brief._id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.03 }}
-                >
-                  <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed">
-                    <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
-                      <span className="text-slate-400 text-xs">🔒</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
-                      <p className="text-xs text-slate-400">{brief.category}</p>
-                    </div>
-                    <span className="text-xs text-slate-400 shrink-0">No questions yet</span>
-                  </div>
-                </motion.div>
-              )
-            }
+          <div className="space-y-2">
+            {briefs.map((brief, i) => {
+              const state = brief.quizState
 
-            if (state === 'needs-read') {
+              if (state === 'needs-read') {
+                return (
+                  <motion.div
+                    key={brief._id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                  >
+                    <Link
+                      to={`/brief/${brief._id}`}
+                      className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200 hover:border-amber-300 transition-all group"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                        <span className="font-bold text-xs text-amber-600">📖</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                        <p className="text-xs text-slate-400">{brief.category}</p>
+                      </div>
+                      <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">
+                        Read first →
+                      </span>
+                    </Link>
+                  </motion.div>
+                )
+              }
+
+              const passed = state === 'passed'
               return (
                 <motion.div
                   key={brief._id}
@@ -188,60 +217,43 @@ export default function QuizBriefsList() {
                   transition={{ delay: i * 0.03 }}
                 >
                   <Link
-                    to={`/brief/${brief._id}`}
-                    className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200 hover:border-amber-300 transition-all group"
+                    to={`/quiz/${brief._id}`}
+                    className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all group
+                      ${passed
+                        ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
+                        : 'bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50'
+                      }`}
                   >
-                    <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-                      <span className="font-bold text-xs text-amber-600">📖</span>
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
+                      ${passed ? 'bg-emerald-100' : 'bg-brand-100'}`}
+                    >
+                      <span className={`font-bold text-xs ${passed ? 'text-emerald-600' : 'text-brand-600'}`}>
+                        {passed ? '✓' : 'Q'}
+                      </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
                       <p className="text-xs text-slate-400">{brief.category}</p>
                     </div>
-                    <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">
-                      Read first →
-                    </span>
+                    {passed
+                      ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Passed</span>
+                      : <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                    }
                   </Link>
                 </motion.div>
               )
-            }
+            })}
+          </div>
 
-            const passed = state === 'passed'
-            return (
-              <motion.div
-                key={brief._id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
-              >
-                <Link
-                  to={`/quiz/${brief._id}`}
-                  className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all group
-                    ${passed
-                      ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
-                      : 'bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50'
-                    }`}
-                >
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
-                    ${passed ? 'bg-emerald-100' : 'bg-brand-100'}`}
-                  >
-                    <span className={`font-bold text-xs ${passed ? 'text-emerald-600' : 'text-brand-600'}`}>
-                      {passed ? '✓' : 'Q'}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
-                    <p className="text-xs text-slate-400">{brief.category}</p>
-                  </div>
-                  {passed
-                    ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Passed</span>
-                    : <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
-                  }
-                </Link>
-              </motion.div>
-            )
-          })}
-        </div>
+          {hasMore && (
+            <button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="w-full mt-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:border-brand-300 hover:text-brand-600 disabled:opacity-40 transition-all"
+            >
+              {loadingMore ? 'Loading…' : 'Load More'}
+            </button>
+          )}
         </>
       )}
     </div>
