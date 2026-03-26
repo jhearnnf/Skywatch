@@ -160,7 +160,7 @@ export default function Home() {
 
   // Fetch latest 4 briefs for "keep learning" strip — re-fetch on user change so isRead/isStarted resets after logout
   useEffect(() => {
-    fetch(`${API}/api/briefs?limit=4`, { credentials: 'include' })
+    fetch(`${API}/api/briefs?limit=4&status=published`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => setLatestBriefs(data.data?.briefs ?? []))
       .catch(() => {})

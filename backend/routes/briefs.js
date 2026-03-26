@@ -22,7 +22,7 @@ function getTierAmmo(tier, settings) {
 // GET /api/briefs — list all accessible briefs
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { category, search, page = 1, limit = 20, dateFrom } = req.query;
+    const { category, search, page = 1, limit = 20, dateFrom, status } = req.query;
     const filter = {};
     if (category) filter.category = category;
     if (search) filter.$or = [
@@ -30,6 +30,7 @@ router.get('/', optionalAuth, async (req, res) => {
       { subtitle: new RegExp(search, 'i') },
     ];
     if (dateFrom) filter.dateAdded = { $gte: new Date(dateFrom) };
+    if (status) filter.status = status;
 
     const briefs = await IntelligenceBrief.find(filter)
       .populate('media')
