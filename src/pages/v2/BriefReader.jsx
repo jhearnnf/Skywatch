@@ -209,6 +209,8 @@ function BooStatsPanel({ brief, navigate }) {
   const bases     = (brief.associatedBaseBriefIds     ?? []).filter(b => b?._id)
   const squadrons = (brief.associatedSquadronBriefIds ?? []).filter(b => b?._id)
   const aircraft  = (brief.associatedAircraftBriefIds ?? []).filter(b => b?._id)
+  const missions  = (brief.associatedMissionBriefIds  ?? []).filter(b => b?._id)
+  const training  = (brief.associatedTrainingBriefIds ?? []).filter(b => b?._id)
   const related   = (brief.relatedBriefIds            ?? []).filter(b => b?._id)
 
   const sections = []
@@ -216,8 +218,12 @@ function BooStatsPanel({ brief, navigate }) {
     sections.push({ label: `🗺️ Home Base${bases.length > 1 ? 's' : ''}`, items: bases })
   if (['Bases', 'Aircrafts'].includes(cat) && squadrons.length > 0)
     sections.push({ label: '✈️ Squadrons', items: squadrons })
-  if (['Bases', 'Squadrons'].includes(cat) && aircraft.length > 0)
+  if (['Bases', 'Squadrons', 'Tech'].includes(cat) && aircraft.length > 0)
     sections.push({ label: '🛩️ Aircraft', items: aircraft })
+  if (['Aircrafts', 'Squadrons'].includes(cat) && missions.length > 0)
+    sections.push({ label: '🎖️ Missions', items: missions })
+  if (['Roles'].includes(cat) && training.length > 0)
+    sections.push({ label: '🎓 Training', items: training })
   if (related.length > 0)
     sections.push({ label: '🔗 Related', items: related })
 
@@ -254,6 +260,8 @@ function ContinueLearning({ brief, navigate }) {
     ...(brief.associatedBaseBriefIds     ?? []),
     ...(brief.associatedSquadronBriefIds ?? []),
     ...(brief.associatedAircraftBriefIds ?? []),
+    ...(brief.associatedMissionBriefIds  ?? []),
+    ...(brief.associatedTrainingBriefIds ?? []),
     ...(brief.relatedBriefIds            ?? []),
   ]
     .filter(b => b?._id && !seen.has(String(b._id)) && seen.add(String(b._id)))

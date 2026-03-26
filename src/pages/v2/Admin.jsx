@@ -2212,7 +2212,9 @@ function BriefsTab({ API }) {
   const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: false, questions: false, images: true, sources: false, gameData: false })
   const [allBasesBriefs,     setAllBasesBriefs]     = useState([]) // Bases briefs for Aircraft/Squadrons picker
   const [allSquadronsBriefs, setAllSquadronsBriefs] = useState([]) // Squadrons briefs for Bases/Aircraft picker
-  const [allAircraftBriefs,  setAllAircraftBriefs]  = useState([]) // Aircraft briefs for Bases/Squadrons picker
+  const [allAircraftBriefs,  setAllAircraftBriefs]  = useState([]) // Aircraft briefs for Bases/Squadrons/Tech picker
+  const [allMissionsBriefs,  setAllMissionsBriefs]  = useState([]) // Missions briefs for Aircrafts/Squadrons picker
+  const [allTrainingsBriefs, setAllTrainingsBriefs] = useState([]) // Training briefs for Roles picker
 
   const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }))
 
@@ -2257,6 +2259,8 @@ function BriefsTab({ API }) {
       associatedBaseBriefIds:     (br.associatedBaseBriefIds     ?? []).map(b => String(b._id ?? b)),
       associatedSquadronBriefIds: (br.associatedSquadronBriefIds ?? []).map(b => String(b._id ?? b)),
       associatedAircraftBriefIds: (br.associatedAircraftBriefIds ?? []).map(b => String(b._id ?? b)),
+      associatedMissionBriefIds:  (br.associatedMissionBriefIds  ?? []).map(b => String(b._id ?? b)),
+      associatedTrainingBriefIds: (br.associatedTrainingBriefIds ?? []).map(b => String(b._id ?? b)),
       relatedBriefIds:            (br.relatedBriefIds            ?? []).map(b => String(b._id ?? b)),
     })
     setEasyQuestions(br.quizQuestionsEasy?.map(q => ({
@@ -2278,7 +2282,9 @@ function BriefsTab({ API }) {
     // Pre-load briefs for linked-brief pickers
     const needsBases     = ['Aircrafts', 'Squadrons'].includes(br.category)
     const needsSquadrons = ['Bases', 'Aircrafts'].includes(br.category)
-    const needsAircraft  = ['Bases', 'Squadrons'].includes(br.category)
+    const needsAircraft  = ['Bases', 'Squadrons', 'Tech'].includes(br.category)
+    const needsMissions  = ['Aircrafts', 'Squadrons'].includes(br.category)
+    const needsTraining  = ['Roles'].includes(br.category)
     const fetches = []
     if (needsBases     && allBasesBriefs.length === 0)
       fetches.push(fetch(`${API}/api/admin/briefs?category=Bases&limit=200`, { credentials: 'include' })
@@ -2289,6 +2295,12 @@ function BriefsTab({ API }) {
     if (needsAircraft  && allAircraftBriefs.length === 0)
       fetches.push(fetch(`${API}/api/admin/briefs?category=Aircrafts&limit=200`, { credentials: 'include' })
         .then(r => r.json()).then(d => { if (d.data?.briefs) setAllAircraftBriefs(d.data.briefs) }).catch(() => {}))
+    if (needsMissions  && allMissionsBriefs.length === 0)
+      fetches.push(fetch(`${API}/api/admin/briefs?category=Missions&limit=200`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllMissionsBriefs(d.data.briefs) }).catch(() => {}))
+    if (needsTraining  && allTrainingsBriefs.length === 0)
+      fetches.push(fetch(`${API}/api/admin/briefs?category=Training&limit=200`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllTrainingsBriefs(d.data.briefs) }).catch(() => {}))
     if (fetches.length) Promise.all(fetches).catch(() => {})
     setView('editor')
   }
@@ -2419,6 +2431,8 @@ function BriefsTab({ API }) {
       associatedBaseBriefIds:     [],
       associatedSquadronBriefIds: [],
       associatedAircraftBriefIds: [],
+      associatedMissionBriefIds:  [],
+      associatedTrainingBriefIds: [],
       relatedBriefIds:            [],
     })
     setEasyQuestions([])
@@ -2433,10 +2447,11 @@ function BriefsTab({ API }) {
     // Fetch pools needed for this category — awaited so we can use them for link suggestions
     const needsBases     = ['Aircrafts', 'Squadrons'].includes(category)
     const needsSquadrons = ['Bases', 'Aircrafts'].includes(category)
-    const needsAircraft  = ['Bases', 'Squadrons'].includes(category)
+    const needsAircraft  = ['Bases', 'Squadrons', 'Tech'].includes(category)
+    const needsMissions  = ['Aircrafts', 'Squadrons'].includes(category)
+    const needsTraining  = ['Roles'].includes(category)
 
     const fetchPool = (cat, current, setter) => {
-      if (!['Aircrafts', 'Bases', 'Squadrons'].includes(category)) return Promise.resolve([])
       if (current.length > 0) return Promise.resolve(current)
       return fetch(`${API}/api/admin/briefs?category=${cat}&limit=200`, { credentials: 'include' })
         .then(r => r.json())
@@ -2444,10 +2459,12 @@ function BriefsTab({ API }) {
         .catch(() => [])
     }
 
-    const [poolBases, poolSquadrons, poolAircraft] = await Promise.all([
+    const [poolBases, poolSquadrons, poolAircraft, poolMissions, poolTraining] = await Promise.all([
       needsBases     ? fetchPool('Bases',     allBasesBriefs,     setAllBasesBriefs)     : Promise.resolve([]),
       needsSquadrons ? fetchPool('Squadrons', allSquadronsBriefs, setAllSquadronsBriefs) : Promise.resolve([]),
       needsAircraft  ? fetchPool('Aircrafts', allAircraftBriefs,  setAllAircraftBriefs)  : Promise.resolve([]),
+      needsMissions  ? fetchPool('Missions',  allMissionsBriefs,  setAllMissionsBriefs)  : Promise.resolve([]),
+      needsTraining  ? fetchPool('Training',  allTrainingsBriefs, setAllTrainingsBriefs) : Promise.resolve([]),
     ])
 
     // Helper: call generate-links for one type
@@ -2469,7 +2486,7 @@ function BriefsTab({ API }) {
     // Auto-generate everything in parallel
     setAutoGenerating(true)
     try {
-      const [qRes, imgRes, kwRes, basesRes, squadronsRes, aircraftRes] = await Promise.all([
+      const [qRes, imgRes, kwRes, basesRes, squadronsRes, aircraftRes, missionsRes, trainingRes] = await Promise.all([
         fetch(`${API}/api/admin/ai/generate-quiz`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -2488,6 +2505,8 @@ function BriefsTab({ API }) {
         needsBases     ? suggestLinks('bases',     poolBases)     : Promise.resolve(null),
         needsSquadrons ? suggestLinks('squadrons', poolSquadrons) : Promise.resolve(null),
         needsAircraft  ? suggestLinks('aircraft',  poolAircraft)  : Promise.resolve(null),
+        needsMissions  ? suggestLinks('missions',  poolMissions)  : Promise.resolve(null),
+        needsTraining  ? suggestLinks('training',  poolTraining)  : Promise.resolve(null),
       ])
       const [qData, imgData, kwData] = await Promise.all([qRes.json(), imgRes.json(), kwRes.json()])
 
@@ -2505,9 +2524,11 @@ function BriefsTab({ API }) {
       // Apply AI-suggested linked brief IDs
       setDraft(p => ({
         ...p,
-        ...(basesRes?.status === 'success'     && { associatedBaseBriefIds:     basesRes.data.ids }),
-        ...(squadronsRes?.status === 'success' && { associatedSquadronBriefIds: squadronsRes.data.ids }),
-        ...(aircraftRes?.status === 'success'  && { associatedAircraftBriefIds: aircraftRes.data.ids }),
+        ...(basesRes?.status === 'success'    && { associatedBaseBriefIds:     basesRes.data.ids }),
+        ...(squadronsRes?.status === 'success'&& { associatedSquadronBriefIds: squadronsRes.data.ids }),
+        ...(aircraftRes?.status === 'success' && { associatedAircraftBriefIds: aircraftRes.data.ids }),
+        ...(missionsRes?.status === 'success' && { associatedMissionBriefIds:  missionsRes.data.ids }),
+        ...(trainingRes?.status === 'success' && { associatedTrainingBriefIds: trainingRes.data.ids }),
       }))
     } finally {
       setAutoGenerating(false)
@@ -2914,9 +2935,15 @@ function BriefsTab({ API }) {
                       if (['Bases', 'Aircrafts'].includes(c) && allSquadronsBriefs.length === 0)
                         fetch(`${API}/api/admin/briefs?category=Squadrons&limit=200`, { credentials: 'include' })
                           .then(r => r.json()).then(d => { if (d.data?.briefs) setAllSquadronsBriefs(d.data.briefs) }).catch(() => {})
-                      if (['Bases', 'Squadrons'].includes(c) && allAircraftBriefs.length === 0)
+                      if (['Bases', 'Squadrons', 'Tech'].includes(c) && allAircraftBriefs.length === 0)
                         fetch(`${API}/api/admin/briefs?category=Aircrafts&limit=200`, { credentials: 'include' })
                           .then(r => r.json()).then(d => { if (d.data?.briefs) setAllAircraftBriefs(d.data.briefs) }).catch(() => {})
+                      if (['Aircrafts', 'Squadrons'].includes(c) && allMissionsBriefs.length === 0)
+                        fetch(`${API}/api/admin/briefs?category=Missions&limit=200`, { credentials: 'include' })
+                          .then(r => r.json()).then(d => { if (d.data?.briefs) setAllMissionsBriefs(d.data.briefs) }).catch(() => {})
+                      if (['Roles'].includes(c) && allTrainingsBriefs.length === 0)
+                        fetch(`${API}/api/admin/briefs?category=Training&limit=200`, { credentials: 'include' })
+                          .then(r => r.json()).then(d => { if (d.data?.briefs) setAllTrainingsBriefs(d.data.briefs) }).catch(() => {})
                     }}
                     className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
                       ${draft.category === c
@@ -3169,17 +3196,25 @@ function BriefsTab({ API }) {
           linkedSections.push({
             label: '✈️ Squadrons', desc: 'Link squadron briefs', field: 'associatedSquadronBriefIds', pool: allSquadronsBriefs,
           })
-        if (['Bases', 'Squadrons'].includes(cat))
+        if (['Bases', 'Squadrons', 'Tech'].includes(cat))
           linkedSections.push({
             label: '🛩️ Aircraft', desc: 'Link aircraft briefs', field: 'associatedAircraftBriefIds', pool: allAircraftBriefs,
           })
+        if (['Aircrafts', 'Squadrons'].includes(cat))
+          linkedSections.push({
+            label: '🎖️ Missions', desc: 'Link mission/operation briefs', field: 'associatedMissionBriefIds', pool: allMissionsBriefs,
+          })
+        if (['Roles'].includes(cat))
+          linkedSections.push({
+            label: '🎓 Training', desc: 'Link training programme briefs', field: 'associatedTrainingBriefIds', pool: allTrainingsBriefs,
+          })
         linkedSections.push({
           label: '🔗 Related Briefs', desc: 'Generic cross-category links', field: 'relatedBriefIds', pool: [
-            ...allBasesBriefs, ...allSquadronsBriefs, ...allAircraftBriefs,
+            ...allBasesBriefs, ...allSquadronsBriefs, ...allAircraftBriefs, ...allMissionsBriefs, ...allTrainingsBriefs,
           ].filter((b, i, arr) => arr.findIndex(x => String(x._id) === String(b._id)) === i),
         })
 
-        if (linkedSections.every(s => s.label !== '🗺️ Home Bases') && linkedSections.every(s => s.label !== '✈️ Squadrons') && linkedSections.every(s => s.label !== '🛩️ Aircraft'))
+        if (linkedSections.length <= 1) // only the catch-all Related Briefs section
           return null
 
         return (

@@ -182,8 +182,12 @@ const intelligenceBriefSchema = new mongoose.Schema(
     associatedBaseBriefIds:     [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
     // Bases/Aircraft briefs → Squadrons
     associatedSquadronBriefIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
-    // Bases/Squadron briefs → Aircraft
+    // Bases/Squadron/Tech briefs → Aircraft
     associatedAircraftBriefIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+    // Aircrafts/Squadrons briefs → Missions/Operations
+    associatedMissionBriefIds:  [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+    // Roles briefs → Training programmes
+    associatedTrainingBriefIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
     // Generic catch-all for any cross-category link (Terminology, Roles, etc.)
     relatedBriefIds:            [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
 

@@ -1291,10 +1291,14 @@ router.post('/ai/generate-links', async (req, res) => {
     const prompts = {
       'Aircrafts:bases':     `You are an expert on Royal Air Force aircraft and bases. Given an aircraft brief, identify which RAF bases are home/primary operating bases for this aircraft. Only select bases where this aircraft type is permanently stationed.`,
       'Aircrafts:squadrons': `You are an expert on Royal Air Force aircraft and squadrons. Given an aircraft brief, identify which RAF squadrons operate this aircraft type as their primary platform.`,
+      'Aircrafts:missions':  `You are an expert on Royal Air Force operations and aircraft. Given an aircraft brief, identify which RAF operations or missions this aircraft type participated in from the list provided.`,
       'Squadrons:bases':     `You are an expert on Royal Air Force squadrons and bases. Given a squadron brief, identify which RAF bases this squadron is or was primarily stationed at.`,
       'Squadrons:aircraft':  `You are an expert on Royal Air Force squadrons and aircraft. Given a squadron brief, identify which aircraft types from the list this squadron operates or historically operated.`,
+      'Squadrons:missions':  `You are an expert on Royal Air Force squadrons and operations. Given a squadron brief, identify which operations or missions this squadron participated in from the list provided.`,
       'Bases:squadrons':     `You are an expert on Royal Air Force bases and squadrons. Given a base brief, identify which RAF squadrons are or were stationed at this base.`,
       'Bases:aircraft':      `You are an expert on Royal Air Force bases and aircraft. Given a base brief, identify which aircraft types from the list are or were based at this location.`,
+      'Roles:training':      `You are an expert on Royal Air Force careers and training pipelines. Given a role brief, identify which training programmes from the list are required or directly relevant to this role's career pathway.`,
+      'Tech:aircraft':       `You are an expert on Royal Air Force technology and aircraft. Given a technology or weapon system brief, identify which aircraft from the list carry or use this system.`,
     };
 
     const key = `${sourceCategory}:${linkType}`;
