@@ -2410,7 +2410,7 @@ function BriefsTab({ API }) {
     // lead is the full { text, section, subsection } object for topic leads, null for news headlines
     const category    = lead ? (lead.category ?? 'News') : 'News'
     const subcategory = lead ? (lead.subcategory ?? '') : ''
-    const title       = briefData.title ?? ''
+    const title       = lead ? lead.title : (briefData.title ?? '')  // always use lead title — never the AI-generated one
     const subtitle    = briefData.subtitle ?? ''
     const description = Array.isArray(briefData.descriptionSections)
       ? briefData.descriptionSections.join('\n\n')

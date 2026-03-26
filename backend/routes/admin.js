@@ -1179,6 +1179,9 @@ router.post('/ai/generate-brief', async (req, res) => {
       console.error('[generate-brief] JSON parse failed. Raw response:', raw);
       throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
     }
+    // Lock title to the lead topic — AI must not rename the subject
+    if (topic) brief.title = topic;
+
     // For Ranks briefs, apply deterministic hierarchy lookup instead of relying on AI
     if (!headline && category === 'Ranks' && brief.title) {
       const rankOrder = lookupRankHierarchy(brief.title);
