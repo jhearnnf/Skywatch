@@ -33,89 +33,6 @@ const ALL_CATEGORIES = [
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
 ]
 
-function leadSectionToCategory(section) {
-  if (!section) return ALL_CATEGORIES[0]
-  const match = section.match(/SECTION\s+(\d+)/i)
-  const num = match ? parseInt(match[1], 10) : 0
-  const map = {
-    1: 'Ranks', 2: 'Squadrons', 3: 'Aircrafts', 4: 'Aircrafts',
-    5: 'Bases', 6: 'Bases', 7: 'Training', 8: 'Threats', 9: 'Allies',
-    10: 'Missions', 11: 'Tech', 12: 'Terminology', 13: 'Treaties', 14: 'AOR',
-  }
-  return map[num] ?? ALL_CATEGORIES[0]
-}
-
-function leadSubsectionToSubcategory(subsection) {
-  const map = {
-    'FAST JET': 'Fast Jet',
-    'INTELLIGENCE, SURVEILLANCE & RECONNAISSANCE (ISR)': 'ISR & Surveillance',
-    'MARITIME PATROL': 'Maritime Patrol',
-    'TRANSPORT & TANKER': 'Transport & Tanker',
-    'ROTARY WING': 'Rotary Wing',
-    'TRAINING (FIXED WING)': 'Training Aircraft',
-    'GROUND-BASED AIR DEFENCE (RAF REGIMENT)': 'Ground-Based Air Defence',
-    'WWII ERA': 'Historic — WWII',
-    'PRE-WWII / INTERWAR': 'Historic — WWII',
-    'COLD WAR ERA': 'Historic — Cold War',
-    'PANAVIA TORNADO FAMILY': 'Historic — Cold War',
-    'BAE HARRIER FAMILY': 'Historic — Cold War',
-    'POST-COLD WAR / RECENT RETIREMENTS': 'Historic — Post-Cold War',
-    'MAIN OPERATING BASES': 'UK Active',
-    'SUPPORT, INTELLIGENCE & SPECIALIST SITES': 'UK Active',
-    'FORMER / RECENTLY CLOSED UK BASES': 'UK Former',
-    'PERMANENT OVERSEAS BASES': 'Overseas Permanent',
-    'DEPLOYED / FORWARD OPERATING LOCATIONS': 'Overseas Deployed / FOL',
-    'COMMISSIONED OFFICER RANKS': 'Commissioned Officer',
-    'NON-COMMISSIONED RANKS': 'Non-Commissioned',
-    'SPECIALIST ROLES & DESIGNATIONS': 'Specialist Role',
-    'ACTIVE FRONT-LINE SQUADRONS': 'Active Front-Line',
-    'TRAINING SQUADRONS': 'Training',
-    'ROYAL AUXILIARY AIR FORCE (RAuxAF) SQUADRONS': 'Royal Auxiliary Air Force',
-    'HISTORIC / FAMOUS SQUADRONS': 'Historic',
-    'INITIAL TRAINING': 'Initial Training',
-    'FLYING TRAINING PIPELINE': 'Flying Training',
-    'GROUND TRAINING & PROFESSIONAL MILITARY EDUCATION': 'Ground Training & PME',
-    'AIR COMBAT & TACTICAL TRAINING': 'Tactical & Combat Training',
-    'STATE ACTOR AIR THREATS': 'State Actor Air',
-    'SURFACE-TO-AIR MISSILE (SAM) THREATS': 'Surface-to-Air Missiles',
-    'ASYMMETRIC / NON-STATE THREATS': 'Asymmetric & Non-State',
-    'MISSILE & STAND-OFF THREATS': 'Missiles & Stand-Off',
-    'ELECTRONIC & CYBER THREATS': 'Electronic & Cyber',
-    'NATO ALLIES (KEY)': 'NATO',
-    'FIVE EYES PARTNERS': 'Five Eyes',
-    'AUKUS PARTNERS': 'AUKUS',
-    'BILATERAL & FRAMEWORK PARTNERS': 'Bilateral & Framework Partners',
-    'WORLD WAR I': 'World War I',
-    'WORLD WAR II': 'World War II',
-    'POST-WAR / COLD WAR': 'Post-War & Cold War',
-    'POST-COLD WAR': 'Post-Cold War',
-    'WAR ON TERROR / 21ST CENTURY': 'War on Terror',
-    'NATO STANDING OPERATIONS': 'NATO Standing Operations',
-    'HUMANITARIAN / DISASTER RELIEF': 'Humanitarian & NEO',
-    'WEAPONS SYSTEMS': 'Weapons Systems',
-    'SENSORS & AVIONICS': 'Sensors & Avionics',
-    'ELECTRONIC WARFARE': 'Electronic Warfare',
-    'FUTURE TECHNOLOGY & PROGRAMMES': 'Future Programmes',
-    'COMMAND & CONTROL / COMMS': 'Command, Control & Comms',
-    'OPERATIONAL CONCEPTS': 'Operational Concepts',
-    'FLYING & TACTICAL TERMINOLOGY': 'Flying & Tactical',
-    'AIR TRAFFIC & NAVIGATION': 'Air Traffic & Navigation',
-    'INTELLIGENCE & PLANNING': 'Intelligence & Planning',
-    'MAINTENANCE & SUPPORT': 'Maintenance & Support',
-    'FOUNDING & CORE ALLIANCES': 'Founding & Core Alliances',
-    'BILATERAL DEFENCE AGREEMENTS': 'Bilateral Defence Agreements',
-    'ARMS CONTROL & NON-PROLIFERATION': 'Arms Control & Non-Proliferation',
-    'OPERATIONAL & STATUS AGREEMENTS': 'Operational & Status Agreements',
-    'UK / HOME AIR DEFENCE': 'UK Home Air Defence',
-    'NATO AOR STRUCTURE': 'NATO AOR',
-    'CENTCOM / MIDDLE EAST AOR': 'Middle East & CENTCOM',
-    'ATLANTIC / GIUK GAP': 'Atlantic & GIUK Gap',
-    'AFRICA AOR': 'Africa',
-    'INDO-PACIFIC AOR': 'Indo-Pacific',
-    'FALKLAND ISLANDS AOR': 'South Atlantic & Falklands',
-  }
-  return map[subsection] || ''
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared UI
@@ -1140,9 +1057,21 @@ function UsersTab({ API }) {
                 </p>
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>
-              <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${TIER_COLORS[u.subscriptionTier] ?? TIER_COLORS.free}`}>
-                {u.subscriptionTier === 'trial' && u.isTrialActive ? 'Trial (Silver)' : (u.subscriptionTier ?? 'free')}
-              </span>
+              <div className="flex flex-col items-end gap-0.5">
+                <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${TIER_COLORS[u.subscriptionTier] ?? TIER_COLORS.free}`}>
+                  {u.subscriptionTier === 'trial' && u.isTrialActive ? 'Trial (Silver)' : (u.subscriptionTier ?? 'free')}
+                </span>
+                {u.subscriptionTier === 'trial' && u.isTrialActive && u.trialStartDate && (() => {
+                  const end = new Date(u.trialStartDate)
+                  end.setDate(end.getDate() + (u.trialDurationDays || 5))
+                  const daysLeft = Math.ceil((end - Date.now()) / 86400000)
+                  return (
+                    <span className="text-[10px] text-amber-600 font-semibold">
+                      {daysLeft <= 1 ? '< 1 day left' : `${daysLeft}d left`}
+                    </span>
+                  )
+                })()}
+              </div>
             </div>
 
             {/* Stats row */}
@@ -1909,7 +1838,7 @@ function LeadsModal({ API, onClose, onGenerate }) {
     try {
       const body = isHeadline
         ? { headline: key }
-        : { topic: key, category: leadSectionToCategory(lead?.section) }
+        : { topic: key, category: lead?.category ?? 'News' }
       const res  = await fetch(`${API}/api/admin/ai/generate-brief`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -2442,8 +2371,8 @@ function BriefsTab({ API }) {
   // ── AI: Generate brief from lead ─────────────────────────────────────────
   const handleLeadGenerate = async (briefData, lead) => {
     // lead is the full { text, section, subsection } object for topic leads, null for news headlines
-    const category    = lead ? leadSectionToCategory(lead.section) : 'News'
-    const subcategory = lead ? leadSubsectionToSubcategory(lead.subsection) : ''
+    const category    = lead ? (lead.category ?? 'News') : 'News'
+    const subcategory = lead ? (lead.subcategory ?? '') : ''
     const title       = briefData.title ?? ''
     const subtitle    = briefData.subtitle ?? ''
     const description = Array.isArray(briefData.descriptionSections)
@@ -2471,6 +2400,22 @@ function BriefsTab({ API }) {
     setPendingLead(lead ? lead.title : null)
     setStaleSourceWarning(briefData.staleSourceWarning ?? false)
     setView('editor')
+
+    // Pre-load briefs for linked-brief pickers (mirrors openBrief logic)
+    const needsBases     = ['Aircrafts', 'Squadrons'].includes(category)
+    const needsSquadrons = ['Bases', 'Aircrafts'].includes(category)
+    const needsAircraft  = ['Bases', 'Squadrons'].includes(category)
+    const poolFetches = []
+    if (needsBases && allBasesBriefs.length === 0)
+      poolFetches.push(fetch(`${API}/api/admin/briefs?category=Bases&limit=200`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllBasesBriefs(d.data.briefs) }).catch(() => {}))
+    if (needsSquadrons && allSquadronsBriefs.length === 0)
+      poolFetches.push(fetch(`${API}/api/admin/briefs?category=Squadrons&limit=200`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllSquadronsBriefs(d.data.briefs) }).catch(() => {}))
+    if (needsAircraft && allAircraftBriefs.length === 0)
+      poolFetches.push(fetch(`${API}/api/admin/briefs?category=Aircrafts&limit=200`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllAircraftBriefs(d.data.briefs) }).catch(() => {}))
+    if (poolFetches.length) Promise.all(poolFetches).catch(() => {})
 
     // Auto-generate questions, images, and keywords in parallel
     setAutoGenerating(true)
