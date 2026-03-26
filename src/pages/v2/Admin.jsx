@@ -2762,12 +2762,12 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1) }}
             placeholder="Search briefs…"
-            className="flex-1 min-w-[160px] border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+            className="flex-1 min-w-[160px] border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 bg-surface text-text"
           />
           <select
             value={category}
             onChange={e => { setCategory(e.target.value); setPage(1) }}
-            className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+            className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 bg-surface text-text"
           >
             <option value="">All Categories</option>
             {BRIEF_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
