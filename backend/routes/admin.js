@@ -637,6 +637,22 @@ router.get('/briefs/titles', async (_req, res) => {
   }
 });
 
+// GET /api/admin/briefs/related-pool — lightweight list for the Related Briefs picker
+// Excludes categories covered by typed link pickers (Bases/Squadrons/Aircrafts/Missions/Training)
+const TYPED_LINK_CATEGORIES = ['Bases', 'Squadrons', 'Aircrafts', 'Missions', 'Training'];
+router.get('/briefs/related-pool', async (_req, res) => {
+  try {
+    const briefs = await IntelligenceBrief
+      .find({ category: { $nin: TYPED_LINK_CATEGORIES } })
+      .select('title category status')
+      .sort({ category: 1, title: 1 })
+      .lean();
+    res.json({ status: 'success', data: { briefs } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/admin/briefs/:id
 router.get('/briefs/:id', async (req, res) => {
   try {

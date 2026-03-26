@@ -2215,6 +2215,8 @@ function BriefsTab({ API }) {
   const [allAircraftBriefs,  setAllAircraftBriefs]  = useState([]) // Aircraft briefs for Bases/Squadrons/Tech picker
   const [allMissionsBriefs,  setAllMissionsBriefs]  = useState([]) // Missions briefs for Aircrafts/Squadrons picker
   const [allTrainingsBriefs, setAllTrainingsBriefs] = useState([]) // Training briefs for Roles picker
+  const [allRelatedPool,     setAllRelatedPool]     = useState([]) // All non-typed-link briefs for Related picker
+  const [relatedSearch,      setRelatedSearch]      = useState('')
 
   const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }))
 
@@ -2301,7 +2303,11 @@ function BriefsTab({ API }) {
     if (needsTraining  && allTrainingsBriefs.length === 0)
       fetches.push(fetch(`${API}/api/admin/briefs?category=Training&limit=200`, { credentials: 'include' })
         .then(r => r.json()).then(d => { if (d.data?.briefs) setAllTrainingsBriefs(d.data.briefs) }).catch(() => {}))
+    if (allRelatedPool.length === 0)
+      fetches.push(fetch(`${API}/api/admin/briefs/related-pool`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllRelatedPool(d.data.briefs) }).catch(() => {}))
     if (fetches.length) Promise.all(fetches).catch(() => {})
+    setRelatedSearch('')
     setView('editor')
   }
 
@@ -2315,6 +2321,7 @@ function BriefsTab({ API }) {
     setQTab('easy')
     setSaveStatus(null)
     setStaleSourceWarning(false)
+    setRelatedSearch('')
     setView('editor')
   }
 
@@ -2442,6 +2449,7 @@ function BriefsTab({ API }) {
     setBriefId(null)
     setPendingLead(lead ? lead.title : null)
     setStaleSourceWarning(briefData.staleSourceWarning ?? false)
+    setRelatedSearch('')
     setView('editor')
 
     // Fetch pools needed for this category — awaited so we can use them for link suggestions
@@ -2459,12 +2467,19 @@ function BriefsTab({ API }) {
         .catch(() => [])
     }
 
+    const fetchRelatedPool = () => {
+      if (allRelatedPool.length > 0) return Promise.resolve()
+      return fetch(`${API}/api/admin/briefs/related-pool`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllRelatedPool(d.data.briefs) }).catch(() => {})
+    }
+
     const [poolBases, poolSquadrons, poolAircraft, poolMissions, poolTraining] = await Promise.all([
       needsBases     ? fetchPool('Bases',     allBasesBriefs,     setAllBasesBriefs)     : Promise.resolve([]),
       needsSquadrons ? fetchPool('Squadrons', allSquadronsBriefs, setAllSquadronsBriefs) : Promise.resolve([]),
       needsAircraft  ? fetchPool('Aircrafts', allAircraftBriefs,  setAllAircraftBriefs)  : Promise.resolve([]),
       needsMissions  ? fetchPool('Missions',  allMissionsBriefs,  setAllMissionsBriefs)  : Promise.resolve([]),
       needsTraining  ? fetchPool('Training',  allTrainingsBriefs, setAllTrainingsBriefs) : Promise.resolve([]),
+      fetchRelatedPool(),
     ])
 
     // Helper: call generate-links for one type
@@ -3208,14 +3223,13 @@ function BriefsTab({ API }) {
           linkedSections.push({
             label: '🎓 Training', desc: 'Link training programme briefs', field: 'associatedTrainingBriefIds', pool: allTrainingsBriefs,
           })
-        linkedSections.push({
-          label: '🔗 Related Briefs', desc: 'Generic cross-category links', field: 'relatedBriefIds', pool: [
-            ...allBasesBriefs, ...allSquadronsBriefs, ...allAircraftBriefs, ...allMissionsBriefs, ...allTrainingsBriefs,
-          ].filter((b, i, arr) => arr.findIndex(x => String(x._id) === String(b._id)) === i),
-        })
+        // Related Briefs uses its own dedicated pool + search — handled separately below
 
-        if (linkedSections.length <= 1) // only the catch-all Related Briefs section
-          return null
+        const relatedFiltered = allRelatedPool.filter(b =>
+          !relatedSearch || b.title.toLowerCase().includes(relatedSearch.toLowerCase())
+        )
+        const selectedRelated = (draft.relatedBriefIds ?? [])
+        const selectedRelatedBriefs = allRelatedPool.filter(b => selectedRelated.includes(String(b._id)))
 
         return (
           <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
@@ -3272,6 +3286,69 @@ function BriefsTab({ API }) {
                   )}
                 </div>
               ))}
+
+              {/* ── Related Briefs (searchable, all non-typed categories) ── */}
+              <div>
+                <p className="text-xs font-bold text-slate-600 mb-1">🔗 Related Briefs</p>
+                <p className="text-[11px] text-slate-400 mb-2">Cross-category links — Threats, Allies, Terminology, AOR, etc.</p>
+                {selectedRelatedBriefs.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {selectedRelatedBriefs.map(b => (
+                      <span key={b._id} className="flex items-center gap-1 text-[11px] bg-brand-50 border border-brand-200 text-brand-700 rounded-full px-2 py-0.5">
+                        {b.title}
+                        <button
+                          onClick={() => setDraft(p => ({ ...p, relatedBriefIds: p.relatedBriefIds.filter(id => id !== String(b._id)) }))}
+                          className="text-brand-400 hover:text-brand-700 leading-none"
+                        >×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="relative mb-1">
+                  <input
+                    type="text"
+                    value={relatedSearch}
+                    onChange={e => setRelatedSearch(e.target.value)}
+                    placeholder="Search briefs…"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400"
+                  />
+                  {relatedSearch && (
+                    <button onClick={() => setRelatedSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
+                  )}
+                </div>
+                {relatedSearch && (
+                  <div className="space-y-1 max-h-48 overflow-y-auto border border-slate-100 rounded-xl p-2">
+                    {relatedFiltered.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-1 px-1">No results</p>
+                    ) : relatedFiltered.map(b => {
+                      const checked = selectedRelated.includes(String(b._id))
+                      return (
+                        <label key={b._id} className="flex items-center gap-2 cursor-pointer py-0.5">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={e => setDraft(p => {
+                              const ids = p.relatedBriefIds ?? []
+                              return {
+                                ...p,
+                                relatedBriefIds: e.target.checked
+                                  ? [...ids, String(b._id)]
+                                  : ids.filter(id => id !== String(b._id)),
+                              }
+                            })}
+                            className="rounded"
+                          />
+                          <span className="text-sm text-slate-700 flex-1">{b.title}</span>
+                          <span className="text-[10px] text-slate-400 shrink-0">{b.category}</span>
+                          {b.status === 'stub' && (
+                            <span className="text-[10px] text-slate-400">stub</span>
+                          )}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )
