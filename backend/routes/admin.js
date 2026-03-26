@@ -1207,8 +1207,9 @@ router.get('/intel-leads', async (req, res) => {
 // POST /api/admin/intel-leads/mark-complete — mark a lead as published in DB
 router.post('/intel-leads/mark-complete', async (req, res) => {
   try {
-    const { lead } = req.body;
-    if (!lead) return res.status(400).json({ message: 'lead required' });
+    const { title } = req.body;
+    if (!title) return res.status(400).json({ message: 'title required' });
+    const lead = title;
 
     const result = await IntelLead.updateOne(
       { title: lead.trim(), isPublished: false },

@@ -1756,10 +1756,16 @@ function isSimilarTitle(headline, existingTitles) {
 }
 
 function LeadRow({ lead, picked, busy, onGenerate }) {
+  const isPublished = lead.isPublished ?? false
   return (
-    <div className={`flex items-start justify-between gap-3 py-2 px-3 rounded-xl mb-1 transition-colors ${picked?.title === lead.title ? 'bg-amber-50 border border-amber-200' : 'hover:bg-slate-50'}`}>
+    <div className={`flex items-start justify-between gap-3 py-2 px-3 rounded-xl mb-1 transition-colors ${
+      isPublished ? 'opacity-50' : picked?.title === lead.title ? 'bg-amber-50 border border-amber-200' : 'hover:bg-slate-50'
+    }`}>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-slate-700">{lead.title}</p>
+        <div className="flex items-center gap-1.5">
+          <p className={`text-sm ${isPublished ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{lead.title}</p>
+          {isPublished && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full shrink-0">✓ Published</span>}
+        </div>
         {lead.nickname && (
           <p className="text-[11px] text-slate-400 mt-0.5">"{lead.nickname}"</p>
         )}
@@ -1769,8 +1775,8 @@ function LeadRow({ lead, picked, busy, onGenerate }) {
       </div>
       <button
         onClick={() => onGenerate(lead)}
-        disabled={busy === lead.title}
-        className="text-xs px-3 py-1 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold whitespace-nowrap hover:bg-brand-100 disabled:opacity-40"
+        disabled={busy === lead.title || isPublished}
+        className="text-xs px-3 py-1 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold whitespace-nowrap hover:bg-brand-100 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {busy === lead.title ? '…' : 'Generate →'}
       </button>
@@ -1788,6 +1794,7 @@ function LeadsModal({ API, onClose, onGenerate }) {
   const [openSubsections, setOpenSubsections] = useState(new Set())
   const [resetBusy,       setResetBusy]       = useState(false)
   const [resetModal,      setResetModal]      = useState(false)
+  const [showCompleted,   setShowCompleted]   = useState(false)
 
   const toggleSection = (sec) => setOpenSections(prev => {
     const next = new Set(prev); next.has(sec) ? next.delete(sec) : next.add(sec); return next
@@ -1813,16 +1820,23 @@ function LeadsModal({ API, onClose, onGenerate }) {
       .catch(() => {})
   }, [API])
 
-  const filtered = leads.filter(l =>
-    !search ||
-    (l.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    (l.nickname ?? '').toLowerCase().includes(search.toLowerCase()) ||
-    (l.section ?? '').toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = leads.filter(l => {
+    if (!showCompleted && l.isPublished) return false
+    if (!search) return true
+    return (
+      (l.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (l.nickname ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (l.section ?? '').toLowerCase().includes(search.toLowerCase())
+    )
+  })
+
+  const publishedCount   = leads.filter(l => l.isPublished).length
+  const unpublishedCount = leads.length - publishedCount
 
   const pickRandom = () => {
-    if (!filtered.length) return
-    const lead = filtered[Math.floor(Math.random() * filtered.length)]
+    const pool = filtered.filter(l => !l.isPublished)
+    if (!pool.length) return
+    const lead = pool[Math.floor(Math.random() * pool.length)]
     setPicked(lead)
     // Ensure the section and subsection containing this lead are open
     const sec = lead.section || 'General'
@@ -1956,7 +1970,7 @@ function LeadsModal({ API, onClose, onGenerate }) {
                 Pick Random
               </button>
             </div>
-            <div className="px-4 pb-2 flex items-center gap-2">
+            <div className="px-4 pb-2 flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setResetModal(true)}
                 disabled={resetBusy}
@@ -1964,6 +1978,17 @@ function LeadsModal({ API, onClose, onGenerate }) {
               >
                 {resetBusy ? '…Resetting' : '🔄 Reset All Leads & Stubs'}
               </button>
+              <button
+                onClick={() => setShowCompleted(v => !v)}
+                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
+                  showCompleted
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : 'bg-surface text-slate-600 border-slate-200 hover:border-emerald-300'
+                }`}
+              >
+                ✓ Completed ({publishedCount})
+              </button>
+              <span className="text-[10px] text-slate-400 ml-auto">{unpublishedCount} remaining</span>
             </div>
             <div className="overflow-y-auto flex-1 px-4 py-2">
               {Object.entries(grouped).map(([section, subsections]) => {
