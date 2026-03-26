@@ -2413,9 +2413,13 @@ function BriefsTab({ API }) {
       descriptionSections: Array.isArray(briefData.descriptionSections) && briefData.descriptionSections.length
         ? briefData.descriptionSections
         : ['','',''],
-      keywords:            Array.isArray(briefData.keywords) ? briefData.keywords : [],
-      sources:             Array.isArray(briefData.sources) ? briefData.sources : [],
-      gameData:            (briefData.gameData && typeof briefData.gameData === 'object') ? briefData.gameData : {},
+      keywords:                  Array.isArray(briefData.keywords) ? briefData.keywords : [],
+      sources:                   Array.isArray(briefData.sources) ? briefData.sources : [],
+      gameData:                  (briefData.gameData && typeof briefData.gameData === 'object') ? briefData.gameData : {},
+      associatedBaseBriefIds:     [],
+      associatedSquadronBriefIds: [],
+      associatedAircraftBriefIds: [],
+      relatedBriefIds:            [],
     })
     setEasyQuestions([])
     setMediumQuestions([])
@@ -2426,26 +2430,46 @@ function BriefsTab({ API }) {
     setStaleSourceWarning(briefData.staleSourceWarning ?? false)
     setView('editor')
 
-    // Pre-load briefs for linked-brief pickers (mirrors openBrief logic)
+    // Fetch pools needed for this category — awaited so we can use them for link suggestions
     const needsBases     = ['Aircrafts', 'Squadrons'].includes(category)
     const needsSquadrons = ['Bases', 'Aircrafts'].includes(category)
     const needsAircraft  = ['Bases', 'Squadrons'].includes(category)
-    const poolFetches = []
-    if (needsBases && allBasesBriefs.length === 0)
-      poolFetches.push(fetch(`${API}/api/admin/briefs?category=Bases&limit=200`, { credentials: 'include' })
-        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllBasesBriefs(d.data.briefs) }).catch(() => {}))
-    if (needsSquadrons && allSquadronsBriefs.length === 0)
-      poolFetches.push(fetch(`${API}/api/admin/briefs?category=Squadrons&limit=200`, { credentials: 'include' })
-        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllSquadronsBriefs(d.data.briefs) }).catch(() => {}))
-    if (needsAircraft && allAircraftBriefs.length === 0)
-      poolFetches.push(fetch(`${API}/api/admin/briefs?category=Aircrafts&limit=200`, { credentials: 'include' })
-        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllAircraftBriefs(d.data.briefs) }).catch(() => {}))
-    if (poolFetches.length) Promise.all(poolFetches).catch(() => {})
 
-    // Auto-generate questions, images, and keywords in parallel
+    const fetchPool = (cat, current, setter) => {
+      if (!['Aircrafts', 'Bases', 'Squadrons'].includes(category)) return Promise.resolve([])
+      if (current.length > 0) return Promise.resolve(current)
+      return fetch(`${API}/api/admin/briefs?category=${cat}&limit=200`, { credentials: 'include' })
+        .then(r => r.json())
+        .then(d => { const briefs = d.data?.briefs ?? []; setter(briefs); return briefs })
+        .catch(() => [])
+    }
+
+    const [poolBases, poolSquadrons, poolAircraft] = await Promise.all([
+      needsBases     ? fetchPool('Bases',     allBasesBriefs,     setAllBasesBriefs)     : Promise.resolve([]),
+      needsSquadrons ? fetchPool('Squadrons', allSquadronsBriefs, setAllSquadronsBriefs) : Promise.resolve([]),
+      needsAircraft  ? fetchPool('Aircrafts', allAircraftBriefs,  setAllAircraftBriefs)  : Promise.resolve([]),
+    ])
+
+    // Helper: call generate-links for one type
+    const suggestLinks = (linkType, pool) => {
+      if (!pool.length) return Promise.resolve(null)
+      return fetch(`${API}/api/admin/ai/generate-links`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourceTitle: title,
+          sourceDescription: description,
+          sourceCategory: category,
+          linkType,
+          pool: pool.map(b => ({ _id: b._id, title: b.title })),
+        }),
+      }).then(r => r.json()).catch(() => null)
+    }
+
+    // Auto-generate everything in parallel
     setAutoGenerating(true)
     try {
-      const [qRes, imgRes, kwRes] = await Promise.all([
+      const [qRes, imgRes, kwRes, basesRes, squadronsRes, aircraftRes] = await Promise.all([
         fetch(`${API}/api/admin/ai/generate-quiz`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -2461,8 +2485,12 @@ function BriefsTab({ API }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ description, existingKeywords: [], needed: 10 }),
         }),
+        needsBases     ? suggestLinks('bases',     poolBases)     : Promise.resolve(null),
+        needsSquadrons ? suggestLinks('squadrons', poolSquadrons) : Promise.resolve(null),
+        needsAircraft  ? suggestLinks('aircraft',  poolAircraft)  : Promise.resolve(null),
       ])
       const [qData, imgData, kwData] = await Promise.all([qRes.json(), imgRes.json(), kwRes.json()])
+
       if (qData.status === 'success') {
         setEasyQuestions(qData.data.easyQuestions ?? [])
         setMediumQuestions(qData.data.mediumQuestions ?? [])
@@ -2473,6 +2501,14 @@ function BriefsTab({ API }) {
       if (kwData.status === 'success') {
         setDraft(p => ({ ...p, keywords: kwData.data.keywords ?? [] }))
       }
+
+      // Apply AI-suggested linked brief IDs
+      setDraft(p => ({
+        ...p,
+        ...(basesRes?.status === 'success'     && { associatedBaseBriefIds:     basesRes.data.ids }),
+        ...(squadronsRes?.status === 'success' && { associatedSquadronBriefIds: squadronsRes.data.ids }),
+        ...(aircraftRes?.status === 'success'  && { associatedAircraftBriefIds: aircraftRes.data.ids }),
+      }))
     } finally {
       setAutoGenerating(false)
     }

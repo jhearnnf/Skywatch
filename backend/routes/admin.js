@@ -1278,6 +1278,51 @@ router.post('/ai/generate-keywords', async (req, res) => {
   }
 });
 
+// POST /api/admin/ai/generate-links
+// Generic linked-brief suggester. sourceCategory + linkType determine the prompt.
+// linkType: 'bases' | 'squadrons' | 'aircraft'
+router.post('/ai/generate-links', async (req, res) => {
+  try {
+    const { sourceTitle, sourceDescription, sourceCategory, linkType, pool } = req.body;
+    if (!sourceTitle) return res.status(400).json({ message: 'sourceTitle required' });
+    if (!Array.isArray(pool) || pool.length === 0)
+      return res.status(400).json({ message: 'pool required' });
+
+    const prompts = {
+      'Aircrafts:bases':     `You are an expert on Royal Air Force aircraft and bases. Given an aircraft brief, identify which RAF bases are home/primary operating bases for this aircraft. Only select bases where this aircraft type is permanently stationed.`,
+      'Aircrafts:squadrons': `You are an expert on Royal Air Force aircraft and squadrons. Given an aircraft brief, identify which RAF squadrons operate this aircraft type as their primary platform.`,
+      'Squadrons:bases':     `You are an expert on Royal Air Force squadrons and bases. Given a squadron brief, identify which RAF bases this squadron is or was primarily stationed at.`,
+      'Squadrons:aircraft':  `You are an expert on Royal Air Force squadrons and aircraft. Given a squadron brief, identify which aircraft types from the list this squadron operates or historically operated.`,
+      'Bases:squadrons':     `You are an expert on Royal Air Force bases and squadrons. Given a base brief, identify which RAF squadrons are or were stationed at this base.`,
+      'Bases:aircraft':      `You are an expert on Royal Air Force bases and aircraft. Given a base brief, identify which aircraft types from the list are or were based at this location.`,
+    };
+
+    const key = `${sourceCategory}:${linkType}`;
+    const systemPrompt = prompts[key];
+    if (!systemPrompt) return res.status(400).json({ message: `Unsupported combination: ${key}` });
+
+    const poolList = pool.map(b => `- "${b.title}" (id: ${b._id})`).join('\n');
+    const data = await openRouterChat([{
+      role: 'system',
+      content: systemPrompt + ' Return ONLY valid JSON — no markdown, no code blocks.',
+    }, {
+      role: 'user',
+      content: `Brief: "${sourceTitle}"\n\nDescription:\n"""\n${sourceDescription ?? ''}\n"""\n\nAvailable ${linkType} briefs:\n${poolList}\n\nReturn the IDs of matching ${linkType}. If none match, return an empty array.\n\nReturn ONLY valid JSON: {"ids":["id1","id2"]}`,
+    }], 'perplexity/sonar', 512);
+
+    const raw = data.choices?.[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(cleanJson(raw));
+    const validIds = new Set(pool.map(b => String(b._id)));
+    const ids = (Array.isArray(parsed.ids) ? parsed.ids : [])
+      .map(String)
+      .filter(id => validIds.has(id));
+
+    res.json({ status: 'success', data: { ids } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/admin/ai/generate-bases
 // Given an aircraft brief title + body and a list of available base briefs,
 // asks the AI which bases are home bases for this aircraft.
