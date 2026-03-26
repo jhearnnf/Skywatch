@@ -59,9 +59,9 @@ function KeywordSheet({ kw, onClose }) {
 // ── Media carousel ────────────────────────────────────────────────────────
 function MediaCarousel({ media, title, API }) {
   const [idx, setIdx] = useState(0)
-  const images = media.filter(m => m?.mediaUrl)
+  const images = media.filter(m => m?.cloudinaryPublicId)
   if (!images.length) return null
-  const src = images[idx].mediaUrl.startsWith('/') ? `${API}${images[idx].mediaUrl}` : images[idx].mediaUrl
+  const src = images[idx].mediaUrl
   const multi = images.length > 1
   return (
     <div className="relative rounded-2xl overflow-hidden mb-5 aspect-video bg-slate-100 group">
@@ -193,6 +193,16 @@ function BooStatsPanel({ brief, navigate }) {
   } else if (['Missions', 'Tech', 'Treaties'].includes(cat)) {
     if (gd.startYear != null)
       stats.push({ label: 'Period', value: `${gd.startYear} – ${gd.endYear != null ? gd.endYear : 'Present'}` })
+  } else if (['Bases', 'Squadrons', 'Threats'].includes(cat)) {
+    const L = {
+      Bases:     { start: 'Opened',     active: 'Active',     closed: 'Closed'    },
+      Squadrons: { start: 'Formed',     active: 'Active',     closed: 'Disbanded' },
+      Threats:   { start: 'Introduced', active: 'In Service', closed: 'Retired'   },
+    }[cat]
+    if (gd.startYear != null)
+      stats.push({ label: L.start, value: String(gd.startYear) })
+    if (gd.startYear != null)
+      stats.push({ label: 'Status', value: gd.endYear != null ? `${L.closed} ${gd.endYear}` : L.active })
   }
 
   // Typed relationship sections per category
@@ -218,7 +228,7 @@ function BooStatsPanel({ brief, navigate }) {
       {stats.length > 0 && (
         <>
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">⚔️ Battle Data</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">📊 Stats</span>
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
             {stats.map(s => <StatRow key={s.label} label={s.label} value={s.value} />)}

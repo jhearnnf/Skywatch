@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const CATEGORIES = [
   'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
+  'Heritage',
 ];
 
 // Valid subcategories per category. Empty array = subcategory not applicable.
@@ -56,6 +57,8 @@ const SUBCATEGORIES = {
     'Medical & Nursing',
     'Cyber & Information',
     'Fighter Controller',
+    'Support & Administration',
+    'Space Operations',
   ],
   Threats: [
     'State Actor Air',
@@ -107,6 +110,12 @@ const SUBCATEGORIES = {
     'Bilateral Defence Agreements',
     'Arms Control & Non-Proliferation',
     'Operational & Status Agreements',
+    'Defence Policy & Strategy',
+  ],
+  Heritage: [
+    'Famous Personnel',
+    'Traditions & Culture',
+    'Memorials & Museums',
   ],
 };
 
@@ -163,9 +172,9 @@ const intelligenceBriefSchema = new mongoose.Schema(
       trainingWeekStart:  { type: Number },
       trainingWeekEnd:    { type: Number },
 
-      // Missions / Tech / Treaties
+      // Bases / Squadrons / Missions / Tech / Treaties / Threats
       startYear:          { type: Number },
-      endYear:            { type: Number },   // null = ongoing
+      endYear:            { type: Number },   // null = still active / ongoing
     },
 
     // Relationship arrays — typed links between brief categories

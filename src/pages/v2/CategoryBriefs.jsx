@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppSettings } from '../../context/AppSettingsContext'
-import { requiredTier } from '../../utils/subscription'
+import { requiredTier, isCategoryLocked } from '../../utils/subscription'
 import LockedCategoryModal from '../../components/LockedCategoryModal'
 import { CATEGORY_ICONS, SUBCATEGORIES } from '../../data/mockData'
 
@@ -149,8 +149,9 @@ export default function CategoryBriefs() {
   const [search, setSearch]         = useState('')
   const [lockedModal, setLockedModal] = useState(null)
 
-  const icon  = CATEGORY_ICONS[category] ?? '📄'
-  const subs  = SUBCATEGORIES[category]  ?? []
+  const icon        = CATEGORY_ICONS[category] ?? '📄'
+  const subs        = SUBCATEGORIES[category]  ?? []
+  const isPageLocked = settings ? isCategoryLocked(category, user, settings) : false
 
   useEffect(() => {
     setLoading(true)
@@ -179,6 +180,17 @@ export default function CategoryBriefs() {
 
   const totalRead = briefs.filter(b => readIds.has(b._id)).length
   const pct       = briefs.length > 0 ? Math.round((totalRead / briefs.length) * 100) : 0
+
+  if (isPageLocked) {
+    return (
+      <LockedCategoryModal
+        category={category}
+        tier={requiredTier(category, settings)}
+        user={user}
+        onClose={() => navigate('/learn')}
+      />
+    )
+  }
 
   return (
     <div>

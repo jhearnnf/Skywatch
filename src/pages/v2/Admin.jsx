@@ -141,7 +141,7 @@ function Toast({ msg, onClear }) {
 }
 
 function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger = false, onConfirm, onCancel }) {
-  const [reason, setReason] = useState('')
+  const [reason, setReason] = useState('testing')
   const [busy,   setBusy]   = useState(false)
 
   useEffect(() => {
@@ -777,6 +777,7 @@ function SettingsTab({ API }) {
   const [settings, setSettings] = useState(null)
   const [draft,    setDraft]    = useState({})
   const [modal,    setModal]    = useState(null)   // { label, fields }
+  const [coinModal, setCoinModal] = useState(false)
   const [toast,    setToast]    = useState('')
   const [testAmount, setTestAmount] = useState('')
   const [coinBusy,   setCoinBusy]   = useState(false)
@@ -811,15 +812,16 @@ function SettingsTab({ API }) {
     load()
   }
 
-  const awardTest = async () => {
+  const awardTest = async (reason) => {
     const amt = parseInt(testAmount, 10)
     if (!amt || amt <= 0) return
+    setCoinModal(false)
     setCoinBusy(true)
     try {
       const res  = await fetch(`${API}/api/admin/award-coins`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt }),
+        body: JSON.stringify({ amount: amt, reason }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -979,17 +981,26 @@ function SettingsTab({ API }) {
             type="number" min={1} placeholder="Amount…"
             value={testAmount}
             onChange={e => setTestAmount(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && awardTest()}
+            onKeyDown={e => e.key === 'Enter' && parseInt(testAmount, 10) > 0 && setCoinModal(true)}
             className="w-32 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
           />
           <button
-            onClick={awardTest}
+            onClick={() => setCoinModal(true)}
             disabled={coinBusy || !testAmount || parseInt(testAmount, 10) <= 0}
             className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
           >
             {coinBusy ? 'Awarding…' : '⬡ Award'}
           </button>
         </div>
+        {coinModal && (
+          <ConfirmModal
+            title={`Award ${testAmount} Test Coins`}
+            body="Awards aircoins directly to your admin account. Use for testing reward flows."
+            confirmLabel="Award Coins"
+            onConfirm={awardTest}
+            onCancel={() => setCoinModal(false)}
+          />
+        )}
       </Section>
     </div>
   )
@@ -1799,7 +1810,7 @@ const EMPTY_DRAFT = {
   relatedBriefIds:            [],
 }
 
-const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
+const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases', 'Squadrons', 'Threats']
 
 // Rough duplicate detection — returns true if headline is similar to an existing title
 function isSimilarTitle(headline, existingTitles) {
@@ -1847,7 +1858,7 @@ function LeadsModal({ API, onClose, onGenerate }) {
   const [openSections,    setOpenSections]    = useState(new Set())
   const [openSubsections, setOpenSubsections] = useState(new Set())
   const [resetBusy,       setResetBusy]       = useState(false)
-  const [resetConfirm,    setResetConfirm]    = useState(false)
+  const [resetModal,      setResetModal]      = useState(false)
 
   const toggleSection = (sec) => setOpenSections(prev => {
     const next = new Set(prev); next.has(sec) ? next.delete(sec) : next.add(sec); return next
@@ -1916,14 +1927,14 @@ function LeadsModal({ API, onClose, onGenerate }) {
     }
   }
 
-  const resetLeads = async () => {
+  const resetLeads = async (reason) => {
+    setResetModal(false)
     setResetBusy(true)
-    setResetConfirm(false)
     try {
       const res  = await fetch(`${API}/api/admin/leads/reset`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Admin reset leads and stubs' }),
+        body: JSON.stringify({ reason }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -2017,26 +2028,13 @@ function LeadsModal({ API, onClose, onGenerate }) {
               </button>
             </div>
             <div className="px-4 pb-2 flex items-center gap-2">
-              {!resetConfirm ? (
-                <button
-                  onClick={() => setResetConfirm(true)}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition-colors"
-                >
-                  🔄 Reset All Leads & Stubs
-                </button>
-              ) : (
-                <>
-                  <span className="text-xs text-red-600 font-semibold">Wipes all briefs — confirm?</span>
-                  <button
-                    onClick={resetLeads}
-                    disabled={resetBusy}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {resetBusy ? '…' : 'Yes, Reset'}
-                  </button>
-                  <button onClick={() => setResetConfirm(false)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
-                </>
-              )}
+              <button
+                onClick={() => setResetModal(true)}
+                disabled={resetBusy}
+                className="text-xs px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition-colors disabled:opacity-50"
+              >
+                {resetBusy ? '…Resetting' : '🔄 Reset All Leads & Stubs'}
+              </button>
             </div>
             <div className="overflow-y-auto flex-1 px-4 py-2">
               {Object.entries(grouped).map(([section, subsections]) => {
@@ -2187,6 +2185,17 @@ function LeadsModal({ API, onClose, onGenerate }) {
               })}
             </div>
           </div>
+        )}
+
+        {resetModal && (
+          <ConfirmModal
+            title="Reset All Leads & Stubs"
+            body="This wipes all briefs, quiz questions, game data, and reading history — then re-seeds from the leads array. Cannot be undone."
+            confirmLabel="Yes, Reset Everything"
+            danger
+            onConfirm={resetLeads}
+            onCancel={() => setResetModal(false)}
+          />
         )}
 
         {/* Duplicate confirmation overlay */}
@@ -2664,7 +2673,7 @@ function BriefsTab({ API }) {
     const hasEasy     = (brief.quizQuestionsEasy?.length ?? 0) >= 10
     const hasMedium   = (brief.quizQuestionsMedium?.length ?? 0) >= 10
     const hasQuiz     = hasEasy && hasMedium
-    const hasMedia    = (brief.media?.length ?? 0) > 0
+    const hasMedia    = (brief.media ?? []).some(m => m.cloudinaryPublicId)
     return (
       <span className="flex gap-1 items-center">
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasKeywords ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>K</span>
@@ -3044,7 +3053,7 @@ function BriefsTab({ API }) {
               <div className="grid grid-cols-2 gap-3 mb-4">
                 {media.map(m => (
                   <div key={m._id} className="relative group">
-                    <img src={m.mediaUrl.startsWith('/') ? `${API}${m.mediaUrl}` : m.mediaUrl} alt="" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
+                    <img src={m.mediaUrl} alt="" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
                     <button
                       onClick={() => removeMedia(m._id)}
                       className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -3126,9 +3135,15 @@ function BriefsTab({ API }) {
                 <GameDataField label="Training Week Start" field="trainingWeekStart" draft={draft} setDraft={setDraft} />
                 <GameDataField label="Training Week End" field="trainingWeekEnd" draft={draft} setDraft={setDraft} />
               </>)}
-              {['Missions', 'Tech', 'Treaties'].includes(draft.category) && (<>
-                <GameDataField label="Start Year" field="startYear" draft={draft} setDraft={setDraft} />
-                <GameDataField label="End Year (blank = ongoing)" field="endYear" draft={draft} setDraft={setDraft} nullable />
+              {['Missions', 'Tech', 'Treaties', 'Bases', 'Squadrons', 'Threats'].includes(draft.category) && (<>
+                <GameDataField
+                  label={{ Bases: 'Year Opened', Squadrons: 'Year Formed', Threats: 'Year Introduced' }[draft.category] ?? 'Start Year'}
+                  field="startYear" draft={draft} setDraft={setDraft}
+                />
+                <GameDataField
+                  label={{ Bases: 'Year Closed (blank = still active)', Squadrons: 'Year Disbanded (blank = still active)', Threats: 'Year Retired (blank = in service)' }[draft.category] ?? 'End Year (blank = ongoing)'}
+                  field="endYear" draft={draft} setDraft={setDraft} nullable
+                />
               </>)}
             </div>
           )}
