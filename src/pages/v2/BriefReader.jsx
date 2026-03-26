@@ -902,6 +902,7 @@ export default function BriefReader() {
               <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
               Surveillance Active
             </motion.div>
+          </div>
           {user?.isAdmin && (
             <button
               onClick={() => navigate('/admin', { state: { openLeads: true, leadsSearch: brief.title } })}
@@ -960,6 +961,7 @@ export default function BriefReader() {
               <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
               Surveillance Active
             </motion.div>
+          </div>
           {user?.isAdmin && (
             <button
               onClick={() => navigate('/admin', { state: { openLeads: true, leadsSearch: brief.title } })}
