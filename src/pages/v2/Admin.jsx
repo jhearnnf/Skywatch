@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { invalidateSoundSettings } from '../../utils/sound'
 import { TUTORIAL_STEPS } from '../../context/AppTutorialContext'
@@ -1784,10 +1784,10 @@ function LeadRow({ lead, picked, busy, onGenerate }) {
   )
 }
 
-function LeadsModal({ API, onClose, onGenerate }) {
+function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
   const [tab,             setTab]             = useState('leads') // 'leads' | 'news'
   const [leads,           setLeads]           = useState([])
-  const [search,          setSearch]          = useState('')
+  const [search,          setSearch]          = useState(initialSearch)
   const [picked,          setPicked]          = useState(null)
   const [busy,            setBusy]            = useState(null)
   const [openSections,    setOpenSections]    = useState(new Set())
@@ -2181,7 +2181,7 @@ function LeadsModal({ API, onClose, onGenerate }) {
   )
 }
 
-function BriefsTab({ API }) {
+function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapConsumed }) {
   const [view,          setView]          = useState('list')
   // List state
   const [briefs,        setBriefs]        = useState([])
@@ -2192,6 +2192,13 @@ function BriefsTab({ API }) {
   const [category,      setCategory]      = useState('')
   const [toast,         setToast]         = useState('')
   const [showLeads,     setShowLeads]     = useState(false)
+
+  useEffect(() => {
+    if (openLeads) {
+      setShowLeads(true)
+      onBootstrapConsumed?.()
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   // Editor state
   const [draft,         setDraft]         = useState({ ...EMPTY_DRAFT, descriptionSections: ['','',''] })
   const [easyQuestions, setEasyQuestions] = useState([])
@@ -2745,6 +2752,7 @@ function BriefsTab({ API }) {
             API={API}
             onClose={() => setShowLeads(false)}
             onGenerate={handleLeadGenerate}
+            initialSearch={initialSearch}
           />
         )}
 
@@ -3851,8 +3859,20 @@ const TABS = [
 export default function Admin() {
   const { user, setUser, loading, API } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [tab, setTab] = useState('stats')
   const [unsolvedCount, setUnsolvedCount] = useState(null)
+  const [leadsInitialSearch, setLeadsInitialSearch] = useState('')
+  const [openLeadsOnMount,   setOpenLeadsOnMount]   = useState(false)
+
+  useEffect(() => {
+    const s = location.state
+    if (s?.openLeads) {
+      setTab('briefs')
+      setLeadsInitialSearch(s.leadsSearch ?? '')
+      setOpenLeadsOnMount(true)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!loading && (!user || !user.isAdmin)) navigate('/home', { replace: true })
@@ -3917,7 +3937,7 @@ export default function Admin() {
             {tab === 'users'    && <UsersTab    API={API} />}
             {tab === 'problems' && <ProblemsTab API={API} />}
             {tab === 'content'  && <ContentTab  API={API} />}
-            {tab === 'briefs'   && <BriefsTab   API={API} />}
+            {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false) }} />}
             {tab === 'logs'     && <LogsTab     API={API} />}
           </motion.div>
         </AnimatePresence>

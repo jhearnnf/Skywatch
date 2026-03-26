@@ -902,7 +902,14 @@ export default function BriefReader() {
               <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
               Surveillance Active
             </motion.div>
-          </div>
+          {user?.isAdmin && (
+            <button
+              onClick={() => navigate('/admin', { state: { openLeads: true, leadsSearch: brief.title } })}
+              className="mt-5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 transition-colors"
+            >
+              ✦ Generate Brief →
+            </button>
+          )}
         </motion.div>
         <button
           onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
@@ -953,7 +960,14 @@ export default function BriefReader() {
               <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
               Surveillance Active
             </motion.div>
-          </div>
+          {user?.isAdmin && (
+            <button
+              onClick={() => navigate('/admin', { state: { openLeads: true, leadsSearch: brief.title } })}
+              className="mt-5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 transition-colors"
+            >
+              ✦ Generate Brief →
+            </button>
+          )}
         </motion.div>
         <button
           onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
