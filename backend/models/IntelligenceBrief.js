@@ -153,6 +153,7 @@ const intelligenceBriefSchema = new mongoose.Schema(
     media: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Media' }],
 
     title:       { type: String, required: true, trim: true },
+    nickname:    { type: String, trim: true },   // informal/popular name (e.g. "Typhoon" for Eurofighter)
     subtitle:    { type: String, trim: true },
     descriptionSections: [{ type: String, trim: true }], // exactly 4 sections; section 4 is a name-free 1–2 sentence summary (used for flashcard recall)
 
@@ -212,7 +213,7 @@ const intelligenceBriefSchema = new mongoose.Schema(
 
 intelligenceBriefSchema.index({ category: 1, subcategory: 1, dateAdded: -1 });
 intelligenceBriefSchema.index({ historic: 1 });
-intelligenceBriefSchema.index({ title: 'text', subtitle: 'text' });
+intelligenceBriefSchema.index({ title: 'text', nickname: 'text', subtitle: 'text' });
 
 module.exports = mongoose.model('IntelligenceBrief', intelligenceBriefSchema);
 module.exports.CATEGORIES = CATEGORIES;

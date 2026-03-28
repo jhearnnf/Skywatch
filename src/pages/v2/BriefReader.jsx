@@ -175,9 +175,9 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
 // ── BOO stats panel ───────────────────────────────────────────────────────
 function StatRow({ label, value }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</span>
-      <span className="text-sm font-bold text-white">{value}</span>
+    <div className="bg-brand-100 border border-brand-200 rounded-xl px-3 py-2.5">
+      <span className="text-[9px] font-bold uppercase tracking-widest text-brand-500 block mb-1">{label}</span>
+      <span className="text-sm font-bold text-text leading-tight">{value}</span>
     </div>
   )
 }
@@ -187,10 +187,10 @@ function BriefPill({ b, navigate }) {
   return (
     <button
       onClick={() => navigate(`/brief/${b._id}`)}
-      className={`text-xs font-semibold px-2 py-0.5 rounded-full transition-opacity ${
+      className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all ${
         isStub
-          ? 'bg-slate-600 text-slate-400 opacity-60 hover:opacity-80'
-          : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+          ? 'bg-slate-200 text-slate-500 opacity-50 hover:opacity-70'
+          : 'bg-brand-200 text-brand-700 hover:bg-brand-300 hover:text-brand-800'
       }`}
     >
       {isStub ? `🔒 ${b.title}` : b.title}
@@ -263,20 +263,21 @@ function BooStatsPanel({ brief, navigate }) {
   if (stats.length === 0 && sections.length === 0) return null
 
   return (
-    <div className="bg-slate-800 rounded-2xl px-4 py-3 mb-5">
+    <div className="bg-surface-raised border border-brand-200 rounded-2xl px-4 py-4 mb-5">
       {stats.length > 0 && (
         <>
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">📊 Stats</span>
+            <div className="w-0.5 h-3.5 bg-brand-400 rounded-full" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-500">Intel Stats</span>
           </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {stats.map(s => <StatRow key={s.label} label={s.label} value={s.value} />)}
           </div>
         </>
       )}
       {sections.map((sec, i) => (
-        <div key={sec.label} className={stats.length > 0 || i > 0 ? 'mt-3 pt-3 border-t border-slate-700' : ''}>
-          <span className={`text-[10px] font-bold uppercase tracking-widest block mb-2 ${sec.historic ? 'text-amber-400' : 'text-slate-400'}`}>{sec.label}</span>
+        <div key={sec.label} className={stats.length > 0 || i > 0 ? 'mt-4 pt-4 border-t border-brand-200' : ''}>
+          <span className={`text-[10px] font-bold uppercase tracking-widest block mb-2 ${sec.historic ? 'text-amber-600' : 'text-brand-500'}`}>{sec.label}</span>
           <div className="flex flex-wrap gap-1.5">
             {sec.items.map(b => <BriefPill key={b._id} b={b} navigate={navigate} />)}
           </div>
@@ -572,6 +573,9 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) 
           )}
         </div>
         <h1 className="text-2xl font-extrabold text-slate-900 leading-tight">{brief.title}</h1>
+        {brief.nickname && (
+          <p className="text-sm text-slate-400 italic mt-0.5">"{brief.nickname}"</p>
+        )}
         {brief.subtitle && (
           <p className="text-sm text-slate-500 mt-1.5">{brief.subtitle}</p>
         )}
@@ -1222,6 +1226,9 @@ export default function BriefReader() {
           )}
         </div>
         <h1 className="text-2xl font-extrabold text-slate-900 leading-tight">{brief.title}</h1>
+        {brief.nickname && (
+          <p className="text-sm text-slate-400 italic mt-0.5">"{brief.nickname}"</p>
+        )}
         {brief.subtitle && (
           <p className="text-sm text-slate-500 mt-1.5">{brief.subtitle}</p>
         )}

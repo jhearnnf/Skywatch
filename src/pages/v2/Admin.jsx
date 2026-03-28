@@ -1745,7 +1745,7 @@ const BRIEF_SUBCATEGORIES = {
 }
 
 const EMPTY_DRAFT = {
-  title: '', subtitle: '', category: 'News', subcategory: '', historic: false,
+  title: '', nickname: '', subtitle: '', category: 'News', subcategory: '', historic: false,
   descriptionSections: ['', '', ''],
   keywords: [],
   sources: [],
@@ -2312,6 +2312,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     const br = data.data.brief
     setDraft({
       title:               br.title ?? '',
+      nickname:            br.nickname ?? '',
       subtitle:            br.subtitle ?? '',
       category:            br.category ?? 'News',
       subcategory:         br.subcategory ?? '',
@@ -2481,6 +2482,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     const category    = lead ? (lead.category ?? 'News') : 'News'
     const subcategory = lead ? (lead.subcategory ?? '') : ''
     const title       = lead ? lead.title : (briefData.title ?? '')  // always use lead title — never the AI-generated one
+    const nickname    = lead ? (lead.nickname ?? '') : (briefData.nickname ?? '')
     const subtitle    = briefData.subtitle ?? ''
     const description = Array.isArray(briefData.descriptionSections)
       ? briefData.descriptionSections.join('\n\n')
@@ -2488,6 +2490,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
     setDraft({
       title,
+      nickname,
       subtitle,
       category,
       subcategory,
@@ -2990,7 +2993,14 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         </button>
         <div className="flex-1 min-w-0">
           <h2 className="font-bold text-slate-800 truncate">{draft.title || 'New Brief'}</h2>
-          {briefId && <p className="text-[10px] text-slate-400 font-mono truncate">{briefId}</p>}
+          {briefId && (
+            <a
+              href={`/brief/${briefId}`}
+              className="text-[10px] text-brand-500 font-mono truncate hover:underline"
+            >
+              {briefId}
+            </a>
+          )}
         </div>
         {pendingLead && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Lead</span>}
         {briefId && (
@@ -3118,6 +3128,17 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 type="text"
                 value={draft.title}
                 onChange={e => setDraft(p => ({ ...p, title: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+              />
+            </div>
+            {/* Nickname */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Nickname <span className="font-normal text-slate-400">(optional — informal/popular name)</span></label>
+              <input
+                type="text"
+                value={draft.nickname ?? ''}
+                onChange={e => setDraft(p => ({ ...p, nickname: e.target.value }))}
+                placeholder="e.g. Typhoon, Tonka, Widow Maker"
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
               />
             </div>
