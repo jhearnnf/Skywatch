@@ -1357,7 +1357,7 @@ export default function BriefReader() {
                     className="block text-xs text-brand-600 hover:underline truncate"
                   >
                     {s.siteName || s.url}
-                    {s.articleDate && <span className="text-slate-400 ml-1">· {s.articleDate}</span>}
+                    {s.articleDate && <span className="text-slate-400 ml-1">· {new Date(s.articleDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
                   </a>
                 ))}
               </div>
