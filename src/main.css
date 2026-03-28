@@ -239,3 +239,73 @@ body.play-mode::before {
 body.play-mode .card-shadow {
   box-shadow: 0 1px 3px rgba(0,0,0,.55), 0 4px 16px rgba(251, 146, 60, 0.12);
 }
+
+/* ── E-ink / e-paper display support ─────────────────────────────────────────
+   Targets devices with slow-refresh displays (Kindle, reMarkable, Kobo, etc.)
+   via the CSS `update` media feature. Has zero effect on normal screens.
+   ────────────────────────────────────────────────────────────────────────── */
+@media (update: slow) {
+  /* Kill all CSS animations and transitions */
+  *, *::before, *::after {
+    animation-duration:        0.001ms !important;
+    animation-iteration-count: 1       !important;
+    transition-duration:       0.001ms !important;
+    transition-delay:          0ms     !important;
+    scroll-behavior:           auto    !important;
+  }
+
+  /* High-contrast monochrome base */
+  html, body {
+    background: #fff !important;
+    color:       #000 !important;
+  }
+
+  /* Strip all decorative backgrounds — gradients, images, glows */
+  *, *::before, *::after {
+    background-image:  none !important;
+    box-shadow:        none !important;
+    text-shadow:       none !important;
+    filter:            none !important;
+    backdrop-filter:   none !important;
+  }
+
+  /* Force all backgrounds to white, all text to black */
+  * {
+    background-color: #fff !important;
+    color:            #000 !important;
+  }
+
+  /* Restore border visibility for structural elements (replaces shadows/colour) */
+  [class*="rounded"],
+  [class*="border"],
+  nav, header, footer,
+  button, input, textarea, select {
+    border-color: #999 !important;
+  }
+
+  /* Ensure interactive elements have a visible border even if they had none */
+  button, input, textarea, select, a[role="button"] {
+    border: 1px solid #555 !important;
+  }
+
+  /* Links: underline instead of colour */
+  a {
+    color:            #000 !important;
+    text-decoration:  underline !important;
+  }
+
+  /* Images: bump contrast slightly for grayscale rendering */
+  img {
+    filter: contrast(1.1) grayscale(1) !important;
+  }
+
+  /* Remove fixed/sticky positioning — e-ink scrolling is page-by-page */
+  [class*="sticky"], [class*="fixed"] {
+    position: static !important;
+  }
+
+  /* Overlays / modals: simple border instead of backdrop blur */
+  [class*="inset-0"] {
+    background-color: rgba(255,255,255,0.95) !important;
+  }
+}

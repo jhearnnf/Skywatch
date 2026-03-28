@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { AnimatePresence, motion, useIsPresent } from 'framer-motion'
+import { AnimatePresence, motion, useIsPresent, MotionGlobalConfig } from 'framer-motion'
+
+// Disable all Framer Motion animations on e-ink / e-paper displays (update: slow).
+// Has no effect on normal screens — matchMedia returns false there.
+if (window.matchMedia('(update: slow)').matches) {
+  MotionGlobalConfig.skipAnimations = true
+}
 
 import { AuthProvider, useAuth }          from './context/AuthContext'
 import { AppSettingsProvider }             from './context/AppSettingsContext'
