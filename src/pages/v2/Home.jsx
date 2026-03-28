@@ -117,8 +117,9 @@ export default function Home() {
   const [stats,        setStats]        = useState({}) // { [category]: { total, done } } — logged-in only
   const [missionDone,  setMissionDone]  = useState(false)
   const [latestBriefs, setLatestBriefs] = useState([])
-  const [lockedModal,  setLockedModal]  = useState(null) // { category, tier }
-  const [showCROFlow,  setShowCROFlow]  = useState(false)
+  const [lockedModal,       setLockedModal]       = useState(null) // { category, tier }
+  const [showCROFlow,       setShowCROFlow]       = useState(false)
+  const [missionLoading,    setMissionLoading]    = useState(false)
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
 
   // Mission done if the user completed a brief today (server-authoritative via lastStreakDate)
@@ -225,13 +226,31 @@ export default function Home() {
         initial={{ opacity: 0, x: -12 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 0.2 }}
-        className={`rounded-2xl p-4 mb-6 flex items-center gap-3 border
+        onClick={!missionDone && !missionLoading ? async () => {
+          setMissionLoading(true)
+          try {
+            const res = await fetch(`${API}/api/briefs/random-unlocked`, { credentials: 'include' })
+            const data = await res.json()
+            if (data.status === 'success') {
+              navigate(`/brief/${data.data.briefId}`)
+            } else {
+              navigate('/learn')
+            }
+          } catch {
+            navigate('/learn')
+          } finally {
+            setMissionLoading(false)
+          }
+        } : undefined}
+        className={`rounded-2xl p-4 mb-6 flex items-center gap-3 border transition-all
           ${missionDone
             ? 'bg-emerald-50 border-emerald-200'
-            : 'bg-amber-50 border-amber-200'
+            : missionLoading
+              ? 'bg-amber-50 border-amber-200 opacity-60 cursor-wait'
+              : 'bg-amber-50 border-amber-200 cursor-pointer hover:border-amber-400 hover:-translate-y-0.5 card-shadow hover:card-shadow-hover'
           }`}
       >
-        <span className="text-2xl">{missionDone ? '✅' : '⭐'}</span>
+        <span className="text-2xl">{missionDone ? '✅' : missionLoading ? '…' : '⭐'}</span>
         <div className="flex-1 min-w-0">
           {missionDone ? (
             <>
@@ -246,12 +265,9 @@ export default function Home() {
           )}
         </div>
         {!missionDone && (
-          <Link
-            to="/learn"
-            className="shrink-0 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl transition-colors"
-          >
-            Go →
-          </Link>
+          <span className="shrink-0 text-xs font-bold bg-amber-500 text-white px-3 py-1.5 rounded-xl">
+            {missionLoading ? '…' : 'Go →'}
+          </span>
         )}
       </motion.div>
 

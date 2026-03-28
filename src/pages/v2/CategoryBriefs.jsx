@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
@@ -7,7 +7,7 @@ import { requiredTier, isCategoryLocked } from '../../utils/subscription'
 import LockedCategoryModal from '../../components/LockedCategoryModal'
 import { CATEGORY_ICONS, SUBCATEGORIES } from '../../data/mockData'
 
-function BriefNode({ brief, index, isRead, isStarted, quizPassed, onLockedClick }) {
+function BriefNode({ brief, index, isRead, isStarted, quizPassed, booCompleted, onLockedClick }) {
   const locked  = brief.isLocked ?? false
   const isStub  = brief.status === 'stub'
 
@@ -103,6 +103,9 @@ function BriefNode({ brief, index, isRead, isStarted, quizPassed, onLockedClick 
                   {quizPassed && (
                     <span className="text-[10px] text-amber-600 font-semibold">★ Quiz Passed</span>
                   )}
+                  {booCompleted && (
+                    <span className="text-[10px] text-sky-600 font-semibold">🗺 BOO Complete</span>
+                  )}
                 </div>
               )}
             </div>
@@ -140,76 +143,118 @@ export default function CategoryBriefs() {
   const { user, API }      = useAuth()
   const { settings }       = useAppSettings()
   const navigate           = useNavigate()
-  const [briefs,      setBriefs]      = useState([])
-  const [total,       setTotal]       = useState(0)
-  const [hasMore,     setHasMore]     = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [page,        setPage]        = useState(1)
-  const [readIds,     setReadIds]     = useState(new Set())
-  const [startedIds,  setStartedIds]  = useState(new Set())
-  const [passedIds,   setPassedIds]   = useState(new Set())
-  const [loading,     setLoading]     = useState(true)
-  const [activeSubcat, setSubcat]     = useState('all')
-  const [search,      setSearch]      = useState('')
-  const [lockedModal, setLockedModal] = useState(null)
+  const [briefs,          setBriefs]          = useState([])
+  const [total,           setTotal]           = useState(0)   // filtered total (for pagination)
+  const [categoryTotal,   setCategoryTotal]   = useState(0)   // unfiltered total (for progress bar)
+  const [hasMore,         setHasMore]         = useState(false)
+  const [loadingMore,     setLoadingMore]     = useState(false)
+  const [page,            setPage]            = useState(1)
+  const [readIds,         setReadIds]         = useState(new Set())
+  const [startedIds,      setStartedIds]      = useState(new Set())
+  const [passedIds,       setPassedIds]       = useState(new Set())
+  const [booCompletedIds, setBooCompletedIds] = useState(new Set())
+  const [loading,         setLoading]         = useState(true)
+  const [activeSubcat,    setSubcat]          = useState('all')
+  const [search,          setSearch]          = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [lockedModal,     setLockedModal]     = useState(null)
+  // Prevents the filter effect from double-fetching when a category change resets filter state
+  const filterResetRef = useRef(false)
 
   const LIMIT = 30
   const icon        = CATEGORY_ICONS[category] ?? '📄'
   const subs        = SUBCATEGORIES[category]  ?? []
   const isPageLocked = settings ? isCategoryLocked(category, user, settings) : false
 
+  // Build and execute a briefs fetch with all active params
+  function doFetch(pageNum, searchVal, subcatVal) {
+    const params = new URLSearchParams({ category, limit: LIMIT, page: pageNum })
+    if (searchVal)              params.set('search',     searchVal)
+    if (subcatVal !== 'all')    params.set('subcategory', subcatVal)
+    return fetch(`${API}/api/briefs?${params}`, { credentials: 'include' }).then(r => r.json())
+  }
+
+  // Initial load: fires on category / user / API change; resets all filter state
   useEffect(() => {
-    setLoading(true)
+    filterResetRef.current = true
+    setSearch('')
+    setDebouncedSearch('')
+    setSubcat('all')
     setPage(1)
     setBriefs([])
+    setLoading(true)
+
     Promise.all([
-      fetch(`${API}/api/briefs?category=${encodeURIComponent(category)}&limit=${LIMIT}&page=1`, { credentials: 'include' }).then(r => r.json()),
+      doFetch(1, '', 'all'),
       user
         ? fetch(`${API}/api/users/me/read-briefs`, { credentials: 'include' }).then(r => r.json())
         : Promise.resolve(null),
       user
         ? fetch(`${API}/api/games/quiz/completed-brief-ids`, { credentials: 'include' }).then(r => r.json())
         : Promise.resolve(null),
+      user
+        ? fetch(`${API}/api/games/battle-of-order/completed-brief-ids`, { credentials: 'include' }).then(r => r.json())
+        : Promise.resolve(null),
     ])
-      .then(([briefsData, readData, quizData]) => {
-        const incoming = briefsData.data?.briefs ?? []
-        const tot      = briefsData.data?.total  ?? incoming.length
+      .then(([briefsData, readData, quizData, booData]) => {
+        const incoming   = briefsData.data?.briefs      ?? []
+        const tot        = briefsData.data?.total       ?? 0
+        const totalPages = briefsData.data?.totalPages  ?? 0
         setBriefs(incoming)
         setTotal(tot)
-        setHasMore(incoming.length < tot)
-        setReadIds(new Set(readData?.data?.briefIds   ?? []))
+        setCategoryTotal(tot)
+        setHasMore(1 < totalPages)
+        setReadIds(new Set(readData?.data?.briefIds    ?? []))
         setStartedIds(new Set(readData?.data?.startedIds ?? []))
-        setPassedIds(new Set(quizData?.data?.ids      ?? []))
+        setPassedIds(new Set(quizData?.data?.ids       ?? []))
+        setBooCompletedIds(new Set(booData?.data?.ids  ?? []))
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [category, user, API])
+  }, [category, user, API]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounce the search input (400ms)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Re-fetch page 1 in replace mode whenever search/subcategory changes
+  // (skips the first run caused by the category-change reset above)
+  useEffect(() => {
+    if (filterResetRef.current) { filterResetRef.current = false; return; }
+    setPage(1)
+    setBriefs([])
+    setLoading(true)
+    doFetch(1, debouncedSearch, activeSubcat)
+      .then(data => {
+        const incoming   = data.data?.briefs     ?? []
+        const tot        = data.data?.total      ?? 0
+        const totalPages = data.data?.totalPages ?? 0
+        setBriefs(incoming)
+        setTotal(tot)
+        setHasMore(1 < totalPages)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [debouncedSearch, activeSubcat]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleLoadMore() {
     const next = page + 1
     setPage(next)
     setLoadingMore(true)
     try {
-      const data = await fetch(
-        `${API}/api/briefs?category=${encodeURIComponent(category)}&limit=${LIMIT}&page=${next}`,
-        { credentials: 'include' }
-      ).then(r => r.json())
-      const incoming = data?.data?.briefs ?? []
-      setBriefs(prev => {
-        const updated = [...prev, ...incoming]
-        setHasMore(updated.length < (data?.data?.total ?? updated.length))
-        return updated
-      })
+      const data       = await doFetch(next, debouncedSearch, activeSubcat)
+      const incoming   = data?.data?.briefs     ?? []
+      const totalPages = data?.data?.totalPages ?? 0
+      setBriefs(prev => [...prev, ...incoming])
+      setHasMore(next < totalPages)
     } catch {}
     finally { setLoadingMore(false) }
   }
 
-  const filtered = briefs
-    .filter(b => activeSubcat === 'all' || b.subcategory === activeSubcat)
-    .filter(b => !search || b.title?.toLowerCase().includes(search.toLowerCase()) || b.subtitle?.toLowerCase().includes(search.toLowerCase()))
-
   const totalRead = briefs.filter(b => readIds.has(b._id)).length
-  const pct       = total > 0 ? Math.round((totalRead / total) * 100) : 0
+  const pct       = categoryTotal > 0 ? Math.round((totalRead / categoryTotal) * 100) : 0
 
   if (isPageLocked) {
     return (
@@ -237,7 +282,7 @@ export default function CategoryBriefs() {
         <span className="text-4xl">{icon}</span>
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900">{category}</h1>
-          <p className="text-sm text-slate-500">{briefs.length} intel briefs</p>
+          <p className="text-sm text-slate-500">{total} intel briefs</p>
         </div>
       </div>
 
@@ -255,7 +300,7 @@ export default function CategoryBriefs() {
             transition={{ duration: 0.7, ease: 'easeOut' }}
           />
         </div>
-        <p className="text-xs text-slate-400 mt-2">{totalRead} of {briefs.length} briefs read</p>
+        <p className="text-xs text-slate-400 mt-2">{totalRead} of {categoryTotal} briefs read</p>
       </div>
 
       {/* Search bar */}
@@ -307,7 +352,7 @@ export default function CategoryBriefs() {
             <div key={i} className="bg-surface rounded-2xl p-4 border border-slate-100 animate-pulse h-20" />
           ))}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : briefs.length === 0 ? (
         <div className="text-center py-16 text-slate-400">
           <div className="text-4xl mb-3">📭</div>
           <p className="font-semibold">No briefs in this section yet.</p>
@@ -315,7 +360,7 @@ export default function CategoryBriefs() {
       ) : (
         <>
           <div className="space-y-3">
-            {filtered.map((brief, i) => (
+            {briefs.map((brief, i) => (
               <BriefNode
                 key={brief._id}
                 brief={brief}
@@ -323,13 +368,14 @@ export default function CategoryBriefs() {
                 isRead={readIds.has(brief._id)}
                 isStarted={startedIds.has(brief._id)}
                 quizPassed={passedIds.has(brief._id)}
+                booCompleted={booCompletedIds.has(brief._id)}
                 onLockedClick={brief.isLocked
                   ? () => setLockedModal({ category: brief.category, tier: requiredTier(brief.category, settings) })
                   : undefined}
               />
             ))}
           </div>
-          {hasMore && !search && activeSubcat === 'all' && (
+          {hasMore && (
             <button
               onClick={handleLoadMore}
               disabled={loadingMore}

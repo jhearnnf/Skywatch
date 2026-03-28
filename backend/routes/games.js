@@ -257,6 +257,24 @@ router.get('/quiz/completed-brief-ids', protect, async (req, res) => {
   }
 });
 
+// GET /api/games/battle-of-order/completed-brief-ids — all briefIds this user has ever won a BOO game for
+router.get('/battle-of-order/completed-brief-ids', protect, async (req, res) => {
+  try {
+    const results = await GameSessionOrderOfBattleResult.find({
+      userId: req.user._id,
+      won: true,
+    }).populate({ path: 'gameId', select: 'anchorBriefId' }).lean();
+    const ids = [...new Set(
+      results
+        .filter(r => r.gameId?.anchorBriefId)
+        .map(r => r.gameId.anchorBriefId.toString())
+    )];
+    res.json({ status: 'success', data: { ids } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/games/quiz/briefs?state=available|completed|all&page=1&limit=20&search=
 // Paginated brief list with server-computed quizState per brief.
 // state=available : playable briefs the user has NOT yet passed

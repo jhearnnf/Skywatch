@@ -9,6 +9,7 @@ const { awardCoins } = require('../utils/awardCoins');
 const { effectiveTier, getAccessibleCategories } = require('../utils/subscription');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
 require('../models/GameQuizQuestion');
+const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
 
 // Gold ammo sentinel — treated as unlimited throughout
 const AMMO_GOLD = 9999;
@@ -19,12 +20,15 @@ function getTierAmmo(tier, settings) {
   return settings.ammoFree ?? 3;
 }
 
-// GET /api/briefs — list all accessible briefs
+// GET /api/briefs — list all accessible briefs, sorted by read-priority then dateAdded
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { category, search, page = 1, limit = 20, dateFrom, status } = req.query;
+    const { category, search, subcategory, dateFrom, status } = req.query;
+    const pageNum  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const filter = {};
-    if (category) filter.category = category;
+    if (category)    filter.category    = category;
+    if (subcategory) filter.subcategory = subcategory;
     if (search) filter.$or = [
       { title: new RegExp(search, 'i') },
       { subtitle: new RegExp(search, 'i') },
@@ -32,51 +36,65 @@ router.get('/', optionalAuth, async (req, res) => {
     if (dateFrom) filter.dateAdded = { $gte: new Date(dateFrom) };
     if (status) filter.status = status;
 
+    // Pre-fetch user's read/started/quiz IDs so we can sort by priority server-side.
+    // Priority: 1=in-progress, 2=unread published, 3=read no quiz, 4=read+quiz, 5=stub
+    let startedIds = [], readIds = [], quizIds = [];
+    if (req.user) {
+      const [startedRecs, readRecs, quizRecs] = await Promise.all([
+        IntelligenceBriefRead.find({ userId: req.user._id, completed: false }).select('intelBriefId').lean(),
+        IntelligenceBriefRead.find({ userId: req.user._id, completed: true  }).select('intelBriefId').lean(),
+        GameSessionQuizAttempt.find({ userId: req.user._id, status: 'completed', won: true }).select('intelBriefId').lean(),
+      ]);
+      startedIds = startedRecs.map(r => r.intelBriefId);
+      readIds    = readRecs.map(r => r.intelBriefId);
+      quizIds    = quizRecs.map(r => r.intelBriefId);
+    }
+
+    const readSet    = new Set(readIds.map(id => id.toString()));
+    const startedSet = new Set(startedIds.map(id => id.toString()));
+
     const [briefs, total] = await Promise.all([
-      IntelligenceBrief.find(filter)
-        .populate('media')
-        .sort({ dateAdded: -1 })
-        .skip((page - 1) * limit)
-        .limit(Number(limit)),
+      IntelligenceBrief.aggregate([
+        { $match: filter },
+        { $addFields: {
+          _priority: {
+            $switch: {
+              branches: [
+                { case: { $eq: ['$status', 'stub'] },                              then: 5 },
+                { case: { $in: ['$_id', startedIds] },                             then: 1 },
+                { case: { $and: [
+                  { $not: { $in: ['$_id', readIds] } },
+                  { $ne:  ['$status', 'stub'] },
+                ]},                                                                 then: 2 },
+                { case: { $and: [
+                  { $in:  ['$_id', readIds] },
+                  { $not: { $in: ['$_id', quizIds] } },
+                ]},                                                                 then: 3 },
+              ],
+              default: 4,
+            },
+          },
+        }},
+        { $sort: { _priority: 1, dateAdded: -1 } },
+        { $skip: (pageNum - 1) * limitNum },
+        { $limit: limitNum },
+      ]).then(docs => IntelligenceBrief.populate(docs, { path: 'media' })),
       IntelligenceBrief.countDocuments(filter),
     ]);
 
-    let briefsOut = briefs.map(b => b.toObject());
+    const settings   = await AppSettings.getSettings();
+    const tier       = req.user ? effectiveTier(req.user) : 'guest';
+    const accessible = getAccessibleCategories(tier, settings);
 
-    if (briefs.length > 0) {
-      const settings   = await AppSettings.getSettings();
-      const tier       = req.user ? effectiveTier(req.user) : 'guest';
-      const accessible = getAccessibleCategories(tier, settings);
+    const briefsOut = briefs.map(b => ({
+      ...b,
+      isRead:    readSet.has(b._id.toString()),
+      isStarted: startedSet.has(b._id.toString()),
+      isLocked:  accessible !== null && !accessible.includes(b.category),
+    }));
 
-      let readSet    = new Set();
-      let startedSet = new Set();
-      if (req.user) {
-        const briefIds = briefs.map(b => b._id);
-        const [readRecords, startedRecords] = await Promise.all([
-          IntelligenceBriefRead.find({
-            userId: req.user._id,
-            intelBriefId: { $in: briefIds },
-            completed: true,
-          }).select('intelBriefId'),
-          IntelligenceBriefRead.find({
-            userId: req.user._id,
-            intelBriefId: { $in: briefIds },
-            completed: false,
-          }).select('intelBriefId'),
-        ]);
-        readSet    = new Set(readRecords.map(r => r.intelBriefId.toString()));
-        startedSet = new Set(startedRecords.map(r => r.intelBriefId.toString()));
-      }
-
-      briefsOut = briefsOut.map(b => ({
-        ...b,
-        isRead:    readSet.has(b._id.toString()),
-        isStarted: startedSet.has(b._id.toString()),
-        isLocked:  accessible !== null && !accessible.includes(b.category),
-      }));
-    }
-
-    res.json({ status: 'success', data: { briefs: briefsOut, total } });
+    const totalPages = Math.ceil(total / limitNum);
+    res.json({ status: 'success', data: { briefs: briefsOut, total, page: pageNum, totalPages } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -128,6 +146,54 @@ router.get('/category-stats', optionalAuth, async (req, res) => {
     }
 
     res.json({ status: 'success', data: { stats } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/briefs/random-unlocked — returns a random published brief accessible to the current user,
+// preferring briefs the user has not yet completed (falls back to any accessible brief if all are done)
+router.get('/random-unlocked', optionalAuth, async (req, res) => {
+  try {
+    const settings   = await AppSettings.getSettings();
+    const tier       = req.user ? effectiveTier(req.user) : 'guest';
+    const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
+
+    const baseFilter = { status: 'published' };
+    if (accessible !== null) baseFilter.category = { $in: accessible };
+
+    // Build a set of brief IDs the user has already completed
+    let completedIds = [];
+    if (req.user) {
+      const reads = await IntelligenceBriefRead.find({
+        userId: req.user._id,
+        completed: true,
+      }).select('intelBriefId').lean();
+      completedIds = reads.map(r => r.intelBriefId);
+    }
+
+    // Try to find an unread brief first
+    const unreadFilter = completedIds.length
+      ? { ...baseFilter, _id: { $nin: completedIds } }
+      : baseFilter;
+
+    let [result] = await IntelligenceBrief.aggregate([
+      { $match: unreadFilter },
+      { $sample: { size: 1 } },
+      { $project: { _id: 1 } },
+    ]);
+
+    // Fall back to any accessible brief if the user has read them all
+    if (!result && completedIds.length) {
+      [result] = await IntelligenceBrief.aggregate([
+        { $match: baseFilter },
+        { $sample: { size: 1 } },
+        { $project: { _id: 1 } },
+      ]);
+    }
+
+    if (!result) return res.status(404).json({ message: 'No briefs available.' });
+    res.json({ status: 'success', data: { briefId: result._id } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -228,7 +294,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
       .populate('associatedBaseBriefIds',     '_id title category status')
       .populate('associatedSquadronBriefIds', '_id title category status')
       .populate('associatedAircraftBriefIds', '_id title category status')
-      .populate('relatedBriefIds',            '_id title subtitle category status');
+      .populate('relatedBriefIds',            '_id title subtitle category status')
+      .populate('relatedHistoric',            '_id title subtitle category status historic');
 
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
