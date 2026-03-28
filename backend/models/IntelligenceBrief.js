@@ -128,6 +128,7 @@ const sourceSchema = new mongoose.Schema({
 const keywordSchema = new mongoose.Schema({
   keyword:              { type: String, required: true, trim: true },
   generatedDescription: { type: String, trim: true },
+  linkedBriefId:        { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', default: null },
 });
 
 const intelligenceBriefSchema = new mongoose.Schema(
@@ -153,7 +154,7 @@ const intelligenceBriefSchema = new mongoose.Schema(
 
     title:       { type: String, required: true, trim: true },
     subtitle:    { type: String, trim: true },
-    descriptionSections: [{ type: String, trim: true }], // 2–4 paragraphs, max 240 words total
+    descriptionSections: [{ type: String, trim: true }], // exactly 4 sections; section 4 is a name-free 1–2 sentence summary (used for flashcard recall)
 
     sources:  [sourceSchema],
     keywords: [keywordSchema],
@@ -190,6 +191,8 @@ const intelligenceBriefSchema = new mongoose.Schema(
     associatedTrainingBriefIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
     // Generic catch-all for any cross-category link (Terminology, Roles, etc.)
     relatedBriefIds:            [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+    // Back-links from historic briefs — populated automatically when a historic brief is saved
+    relatedHistoric:            [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
 
     // 'stub' = title/category only, no content yet. 'published' = full brief.
     status: { type: String, enum: ['stub', 'published'], default: 'published' },

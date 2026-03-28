@@ -1058,9 +1058,15 @@ function UsersTab({ API }) {
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>
               <div className="flex flex-col items-end gap-0.5">
-                <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${TIER_COLORS[u.subscriptionTier] ?? TIER_COLORS.free}`}>
-                  {u.subscriptionTier === 'trial' && u.isTrialActive ? 'Trial (Silver)' : (u.subscriptionTier ?? 'free')}
-                </span>
+                {u.subscriptionTier === 'trial' && !u.isTrialActive ? (
+                  <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-600">
+                    Trial Expired
+                  </span>
+                ) : (
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${TIER_COLORS[u.subscriptionTier] ?? TIER_COLORS.free}`}>
+                    {u.subscriptionTier === 'trial' ? 'Trial (Silver)' : (u.subscriptionTier ?? 'free')}
+                  </span>
+                )}
                 {u.subscriptionTier === 'trial' && u.isTrialActive && u.trialStartDate && (() => {
                   const end = new Date(u.trialStartDate)
                   end.setDate(end.getDate() + (u.trialDurationDays || 5))
@@ -1068,6 +1074,15 @@ function UsersTab({ API }) {
                   return (
                     <span className="text-[10px] text-amber-600 font-semibold">
                       {daysLeft <= 1 ? '< 1 day left' : `${daysLeft}d left`}
+                    </span>
+                  )
+                })()}
+                {u.subscriptionTier === 'trial' && !u.isTrialActive && u.trialStartDate && (() => {
+                  const end = new Date(u.trialStartDate)
+                  end.setDate(end.getDate() + (u.trialDurationDays || 5))
+                  return (
+                    <span className="text-[10px] text-red-400 font-semibold">
+                      ended {end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                     </span>
                   )
                 })()}
@@ -1653,50 +1668,52 @@ function SubEmulator({ user, API, onTierChange }) {
 // GENERATE BASES BUTTON
 // ─────────────────────────────────────────────────────────────────────────────
 
-function GenerateBasesButton({ title, body, basesBriefs, API, onResult }) {
+function GenerateSectionLinksButton({ sourceTitle, sourceDescription, sourceCategory, linkType, pool, isHistoric, API, onResult }) {
   const [status, setStatus] = useState(null) // null | 'loading' | 'done' | 'error'
   const [msg, setMsg]       = useState('')
 
   const generate = async () => {
-    if (!title) { setStatus('error'); setMsg('Brief needs a title first'); return }
+    if (!sourceTitle) { setStatus('error'); setMsg('Brief needs a title first'); return }
+    if (!pool.length) { setStatus('error'); setMsg('No briefs loaded yet'); return }
     setStatus('loading')
     setMsg('')
     try {
-      const res  = await fetch(`${API}/api/admin/ai/generate-bases`, {
+      const res  = await fetch(`${API}/api/admin/ai/generate-links`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title,
-          body: typeof body === 'string' ? body : JSON.stringify(body),
-          basesBriefs: basesBriefs.map(b => ({ _id: b._id, title: b.title })),
+          sourceTitle,
+          sourceDescription,
+          sourceCategory,
+          linkType,
+          pool: pool.map(b => ({ _id: b._id, title: b.title })),
+          isHistoric: isHistoric ?? false,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.message || 'Failed')
-      const ids = data.data?.baseIds ?? []
+      const ids = data.data?.ids ?? []
       onResult(ids)
       setStatus('done')
-      setMsg(ids.length ? `${ids.length} base${ids.length > 1 ? 's' : ''} selected` : 'No matching bases found')
+      setMsg(ids.length ? `${ids.length} selected` : 'None matched')
     } catch (err) {
       setStatus('error')
-      setMsg(err.message)
+      setMsg(err.message.slice(0, 60))
     }
   }
 
   return (
-    <div className="flex flex-col items-end gap-1 shrink-0">
+    <div className="flex items-center gap-2 shrink-0">
+      {msg && (
+        <span className={`text-[10px] ${status === 'error' ? 'text-red-500' : 'text-emerald-600'}`}>{msg}</span>
+      )}
       <button
         onClick={generate}
         disabled={status === 'loading'}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-all"
+        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-all"
       >
-        {status === 'loading' ? '...' : '✦ Generate'}
+        {status === 'loading' ? '…' : '✦ Generate'}
       </button>
-      {msg && (
-        <p className={`text-[10px] ${status === 'error' ? 'text-red-500' : status === 'done' ? 'text-emerald-600' : 'text-slate-400'}`}>
-          {msg}
-        </p>
-      )}
     </div>
   )
 }
@@ -1737,6 +1754,7 @@ const EMPTY_DRAFT = {
   associatedSquadronBriefIds: [],
   associatedAircraftBriefIds: [],
   relatedBriefIds:            [],
+  relatedHistoric:            [],
 }
 
 const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases', 'Squadrons', 'Threats']
@@ -2181,6 +2199,15 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
   )
 }
 
+function GeneratingOverlay({ label = 'AI Generation Underway' }) {
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/75 backdrop-blur-[2px] rounded-2xl pointer-events-none">
+      <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+      <p className="text-xs font-bold text-brand-700 tracking-wide">{label}</p>
+    </div>
+  )
+}
+
 function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapConsumed }) {
   const [view,          setView]          = useState('list')
   // List state
@@ -2194,10 +2221,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const [showLeads,     setShowLeads]     = useState(false)
 
   useEffect(() => {
-    if (openLeads) {
-      setShowLeads(true)
-      setTimeout(() => onBootstrapConsumed?.(), 0)
-    }
+    if (openLeads) setShowLeads(true)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   // Editor state
   const [draft,         setDraft]         = useState({ ...EMPTY_DRAFT, descriptionSections: ['','',''] })
@@ -2302,6 +2326,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       associatedMissionBriefIds:  (br.associatedMissionBriefIds  ?? []).map(b => String(b._id ?? b)),
       associatedTrainingBriefIds: (br.associatedTrainingBriefIds ?? []).map(b => String(b._id ?? b)),
       relatedBriefIds:            (br.relatedBriefIds            ?? []).map(b => String(b._id ?? b)),
+      relatedHistoric:            (br.relatedHistoric            ?? []).map(b => String(b._id ?? b)),
     })
     setEasyQuestions(br.quizQuestionsEasy?.map(q => ({
       question: q.question,
@@ -2479,6 +2504,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       associatedMissionBriefIds:  [],
       associatedTrainingBriefIds: [],
       relatedBriefIds:            [],
+      relatedHistoric:            [],
     })
     setEasyQuestions([])
     setMediumQuestions([])
@@ -2532,6 +2558,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
           sourceCategory: category,
           linkType,
           pool: pool.map(b => ({ _id: b._id, title: b.title })),
+          isHistoric: draft.historic ?? false,
         }),
       }).then(r => r.json()).catch(() => null)
     }
@@ -2553,7 +2580,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         fetch(`${API}/api/admin/ai/generate-keywords`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ description, existingKeywords: [], needed: 10 }),
+          body: JSON.stringify({ description, existingKeywords: [], needed: 10, title, briefId: briefId || null }),
         }),
         needsBases     ? suggestLinks('bases',     poolBases)     : Promise.resolve(null),
         needsSquadrons ? suggestLinks('squadrons', poolSquadrons) : Promise.resolve(null),
@@ -2596,7 +2623,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       const res  = await fetch(`${API}/api/admin/ai/generate-keywords`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description, existingKeywords: [], needed: 10 }),
+        body: JSON.stringify({ description, existingKeywords: [], needed: 10, title: draft.title, briefId: briefId || null }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -2781,7 +2808,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         {showLeads && (
           <LeadsModal
             API={API}
-            onClose={() => setShowLeads(false)}
+            onClose={() => { setShowLeads(false); onBootstrapConsumed?.() }}
             onGenerate={handleLeadGenerate}
             initialSearch={initialSearch}
           />
@@ -3109,7 +3136,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       </div>
 
       {/* ── Section B: Description ─────────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        {(generating === 'description' || regeneratingAll) && <GeneratingOverlay />}
         <button
           onClick={() => toggleSection('desc')}
           className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
@@ -3167,7 +3195,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       </div>
 
       {/* ── Section C: Images ─────────────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        {(generating === 'images' || autoGenerating) && <GeneratingOverlay />}
         <button
           onClick={() => toggleSection('images')}
           className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
@@ -3244,7 +3273,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
       {/* ── Section D: Game Data (BOO categories only) ─────────────────── */}
       {BOO_CATEGORIES.includes(draft.category) && (
-        <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+          {(autoGenerating || regeneratingAll) && <GeneratingOverlay />}
           <button
             onClick={() => toggleSection('gameData')}
             className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
@@ -3286,23 +3316,23 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
         if (['Aircrafts', 'Squadrons'].includes(cat))
           linkedSections.push({
-            label: '🗺️ Home Bases', desc: 'Link base briefs', field: 'associatedBaseBriefIds', pool: allBasesBriefs,
+            label: '🗺️ Home Bases', desc: 'Link base briefs', field: 'associatedBaseBriefIds', pool: allBasesBriefs, linkType: 'bases',
           })
         if (['Bases', 'Aircrafts'].includes(cat))
           linkedSections.push({
-            label: '✈️ Squadrons', desc: 'Link squadron briefs', field: 'associatedSquadronBriefIds', pool: allSquadronsBriefs,
+            label: '✈️ Squadrons', desc: 'Link squadron briefs', field: 'associatedSquadronBriefIds', pool: allSquadronsBriefs, linkType: 'squadrons',
           })
         if (['Bases', 'Squadrons', 'Tech'].includes(cat))
           linkedSections.push({
-            label: '🛩️ Aircraft', desc: 'Link aircraft briefs', field: 'associatedAircraftBriefIds', pool: allAircraftBriefs,
+            label: '🛩️ Aircraft', desc: 'Link aircraft briefs', field: 'associatedAircraftBriefIds', pool: allAircraftBriefs, linkType: 'aircraft',
           })
         if (['Aircrafts', 'Squadrons'].includes(cat))
           linkedSections.push({
-            label: '🎖️ Missions', desc: 'Link mission/operation briefs', field: 'associatedMissionBriefIds', pool: allMissionsBriefs,
+            label: '🎖️ Missions', desc: 'Link mission/operation briefs', field: 'associatedMissionBriefIds', pool: allMissionsBriefs, linkType: 'missions',
           })
         if (['Roles'].includes(cat))
           linkedSections.push({
-            label: '🎓 Training', desc: 'Link training programme briefs', field: 'associatedTrainingBriefIds', pool: allTrainingsBriefs,
+            label: '🎓 Training', desc: 'Link training programme briefs', field: 'associatedTrainingBriefIds', pool: allTrainingsBriefs, linkType: 'training',
           })
         // Related Briefs uses its own dedicated pool + search — handled separately below
 
@@ -3313,32 +3343,39 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         const selectedRelatedBriefs = allRelatedPool.filter(b => selectedRelated.includes(String(b._id)))
 
         return (
-          <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-bold text-slate-800">🕸️ Linked Briefs</h3>
-                <p className="text-xs text-slate-400 mt-0.5">Connect related briefs to build the knowledge graph</p>
-              </div>
-              {cat === 'Aircrafts' && allBasesBriefs.length > 0 && (
-                <GenerateBasesButton
-                  title={draft.title}
-                  body={draft.body}
-                  basesBriefs={allBasesBriefs}
-                  API={API}
-                  onResult={ids => setDraft(p => ({ ...p, associatedBaseBriefIds: ids }))}
-                />
-              )}
+          <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+            {autoGenerating && <GeneratingOverlay />}
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h3 className="font-bold text-slate-800">🕸️ Linked Briefs</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Connect related briefs to build the knowledge graph</p>
             </div>
             <div className="px-5 py-4 space-y-5">
               {linkedSections.map(sec => (
                 <div key={sec.field}>
-                  <p className="text-xs font-bold text-slate-600 mb-1">{sec.label}</p>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-bold text-slate-600">{sec.label}</p>
+                      {(() => { const n = (draft[sec.field] ?? []).length; return (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${n > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{n} selected</span>
+                      )})()}
+                    </div>
+                    <GenerateSectionLinksButton
+                      sourceTitle={draft.title}
+                      sourceDescription={draft.descriptionSections.join(' ')}
+                      sourceCategory={draft.category}
+                      linkType={sec.linkType}
+                      pool={sec.pool}
+                      isHistoric={draft.historic ?? false}
+                      API={API}
+                      onResult={ids => setDraft(p => ({ ...p, [sec.field]: ids }))}
+                    />
+                  </div>
                   <p className="text-[11px] text-slate-400 mb-2">{sec.desc}</p>
                   {sec.pool.length === 0 ? (
                     <p className="text-xs text-slate-400">No briefs available yet.</p>
                   ) : (
                     <div className="space-y-1 max-h-40 overflow-y-auto border border-slate-100 rounded-xl p-2">
-                      {sec.pool.map(b => {
+                      {sec.pool.slice().sort((a, b) => a.title.localeCompare(b.title)).map(b => {
                         const checked = (draft[sec.field] ?? []).includes(String(b._id))
                         return (
                           <label key={b._id} className="flex items-center gap-2 cursor-pointer py-0.5">
@@ -3491,7 +3528,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       </div>
 
       {/* ── Section F: Keywords ───────────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        {(generating === 'keywords' || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
         <button
           onClick={() => toggleSection('keywords')}
           className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
@@ -3514,7 +3552,12 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
             {draft.keywords.map((kw, idx) => (
               <div key={idx} className={`p-3 rounded-xl border ${!descLower.includes(kw.keyword?.toLowerCase()) && kw.keyword ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-500">Keyword {idx + 1}</label>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-semibold text-slate-500">Keyword {idx + 1}</label>
+                    {kw.linkedBriefId && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-100 text-brand-700 border border-brand-200">→ Brief</span>
+                    )}
+                  </div>
                   <button
                     onClick={() => setDraft(p => ({ ...p, keywords: p.keywords.filter((_, i) => i !== idx) }))}
                     className="text-xs text-red-400 hover:text-red-600"
@@ -3562,7 +3605,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       </div>
 
       {/* ── Section G: Quiz Questions ─────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        {(generating === 'questions' || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
         <button
           onClick={() => toggleSection('questions')}
           className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"

@@ -613,12 +613,48 @@ router.get('/briefs', async (req, res) => {
       { title: new RegExp(search, 'i') },
       { subtitle: new RegExp(search, 'i') },
     ];
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Pre-compute which brief IDs have at least one media doc with a real cloudinaryPublicId.
+    // This avoids relying on $lookup + field-existence checks inside the aggregation pipeline,
+    // which behave inconsistently when the field is absent vs null.
+    const validMediaIds = await Media.find({
+      cloudinaryPublicId: { $exists: true, $ne: '' },
+    }).distinct('_id');
+
+    const briefIdsWithMedia = validMediaIds.length
+      ? await IntelligenceBrief.find({ media: { $in: validMediaIds } }).distinct('_id')
+      : [];
+
     const [briefs, total] = await Promise.all([
-      IntelligenceBrief.find(filter)
-        .populate('media')
-        .sort({ dateAdded: -1 })
-        .skip((page - 1) * limit)
-        .limit(Number(limit)),
+      IntelligenceBrief.aggregate([
+        { $match: filter },
+        { $lookup: { from: Media.collection.name, localField: 'media', foreignField: '_id', as: 'media' } },
+        { $addFields: {
+          // 1 badge=1 (first), 2 badges=2, 3 badges=3, 0 badges=4 (last)
+          _sortOrder: {
+            $let: {
+              vars: {
+                hasK: { $cond: [{ $gte: [{ $size: { $ifNull: ['$keywords', []] } }, 10] }, 1, 0] },
+                hasQ: { $cond: [{ $and: [
+                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsEasy', []] } }, 10] },
+                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsMedium', []] } }, 10] },
+                ]}, 1, 0] },
+                hasM: { $cond: [{ $in: ['$_id', briefIdsWithMedia] }, 1, 0] },
+              },
+              in: {
+                $let: {
+                  vars: { bc: { $add: ['$$hasK', '$$hasQ', '$$hasM'] } },
+                  in: { $cond: [{ $eq: ['$$bc', 0] }, 4, '$$bc'] },
+                },
+              },
+            },
+          },
+        }},
+        { $sort: { _sortOrder: 1, dateAdded: -1 } },
+        { $skip: skip },
+        { $limit: Number(limit) },
+      ]),
       IntelligenceBrief.countDocuments(filter),
     ]);
     res.json({ status: 'success', data: { briefs, total } });
@@ -726,6 +762,7 @@ router.post('/briefs', requireReason, async (req, res) => {
         associatedMissionBriefIds:  mergeIds(existing.associatedMissionBriefIds,  fields.associatedMissionBriefIds),
         associatedTrainingBriefIds: mergeIds(existing.associatedTrainingBriefIds, fields.associatedTrainingBriefIds),
         relatedBriefIds:            mergeIds(existing.relatedBriefIds,            fields.relatedBriefIds),
+        relatedHistoric:            mergeIds(existing.relatedHistoric ?? [],       fields.relatedHistoric),
       };
       brief = await IntelligenceBrief.findByIdAndUpdate(
         existing._id,
@@ -734,6 +771,21 @@ router.post('/briefs', requireReason, async (req, res) => {
       ).populate('media');
     } else {
       brief = await IntelligenceBrief.create(fields);
+    }
+    // If the saved brief is historic, push its _id into relatedHistoric on all linked target briefs
+    if (brief.historic) {
+      const targetIds = [
+        ...(brief.associatedBaseBriefIds     ?? []),
+        ...(brief.associatedSquadronBriefIds ?? []),
+        ...(brief.associatedAircraftBriefIds ?? []),
+        ...(brief.associatedMissionBriefIds  ?? []),
+      ].filter(id => id);
+      if (targetIds.length > 0) {
+        await IntelligenceBrief.updateMany(
+          { _id: { $in: targetIds } },
+          { $addToSet: { relatedHistoric: brief._id } }
+        );
+      }
     }
     await AdminAction.create({ userId: req.user._id, actionType: 'create_brief', reason });
     res.json({ status: 'success', data: { brief } });
@@ -748,6 +800,20 @@ router.patch('/briefs/:id', requireReason, async (req, res) => {
     const { reason, ...fields } = req.body;
     const brief = await IntelligenceBrief.findByIdAndUpdate(req.params.id, fields, { new: true, runValidators: true }).populate('media');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    if (brief.historic) {
+      const targetIds = [
+        ...(brief.associatedBaseBriefIds     ?? []),
+        ...(brief.associatedSquadronBriefIds ?? []),
+        ...(brief.associatedAircraftBriefIds ?? []),
+        ...(brief.associatedMissionBriefIds  ?? []),
+      ].filter(id => id);
+      if (targetIds.length > 0) {
+        await IntelligenceBrief.updateMany(
+          { _id: { $in: targetIds } },
+          { $addToSet: { relatedHistoric: brief._id } }
+        );
+      }
+    }
     await AdminAction.create({ userId: req.user._id, actionType: 'edit_brief', reason });
     res.json({ status: 'success', data: { brief } });
   } catch (err) {
@@ -781,6 +847,7 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
         associatedSquadronBriefIds: new mongoose.Types.ObjectId(briefId),
         associatedAircraftBriefIds: new mongoose.Types.ObjectId(briefId),
         relatedBriefIds:            new mongoose.Types.ObjectId(briefId),
+        relatedHistoric:            new mongoose.Types.ObjectId(briefId),
       } }),
     ]);
 
@@ -1214,8 +1281,8 @@ router.post('/ai/generate-brief', async (req, res) => {
     const { headline, topic, category } = req.body;
     if (!headline && !topic) return res.status(400).json({ message: 'headline or topic required' });
 
-    const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use plain, clear sentences. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ]`;
-    const SHARED_RULES = `\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words. Write each section as plain prose — no bullet points, no headers, no markdown.`;
+    const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    "Section 1 — 50–80 words. Use plain, clear sentences. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Section 2 — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Section 3 — 50–80 words. Operational context, key capabilities, or RAF significance.",\n    "Section 4 — 1–2 sentences only. A concise summary of this subject's role and significance within the modern RAF. CRITICAL: do NOT mention the subject's name, title, designation, or any unique identifier that would immediately reveal what this brief is about. The summary must be specific enough that a reader given a short list of 4–5 candidates could identify the correct one, but it must not name the subject directly."\n  ]`;
+    const SHARED_RULES = `\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of EXACTLY 4 strings — no more, no fewer. Total word count across sections 1–3 must not exceed 220 words. Section 4 must be 1–2 sentences and must not contain the subject's name or any unique identifier. Write each section as plain prose — no bullet points, no headers, no markdown.`;
 
     // News shape — AI must generate the title
     const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "concise factual title, max 70 characters",\n  ${SHARED_SECTIONS},\n  "sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}${SHARED_RULES}`;
@@ -1325,14 +1392,21 @@ router.post('/leads/reset', requireReason, async (req, res) => {
 // POST /api/admin/ai/generate-keywords
 // Generates up to `needed` additional keywords sourced from the description.
 // Existing keyword strings are passed in so the AI doesn't repeat them.
+function normTitle(s) {
+  return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
 router.post('/ai/generate-keywords', async (req, res) => {
   try {
-    const { description, existingKeywords = [], needed = 10 } = req.body;
+    const { description, existingKeywords = [], needed = 10, title = '', briefId = null } = req.body;
     if (!description) return res.status(400).json({ message: 'description required' });
     if (needed <= 0)  return res.json({ status: 'success', data: { keywords: [] } });
 
     const existingList = existingKeywords.length
       ? `Already used (do NOT repeat these): ${existingKeywords.join(', ')}\n\n`
+      : '';
+    const titleExclusion = title
+      ? `Do NOT use the topic title or name itself as a keyword — "${title}" and any shortened form of it must not appear as a keyword.\n\n`
       : '';
 
     const data = await openRouterChat([{
@@ -1340,17 +1414,39 @@ router.post('/ai/generate-keywords', async (req, res) => {
       content: 'You are a keyword extractor for a Royal Air Force training platform. Prioritise terms that build understanding of the modern RAF — training pathways, bases, aircraft, roles, and operational context. You only select terms that appear verbatim in the provided description text. For each keyword you write a general RAF-specific definition of that term — what it is, its role and capabilities — without referencing the specific intel brief it was found in.',
     }, {
       role: 'user',
-      content: `Description:\n"""${description}"""\n\n${existingList}Extract exactly ${needed} keywords from the description above. Every keyword string MUST appear verbatim (same spelling and capitalisation) in the description. Choose technical terms, acronyms, aircraft designations, operation names, and proper nouns.\n\nFor "generatedDescription": write a general RAF-specific definition of the term itself (e.g. what that aircraft/system/operation is, its role and capabilities). Do NOT reference or summarise the intel brief — the description should be useful as a standalone glossary entry.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition of this term"},{"keyword":"...","generatedDescription":"..."}]}`,
+      content: `Description:\n"""${description}"""\n\n${existingList}${titleExclusion}Extract exactly ${needed} keywords from the description above. Every keyword string MUST appear verbatim (same spelling and capitalisation) in the description. Choose technical terms, acronyms, aircraft designations, operation names, and proper nouns — but never the subject/title of the brief itself.\n\nFor "generatedDescription": write a general RAF-specific definition of the term itself (e.g. what that aircraft/system/operation is, its role and capabilities). Do NOT reference or summarise the intel brief — the description should be useful as a standalone glossary entry.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition of this term"},{"keyword":"...","generatedDescription":"..."}]}`,
     }], 'perplexity/sonar');
 
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     const parsed = JSON.parse(cleanJson(raw));
     const desc = description.toLowerCase();
     const existing = new Set(existingKeywords.map(k => k.toLowerCase()));
+    const titleLower = title.toLowerCase();
 
-    const keywords = (Array.isArray(parsed.keywords) ? parsed.keywords : [])
-      .filter(k => k.keyword && desc.includes(k.keyword.toLowerCase()) && !existing.has(k.keyword.toLowerCase()))
+    const filtered = (Array.isArray(parsed.keywords) ? parsed.keywords : [])
+      .filter(k => {
+        if (!k.keyword) return false;
+        const kl = k.keyword.toLowerCase();
+        if (!desc.includes(kl)) return false;
+        if (existing.has(kl)) return false;
+        // Exclude if keyword is the title itself or the title contains/is contained by the keyword
+        if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
+        return true;
+      })
       .slice(0, needed);
+
+    // Build a normalised title → _id map from all existing briefs/stubs, excluding the current brief
+    const allBriefs = await IntelligenceBrief.find({}, { _id: 1, title: 1 }).lean();
+    const titleMap = new Map();
+    for (const b of allBriefs) {
+      if (briefId && String(b._id) === String(briefId)) continue;
+      titleMap.set(normTitle(b.title), b._id);
+    }
+
+    const keywords = filtered.map(k => {
+      const linkedBriefId = titleMap.get(normTitle(k.keyword)) ?? null;
+      return linkedBriefId ? { ...k, linkedBriefId } : k;
+    });
 
     res.json({ status: 'success', data: { keywords } });
   } catch (err) {
@@ -1363,7 +1459,7 @@ router.post('/ai/generate-keywords', async (req, res) => {
 // linkType: 'bases' | 'squadrons' | 'aircraft'
 router.post('/ai/generate-links', async (req, res) => {
   try {
-    const { sourceTitle, sourceDescription, sourceCategory, linkType, pool } = req.body;
+    const { sourceTitle, sourceDescription, sourceCategory, linkType, pool, isHistoric } = req.body;
     if (!sourceTitle) return res.status(400).json({ message: 'sourceTitle required' });
     if (!Array.isArray(pool) || pool.length === 0)
       return res.status(400).json({ message: 'pool required' });
@@ -1381,25 +1477,39 @@ router.post('/ai/generate-links', async (req, res) => {
       'Tech:aircraft':       `You are an expert on Royal Air Force technology and aircraft. Given a technology or weapon system brief, identify which aircraft from the list carry or use this system.`,
     };
 
+    const historicPrompts = {
+      'Aircrafts:bases':     `You are an expert on Royal Air Force aircraft and bases. Given a HISTORIC aircraft brief, identify which RAF bases historically served as home or primary operating bases for this aircraft type during its service life.`,
+      'Aircrafts:squadrons': `You are an expert on Royal Air Force aircraft and squadrons. Given a HISTORIC aircraft brief, identify which RAF squadrons historically operated this aircraft type as their primary platform.`,
+      'Aircrafts:missions':  `You are an expert on Royal Air Force operations and aircraft. Given a HISTORIC aircraft brief, identify which RAF operations or missions this aircraft type participated in from the list provided.`,
+      'Squadrons:bases':     `You are an expert on Royal Air Force squadrons and bases. Given a HISTORIC squadron brief, identify which RAF bases this squadron was historically stationed at during its service.`,
+      'Squadrons:aircraft':  `You are an expert on Royal Air Force squadrons and aircraft. Given a HISTORIC squadron brief, identify which aircraft types from the list this squadron historically operated.`,
+      'Squadrons:missions':  `You are an expert on Royal Air Force squadrons and operations. Given a HISTORIC squadron brief, identify which operations or missions this squadron participated in from the list provided.`,
+      'Bases:squadrons':     `You are an expert on Royal Air Force bases and squadrons. Given a HISTORIC base brief, identify which RAF squadrons were historically stationed at this base.`,
+      'Bases:aircraft':      `You are an expert on Royal Air Force bases and aircraft. Given a HISTORIC base brief, identify which aircraft types from the list were historically based at this location.`,
+      'Roles:training':      `You are an expert on Royal Air Force careers and training pipelines. Given a role brief, identify which training programmes from the list are required or directly relevant to this role's career pathway.`,
+      'Tech:aircraft':       `You are an expert on Royal Air Force technology and aircraft. Given a HISTORIC technology or weapon system brief, identify which aircraft from the list historically carried or used this system.`,
+    };
+
     const key = `${sourceCategory}:${linkType}`;
-    const systemPrompt = prompts[key];
+    const systemPrompt = (isHistoric ? historicPrompts[key] : null) ?? prompts[key];
     if (!systemPrompt) return res.status(400).json({ message: `Unsupported combination: ${key}` });
 
-    const poolList = pool.map(b => `- "${b.title}" (id: ${b._id})`).join('\n');
+    const poolList = pool.map(b => `- "${b.title}"`).join('\n');
     const data = await openRouterChat([{
       role: 'system',
       content: systemPrompt + ' Return ONLY valid JSON — no markdown, no code blocks.',
     }, {
       role: 'user',
-      content: `Brief: "${sourceTitle}"\n\nDescription:\n"""\n${sourceDescription ?? ''}\n"""\n\nAvailable ${linkType} briefs:\n${poolList}\n\nReturn the IDs of matching ${linkType}. If none match, return an empty array.\n\nReturn ONLY valid JSON: {"ids":["id1","id2"]}`,
-    }], 'perplexity/sonar', 512);
+      content: `Brief: "${sourceTitle}"\n\nDescription:\n"""\n${sourceDescription ?? ''}\n"""\n\nAvailable ${linkType} briefs:\n${poolList}\n\nReturn the titles of all matching ${linkType} from the list above, copied exactly as written. If none match, return an empty array.\n\nReturn ONLY valid JSON: {"titles":["Exact Title One","Exact Title Two"]}`,
+    }], 'perplexity/sonar', 1024);
 
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     const parsed = JSON.parse(cleanJson(raw));
-    const validIds = new Set(pool.map(b => String(b._id)));
-    const ids = (Array.isArray(parsed.ids) ? parsed.ids : [])
-      .map(String)
-      .filter(id => validIds.has(id));
+    // Match returned titles back to IDs using normalised string comparison
+    const poolByNorm = new Map(pool.map(b => [normTitle(b.title), String(b._id)]));
+    const ids = (Array.isArray(parsed.titles) ? parsed.titles : [])
+      .map(t => poolByNorm.get(normTitle(t)))
+      .filter(Boolean);
 
     res.json({ status: 'success', data: { ids } });
   } catch (err) {
@@ -1412,19 +1522,27 @@ router.post('/ai/generate-links', async (req, res) => {
 // asks the AI which bases are home bases for this aircraft.
 router.post('/ai/generate-bases', async (req, res) => {
   try {
-    const { title, body, basesBriefs } = req.body;
+    const { title, body, basesBriefs, isHistoric } = req.body;
     if (!title) return res.status(400).json({ message: 'title required' });
     if (!Array.isArray(basesBriefs) || basesBriefs.length === 0)
       return res.status(400).json({ message: 'basesBriefs required' });
 
     const baseList = basesBriefs.map(b => `- "${b.title}" (id: ${b._id})`).join('\n');
 
+    const sysPrompt = isHistoric
+      ? 'You are an expert on Royal Air Force aircraft and their operating bases. Given a HISTORIC aircraft brief and a list of RAF base briefs, identify which bases historically served as home or primary operating bases for this aircraft type during its service life. Return ONLY valid JSON — no markdown, no code blocks.'
+      : 'You are an expert on Royal Air Force aircraft and their operating bases. Given an aircraft brief and a list of RAF base briefs, identify which bases are home bases for that aircraft. Only select bases where the aircraft is currently stationed or has a known permanent/primary operating presence. Return ONLY valid JSON — no markdown, no code blocks.';
+
+    const userPrompt = isHistoric
+      ? `Aircraft: "${title}"\n\nBrief body:\n"""\n${body ?? ''}\n"""\n\nAvailable base briefs:\n${baseList}\n\nReturn the IDs of bases that were historically home bases for this aircraft during its RAF service. If none match, return an empty array.\n\nReturn ONLY valid JSON: {"baseIds":["id1","id2"]}`
+      : `Aircraft: "${title}"\n\nBrief body:\n"""\n${body ?? ''}\n"""\n\nAvailable base briefs:\n${baseList}\n\nReturn the IDs of bases that are home bases for this aircraft. Only include bases where this aircraft type is stationed. If none match, return an empty array.\n\nReturn ONLY valid JSON: {"baseIds":["id1","id2"]}`;
+
     const data = await openRouterChat([{
       role: 'system',
-      content: 'You are an expert on Royal Air Force aircraft and their operating bases. Given an aircraft brief and a list of RAF base briefs, identify which bases are home bases for that aircraft. Only select bases where the aircraft is currently stationed or has a known permanent/primary operating presence. Return ONLY valid JSON — no markdown, no code blocks.',
+      content: sysPrompt,
     }, {
       role: 'user',
-      content: `Aircraft: "${title}"\n\nBrief body:\n"""\n${body ?? ''}\n"""\n\nAvailable base briefs:\n${baseList}\n\nReturn the IDs of bases that are home bases for this aircraft. Only include bases where this aircraft type is stationed. If none match, return an empty array.\n\nReturn ONLY valid JSON: {"baseIds":["id1","id2"]}`,
+      content: userPrompt,
     }], 'perplexity/sonar', 512);
 
     const raw = data.choices?.[0]?.message?.content ?? '{}';

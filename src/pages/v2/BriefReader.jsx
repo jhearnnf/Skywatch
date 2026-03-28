@@ -11,7 +11,14 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import { playSound } from '../../utils/sound'
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
-function KeywordSheet({ kw, onClose }) {
+function KeywordSheet({ kw, onClose, navigate }) {
+  const isLinked = !!kw?.linkedBriefId
+
+  const handleOpenBrief = () => {
+    onClose()
+    navigate(`/brief/${kw.linkedBriefId}`)
+  }
+
   return (
     <AnimatePresence>
       {kw && (
@@ -36,19 +43,42 @@ function KeywordSheet({ kw, onClose }) {
             <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
 
             <div className="flex items-start gap-3">
-              <span className="text-3xl">🔑</span>
+              <span className="text-3xl">{isLinked ? '📋' : '🔑'}</span>
               <div>
                 <h3 className="text-lg font-extrabold text-slate-900 mb-1">{kw.keyword}</h3>
-                <p className="text-sm text-slate-600 leading-relaxed">{kw.generatedDescription}</p>
+                {isLinked ? (
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    This subject has its own Intel Brief. Open it to learn more.
+                  </p>
+                ) : (
+                  <p className="text-sm text-slate-600 leading-relaxed">{kw.generatedDescription}</p>
+                )}
               </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="mt-5 w-full py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors"
-            >
-              Got it ✓
-            </button>
+            {isLinked ? (
+              <div className="mt-5 flex flex-col gap-2">
+                <button
+                  onClick={handleOpenBrief}
+                  className="w-full py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors"
+                >
+                  Open Intel Brief →
+                </button>
+                <button
+                  onClick={onClose}
+                  className="w-full py-2 rounded-2xl text-slate-500 text-sm font-semibold hover:text-slate-700 transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onClose}
+                className="mt-5 w-full py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors"
+              >
+                Got it ✓
+              </button>
+            )}
           </motion.div>
         </>
       )}
@@ -211,7 +241,8 @@ function BooStatsPanel({ brief, navigate }) {
   const aircraft  = (brief.associatedAircraftBriefIds ?? []).filter(b => b?._id)
   const missions  = (brief.associatedMissionBriefIds  ?? []).filter(b => b?._id)
   const training  = (brief.associatedTrainingBriefIds ?? []).filter(b => b?._id)
-  const related   = (brief.relatedBriefIds            ?? []).filter(b => b?._id)
+  const related         = (brief.relatedBriefIds ?? []).filter(b => b?._id)
+  const historicRelated = (brief.relatedHistoric ?? []).filter(b => b?._id)
 
   const sections = []
   if (['Aircrafts', 'Squadrons'].includes(cat) && bases.length > 0)
@@ -226,6 +257,8 @@ function BooStatsPanel({ brief, navigate }) {
     sections.push({ label: '🎓 Training', items: training })
   if (related.length > 0)
     sections.push({ label: '🔗 Related', items: related })
+  if (['Bases', 'Squadrons', 'Missions', 'AOR'].includes(cat) && historicRelated.length > 0)
+    sections.push({ label: '🏛️ Historic Intelligence', items: historicRelated, historic: true })
 
   if (stats.length === 0 && sections.length === 0) return null
 
@@ -243,7 +276,7 @@ function BooStatsPanel({ brief, navigate }) {
       )}
       {sections.map((sec, i) => (
         <div key={sec.label} className={stats.length > 0 || i > 0 ? 'mt-3 pt-3 border-t border-slate-700' : ''}>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-2">{sec.label}</span>
+          <span className={`text-[10px] font-bold uppercase tracking-widest block mb-2 ${sec.historic ? 'text-amber-400' : 'text-slate-400'}`}>{sec.label}</span>
           <div className="flex flex-wrap gap-1.5">
             {sec.items.map(b => <BriefPill key={b._id} b={b} navigate={navigate} />)}
           </div>
@@ -544,16 +577,20 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) 
         )}
       </div>
 
-      {/* Read badge */}
-      <div className="flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 mb-6">
+      {/* Read badge / re-read */}
+      <button
+        onClick={onReRead}
+        className="w-full flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 mb-6 hover:bg-emerald-100 hover:border-emerald-300 transition-colors text-left cursor-pointer"
+      >
         <span className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center shrink-0">
           <span className="text-white text-xs font-bold">✓</span>
         </span>
-        <div>
+        <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-emerald-800">Intel brief classified as read</p>
           <p className="text-xs text-emerald-600">You've completed this brief before</p>
         </div>
-      </div>
+        <span className="text-xs font-semibold text-emerald-700 shrink-0">↩ Re-read →</span>
+      </button>
 
       {/* Game cards */}
       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Test your knowledge</p>
@@ -565,7 +602,7 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) 
         ) : (
           <button
             onClick={() => navigate(`/quiz/${brief._id}`)}
-            className={`w-full text-left flex items-center gap-4 p-4 rounded-2xl border transition-all group
+            className={`w-full text-left flex items-center gap-4 p-4 rounded-2xl border transition-all group cursor-pointer
               ${quizPassed
                 ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-300'
                 : 'bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 card-shadow hover:card-shadow-hover'
@@ -590,10 +627,24 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) 
 
         {/* BOO card */}
         {booVisible && quizPassed !== null && (
-          booState === 'available' ? (
+          booState === 'completed' ? (
             <button
               onClick={() => navigate(`/battle-of-order/${brief._id}`)}
-              className="w-full text-left flex items-center gap-4 p-4 rounded-2xl border bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group card-shadow hover:card-shadow-hover"
+              className="w-full text-left flex items-center gap-4 p-4 rounded-2xl border bg-emerald-50 border-emerald-200 hover:border-emerald-300 transition-all group cursor-pointer"
+            >
+              <div className="w-11 h-11 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0 text-xl">
+                🗺️
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-slate-800">Battle of Order</p>
+                <p className="text-xs text-emerald-600 mt-0.5">✓ Completed</p>
+              </div>
+              <span className="text-sm font-bold text-emerald-600 shrink-0">Replay →</span>
+            </button>
+          ) : booState === 'available' ? (
+            <button
+              onClick={() => navigate(`/battle-of-order/${brief._id}`)}
+              className="w-full text-left flex items-center gap-4 p-4 rounded-2xl border bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group card-shadow hover:card-shadow-hover cursor-pointer"
             >
               <div className="w-11 h-11 rounded-xl bg-brand-100 flex items-center justify-center shrink-0 text-xl">
                 🗺️
@@ -619,13 +670,6 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) 
         )}
       </div>
 
-      {/* Re-read button */}
-      <button
-        onClick={onReRead}
-        className="w-full py-3 border border-slate-200 rounded-2xl text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-      >
-        ↩ Re-read Intel Brief
-      </button>
     </div>
   )
 }
@@ -830,9 +874,13 @@ export default function BriefReader() {
         const booData = await booRes.json()
         if (cancelled) return
         const booAvail = booData.data?.available ?? false
-        if      (!booAvail) setBooState('unavailable')
-        else if (!passed)   setBooState('locked-quiz')
-        else                setBooState('available')
+        if      (!booAvail) { setBooState('unavailable'); return }
+        if      (!passed)   { setBooState('locked-quiz'); return }
+        const statusRes  = await fetch(`${API}/api/games/battle-of-order/status/${briefId}`, { credentials: 'include' })
+        const statusData = await statusRes.json()
+        if (cancelled) return
+        const booCompleted = statusData.data?.hasCompleted ?? false
+        setBooState(booCompleted ? 'completed' : 'available')
       } catch { /* silently ignore */ }
     }
     check()
@@ -1123,7 +1171,7 @@ export default function BriefReader() {
   return (
     <>
       <TutorialModal />
-      <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} />
+      <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} navigate={navigate} />
 
       {/* Layer 1: block navigation while spawn-check is in-flight */}
       {spawnCheckPending && (
