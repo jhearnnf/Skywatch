@@ -1500,7 +1500,7 @@ router.post('/ai/generate-links', async (req, res) => {
       content: systemPrompt + ' Return ONLY valid JSON — no markdown, no code blocks.',
     }, {
       role: 'user',
-      content: `Brief: "${sourceTitle}"\n\nDescription:\n"""\n${sourceDescription ?? ''}\n"""\n\nAvailable ${linkType} briefs:\n${poolList}\n\nReturn the titles of all matching ${linkType} from the list above, copied exactly as written. If none match, return an empty array.\n\nReturn ONLY valid JSON: {"titles":["Exact Title One","Exact Title Two"]}`,
+      content: `Brief: "${sourceTitle}"\n\nDescription:\n"""\n${sourceDescription ?? ''}\n"""\n\nAvailable ${linkType} briefs:\n${poolList}\n\nReturn the titles of all matching ${linkType} from the list above, copied exactly as written. Always use Arabic numerals for squadron numbers (e.g. "No. 4 Squadron RAF", never "No. IV Squadron RAF"). If none match, return an empty array.\n\nReturn ONLY valid JSON: {"titles":["Exact Title One","Exact Title Two"]}`,
     }], 'perplexity/sonar', 1024);
 
     const raw = data.choices?.[0]?.message?.content ?? '{}';
