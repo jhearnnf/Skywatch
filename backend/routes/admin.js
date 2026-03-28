@@ -1435,16 +1435,29 @@ router.post('/ai/generate-keywords', async (req, res) => {
       })
       .slice(0, needed);
 
-    // Build a normalised title → _id map from all existing briefs/stubs, excluding the current brief
+    // Build normalised brief pool for linking, excluding the current brief
     const allBriefs = await IntelligenceBrief.find({}, { _id: 1, title: 1 }).lean();
-    const titleMap = new Map();
-    for (const b of allBriefs) {
-      if (briefId && String(b._id) === String(briefId)) continue;
-      titleMap.set(normTitle(b.title), b._id);
-    }
+    const briefPool = allBriefs
+      .filter(b => !briefId || String(b._id) !== String(briefId))
+      .map(b => ({ id: String(b._id), norm: normTitle(b.title) }));
+    const exactMap = new Map(briefPool.map(b => [b.norm, b.id]));
 
     const keywords = filtered.map(k => {
-      const linkedBriefId = titleMap.get(normTitle(k.keyword)) ?? null;
+      const normKw = normTitle(k.keyword);
+
+      // Level 1: exact normalised match
+      let linkedBriefId = exactMap.get(normKw) ?? null;
+
+      // Level 2: keyword contained in brief title (min 6 chars to avoid noise)
+      if (!linkedBriefId && normKw.length >= 6) {
+        const candidates = briefPool.filter(b => b.norm.includes(normKw));
+        if (candidates.length > 0) {
+          // Pick shortest title — most specific match
+          candidates.sort((a, b) => a.norm.length - b.norm.length);
+          linkedBriefId = candidates[0].id;
+        }
+      }
+
       return linkedBriefId ? { ...k, linkedBriefId } : k;
     });
 
