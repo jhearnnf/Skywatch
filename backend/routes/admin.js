@@ -151,8 +151,8 @@ router.get('/stats', async (_req, res) => {
       aircoinAgg, loginAgg,
       quizTimeAgg,
       booTotal, booWon, booDefeated, booAbandoned, booTimeAgg,
-      tutorialAgg,
       wtaTotal, wtaWon, wtaAbandoned, wtaRound1Correct, wtaRound2Correct, wtaTimeAgg,
+      tutorialAgg,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ subscriptionTier: 'free' }),

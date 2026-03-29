@@ -19,9 +19,10 @@ const db      = require('../helpers/setupDb');
 const {
   createUser, createAdminUser, createSettings, authCookie,
 } = require('../helpers/factories');
-const GameSessionQuizAttempt         = require('../../models/GameSessionQuizAttempt');
-const GameSessionOrderOfBattleResult = require('../../models/GameSessionOrderOfBattleResult');
-const IntelligenceBriefRead          = require('../../models/IntelligenceBriefRead');
+const GameSessionQuizAttempt          = require('../../models/GameSessionQuizAttempt');
+const GameSessionOrderOfBattleResult  = require('../../models/GameSessionOrderOfBattleResult');
+const GameSessionWhereAircraftResult  = require('../../models/GameSessionWhereAircraftResult');
+const IntelligenceBriefRead           = require('../../models/IntelligenceBriefRead');
 const mongoose = require('mongoose');
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -410,5 +411,143 @@ describe('GET /api/admin/stats — games.boo section', () => {
     expect(boo.defeated).toBe(1);
     expect(boo.abandoned).toBe(1);
     expect(boo.totalSeconds).toBe(65);
+  });
+});
+
+// ── WTA section ───────────────────────────────────────────────────────────────
+
+function fakeWta(userId, overrides = {}) {
+  return {
+    userId,
+    aircraftBriefId: new mongoose.Types.ObjectId(),
+    gameSessionId:   new mongoose.Types.ObjectId().toString(),
+    status:          'completed',
+    round1Correct:   false,
+    round2Attempted: false,
+    round2Correct:   false,
+    won:             false,
+    aircoinsEarned:  0,
+    timeTakenSeconds: 0,
+    ...overrides,
+  };
+}
+
+describe('GET /api/admin/stats — games.wta section', () => {
+  it('returns 0 for all wta fields when no WTA games exist', async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    const { wta } = res.body.data.games;
+
+    expect(wta).toBeDefined();
+    expect(wta.total).toBe(0);
+    expect(wta.won).toBe(0);
+    expect(wta.abandoned).toBe(0);
+    expect(wta.round1Correct).toBe(0);
+    expect(wta.round2Correct).toBe(0);
+    expect(wta.totalSeconds).toBe(0);
+  });
+
+  it('wta fields are all numeric — none are NaN or undefined', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    await GameSessionWhereAircraftResult.create([
+      fakeWta(user._id, { round1Correct: true, round2Attempted: true, round2Correct: true, won: true, timeTakenSeconds: 40 }),
+      fakeWta(user._id, { round1Correct: true, round2Attempted: true, round2Correct: false, won: false, timeTakenSeconds: 20 }),
+      fakeWta(user._id, { round1Correct: false, status: 'abandoned', timeTakenSeconds: 5 }),
+    ]);
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    const { wta } = res.body.data.games;
+
+    for (const [key, val] of Object.entries(wta)) {
+      expect(typeof val).toBe('number');
+      expect(isNaN(val)).toBe(false);
+    }
+  });
+
+  it('counts wta totals, won, and abandoned correctly', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    await GameSessionWhereAircraftResult.create([
+      fakeWta(user._id, { won: true,  status: 'completed' }),
+      fakeWta(user._id, { won: false, status: 'completed' }),
+      fakeWta(user._id, { won: false, status: 'abandoned' }),
+    ]);
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    const { wta } = res.body.data.games;
+
+    expect(wta.total).toBe(3);
+    expect(wta.won).toBe(1);
+    expect(wta.abandoned).toBe(1);
+  });
+
+  it('counts round1Correct and round2Correct independently', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    await GameSessionWhereAircraftResult.create([
+      fakeWta(user._id, { round1Correct: true,  round2Correct: true  }),
+      fakeWta(user._id, { round1Correct: true,  round2Correct: false }),
+      fakeWta(user._id, { round1Correct: false, round2Correct: false }),
+    ]);
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    const { wta } = res.body.data.games;
+
+    expect(wta.round1Correct).toBe(2);
+    expect(wta.round2Correct).toBe(1);
+  });
+
+  it('round1Correct and round2Correct produce valid percentages (not NaN) when total > 0', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    await GameSessionWhereAircraftResult.create([
+      fakeWta(user._id, { round1Correct: true,  round2Correct: true,  timeTakenSeconds: 30 }),
+      fakeWta(user._id, { round1Correct: false, round2Correct: false, timeTakenSeconds: 10 }),
+    ]);
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    const { wta } = res.body.data.games;
+
+    expect(wta.total).toBeGreaterThan(0);
+
+    // Replicate the frontend pct() calculation
+    const r1Pct = Math.round((wta.round1Correct / wta.total) * 100);
+    const r2Pct = Math.round((wta.round2Correct / wta.total) * 100);
+
+    expect(isNaN(r1Pct)).toBe(false);
+    expect(isNaN(r2Pct)).toBe(false);
+    expect(r1Pct).toBe(50);
+    expect(r2Pct).toBe(50);
+  });
+
+  it('sums timeTakenSeconds across all wta results into totalSeconds', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    await GameSessionWhereAircraftResult.create([
+      fakeWta(user._id, { timeTakenSeconds: 30 }),
+      fakeWta(user._id, { timeTakenSeconds: 45 }),
+    ]);
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.games.wta.totalSeconds).toBe(75);
   });
 });
