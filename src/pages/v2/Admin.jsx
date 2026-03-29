@@ -835,23 +835,28 @@ function AiPromptsSection({ API }) {
   if (!prompts) return null
 
   return (
-    <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+    <div className="rounded-2xl overflow-hidden mb-4 border-2" style={{ background: '#fff5f5', borderColor: '#fca5a5' }}>
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
-      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-        <div>
-          <h3 className="font-bold text-slate-800">AI Prompts</h3>
-          <p className="text-xs text-slate-400 mt-0.5">Leave a field blank or click Restore to use the hardcoded default</p>
+      <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: '#fca5a5', background: '#fee2e2' }}>
+        <div className="flex items-center gap-2">
+          <span style={{ color: '#b91c1c', fontSize: 16 }}>⚠</span>
+          <div>
+            <h3 className="font-bold" style={{ color: '#7f1d1d' }}>AI Prompts</h3>
+            <p className="text-xs mt-0.5" style={{ color: '#b91c1c', opacity: 0.75 }}>Leave a field blank or click Restore to use the hardcoded default</p>
+          </div>
+          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full self-start mt-0.5" style={{ background: '#fca5a5', color: '#7f1d1d' }}>Critical</span>
         </div>
         <div className="flex items-center gap-3">
           {dirtyCount > 0 && (
-            <span className="text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>
               {dirtyCount} unsaved
             </span>
           )}
           <button
             onClick={saveAll}
             disabled={saving || dirtyCount === 0}
-            className="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
+            className="px-5 py-2 text-white text-sm font-bold rounded-xl transition-opacity disabled:opacity-40"
+            style={{ background: '#b91c1c' }}
           >
             {saving ? 'Saving…' : 'Save All'}
           </button>
@@ -866,13 +871,14 @@ function AiPromptsSection({ API }) {
               {accordion ? (
                 <button
                   onClick={() => setOpenGroup(isOpen ? null : group)}
-                  className="w-full flex items-center justify-between py-2 text-left border-b border-slate-100"
+                  className="w-full flex items-center justify-between py-2 text-left border-b"
+                  style={{ borderColor: '#fca5a5' }}
                 >
-                  <span className="text-sm font-bold text-slate-700">{group}</span>
-                  <span className="text-slate-400 text-xs">{isOpen ? '▲ collapse' : `${items.length} prompts ▼`}</span>
+                  <span className="text-sm font-bold" style={{ color: '#7f1d1d' }}>{group}</span>
+                  <span className="text-xs" style={{ color: '#b91c1c', opacity: 0.6 }}>{isOpen ? '▲ collapse' : `${items.length} prompts ▼`}</span>
                 </button>
               ) : (
-                <p className="text-sm font-bold text-slate-700 border-b border-slate-100 pb-2">{group}</p>
+                <p className="text-sm font-bold border-b pb-2" style={{ color: '#7f1d1d', borderColor: '#fca5a5' }}>{group}</p>
               )}
               {(!accordion || isOpen) && (
                 <div className="mt-3 space-y-4">
@@ -882,14 +888,15 @@ function AiPromptsSection({ API }) {
                     return (
                       <div key={key}>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-semibold text-slate-600">
+                          <label className="text-xs font-semibold" style={{ color: '#991b1b' }}>
                             {label}
-                            {isDirty && <span className="ml-2 text-amber-500 font-bold">●</span>}
+                            {isDirty && <span className="ml-2 font-bold" style={{ color: '#d97706' }}>●</span>}
                           </label>
                           {!isDefault && (
                             <button
                               onClick={() => restoreDefault(key)}
-                              className="text-[11px] text-slate-400 hover:text-brand-600 transition-colors"
+                              className="text-[11px] transition-colors"
+                              style={{ color: '#b91c1c', opacity: 0.65 }}
                             >
                               Restore default
                             </button>
@@ -899,7 +906,8 @@ function AiPromptsSection({ API }) {
                           value={draft[key] ?? ''}
                           onChange={e => onChange(key, e.target.value)}
                           rows={4}
-                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-200 bg-slate-50 text-slate-800 resize-y"
+                          className="w-full rounded-lg px-3 py-2 text-xs font-mono outline-none resize-y"
+                          style={{ border: '1px solid #fca5a5', background: '#fff', color: '#1e293b' }}
                         />
                       </div>
                     )
@@ -1763,16 +1771,32 @@ function ContentTab({ API }) {
       </Section>
 
       {/* ── AI Content Generation ─────────────────────────────────── */}
-      <Section title="AI Content Generation" onSave={() => save('Update AI Content Generation', ['aiKeywordsPerBrief'])}>
-        <NumInput
-          label="Keywords per brief"
-          hint="Number of keywords the AI generates when creating or regenerating a brief"
-          value={draft.aiKeywordsPerBrief ?? 20}
-          onChange={v => setDraft(p => ({ ...p, aiKeywordsPerBrief: v }))}
-          min={1}
-          max={50}
-        />
-      </Section>
+      <div className="rounded-2xl overflow-hidden mb-4 border-2" style={{ background: '#fff5f5', borderColor: '#fca5a5' }}>
+        <div className="px-5 py-4 border-b flex items-center gap-2" style={{ borderColor: '#fca5a5', background: '#fee2e2' }}>
+          <span style={{ color: '#b91c1c', fontSize: 16 }}>⚠</span>
+          <h3 className="font-bold" style={{ color: '#7f1d1d' }}>AI Content Generation</h3>
+          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fca5a5', color: '#7f1d1d' }}>Critical</span>
+        </div>
+        <div className="px-5 py-3">
+          <NumInput
+            label="Keywords per brief"
+            hint="Number of keywords the AI generates when creating or regenerating a brief"
+            value={draft.aiKeywordsPerBrief ?? 20}
+            onChange={v => setDraft(p => ({ ...p, aiKeywordsPerBrief: v }))}
+            min={1}
+            max={50}
+          />
+        </div>
+        <div className="px-5 pb-4">
+          <button
+            onClick={() => save('Update AI Content Generation', ['aiKeywordsPerBrief'])}
+            className="mt-1 px-5 py-2 text-white text-sm font-bold rounded-xl transition-colors"
+            style={{ background: '#b91c1c' }}
+          >
+            Save
+          </button>
+        </div>
+      </div>
 
       {/* ── AI Prompts ────────────────────────────────────────────── */}
       <AiPromptsSection API={API} />
