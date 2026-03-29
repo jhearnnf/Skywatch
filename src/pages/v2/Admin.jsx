@@ -1810,40 +1810,6 @@ function ContentTab({ API }) {
         {field('combatReadinessMediumFlavor', 'Flavour text', CR_DEFAULTS.combatReadinessMediumFlavor, 2)}
       </Section>
 
-      {/* ── AI Content Generation ─────────────────────────────────── */}
-      <CollapsibleBox
-        bodyStyle={{ background: '#fff5f5', borderColor: '#fca5a5' }}
-        headerStyle={{ borderColor: '#fca5a5', background: '#fee2e2', color: '#7f1d1d' }}
-        headerContent={<>
-          <span style={{ color: '#b91c1c', fontSize: 16 }}>⚠</span>
-          <h3 className="font-bold" style={{ color: '#7f1d1d' }}>AI Content Generation</h3>
-          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fca5a5', color: '#7f1d1d' }}>Critical</span>
-        </>}
-      >
-        <div className="px-5 py-3">
-          <NumInput
-            label="Keywords per brief"
-            hint="Number of keywords the AI generates when creating or regenerating a brief"
-            value={draft.aiKeywordsPerBrief ?? 20}
-            onChange={v => setDraft(p => ({ ...p, aiKeywordsPerBrief: v }))}
-            min={1}
-            max={50}
-          />
-        </div>
-        <div className="px-5 pb-4">
-          <button
-            onClick={() => save('Update AI Content Generation', ['aiKeywordsPerBrief'])}
-            className="mt-1 px-5 py-2 text-white text-sm font-bold rounded-xl transition-colors"
-            style={{ background: '#b91c1c' }}
-          >
-            Save
-          </button>
-        </div>
-      </CollapsibleBox>
-
-      {/* ── AI Prompts ────────────────────────────────────────────── */}
-      <AiPromptsSection API={API} />
-
       {/* ── Tutorials ─────────────────────────────────────────────── */}
       <CollapsibleBox
         bodyStyle={{ border: '1px solid #e2e8f0', borderRadius: undefined }}
@@ -1919,6 +1885,40 @@ function ContentTab({ API }) {
           </button>
         </div>
       </CollapsibleBox>
+
+      {/* ── AI Content Generation ─────────────────────────────────── */}
+      <CollapsibleBox
+        bodyStyle={{ background: '#fff5f5', borderColor: '#fca5a5' }}
+        headerStyle={{ borderColor: '#fca5a5', background: '#fee2e2', color: '#7f1d1d' }}
+        headerContent={<>
+          <span style={{ color: '#b91c1c', fontSize: 16 }}>⚠</span>
+          <h3 className="font-bold" style={{ color: '#7f1d1d' }}>AI Content Generation</h3>
+          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fca5a5', color: '#7f1d1d' }}>Critical</span>
+        </>}
+      >
+        <div className="px-5 py-3">
+          <NumInput
+            label="Keywords per brief"
+            hint="Number of keywords the AI generates when creating or regenerating a brief"
+            value={draft.aiKeywordsPerBrief ?? 20}
+            onChange={v => setDraft(p => ({ ...p, aiKeywordsPerBrief: v }))}
+            min={1}
+            max={50}
+          />
+        </div>
+        <div className="px-5 pb-4">
+          <button
+            onClick={() => save('Update AI Content Generation', ['aiKeywordsPerBrief'])}
+            className="mt-1 px-5 py-2 text-white text-sm font-bold rounded-xl transition-colors"
+            style={{ background: '#b91c1c' }}
+          >
+            Save
+          </button>
+        </div>
+      </CollapsibleBox>
+
+      {/* ── AI Prompts ────────────────────────────────────────────── */}
+      <AiPromptsSection API={API} />
     </div>
   )
 }
