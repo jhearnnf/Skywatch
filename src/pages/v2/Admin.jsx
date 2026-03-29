@@ -199,6 +199,31 @@ function StatsTab({ API }) {
         </div>
       </section>
 
+      {/* Where's That Aircraft */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Where's That Aircraft</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Games"       value={fmtNum(games.wta?.total)}                                     color="brand" />
+          <StatCard label="Won"         value={pct(games.wta?.won, games.wta?.total)}                        color="emerald" />
+          <StatCard label="Abandoned"   value={pct(games.wta?.abandoned, games.wta?.total)}                  color="red" />
+          <StatCard label="Time Played" value={fmtSeconds(games.wta?.totalSeconds)}                          color="slate" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="R1 Correct (ID)"    value={pct(games.wta?.round1Correct, games.wta?.total)}  color="amber" sub="Aircraft identified" />
+          <StatCard label="R2 Correct (Base)"  value={pct(games.wta?.round2Correct, games.wta?.total)}  color="amber" sub="Base located" />
+        </div>
+      </section>
+
+      {/* Who's At Aircraft */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Who's At Aircraft</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Guesses"     value={fmtNum(games.whos?.total)}                                    color="brand" />
+          <StatCard label="Correct"     value={pct(games.whos?.correct, games.whos?.total)}                  color="emerald" />
+          <StatCard label="Time Played" value={fmtSeconds(games.whos?.totalSeconds)}                         color="slate" />
+        </div>
+      </section>
+
       {/* Aircoins + Briefs + Tutorials */}
       <section>
         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Economy & Content</h3>
@@ -1158,6 +1183,11 @@ function UsersTab({ API }) {
                     isReset: (u.profileStats?.brifsRead ?? 0) === 0,
                   },
                   {
+                    label:   'Streak',
+                    fields:  ['streak'],
+                    isReset: (u.loginStreak ?? 0) === 0,
+                  },
+                  {
                     label:   'Tutorials',
                     fields:  ['tutorials'],
                     isReset: !['welcome', 'intel_brief', 'user', 'load_up'].some(
@@ -1530,6 +1560,18 @@ function ContentTab({ API }) {
         {field('combatReadinessMediumTag',    'Tag',    CR_DEFAULTS.combatReadinessMediumTag)}
         {field('combatReadinessMediumStars',  'Stars',  CR_DEFAULTS.combatReadinessMediumStars)}
         {field('combatReadinessMediumFlavor', 'Flavour text', CR_DEFAULTS.combatReadinessMediumFlavor, 2)}
+      </Section>
+
+      {/* ── AI Content Generation ─────────────────────────────────── */}
+      <Section title="AI Content Generation" onSave={() => save('Update AI Content Generation', ['aiKeywordsPerBrief'])}>
+        <NumInput
+          label="Keywords per brief"
+          hint="Number of keywords the AI generates when creating or regenerating a brief"
+          value={draft.aiKeywordsPerBrief ?? 20}
+          onChange={v => setDraft(p => ({ ...p, aiKeywordsPerBrief: v }))}
+          min={1}
+          max={50}
+        />
       </Section>
 
       {/* ── Tutorials ─────────────────────────────────────────────── */}
@@ -2251,6 +2293,14 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const [dupePanel,          setDupePanel]          = useState(false)
   const [dupeGroups,         setDupeGroups]         = useState(null)
   const [dupesLoading,       setDupesLoading]       = useState(false)
+  const [keywordsPerBrief,   setKeywordsPerBrief]   = useState(20)
+
+  useEffect(() => {
+    fetch(`${API}/api/admin/settings`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (d.data?.settings?.aiKeywordsPerBrief) setKeywordsPerBrief(d.data.settings.aiKeywordsPerBrief) })
+      .catch(() => {})
+  }, [API])
 
   const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }))
 
@@ -2583,7 +2633,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         fetch(`${API}/api/admin/ai/generate-keywords`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ description, existingKeywords: [], needed: 10, title, briefId: briefId || null }),
+          body: JSON.stringify({ description, existingKeywords: [], needed: keywordsPerBrief, title, briefId: briefId || null }),
         }),
         needsBases     ? suggestLinks('bases',     poolBases)     : Promise.resolve(null),
         needsSquadrons ? suggestLinks('squadrons', poolSquadrons) : Promise.resolve(null),
@@ -2626,7 +2676,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       const res  = await fetch(`${API}/api/admin/ai/generate-keywords`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description, existingKeywords: [], needed: 10, title: draft.title, briefId: briefId || null }),
+        body: JSON.stringify({ description, existingKeywords: [], needed: keywordsPerBrief, title: draft.title, briefId: briefId || null }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -2779,7 +2829,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
   // ── Status badge helper ───────────────────────────────────────────────────
   function BriefStatusPills({ brief }) {
-    const hasKeywords = (brief.keywords?.length ?? 0) >= 10
+    const hasKeywords = (brief.keywords?.length ?? 0) >= keywordsPerBrief
     const hasEasy     = (brief.quizQuestionsEasy?.length ?? 0) >= 10
     const hasMedium   = (brief.quizQuestionsMedium?.length ?? 0) >= 10
     const hasQuiz     = hasEasy && hasMedium
@@ -2893,21 +2943,27 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
           {loading && <p className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading…</p>}
           {!loading && briefs.length === 0 && <p className="py-8 text-center text-slate-400 text-sm">No briefs found</p>}
-          {briefs.map((b, i) => (
-            <button
-              key={b._id}
-              onClick={() => openBrief(b)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors ${i !== 0 ? 'border-t border-slate-100' : ''}`}
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-800 truncate">{b.title}</p>
-                <p className="text-xs text-slate-400 truncate">{b.subtitle}</p>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 whitespace-nowrap">{b.category}</span>
-              <BriefStatusPills brief={b} />
-              <span className="text-slate-300 text-sm">›</span>
-            </button>
-          ))}
+          {briefs.map((b, i) => {
+            const isStub = b.status === 'stub';
+            return (
+              <button
+                key={b._id}
+                onClick={() => openBrief(b)}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${i !== 0 ? 'border-t border-slate-100' : ''} ${isStub ? 'bg-slate-50 hover:bg-slate-100' : 'hover:bg-slate-50'}`}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold truncate ${isStub ? 'text-slate-400' : 'text-slate-800'}`}>{b.title}</p>
+                  <p className="text-xs text-slate-400 truncate">{b.subtitle}</p>
+                </div>
+                {isStub && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 whitespace-nowrap">STUB</span>
+                )}
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 whitespace-nowrap">{b.category}</span>
+                <BriefStatusPills brief={b} />
+                <span className="text-slate-300 text-sm">›</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Pagination */}
@@ -3215,7 +3271,69 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         )}
       </div>
 
-      {/* ── Section C: Images ─────────────────────────────────────────── */}
+      {/* ── Section C: Sources ────────────────────────────────────────── */}
+      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <button
+          onClick={() => toggleSection('sources')}
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+        >
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-slate-800">Sources</h3>
+            {draft.sources.length > 0 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                {draft.sources.length} {draft.sources.length === 1 ? 'source' : 'sources'}
+              </span>
+            )}
+          </div>
+          <span className="text-slate-400 text-xs">{openSections.sources ? '▲' : '▼'}</span>
+        </button>
+        {openSections.sources && (
+          <div className="px-5 py-4 space-y-3">
+            {draft.sources.map((src, idx) => (
+              <div key={idx} className="border border-slate-100 rounded-xl p-3 bg-slate-50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500">Source {idx + 1}</span>
+                  <button
+                    onClick={() => setDraft(p => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
+                    className="text-xs text-red-400 hover:text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={src.url}
+                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], url: e.target.value }; return { ...p, sources: s } })}
+                  placeholder="URL"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                />
+                <input
+                  type="text"
+                  value={src.siteName ?? ''}
+                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], siteName: e.target.value }; return { ...p, sources: s } })}
+                  placeholder="Site Name"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                />
+                <input
+                  type="text"
+                  value={src.articleDate ?? ''}
+                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], articleDate: e.target.value }; return { ...p, sources: s } })}
+                  placeholder="Date (YYYY-MM-DD)"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                />
+              </div>
+            ))}
+            <button
+              onClick={() => setDraft(p => ({ ...p, sources: [...p.sources, { url: '', siteName: '', articleDate: '' }] }))}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+            >
+              + Add Source
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Section D: Images ─────────────────────────────────────────── */}
       <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
         {(generating === 'images' || autoGenerating) && <GeneratingOverlay />}
         <button
@@ -3493,61 +3611,6 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         )
       })()}
 
-      {/* ── Section E: Sources ────────────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
-        <button
-          onClick={() => toggleSection('sources')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
-        >
-          <h3 className="font-bold text-slate-800">Sources</h3>
-          <span className="text-slate-400 text-xs">{openSections.sources ? '▲' : '▼'}</span>
-        </button>
-        {openSections.sources && (
-          <div className="px-5 py-4 space-y-3">
-            {draft.sources.map((src, idx) => (
-              <div key={idx} className="border border-slate-100 rounded-xl p-3 bg-slate-50 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500">Source {idx + 1}</span>
-                  <button
-                    onClick={() => setDraft(p => ({ ...p, sources: p.sources.filter((_, i) => i !== idx) }))}
-                    className="text-xs text-red-400 hover:text-red-600"
-                  >
-                    Remove
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  value={src.url}
-                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], url: e.target.value }; return { ...p, sources: s } })}
-                  placeholder="URL"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
-                />
-                <input
-                  type="text"
-                  value={src.siteName ?? ''}
-                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], siteName: e.target.value }; return { ...p, sources: s } })}
-                  placeholder="Site Name"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
-                />
-                <input
-                  type="text"
-                  value={src.articleDate ?? ''}
-                  onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], articleDate: e.target.value }; return { ...p, sources: s } })}
-                  placeholder="Date (YYYY-MM-DD)"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
-                />
-              </div>
-            ))}
-            <button
-              onClick={() => setDraft(p => ({ ...p, sources: [...p.sources, { url: '', siteName: '', articleDate: '' }] }))}
-              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
-            >
-              + Add Source
-            </button>
-          </div>
-        )}
-      </div>
-
       {/* ── Section F: Keywords ───────────────────────────────────────── */}
       <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
         {(generating === 'keywords' || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
@@ -3557,8 +3620,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         >
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-slate-800">Keywords</h3>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${draft.keywords.length >= 10 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-              {draft.keywords.length} / 10
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${draft.keywords.length >= keywordsPerBrief ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+              {draft.keywords.length} / {keywordsPerBrief}
             </span>
             {badKeywords.length > 0 && (
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
@@ -3632,7 +3695,12 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
           onClick={() => toggleSection('questions')}
           className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
         >
-          <h3 className="font-bold text-slate-800">Quiz Questions</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-slate-800">Quiz Questions</h3>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${easyQuestions.length >= 10 && mediumQuestions.length >= 10 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+              {easyQuestions.length + mediumQuestions.length} / 20
+            </span>
+          </div>
           <span className="text-slate-400 text-xs">{openSections.questions ? '▲' : '▼'}</span>
         </button>
         {openSections.questions && (

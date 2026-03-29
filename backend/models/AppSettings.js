@@ -92,6 +92,9 @@ const appSettingsSchema = new mongoose.Schema({
   volumeBattleOfOrderLost:            { type: Number, default: 100, min: 0, max: 100 },
   volumeBattleOfOrderSelection:       { type: Number, default: 100, min: 0, max: 100 },
 
+  // AI content generation
+  aiKeywordsPerBrief: { type: Number, default: 20, min: 1 },
+
   // Feature flags
   useLiveLeaderboard:   { type: Boolean, default: false },
   disableLoadingBar:    { type: Boolean, default: false },

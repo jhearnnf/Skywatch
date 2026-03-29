@@ -22,19 +22,14 @@ import { useAuth } from '../../../context/AuthContext'
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * @param {object[]} briefs          - briefs with isRead set
- * @param {string[]} passedQuizIds   - brief IDs the user has passed the quiz for
- * @param {string[]} booCategories   - categories with enough BOO data
+ * Mocks the /api/games/battle-of-order/briefs endpoint to return `briefs`
+ * with booState already set (as the real server does).
  */
-function setup({ briefs = [], passedQuizIds = [], booCategories = ['Aircrafts'] } = {}) {
+function setup({ briefs = [] } = {}) {
   useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '' })
   global.fetch = vi.fn().mockImplementation((url) => {
-    if (url.includes('/api/briefs'))
-      return Promise.resolve({ json: async () => ({ data: { briefs } }) })
-    if (url.includes('/api/games/quiz/completed-brief-ids'))
-      return Promise.resolve({ json: async () => ({ data: { ids: passedQuizIds } }) })
-    if (url.includes('/api/games/battle-of-order/available-categories'))
-      return Promise.resolve({ json: async () => ({ data: { categories: booCategories } }) })
+    if (url.includes('battle-of-order/briefs'))
+      return Promise.resolve({ json: async () => ({ data: { briefs, total: briefs.length, page: 1, totalPages: 1 } }) })
     return Promise.resolve({ json: async () => ({}) })
   })
   render(<BOOBriefsList />)
@@ -46,49 +41,34 @@ afterEach(() => { vi.restoreAllMocks() })
 
 describe('BOOBriefsList — prerequisite state logic', () => {
 
-  it('shows "Read first" for an unread brief with BOO data', async () => {
-    setup({
-      briefs:       [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', isRead: false }],
-      passedQuizIds: [],
-    })
+  it('shows "Read first" for a needs-read brief', async () => {
+    setup({ briefs: [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', booState: 'needs-read' }] })
     await waitFor(() => screen.getByText('Typhoon'))
     expect(screen.getByText(/read first/i)).toBeDefined()
   })
 
-  it('links "Read first" card to the brief reader, not the quiz', async () => {
-    setup({
-      briefs:       [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', isRead: false }],
-      passedQuizIds: [],
-    })
+  it('"Read first" card links to the brief reader', async () => {
+    setup({ briefs: [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', booState: 'needs-read' }] })
     await waitFor(() => screen.getByText('Typhoon'))
     const link = screen.getByText('Typhoon').closest('a')
     expect(link.href).toContain('/brief/b1')
   })
 
-  it('shows "Pass quiz first" for a read brief whose quiz is not yet passed', async () => {
-    setup({
-      briefs:       [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', isRead: true }],
-      passedQuizIds: [],
-    })
+  it('shows "Pass quiz first" for a needs-quiz brief', async () => {
+    setup({ briefs: [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', booState: 'needs-quiz' }] })
     await waitFor(() => screen.getByText('Typhoon'))
     expect(screen.getByText(/pass quiz first/i)).toBeDefined()
   })
 
-  it('links "Pass quiz first" card to the quiz', async () => {
-    setup({
-      briefs:       [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', isRead: true }],
-      passedQuizIds: [],
-    })
+  it('"Pass quiz first" card links to the quiz page', async () => {
+    setup({ briefs: [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', booState: 'needs-quiz' }] })
     await waitFor(() => screen.getByText('Typhoon'))
     const link = screen.getByText('Typhoon').closest('a')
     expect(link.href).toContain('/quiz/b1')
   })
 
-  it('shows playable BOO card when brief is read and quiz is passed', async () => {
-    setup({
-      briefs:        [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', isRead: true }],
-      passedQuizIds: ['b1'],
-    })
+  it('shows playable BOO link for an active brief', async () => {
+    setup({ briefs: [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', booState: 'active' }] })
     await waitFor(() => screen.getByText('Typhoon'))
     expect(screen.queryByText(/read first/i)).toBeNull()
     expect(screen.queryByText(/pass quiz first/i)).toBeNull()
@@ -96,15 +76,19 @@ describe('BOOBriefsList — prerequisite state logic', () => {
     expect(link.href).toContain('/battle-of-order/b1')
   })
 
+  it('shows "No data yet" for a no-data brief', async () => {
+    setup({ briefs: [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', booState: 'no-data' }] })
+    await waitFor(() => screen.getByText('Typhoon'))
+    expect(screen.getByText(/no data yet/i)).toBeDefined()
+  })
+
   it('shows "Read first" before "Pass quiz first" in sort order', async () => {
     setup({
       briefs: [
-        { _id: 'b1', title: 'Needs Quiz', category: 'Aircrafts', isRead: true  },
-        { _id: 'b2', title: 'Needs Read', category: 'Aircrafts', isRead: false },
+        { _id: 'b1', title: 'Needs Quiz', category: 'Aircrafts', booState: 'needs-quiz' },
+        { _id: 'b2', title: 'Needs Read', category: 'Aircrafts', booState: 'needs-read' },
       ],
-      passedQuizIds: [],
     })
-    // Click "All" tab so both are visible
     await waitFor(() => screen.getByText('Needs Quiz'))
     screen.getByRole('button', { name: 'All' }).click()
     await waitFor(() => screen.getByText('Needs Read'))
@@ -112,18 +96,58 @@ describe('BOOBriefsList — prerequisite state logic', () => {
     expect(html.indexOf('Needs Quiz')).toBeLessThan(html.indexOf('Needs Read'))
   })
 
-  it('does not show BOO card for a brief in a category with no BOO data', async () => {
-    setup({
-      briefs:       [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', isRead: true }],
-      passedQuizIds: ['b1'],
-      booCategories: [], // no categories have BOO data
-    })
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
-    // Brief should still render but as no-data (not in Available tab)
-    screen.getByRole('button', { name: 'All' }).click()
+  // ── needs-aircraft-reads ──────────────────────────────────────────────────
+
+  it('shows "Read more Aircrafts" label for a needs-aircraft-reads brief', async () => {
+    setup({ briefs: [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', booState: 'needs-aircraft-reads' }] })
+    await waitFor(() => screen.getByText('Typhoon'))
+    expect(screen.getByText(/read more aircrafts/i)).toBeDefined()
+  })
+
+  it('needs-aircraft-reads card does not link to the BOO game', async () => {
+    setup({ briefs: [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', booState: 'needs-aircraft-reads' }] })
+    await waitFor(() => screen.getByText('Typhoon'))
+    const link = screen.getByText('Typhoon').closest('a')
+    expect(link).toBeNull()
+  })
+
+  it('needs-aircraft-reads card does not show read or quiz prompts', async () => {
+    setup({ briefs: [{ _id: 'b1', title: 'Typhoon', category: 'Aircrafts', booState: 'needs-aircraft-reads' }] })
     await waitFor(() => screen.getByText('Typhoon'))
     expect(screen.queryByText(/read first/i)).toBeNull()
     expect(screen.queryByText(/pass quiz first/i)).toBeNull()
-    expect(screen.getByText(/no data yet/i)).toBeDefined()
+  })
+
+  it('completed brief sorts before needs-aircraft-reads brief', async () => {
+    setup({
+      briefs: [
+        { _id: 'b1', title: 'Completed Brief', category: 'Aircrafts', booState: 'completed' },
+        { _id: 'b2', title: 'Locked Brief',    category: 'Aircrafts', booState: 'needs-aircraft-reads' },
+      ],
+    })
+    await waitFor(() => screen.getByText('Locked Brief'))
+    const html = document.body.innerHTML
+    expect(html.indexOf('Completed Brief')).toBeLessThan(html.indexOf('Locked Brief'))
+  })
+
+  it('active brief sorts before needs-aircraft-reads brief', async () => {
+    setup({
+      briefs: [
+        { _id: 'b1', title: 'Ready Brief',  category: 'Aircrafts', booState: 'active' },
+        { _id: 'b2', title: 'Locked Brief', category: 'Aircrafts', booState: 'needs-aircraft-reads' },
+      ],
+    })
+    await waitFor(() => screen.getByText('Locked Brief'))
+    const html = document.body.innerHTML
+    expect(html.indexOf('Ready Brief')).toBeLessThan(html.indexOf('Locked Brief'))
+  })
+
+  it('needs-aircraft-reads brief does not appear in the Available tab', async () => {
+    setup({ briefs: [{ _id: 'b1', title: 'Locked Brief', category: 'Aircrafts', booState: 'needs-aircraft-reads' }] })
+    // Available is the default tab — server filters this server-side, but confirm no BOO link is rendered
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+    // If the server returned the brief, it would render — but there should be no BOO game link
+    const booLinks = screen.queryAllByRole('link').filter(l => (l.getAttribute('href') ?? '').includes('/battle-of-order/b1'))
+    expect(booLinks.length).toBe(0)
   })
 })

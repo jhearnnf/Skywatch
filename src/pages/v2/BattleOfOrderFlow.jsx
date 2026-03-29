@@ -651,6 +651,8 @@ export default function BattleOfOrderFlow() {
           <p className="text-sm">
             {unavailableReason === 'not_read'
               ? 'You need to read and complete this brief before playing.'
+              : unavailableReason === 'needs-aircraft-reads'
+              ? 'You need to read more Aircrafts briefs before Battle of Order unlocks.'
               : unavailableReason === 'quiz_not_passed'
               ? 'You need to pass the Intel Quiz for this brief first.'
               : unavailableReason === 'ineligible_category'

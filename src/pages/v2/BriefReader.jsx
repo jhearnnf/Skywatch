@@ -414,21 +414,6 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
       <h2 className="text-2xl font-extrabold text-slate-900 mb-2">{heading}</h2>
       <p className="text-slate-500 mb-8">{subheading}</p>
 
-      {/* Keywords learned */}
-      {brief.keywords?.length > 0 && (
-        <div className="bg-surface rounded-2xl p-4 border border-slate-200 mb-6 text-left card-shadow">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-            🔑 Keywords in this brief
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {brief.keywords.map(kw => (
-              <span key={kw._id ?? kw.keyword} className="text-xs font-semibold bg-brand-100 text-brand-700 px-2 py-1 rounded-full border border-brand-200">
-                {kw.keyword}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Continue Learning */}
       <ContinueLearning brief={brief} navigate={navigate} />
@@ -666,7 +651,11 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) 
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-sm text-slate-500">Battle of Order</p>
-                <p className="text-xs text-slate-400 mt-0.5">Pass the quiz to unlock</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {booState === 'locked-aircraft-reads'
+                    ? 'Read more Aircrafts briefs to unlock'
+                    : 'Pass the quiz to unlock'}
+                </p>
               </div>
               <span className="text-xs font-semibold text-slate-400 shrink-0">🔒 Locked</span>
             </div>
@@ -700,7 +689,7 @@ export default function BriefReader() {
   const [activeKw, setActiveKw]    = useState(null)
   const [learnedKws, setLearned]   = useState(new Set())
   const [readRecord, setReadRecord] = useState(null)
-  // 'unavailable' | 'locked-quiz' | 'available'
+  // 'unavailable' | 'locked-aircraft-reads' | 'locked-quiz' | 'available' | 'completed'
   const [booState, setBooState]   = useState('unavailable')
   const [quizPassed, setQuizPassed] = useState(null) // null=loading, true/false once fetched
   const [reReadMode, setReReadMode] = useState(false)
@@ -878,8 +867,14 @@ export default function BriefReader() {
         const booData = await booRes.json()
         if (cancelled) return
         const booAvail = booData.data?.available ?? false
-        if      (!booAvail) { setBooState('unavailable'); return }
-        if      (!passed)   { setBooState('locked-quiz'); return }
+        if (!booAvail) {
+          const reason = booData.data?.reason
+          if      (reason === 'needs-aircraft-reads') setBooState('locked-aircraft-reads')
+          else if (reason === 'quiz_not_passed')      setBooState('locked-quiz')
+          else                                        setBooState('unavailable')
+          return
+        }
+        if (!passed) { setBooState('locked-quiz'); return }
         const statusRes  = await fetch(`${API}/api/games/battle-of-order/status/${briefId}`, { credentials: 'include' })
         const statusData = await statusRes.json()
         if (cancelled) return

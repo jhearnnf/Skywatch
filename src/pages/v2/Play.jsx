@@ -377,6 +377,28 @@ export default function Play() {
                   {booBriefs.map((brief, i) => {
                     const state = brief.booState
 
+                    if (state === 'needs-aircraft-reads') {
+                      return (
+                        <motion.div
+                          key={brief._id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
+                          <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed">
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                              <span className="text-slate-400 text-xs">🔒</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                              <p className="text-xs text-slate-400">{brief.category}</p>
+                            </div>
+                            <span className="text-xs text-slate-400 shrink-0">Read more Aircrafts</span>
+                          </div>
+                        </motion.div>
+                      )
+                    }
+
                     if (state === 'no-data') {
                       return (
                         <motion.div

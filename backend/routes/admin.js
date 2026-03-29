@@ -102,6 +102,8 @@ router.get('/stats', async (_req, res) => {
       quizTimeAgg,
       booTotal, booWon, booDefeated, booAbandoned, booTimeAgg,
       tutorialAgg,
+      wtaTotal, wtaWon, wtaAbandoned, wtaRound1Correct, wtaRound2Correct, wtaTimeAgg,
+      whosTotal, whosCorrect, whosTimeAgg,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ subscriptionTier: 'free' }),
@@ -134,6 +136,21 @@ router.get('/stats', async (_req, res) => {
       GameSessionOrderOfBattleResult.countDocuments({ abandoned: true }),
       // BOO: sum timeTakenSeconds (null entries treated as 0)
       GameSessionOrderOfBattleResult.aggregate([
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$timeTakenSeconds', 0] } } } },
+      ]),
+      // Where's That Aircraft (WhereAircraftResult)
+      GameSessionWhereAircraftResult.countDocuments(),
+      GameSessionWhereAircraftResult.countDocuments({ won: true }),
+      GameSessionWhereAircraftResult.countDocuments({ status: 'abandoned' }),
+      GameSessionWhereAircraftResult.countDocuments({ round1Correct: true }),
+      GameSessionWhereAircraftResult.countDocuments({ round2Correct: true }),
+      GameSessionWhereAircraftResult.aggregate([
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$timeTakenSeconds', 0] } } } },
+      ]),
+      // Who's At Aircraft (WhosAtAircraftResult — individual guesses)
+      GameSessionWhosAtAircraftResult.countDocuments(),
+      GameSessionWhosAtAircraftResult.countDocuments({ isCorrect: true }),
+      GameSessionWhosAtAircraftResult.aggregate([
         { $group: { _id: null, total: { $sum: { $ifNull: ['$timeTakenSeconds', 0] } } } },
       ]),
       // Tutorial viewed/skipped counts across all users and all 4 tutorial fields
@@ -187,6 +204,19 @@ router.get('/stats', async (_req, res) => {
             defeated:  booDefeated,
             abandoned: booAbandoned,
             totalSeconds: booTimeAgg[0]?.total ?? 0,
+          },
+          wta: {
+            total:         wtaTotal,
+            won:           wtaWon,
+            abandoned:     wtaAbandoned,
+            round1Correct: wtaRound1Correct,
+            round2Correct: wtaRound2Correct,
+            totalSeconds:  wtaTimeAgg[0]?.total ?? 0,
+          },
+          whos: {
+            total:   whosTotal,
+            correct: whosCorrect,
+            totalSeconds: whosTimeAgg[0]?.total ?? 0,
           },
         },
         briefs: { totalBrifsRead, totalBrifsOpened, totalReadSeconds: readTimeAgg[0]?.total ?? 0 },
@@ -526,6 +556,7 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
 
     if (fields.includes('aircoins'))        { userUpdates.totalAircoins = 0; userUpdates.cycleAircoins = 0; userUpdates.rank = null; ops.push(AircoinLog.deleteMany({ userId: req.params.id })); }
     if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); }
+    if (fields.includes('streak'))          { userUpdates.loginStreak = 0; userUpdates.lastStreakDate = null; }
     if (fields.includes('intelBriefsRead')) {
       userUpdates.loginStreak    = 0;
       userUpdates.lastStreakDate = null;
@@ -1605,8 +1636,13 @@ router.post('/ai/regenerate-brief/:id', async (req, res) => {
     const brief = await IntelligenceBrief.findById(req.params.id);
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
+    const aiSettings = await AppSettings.getSettings();
+    const kwCount = aiSettings.aiKeywordsPerBrief ?? 20;
+
     // ── Step 1: regenerate description sections, keywords (+ gameData for BOO) ─
     let TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use plain, clear sentences. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ],\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim somewhere in the descriptionSections above", "generatedDescription": "2-3 sentences. Explain what this term is and its RAF role or purpose. Where relevant include specific detail: for a base or station — its location, which aircraft types and squadrons are stationed there, and what operations occur there; for a squadron or unit — its primary role and responsibilities, aircraft operated, and home base; for an aircraft or system — its capabilities, current service status, and operating bases/squadrons; for a rank, role, or training concept — its place in the RAF structure and training pathway significance. Draw on broader RAF knowledge beyond this brief — do NOT reference or summarise this intel brief."},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"}\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words. Write each section as plain prose — no bullet points, no headers, no markdown.\n2. Write all sections first, then extract keywords — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere across the sections.\n3. Return exactly 10 keyword objects.\n4. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
+
+    TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace('Return exactly 10 keyword objects', `Return exactly ${kwCount} keyword objects`);
 
     const gdShape = booGameDataShape(brief.category);
     if (gdShape) {

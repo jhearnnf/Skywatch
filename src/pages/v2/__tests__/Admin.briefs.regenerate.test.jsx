@@ -484,9 +484,9 @@ describe('Admin Briefs — BriefStatusPills badges', () => {
   beforeEach(() => { global.Audio = class { play = vi.fn().mockResolvedValue(undefined) } })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('K badge is green when brief has ≥10 keywords', async () => {
+  it('K badge is green when brief has ≥20 keywords (default threshold)', async () => {
     global.fetch = vi.fn().mockImplementation(briefListHandler({
-      keywords: Array.from({ length: 10 }, (_, i) => ({ keyword: `kw${i}`, generatedDescription: '' })),
+      keywords: Array.from({ length: 20 }, (_, i) => ({ keyword: `kw${i}`, generatedDescription: '' })),
     }))
     render(<Admin />)
     await navigateToBriefsTab()
@@ -494,7 +494,7 @@ describe('Admin Briefs — BriefStatusPills badges', () => {
     expect(screen.getByText('K').className).toContain('bg-emerald-100')
   })
 
-  it('K badge is grey when brief has <10 keywords', async () => {
+  it('K badge is grey when brief has <20 keywords (default threshold)', async () => {
     global.fetch = vi.fn().mockImplementation(briefListHandler({ keywords: [{ keyword: 'one', generatedDescription: '' }] }))
     render(<Admin />)
     await navigateToBriefsTab()

@@ -405,4 +405,47 @@ describe('Play page — Battle of Order states', () => {
     const completedPos = container.innerHTML.indexOf('Already Played')
     expect(activePos).toBeLessThan(completedPos)
   })
+
+  // ── needs-aircraft-reads ────────────────────────────────────────────────
+
+  it('shows "Read more Aircrafts" label for a needs-aircraft-reads brief', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Locked Brief', category: 'Aircrafts', booState: 'needs-aircraft-reads' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Locked Brief'))
+    expect(screen.getByText(/read more aircrafts/i)).toBeDefined()
+  })
+
+  it('needs-aircraft-reads card does not link to the BOO game', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Locked Brief', category: 'Aircrafts', booState: 'needs-aircraft-reads' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Locked Brief'))
+    const booLinks = screen.queryAllByRole('link').filter(l => l.getAttribute('href') === '/battle-of-order/b1')
+    expect(booLinks.length).toBe(0)
+  })
+
+  it('needs-aircraft-reads card does not show read or quiz prompts', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Locked Brief', category: 'Aircrafts', booState: 'needs-aircraft-reads' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Locked Brief'))
+    expect(screen.queryByText(/read first/i)).toBeNull()
+    expect(screen.queryByText(/pass quiz first/i)).toBeNull()
+  })
+
+  it('active brief appears before needs-aircraft-reads brief', async () => {
+    const booBriefs = [
+      { _id: 'b1', title: 'Ready Brief',  category: 'Aircrafts', booState: 'active' },
+      { _id: 'b2', title: 'Locked Brief', category: 'Aircrafts', booState: 'needs-aircraft-reads' },
+    ]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Locked Brief'))
+    const html = document.body.innerHTML
+    expect(html.indexOf('Ready Brief')).toBeLessThan(html.indexOf('Locked Brief'))
+  })
+
+  it('needs-aircraft-reads brief shows the lock icon, not the play icon', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Locked Brief', category: 'Aircrafts', booState: 'needs-aircraft-reads' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Locked Brief'))
+    expect(screen.queryByText('Play now')).toBeNull()
+  })
 })

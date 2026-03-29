@@ -200,8 +200,10 @@ describe('BriefReader — complete brief coin awarding', () => {
   })
 
   it('does NOT call awardAircoins when complete returns 0 coins (idempotent re-complete)', async () => {
+    // coinsAwarded:true but completed:false → reading screen, not AlreadyReadScreen
+    const coinsAwardedRecord = { _id: 'rr1', coinsAwarded: true, completed: false }
     global.fetch = vi.fn()
-      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF, COMPLETED_READ_RECORD))
+      .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF, coinsAwardedRecord))
       .mockResolvedValueOnce({ ok: true, json: async () => ({ data: {} }) }) // wta-spawn
       .mockResolvedValueOnce(makeCompleteResponse({ aircoinsEarned: 0, dailyCoinsEarned: 0 }))
       .mockResolvedValue({ ok: true, json: async () => ({}) })
@@ -243,7 +245,9 @@ describe('BriefReader — complete brief coin awarding', () => {
   })
 
   it('logged-in user who already collected coins sees plain "✓ Complete Brief"', async () => {
-    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF, COMPLETED_READ_RECORD))
+    // coinsAwarded:true but completed:false → reading screen shows plain Complete button
+    const coinsAwardedRecord = { _id: 'rr1', coinsAwarded: true, completed: false }
+    global.fetch = vi.fn().mockResolvedValue(makeGetResponse(SINGLE_SECTION_BRIEF, coinsAwardedRecord))
     render(<BriefReader />)
     await waitFor(() => screen.getByText('✓ Complete Brief'))
     expect(screen.queryByText('⭐ Complete Brief & Collect Aircoins')).toBeNull()
@@ -571,7 +575,8 @@ describe('BriefReader — BOO button on completion screen', () => {
   afterEach(() => vi.restoreAllMocks())
 
   // Actual fetch call order for Aircrafts-category briefs with logged-in user:
-  //   brief (1) → wta-spawn (2) → /complete (3) → /boo-options (4) → /quiz/status (5) → spawn-check (6)
+  //   brief (1) → wta-spawn (2) → /complete (3) → /quiz/status (4) → /boo-options (5) → spawn-check (6+)
+  // check() calls quiz/status first, then options, then (if available) boo-status.
   // wta-spawn fires from useEffect when brief+user both resolve (Aircrafts category only).
   // spawn-check fires inside /complete's .then() chain — safe to leave unmocked (caught by .catch).
   const WTA_SPAWN_EMPTY = { ok: true, json: async () => ({ data: null }) }
@@ -581,9 +586,9 @@ describe('BriefReader — BOO button on completion screen', () => {
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
       .mockResolvedValueOnce(WTA_SPAWN_EMPTY)
       .mockResolvedValueOnce(makeCompleteResponse())
-      .mockResolvedValueOnce(makeBooResponse(true))
-      .mockResolvedValueOnce(makeQuizStatusResponse(true))
-      .mockResolvedValue({ ok: true, json: async () => ({ data: {} }) }) // spawn-check catch-all
+      .mockResolvedValueOnce(makeQuizStatusResponse(true))             // quiz/status first
+      .mockResolvedValueOnce(makeBooResponse(true))                    // then options
+      .mockResolvedValue({ ok: true, json: async () => ({ data: {} }) }) // boo-status + spawn-check catch-all
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('⭐ Complete Brief & Collect Aircoins'))
@@ -601,8 +606,8 @@ describe('BriefReader — BOO button on completion screen', () => {
       .mockResolvedValueOnce(makeGetResponse(SINGLE_SECTION_BRIEF))
       .mockResolvedValueOnce(WTA_SPAWN_EMPTY)
       .mockResolvedValueOnce(makeCompleteResponse())
-      .mockResolvedValueOnce(makeBooResponse(true))
-      .mockResolvedValueOnce(makeQuizStatusResponse(false))
+      .mockResolvedValueOnce(makeQuizStatusResponse(false))            // quiz/status first
+      .mockResolvedValueOnce(makeBooResponse(true))                    // then options (available:true to exercise locked-quiz path)
       .mockResolvedValue({ ok: true, json: async () => ({ data: {} }) })
 
     render(<BriefReader />)
