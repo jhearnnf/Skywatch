@@ -558,7 +558,7 @@ function AircoinsCeiling({ API }) {
   const fmt = n => (n ?? 0).toLocaleString()
 
   return (
-    <Section title="Aircoins Ceiling">
+    <Section title="Aircoins Ceiling" collapsible>
       <p className="text-xs text-slate-400 mb-3">
         Economy viability check — max coins achievable with perfect play.
         Excludes daily streak bonuses and Flashcard Recall.
@@ -1044,7 +1044,7 @@ function SettingsTab({ API }) {
       )}
 
       {/* ── Subscription ─────────────────────────────────────── */}
-      <Section title="Subscription" onSave={() => save('Update Subscription Settings', ['trialDurationDays', 'freeCategories', 'silverCategories', 'guestCategories'])}>
+      <Section title="Subscription" collapsible onSave={() => save('Update Subscription Settings', ['trialDurationDays', 'freeCategories', 'silverCategories', 'guestCategories'])}>
         <NumInput label="Trial duration (days)" value={draft.trialDurationDays} min={1} max={365} onChange={v => set('trialDurationDays', v)} />
 
         <div className="pt-3">
@@ -1070,7 +1070,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Aircoins ─────────────────────────────────────────── */}
-      <Section title="Aircoins" onSave={() => save('Update Aircoin Options', [
+      <Section title="Aircoins" collapsible onSave={() => save('Update Aircoin Options', [
         'aircoinsPerWinEasy', 'aircoinsPerWinMedium', 'aircoinsPerBriefRead',
         'aircoinsFirstLogin', 'aircoinsStreakBonus', 'aircoins100Percent',
         'aircoinsOrderOfBattleEasy', 'aircoinsOrderOfBattleMedium',
@@ -1090,7 +1090,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Game ────────────────────────────────────────────── */}
-      <Section title="Game Options" onSave={() => save('Update Game Options', [
+      <Section title="Game Options" collapsible onSave={() => save('Update Game Options', [
         'easyAnswerCount', 'mediumAnswerCount',
         'passThresholdEasy', 'passThresholdMedium',
       ])}>
@@ -1131,7 +1131,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" onSave={() => save('Update Feature Flags', ['useLiveLeaderboard'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -1141,7 +1141,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Sound Effects ───────────────────────────────────── */}
-      <Section title="Sound Effects" onSave={() => save('Update Sound Settings', ALL_SOUND_KEYS)}>
+      <Section title="Sound Effects" collapsible onSave={() => save('Update Sound Settings', ALL_SOUND_KEYS)}>
         {SOUND_GROUPS.map(group => (
           <div key={group.title} className="mb-4">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-1 pb-1">{group.title}</p>
@@ -1164,7 +1164,7 @@ function SettingsTab({ API }) {
       <AircoinsCeiling API={API} />
 
       {/* ── Award Test Coins ────────────────────────────────── */}
-      <Section title="Award Test Coins">
+      <Section title="Award Test Coins" collapsible>
         <p className="text-xs text-slate-400 mb-3">Awards aircoins to your admin account, logged as "Test Coins".</p>
         <div className="flex items-center gap-3">
           <input
