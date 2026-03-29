@@ -44,6 +44,7 @@ const AI_PROMPT_DEFAULTS = {
   // Quiz generation
   'quiz':                    'You are a quiz question writer for a Royal Air Force training platform. Favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description.',
   'quizRegenerate':          'You are a quiz question writer for a Royal Air Force training platform. Favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description.',
+  'quizMissing':             'You are a quiz question writer for a Royal Air Force training platform. Favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description. You will be given a list of existing questions — do not repeat or closely paraphrase any of them.',
   // Keywords
   'keywords':                'You are a keyword extractor for a Royal Air Force training platform. Prioritise terms that build understanding of the modern RAF — training pathways, bases, aircraft, roles, and operational context. You only select terms that appear verbatim in the provided description text. For each keyword you write a general RAF-specific definition of that term — what it is, its role and capabilities — without referencing the specific intel brief it was found in.',
   // Linking — current
@@ -1682,6 +1683,47 @@ router.post('/ai/generate-quiz', async (req, res) => {
     res.json({ status: 'success', data: { easyQuestions: generated.easyQuestions ?? [], mediumQuestions: generated.mediumQuestions ?? [] } });
   } catch (err) {
     console.error('[generate-quiz] error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/generate-quiz-missing
+// Generates `needed` new questions for a single difficulty tier, avoiding repeats of existing questions.
+router.post('/ai/generate-quiz-missing', async (req, res) => {
+  try {
+    const { title, description, difficulty = 'easy', existingQuestions = [], needed = 1 } = req.body;
+    if (!title && !description) return res.status(400).json({ message: 'title or description required' });
+    if (needed <= 0) return res.json({ status: 'success', data: { questions: [] } });
+
+    const difficultyLabel = difficulty === 'medium' ? 'medium' : 'easy';
+    const difficultyRule  = difficultyLabel === 'easy'
+      ? 'Easy questions test direct recall of specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).'
+      : 'Medium questions require understanding of context or relationships between facts stated in the description.';
+
+    const existingList = existingQuestions.length
+      ? `\n\nExisting questions (do NOT repeat or closely paraphrase any of these):\n${existingQuestions.map((q, i) => `${i + 1}. ${q.question}`).join('\n')}`
+      : '';
+
+    const aiSettings = await AppSettings.getSettings();
+    const data = await openRouterChat([{
+      role: 'system',
+      content: getPrompt(aiSettings, 'quizMissing'),
+    }, {
+      role: 'user',
+      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""${existingList}\n\nUsing ONLY the facts stated in the description above, generate exactly ${needed} NEW ${difficultyLabel} quiz question${needed > 1 ? 's' : ''}.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. ${difficultyRule}\n3. The correct answer must be explicitly supported by the description.\n4. Wrong answers must be plausible but clearly incorrect based on the description.\n5. Exactly 10 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n6. Do NOT repeat or closely paraphrase any of the existing questions listed above.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"questions":[{"question":"...","answers":[{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."}],"correctAnswerIndex":0}]}`,
+    }], 'perplexity/sonar', 4096);
+
+    const raw = data.choices?.[0]?.message?.content ?? '{}';
+    let generated;
+    try {
+      generated = JSON.parse(cleanJson(raw));
+    } catch (parseErr) {
+      console.error('[generate-quiz-missing] JSON parse failed. Raw response:', raw.slice(0, 500));
+      throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
+    }
+    res.json({ status: 'success', data: { questions: (generated.questions ?? []).slice(0, needed) } });
+  } catch (err) {
+    console.error('[generate-quiz-missing] error:', err.message);
     res.status(500).json({ message: err.message });
   }
 });

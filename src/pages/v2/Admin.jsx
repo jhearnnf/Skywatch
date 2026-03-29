@@ -754,6 +754,7 @@ const AI_PROMPT_GROUPS = [
     items: [
       { key: 'quiz',           label: 'Generate Quiz' },
       { key: 'quizRegenerate', label: 'Regenerate Quiz' },
+      { key: 'quizMissing',    label: 'Generate Missing Questions' },
     ],
   },
   {
@@ -2970,21 +2971,62 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     }
   }
 
-  // ── Save questions only ────────────────────────────────────────────────────
-  const saveQuestions = async () => {
-    if (!briefId) return
-    setGenerating('questions')
+  // ── AI: Generate single (fill gap) keywords ───────────────────────────────
+  const generateSingleKeyword = async () => {
+    const needed = keywordsPerBrief - draft.keywords.length
+    if (needed <= 0) return
+    setGenerating('keywords-single')
     try {
-      await fetch(`${API}/api/admin/briefs/${briefId}/questions`, {
+      const description = draft.descriptionSections.join(' ')
+      const res = await fetch(`${API}/api/admin/ai/generate-keywords`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ easyQuestions, mediumQuestions }),
+        body: JSON.stringify({ description, existingKeywords: draft.keywords.map(k => k.keyword), needed, title: draft.title, briefId: briefId || null }),
       })
-      setToast('Questions saved')
+      const data = await res.json()
+      if (data.status === 'success') {
+        setDraft(p => ({ ...p, keywords: [...p.keywords, ...data.data.keywords] }))
+      }
     } finally {
       setGenerating(null)
     }
   }
+
+  // ── AI: Generate missing (fill gap) questions ────────────────────────────
+  const generateSingleQuestion = async () => {
+    const currentQs = qTab === 'easy' ? easyQuestions : mediumQuestions
+    const missing = 10 - currentQs.length
+    if (missing <= 0) return
+    setGenerating('questions-single')
+    try {
+      const res = await fetch(`${API}/api/admin/ai/generate-quiz-missing`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: draft.title,
+          description: draft.descriptionSections.join('\n\n'),
+          difficulty: qTab,
+          existingQuestions: currentQs,
+          needed: missing,
+        }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        if (qTab === 'easy') setEasyQuestions(p => [...p, ...(data.data.questions ?? [])])
+        else setMediumQuestions(p => [...p, ...(data.data.questions ?? [])])
+      }
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  // ── Add blank question ────────────────────────────────────────────────────
+  const addBlankQuestion = () => {
+    const blank = { question: '', correctAnswerIndex: 0, answers: Array(10).fill(null).map(() => ({ title: '' })) }
+    if (qTab === 'easy') setEasyQuestions(p => [...p, blank])
+    else setMediumQuestions(p => [...p, blank])
+  }
+
 
   // ── AI: Generate images ───────────────────────────────────────────────────
   const generateImages = async () => {
@@ -3942,11 +3984,20 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
               </button>
               <button
                 onClick={generateKeywords}
-                disabled={generating === 'keywords' || regeneratingAll}
+                disabled={generating === 'keywords' || generating === 'keywords-single' || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
                 {generating === 'keywords' ? '↺ Generating…' : '↺ Generate Keywords'}
               </button>
+              {draft.keywords.length < keywordsPerBrief && (
+                <button
+                  onClick={generateSingleKeyword}
+                  disabled={generating === 'keywords' || generating === 'keywords-single' || regeneratingAll}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
+                >
+                  {generating === 'keywords-single' ? '↺ Generating…' : `↺ Generate Missing (${keywordsPerBrief - draft.keywords.length})`}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -4029,18 +4080,27 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
             <div className="flex gap-2 flex-wrap mt-4">
               <button
                 onClick={generateQuestions}
-                disabled={generating === 'questions' || autoGenerating || regeneratingAll}
+                disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
                 {generating === 'questions' || autoGenerating ? '↺ Generating…' : '↺ Generate Questions'}
               </button>
-              {briefId && (easyQuestions.length > 0 || mediumQuestions.length > 0) && (
+              {currentQuestions.length < 10 && (
                 <button
-                  onClick={saveQuestions}
-                  disabled={generating === 'questions'}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-40"
+                  onClick={generateSingleQuestion}
+                  disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
                 >
-                  Save Questions
+                  {generating === 'questions-single' ? '↺ Generating…' : `↺ Generate Missing (${10 - currentQuestions.length})`}
+                </button>
+              )}
+              {currentQuestions.length < 10 && (
+                <button
+                  onClick={addBlankQuestion}
+                  disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors disabled:opacity-40"
+                >
+                  + Add Question
                 </button>
               )}
             </div>

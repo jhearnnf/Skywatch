@@ -177,6 +177,9 @@ const intelligenceBriefSchema = new mongoose.Schema(
       // Bases / Squadrons / Missions / Tech / Treaties / Threats
       startYear:          { type: Number },
       endYear:            { type: Number },   // null = still active / ongoing
+
+      // Bases
+      aircraftCount:      { type: Number },   // number of aircraft currently assigned to base
     },
 
     // Relationship arrays — typed links between brief categories

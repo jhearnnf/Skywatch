@@ -6,13 +6,14 @@ import { playSound } from '../../utils/sound'
 
 // ── Order type display metadata ───────────────────────────────────────────
 const ORDER_META = {
-  speed:           { label: 'Speed: Slowest → Fastest',         desc: 'Rank from slowest to fastest top speed',             emoji: '💨', startLabel: 'SLOWEST',                   endLabel: 'FASTEST'                   },
-  year_introduced: { label: 'Year Introduced: Oldest → Latest', desc: 'Rank from earliest to latest year of introduction',  emoji: '📅', startLabel: 'FIRST INTRODUCED',           endLabel: 'MOST RECENTLY INTRODUCED'  },
-  year_retired:    { label: 'Year Retired: Oldest → Latest',    desc: 'Rank from earliest to most recently retired',        emoji: '🗓️', startLabel: 'EARLIEST RETIRED',           endLabel: 'MOST RECENTLY RETIRED'    },
-  rank_hierarchy:  { label: 'Rank Hierarchy',                   desc: 'Arrange in correct hierarchical rank order',         emoji: '🎖️', startLabel: 'MOST SENIOR (hierarchy #1)', endLabel: 'MOST JUNIOR'              },
-  training_week:   { label: 'Training Week Order',              desc: 'Arrange in order of training schedule',              emoji: '📋', startLabel: 'FIRST WEEK / PHASE',         endLabel: 'LAST WEEK / PHASE'        },
-  start_year:      { label: 'Start Year: Oldest → Latest',      desc: 'Rank from earliest to latest start year',           emoji: '📅', startLabel: 'EARLIEST START',             endLabel: 'LATEST START'             },
-  end_year:        { label: 'End Year: Oldest → Latest',        desc: 'Rank from earliest to latest end/conclusion year',  emoji: '🏁', startLabel: 'EARLIEST END',               endLabel: 'LATEST / ONGOING'         },
+  speed:             { label: 'Speed: Slowest → Fastest',            desc: 'Rank from slowest to fastest top speed',             emoji: '💨', startLabel: 'SLOWEST',                   endLabel: 'FASTEST',                  showValue: true  },
+  year_introduced:   { label: 'Year Introduced: Oldest → Latest',    desc: 'Rank from earliest to latest year of introduction',  emoji: '📅', startLabel: 'FIRST INTRODUCED',           endLabel: 'MOST RECENTLY INTRODUCED', showValue: false },
+  year_retired:      { label: 'Year Retired: Oldest → Latest',       desc: 'Rank from earliest to most recently retired',        emoji: '🗓️', startLabel: 'EARLIEST RETIRED',           endLabel: 'MOST RECENTLY RETIRED',    showValue: false },
+  rank_hierarchy:    { label: 'Rank Hierarchy',                       desc: 'Arrange in correct hierarchical rank order',         emoji: '🎖️', startLabel: 'MOST SENIOR (hierarchy #1)', endLabel: 'MOST JUNIOR',              showValue: false },
+  training_week:     { label: 'Training Week Order',                  desc: 'Arrange in order of training schedule',              emoji: '📋', startLabel: 'FIRST WEEK / PHASE',         endLabel: 'LAST WEEK / PHASE',        showValue: false },
+  start_year:        { label: 'Start Year: Oldest → Latest',         desc: 'Rank from earliest to latest start year',            emoji: '📅', startLabel: 'EARLIEST START',             endLabel: 'LATEST START',             showValue: false },
+  end_year:          { label: 'End Year: Oldest → Latest',           desc: 'Rank from earliest to latest end/conclusion year',   emoji: '🏁', startLabel: 'EARLIEST END',               endLabel: 'LATEST / ONGOING',         showValue: false },
+  aircraft_count_asc: { label: 'Aircraft Count: Fewest → Most',      desc: 'Rank from fewest to most aircraft assigned',         emoji: '✈️', startLabel: 'FEWEST AIRCRAFT',            endLabel: 'MOST AIRCRAFT',            showValue: true  },
 }
 
 // ── Roulette selection screen ─────────────────────────────────────────────
@@ -257,7 +258,12 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
               <span className={`w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0 ${badgeColor(i)}`}>
                 {i + 1}
               </span>
-              <span className="flex-1 text-sm font-semibold text-slate-800">{item.briefTitle}</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-semibold text-slate-800">{item.briefTitle}</span>
+                {meta.showValue && item.displayValue && (
+                  <span className="block text-xs text-slate-400 font-medium mt-0.5">{item.displayValue}</span>
+                )}
+              </div>
               <div className="flex flex-col gap-0.5 shrink-0">
                 <button
                   onClick={() => moveUp(i)}

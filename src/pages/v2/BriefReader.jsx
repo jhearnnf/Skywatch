@@ -9,6 +9,7 @@ import MissionDetectedModal from '../../components/MissionDetectedModal'
 import { requiredTier } from '../../utils/subscription'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { playSound } from '../../utils/sound'
+import RafBasesMap from '../../components/RafBasesMap'
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
 function KeywordSheet({ kw, onClose, navigate }) {
@@ -199,6 +200,7 @@ function BriefPill({ b, navigate }) {
 }
 
 function BooStatsPanel({ brief, navigate }) {
+  const [mapOpen, setMapOpen] = useState(false)
   const gd  = brief.gameData ?? {}
   const cat = brief.category
 
@@ -245,8 +247,10 @@ function BooStatsPanel({ brief, navigate }) {
   const historicRelated = (brief.relatedHistoric ?? []).filter(b => b?._id)
 
   const sections = []
+  if (cat === 'Bases')
+    sections.push({ label: '🗺️ Location', items: [], isLocationSection: true })
   if (['Aircrafts', 'Squadrons'].includes(cat) && bases.length > 0)
-    sections.push({ label: `🗺️ Home Base${bases.length > 1 ? 's' : ''}`, items: bases })
+    sections.push({ label: `🗺️ Home Base${bases.length > 1 ? 's' : ''}`, items: bases, isBasesSection: true })
   if (['Bases', 'Aircrafts'].includes(cat) && squadrons.length > 0)
     sections.push({ label: '✈️ Squadrons', items: squadrons })
   if (['Bases', 'Squadrons', 'Tech'].includes(cat) && aircraft.length > 0)
@@ -277,10 +281,38 @@ function BooStatsPanel({ brief, navigate }) {
       )}
       {sections.map((sec, i) => (
         <div key={sec.label} className={stats.length > 0 || i > 0 ? 'mt-4 pt-4 border-t border-brand-200' : ''}>
-          <span className={`text-[10px] font-bold uppercase tracking-widest block mb-2 ${sec.historic ? 'text-amber-600' : 'text-brand-500'}`}>{sec.label}</span>
+          <div className="flex items-center justify-between mb-2">
+            <span className={`text-[10px] font-bold uppercase tracking-widest ${sec.historic ? 'text-amber-600' : 'text-brand-500'}`}>{sec.label}</span>
+            {(sec.isBasesSection || sec.isLocationSection) && (
+              <button
+                onClick={() => setMapOpen(o => !o)}
+                className="text-[10px] font-bold uppercase tracking-widest text-brand-600 hover:text-brand-800 transition-colors px-2 py-0.5 rounded-full border border-brand-300 hover:border-brand-500 bg-brand-50 hover:bg-brand-100"
+              >
+                {mapOpen ? 'Hide Map' : 'View on Map'}
+              </button>
+            )}
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {sec.items.map(b => <BriefPill key={b._id} b={b} navigate={navigate} />)}
           </div>
+          {sec.isBasesSection && mapOpen && (
+            <div className="mt-3">
+              <RafBasesMap
+                mode="view"
+                height={280}
+                highlightedBaseNames={sec.items.map(b => b.title)}
+              />
+            </div>
+          )}
+          {sec.isLocationSection && mapOpen && (
+            <div className="mt-3">
+              <RafBasesMap
+                mode="view"
+                height={280}
+                highlightedBaseNames={[brief.title]}
+              />
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -531,7 +563,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
 }
 
 // ── Already-read screen ──────────────────────────────────────────────────
-const BOO_CATS = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']
+const BOO_CATS = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases']
 
 function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) {
   const showBoo    = BOO_CATS.includes(brief.category)
@@ -654,6 +686,8 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) 
                 <p className="text-xs text-slate-400 mt-0.5">
                   {booState === 'locked-aircraft-reads'
                     ? 'Read more Aircrafts briefs to unlock'
+                    : booState === 'locked-bases-reads'
+                    ? 'Read more Bases briefs to unlock'
                     : 'Pass the quiz to unlock'}
                 </p>
               </div>
@@ -870,6 +904,7 @@ export default function BriefReader() {
         if (!booAvail) {
           const reason = booData.data?.reason
           if      (reason === 'needs-aircraft-reads') setBooState('locked-aircraft-reads')
+          else if (reason === 'needs-bases-reads')    setBooState('locked-bases-reads')
           else if (reason === 'quiz_not_passed')      setBooState('locked-quiz')
           else                                        setBooState('unavailable')
           return
@@ -886,15 +921,22 @@ export default function BriefReader() {
     return () => { cancelled = true }
   }, [done, readRecord?.completed, brief, user, briefId, API]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Tutorial on first visit
+  // Reset the "opened" flag when the user enters re-read mode so the sound re-fires
   useEffect(() => {
-    if (!loading && brief && !briefOpenedRef.current && !done) {
+    if (reReadMode) briefOpenedRef.current = false
+  }, [reReadMode])
+
+  // Tutorial on first visit (and on re-read entry)
+  useEffect(() => {
+    // Don't play while on the AlreadyReadScreen (completed brief, not yet in re-read mode)
+    const onAlreadyReadScreen = readRecord?.completed && user && !reReadMode
+    if (!loading && brief && !briefOpenedRef.current && !done && !onAlreadyReadScreen) {
       briefOpenedRef.current = true
       playSound('intel_brief_opened')
       const t = setTimeout(() => start('briefReader'), 800)
       return () => clearTimeout(t)
     }
-  }, [loading, brief]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loading, brief, readRecord, reReadMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sections = brief?.descriptionSections?.filter(Boolean) ?? []
   const total    = sections.length

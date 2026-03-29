@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const BATTLE_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties'];
+const BATTLE_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases'];
 
 const ORDER_TYPES = {
   Aircrafts: ['speed', 'year_introduced', 'year_retired'],
@@ -9,17 +9,19 @@ const ORDER_TYPES = {
   Missions:  ['start_year', 'end_year'],
   Tech:      ['start_year', 'end_year'],
   Treaties:  ['start_year', 'end_year'],
+  Bases:     ['start_year', 'aircraft_count_asc'],
 };
 
 // gameData field key for each orderType
 const REQUIRED_FIELD = {
-  speed:           'topSpeedKph',
-  year_introduced: 'yearIntroduced',
-  year_retired:    'yearRetired',
-  rank_hierarchy:  'rankHierarchyOrder',
-  training_week:   'trainingWeekStart',
-  start_year:      'startYear',
-  end_year:        'endYear',
+  speed:             'topSpeedKph',
+  year_introduced:   'yearIntroduced',
+  year_retired:      'yearRetired',
+  rank_hierarchy:    'rankHierarchyOrder',
+  training_week:     'trainingWeekStart',
+  start_year:        'startYear',
+  end_year:          'endYear',
+  aircraft_count_asc: 'aircraftCount',
 };
 
 const schema = new mongoose.Schema({

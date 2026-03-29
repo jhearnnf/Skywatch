@@ -10,13 +10,11 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import { playSound } from '../../utils/sound'
-import { RAF_BASES } from '../../data/rafBases'
+import RafBasesMap from '../../components/RafBasesMap'
 
 // ── Phase constants ────────────────────────────────────────────────────────
 const PHASE_LOADING     = 'loading'
@@ -113,7 +111,7 @@ function Round1({ data, onCorrect, onWrong }) {
 }
 
 // ── Round 1 Complete interstitial ─────────────────────────────────────────
-function Round1Complete({ aircraftTitle, round1Coins, onContinue }) {
+function Round1Complete({ aircraftTitle, round1Coins, correctBaseCount, onContinue }) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -145,7 +143,7 @@ function Round1Complete({ aircraftTitle, round1Coins, onContinue }) {
       <div className="bg-brand-50 border border-brand-200 rounded-2xl p-4 mb-8 text-left max-w-xs mx-auto">
         <p className="text-sm font-bold text-brand-800 mb-1">🗺️ Round 2 — Find the Base</p>
         <p className="text-xs text-brand-700 leading-relaxed">
-          Now locate where this aircraft is based. Select its RAF home base on the map to complete the mission.
+          Now locate where this aircraft is based. Select its RAF home base{correctBaseCount > 1 ? 's' : ''} on the map to complete the mission.
         </p>
       </div>
 
@@ -203,11 +201,6 @@ function Round2({ data, aircraftTitle, onSubmit }) {
   const [submitted, setSubmitted] = useState(false)
   const [startTime] = useState(() => Date.now())
 
-  const baseMap = {}
-  for (const b of data.bases) {
-    baseMap[b.title.toLowerCase()] = b
-  }
-
   function toggleBase(base) {
     if (submitted) return
     setSelected(prev => {
@@ -244,56 +237,15 @@ function Round2({ data, aircraftTitle, onSubmit }) {
         )}
       </p>
 
-      <div className="rounded-2xl overflow-hidden border border-slate-200 mb-4" style={{ height: 340 }}>
-        <MapContainer
-          center={[54.5, -3.5]}
-          zoom={5}
-          style={{ height: '100%', width: '100%' }}
-          zoomControl={true}
-          attributionControl={false}
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; OpenStreetMap contributors'
-          />
-          {RAF_BASES.map(base => {
-            const dbBase = baseMap[base.name.toLowerCase()]
-            if (!dbBase) return null
-
-            const isSelected = selected.has(String(dbBase._id))
-            const isCorrect  = submitted && dbBase.isCorrect
-            const isWrong    = submitted && isSelected && !dbBase.isCorrect
-            const isRead     = dbBase.isRead
-
-            let color = isRead ? '#1d4ed8' : '#94a3b8'
-            if (submitted) {
-              if (isCorrect)   color = '#16a34a'
-              else if (isWrong) color = '#dc2626'
-            } else if (isSelected) {
-              color = '#f59e0b'
-            }
-
-            return (
-              <CircleMarker
-                key={base.name}
-                center={[base.lat, base.lng]}
-                radius={isSelected || (submitted && isCorrect) ? 10 : 7}
-                pathOptions={{
-                  color,
-                  fillColor: color,
-                  fillOpacity: isRead || isSelected || submitted ? 0.85 : 0.4,
-                  weight: isSelected ? 3 : 2,
-                }}
-                eventHandlers={{ click: () => toggleBase(dbBase) }}
-              >
-                <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-                  <span className="text-xs font-semibold">{base.name}</span>
-                  {!isRead && <span className="text-slate-400 text-xs"> · not read</span>}
-                </Tooltip>
-              </CircleMarker>
-            )
-          })}
-        </MapContainer>
+      <div className="mb-4">
+        <RafBasesMap
+          mode="game"
+          height={340}
+          bases={data.bases}
+          selected={selected}
+          submitted={submitted}
+          onToggle={toggleBase}
+        />
       </div>
 
       <div className="mb-4 min-h-[28px]">
@@ -709,6 +661,7 @@ export default function WhereAircraftGame() {
             <Round1Complete
               aircraftTitle={round1Data.options.find(o => o.isCorrect)?.title ?? ''}
               round1Coins={round1Coins}
+              correctBaseCount={round2Data?.correctBaseCount ?? 1}
               onContinue={() => setPhase(PHASE_ROUND2)}
             />
           </motion.div>

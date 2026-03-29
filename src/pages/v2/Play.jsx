@@ -221,11 +221,6 @@ export default function Play() {
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: i * 0.05 }}
                         >
-                          {isFirstNeedsRead && hasActive && (
-                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 mt-1">
-                              Read to unlock more quizzes
-                            </p>
-                          )}
                           <Link
                             to={`/brief/${brief._id}`}
                             className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200 hover:border-amber-300 transition-all group"

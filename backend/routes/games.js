@@ -27,8 +27,9 @@ function getDisplayValue(orderType, gameData) {
     case 'rank_hierarchy':  return gameData.rankHierarchyOrder  != null ? `Order: ${gameData.rankHierarchyOrder}` : null;
     case 'training_week':   return gameData.trainingWeekStart   != null
       ? `Wk ${gameData.trainingWeekStart}${gameData.trainingWeekEnd ? `–${gameData.trainingWeekEnd}` : ''}` : null;
-    case 'start_year':      return gameData.startYear           != null ? String(gameData.startYear)      : null;
-    case 'end_year':        return gameData.endYear             != null ? String(gameData.endYear)        : `Ongoing (${cy})`;
+    case 'start_year':        return gameData.startYear           != null ? String(gameData.startYear)      : null;
+    case 'end_year':          return gameData.endYear             != null ? String(gameData.endYear)        : `Ongoing (${cy})`;
+    case 'aircraft_count_asc': return gameData.aircraftCount      != null ? `${gameData.aircraftCount} aircraft` : null;
     default: return null;
   }
 }
@@ -438,14 +439,20 @@ router.get('/battle-of-order/briefs', protect, async (req, res) => {
     const readSet       = new Set(readRecords.map(r => r.intelBriefId.toString()));
     const passedQuizSet = new Set(passedQuizRecords.map(r => r.intelBriefId.toString()));
 
-    // Aircraft-reads gate: user must have read ≥ threshold published Aircrafts briefs
-    const aircraftThreshold = needed; // medium=5, easy=3
+    // Category-reads gate: Bases briefs gate on bases reads; all others gate on aircraft reads
     const aircraftBriefIds = await IntelligenceBrief.find({ category: 'Aircrafts', status: 'published' })
       .select('_id').lean().then(docs => docs.map(d => d._id));
     const aircraftReadsCount = await IntelligenceBriefRead.countDocuments({
       userId: req.user._id, completed: true, intelBriefId: { $in: aircraftBriefIds },
     });
-    const meetsAircraftThreshold = aircraftReadsCount >= aircraftThreshold;
+    const meetsAircraftThreshold = aircraftReadsCount >= needed;
+
+    const basesBriefIds = await IntelligenceBrief.find({ category: 'Bases', status: 'published' })
+      .select('_id').lean().then(docs => docs.map(d => d._id));
+    const basesReadsCount = await IntelligenceBriefRead.countDocuments({
+      userId: req.user._id, completed: true, intelBriefId: { $in: basesBriefIds },
+    });
+    const meetsBasesThreshold = basesReadsCount >= needed;
 
     // Annotate + subscription filter
     const annotated = allDocs
@@ -453,8 +460,9 @@ router.get('/battle-of-order/briefs', protect, async (req, res) => {
       .map(b => {
         const id = b._id.toString();
         const hasData = booCategories.has(b.category);
+        const meetsGate = b.category === 'Bases' ? meetsBasesThreshold : meetsAircraftThreshold;
         let booState;
-        if      (!meetsAircraftThreshold)  booState = 'needs-aircraft-reads';
+        if      (!meetsGate)               booState = b.category === 'Bases' ? 'needs-bases-reads' : 'needs-aircraft-reads';
         else if (wonBooSet.has(id))        booState = 'completed';
         else if (!hasData)                 booState = 'no-data';
         else if (!readSet.has(id))         booState = 'needs-read';
@@ -463,8 +471,8 @@ router.get('/battle-of-order/briefs', protect, async (req, res) => {
         return { _id: b._id, title: b.title, category: b.category, subcategory: b.subcategory, booState };
       });
 
-    // Sort: active → needs-quiz → needs-read → completed → no-data → needs-aircraft-reads
-    const STATE_ORDER = { active: 0, 'needs-quiz': 1, 'needs-read': 2, completed: 3, 'no-data': 4, 'needs-aircraft-reads': 5 };
+    // Sort: active → needs-quiz → needs-read → completed → no-data → needs-aircraft-reads / needs-bases-reads
+    const STATE_ORDER = { active: 0, 'needs-quiz': 1, 'needs-read': 2, completed: 3, 'no-data': 4, 'needs-aircraft-reads': 5, 'needs-bases-reads': 5 };
     annotated.sort((a, b) => (STATE_ORDER[a.booState] ?? 99) - (STATE_ORDER[b.booState] ?? 99));
 
     const total      = annotated.length;
@@ -541,21 +549,28 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
         .map(r => r.gameId.anchorBriefId.toString())
     );
 
-    // Aircraft-reads gate: user must have read ≥ threshold published Aircrafts briefs
-    const aircraftThreshold = needed; // medium=5, easy=3
-    const aircraftBriefIds = await IntelligenceBrief.find({ category: 'Aircrafts', status: 'published' })
+    // Category-reads gate: Bases briefs gate on bases reads; all others gate on aircraft reads
+    const aircraftBriefIdsRec = await IntelligenceBrief.find({ category: 'Aircrafts', status: 'published' })
       .select('_id').lean().then(docs => docs.map(d => d._id));
-    const aircraftReadsCount = await IntelligenceBriefRead.countDocuments({
-      userId: req.user._id, completed: true, intelBriefId: { $in: aircraftBriefIds },
+    const aircraftReadsCountRec = await IntelligenceBriefRead.countDocuments({
+      userId: req.user._id, completed: true, intelBriefId: { $in: aircraftBriefIdsRec },
     });
-    const meetsAircraftThreshold = aircraftReadsCount >= aircraftThreshold;
+    const meetsAircraftThresholdRec = aircraftReadsCountRec >= needed;
 
-    // Bucket each brief — full prerequisite chain: aircraft gate → read → quiz → BOO
-    const active = [], completed = [], needsQuiz = [], needsRead = [], noData = [], needsAircraftReads = [];
+    const basesBriefIdsRec = await IntelligenceBrief.find({ category: 'Bases', status: 'published' })
+      .select('_id').lean().then(docs => docs.map(d => d._id));
+    const basesReadsCountRec = await IntelligenceBriefRead.countDocuments({
+      userId: req.user._id, completed: true, intelBriefId: { $in: basesBriefIdsRec },
+    });
+    const meetsBasesThresholdRec = basesReadsCountRec >= needed;
+
+    // Bucket each brief — full prerequisite chain: gate → read → quiz → BOO
+    const active = [], completed = [], needsQuiz = [], needsRead = [], noData = [], needsAircraftReads = [], needsBasesReads = [];
     for (const brief of accessible) {
       const id      = brief._id.toString();
       const hasData = booCategories.has(brief.category);
-      if      (!meetsAircraftThreshold)  needsAircraftReads.push(brief);
+      const meetsGate = brief.category === 'Bases' ? meetsBasesThresholdRec : meetsAircraftThresholdRec;
+      if      (!meetsGate)               brief.category === 'Bases' ? needsBasesReads.push(brief) : needsAircraftReads.push(brief);
       else if (!hasData)                 noData.push(brief);
       else if (!readSet.has(id))         needsRead.push(brief);
       else if (!passedQuizSet.has(id))   needsQuiz.push(brief);
@@ -569,12 +584,13 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
       if (remaining <= 0 || list.length === 0) return;
       list.slice(0, remaining).forEach(b => result.push({ ...b, booState: state }));
     };
-    addBriefs(active,             'active');
-    addBriefs(needsQuiz,          'needs-quiz');
-    addBriefs(needsRead,          'needs-read');
-    addBriefs(completed,          'completed');
-    addBriefs(noData,             'no-data');
+    addBriefs(active,            'active');
+    addBriefs(needsQuiz,         'needs-quiz');
+    addBriefs(needsRead,         'needs-read');
+    addBriefs(completed,         'completed');
+    addBriefs(noData,            'no-data');
     addBriefs(needsAircraftReads, 'needs-aircraft-reads');
+    addBriefs(needsBasesReads,   'needs-bases-reads');
 
     res.json({ status: 'success', data: { briefs: result } });
   } catch (err) {
@@ -698,14 +714,16 @@ router.get('/battle-of-order/options', protect, async (req, res) => {
     const difficulty = userDoc.difficultySetting ?? 'easy';
     const needed     = difficulty === 'medium' ? 5 : 3;
 
-    // Prerequisite 2: aircraft-reads gate (must have read ≥ threshold published Aircrafts briefs)
-    const aircraftBriefIds = await IntelligenceBrief.find({ category: 'Aircrafts', status: 'published' })
+    // Prerequisite 2: category-reads gate (Bases gates on bases reads; all others gate on aircraft reads)
+    const gateCategory = anchor.category === 'Bases' ? 'Bases' : 'Aircrafts';
+    const gateBriefIds = await IntelligenceBrief.find({ category: gateCategory, status: 'published' })
       .select('_id').lean().then(docs => docs.map(d => d._id));
-    const aircraftReadsCount = await IntelligenceBriefRead.countDocuments({
-      userId: req.user._id, completed: true, intelBriefId: { $in: aircraftBriefIds },
+    const gateReadsCount = await IntelligenceBriefRead.countDocuments({
+      userId: req.user._id, completed: true, intelBriefId: { $in: gateBriefIds },
     });
-    if (aircraftReadsCount < needed) {
-      return res.json({ status: 'success', data: { available: false, reason: 'needs-aircraft-reads', aircraftThreshold: needed } });
+    if (gateReadsCount < needed) {
+      const reason = anchor.category === 'Bases' ? 'needs-bases-reads' : 'needs-aircraft-reads';
+      return res.json({ status: 'success', data: { available: false, reason, threshold: needed } });
     }
 
     // Prerequisite 3: user must have passed the quiz
@@ -757,14 +775,15 @@ router.post('/battle-of-order/generate', protect, async (req, res) => {
     const difficulty = userDoc.difficultySetting ?? 'easy';
     const needed     = difficulty === 'medium' ? 5 : 3;
 
-    // Prerequisite 2: aircraft-reads gate
-    const aircraftBriefIds = await IntelligenceBrief.find({ category: 'Aircrafts', status: 'published' })
+    // Prerequisite 2: category-reads gate
+    const gateCategory2 = anchor.category === 'Bases' ? 'Bases' : 'Aircrafts';
+    const gateBriefIds2 = await IntelligenceBrief.find({ category: gateCategory2, status: 'published' })
       .select('_id').lean().then(docs => docs.map(d => d._id));
-    const aircraftReadsCount = await IntelligenceBriefRead.countDocuments({
-      userId: req.user._id, completed: true, intelBriefId: { $in: aircraftBriefIds },
+    const gateReadsCount2 = await IntelligenceBriefRead.countDocuments({
+      userId: req.user._id, completed: true, intelBriefId: { $in: gateBriefIds2 },
     });
-    if (aircraftReadsCount < needed) {
-      return res.status(403).json({ message: `Read ${needed} Aircrafts briefs to unlock Battle of Order.` });
+    if (gateReadsCount2 < needed) {
+      return res.status(403).json({ message: `Read ${needed} ${gateCategory2} briefs to unlock Battle of Order.` });
     }
 
     // Prerequisite 3: user must have passed the quiz
@@ -799,8 +818,9 @@ router.post('/battle-of-order/generate', protect, async (req, res) => {
       if (orderType === 'year_retired')    return gd.yearRetired       ?? cy;
       if (orderType === 'rank_hierarchy')  return gd.rankHierarchyOrder ?? Infinity;
       if (orderType === 'training_week')   return gd.trainingWeekStart  ?? Infinity;
-      if (orderType === 'start_year')      return gd.startYear         ?? Infinity;
-      if (orderType === 'end_year')        return gd.endYear           ?? cy;
+      if (orderType === 'start_year')        return gd.startYear          ?? Infinity;
+      if (orderType === 'end_year')          return gd.endYear            ?? cy;
+      if (orderType === 'aircraft_count_asc') return gd.aircraftCount     ?? Infinity;
       return 0;
     };
 
@@ -824,9 +844,10 @@ router.post('/battle-of-order/generate', protect, async (req, res) => {
       const brief = pool.find(b => b._id.toString() === c.briefId.toString()) ??
                     (anchor._id.toString() === c.briefId.toString() ? anchor : null);
       return {
-        choiceId:   c._id,
-        briefTitle: brief?.title,
-        briefMedia: getBriefMedia(brief ?? {}),
+        choiceId:     c._id,
+        briefTitle:   brief?.title,
+        briefMedia:   getBriefMedia(brief ?? {}),
+        displayValue: getDisplayValue(orderType, brief?.gameData),
       };
     });
 
