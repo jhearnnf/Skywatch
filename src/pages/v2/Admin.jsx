@@ -646,24 +646,56 @@ function AircoinsCeiling({ API }) {
   )
 }
 
-function Section({ title, children, onSave, saving }) {
+function Section({ title, children, onSave, saving, collapsible = false }) {
+  const [open, setOpen] = useState(!collapsible)
   return (
     <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
-      <div className="px-5 py-4 border-b border-slate-100">
-        <h3 className="font-bold text-slate-800">{title}</h3>
-      </div>
-      <div className="px-5 py-3">{children}</div>
-      {onSave && (
-        <div className="px-5 pb-4">
-          <button
-            onClick={onSave}
-            disabled={saving}
-            className="mt-1 px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
+      {collapsible ? (
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="w-full px-5 py-4 border-b border-slate-100 flex items-center justify-between text-left"
+        >
+          <h3 className="font-bold text-slate-800">{title}</h3>
+          <span className="text-slate-400 text-xs ml-2">{open ? '▲' : '▼'}</span>
+        </button>
+      ) : (
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h3 className="font-bold text-slate-800">{title}</h3>
         </div>
       )}
+      {open && (
+        <>
+          <div className="px-5 py-3">{children}</div>
+          {onSave && (
+            <div className="px-5 pb-4">
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className="mt-1 px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function CollapsibleBox({ title, headerContent, headerStyle, bodyStyle, children }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-2xl overflow-hidden mb-4 border-2" style={bodyStyle}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-5 py-4 border-b flex items-center justify-between text-left"
+        style={headerStyle}
+      >
+        <div className="flex items-center gap-2">{headerContent ?? <h3 className="font-bold text-slate-800">{title}</h3>}</div>
+        <span className="text-xs ml-2" style={{ color: headerStyle?.color ?? '#94a3b8' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && children}
     </div>
   )
 }
@@ -781,6 +813,7 @@ const AI_PROMPT_GROUPS = [
 ]
 
 function AiPromptsSection({ API }) {
+  const [open,      setOpen]      = useState(false)
   const [prompts,   setPrompts]   = useState(null)   // { key: currentValue }
   const [defaults,  setDefaults]  = useState(null)   // { key: hardcodedDefault }
   const [draft,     setDraft]     = useState({})
@@ -837,7 +870,11 @@ function AiPromptsSection({ API }) {
   return (
     <div className="rounded-2xl overflow-hidden mb-4 border-2" style={{ background: '#fff5f5', borderColor: '#fca5a5' }}>
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
-      <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: '#fca5a5', background: '#fee2e2' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-5 py-4 border-b flex items-center justify-between text-left"
+        style={{ borderColor: '#fca5a5', background: '#fee2e2' }}
+      >
         <div className="flex items-center gap-2">
           <span style={{ color: '#b91c1c', fontSize: 16 }}>⚠</span>
           <div>
@@ -852,18 +889,21 @@ function AiPromptsSection({ API }) {
               {dirtyCount} unsaved
             </span>
           )}
-          <button
-            onClick={saveAll}
-            disabled={saving || dirtyCount === 0}
-            className="px-5 py-2 text-white text-sm font-bold rounded-xl transition-opacity disabled:opacity-40"
-            style={{ background: '#b91c1c' }}
-          >
-            {saving ? 'Saving…' : 'Save All'}
-          </button>
+          {open && (
+            <button
+              onClick={e => { e.stopPropagation(); saveAll() }}
+              disabled={saving || dirtyCount === 0}
+              className="px-5 py-2 text-white text-sm font-bold rounded-xl transition-opacity disabled:opacity-40"
+              style={{ background: '#b91c1c' }}
+            >
+              {saving ? 'Saving…' : 'Save All'}
+            </button>
+          )}
+          <span className="text-xs" style={{ color: '#b91c1c', opacity: 0.6 }}>{open ? '▲' : '▼'}</span>
         </div>
-      </div>
+      </button>
 
-      <div className="px-5 py-4 space-y-6">
+      {open && <div className="px-5 py-4 space-y-6">
         {AI_PROMPT_GROUPS.map(({ group, items, accordion }) => {
           const isOpen = openGroup === group
           return (
@@ -917,7 +957,7 @@ function AiPromptsSection({ API }) {
             </div>
           )
         })}
-      </div>
+      </div>}
     </div>
   )
 }
@@ -1716,7 +1756,7 @@ function ContentTab({ API }) {
       {modal && <ConfirmModal title={modal.label} onConfirm={modal.isTutorial ? confirmSaveTutorials : confirmSave} onCancel={() => setModal(null)} />}
 
       {/* ── Email Settings ────────────────────────────────────────── */}
-      <Section title="Email Settings" onSave={() => save('Update Email Settings', ['emailWelcomeEnabled', 'emailConfirmationEnabled'])}>
+      <Section title="Email Settings" collapsible onSave={() => save('Update Email Settings', ['emailWelcomeEnabled', 'emailConfirmationEnabled'])}>
         <Toggle
           label="Send welcome email"
           hint="When off, new users will not receive a welcome email after registering"
@@ -1732,7 +1772,7 @@ function ContentTab({ API }) {
       </Section>
 
       {/* ── Welcome Email ─────────────────────────────────────────── */}
-      <Section title="Welcome Email" onSave={() => save('Update Welcome Email', ['welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
+      <Section title="Welcome Email" collapsible onSave={() => save('Update Welcome Email', ['welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
         {field('welcomeEmailSubject', 'Subject',  EMAIL_DEFAULTS.welcomeEmailSubject)}
         {field('welcomeEmailHeading', 'Heading',  EMAIL_DEFAULTS.welcomeEmailHeading)}
         {field('welcomeEmailBody',    'Body',     EMAIL_DEFAULTS.welcomeEmailBody, 4)}
@@ -1751,7 +1791,7 @@ function ContentTab({ API }) {
       </Section>
 
       {/* ── Difficulty Select Screen ─────────────────────────────── */}
-      <Section title="Difficulty Select Screen" onSave={() => save('Update Combat Readiness Screen', [
+      <Section title="Difficulty Select Screen" collapsible onSave={() => save('Update Combat Readiness Screen', [
         'combatReadinessTitle', 'combatReadinessSubtitle',
         'combatReadinessEasyLabel', 'combatReadinessEasyTag', 'combatReadinessEasyStars', 'combatReadinessEasyFlavor',
         'combatReadinessMediumLabel', 'combatReadinessMediumTag', 'combatReadinessMediumStars', 'combatReadinessMediumFlavor',
@@ -1771,12 +1811,15 @@ function ContentTab({ API }) {
       </Section>
 
       {/* ── AI Content Generation ─────────────────────────────────── */}
-      <div className="rounded-2xl overflow-hidden mb-4 border-2" style={{ background: '#fff5f5', borderColor: '#fca5a5' }}>
-        <div className="px-5 py-4 border-b flex items-center gap-2" style={{ borderColor: '#fca5a5', background: '#fee2e2' }}>
+      <CollapsibleBox
+        bodyStyle={{ background: '#fff5f5', borderColor: '#fca5a5' }}
+        headerStyle={{ borderColor: '#fca5a5', background: '#fee2e2', color: '#7f1d1d' }}
+        headerContent={<>
           <span style={{ color: '#b91c1c', fontSize: 16 }}>⚠</span>
           <h3 className="font-bold" style={{ color: '#7f1d1d' }}>AI Content Generation</h3>
           <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fca5a5', color: '#7f1d1d' }}>Critical</span>
-        </div>
+        </>}
+      >
         <div className="px-5 py-3">
           <NumInput
             label="Keywords per brief"
@@ -1796,17 +1839,20 @@ function ContentTab({ API }) {
             Save
           </button>
         </div>
-      </div>
+      </CollapsibleBox>
 
       {/* ── AI Prompts ────────────────────────────────────────────── */}
       <AiPromptsSection API={API} />
 
       {/* ── Tutorials ─────────────────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <CollapsibleBox
+        bodyStyle={{ border: '1px solid #e2e8f0', borderRadius: undefined }}
+        headerStyle={{ borderColor: '#f1f5f9', background: '#fff' }}
+        headerContent={<>
           <h3 className="font-bold text-slate-800">Tutorials</h3>
-          <p className="text-xs text-slate-400">Leave a field blank to use the default text</p>
-        </div>
+          <p className="text-xs text-slate-400 ml-2">Leave a field blank to use the default text</p>
+        </>}
+      >
         <div className="px-5 py-3">
           {TUTORIAL_META.map(({ key: tutKey, label: tutLabel }) => {
             const steps    = TUTORIAL_STEPS[tutKey] ?? []
@@ -1872,7 +1918,7 @@ function ContentTab({ API }) {
             Save Tutorials
           </button>
         </div>
-      </div>
+      </CollapsibleBox>
     </div>
   )
 }
