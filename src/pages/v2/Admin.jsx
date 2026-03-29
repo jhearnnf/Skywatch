@@ -714,6 +714,206 @@ function PctSlider({ label, value, onChange }) {
   )
 }
 
+// ── AI Prompt Groups definition ───────────────────────────────────────────────
+const AI_PROMPT_GROUPS = [
+  {
+    group: 'Content Generation',
+    items: [
+      { key: 'brief.news',            label: 'Generate Brief — News' },
+      { key: 'brief.topic',           label: 'Generate Brief — Topic' },
+      { key: 'regenerateBrief',       label: 'Regenerate Brief (description)' },
+      { key: 'regenerateDescription', label: 'Regenerate Description Only' },
+      { key: 'keywords',              label: 'Extract Keywords' },
+    ],
+  },
+  {
+    group: 'Quiz Generation',
+    items: [
+      { key: 'quiz',           label: 'Generate Quiz' },
+      { key: 'quizRegenerate', label: 'Regenerate Quiz' },
+    ],
+  },
+  {
+    group: 'Linking — Current',
+    accordion: true,
+    items: [
+      { key: 'links.Aircrafts:bases',     label: 'Aircraft → Bases' },
+      { key: 'links.Aircrafts:squadrons', label: 'Aircraft → Squadrons' },
+      { key: 'links.Aircrafts:missions',  label: 'Aircraft → Missions' },
+      { key: 'links.Squadrons:bases',     label: 'Squadrons → Bases' },
+      { key: 'links.Squadrons:aircraft',  label: 'Squadrons → Aircraft' },
+      { key: 'links.Squadrons:missions',  label: 'Squadrons → Missions' },
+      { key: 'links.Bases:squadrons',     label: 'Bases → Squadrons' },
+      { key: 'links.Bases:aircraft',      label: 'Bases → Aircraft' },
+      { key: 'links.Roles:training',      label: 'Roles → Training' },
+      { key: 'links.Tech:aircraft',       label: 'Tech → Aircraft' },
+    ],
+  },
+  {
+    group: 'Linking — Historic',
+    accordion: true,
+    items: [
+      { key: 'links.historic.Aircrafts:bases',     label: 'Aircraft → Bases (historic)' },
+      { key: 'links.historic.Aircrafts:squadrons', label: 'Aircraft → Squadrons (historic)' },
+      { key: 'links.historic.Aircrafts:missions',  label: 'Aircraft → Missions (historic)' },
+      { key: 'links.historic.Squadrons:bases',     label: 'Squadrons → Bases (historic)' },
+      { key: 'links.historic.Squadrons:aircraft',  label: 'Squadrons → Aircraft (historic)' },
+      { key: 'links.historic.Squadrons:missions',  label: 'Squadrons → Missions (historic)' },
+      { key: 'links.historic.Bases:squadrons',     label: 'Bases → Squadrons (historic)' },
+      { key: 'links.historic.Bases:aircraft',      label: 'Bases → Aircraft (historic)' },
+    ],
+  },
+  {
+    group: 'Bases',
+    items: [
+      { key: 'bases.current', label: 'Generate Bases — Current' },
+      { key: 'bases.historic', label: 'Generate Bases — Historic' },
+    ],
+  },
+  {
+    group: 'Utility',
+    items: [
+      { key: 'newsHeadlines',   label: 'News Headlines' },
+      { key: 'battleOrderData', label: 'Battle Order Data' },
+      { key: 'imageExtraction', label: 'Image Subject Extraction' },
+    ],
+  },
+]
+
+function AiPromptsSection({ API }) {
+  const [prompts,   setPrompts]   = useState(null)   // { key: currentValue }
+  const [defaults,  setDefaults]  = useState(null)   // { key: hardcodedDefault }
+  const [draft,     setDraft]     = useState({})
+  const [openGroup, setOpenGroup] = useState(null)
+  const [saving,    setSaving]    = useState(false)
+  const [toast,     setToast]     = useState('')
+  const [dirty,     setDirty]     = useState({})     // keys that have unsaved changes
+
+  useEffect(() => {
+    fetch(`${API}/api/admin/ai-prompts`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.data) {
+          setPrompts(d.data.prompts)
+          setDefaults(d.data.defaults)
+          setDraft(d.data.prompts)
+        }
+      })
+  }, [API])
+
+  const onChange = (key, value) => {
+    setDraft(p => ({ ...p, [key]: value }))
+    setDirty(p => ({ ...p, [key]: true }))
+  }
+
+  const restoreDefault = (key) => {
+    const def = defaults?.[key] ?? ''
+    setDraft(p => ({ ...p, [key]: def }))
+    setDirty(p => ({ ...p, [key]: true }))
+  }
+
+  const saveAll = async () => {
+    setSaving(true)
+    try {
+      await fetch(`${API}/api/admin/ai-prompts`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompts: draft }),
+      })
+      setPrompts({ ...draft })
+      setDirty({})
+      setToast('✓ AI prompts saved')
+    } catch (e) {
+      setToast('Error saving prompts')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const dirtyCount = Object.values(dirty).filter(Boolean).length
+
+  if (!prompts) return null
+
+  return (
+    <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 className="font-bold text-slate-800">AI Prompts</h3>
+          <p className="text-xs text-slate-400 mt-0.5">Leave a field blank or click Restore to use the hardcoded default</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {dirtyCount > 0 && (
+            <span className="text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+              {dirtyCount} unsaved
+            </span>
+          )}
+          <button
+            onClick={saveAll}
+            disabled={saving || dirtyCount === 0}
+            className="px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
+          >
+            {saving ? 'Saving…' : 'Save All'}
+          </button>
+        </div>
+      </div>
+
+      <div className="px-5 py-4 space-y-6">
+        {AI_PROMPT_GROUPS.map(({ group, items, accordion }) => {
+          const isOpen = openGroup === group
+          return (
+            <div key={group}>
+              {accordion ? (
+                <button
+                  onClick={() => setOpenGroup(isOpen ? null : group)}
+                  className="w-full flex items-center justify-between py-2 text-left border-b border-slate-100"
+                >
+                  <span className="text-sm font-bold text-slate-700">{group}</span>
+                  <span className="text-slate-400 text-xs">{isOpen ? '▲ collapse' : `${items.length} prompts ▼`}</span>
+                </button>
+              ) : (
+                <p className="text-sm font-bold text-slate-700 border-b border-slate-100 pb-2">{group}</p>
+              )}
+              {(!accordion || isOpen) && (
+                <div className="mt-3 space-y-4">
+                  {items.map(({ key, label }) => {
+                    const isDirty = dirty[key]
+                    const isDefault = draft[key] === defaults?.[key]
+                    return (
+                      <div key={key}>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-semibold text-slate-600">
+                            {label}
+                            {isDirty && <span className="ml-2 text-amber-500 font-bold">●</span>}
+                          </label>
+                          {!isDefault && (
+                            <button
+                              onClick={() => restoreDefault(key)}
+                              className="text-[11px] text-slate-400 hover:text-brand-600 transition-colors"
+                            >
+                              Restore default
+                            </button>
+                          )}
+                        </div>
+                        <textarea
+                          value={draft[key] ?? ''}
+                          onChange={e => onChange(key, e.target.value)}
+                          rows={4}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-brand-200 bg-slate-50 text-slate-800 resize-y"
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function SettingsTab({ API }) {
   const { awardAircoins } = useAuth()
   const [settings, setSettings] = useState(null)
@@ -1573,6 +1773,9 @@ function ContentTab({ API }) {
           max={50}
         />
       </Section>
+
+      {/* ── AI Prompts ────────────────────────────────────────────── */}
+      <AiPromptsSection API={API} />
 
       {/* ── Tutorials ─────────────────────────────────────────────── */}
       <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">

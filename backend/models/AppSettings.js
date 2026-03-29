@@ -95,6 +95,10 @@ const appSettingsSchema = new mongoose.Schema({
   // AI content generation
   aiKeywordsPerBrief: { type: Number, default: 20, min: 1 },
 
+  // AI prompt overrides — keys match AI_PROMPT_DEFAULTS in backend/routes/admin.js
+  // Absent or empty string falls back to the hardcoded default.
+  aiPrompts: { type: Map, of: String, default: {} },
+
   // Feature flags
   useLiveLeaderboard:   { type: Boolean, default: false },
   disableLoadingBar:    { type: Boolean, default: false },

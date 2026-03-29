@@ -31,6 +31,56 @@ const { uploadBuffer, destroyAsset } = require('../utils/cloudinary');
 const IntelLead = require('../models/IntelLead');
 const seedLeads = require('../seeds/seedLeads');
 
+// ── AI prompt defaults ────────────────────────────────────────────────────────
+// These are the canonical system prompts used throughout the AI generation
+// routes. Each key maps to AppSettings.aiPrompts — an absent or empty value
+// falls back to the string below. Edit via GET/PATCH /api/admin/ai-prompts.
+const AI_PROMPT_DEFAULTS = {
+  // Content generation
+  'brief.news':              'You are a factual intelligence writer for a Royal Air Force news platform. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
+  'brief.topic':             'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
+  'regenerateBrief':         'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
+  'regenerateDescription':   'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
+  // Quiz generation
+  'quiz':                    'You are a quiz question writer for a Royal Air Force training platform. Favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description.',
+  'quizRegenerate':          'You are a quiz question writer for a Royal Air Force training platform. Favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description.',
+  // Keywords
+  'keywords':                'You are a keyword extractor for a Royal Air Force training platform. Prioritise terms that build understanding of the modern RAF — training pathways, bases, aircraft, roles, and operational context. You only select terms that appear verbatim in the provided description text. For each keyword you write a general RAF-specific definition of that term — what it is, its role and capabilities — without referencing the specific intel brief it was found in.',
+  // Linking — current
+  'links.Aircrafts:bases':     'You are an expert on Royal Air Force aircraft and bases. Given an aircraft brief, identify which RAF bases are home/primary operating bases for this aircraft. Only select bases where this aircraft type is permanently stationed.',
+  'links.Aircrafts:squadrons': 'You are an expert on Royal Air Force aircraft and squadrons. Given an aircraft brief, identify which RAF squadrons operate this aircraft type as their primary platform.',
+  'links.Aircrafts:missions':  'You are an expert on Royal Air Force operations and aircraft. Given an aircraft brief, identify which RAF operations or missions this aircraft type participated in from the list provided.',
+  'links.Squadrons:bases':     'You are an expert on Royal Air Force squadrons and bases. Given a squadron brief, identify which RAF bases this squadron is primarily stationed at.',
+  'links.Squadrons:aircraft':  'You are an expert on Royal Air Force squadrons and aircraft. Given a squadron brief, identify which aircraft types from the list this squadron operates or historically operated.',
+  'links.Squadrons:missions':  'You are an expert on Royal Air Force squadrons and operations. Given a squadron brief, identify which operations or missions this squadron participated in from the list provided.',
+  'links.Bases:squadrons':     'You are an expert on Royal Air Force bases and squadrons. Given a base brief, identify which RAF squadrons are or were stationed at this base.',
+  'links.Bases:aircraft':      'You are an expert on Royal Air Force bases and aircraft. Given a base brief, identify which aircraft types from the list are or were based at this location.',
+  'links.Roles:training':      'You are an expert on Royal Air Force careers and training pipelines. Given a role brief, identify which training programmes from the list are required or directly relevant to this role\'s career pathway.',
+  'links.Tech:aircraft':       'You are an expert on Royal Air Force technology and aircraft. Given a technology or weapon system brief, identify which aircraft from the list carry or use this system.',
+  // Linking — historic
+  'links.historic.Aircrafts:bases':     'You are an expert on Royal Air Force aircraft and bases. Given a HISTORIC aircraft brief, identify which RAF bases historically served as home or primary operating bases for this aircraft type during its service life.',
+  'links.historic.Aircrafts:squadrons': 'You are an expert on Royal Air Force aircraft and squadrons. Given a HISTORIC aircraft brief, identify which RAF squadrons historically operated this aircraft type as their primary platform.',
+  'links.historic.Aircrafts:missions':  'You are an expert on Royal Air Force operations and aircraft. Given a HISTORIC aircraft brief, identify which RAF operations or missions this aircraft type participated in from the list provided.',
+  'links.historic.Squadrons:bases':     'You are an expert on Royal Air Force squadrons and bases. Given a HISTORIC squadron brief, identify which RAF bases this squadron was historically stationed at during its service.',
+  'links.historic.Squadrons:aircraft':  'You are an expert on Royal Air Force squadrons and aircraft. Given a HISTORIC squadron brief, identify which aircraft types from the list this squadron historically operated.',
+  'links.historic.Squadrons:missions':  'You are an expert on Royal Air Force squadrons and operations. Given a HISTORIC squadron brief, identify which operations or missions this squadron participated in from the list provided.',
+  'links.historic.Bases:squadrons':     'You are an expert on Royal Air Force bases and squadrons. Given a HISTORIC base brief, identify which RAF squadrons were historically stationed at this base.',
+  'links.historic.Bases:aircraft':      'You are an expert on Royal Air Force bases and aircraft. Given a HISTORIC base brief, identify which aircraft types from the list were historically based at this location.',
+  // Bases
+  'bases.current':           'You are an expert on Royal Air Force aircraft and their operating bases. Given an aircraft brief and a list of RAF base briefs, identify which bases are home bases for that aircraft. Only select bases where the aircraft is currently stationed or has a known permanent/primary operating presence. Return ONLY valid JSON — no markdown, no code blocks.',
+  'bases.historic':          'You are an expert on Royal Air Force aircraft and their operating bases. Given a HISTORIC aircraft brief and a list of RAF base briefs, identify which bases historically served as home or primary operating bases for this aircraft type during its service life. Return ONLY valid JSON — no markdown, no code blocks.',
+  // Utility
+  'newsHeadlines':           'You are a factual news assistant. Only report real, verified news stories that have actually been published. Never invent or fabricate headlines.',
+  'battleOrderData':         'You are a factual data extractor for a Royal Air Force training platform. You only return verified numeric data based on published facts. Return ONLY valid JSON with no markdown, no code blocks, no extra text.',
+  'imageExtraction':         'Extract the 3 most visually distinct subjects from this RAF article that are each likely to have their own Wikipedia page with a photograph. Prioritise specific aircraft designations, named bases/locations, named operations, or specific units.\n\nReturn ONLY a JSON array of exactly 3 search terms, e.g. ["Eurofighter Typhoon", "RAF Lossiemouth", "Operation Shader"]',
+};
+
+// Returns the DB override if set, otherwise the hardcoded default.
+function getPrompt(settings, key) {
+  const override = settings?.aiPrompts?.get?.(key);
+  return (override && override.trim()) ? override : AI_PROMPT_DEFAULTS[key];
+}
+
 function normaliseLeadTitle(s) {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
@@ -259,6 +309,41 @@ router.patch('/settings', requireReason, async (req, res) => {
     });
 
     res.json({ status: 'success', data: { settings } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/ai-prompts — return all prompts (DB overrides merged over defaults)
+router.get('/ai-prompts', async (_req, res) => {
+  try {
+    const settings = await AppSettings.getSettings();
+    const prompts = {};
+    for (const key of Object.keys(AI_PROMPT_DEFAULTS)) {
+      const override = settings.aiPrompts?.get?.(key);
+      prompts[key] = (override && override.trim()) ? override : AI_PROMPT_DEFAULTS[key];
+    }
+    res.json({ status: 'success', data: { prompts, defaults: AI_PROMPT_DEFAULTS } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/admin/ai-prompts — save one or more prompt overrides
+// Body: { prompts: { 'brief.news': '...', ... } }
+// Send empty string to restore a prompt to its default.
+router.patch('/ai-prompts', async (req, res) => {
+  try {
+    const { prompts } = req.body;
+    if (!prompts || typeof prompts !== 'object') return res.status(400).json({ message: 'prompts object required' });
+    const settings = await AppSettings.findOne() ?? await AppSettings.create({});
+    for (const [key, value] of Object.entries(prompts)) {
+      if (!(key in AI_PROMPT_DEFAULTS)) continue; // ignore unknown keys
+      settings.aiPrompts.set(key, typeof value === 'string' ? value : '');
+    }
+    settings.markModified('aiPrompts');
+    await settings.save();
+    res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1291,9 +1376,10 @@ function booGameDataShape(category) {
 router.post('/ai/news-headlines', async (req, res) => {
   try {
     const { timestamp } = req.body;
+    const aiSettings = await AppSettings.getSettings();
     const data = await openRouterChat([{
       role: 'system',
-      content: 'You are a factual news assistant. Only report real, verified news stories that have actually been published. Never invent or fabricate headlines.',
+      content: getPrompt(aiSettings, 'newsHeadlines'),
     }, {
       role: 'user',
       content: `The current date and time is ${timestamp}. Search the web right now for real UK Royal Air Force (RAF) news stories published in the last 24 hours only. Return ONLY a JSON array of up to 6 headline strings taken verbatim or closely paraphrased from actual published sources. No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from the last 24 hours, return an empty array []. Format: ["Headline one", "Headline two"]`,
@@ -1335,9 +1421,10 @@ router.post('/ai/generate-brief', async (req, res) => {
       : `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources, return a JSON object for an RAF news intelligence brief. Be as informative as possible about the current RAF affairs covered by this story.\n\n${JSON_SHAPE}`;
 
     const isNews = !!headline;
+    const briefAiSettings = await AppSettings.getSettings();
     const systemPrompt = isNews
-      ? 'You are a factual intelligence writer for a Royal Air Force news platform. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.'
-      : 'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.';
+      ? getPrompt(briefAiSettings, 'brief.news')
+      : getPrompt(briefAiSettings, 'brief.topic');
 
     const data = await openRouterChat([{
       role: 'system',
@@ -1440,9 +1527,10 @@ router.post('/ai/generate-keywords', async (req, res) => {
       ? `Do NOT use the topic title or name itself as a keyword — "${title}" and any shortened form of it must not appear as a keyword.\n\n`
       : '';
 
+    const kwAiSettings = await AppSettings.getSettings();
     const data = await openRouterChat([{
       role: 'system',
-      content: 'You are a keyword extractor for a Royal Air Force training platform. Prioritise terms that build understanding of the modern RAF — training pathways, bases, aircraft, roles, and operational context. You only select terms that appear verbatim in the provided description text. For each keyword you write a general RAF-specific definition of that term — what it is, its role and capabilities — without referencing the specific intel brief it was found in.',
+      content: getPrompt(kwAiSettings, 'keywords'),
     }, {
       role: 'user',
       content: `Description:\n"""${description}"""\n\n${existingList}${titleExclusion}Extract exactly ${needed} keywords from the description above. Every keyword string MUST appear verbatim (same spelling and capitalisation) in the description. Choose technical terms, acronyms, aircraft designations, operation names, and proper nouns — but never the subject/title of the brief itself.\n\nFor "generatedDescription": write a general RAF-specific definition of the term itself (e.g. what that aircraft/system/operation is, its role and capabilities). Do NOT reference or summarise the intel brief — the description should be useful as a standalone glossary entry.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition of this term"},{"keyword":"...","generatedDescription":"..."}]}`,
@@ -1508,34 +1596,13 @@ router.post('/ai/generate-links', async (req, res) => {
     if (!Array.isArray(pool) || pool.length === 0)
       return res.status(400).json({ message: 'pool required' });
 
-    const prompts = {
-      'Aircrafts:bases':     `You are an expert on Royal Air Force aircraft and bases. Given an aircraft brief, identify which RAF bases are home/primary operating bases for this aircraft. Only select bases where this aircraft type is permanently stationed.`,
-      'Aircrafts:squadrons': `You are an expert on Royal Air Force aircraft and squadrons. Given an aircraft brief, identify which RAF squadrons operate this aircraft type as their primary platform.`,
-      'Aircrafts:missions':  `You are an expert on Royal Air Force operations and aircraft. Given an aircraft brief, identify which RAF operations or missions this aircraft type participated in from the list provided.`,
-      'Squadrons:bases':     `You are an expert on Royal Air Force squadrons and bases. Given a squadron brief, identify which RAF bases this squadron is primarily stationed at.`,
-      'Squadrons:aircraft':  `You are an expert on Royal Air Force squadrons and aircraft. Given a squadron brief, identify which aircraft types from the list this squadron operates or historically operated.`,
-      'Squadrons:missions':  `You are an expert on Royal Air Force squadrons and operations. Given a squadron brief, identify which operations or missions this squadron participated in from the list provided.`,
-      'Bases:squadrons':     `You are an expert on Royal Air Force bases and squadrons. Given a base brief, identify which RAF squadrons are or were stationed at this base.`,
-      'Bases:aircraft':      `You are an expert on Royal Air Force bases and aircraft. Given a base brief, identify which aircraft types from the list are or were based at this location.`,
-      'Roles:training':      `You are an expert on Royal Air Force careers and training pipelines. Given a role brief, identify which training programmes from the list are required or directly relevant to this role's career pathway.`,
-      'Tech:aircraft':       `You are an expert on Royal Air Force technology and aircraft. Given a technology or weapon system brief, identify which aircraft from the list carry or use this system.`,
-    };
-
-    const historicPrompts = {
-      'Aircrafts:bases':     `You are an expert on Royal Air Force aircraft and bases. Given a HISTORIC aircraft brief, identify which RAF bases historically served as home or primary operating bases for this aircraft type during its service life.`,
-      'Aircrafts:squadrons': `You are an expert on Royal Air Force aircraft and squadrons. Given a HISTORIC aircraft brief, identify which RAF squadrons historically operated this aircraft type as their primary platform.`,
-      'Aircrafts:missions':  `You are an expert on Royal Air Force operations and aircraft. Given a HISTORIC aircraft brief, identify which RAF operations or missions this aircraft type participated in from the list provided.`,
-      'Squadrons:bases':     `You are an expert on Royal Air Force squadrons and bases. Given a HISTORIC squadron brief, identify which RAF bases this squadron was historically stationed at during its service.`,
-      'Squadrons:aircraft':  `You are an expert on Royal Air Force squadrons and aircraft. Given a HISTORIC squadron brief, identify which aircraft types from the list this squadron historically operated.`,
-      'Squadrons:missions':  `You are an expert on Royal Air Force squadrons and operations. Given a HISTORIC squadron brief, identify which operations or missions this squadron participated in from the list provided.`,
-      'Bases:squadrons':     `You are an expert on Royal Air Force bases and squadrons. Given a HISTORIC base brief, identify which RAF squadrons were historically stationed at this base.`,
-      'Bases:aircraft':      `You are an expert on Royal Air Force bases and aircraft. Given a HISTORIC base brief, identify which aircraft types from the list were historically based at this location.`,
-      'Roles:training':      `You are an expert on Royal Air Force careers and training pipelines. Given a role brief, identify which training programmes from the list are required or directly relevant to this role's career pathway.`,
-      'Tech:aircraft':       `You are an expert on Royal Air Force technology and aircraft. Given a HISTORIC technology or weapon system brief, identify which aircraft from the list historically carried or used this system.`,
-    };
-
+    const linksAiSettings = await AppSettings.getSettings();
     const key = `${sourceCategory}:${linkType}`;
-    const systemPrompt = (isHistoric ? historicPrompts[key] : null) ?? prompts[key];
+    const historicKey = `links.historic.${key}`;
+    const currentKey  = `links.${key}`;
+    const systemPrompt = isHistoric
+      ? (getPrompt(linksAiSettings, historicKey) ?? getPrompt(linksAiSettings, currentKey))
+      : getPrompt(linksAiSettings, currentKey);
     if (!systemPrompt) return res.status(400).json({ message: `Unsupported combination: ${key}` });
 
     const poolList = pool.map(b => `- "${b.title}"`).join('\n');
@@ -1573,9 +1640,10 @@ router.post('/ai/generate-bases', async (req, res) => {
 
     const baseList = basesBriefs.map(b => `- "${b.title}" (id: ${b._id})`).join('\n');
 
+    const basesAiSettings = await AppSettings.getSettings();
     const sysPrompt = isHistoric
-      ? 'You are an expert on Royal Air Force aircraft and their operating bases. Given a HISTORIC aircraft brief and a list of RAF base briefs, identify which bases historically served as home or primary operating bases for this aircraft type during its service life. Return ONLY valid JSON — no markdown, no code blocks.'
-      : 'You are an expert on Royal Air Force aircraft and their operating bases. Given an aircraft brief and a list of RAF base briefs, identify which bases are home bases for that aircraft. Only select bases where the aircraft is currently stationed or has a known permanent/primary operating presence. Return ONLY valid JSON — no markdown, no code blocks.';
+      ? getPrompt(basesAiSettings, 'bases.historic')
+      : getPrompt(basesAiSettings, 'bases.current');
 
     const userPrompt = isHistoric
       ? `Aircraft: "${title}"\n\nBrief body:\n"""\n${body ?? ''}\n"""\n\nAvailable base briefs:\n${baseList}\n\nReturn the IDs of bases that were historically home bases for this aircraft during its RAF service. If none match, return an empty array.\n\nReturn ONLY valid JSON: {"baseIds":["id1","id2"]}`
@@ -1607,9 +1675,10 @@ router.post('/ai/generate-quiz', async (req, res) => {
   try {
     const { title, description } = req.body;
     if (!title && !description) return res.status(400).json({ message: 'title or description required' });
+    const quizAiSettings = await AppSettings.getSettings();
     const data = await openRouterChat([{
       role: 'system',
-      content: 'You are a quiz question writer for a Royal Air Force training platform. Favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description.',
+      content: getPrompt(quizAiSettings, 'quiz'),
     }, {
       role: 'user',
       content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 10 easy and 10 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Easy questions test direct recall of specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n3. Medium questions require understanding of context or relationships between facts stated in the description.\n4. The correct answer must be explicitly supported by the description.\n5. Wrong answers must be plausible but clearly incorrect based on the description.\n6. Exactly 10 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":[{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."}],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
@@ -1654,7 +1723,7 @@ router.post('/ai/regenerate-brief/:id', async (req, res) => {
 
     const briefData = await openRouterChat([{
       role: 'system',
-      content: 'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
+      content: getPrompt(aiSettings, 'regenerateBrief'),
     }, {
       role: 'user',
       content: `Rewrite a comprehensive intelligence brief about this RAF topic: "${brief.title}"\n\nUsing verified facts from published sources, produce a reference-style brief suitable for someone building foundational knowledge of the modern RAF. Where relevant, cover: training pathways and which training blocks/phases apply to this subject; RAF bases associated with this subject and which aircraft or squadrons are stationed there and what operations occur there; roles that interact with or are defined by this subject and how those roles relate to specific training pipelines; and the broader operational and modern-day RAF significance.\n\n${TOPIC_JSON_SHAPE}`,
@@ -1691,7 +1760,7 @@ router.post('/ai/regenerate-brief/:id', async (req, res) => {
 
     const quizData = await openRouterChat([{
       role: 'system',
-      content: 'You are a quiz question writer for a Royal Air Force training platform. Favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description.',
+      content: getPrompt(aiSettings, 'quizRegenerate'),
     }, {
       role: 'user',
       content: `Intel Brief Title: ${brief.title}\n\nIntel Brief Description:\n"""\n${freshDescription}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 10 easy and 10 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Easy questions test direct recall of specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n3. Medium questions require understanding of context or relationships between facts stated in the description.\n4. The correct answer must be explicitly supported by the description.\n5. Wrong answers must be plausible but clearly incorrect based on the description.\n6. Exactly 10 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n7. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each) — never single words, never just a number or acronym alone.\n8. The correct answer must also be a complete sentence or meaningful phrase drawn directly from the description — never a single word or bare number.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":[{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."}],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
@@ -1731,9 +1800,10 @@ router.post('/ai/regenerate-description/:id', async (req, res) => {
 
     const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use plain, clear sentences. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings.\n2. Total word count across all sections must not exceed 240 words.\n3. Write each section as plain prose — no bullet points, no headers, no markdown.`;
 
+    const descAiSettings = await AppSettings.getSettings();
     const data = await openRouterChat([{
       role: 'system',
-      content: 'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
+      content: getPrompt(descAiSettings, 'regenerateDescription'),
     }, {
       role: 'user',
       content: `Write fresh description sections for this RAF intel brief: "${brief.title}"\n\nUsing verified facts from published sources, produce clear, informative paragraphs suitable for someone building foundational knowledge of the modern RAF.\n\n${DESC_JSON_SHAPE}`,
@@ -1814,9 +1884,10 @@ router.post('/ai/generate-battle-order-data', async (req, res) => {
       jsonShape = '{"startYear":1939,"endYear":1945}';
     }
 
+    const booAiSettings = await AppSettings.getSettings();
     const data = await openRouterChat([{
       role: 'system',
-      content: 'You are a factual data extractor for a Royal Air Force training platform. You only return verified numeric data based on published facts. Return ONLY valid JSON with no markdown, no code blocks, no extra text.',
+      content: getPrompt(booAiSettings, 'battleOrderData'),
     }, {
       role: 'user',
       content: `Extract the following data fields for this RAF "${category}" intel brief:\n\nFields needed: ${fieldSpec}\n\nTitle: "${title}"\nDescription:\n"""\n${description ?? ''}\n"""\n\nReturn ONLY valid JSON — no markdown, no code blocks. Use null for unknown/inapplicable values.\nExample shape: ${jsonShape}`,
@@ -1860,6 +1931,8 @@ router.post('/ai/generate-image', async (req, res) => {
     if (!title) return res.status(400).json({ message: 'title is required' });
 
     // Step 1 — extract 3 distinct search terms
+    const imgAiSettings = await AppSettings.getSettings();
+    const imagePromptBase = getPrompt(imgAiSettings, 'imageExtraction');
     const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -1872,7 +1945,7 @@ router.post('/ai/generate-image', async (req, res) => {
         model: 'openai/gpt-4o-mini',
         messages: [{
           role: 'user',
-          content: `Extract the 3 most visually distinct subjects from this RAF article that are each likely to have their own Wikipedia page with a photograph. Prioritise specific aircraft designations, named bases/locations, named operations, or specific units.\n\nReturn ONLY a JSON array of exactly 3 search terms, e.g. ["Eurofighter Typhoon", "RAF Lossiemouth", "Operation Shader"]\n\nTitle: "${title}"${subtitle ? `\nSubtitle: "${subtitle}"` : ''}`,
+          content: `${imagePromptBase}\n\nTitle: "${title}"${subtitle ? `\nSubtitle: "${subtitle}"` : ''}`,
         }],
       }),
     });
