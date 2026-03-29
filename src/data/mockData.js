@@ -67,7 +67,7 @@ export const CATEGORY_DESCRIPTIONS = {
   Roles:       'Every trade and branch explained.',
   Threats:     'Air threats, SAMs, and electronic warfare.',
   Allies:      'NATO, Five Eyes, and bilateral partners.',
-  Missions:    'Operations from WWII to today.',
+  Missions:    'Historic and modern air operations.',
   AOR:         'Area of responsibility and global deployments.',
   Tech:        'Weapons, sensors, and future programmes.',
   Terminology: 'Key RAF terminology and concepts.',
