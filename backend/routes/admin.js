@@ -8,11 +8,11 @@ const { sendWelcomeEmail } = require('../utils/email');
 const GameSessionQuizResult               = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt              = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult      = require('../models/GameSessionOrderOfBattleResult');
+const GameWhosAtAircraft                  = require('../models/GameWhosAtAircraft');
+const GameSessionWhosAtAircraftResult     = require('../models/GameSessionWhosAtAircraftResult');
 const GameOrderOfBattle                   = require('../models/GameOrderOfBattle');
 const GameFlashcardRecall                 = require('../models/GameFlashcardRecall');
 const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashcardRecallResult');
-const GameWhosAtAircraft                  = require('../models/GameWhosAtAircraft');
-const GameSessionWhosAtAircraftResult     = require('../models/GameSessionWhosAtAircraftResult');
 const GameSessionWhereAircraftResult      = require('../models/GameSessionWhereAircraftResult');
 const AircoinLog             = require('../models/AircoinLog');
 const { awardCoins, CYCLE_THRESHOLD } = require('../utils/awardCoins');
@@ -153,7 +153,6 @@ router.get('/stats', async (_req, res) => {
       booTotal, booWon, booDefeated, booAbandoned, booTimeAgg,
       tutorialAgg,
       wtaTotal, wtaWon, wtaAbandoned, wtaRound1Correct, wtaRound2Correct, wtaTimeAgg,
-      whosTotal, whosCorrect, whosTimeAgg,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ subscriptionTier: 'free' }),
@@ -195,12 +194,6 @@ router.get('/stats', async (_req, res) => {
       GameSessionWhereAircraftResult.countDocuments({ round1Correct: true }),
       GameSessionWhereAircraftResult.countDocuments({ round2Correct: true }),
       GameSessionWhereAircraftResult.aggregate([
-        { $group: { _id: null, total: { $sum: { $ifNull: ['$timeTakenSeconds', 0] } } } },
-      ]),
-      // Who's At Aircraft (WhosAtAircraftResult — individual guesses)
-      GameSessionWhosAtAircraftResult.countDocuments(),
-      GameSessionWhosAtAircraftResult.countDocuments({ isCorrect: true }),
-      GameSessionWhosAtAircraftResult.aggregate([
         { $group: { _id: null, total: { $sum: { $ifNull: ['$timeTakenSeconds', 0] } } } },
       ]),
       // Tutorial viewed/skipped counts across all users and all 4 tutorial fields
@@ -262,11 +255,6 @@ router.get('/stats', async (_req, res) => {
             round1Correct: wtaRound1Correct,
             round2Correct: wtaRound2Correct,
             totalSeconds:  wtaTimeAgg[0]?.total ?? 0,
-          },
-          whos: {
-            total:   whosTotal,
-            correct: whosCorrect,
-            totalSeconds: whosTimeAgg[0]?.total ?? 0,
           },
         },
         briefs: { totalBrifsRead, totalBrifsOpened, totalReadSeconds: readTimeAgg[0]?.total ?? 0 },

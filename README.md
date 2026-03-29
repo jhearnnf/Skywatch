@@ -7,7 +7,7 @@ An intelligence-style study platform built for RAF applicants, recruits, and ent
 ## Features
 
 - **Intelligence Briefs** — categorised RAF articles with keyword highlighting and interactive keyword definitions
-- **Knowledge Check Games** — Quiz, Battle of Order, Who's That Aircraft, and Flashcard Recall game modes
+- **Knowledge Check Games** — Quiz, Battle of Order, Where's That Aircraft, and Flashcard Recall game modes
 - **Level & Rank Progression** — earn Aircoins through games and daily logins to level up and climb the RAF rank ladder
 - **Subscription Tiers** — Free, Trial, Silver, and Gold tiers via Stripe
 - **Google OAuth + Email Auth** — secure sign-in with JWT httpOnly cookies

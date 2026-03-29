@@ -10,7 +10,7 @@ const gameWhosAtAircraftSchema = new mongoose.Schema({
 gameWhosAtAircraftSchema.pre('save', async function () {
   const brief = await mongoose.model('IntelligenceBrief').findById(this.intelBriefId).select('category');
   if (brief && brief.category !== 'Aircrafts') {
-    throw new Error("Who's That Aircraft: intel brief must be in the 'Aircrafts' category");
+    throw new Error("Where's That Aircraft: intel brief must be in the 'Aircrafts' category");
   }
 });
 

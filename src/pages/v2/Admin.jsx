@@ -214,15 +214,6 @@ function StatsTab({ API }) {
         </div>
       </section>
 
-      {/* Who's At Aircraft */}
-      <section>
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Who's At Aircraft</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Guesses"     value={fmtNum(games.whos?.total)}                                    color="brand" />
-          <StatCard label="Correct"     value={pct(games.whos?.correct, games.whos?.total)}                  color="emerald" />
-          <StatCard label="Time Played" value={fmtSeconds(games.whos?.totalSeconds)}                         color="slate" />
-        </div>
-      </section>
 
       {/* Aircoins + Briefs + Tutorials */}
       <section>
