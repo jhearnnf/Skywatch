@@ -75,6 +75,9 @@ const AI_PROMPT_DEFAULTS = {
   'newsHeadlines':           'You are a factual news assistant. Only report real, verified news stories that have actually been published. Never invent or fabricate headlines.',
   'battleOrderData':         'You are a factual data extractor for a Royal Air Force training platform. You only return verified numeric data based on published facts. Return ONLY valid JSON with no markdown, no code blocks, no extra text.',
   'imageExtraction':         'Extract the 3 most visually distinct subjects from this RAF article that are each likely to have their own Wikipedia page with a photograph. Prioritise specific aircraft designations, named bases/locations, named operations, or specific units.\n\nReturn ONLY a JSON array of exactly 3 search terms, e.g. ["Eurofighter Typhoon", "RAF Lossiemouth", "Operation Shader"]',
+  // Mnemonics
+  'mnemonic.single':         'You are a memory coach writing mnemonics for young RAF applicants (18–25) who have little military background. Use pop culture references — movies, TV shows, celebrities, music, sports, or internet culture — to make specific numbers and facts easy to remember. Write a single punchy sentence, max 20 words. Be specific to the exact value shown. Return ONLY the sentence, no preamble, no quotes.',
+  'mnemonic.batch':          'You are a memory coach writing mnemonics for young RAF applicants (18–25) who have little military background. Use pop culture references — movies, TV shows, celebrities, music, sports, or internet culture — to make specific numbers and facts easy to remember. Each mnemonic must be a single punchy sentence, max 20 words. Be specific to the exact value. No preamble.',
 };
 
 // Returns the DB override if set, otherwise the hardcoded default.
@@ -1449,7 +1452,7 @@ function buildMnemonicStats(category, gameData) {
 
 // Generates mnemonics for all populated stats of a brief. Returns a plain object
 // keyed by stat key, or null if the brief has no stats or the AI call fails.
-async function generateMnemonicsForBrief(title, category, gameData) {
+async function generateMnemonicsForBrief(title, category, gameData, systemPrompt) {
   const stats = buildMnemonicStats(category, gameData);
   if (!stats.length) return null;
 
@@ -1458,7 +1461,7 @@ async function generateMnemonicsForBrief(title, category, gameData) {
 
   const data = await openRouterChat([{
     role: 'system',
-    content: 'You are a memory coach writing vivid mnemonics to help RAF applicants recall specific facts. Each mnemonic must be a single punchy sentence, max 20 words. Be specific to the exact value and creative — use imagery, comparisons, or wordplay. No preamble.',
+    content: systemPrompt ?? AI_PROMPT_DEFAULTS['mnemonic.batch'],
   }, {
     role: 'user',
     content: `Brief: "${title}" (${category})\n\nStats to remember:\n${statLines}\n\nFor each stat, write one memorable sentence that helps an RAF applicant remember the exact value and connect it to this subject.\n\nReturn ONLY valid JSON — no markdown:\n${shape}`,
@@ -1954,7 +1957,7 @@ router.post('/ai/regenerate-brief/:id', async (req, res) => {
     const resolvedGameData = gameData ?? brief.gameData?.toObject?.() ?? brief.gameData ?? {};
     let mnemonics = null;
     try {
-      mnemonics = await generateMnemonicsForBrief(brief.title, brief.category, resolvedGameData);
+      mnemonics = await generateMnemonicsForBrief(brief.title, brief.category, resolvedGameData, getPrompt(aiSettings, 'mnemonic.batch'));
     } catch (mnemonicErr) {
       console.error('[regenerate-brief] mnemonic generation failed (non-fatal):', mnemonicErr.message);
     }
@@ -2289,6 +2292,8 @@ router.post('/ai/generate-mnemonic', async (req, res) => {
     const { title, category, gameData, statKey } = req.body;
     if (!title || !category) return res.status(400).json({ message: 'title and category required' });
 
+    const mnemonicSettings = await AppSettings.getSettings();
+
     if (statKey) {
       // Single stat — generate one mnemonic and wrap it in an object
       const stats = buildMnemonicStats(category, gameData ?? {});
@@ -2297,7 +2302,7 @@ router.post('/ai/generate-mnemonic', async (req, res) => {
 
       const data = await openRouterChat([{
         role: 'system',
-        content: 'You are a memory coach writing vivid mnemonics to help RAF applicants recall specific facts. Write a single punchy sentence, max 20 words. Be specific to the exact value shown and creative — use imagery, comparisons, or wordplay. Return ONLY the sentence, no preamble, no quotes.',
+        content: getPrompt(mnemonicSettings, 'mnemonic.single'),
       }, {
         role: 'user',
         content: `Brief: "${title}" (${category})\nStat: ${stat.label} — ${stat.value}\n\nWrite one memorable sentence that helps an RAF applicant remember this exact value and connect it to this subject.`,
@@ -2307,7 +2312,7 @@ router.post('/ai/generate-mnemonic', async (req, res) => {
       res.json({ status: 'success', data: { mnemonics: { [statKey]: sentence } } });
     } else {
       // All stats at once
-      const mnemonics = await generateMnemonicsForBrief(title, category, gameData ?? {});
+      const mnemonics = await generateMnemonicsForBrief(title, category, gameData ?? {}, getPrompt(mnemonicSettings, 'mnemonic.batch'));
       if (!mnemonics) return res.status(400).json({ message: 'No stats found for this category' });
       res.json({ status: 'success', data: { mnemonics } });
     }
@@ -2322,10 +2327,13 @@ router.post('/ai/generate-mnemonic', async (req, res) => {
 // generates and saves them. Returns a summary of what was processed.
 router.post('/ai/generate-mnemonics-missing', async (req, res) => {
   try {
-    const briefs = await IntelligenceBrief.find({
-      status:   'published',
-      category: { $in: BOO_CATEGORIES },
-    }).select('title category gameData mnemonics').lean();
+    const [briefs, missingSettings] = await Promise.all([
+      IntelligenceBrief.find({
+        status:   'published',
+        category: { $in: BOO_CATEGORIES },
+      }).select('title category gameData mnemonics').lean(),
+      AppSettings.getSettings(),
+    ]);
 
     const toProcess = briefs.filter(b => {
       const stats = buildMnemonicStats(b.category, b.gameData ?? {});
@@ -2336,10 +2344,11 @@ router.post('/ai/generate-mnemonics-missing', async (req, res) => {
 
     let processed = 0;
     const errors  = [];
+    const batchPrompt = getPrompt(missingSettings, 'mnemonic.batch');
 
     for (const brief of toProcess) {
       try {
-        const mnemonics = await generateMnemonicsForBrief(brief.title, brief.category, brief.gameData ?? {});
+        const mnemonics = await generateMnemonicsForBrief(brief.title, brief.category, brief.gameData ?? {}, batchPrompt);
         if (mnemonics) {
           await IntelligenceBrief.findByIdAndUpdate(brief._id, { mnemonics });
           processed++;

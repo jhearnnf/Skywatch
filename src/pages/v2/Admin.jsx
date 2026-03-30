@@ -802,6 +802,13 @@ const AI_PROMPT_GROUPS = [
       { key: 'imageExtraction', label: 'Image Subject Extraction' },
     ],
   },
+  {
+    group: 'Mnemonics',
+    items: [
+      { key: 'mnemonic.single', label: 'Generate Mnemonic — Single Stat' },
+      { key: 'mnemonic.batch',  label: 'Generate Mnemonics — All Stats (batch)' },
+    ],
+  },
 ]
 
 function AiPromptsSection({ API }) {
@@ -3890,7 +3897,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                   : <MnemonicField mnemonicKey="status" draft={draft} setDraft={setDraft} API={API} />
                 }
 
-                <div className="pt-1">
+                <div className="pt-1 flex flex-wrap gap-2 items-center">
+                  <GenerateStatsButton draft={draft} setDraft={setDraft} API={API} />
                   <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} API={API} />
                 </div>
               </>)}
@@ -4257,6 +4265,20 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   )
 }
 
+// Returns the gameData field names that must be non-null before a mnemonic can be generated.
+function getMnemonicRequiredFields(category, statKey) {
+  const map = {
+    Aircrafts:  { topSpeedKph: ['topSpeedKph'], yearIntroduced: ['yearIntroduced'], status: ['yearIntroduced'] },
+    Ranks:      { rankHierarchyOrder: ['rankHierarchyOrder'] },
+    Training:   { pipelinePosition: ['trainingWeekStart', 'trainingWeekEnd'], trainingDuration: ['weeksOfTraining'] },
+  }
+  const yearBased = ['Missions', 'Tech', 'Treaties', 'Bases', 'Squadrons', 'Threats']
+  if (yearBased.includes(category)) {
+    if (statKey === 'startYear' || statKey === 'period' || statKey === 'status') return ['startYear']
+  }
+  return map[category]?.[statKey] ?? []
+}
+
 function GenerateAllMnemonicsButton({ draft, setDraft, API }) {
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState(null)
@@ -4283,11 +4305,19 @@ function GenerateAllMnemonicsButton({ draft, setDraft, API }) {
     }
   }
 
+  const category  = draft.category ?? ''
+  const gameData  = draft.gameData ?? {}
+  const allKeys   = ['startYear', 'period', 'status', 'topSpeedKph', 'yearIntroduced',
+                     'pipelinePosition', 'trainingDuration', 'rankHierarchyOrder']
+  const requiredFields = [...new Set(allKeys.flatMap(k => getMnemonicRequiredFields(category, k)))]
+  const missingRequired = requiredFields.some(f => gameData[f] == null || gameData[f] === '')
+
   return (
     <>
       <button
         onClick={generate}
-        disabled={busy}
+        disabled={busy || missingRequired}
+        title={missingRequired ? 'Fill in required stats first' : undefined}
         className="text-xs px-3 py-2 rounded-xl border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors"
       >
         {busy ? '↺ Generating mnemonics…' : '↺ Generate All Mnemonics'}
@@ -4324,6 +4354,10 @@ function MnemonicField({ mnemonicKey, draft, setDraft, API }) {
     }
   }
 
+  const requiredFields  = getMnemonicRequiredFields(draft.category ?? '', mnemonicKey)
+  const gameData        = draft.gameData ?? {}
+  const missingRequired = requiredFields.some(f => gameData[f] == null || gameData[f] === '')
+
   return (
     <div className="flex gap-2 items-start mt-1 mb-2">
       <textarea
@@ -4335,8 +4369,8 @@ function MnemonicField({ mnemonicKey, draft, setDraft, API }) {
       />
       <button
         onClick={generate}
-        disabled={busy}
-        title="Generate mnemonic"
+        disabled={busy || missingRequired}
+        title={missingRequired ? 'Fill in required stats first' : 'Generate mnemonic'}
         className="text-xs px-2.5 py-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-600 font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors shrink-0 mt-0.5"
       >
         {busy ? '…' : '↺'}
@@ -4363,6 +4397,50 @@ function GameDataField({ label, field, draft, setDraft, nullable = false }) {
         className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
       />
     </div>
+  )
+}
+
+function GenerateStatsButton({ draft, setDraft, API }) {
+  const [busy, setBusy] = useState(false)
+  const [err,  setErr]  = useState(null)
+
+  const generate = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/generate-battle-order-data`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title:       draft.title,
+          description: draft.descriptionSections.join('\n\n'),
+          category:    draft.category,
+        }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setDraft(p => ({ ...p, gameData: { ...p.gameData, ...data.data.gameData } }))
+      } else {
+        setErr(data.message ?? 'Generation failed')
+      }
+    } catch {
+      setErr('Generation failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <button
+        onClick={generate}
+        disabled={busy}
+        className="text-xs px-3 py-2 rounded-xl border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors"
+      >
+        {busy ? '↺ Generating…' : '↺ Generate Stats'}
+      </button>
+      {err && <p className="text-xs text-red-500">{err}</p>}
+    </>
   )
 }
 

@@ -1683,7 +1683,7 @@ export default function BriefReader() {
           coinReward={settings?.aircoinsPerBriefRead ?? 5}
           onQuiz={() => navigate(`/quiz/${briefId}`)}
           booState={booState}
-          onBattleOrder={booState === 'available' ? () => navigate(`/battle-of-order/${briefId}`) : null}
+          onBattleOrder={booState === 'available' || booState === 'completed' ? () => navigate(`/battle-of-order/${briefId}`) : null}
           onBack={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
           onReRead={() => { setDone(false); setReReadMode(true); setSection(0); setNavDir(1) }}
           navigate={navigate}
