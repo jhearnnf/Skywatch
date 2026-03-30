@@ -165,17 +165,11 @@ export function playSound(name, { onAudio } = {}) {
       return Promise.resolve()
     }
 
-    // Battle of Order sounds — all bypass the queue
-    if (name === 'battle_of_order_won' || name === 'battle_of_order_lost' || name === 'battle_of_order_selection') {
-      const enabledKey = name === 'battle_of_order_won'       ? 'soundEnabledBattleOfOrderWon'
-                       : name === 'battle_of_order_lost'      ? 'soundEnabledBattleOfOrderLost'
-                       :                                        'soundEnabledBattleOfOrderSelection'
-      const volumeKey  = name === 'battle_of_order_won'       ? 'volumeBattleOfOrderWon'
-                       : name === 'battle_of_order_lost'      ? 'volumeBattleOfOrderLost'
-                       :                                        'volumeBattleOfOrderSelection'
-      if (settings[enabledKey] === false) return Promise.resolve()
-      const volume = masterVol(Math.min(1, Math.max(0, (settings[volumeKey] ?? 100) / 100)))
-      const audio  = new Audio(`/sounds/${name}.mp3`)
+    // Battle of Order selection — bypasses the queue (fires during roulette spin)
+    if (name === 'battle_of_order_selection') {
+      if (settings.soundEnabledBattleOfOrderSelection === false) return Promise.resolve()
+      const volume = masterVol(Math.min(1, Math.max(0, (settings.volumeBattleOfOrderSelection ?? 100) / 100)))
+      const audio  = new Audio('/sounds/battle_of_order_selection.mp3')
       audio.volume = volume
       audio.play().catch(() => {})
       return Promise.resolve()
@@ -240,6 +234,14 @@ export function playSound(name, { onAudio } = {}) {
         file       = 'where_aircraft_lose.mp3'
         volumeKey  = 'volumeWhereAircraftLose'
         enabledKey = 'soundEnabledWhereAircraftLose'
+      } else if (name === 'battle_of_order_won') {
+        file       = 'battle_of_order_won.mp3'
+        volumeKey  = 'volumeBattleOfOrderWon'
+        enabledKey = 'soundEnabledBattleOfOrderWon'
+      } else if (name === 'battle_of_order_lost') {
+        file       = 'battle_of_order_lost.mp3'
+        volumeKey  = 'volumeBattleOfOrderLost'
+        enabledKey = 'soundEnabledBattleOfOrderLost'
       } else {
         file = name
       }

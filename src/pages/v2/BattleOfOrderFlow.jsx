@@ -26,10 +26,10 @@ function RouletteScreen({ options, briefTitle, difficulty, onDone }) {
 
   useEffect(() => {
     if (options.length === 0) return
-    if (soundPlayedRef.current) return
-    soundPlayedRef.current = true
-
-    playSound('battle_of_order_selection')
+    if (!soundPlayedRef.current) {
+      soundPlayedRef.current = true
+      playSound('battle_of_order_selection')
+    }
 
     // Land exactly on selectedIdx after 4 full rotations
     const totalTicks = options.length * 4 + selectedIdxRef.current
@@ -193,9 +193,9 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
   }
 
   const badgeColor = (i) => {
-    if (i === 0)              return 'bg-emerald-500 text-white'
-    if (i === items.length - 1) return 'bg-amber-500 text-white'
-    return 'bg-brand-100 text-brand-700'
+    if (i === 0)              return 'bg-emerald-100 text-emerald-700'
+    if (i === items.length - 1) return 'bg-amber-100 text-amber-700'
+    return 'bg-slate-100 text-slate-600'
   }
 
   return (
@@ -256,7 +256,7 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
                   ? 'opacity-40 border-brand-300 bg-brand-50 cursor-grabbing'
                   : overIdx === i
                   ? 'border-brand-400 bg-brand-50 scale-[1.01]'
-                  : 'border-slate-200 bg-slate-50 hover:border-slate-300 cursor-grab'
+                  : 'border-slate-200 bg-slate-50 hover:border-brand-400 hover:bg-brand-50 cursor-grab'
                 }`}
             >
               <span className={`w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0 ${badgeColor(i)}`}>
@@ -264,9 +264,6 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
               </span>
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-semibold text-slate-800">{item.briefTitle}</span>
-                {meta.showValue && item.displayValue && (
-                  <span className="block text-xs text-slate-400 font-medium mt-0.5">{item.displayValue}</span>
-                )}
               </div>
               <div className="flex flex-col gap-0.5 shrink-0">
                 <button
@@ -490,13 +487,17 @@ export default function BattleOfOrderFlow() {
 
   const generateGame = useCallback(async (selectedOrderType) => {
     setScreen('generating')
+    const controller = new AbortController()
+    const timeoutId  = setTimeout(() => controller.abort(), 12000)
     try {
       const res  = await fetch(`${API}/api/games/battle-of-order/generate`, {
         method:      'POST',
         credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },
         body:        JSON.stringify({ briefId, orderType: selectedOrderType }),
+        signal:      controller.signal,
       })
+      clearTimeout(timeoutId)
       const data = await res.json()
       if (!res.ok) {
         setUnavailableReason(data.message ?? 'error')
@@ -511,7 +512,9 @@ export default function BattleOfOrderFlow() {
       abandonedRef.current     = false
       gameStartTimeRef.current = Date.now()
       setScreen('game')
-    } catch {
+    } catch (err) {
+      clearTimeout(timeoutId)
+      console.error('[BOO generate]', err)
       setUnavailableReason('error')
       setScreen('unavailable')
     }
@@ -520,11 +523,14 @@ export default function BattleOfOrderFlow() {
   // Load brief title + BOO options on mount
   useEffect(() => {
     async function init() {
+      const controller = new AbortController()
+      const timeoutId  = setTimeout(() => controller.abort(), 12000)
       try {
         const [briefRes, optRes] = await Promise.all([
-          fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' }),
-          fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' }),
+          fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include', signal: controller.signal }),
+          fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include', signal: controller.signal }),
         ])
+        clearTimeout(timeoutId)
         const briefData = await briefRes.json()
         const optData   = await optRes.json()
 
@@ -543,7 +549,9 @@ export default function BattleOfOrderFlow() {
         storedOptions.current = opts
 
         setScreen('roulette')
-      } catch {
+      } catch (err) {
+        clearTimeout(timeoutId)
+        console.error('[BOO init]', err)
         setUnavailableReason('error')
         setScreen('unavailable')
       }
@@ -635,12 +643,67 @@ export default function BattleOfOrderFlow() {
   }
 
   // ── Loading / Generating ─────────────────────────────────────────────────
-  if (screen === 'loading' || screen === 'generating') {
+  if (screen === 'loading') {
     return (
-      <div className="space-y-4 animate-pulse">
-        <div className="h-8 bg-slate-200 rounded-xl w-2/3 mx-auto" />
-        <div className="h-4 bg-slate-100 rounded w-1/2 mx-auto" />
-        {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-slate-100 rounded-2xl" />)}
+      <div className="animate-pulse text-center">
+        {/* Emoji placeholder */}
+        <div className="w-16 h-16 rounded-full bg-slate-200 mx-auto mb-3" />
+        {/* Title + subtitle */}
+        <div className="h-6 w-48 bg-slate-200 rounded-full mx-auto mb-2" />
+        <div className="h-4 w-32 bg-slate-100 rounded-full mx-auto mb-3" />
+        {/* Difficulty badge */}
+        <div className="h-4 w-36 bg-slate-100 rounded-full mx-auto mb-6" />
+        {/* Slot machine card */}
+        <div className="mx-auto max-w-xs bg-slate-50 border-2 border-slate-200 rounded-2xl p-5">
+          <div className="w-10 h-10 bg-slate-200 rounded-xl mx-auto mb-3" />
+          <div className="h-4 bg-slate-200 rounded w-3/4 mx-auto" />
+        </div>
+      </div>
+    )
+  }
+
+  if (screen === 'generating') {
+    return (
+      <div className="animate-pulse">
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="h-4 w-10 bg-slate-200 rounded-full" />
+          <div className="h-4 w-32 bg-slate-200 rounded-full" />
+          <div className="h-6 w-14 bg-slate-100 rounded-full" />
+        </div>
+        {/* Difficulty badge */}
+        <div className="flex justify-center mb-4">
+          <div className="h-4 w-24 bg-slate-100 rounded-full" />
+        </div>
+        {/* Ordering list card */}
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4">
+          <div className="h-3 w-48 bg-slate-200 rounded-full mb-4" />
+          {/* Scale label top */}
+          <div className="flex items-center gap-2 mb-2 px-1">
+            <div className="w-5 h-5 rounded-full bg-emerald-100 shrink-0" />
+            <div className="h-2.5 w-24 bg-slate-200 rounded-full" />
+          </div>
+          {/* Draggable items */}
+          <div className="space-y-2">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl border-2 border-slate-200">
+                <div className="w-6 h-6 rounded-full bg-slate-200 shrink-0" />
+                <div className="h-4 bg-slate-200 rounded flex-1" />
+                <div className="flex flex-col gap-0.5 shrink-0">
+                  <div className="w-5 h-5 rounded bg-slate-100" />
+                  <div className="w-5 h-5 rounded bg-slate-100" />
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Scale label bottom */}
+          <div className="flex items-center gap-2 mt-2 px-1">
+            <div className="w-5 h-5 rounded-full bg-amber-100 shrink-0" />
+            <div className="h-2.5 w-28 bg-slate-200 rounded-full" />
+          </div>
+        </div>
+        {/* Submit button */}
+        <div className="h-14 bg-slate-200 rounded-2xl" />
       </div>
     )
   }

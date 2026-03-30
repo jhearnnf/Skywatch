@@ -199,6 +199,18 @@ const intelligenceBriefSchema = new mongoose.Schema(
     // Back-links from historic briefs — populated automatically when a historic brief is saved
     relatedHistoric:            [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
 
+    // Mnemonics — short memory-aid sentences keyed by stat field, one per stat row
+    mnemonics: {
+      topSpeedKph:        { type: String },   // Aircrafts: top speed stat
+      yearIntroduced:     { type: String },   // Aircrafts: introduced year stat
+      status:             { type: String },   // Aircrafts/Bases/Squadrons/Threats: status stat
+      rankHierarchyOrder: { type: String },   // Ranks: seniority stat
+      pipelinePosition:   { type: String },   // Training: pipeline position stat
+      trainingDuration:   { type: String },   // Training: duration stat
+      period:             { type: String },   // Missions/Tech/Treaties: period stat
+      startYear:          { type: String },   // Bases/Squadrons/Threats: opened/formed/introduced stat
+    },
+
     // 'stub' = title/category only, no content yet. 'published' = full brief.
     status: { type: String, enum: ['stub', 'published'], default: 'published' },
 

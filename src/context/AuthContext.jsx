@@ -14,10 +14,14 @@ export function AuthProvider({ children }) {
 
   // Check session on mount
   useEffect(() => {
-    fetch(`${API}/api/auth/me`, { credentials: 'include' })
+    const controller = new AbortController()
+    const timeoutId  = setTimeout(() => controller.abort(), 8000)
+    console.log('[auth] checking session...')
+    fetch(`${API}/api/auth/me`, { credentials: 'include', signal: controller.signal })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         const u = data?.data?.user ?? null
+        console.log('[auth] session resolved, user:', u?._id ?? null)
         setUser(u)
         // If an admin reset this user's tutorials server-side, clear localStorage tutorial keys
         if (u?.tutorialsResetAt) {
@@ -32,8 +36,8 @@ export function AuthProvider({ children }) {
           }
         }
       })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+      .catch(err => console.error('[auth] session fetch failed:', err))
+      .finally(() => { clearTimeout(timeoutId); setLoading(false) })
   }, [])
 
   const logout = async () => {

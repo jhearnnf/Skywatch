@@ -15,7 +15,7 @@ export default function AircoinNotification({ amount, label = 'Brief Read Reward
         exit={{ opacity: 0, y: -60, scale: 0.9 }}
         transition={{ type: 'spring', damping: 18, stiffness: 280 }}
         aria-live="polite"
-        className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 bg-amber-500 text-white px-5 py-3 rounded-2xl shadow-xl shadow-amber-200/60 font-bold text-sm whitespace-nowrap"
+        className="fixed top-[72px] left-1/2 -translate-x-1/2 z-[1100] flex items-center gap-3 bg-amber-500 text-white px-5 py-3 rounded-2xl shadow-xl shadow-amber-200/60 font-bold text-sm whitespace-nowrap"
       >
         <svg width="26" height="26" viewBox="0 0 32 32" fill="none" className="shrink-0">
           <circle cx="16" cy="16" r="14" fill="#f59e0b" stroke="#fbbf24" strokeWidth="1.5"/>

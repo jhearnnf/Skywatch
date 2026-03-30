@@ -160,24 +160,26 @@ export default function Learn() {
                         {complete && !locked && <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">✓ Done</span>}
                       </div>
                       <p className="text-xs text-slate-400 truncate">{CATEGORY_DESCRIPTIONS[cat] ?? ''}</p>
-                      {user && total > 0 && !locked && (
+                      {user && !locked && (
                         <div className="mt-1.5">
                           <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
-                            <motion.div
-                              className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-brand-500'}`}
-                              initial={{ width: 0 }}
-                              animate={{ width: `${pct}%` }}
-                              transition={{ duration: 0.5, delay: 0.1 }}
-                            />
+                            {total > 0 && (
+                              <motion.div
+                                className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-brand-500'}`}
+                                initial={{ width: 0 }}
+                                animate={{ width: `${pct}%` }}
+                                transition={{ duration: 0.5, delay: 0.1 }}
+                              />
+                            )}
                           </div>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{done}/{total} read</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">{total > 0 ? `${done}/${total} read` : 'No briefs yet'}</p>
                         </div>
                       )}
                     </div>
                     <div className="text-right shrink-0">
-                      {total > 0 && (
-                        <p className={`text-xs font-bold mb-0.5 ${locked ? 'text-slate-400' : complete ? 'text-emerald-600' : 'text-brand-600'}`}>{total}</p>
-                      )}
+                      <p className={`text-xs font-bold mb-0.5 ${locked ? 'text-slate-400' : complete ? 'text-emerald-600' : total > 0 ? 'text-brand-600' : 'text-slate-300'}`}>
+                        {total > 0 ? total : '—'}
+                      </p>
                       {!locked && (
                         <span className={`transition-colors block ${complete ? 'text-emerald-300 group-hover:text-emerald-500' : 'text-slate-300 group-hover:text-brand-400'}`}>→</span>
                       )}

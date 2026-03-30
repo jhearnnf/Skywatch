@@ -105,6 +105,7 @@ router.get('/', optionalAuth, async (req, res) => {
 router.get('/category-counts', async (req, res) => {
   try {
     const rows = await IntelligenceBrief.aggregate([
+      { $match: { status: 'published' } },
       { $group: { _id: '$category', count: { $sum: 1 } } },
     ]);
 
@@ -119,8 +120,9 @@ router.get('/category-counts', async (req, res) => {
 // GET /api/briefs/category-stats — total + done (read) count per category for the current user
 router.get('/category-stats', optionalAuth, async (req, res) => {
   try {
-    // Total briefs per category
+    // Total published briefs per category
     const totals = await IntelligenceBrief.aggregate([
+      { $match: { status: 'published' } },
       { $group: { _id: '$category', total: { $sum: 1 } } },
     ]);
 
@@ -153,6 +155,32 @@ router.get('/category-stats', optionalAuth, async (req, res) => {
 
 // GET /api/briefs/random-unlocked — returns a random published brief accessible to the current user,
 // preferring briefs the user has not yet completed (falls back to any accessible brief if all are done)
+// GET /api/briefs/random-sample?count=5 — N random accessible published briefs (title/category/status only)
+router.get('/random-sample', optionalAuth, async (req, res) => {
+  try {
+    const count    = Math.min(parseInt(req.query.count) || 5, 20);
+    const settings = await AppSettings.getSettings();
+    const tier     = req.user ? effectiveTier(req.user) : 'guest';
+    const accessible = getAccessibleCategories(tier, settings);
+
+    const filter = { status: 'published' };
+    if (accessible !== null) filter.category = { $in: accessible };
+
+    // Exclude the requested brief if provided
+    if (req.query.exclude) filter._id = { $ne: req.query.exclude };
+
+    const results = await IntelligenceBrief.aggregate([
+      { $match: filter },
+      { $sample: { size: count } },
+      { $project: { _id: 1, title: 1, category: 1, status: 1 } },
+    ]);
+
+    res.json({ status: 'success', data: results });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.get('/random-unlocked', optionalAuth, async (req, res) => {
   try {
     const settings   = await AppSettings.getSettings();
@@ -561,6 +589,22 @@ router.get('/completed-brief-ids', protect, async (req, res) => {
     }).select('intelBriefId').lean();
     const ids = [...new Set(reads.map(r => r.intelBriefId.toString()))];
     res.json({ status: 'success', data: { ids } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/briefs/:id/mnemonic-viewed — record that a user opened a mnemonic sheet for a stat
+router.post('/:id/mnemonic-viewed', protect, async (req, res) => {
+  try {
+    const { statKey } = req.body;
+    if (!statKey) return res.status(400).json({ message: 'statKey required' });
+    await IntelligenceBriefRead.findOneAndUpdate(
+      { userId: req.user._id, intelBriefId: req.params.id },
+      { $addToSet: { mnemonicsViewed: statKey } },
+      { upsert: true }
+    );
+    res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

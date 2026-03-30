@@ -2166,6 +2166,7 @@ const EMPTY_DRAFT = {
   keywords: [],
   sources: [],
   gameData: {},
+  mnemonics: {},
   associatedBaseBriefIds:     [],
   associatedSquadronBriefIds: [],
   associatedAircraftBriefIds: [],
@@ -2657,7 +2658,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const [staleSourceWarning,    setStaleSourceWarning]    = useState(false)
   const [missingGameDataWarning, setMissingGameDataWarning] = useState(false)
   // Section open/close
-  const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: false, questions: false, images: true, sources: false, gameData: false })
+  const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: false, questions: false, images: true, sources: false, stats: false })
   const [allBasesBriefs,     setAllBasesBriefs]     = useState([]) // Bases briefs for Aircraft/Squadrons picker
   const [allSquadronsBriefs, setAllSquadronsBriefs] = useState([]) // Squadrons briefs for Bases/Aircraft picker
   const [allAircraftBriefs,  setAllAircraftBriefs]  = useState([]) // Aircraft briefs for Bases/Squadrons/Tech picker
@@ -2746,6 +2747,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       keywords:            br.keywords ?? [],
       sources:             br.sources ?? [],
       gameData:            br.gameData ?? {},
+      mnemonics:           br.mnemonics ?? {},
       associatedBaseBriefIds:     (br.associatedBaseBriefIds     ?? []).map(b => String(b._id ?? b)),
       associatedSquadronBriefIds: (br.associatedSquadronBriefIds ?? []).map(b => String(b._id ?? b)),
       associatedAircraftBriefIds: (br.associatedAircraftBriefIds ?? []).map(b => String(b._id ?? b)),
@@ -3197,8 +3199,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       const regenData = await regenRes.json()
       if (regenData.status !== 'success') throw new Error(regenData.message ?? 'Regeneration failed')
 
-      const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData } = regenData.data
-      setDraft(p => ({ ...p, descriptionSections, keywords, ...(gameData ? { gameData } : {}) }))
+      const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData, mnemonics } = regenData.data
+      setDraft(p => ({ ...p, descriptionSections, keywords, ...(gameData ? { gameData } : {}), ...(mnemonics ? { mnemonics } : {}) }))
       setEasyQuestions(easyQuestions ?? [])
       setMediumQuestions(mediumQuestions ?? [])
       setToast('Regenerated — review and save when ready')
@@ -3850,18 +3852,18 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         )}
       </div>
 
-      {/* ── Section D: Game Data (BOO categories only) ─────────────────── */}
+      {/* ── Section D: Stats & Mnemonics (BOO categories only) ────────── */}
       {BOO_CATEGORIES.includes(draft.category) && (
         <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
           {(autoGenerating || regeneratingAll) && <GeneratingOverlay />}
           <button
-            onClick={() => toggleSection('gameData')}
+            onClick={() => toggleSection('stats')}
             className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
           >
-            <h3 className="font-bold text-slate-800">⚔️ Game Data</h3>
-            <span className="text-slate-400 text-xs">{openSections.gameData ? '▲' : '▼'}</span>
+            <h3 className="font-bold text-slate-800">📊 Stats & Mnemonics</h3>
+            <span className="text-slate-400 text-xs">{openSections.stats ? '▲' : '▼'}</span>
           </button>
-          {openSections.gameData && (
+          {openSections.stats && (
             <div className="px-5 py-4 space-y-3">
               {draft.category === 'Aircrafts' && (
                 <AircraftDataSection draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
@@ -3877,15 +3879,26 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                   label={{ Bases: 'Year Opened', Squadrons: 'Year Formed', Threats: 'Year Introduced' }[draft.category] ?? 'Start Year'}
                   field="startYear" draft={draft} setDraft={setDraft}
                 />
+                <MnemonicField mnemonicKey="startYear" draft={draft} setDraft={setDraft} API={API} />
+
                 <GameDataField
                   label={{ Bases: 'Year Closed (blank = still active)', Squadrons: 'Year Disbanded (blank = still active)', Threats: 'Year Retired (blank = in service)' }[draft.category] ?? 'End Year (blank = ongoing)'}
                   field="endYear" draft={draft} setDraft={setDraft} nullable
                 />
+                {['Missions', 'Tech', 'Treaties'].includes(draft.category)
+                  ? <MnemonicField mnemonicKey="period" draft={draft} setDraft={setDraft} API={API} />
+                  : <MnemonicField mnemonicKey="status" draft={draft} setDraft={setDraft} API={API} />
+                }
+
+                <div className="pt-1">
+                  <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} API={API} />
+                </div>
               </>)}
             </div>
           )}
         </div>
       )}
+
 
       {/* ── Section D2: Linked Briefs ────────────────────────────────── */}
       {(() => {
@@ -4244,6 +4257,95 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   )
 }
 
+function GenerateAllMnemonicsButton({ draft, setDraft, API }) {
+  const [busy, setBusy] = useState(false)
+  const [err,  setErr]  = useState(null)
+
+  const generate = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/generate-mnemonic`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: draft.title, category: draft.category, gameData: draft.gameData ?? {} }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setDraft(p => ({ ...p, mnemonics: { ...p.mnemonics, ...data.data.mnemonics } }))
+      } else {
+        setErr(data.message ?? 'Failed')
+      }
+    } catch {
+      setErr('Failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <button
+        onClick={generate}
+        disabled={busy}
+        className="text-xs px-3 py-2 rounded-xl border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors"
+      >
+        {busy ? '↺ Generating mnemonics…' : '↺ Generate All Mnemonics'}
+      </button>
+      {err && <p className="text-xs text-red-500">{err}</p>}
+    </>
+  )
+}
+
+// ── MnemonicField — paired mnemonic textarea + generate button ────────────
+function MnemonicField({ mnemonicKey, draft, setDraft, API }) {
+  const [busy, setBusy] = useState(false)
+  const [err,  setErr]  = useState(null)
+
+  const generate = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/generate-mnemonic`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: draft.title, category: draft.category, gameData: draft.gameData ?? {}, statKey: mnemonicKey }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setDraft(p => ({ ...p, mnemonics: { ...p.mnemonics, ...data.data.mnemonics } }))
+      } else {
+        setErr(data.message ?? 'Failed')
+      }
+    } catch {
+      setErr('Failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex gap-2 items-start mt-1 mb-2">
+      <textarea
+        value={draft.mnemonics?.[mnemonicKey] ?? ''}
+        onChange={e => setDraft(p => ({ ...p, mnemonics: { ...p.mnemonics, [mnemonicKey]: e.target.value } }))}
+        rows={2}
+        placeholder="💡 Memory aid…"
+        className="flex-1 border border-slate-100 bg-slate-50/60 rounded-xl px-3 py-2 text-xs text-slate-600 outline-none focus:ring-2 focus:ring-brand-100 resize-none"
+      />
+      <button
+        onClick={generate}
+        disabled={busy}
+        title="Generate mnemonic"
+        className="text-xs px-2.5 py-1.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-600 font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors shrink-0 mt-0.5"
+      >
+        {busy ? '…' : '↺'}
+      </button>
+      {err && <p className="text-xs text-red-500 mt-1 col-span-2">{err}</p>}
+    </div>
+  )
+}
+
 function GameDataField({ label, field, draft, setDraft, nullable = false }) {
   const val = draft.gameData?.[field]
   return (
@@ -4297,9 +4399,15 @@ function AircraftDataSection({ draft, setDraft, briefId, API }) {
   return (
     <>
       <GameDataField label="Top Speed (km/h)" field="topSpeedKph" draft={draft} setDraft={setDraft} />
+      <MnemonicField mnemonicKey="topSpeedKph" draft={draft} setDraft={setDraft} API={API} />
+
       <GameDataField label="Year Introduced" field="yearIntroduced" draft={draft} setDraft={setDraft} />
+      <MnemonicField mnemonicKey="yearIntroduced" draft={draft} setDraft={setDraft} API={API} />
+
       <GameDataField label="Year Retired (blank = still in service)" field="yearRetired" draft={draft} setDraft={setDraft} nullable />
-      <div className="pt-1">
+      <MnemonicField mnemonicKey="status" draft={draft} setDraft={setDraft} API={API} />
+
+      <div className="pt-1 flex flex-wrap gap-2 items-center">
         <button
           onClick={generate}
           disabled={busy}
@@ -4307,7 +4415,8 @@ function AircraftDataSection({ draft, setDraft, briefId, API }) {
         >
           {busy ? '↺ Generating…' : '↺ Generate Stats'}
         </button>
-        {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+        <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} API={API} />
+        {err && <p className="text-xs text-red-500">{err}</p>}
       </div>
     </>
   )
@@ -4347,8 +4456,12 @@ function TrainingDataSection({ draft, setDraft, briefId, API }) {
     <>
       <GameDataField label="Pipeline Week Start (0 if unknown)" field="trainingWeekStart" draft={draft} setDraft={setDraft} />
       <GameDataField label="Pipeline Week End (0 if unknown)"   field="trainingWeekEnd"   draft={draft} setDraft={setDraft} />
+      <MnemonicField mnemonicKey="pipelinePosition" draft={draft} setDraft={setDraft} API={API} />
+
       <GameDataField label="Training Duration (weeks, 0 if unknown)" field="weeksOfTraining" draft={draft} setDraft={setDraft} />
-      <div className="pt-1">
+      <MnemonicField mnemonicKey="trainingDuration" draft={draft} setDraft={setDraft} API={API} />
+
+      <div className="pt-1 flex flex-wrap gap-2 items-center">
         <button
           onClick={generate}
           disabled={busy}
@@ -4356,7 +4469,8 @@ function TrainingDataSection({ draft, setDraft, briefId, API }) {
         >
           {busy ? '↺ Generating…' : '↺ Generate Stats'}
         </button>
-        {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+        <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} API={API} />
+        {err && <p className="text-xs text-red-500">{err}</p>}
       </div>
     </>
   )
@@ -4411,9 +4525,12 @@ function RankDataField({ draft, setDraft, briefId, API }) {
         )}
       </div>
       {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+      <MnemonicField mnemonicKey="rankHierarchyOrder" draft={draft} setDraft={setDraft} API={API} />
+      <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} API={API} />
     </div>
   )
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LOGS TAB

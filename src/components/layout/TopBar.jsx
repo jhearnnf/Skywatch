@@ -20,7 +20,7 @@ export default function TopBar() {
   const navigate = useNavigate()
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-40 bg-slate-50/90 backdrop-blur-md border-b border-slate-200/60 h-14">
+    <header className="fixed top-0 left-0 right-0 z-[1001] bg-slate-50/90 backdrop-blur-md border-b border-slate-200/60 h-14">
       <div className="max-w-6xl mx-auto px-4 h-full flex items-center justify-between gap-3">
 
         {/* Logo */}

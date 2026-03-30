@@ -99,6 +99,7 @@ body {
   font-family: var(--font-family-sans);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: contain;
+  overscroll-behavior-x: none;
 }
 
 /* Subtle tactical grid overlay */
@@ -308,4 +309,36 @@ body.play-mode .card-shadow {
   [class*="inset-0"] {
     background-color: rgba(255,255,255,0.95) !important;
   }
+}
+
+/* ── Quiz unavailable state ───────────────────────────────────────────── */
+
+.quiz-unavailable-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.quiz-unavailable-btn {
+  width: 100%;
+  padding: 1rem;
+  background: #f1f5f9;
+  color: #64748b;
+  font-weight: 700;
+  font-size: 1.125rem;
+  border-radius: 1rem;
+  border: 1px dashed #cbd5e1;
+  text-align: center;
+  cursor: not-allowed;
+  opacity: 0.65;
+  user-select: none;
+}
+
+.quiz-unavailable-msg {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-align: center;
+  max-width: 20rem;
+}
 }

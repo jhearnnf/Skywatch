@@ -92,6 +92,52 @@ function KeywordSheet({ kw, onClose, navigate }) {
   )
 }
 
+// ── Stat mnemonic bottom-sheet ────────────────────────────────────────────
+function StatMnemonicSheet({ stat, onClose }) {
+  return (
+    <AnimatePresence>
+      {stat && (
+        <>
+          <motion.div
+            key="sm-bg"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-slate-900/40"
+            onClick={onClose}
+          />
+          <motion.div
+            key="sm-sheet"
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            className="fixed bottom-0 inset-x-0 z-50 bg-surface rounded-t-3xl p-6 pb-10 max-w-lg mx-auto shadow-2xl"
+          >
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
+
+            <div className="flex items-start gap-3">
+              <span className="text-3xl">💡</span>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-400 mb-1">{stat.label}</p>
+                <p className="text-base font-bold text-slate-900 mb-3">{stat.value}</p>
+                <p className="text-sm text-slate-600 leading-relaxed">{stat.mnemonic}</p>
+              </div>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="mt-5 w-full py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors"
+            >
+              Got it ✓
+            </button>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
 // ── Flashcard (final section) ─────────────────────────────────────────────
 function FlashCard({ sectionIdx, total, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap }) {
   return (
@@ -139,7 +185,7 @@ function FlashCard({ sectionIdx, total, title, subtitle, category, subcategory, 
 }
 
 // ── Section card (image zone + stat + text) ───────────────────────────────
-function SectionCard({ imageZone, stat, sectionIdx, total, isLast, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap }) {
+function SectionCard({ imageZone, stat, sectionIdx, total, isLast, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap }) {
   const hasBases = (highlightedBaseNames ?? []).length > 0
 
   if (isLast) {
@@ -199,10 +245,23 @@ function SectionCard({ imageZone, stat, sectionIdx, total, isLast, highlightedBa
 
       {/* Stat row */}
       {stat && (
-        <div className="flex items-baseline justify-between gap-4 px-5 py-2.5 border-b border-slate-100 bg-slate-50/50">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400 shrink-0">{stat.label}</span>
-          <span className="text-sm font-semibold text-text text-right">{stat.value}</span>
-        </div>
+        stat.mnemonic ? (
+          <button
+            onClick={() => onStatTap?.(stat)}
+            className="w-full flex items-baseline justify-between gap-4 px-5 py-2.5 border-b border-slate-100 bg-slate-50/50 hover:bg-brand-50/50 transition-colors text-left"
+          >
+            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400 shrink-0">{stat.label}</span>
+            <span className="flex items-center gap-1.5">
+              <span className="text-sm font-semibold text-text text-right">{stat.value}</span>
+              <span className="text-base leading-none">💡</span>
+            </span>
+          </button>
+        ) : (
+          <div className="flex items-baseline justify-between gap-4 px-5 py-2.5 border-b border-slate-100 bg-slate-50/50">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400 shrink-0">{stat.label}</span>
+            <span className="text-sm font-semibold text-text text-right">{stat.value}</span>
+          </div>
+        )
       )}
 
       <div className="p-5">
@@ -394,26 +453,28 @@ function StatRow({ label, value }) {
 
 function buildStats(brief) {
   const gd  = brief.gameData ?? {}
+  const mn  = brief.mnemonics ?? {}
   const cat = brief.category
+  const mk  = (statKey, label, value) => ({ statKey, label, value, mnemonic: mn[statKey] || null })
   const stats = []
   if (cat === 'Aircrafts') {
     if (gd.topSpeedKph != null)
-      stats.push({ label: 'Top Speed', value: `${gd.topSpeedKph.toLocaleString()} km/h · ${Math.round(gd.topSpeedKph * 0.621).toLocaleString()} mph` })
+      stats.push(mk('topSpeedKph',    'Top Speed',  `${gd.topSpeedKph.toLocaleString()} km/h · ${Math.round(gd.topSpeedKph * 0.621).toLocaleString()} mph`))
     if (gd.yearIntroduced != null)
-      stats.push({ label: 'Introduced', value: String(gd.yearIntroduced) })
+      stats.push(mk('yearIntroduced', 'Introduced', String(gd.yearIntroduced)))
     if (gd.yearIntroduced != null)
-      stats.push({ label: 'Status', value: gd.yearRetired != null ? `Retired ${gd.yearRetired}` : 'In Service' })
+      stats.push(mk('status',         'Status',     gd.yearRetired != null ? `Retired ${gd.yearRetired}` : 'In Service'))
   } else if (cat === 'Ranks') {
     if (gd.rankHierarchyOrder != null)
-      stats.push({ label: 'Seniority', value: `#${gd.rankHierarchyOrder}${gd.rankHierarchyOrder === 1 ? ' — Most Senior' : ''}` })
+      stats.push(mk('rankHierarchyOrder', 'Seniority', `#${gd.rankHierarchyOrder}${gd.rankHierarchyOrder === 1 ? ' — Most Senior' : ''}`))
   } else if (cat === 'Training') {
     if (gd.trainingWeekStart != null && gd.trainingWeekEnd != null)
-      stats.push({ label: 'Pipeline Position', value: `Week ${gd.trainingWeekStart} – Week ${gd.trainingWeekEnd}` })
+      stats.push(mk('pipelinePosition', 'Pipeline Position', `Week ${gd.trainingWeekStart} – Week ${gd.trainingWeekEnd}`))
     if (gd.weeksOfTraining != null)
-      stats.push({ label: 'Duration', value: `${gd.weeksOfTraining} week${gd.weeksOfTraining === 1 ? '' : 's'}` })
+      stats.push(mk('trainingDuration', 'Duration', `${gd.weeksOfTraining} week${gd.weeksOfTraining === 1 ? '' : 's'}`))
   } else if (['Missions', 'Tech', 'Treaties'].includes(cat)) {
     if (gd.startYear != null)
-      stats.push({ label: 'Period', value: `${gd.startYear} – ${gd.endYear != null ? gd.endYear : 'Present'}` })
+      stats.push(mk('period', 'Period', `${gd.startYear} – ${gd.endYear != null ? gd.endYear : 'Present'}`))
   } else if (['Bases', 'Squadrons', 'Threats'].includes(cat)) {
     const L = {
       Bases:     { start: 'Opened',     active: 'Active',     closed: 'Closed'    },
@@ -421,9 +482,9 @@ function buildStats(brief) {
       Threats:   { start: 'Introduced', active: 'In Service', closed: 'Retired'   },
     }[cat]
     if (gd.startYear != null)
-      stats.push({ label: L.start, value: String(gd.startYear) })
+      stats.push(mk('startYear', L.start, String(gd.startYear)))
     if (gd.startYear != null)
-      stats.push({ label: 'Status', value: gd.endYear != null ? `${L.closed} ${gd.endYear}` : L.active })
+      stats.push(mk('status', 'Status', gd.endYear != null ? `${L.closed} ${gd.endYear}` : L.active))
   }
   return stats
 }
@@ -551,7 +612,7 @@ function BriefConnectionsPanel({ brief, navigate, autoExpand, onBasePillClick })
 }
 
 // ── Continue Learning cards ───────────────────────────────────────────────
-function ContinueLearning({ brief, navigate }) {
+function ContinueLearning({ brief, navigate, fallbackCards }) {
   const seen = new Set()
   const cards = [
     ...(brief.associatedBaseBriefIds     ?? []),
@@ -565,7 +626,9 @@ function ContinueLearning({ brief, navigate }) {
     .sort((a, b) => (a.status === 'stub' ? 1 : 0) - (b.status === 'stub' ? 1 : 0))
     .slice(0, 5)
 
-  if (cards.length === 0) return null
+  const displayCards = cards.length > 0 ? cards : (fallbackCards ?? [])
+
+  if (displayCards.length === 0) return null
 
   return (
     <div className="bg-surface rounded-2xl p-4 border border-slate-200 mb-6 card-shadow">
@@ -573,7 +636,7 @@ function ContinueLearning({ brief, navigate }) {
         📡 Continue Learning
       </p>
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-        {cards.map(b => (
+        {displayCards.map(b => (
           <button
             key={b._id}
             onClick={() => navigate(`/brief/${b._id}`)}
@@ -596,10 +659,11 @@ function ContinueLearning({ brief, navigate }) {
 }
 
 // ── Completion screen ─────────────────────────────────────────────────────
-function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user, isFirstCompletion, coinReward, navigate }) {
+function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onReRead, user, isFirstCompletion, coinReward, navigate, quizPassed, quizAvailable }) {
   const { API, setUser, awardAircoins } = useAuth()
-  const [email, setEmail] = useState('')
-  const googleBtnRef     = useRef(null)
+  const [email, setEmail]             = useState('')
+  const [showEmailInput, setShowEmailInput] = useState(false)
+  const googleBtnRef                  = useRef(null)
 
   // Google One Tap + inline button — guests only
   useEffect(() => {
@@ -655,7 +719,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
     navigate(`/login?tab=register&pendingBrief=${brief._id}${email ? `&email=${encodeURIComponent(email)}` : ''}`)
   }
 
-  const heading    = isFirstCompletion && user ? '🎖️ First Brief — Mission Complete!' : 'Brief Complete!'
+  const heading    = isFirstCompletion && user ? 'First Brief — Mission Complete' : 'Brief Complete'
   const subheading = isFirstCompletion && user
     ? 'Your first intel brief is done. Now test what you\'ve learned.'
     : 'You\'ve read all sections of this brief.'
@@ -666,97 +730,107 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
       animate={{ opacity: 1, scale: 1 }}
       className="text-center py-8"
     >
+      {/* Badge icon */}
       <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ type: 'spring', damping: 14, delay: 0.1 }}
-        className="text-6xl mb-4"
+        className="flex justify-center mb-4"
       >
-        🎉
+        <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="28" cy="28" r="27" stroke="#1d4ed8" strokeWidth="2" fill="#eff6ff" />
+          <circle cx="28" cy="28" r="20" stroke="#1d4ed8" strokeWidth="1" strokeDasharray="3 3" fill="none" />
+          <line x1="28" y1="8" x2="28" y2="13" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" />
+          <line x1="28" y1="43" x2="28" y2="48" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" />
+          <line x1="8" y1="28" x2="13" y2="28" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" />
+          <line x1="43" y1="28" x2="48" y2="28" stroke="#1d4ed8" strokeWidth="2" strokeLinecap="round" />
+          <polyline points="21,28 26,33 35,22" stroke="#1d4ed8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        </svg>
       </motion.div>
+
       <h2 className="text-2xl font-extrabold text-slate-900 mb-2">{heading}</h2>
       <p className="text-slate-500 mb-8">{subheading}</p>
-
 
       <div className="space-y-3">
         {user ? (
           <>
-            <button
-              onClick={onQuiz}
-              className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-lg transition-colors shadow-lg shadow-brand-200"
-            >
-              🎮 Take the Quiz → Earn Aircoins
-            </button>
+            {/* Primary: Quiz */}
+            {quizAvailable ? (
+              <button
+                onClick={onQuiz}
+                className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-lg transition-colors shadow-lg shadow-brand-200"
+              >
+                🧠 {quizPassed ? 'Retake Quiz' : 'Take the Quiz → Earn Aircoins'}
+              </button>
+            ) : (
+              <div className="quiz-unavailable-block">
+                <div className="quiz-unavailable-btn" aria-disabled="true">
+                  🧠 Quiz Locked
+                </div>
+                <p className="quiz-unavailable-msg">
+                  Intel is still being compiled for this quiz — check back soon.
+                </p>
+              </div>
+            )}
+
+            {/* Secondary: Battle of Order */}
             {booState === 'available' && (
               <button
                 onClick={onBattleOrder}
-                className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-2xl text-base transition-colors"
+                className="w-full py-3.5 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
               >
-                🗺️ Battle Order → Earn Aircoins
+                🗺️ Battle of Order — Earn Aircoins
+              </button>
+            )}
+            {booState === 'completed' && (
+              <button
+                onClick={onBattleOrder}
+                className="w-full py-3.5 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
+              >
+                🗺️ Replay Battle of Order
               </button>
             )}
             {booState === 'locked-quiz' && (
-              <button
-                disabled
-                className="w-full py-4 border border-dashed border-slate-200 text-slate-400 font-semibold rounded-2xl text-sm cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <span>🗺️ Battle Order</span>
-                <span className="text-xs bg-slate-100 px-2 py-0.5 rounded-full">🔒 Pass the quiz first</span>
-              </button>
+              <div className="w-full py-3 border border-dashed border-slate-200 text-slate-400 font-semibold rounded-2xl text-sm flex items-center justify-center gap-2">
+                <span>🗺️ Battle of Order</span>
+                <span className="text-xs bg-slate-100 px-2 py-0.5 rounded-full">
+                  {quizAvailable ? '🔒 Pass the quiz first' : '🔒 Intel Pending'}
+                </span>
+              </div>
+            )}
+
+            {/* Continue Learning — shown when quiz passed and BOO is done or unavailable */}
+            {quizPassed && (booState === 'completed' || booState === 'unavailable' || booState === 'no-game-data') && (
+              <ContinueLearning brief={brief} navigate={navigate} />
             )}
           </>
         ) : (
           <>
-            {/* Investment hook */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left flex items-center gap-3">
-              <span className="text-2xl shrink-0">⭐</span>
+            {/* Coin hook */}
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-left flex items-center gap-3">
+              <span className="text-xl shrink-0">⭐</span>
               <div>
-                <p className="text-sm font-bold text-slate-700">{coinReward} Aircoins waiting to be claimed</p>
-                <p className="text-xs text-slate-500">Sign up to collect your reward and keep your streak</p>
+                <p className="text-sm font-bold text-amber-800">{coinReward} Aircoins waiting to be claimed</p>
+                <p className="text-xs text-amber-700">Sign up to collect your reward and track your streak</p>
               </div>
             </div>
 
-            {/* Sign-up panel */}
-            <div className="bg-surface border border-slate-200 rounded-2xl p-5 text-left card-shadow">
-              <p className="font-bold text-slate-900 mb-3">Don't lose this progress</p>
-              <ul className="space-y-1.5 mb-5">
-                <li className="flex items-center gap-2 text-sm text-slate-700">
-                  <span className="text-emerald-600 font-bold shrink-0">✓</span>
-                  Claim your {coinReward} Aircoins for this brief
-                </li>
-                <li className="flex items-center gap-2 text-sm text-slate-700">
-                  <span className="text-emerald-600 font-bold shrink-0">✓</span>
-                  Take the quiz — test what you've just learned
-                </li>
-                <li className="flex items-center gap-2 text-sm text-slate-700">
-                  <span className="text-emerald-600 font-bold shrink-0">✓</span>
-                  Track your reading streak
-                </li>
-                <li className="flex items-center gap-2 text-sm text-slate-700">
-                  <span className="text-emerald-600 font-bold shrink-0">✓</span>
-                  5-day Silver trial included on sign-up
-                </li>
-              </ul>
+            {/* Google button */}
+            <div ref={googleBtnRef} className="flex justify-center" />
+            {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+              <p className="text-xs text-slate-400 text-center">Google sign-in unavailable</p>
+            )}
 
-              {/* Google button (fallback if One Tap suppressed) */}
-              <div ref={googleBtnRef} className="flex justify-center mb-3" />
-              {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
-                <p className="text-xs text-slate-400 text-center mb-3">Google sign-in unavailable</p>
-              )}
-
-              <div className="flex items-center gap-2 mb-3">
-                <div className="flex-1 h-px bg-slate-100" />
-                <span className="text-xs text-slate-400">or continue with email</span>
-                <div className="flex-1 h-px bg-slate-100" />
-              </div>
-
-              <div className="flex gap-2 mb-3">
+            {/* Email — collapsed by default */}
+            {showEmailInput ? (
+              <div className="flex gap-2">
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleEmailContinue() }}
                   placeholder="your@email.com"
+                  autoFocus
                   className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm"
                 />
                 <button
@@ -766,29 +840,35 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
                   Continue →
                 </button>
               </div>
+            ) : (
+              <button
+                onClick={() => setShowEmailInput(true)}
+                className="w-full py-2.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                or continue with email →
+              </button>
+            )}
 
-              <p className="text-center text-xs text-slate-400">
-                Already have an account?{' '}
-                <button
-                  onClick={() => { localStorage.setItem('sw_pending_brief', brief._id); navigate(`/login?tab=signin&pendingBrief=${brief._id}`) }}
-                  className="text-brand-600 font-semibold hover:underline"
-                >
-                  Sign in
-                </button>
-              </p>
-            </div>
+            <p className="text-xs text-slate-400">
+              Already have an account?{' '}
+              <button
+                onClick={() => { localStorage.setItem('sw_pending_brief', brief._id); navigate(`/login?tab=signin&pendingBrief=${brief._id}`) }}
+                className="text-brand-600 font-semibold hover:underline"
+              >
+                Sign in
+              </button>
+            </p>
           </>
         )}
+
+        {/* Tertiary actions */}
         <button
-          onClick={onBack}
-          className="w-full py-3 border border-slate-200 text-slate-600 font-semibold rounded-2xl hover:bg-slate-50 transition-colors"
+          onClick={onReRead}
+          className="w-full py-2.5 text-sm text-slate-500 hover:text-slate-700 font-medium transition-colors border border-slate-200 rounded-2xl hover:bg-slate-50"
         >
-          Back to Subject
+          ↩ Re-read Brief
         </button>
       </div>
-
-      {/* Continue Learning */}
-      <ContinueLearning brief={brief} navigate={navigate} />
     </motion.div>
   )
 }
@@ -796,7 +876,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
 // ── Already-read screen ──────────────────────────────────────────────────
 const BOO_CATS = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases']
 
-function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) {
+function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, quizAvailable }) {
   const showBoo    = BOO_CATS.includes(brief.category)
   const booVisible = showBoo && booState !== 'unavailable' && booState !== 'no-game-data'
 
@@ -851,6 +931,17 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) 
         {/* Quiz card */}
         {quizPassed === null ? (
           <div className="h-20 bg-slate-100 rounded-2xl animate-pulse" />
+        ) : !quizAvailable ? (
+          <div className="flex items-center gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50 opacity-60">
+            <div className="w-11 h-11 rounded-xl bg-slate-200 flex items-center justify-center shrink-0 text-xl">
+              🧠
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-sm text-slate-500">Intel Quiz</p>
+              <p className="text-xs text-slate-400 mt-0.5">Still compiling intel for this quiz</p>
+            </div>
+            <span className="text-xs font-semibold text-slate-400 shrink-0">🔒 Intel Pending</span>
+          </div>
         ) : (
           <button
             onClick={() => navigate(`/quiz/${brief._id}`)}
@@ -929,6 +1020,9 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) 
         )}
       </div>
 
+      {/* Continue Learning */}
+      <ContinueLearning brief={brief} navigate={navigate} />
+
     </div>
   )
 }
@@ -953,8 +1047,9 @@ export default function BriefReader() {
   const [done, setDone]          = useState(
     () => sessionStorage.getItem('sw_brief_just_completed') === briefId
   )
-  const [activeKw, setActiveKw]    = useState(null)
-  const [learnedKws, setLearned]   = useState(new Set())
+  const [activeKw, setActiveKw]     = useState(null)
+  const [activeStat, setActiveStat] = useState(null)
+  const [learnedKws, setLearned]    = useState(new Set())
   const [readRecord, setReadRecord] = useState(null)
   // 'unavailable' | 'no-game-data' | 'locked-aircraft-reads' | 'locked-bases-reads' | 'locked-quiz' | 'available' | 'completed'
   const [booState, setBooState]   = useState('unavailable')
@@ -968,6 +1063,7 @@ export default function BriefReader() {
   const [hasSwiped, setHasSwiped]       = useState(false)
   const [mapOpen, setMapOpen]           = useState(false)
   const [mapCentreOn, setMapCentreOn]   = useState(null)
+  const [randomBriefs, setRandomBriefs] = useState([])
   const [startedAtZero] = useState(() => {
     const saved = sessionStorage.getItem(`sw_brief_sec_${briefId}`)
     return !saved || Number(saved) === 0
@@ -978,6 +1074,14 @@ export default function BriefReader() {
   const briefOpenedRef             = useRef(false)
   const accSecondsRef              = useRef(0)
   const lastTickRef                = useRef(null)
+
+  // Quiz availability — true when the user's difficulty pool has ≥5 questions
+  const MIN_QUIZ_QUESTIONS = 5
+  const quizAvailable = brief
+    ? (user?.difficultySetting === 'medium'
+        ? (brief.quizQuestionsMedium?.length ?? 0) >= MIN_QUIZ_QUESTIONS
+        : (brief.quizQuestionsEasy?.length   ?? 0) >= MIN_QUIZ_QUESTIONS)
+    : false
 
   // Layer 2 safety net: if user navigated away before spawn modal appeared, restore it
   useEffect(() => {
@@ -1055,7 +1159,16 @@ export default function BriefReader() {
         return r.json()
       })
       .then(data => {
-        if (data?.data?.brief) setBrief(data.data.brief)
+        if (data?.data?.brief) {
+          const b = data.data.brief
+          setBrief(b)
+          if (b.status === 'stub') {
+            fetch(`${API}/api/briefs/random-sample?count=5&exclude=${b._id}`, { credentials: 'include' })
+              .then(r => r.json())
+              .then(d => { if (d?.data) setRandomBriefs(d.data) })
+              .catch(() => {})
+          }
+        }
         if (data?.data?.readRecord) setReadRecord(data.data.readRecord)
         if (data?.data?.mentionedBriefs) setMentionedBriefs(data.data.mentionedBriefs)
       })
@@ -1302,6 +1415,18 @@ export default function BriefReader() {
     if (kw) setLearned(s => new Set([...s, kw.keyword.toLowerCase()]))
   }
 
+  const handleStatTap = (stat) => {
+    if (!stat?.mnemonic) return
+    setActiveStat(stat)
+    if (user && brief?._id) {
+      fetch(`${API}/api/briefs/${brief._id}/mnemonic-viewed`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statKey: stat.statKey }),
+      }).catch(() => {})
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
@@ -1391,12 +1516,9 @@ export default function BriefReader() {
             </button>
           )}
         </motion.div>
-        <button
-          onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
-          className="mt-5 w-full py-3 border border-slate-200 text-slate-600 font-semibold rounded-2xl hover:bg-slate-50 transition-colors"
-        >
-          ← Back to {brief.category}
-        </button>
+        <div className="mt-5">
+          <ContinueLearning brief={brief} navigate={navigate} fallbackCards={randomBriefs} />
+        </div>
       </>
     )
   }
@@ -1467,8 +1589,9 @@ export default function BriefReader() {
         brief={brief}
         quizPassed={quizPassed}
         booState={booState}
-        onReRead={() => setReReadMode(true)}
+        onReRead={() => { setReReadMode(true); setSection(0); setNavDir(1) }}
         navigate={navigate}
+        quizAvailable={quizAvailable}
       />
     )
   }
@@ -1477,6 +1600,7 @@ export default function BriefReader() {
     <>
       <TutorialModal />
       <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} navigate={navigate} />
+      <StatMnemonicSheet stat={activeStat} onClose={() => setActiveStat(null)} />
 
       {/* Layer 1: block navigation while spawn-check is in-flight */}
       {spawnCheckPending && (
@@ -1522,11 +1646,7 @@ export default function BriefReader() {
         </button>
 
         {/* Brief header */}
-        <motion.div
-          layout
-          transition={{ layout: { type: 'spring', stiffness: 280, damping: 28 } }}
-          className="mb-5 overflow-hidden"
-        >
+        <div className="mb-5 overflow-hidden">
           <AnimatePresence initial={false}>
             {!isLast && (
               <motion.div
@@ -1550,7 +1670,7 @@ export default function BriefReader() {
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        </div>
       </motion.div>
 
 
@@ -1565,7 +1685,10 @@ export default function BriefReader() {
           booState={booState}
           onBattleOrder={booState === 'available' ? () => navigate(`/battle-of-order/${briefId}`) : null}
           onBack={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          onReRead={() => { setDone(false); setReReadMode(true); setSection(0); setNavDir(1) }}
           navigate={navigate}
+          quizPassed={quizPassed}
+          quizAvailable={quizAvailable}
         />
       ) : (
         <>
@@ -1607,11 +1730,7 @@ export default function BriefReader() {
               ...mentionedBriefs.map(b => ({ keyword: b.matchTerm, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
             ]
             return (
-              <motion.div
-                layout
-                transition={{ layout: { type: 'spring', stiffness: 280, damping: 28 } }}
-                className="relative mb-4"
-              >
+              <div className="relative mb-4">
                 <AnimatePresence>
                   {showTutorial && (
                     <SwipeTutorial onDismiss={() => {
@@ -1656,9 +1775,10 @@ export default function BriefReader() {
                     keywords={kwList}
                     learnedKws={learnedKws}
                     onKeywordTap={handleKeywordTap}
+                    onStatTap={handleStatTap}
                   />
                 </SwipeCard>
-              </motion.div>
+              </div>
             )
           })()}
 
@@ -1683,9 +1803,8 @@ export default function BriefReader() {
 
           {/* Connections */}
           <motion.div
-            layout
             animate={{ opacity: isLast ? 1 : 0.3 }}
-            transition={{ layout: { type: 'spring', stiffness: 280, damping: 28 }, opacity: { duration: 1.6, ease: 'easeInOut' } }}
+            transition={{ opacity: { duration: 1.6, ease: 'easeInOut' } }}
             className="mt-6"
           >
             <BriefConnectionsPanel
@@ -1698,7 +1817,7 @@ export default function BriefReader() {
 
           {/* Sources */}
           {brief.sources?.length > 0 && (
-            <motion.div layout transition={{ layout: { type: 'spring', stiffness: 280, damping: 28 } }} className="mt-6 pt-4 border-t border-slate-100">
+            <div className="mt-6 pt-4 border-t border-slate-100">
               <p className="text-xs text-slate-300 mb-1">Sources</p>
               <div className="space-y-0.5">
                 {brief.sources.map((s, i) => (
@@ -1714,7 +1833,7 @@ export default function BriefReader() {
                   </a>
                 ))}
               </div>
-            </motion.div>
+            </div>
           )}
         </>
       )}

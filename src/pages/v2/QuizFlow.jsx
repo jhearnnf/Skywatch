@@ -44,7 +44,7 @@ function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, 
                 ${state === 'correct' ? 'bg-emerald-50 border-emerald-500 text-emerald-800' :
                   state === 'wrong'   ? 'bg-red-50 border-red-400 text-red-700' :
                   answered            ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed' :
-                                        'bg-surface border-slate-200 text-slate-800 hover:border-brand-400 hover:bg-brand-50 cursor-pointer'
+                                        'bg-surface border-slate-200 text-slate-700 hover:border-brand-400 hover:bg-brand-50 cursor-pointer'
                 }`}
             >
               <div className="flex items-center gap-3">
@@ -189,22 +189,24 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
         {booAvailable && onStartBoo && (
           <button
             onClick={onStartBoo}
-            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl text-base transition-colors"
+            className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
           >
             ⚔️ Start Battle of Order
           </button>
         )}
-        <button
-          onClick={onRetry}
-          className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors"
-        >
-          🔄 Try Again
-        </button>
+        {!won && (
+          <button
+            onClick={onRetry}
+            className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors"
+          >
+            🔄 Try Again
+          </button>
+        )}
         <button
           onClick={onBack}
-          className="w-full py-3 border border-slate-200 text-slate-600 font-semibold rounded-2xl hover:bg-slate-50 transition-colors"
+          className="w-full py-3 text-sm text-slate-500 font-medium border border-slate-200 rounded-2xl hover:bg-slate-50 transition-colors"
         >
-          Back to Brief
+          ↩ Back to Brief
         </button>
         <button
           onClick={onBrowse}
@@ -434,10 +436,33 @@ export default function QuizFlow() {
   // ── Loading ──────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="space-y-4 animate-pulse">
-        <div className="h-8 bg-slate-200 rounded-xl w-2/3" />
-        <div className="h-4 bg-slate-100 rounded w-1/2" />
-        {[...Array(4)].map((_, i) => <div key={i} className="h-14 bg-slate-100 rounded-2xl" />)}
+      <div className="animate-pulse">
+        {/* Header row: quit / counter / score */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="h-4 w-10 bg-slate-200 rounded-full" />
+          <div className="h-6 w-16 bg-slate-200 rounded-full" />
+          <div className="h-4 w-14 bg-slate-100 rounded-full" />
+        </div>
+        {/* Difficulty badge */}
+        <div className="flex justify-center mb-2">
+          <div className="h-4 w-24 bg-slate-100 rounded-full" />
+        </div>
+        {/* Progress bar */}
+        <div className="h-2.5 bg-slate-100 rounded-full mb-6" />
+        {/* Question card */}
+        <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200 mb-4">
+          <div className="h-5 bg-slate-200 rounded w-full mb-2" />
+          <div className="h-5 bg-slate-200 rounded w-4/5 mb-6" />
+          {/* Answer options */}
+          <div className="space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-4 rounded-2xl border-2 border-slate-100">
+                <div className="w-7 h-7 rounded-full bg-slate-200 shrink-0" />
+                <div className="h-4 bg-slate-200 rounded flex-1" style={{ width: `${65 + i * 7}%` }} />
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     )
   }

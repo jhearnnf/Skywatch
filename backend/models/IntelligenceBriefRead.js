@@ -13,6 +13,9 @@ const intelligenceBriefReadSchema = new mongoose.Schema({
 
   firstReadAt: { type: Date, default: Date.now },
   lastReadAt:  { type: Date, default: Date.now },
+
+  // Stat keys where this user has opened the mnemonic sheet for this brief
+  mnemonicsViewed: { type: [String], default: [] },
 });
 
 // One record per user per brief

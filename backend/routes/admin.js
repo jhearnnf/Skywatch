@@ -1408,6 +1408,70 @@ function lookupRankHierarchy(title) {
   return null;
 }
 
+// ── Mnemonic helpers ───────────────────────────────────────────────────────
+
+// Returns stat objects { key, label, value } for whichever gameData fields are populated.
+// Mirrors the frontend buildStats() so the AI prompt always reflects what the user sees.
+function buildMnemonicStats(category, gameData) {
+  const gd = gameData ?? {};
+  const stats = [];
+  if (category === 'Aircrafts') {
+    if (gd.topSpeedKph != null)
+      stats.push({ key: 'topSpeedKph', label: 'Top Speed', value: `${gd.topSpeedKph.toLocaleString()} km/h · ${Math.round(gd.topSpeedKph * 0.621).toLocaleString()} mph` });
+    if (gd.yearIntroduced != null)
+      stats.push({ key: 'yearIntroduced', label: 'Introduced', value: String(gd.yearIntroduced) });
+    if (gd.yearIntroduced != null)
+      stats.push({ key: 'status', label: 'Status', value: gd.yearRetired != null ? `Retired ${gd.yearRetired}` : 'In Service' });
+  } else if (category === 'Ranks') {
+    if (gd.rankHierarchyOrder != null)
+      stats.push({ key: 'rankHierarchyOrder', label: 'Seniority', value: `#${gd.rankHierarchyOrder}` });
+  } else if (category === 'Training') {
+    if (gd.trainingWeekStart != null && gd.trainingWeekEnd != null)
+      stats.push({ key: 'pipelinePosition', label: 'Pipeline Position', value: `Week ${gd.trainingWeekStart} – Week ${gd.trainingWeekEnd}` });
+    if (gd.weeksOfTraining != null)
+      stats.push({ key: 'trainingDuration', label: 'Duration', value: `${gd.weeksOfTraining} week${gd.weeksOfTraining === 1 ? '' : 's'}` });
+  } else if (['Missions', 'Tech', 'Treaties'].includes(category)) {
+    if (gd.startYear != null)
+      stats.push({ key: 'period', label: 'Period', value: `${gd.startYear} – ${gd.endYear != null ? gd.endYear : 'Present'}` });
+  } else if (['Bases', 'Squadrons', 'Threats'].includes(category)) {
+    const L = {
+      Bases:     { start: 'Opened',     active: 'Active',     closed: 'Closed'    },
+      Squadrons: { start: 'Formed',     active: 'Active',     closed: 'Disbanded' },
+      Threats:   { start: 'Introduced', active: 'In Service', closed: 'Retired'   },
+    }[category];
+    if (gd.startYear != null)
+      stats.push({ key: 'startYear', label: L.start, value: String(gd.startYear) });
+    if (gd.startYear != null)
+      stats.push({ key: 'status', label: 'Status', value: gd.endYear != null ? `${L.closed} ${gd.endYear}` : L.active });
+  }
+  return stats;
+}
+
+// Generates mnemonics for all populated stats of a brief. Returns a plain object
+// keyed by stat key, or null if the brief has no stats or the AI call fails.
+async function generateMnemonicsForBrief(title, category, gameData) {
+  const stats = buildMnemonicStats(category, gameData);
+  if (!stats.length) return null;
+
+  const statLines = stats.map(s => `- ${s.label}: ${s.value}`).join('\n');
+  const shape = `{${stats.map(s => `"${s.key}": "mnemonic sentence"`).join(', ')}}`;
+
+  const data = await openRouterChat([{
+    role: 'system',
+    content: 'You are a memory coach writing vivid mnemonics to help RAF applicants recall specific facts. Each mnemonic must be a single punchy sentence, max 20 words. Be specific to the exact value and creative — use imagery, comparisons, or wordplay. No preamble.',
+  }, {
+    role: 'user',
+    content: `Brief: "${title}" (${category})\n\nStats to remember:\n${statLines}\n\nFor each stat, write one memorable sentence that helps an RAF applicant remember the exact value and connect it to this subject.\n\nReturn ONLY valid JSON — no markdown:\n${shape}`,
+  }], 'perplexity/sonar', 512);
+
+  const raw = data.choices?.[0]?.message?.content ?? '{}';
+  try {
+    return JSON.parse(cleanJson(raw));
+  } catch {
+    return null;
+  }
+}
+
 function hasStaleSource(sources) {
   if (!Array.isArray(sources) || sources.length === 0) return false;
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
@@ -1886,6 +1950,15 @@ router.post('/ai/regenerate-brief/:id', async (req, res) => {
       throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
     }
 
+    // ── Step 3: generate mnemonics from the resolved gameData ───────────────
+    const resolvedGameData = gameData ?? brief.gameData?.toObject?.() ?? brief.gameData ?? {};
+    let mnemonics = null;
+    try {
+      mnemonics = await generateMnemonicsForBrief(brief.title, brief.category, resolvedGameData);
+    } catch (mnemonicErr) {
+      console.error('[regenerate-brief] mnemonic generation failed (non-fatal):', mnemonicErr.message);
+    }
+
     res.json({
       status: 'success',
       data: {
@@ -1893,7 +1966,8 @@ router.post('/ai/regenerate-brief/:id', async (req, res) => {
         keywords,
         easyQuestions:   quizGenerated.easyQuestions   ?? [],
         mediumQuestions: quizGenerated.mediumQuestions ?? [],
-        ...(gameData ? { gameData } : {}),
+        ...(gameData   ? { gameData }   : {}),
+        ...(mnemonics  ? { mnemonics }  : {}),
       },
     });
   } catch (err) {
@@ -2203,6 +2277,81 @@ router.get('/economy-viability', async (req, res) => {
       },
     });
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/generate-mnemonic
+// Generates mnemonics for one stat (statKey provided) or all stats (statKey omitted).
+// Always returns { mnemonics: { key: sentence, ... } }.
+router.post('/ai/generate-mnemonic', async (req, res) => {
+  try {
+    const { title, category, gameData, statKey } = req.body;
+    if (!title || !category) return res.status(400).json({ message: 'title and category required' });
+
+    if (statKey) {
+      // Single stat — generate one mnemonic and wrap it in an object
+      const stats = buildMnemonicStats(category, gameData ?? {});
+      const stat  = stats.find(s => s.key === statKey);
+      if (!stat) return res.status(400).json({ message: `No stat found for key "${statKey}" in category "${category}"` });
+
+      const data = await openRouterChat([{
+        role: 'system',
+        content: 'You are a memory coach writing vivid mnemonics to help RAF applicants recall specific facts. Write a single punchy sentence, max 20 words. Be specific to the exact value shown and creative — use imagery, comparisons, or wordplay. Return ONLY the sentence, no preamble, no quotes.',
+      }, {
+        role: 'user',
+        content: `Brief: "${title}" (${category})\nStat: ${stat.label} — ${stat.value}\n\nWrite one memorable sentence that helps an RAF applicant remember this exact value and connect it to this subject.`,
+      }], 'perplexity/sonar', 128);
+
+      const sentence = (data.choices?.[0]?.message?.content ?? '').trim();
+      res.json({ status: 'success', data: { mnemonics: { [statKey]: sentence } } });
+    } else {
+      // All stats at once
+      const mnemonics = await generateMnemonicsForBrief(title, category, gameData ?? {});
+      if (!mnemonics) return res.status(400).json({ message: 'No stats found for this category' });
+      res.json({ status: 'success', data: { mnemonics } });
+    }
+  } catch (err) {
+    console.error('[generate-mnemonic] error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/generate-mnemonics-missing
+// Finds all published BOO-category briefs that have populated stats but no mnemonics,
+// generates and saves them. Returns a summary of what was processed.
+router.post('/ai/generate-mnemonics-missing', async (req, res) => {
+  try {
+    const briefs = await IntelligenceBrief.find({
+      status:   'published',
+      category: { $in: BOO_CATEGORIES },
+    }).select('title category gameData mnemonics').lean();
+
+    const toProcess = briefs.filter(b => {
+      const stats = buildMnemonicStats(b.category, b.gameData ?? {});
+      if (!stats.length) return false;
+      const m = b.mnemonics ?? {};
+      return !stats.some(s => m[s.key]); // skip if all stats already have mnemonics
+    });
+
+    let processed = 0;
+    const errors  = [];
+
+    for (const brief of toProcess) {
+      try {
+        const mnemonics = await generateMnemonicsForBrief(brief.title, brief.category, brief.gameData ?? {});
+        if (mnemonics) {
+          await IntelligenceBrief.findByIdAndUpdate(brief._id, { mnemonics });
+          processed++;
+        }
+      } catch (err) {
+        errors.push({ id: String(brief._id), title: brief.title, error: err.message });
+      }
+    }
+
+    res.json({ status: 'success', data: { processed, total: toProcess.length, errors } });
+  } catch (err) {
+    console.error('[generate-mnemonics-missing] error:', err.message);
     res.status(500).json({ message: err.message });
   }
 });

@@ -34,6 +34,50 @@ function getDisplayValue(orderType, gameData) {
   }
 }
 
+// Returns a Set of briefId strings where the user has won ALL available order types
+async function computeFullyCompletedBriefIds(userId, needed) {
+  const results = await GameSessionOrderOfBattleResult.find({ userId, won: true })
+    .populate({ path: 'gameId', select: 'anchorBriefId orderType' }).lean();
+
+  const wonByBrief = new Map();
+  for (const r of results) {
+    if (!r.gameId?.anchorBriefId) continue;
+    const bid = r.gameId.anchorBriefId.toString();
+    if (!wonByBrief.has(bid)) wonByBrief.set(bid, new Set());
+    wonByBrief.get(bid).add(r.gameId.orderType);
+  }
+  if (wonByBrief.size === 0) return new Set();
+
+  const ObjectId = require('mongoose').Types.ObjectId;
+  const briefIds = [...wonByBrief.keys()].map(id => new ObjectId(id));
+  const briefs   = await IntelligenceBrief.find({ _id: { $in: briefIds } })
+    .select('category gameData').lean();
+
+  const categories = [...new Set(briefs.map(b => b.category))];
+  const availByCategory = {};
+  for (const category of categories) {
+    availByCategory[category] = new Set();
+    for (const orderType of (ORDER_TYPES[category] ?? [])) {
+      const fieldKey = REQUIRED_FIELD[orderType];
+      const count = await IntelligenceBrief.countDocuments({
+        category, [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
+      });
+      if (count >= needed) availByCategory[category].add(orderType);
+    }
+  }
+
+  const fullyCompleted = new Set();
+  for (const brief of briefs) {
+    const bid = brief._id.toString();
+    const catAvail = availByCategory[brief.category] ?? new Set();
+    const availForBrief = [...catAvail].filter(ot => brief.gameData?.[REQUIRED_FIELD[ot]] != null);
+    if (availForBrief.length === 0) continue;
+    const won = wonByBrief.get(bid) ?? new Set();
+    if (availForBrief.every(ot => won.has(ot))) fullyCompleted.add(bid);
+  }
+  return fullyCompleted;
+}
+
 // POST /api/games/quiz/start — fetch questions, create attempt, return question set
 router.post('/quiz/start', protect, async (req, res) => {
   try {
@@ -261,16 +305,10 @@ router.get('/quiz/completed-brief-ids', protect, async (req, res) => {
 // GET /api/games/battle-of-order/completed-brief-ids — all briefIds this user has ever won a BOO game for
 router.get('/battle-of-order/completed-brief-ids', protect, async (req, res) => {
   try {
-    const results = await GameSessionOrderOfBattleResult.find({
-      userId: req.user._id,
-      won: true,
-    }).populate({ path: 'gameId', select: 'anchorBriefId' }).lean();
-    const ids = [...new Set(
-      results
-        .filter(r => r.gameId?.anchorBriefId)
-        .map(r => r.gameId.anchorBriefId.toString())
-    )];
-    res.json({ status: 'success', data: { ids } });
+    const userDoc = await User.findById(req.user._id).select('difficultySetting').lean();
+    const needed  = (userDoc.difficultySetting ?? 'easy') === 'medium' ? 5 : 3;
+    const fullyCompleted = await computeFullyCompletedBriefIds(req.user._id, needed);
+    res.json({ status: 'success', data: { ids: [...fullyCompleted] } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -406,15 +444,8 @@ router.get('/battle-of-order/briefs', protect, async (req, res) => {
       }
     }
 
-    // User's won BOO results
-    const wonBooResults = await GameSessionOrderOfBattleResult.find({
-      userId: req.user._id, won: true,
-    }).populate({ path: 'gameId', select: 'anchorBriefId' }).lean();
-    const wonBooSet = new Set(
-      wonBooResults
-        .filter(r => r.gameId?.anchorBriefId)
-        .map(r => r.gameId.anchorBriefId.toString())
-    );
+    // Brief IDs where the user has won ALL available order types
+    const wonBooSet = await computeFullyCompletedBriefIds(req.user._id, needed);
 
     // DB filter by state
     const dbFilter = { category: { $in: BATTLE_CATEGORIES }, status: 'published' };
@@ -539,15 +570,8 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
     }).select('intelBriefId').lean();
     const passedQuizSet = new Set(passedQuizRecords.map(r => r.intelBriefId.toString()));
 
-    // User's won BOO results
-    const wonBooResults = await GameSessionOrderOfBattleResult.find({
-      userId: req.user._id, won: true,
-    }).populate({ path: 'gameId', select: 'anchorBriefId' }).lean();
-    const wonBooSet = new Set(
-      wonBooResults
-        .filter(r => r.gameId?.anchorBriefId)
-        .map(r => r.gameId.anchorBriefId.toString())
-    );
+    // Brief IDs where the user has won ALL available order types
+    const wonBooSet = await computeFullyCompletedBriefIds(req.user._id, needed);
 
     // Category-reads gate: Bases briefs gate on bases reads; all others gate on aircraft reads
     const aircraftBriefIdsRec = await IntelligenceBrief.find({ category: 'Aircrafts', status: 'published' })
@@ -827,7 +851,10 @@ router.post('/battle-of-order/generate', protect, async (req, res) => {
     const sorted  = [...selected].sort((a, b) => getValue(a) - getValue(b));
     const choices = sorted.map((brief, i) => ({ briefId: brief._id, correctOrder: i + 1 }));
 
-    const game = await GameOrderOfBattle.create({ anchorBriefId: briefId, category, difficulty, orderType, choices });
+    const game = await Promise.race([
+      GameOrderOfBattle.create({ anchorBriefId: briefId, category, difficulty, orderType, choices }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('BOO create timed out')), 10000)),
+    ]);
 
     // Populate media for each choice
     const MediaModel = require('../models/Media');
@@ -867,16 +894,38 @@ router.post('/battle-of-order/generate', protect, async (req, res) => {
 router.get('/battle-of-order/status/:briefId', protect, async (req, res) => {
   try {
     const { briefId } = req.params;
+
     const wonResults = await GameSessionOrderOfBattleResult.find({
-      userId: req.user._id,
-      won: true,
+      userId: req.user._id, won: true,
     }).populate({ path: 'gameId', select: 'anchorBriefId orderType difficulty' }).lean();
 
     const completedOrderTypes = wonResults
       .filter(r => r.gameId?.anchorBriefId?.toString() === briefId)
       .map(r => ({ orderType: r.gameId.orderType, difficulty: r.gameId.difficulty }));
 
-    res.json({ status: 'success', data: { hasCompleted: completedOrderTypes.length > 0, completedOrderTypes } });
+    // hasCompleted = true only when ALL available order types for this brief are won
+    let hasCompleted = false;
+    if (completedOrderTypes.length > 0) {
+      const userDoc = await User.findById(req.user._id).select('difficultySetting').lean();
+      const needed  = (userDoc.difficultySetting ?? 'easy') === 'medium' ? 5 : 3;
+      const anchor  = await IntelligenceBrief.findById(briefId).select('category gameData').lean();
+      if (anchor) {
+        const wonSet       = new Set(completedOrderTypes.map(c => c.orderType));
+        const catOrderTypes = ORDER_TYPES[anchor.category] ?? [];
+        const available    = [];
+        for (const ot of catOrderTypes) {
+          const fieldKey = REQUIRED_FIELD[ot];
+          if (anchor.gameData?.[fieldKey] == null) continue;
+          const count = await IntelligenceBrief.countDocuments({
+            category: anchor.category, [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
+          });
+          if (count >= needed) available.push(ot);
+        }
+        hasCompleted = available.length > 0 && available.every(ot => wonSet.has(ot));
+      }
+    }
+
+    res.json({ status: 'success', data: { hasCompleted, completedOrderTypes } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
