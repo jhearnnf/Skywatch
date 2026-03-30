@@ -19,7 +19,7 @@ function KeywordSheet({ kw, onClose, navigate }) {
 
   const handleOpenBrief = () => {
     onClose()
-    navigate(`/brief/${kw.linkedBriefId}`)
+    navigate(`/brief/${kw.linkedBriefId?._id ?? kw.linkedBriefId}`)
   }
 
   return (
@@ -340,7 +340,8 @@ function SwipeTutorial({ onDismiss }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[1100] flex flex-col items-end justify-end pb-5 px-4 rounded-2xl pointer-events-none"
+      className="absolute inset-0 z-[1100] flex flex-col items-end justify-end pb-5 px-4 rounded-2xl pointer-events-auto cursor-pointer"
+      onClick={onDismiss}
     >
       <motion.div
         animate={{ opacity: [1, 0.35, 1] }}
