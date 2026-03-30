@@ -35,13 +35,13 @@ export const TUTORIAL_STEPS = {
   ],
   briefReader: [
     { emoji: '📋', title: 'Reading Intel Briefs',
-      body: 'Each brief is broken into short, clear sections. Read one section at a time by pressing Continue — no rushing, just learning at your own pace.' },
+      body: 'Each brief is split into short sections — swipe left or tap Continue to move forward, swipe right to go back. The counter in the top corner of each card shows where you are in the brief.' },
     { emoji: '🔵', title: 'Keyword Hotspots',
-      body: 'Words highlighted in blue are important RAF terms. Tap any highlighted word to see a detailed explanation. Building this vocabulary is key for your selection process!' },
-    { emoji: '💡', title: 'Take Your Time',
-      body: 'These briefs cover real RAF knowledge. The more carefully you read, the better you\'ll perform in the quiz — and in your actual RAF interviews.' },
+      body: 'Words highlighted in blue are important RAF terms. Tap any highlighted word to see a full explanation. Building this vocabulary is essential for your selection interviews.' },
+    { emoji: '📊', title: 'Key Stats & Memory Aids',
+      body: 'Each section shows a key fact about the subject. If you see a 💡 next to a stat, tap it — a mnemonic memory aid will help you lock that fact in before your interview.' },
     { emoji: '🎮', title: 'Unlock the Quiz',
-      body: 'Once you\'ve read all sections, a quiz becomes available. Complete the quiz to earn Aircoins and mark the brief as complete.' },
+      body: 'Once you\'ve read all sections, a quiz becomes available. Complete it to test your knowledge, earn Aircoins, and mark the brief as complete.' },
   ],
   quiz: [
     { emoji: '🎯', title: 'Quiz Time!',
@@ -126,6 +126,21 @@ export function AppTutorialProvider({ children }) {
     return false
   }, [user?._id])
 
+  // When admin resets tutorials, clear localStorage entries so they show again
+  useEffect(() => {
+    if (!user?._id || !user?.tutorialsResetAt) return
+    const clearedAtKey = `sw_tut_v2_${user._id}_clearedAt`
+    const clearedAt    = localStorage.getItem(clearedAtKey)
+    const resetAt      = new Date(user.tutorialsResetAt).getTime()
+    if (!clearedAt || resetAt > Number(clearedAt)) {
+      ;[...Object.keys(TUTORIAL_STEPS), 'swipe'].forEach(name => {
+        localStorage.removeItem(`sw_tut_v2_${user._id}_${name}`)
+        localStorage.removeItem(`sw_tut_v2_anon_${name}`)
+      })
+      localStorage.setItem(clearedAtKey, String(resetAt))
+    }
+  }, [user?._id, user?.tutorialsResetAt])
+
   // Load tutorial content overrides from public settings on mount
   useEffect(() => {
     fetch(`${API}/api/settings`)
@@ -163,22 +178,35 @@ export function AppTutorialProvider({ children }) {
     setActive({ name, steps, stepIndex: 0 })
   }, [authLoading, hasSeen, getSteps])
 
+  const markSeenOnServer = useCallback((name, status) => {
+    if (!user?._id) return
+    fetch(`${API}/api/users/me/tutorials`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tutorialId: name, status }),
+    }).catch(() => {})
+  }, [user?._id])
+
   const next = useCallback(() => {
     setActive(prev => {
       if (!prev) return null
       const nextIdx = prev.stepIndex + 1
       if (nextIdx >= prev.steps.length) {
         localStorage.setItem(storageKey(prev.name), '1')
+        markSeenOnServer(prev.name, 'viewed')
         return null
       }
       return { ...prev, stepIndex: nextIdx }
     })
-  }, [storageKey])
+  }, [storageKey, markSeenOnServer])
 
   const skip = useCallback(() => {
-    if (active) localStorage.setItem(storageKey(active.name), '1')
+    if (active) {
+      localStorage.setItem(storageKey(active.name), '1')
+      markSeenOnServer(active.name, 'skipped')
+    }
     setActive(null)
-  }, [active, storageKey])
+  }, [active, storageKey, markSeenOnServer])
 
   const replay = useCallback((name) => {
     start(name, true)

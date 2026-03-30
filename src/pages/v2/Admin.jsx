@@ -1437,7 +1437,7 @@ function UsersTab({ API }) {
                   {
                     label:   'Tutorials',
                     fields:  ['tutorials'],
-                    isReset: !['welcome', 'intel_brief', 'user', 'load_up'].some(
+                    isReset: !['home','learn','briefReader','quiz','play','profile','rankings','wheres_aircraft'].some(
                       k => u.tutorials?.[k] === 'viewed' || u.tutorials?.[k] === 'skipped'
                     ),
                   },

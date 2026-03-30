@@ -11,8 +11,9 @@ An intelligence-style study platform built for RAF applicants, recruits, and ent
 - **Level & Rank Progression** — earn Aircoins through games and daily logins to level up and climb the RAF rank ladder
 - **Subscription Tiers** — Free, Trial, Silver, and Gold tiers via Stripe
 - **Google OAuth + Email Auth** — secure sign-in with JWT httpOnly cookies
-- **Admin Panel** — AI-assisted brief generation, user management, problem reports, app stats, and configurable game settings
+- **Admin Panel** — AI-assisted brief generation, mnemonic prompt configuration, user management, problem reports, app stats, and configurable game settings
 - **Cloud Image Storage** — brief images stored and served via Cloudinary
+- **RAF Bases Map** — interactive Leaflet map of RAF bases
 
 ---
 
@@ -23,8 +24,9 @@ An intelligence-style study platform built for RAF applicants, recruits, and ent
 | Frontend | React 19 + Vite 7 + Tailwind CSS v4 |
 | Routing | React Router v7 |
 | Animations | Framer Motion |
-| Backend | Node.js + Express 4 |
-| Database | MongoDB Atlas (Mongoose 8) |
+| Maps | Leaflet + react-leaflet |
+| Backend | Node.js + Express 5 |
+| Database | MongoDB Atlas (Mongoose 9) |
 | Auth | JWT (httpOnly cookies) + Google OAuth (GIS) |
 | Payments | Stripe |
 | Images | Cloudinary |
@@ -38,10 +40,10 @@ An intelligence-style study platform built for RAF applicants, recruits, and ent
 ```
 Skywatch/
 ├── backend/
-│   ├── models/           # Mongoose schemas (18 models)
-│   ├── routes/           # auth, briefs, games, admin, users
+│   ├── models/           # Mongoose schemas (26 models)
+│   ├── routes/           # auth, briefs, games, admin, users, stripe, stripeWebhook
 │   ├── middleware/       # JWT auth middleware
-│   ├── utils/            # cloudinary, email, awardCoins, subscription helpers
+│   ├── utils/            # cloudinary, email, awardCoins, subscription, categoryMapping
 │   ├── scripts/          # one-off maintenance scripts
 │   ├── __tests__/        # Jest integration tests
 │   ├── app.js            # Express app (no server.listen)
@@ -49,10 +51,10 @@ Skywatch/
 │   ├── .env.example      # Backend env template
 │   └── package.json
 ├── src/
-│   ├── components/       # Layout, notifications, tutorial, UpgradePrompt
+│   ├── components/       # Layout, notifications, tutorial, onboarding, ui, UpgradePrompt
 │   ├── pages/v2/         # All active pages (Home, Learn, BriefReader, Play, Profile, …)
 │   ├── context/          # AuthContext, AppSettingsContext, AppTutorialContext
-│   ├── utils/            # subscription helpers
+│   ├── utils/            # subscription, sound, briefImageZones, pendingBrief
 │   ├── data/             # mockData.js (levels, leaderboard, categories)
 │   └── main.jsx / main.css
 ├── public/
@@ -158,14 +160,20 @@ Place these MP3 files in `public/sounds/` for the full audio experience:
 | `target_locked.mp3` | Clicking a highlighted keyword |
 | `target_locked_keyword.mp3` | Keyword interaction |
 | `stand_down.mp3` | Closing a keyword sheet |
-| `coin.mp3` | Earning Aircoins |
+| `aircoin.mp3` | Earning Aircoins |
 | `level_up.mp3` | Level up |
 | `rank_promotion.mp3` | RAF rank promotion |
+| `first_brief_complete.mp3` | Completing first brief |
+| `quiz_answer_correct.mp3` | Correct quiz answer |
+| `quiz_answer_incorrect.mp3` | Incorrect quiz answer |
 | `quiz_complete_win.mp3` | Passing a quiz |
 | `quiz_complete_lose.mp3` | Failing a quiz |
 | `battle_of_order_won.mp3` | Winning Battle of Order |
 | `battle_of_order_lost.mp3` | Losing Battle of Order |
 | `battle_of_order_selection.mp3` | Making a selection in Battle of Order |
+| `where_aircraft_win.mp3` | Winning Where's That Aircraft |
+| `where_aircraft_lose.mp3` | Losing Where's That Aircraft |
+| `where_aircraft_mission_detected.mp3` | Mission detected event |
 | `fire.mp3` | Firing in a game |
 | `out_of_ammo_1/2/3.mp3` | Clicking a keyword with no ammo |
 
@@ -188,6 +196,7 @@ cd backend && npm test
 The account `osmightymanos@hotmail.co.uk` is automatically granted admin rights on first sign-in. Admin users see an **Admin** link in the navigation. The admin panel includes:
 
 - AI-assisted brief creation (GPT-4o-mini via OpenRouter + Wikipedia images via Cloudinary)
+- Mnemonic prompt configuration per brief
 - User management and subscription tier overrides
 - Problem report review
 - App settings (ammo amounts, trial duration, free/silver categories)

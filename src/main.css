@@ -341,4 +341,15 @@ body.play-mode .card-shadow {
   text-align: center;
   max-width: 20rem;
 }
+
+@keyframes coin-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.5); transform: scale(1); }
+  50%  { box-shadow: 0 0 0 8px rgba(217, 119, 6, 0); transform: scale(1.015); }
+  100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); transform: scale(1); }
+}
+
+.coin-hook-pulse {
+  animation: coin-pulse 0.6s ease-out 3;
+  animation-delay: 0.45s;
+  animation-fill-mode: both;
 }

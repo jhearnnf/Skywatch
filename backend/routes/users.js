@@ -183,7 +183,10 @@ router.get('/aircoins/history', protect, async (req, res) => {
 });
 
 // PATCH /api/users/me/tutorials — update a single tutorial status
-const VALID_TUTORIAL_IDS = ['welcome', 'intel_brief', 'user', 'load_up'];
+const VALID_TUTORIAL_IDS = [
+  'welcome', 'intel_brief', 'user', 'load_up',
+  'home', 'learn', 'briefReader', 'quiz', 'play', 'profile', 'rankings', 'wheres_aircraft',
+];
 const TUTORIAL_PRIORITY  = { unseen: 0, skipped: 1, viewed: 2 };
 
 router.patch('/me/tutorials', protect, async (req, res) => {

@@ -185,7 +185,7 @@ function FlashCard({ sectionIdx, total, title, subtitle, category, subcategory, 
 }
 
 // ── Section card (image zone + stat + text) ───────────────────────────────
-function SectionCard({ imageZone, stat, sectionIdx, total, isLast, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap }) {
+function SectionCard({ imageZone, stat, sectionIdx, total, isLast, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap }) {
   const hasBases = (highlightedBaseNames ?? []).length > 0
 
   if (isLast) {
@@ -218,13 +218,13 @@ function SectionCard({ imageZone, stat, sectionIdx, total, isLast, highlightedBa
         />
         {hasBases && mapOpen && (
           <div
-            className="absolute inset-0"
+            className={`absolute inset-0${tutorialActive ? ' pointer-events-none' : ''}`}
             onPointerDownCapture={e => e.stopPropagation()}
           >
             <RafBasesMap mode="view" height="100%" highlightedBaseNames={highlightedBaseNames} centreOn={centreOn} />
           </div>
         )}
-        {hasBases && (
+        {hasBases && !tutorialActive && (
           <button
             onClick={() => setMapOpen(o => !o)}
             className="absolute bottom-2 right-2 z-[1000] text-xs font-semibold px-2.5 py-1 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors backdrop-blur-sm"
@@ -272,17 +272,36 @@ function SectionCard({ imageZone, stat, sectionIdx, total, isLast, highlightedBa
 }
 
 // ── Swipe wrapper (Tinder-style drag) ─────────────────────────────────────
-function SwipeCard({ navDir, canGoBack, onSwipeLeft, onSwipeRight, onFirstSwipe, children }) {
-  const controls = useAnimationControls()
-  const x        = useMotionValue(0)
-  const rotate   = useTransform(x, [-200, 200], [-8, 8])
+function SwipeCard({ navDir, canGoBack, onSwipeLeft, onSwipeRight, onFirstSwipe, showTutorial, children }) {
+  const controls    = useAnimationControls()
+  const x           = useMotionValue(0)
+  const rotate      = useTransform(x, [-200, 200], [-8, 8])
+  const isSwipingRef = useRef(false)
 
   useEffect(() => {
     x.set(navDir * 120)
     controls.start({ x: 0, opacity: 1, transition: { type: 'spring', stiffness: 280, damping: 26 } })
   }, []) // fires on mount — remounted via key on each section change
 
+  // Tutorial idle oscillation — animate the real card so the user sees what to do
+  useEffect(() => {
+    if (showTutorial) {
+      const timer = setTimeout(() => {
+        controls.start({
+          x: [0, -44, 0, 44, 0],
+          rotate: [0, -5, 0, 5, 0],
+          transition: { repeat: Infinity, duration: 2.4, ease: 'easeInOut' },
+        })
+      }, 600)
+      return () => clearTimeout(timer)
+    } else if (!isSwipingRef.current) {
+      // Dismissed via tap — snap card back to rest; if swiping, let fly-off run uninterrupted
+      controls.start({ x: 0, rotate: 0, transition: { type: 'spring', stiffness: 350, damping: 28 } })
+    }
+  }, [showTutorial]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleDragEnd(_, info) {
+    isSwipingRef.current = true
     onFirstSwipe?.()
     const swipeLeft  = info.offset.x < -80 || info.velocity.x < -500
     const swipeRight = info.offset.x > 80  || info.velocity.x > 500
@@ -295,6 +314,7 @@ function SwipeCard({ navDir, canGoBack, onSwipeLeft, onSwipeRight, onFirstSwipe,
     } else {
       controls.start({ x: 0, rotate: 0, opacity: 1, transition: { type: 'spring', stiffness: 350, damping: 28 } })
     }
+    isSwipingRef.current = false
   }
 
   return (
@@ -320,18 +340,17 @@ function SwipeTutorial({ onDismiss }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[1100] flex flex-col items-center justify-center rounded-2xl bg-black/35 backdrop-blur-[2px]"
-      onClick={onDismiss}
+      className="absolute inset-0 z-[1100] flex flex-col items-end justify-end pb-5 px-4 rounded-2xl pointer-events-none"
     >
-      <motion.p
-        animate={{ x: [-28, 28, -28] }}
-        transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
-        className="text-white font-bold text-xl tracking-widest mb-3 select-none"
+      <motion.div
+        animate={{ opacity: [1, 0.35, 1] }}
+        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+        className="pointer-events-auto mx-auto bg-black/60 rounded-full px-5 py-2 flex items-center gap-2 cursor-pointer select-none"
+        onClick={onDismiss}
       >
-        ← →
-      </motion.p>
-      <p className="text-white font-bold text-sm">Swipe to navigate sections</p>
-      <p className="text-white/60 text-xs mt-1">Tap to dismiss</p>
+        <span className="text-white text-sm font-semibold">← Swipe to navigate →</span>
+        <span className="text-white/50 text-xs">tap to dismiss</span>
+      </motion.div>
     </motion.div>
   )
 }
@@ -807,7 +826,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
         ) : (
           <>
             {/* Coin hook */}
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-left flex items-center gap-3">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-left flex items-center gap-3 coin-hook-pulse">
               <span className="text-xl shrink-0">⭐</span>
               <div>
                 <p className="text-sm font-bold text-amber-800">{coinReward} Aircoins waiting to be claimed</p>
@@ -1032,7 +1051,9 @@ export default function BriefReader() {
   const { briefId }    = useParams()
   const navigate       = useNavigate()
   const { user, API, awardAircoins, setUser } = useAuth()
-  const { start }      = useAppTutorial()
+  const { start, visible } = useAppTutorial()
+  const startRef = useRef(start)
+  useEffect(() => { startRef.current = start }, [start])
   const { settings }            = useAppSettings()
   const [brief, setBrief]         = useState(null)
   const [mentionedBriefs, setMentionedBriefs] = useState([])
@@ -1059,7 +1080,7 @@ export default function BriefReader() {
   const [spawnCheckPending, setSpawnCheckPending] = useState(false) // true while spawn-check is in-flight
   const [wtaSpawn,          setWtaSpawn]          = useState(null)  // { remaining, prereqsMet } from API
   const [navDir, setNavDir]        = useState(1) // 1 = forward, -1 = backward
-  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('seenBriefSwipeTutorial'))
+  const [showTutorial, setShowTutorial] = useState(false)
   const [hasSwiped, setHasSwiped]       = useState(false)
   const [mapOpen, setMapOpen]           = useState(false)
   const [mapCentreOn, setMapCentreOn]   = useState(null)
@@ -1074,6 +1095,7 @@ export default function BriefReader() {
   const briefOpenedRef             = useRef(false)
   const accSecondsRef              = useRef(0)
   const lastTickRef                = useRef(null)
+  const prevVisibleRef             = useRef(false)
 
   // Quiz availability — true when the user's difficulty pool has ≥5 questions
   const MIN_QUIZ_QUESTIONS = 5
@@ -1300,10 +1322,26 @@ export default function BriefReader() {
     if (!loading && brief && !briefOpenedRef.current && !done && !onAlreadyReadScreen) {
       briefOpenedRef.current = true
       playSound('intel_brief_opened')
-      const t = setTimeout(() => start('briefReader'), 800)
-      return () => clearTimeout(t)
+      const t = setTimeout(() => startRef.current('briefReader'), 800)
+      return () => { clearTimeout(t); briefOpenedRef.current = false }
     }
   }, [loading, brief, readRecord, reReadMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show the swipe mini-tutorial only AFTER the briefReader tutorial has played (or if already seen)
+  useEffect(() => {
+    const uid = user?._id
+    const swipeKey = uid ? `sw_tut_v2_${uid}_swipe` : 'sw_tut_v2_anon_swipe'
+    if (localStorage.getItem(swipeKey)) return
+    const briefReaderAlreadySeen = !!(
+      (uid && localStorage.getItem(`sw_tut_v2_${uid}_briefReader`)) ||
+      localStorage.getItem('sw_tut_v2_anon_briefReader')
+    )
+    const mainTutJustClosed = prevVisibleRef.current && !visible
+    if (!visible && (briefReaderAlreadySeen || mainTutJustClosed)) {
+      setShowTutorial(true)
+    }
+    prevVisibleRef.current = visible
+  }, [visible, user?._id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sections = brief?.descriptionSections?.filter(Boolean) ?? []
   const total    = sections.length
@@ -1732,10 +1770,11 @@ export default function BriefReader() {
             return (
               <div className="relative mb-4">
                 <AnimatePresence>
-                  {showTutorial && (
+                  {showTutorial && !visible && (
                     <SwipeTutorial onDismiss={() => {
                       setShowTutorial(false)
-                      localStorage.setItem('seenBriefSwipeTutorial', '1')
+                      const _swipeKey = user?._id ? `sw_tut_v2_${user._id}_swipe` : 'sw_tut_v2_anon_swipe'
+                      localStorage.setItem(_swipeKey, '1')
                     }} />
                   )}
                 </AnimatePresence>
@@ -1745,11 +1784,13 @@ export default function BriefReader() {
                   canGoBack={sectionIdx > 0}
                   onSwipeLeft={handleContinue}
                   onSwipeRight={handleGoBack}
+                  showTutorial={showTutorial && !visible}
                   onFirstSwipe={() => {
                     if (!hasSwiped) {
                       setHasSwiped(true)
                       setShowTutorial(false)
-                      localStorage.setItem('seenBriefSwipeTutorial', '1')
+                      const _swipeKey = user?._id ? `sw_tut_v2_${user._id}_swipe` : 'sw_tut_v2_anon_swipe'
+                      localStorage.setItem(_swipeKey, '1')
                     }
                   }}
                 >
@@ -1759,6 +1800,7 @@ export default function BriefReader() {
                     sectionIdx={sectionIdx}
                     total={total}
                     isLast={isLast}
+                    tutorialActive={visible}
                     highlightedBaseNames={
                       brief.category === 'Bases'
                         ? [brief.title]
@@ -1788,8 +1830,8 @@ export default function BriefReader() {
           ) && (
             <motion.p
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
+              animate={{ opacity: showTutorial ? 0.5 : 1 }}
+              transition={{ delay: showTutorial ? 0 : 0.5 }}
               className="text-xs text-brand-500 text-center mb-4"
             >
               💡 Tap a <span className="font-semibold text-brand-700 border-b-2 border-brand-300/70 bg-brand-50/50 rounded px-0.5">highlighted word</span> to learn its meaning
@@ -1797,7 +1839,7 @@ export default function BriefReader() {
           )}
 
           {/* Swipe hint — shown until first swipe */}
-          {!hasSwiped && (
+          {!hasSwiped && !visible && (
             <p className="text-xs text-slate-400 text-center mb-4">← swipe to navigate →</p>
           )}
 

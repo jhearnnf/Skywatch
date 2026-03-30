@@ -44,10 +44,18 @@ const userSchema = new mongoose.Schema(
 
     // Tutorial progress
     tutorials: {
-      welcome:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      intel_brief: { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      user:        { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      load_up:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      welcome:         { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      intel_brief:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      user:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      load_up:         { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      home:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      learn:           { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      briefReader:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      quiz:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      play:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      profile:         { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      rankings:        { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      wheres_aircraft: { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
     },
     tutorialsResetAt: { type: Date, default: null }, // admin-triggered; frontend clears localStorage tutorial keys when newer than last clear
 

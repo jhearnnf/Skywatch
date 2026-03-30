@@ -658,7 +658,12 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
       userUpdates.lastStreakDate = null;
       ops.push(IntelligenceBriefRead.deleteMany({ userId: req.params.id }));
     }
-    if (fields.includes('tutorials'))       { userUpdates.tutorialsResetAt = new Date(); }
+    if (fields.includes('tutorials')) {
+      userUpdates.tutorialsResetAt = new Date();
+      for (const k of ['welcome','intel_brief','user','load_up','home','learn','briefReader','quiz','play','profile','rankings','wheres_aircraft']) {
+        userUpdates[`tutorials.${k}`] = 'unseen';
+      }
+    }
 
     if (Object.keys(userUpdates).length) ops.push(User.findByIdAndUpdate(req.params.id, userUpdates));
     await Promise.all(ops);
