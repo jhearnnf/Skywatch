@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { invalidateSoundSettings } from '../../utils/sound'
-import { TUTORIAL_STEPS } from '../../context/AppTutorialContext'
+import { TUTORIAL_STEPS, useAppTutorial } from '../../context/AppTutorialContext'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -1765,6 +1765,7 @@ function ContentTab({ API }) {
   const [toast,       setToast]       = useState('')
   const [emailBusy,   setEmailBusy]   = useState(false)
   const [expandedTut, setExpandedTut] = useState(null)
+  const { refreshContent } = useAppTutorial()
 
   const load = useCallback(() => {
     fetch(`${API}/api/admin/settings`, { credentials: 'include' })
@@ -1820,6 +1821,7 @@ function ContentTab({ API }) {
     setModal(null)
     setToast('✓ Tutorial text saved')
     load()
+    refreshContent()
   }
 
   const sendTestEmail = async () => {

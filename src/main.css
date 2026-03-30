@@ -236,6 +236,19 @@ body.play-mode::before {
 
 .play-page { /* no background needed — glow lives on body now */ }
 
+/* Tutorial highlight: lifts the game-mode grid above the backdrop + ambient glow */
+.tutorial-grid-highlight {
+  position: relative;
+  z-index: 49;
+  animation: tutorialGlowPulse 2.2s ease-in-out infinite;
+  border-radius: 16px;
+}
+
+@keyframes tutorialGlowPulse {
+  0%, 100% { box-shadow: 0 0 60px 10px rgba(99, 155, 255, 0.18); }
+  50%       { box-shadow: 0 0 110px 30px rgba(99, 155, 255, 0.40); }
+}
+
 /* Amber-tinted card shadows in play mode */
 body.play-mode .card-shadow {
   box-shadow: 0 1px 3px rgba(0,0,0,.55), 0 4px 16px rgba(251, 146, 60, 0.12);

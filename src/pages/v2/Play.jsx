@@ -42,7 +42,9 @@ const GAME_MODES = [
 
 export default function Play() {
   const { user, API } = useAuth()
-  const { start }     = useAppTutorial()
+  const { start, step, visible, next: tutorialNext } = useAppTutorial()
+
+  const isHighlightingGrid = visible && !!step?.highlightGrid
 
   const [quizBriefs, setQuizBriefs] = useState([])
   const [booBriefs,  setBooBriefs]  = useState([])
@@ -96,6 +98,7 @@ export default function Play() {
   // ── Card / scroll ─────────────────────────────────────────────────────────
 
   function handleCardClick(key) {
+    if (isHighlightingGrid) tutorialNext()
     const ref = sectionRefs[key]
     if (!ref?.current) return
     const OFFSET = 56 + 16
@@ -122,13 +125,14 @@ export default function Play() {
         <p className="text-sm text-slate-500 mb-6">Test your RAF knowledge with training games.</p>
 
         {/* ── Game mode grid ─────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8${isHighlightingGrid ? ' tutorial-grid-highlight' : ''}`}>
           {GAME_MODES.map((mode, i) => (
             <motion.div
               key={mode.key}
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06, duration: 0.35 }}
+              className="h-full"
             >
               <div
                 data-testid={`card-${mode.key}`}
@@ -136,7 +140,7 @@ export default function Play() {
                 tabIndex={0}
                 onClick={() => handleCardClick(mode.key)}
                 onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleCardClick(mode.key)}
-                className={`relative flex items-start gap-4 bg-surface rounded-2xl p-4 border transition-all card-shadow cursor-pointer
+                className={`relative flex items-start gap-4 bg-surface rounded-2xl p-4 border transition-all card-shadow cursor-pointer h-full
                   ${mode.available
                     ? 'border-slate-200 hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5'
                     : 'border-slate-100 opacity-60'
@@ -439,6 +443,28 @@ export default function Play() {
                               Read first →
                             </span>
                           </Link>
+                        </motion.div>
+                      )
+                    }
+
+                    if (state === 'quiz-pending') {
+                      return (
+                        <motion.div
+                          key={brief._id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                        >
+                          <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed">
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                              <span className="text-slate-400 text-xs">🔒</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                              <p className="text-xs text-slate-400">{brief.category}</p>
+                            </div>
+                            <span className="text-xs text-slate-400 shrink-0">Intel Pending</span>
+                          </div>
                         </motion.div>
                       )
                     }

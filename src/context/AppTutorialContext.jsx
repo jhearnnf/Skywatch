@@ -53,11 +53,15 @@ export const TUTORIAL_STEPS = {
   ],
   play: [
     { emoji: '🎮', title: 'Play Hub',
-      body: 'This is your training games hub. Each game mode tests your RAF knowledge in a different way — from quizzes to flashcards and aircraft identification.' },
-    { emoji: '🧠', title: 'Start a Quiz',
-      body: 'The Intel Quiz lets you test yourself on any brief you\'ve read. Choose Standard for basic recall or Advanced for deeper questions. Earn Aircoins for every correct answer!' },
-    { emoji: '⚡', title: 'More Games Coming',
-      body: 'Flashcard Recall, Who\'s at Aircraft, and Battle Order are all in development. Check back as new game modes are added to keep training fresh.' },
+      body: 'This is your training games hub. Four game modes test your RAF knowledge in different ways — from quizzes to aircraft identification and tactical ordering.' },
+    { emoji: '🧠', title: 'Intel Quiz',
+      body: 'Test yourself on briefs you\'ve already read. Choose Standard for recall-based questions or Advanced for tougher contextual challenges. Earn Aircoins for every correct answer.' },
+    { emoji: '✈️', title: "Where's That Aircraft?",
+      body: 'Live now! Study RAF aircraft and their home bases, then random identification missions begin appearing. Spot the aircraft from an image, then locate its base on a UK map.' },
+    { emoji: '🗺️', title: 'Battle of Order',
+      body: 'Live now! Arrange aircraft, ranks, and missions in the correct tactical sequence. Read the associated brief and pass its quiz first to unlock each Battle of Order game.' },
+    { emoji: '👆', title: 'Choose Your Game',
+      body: 'Tap any of the game type cards to jump straight to that section below. Flashcard Recall is coming soon — the other three are live and ready to play!', highlightGrid: true },
   ],
   profile: [
     { emoji: '👤', title: 'Your Agent Profile',
@@ -142,12 +146,14 @@ export function AppTutorialProvider({ children }) {
   }, [user?._id, user?.tutorialsResetAt])
 
   // Load tutorial content overrides from public settings on mount
-  useEffect(() => {
-    fetch(`${API}/api/settings`)
+  const fetchContent = useCallback(() => {
+    return fetch(`${API}/api/settings`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.tutorialContent) setTutorialContent(d.tutorialContent) })
       .catch(() => {})
   }, [])
+
+  useEffect(() => { fetchContent() }, [fetchContent])
 
   // Close tutorial on route change
   useEffect(() => {
@@ -218,7 +224,7 @@ export function AppTutorialProvider({ children }) {
   const visible = !!step
 
   return (
-    <Ctx.Provider value={{ start, next, skip, replay, step, total, current, visible, tutorialContent }}>
+    <Ctx.Provider value={{ start, next, skip, replay, step, total, current, visible, tutorialContent, refreshContent: fetchContent }}>
       {children}
     </Ctx.Provider>
   )

@@ -14,7 +14,7 @@ export default function TutorialModal() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[48] bg-slate-900/60 backdrop-blur-sm"
             onClick={skip}
           />
 
@@ -25,7 +25,7 @@ export default function TutorialModal() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.97 }}
             transition={{ type: 'spring', damping: 24, stiffness: 280 }}
-            className="fixed bottom-24 md:bottom-8 left-4 right-4 md:left-auto md:right-8 md:w-96 z-50 bg-surface rounded-2xl shadow-2xl overflow-hidden"
+            className="fixed bottom-24 md:bottom-8 left-4 right-4 md:left-auto md:right-8 md:w-96 z-[52] bg-surface rounded-2xl shadow-2xl overflow-hidden"
           >
             {/* Progress bar */}
             <div className="h-1 bg-slate-100">
