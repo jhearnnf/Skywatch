@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion, useIsPresent, MotionGlobalConfig } from 'framer-motion'
 
@@ -177,6 +177,79 @@ function AppRoutes() {
   )
 }
 
+// ── Report notification banner ─────────────────────────────────────────────
+// Fetches unread in-app notifications on login, shows them one at a time.
+function ReportNotifBanner() {
+  const { user } = useAuth()
+  const API = import.meta.env.VITE_API_URL || ''
+  const [notifs,  setNotifs]  = useState([])
+  const [visible, setVisible] = useState(false)
+
+  // Fetch unread notifications whenever the user logs in
+  useEffect(() => {
+    if (!user) return
+    fetch(`${API}/api/users/me/notifications`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        const list = d.data?.notifications ?? []
+        if (list.length > 0) { setNotifs(list); setVisible(true) }
+      })
+      .catch(() => {})
+  }, [user?._id])
+
+  const dismiss = async () => {
+    const current = notifs[0]
+    if (!current) return
+    setVisible(false)
+    // Mark as read
+    await fetch(`${API}/api/users/me/notifications/${current._id}/read`, {
+      method: 'POST', credentials: 'include',
+    }).catch(() => {})
+    // Advance queue after brief delay
+    setTimeout(() => {
+      setNotifs(prev => {
+        const next = prev.slice(1)
+        if (next.length > 0) setVisible(true)
+        return next
+      })
+    }, 300)
+  }
+
+  const current = notifs[0]
+  if (!current || !visible) return null
+
+  return (
+    <div
+      style={{
+        position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 9000, maxWidth: 440, width: 'calc(100% - 32px)',
+        background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.12)', padding: '16px 20px',
+        display: 'flex', gap: 12, alignItems: 'flex-start',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1d4ed8', margin: '0 0 4px' }}>
+          {current.title}
+        </p>
+        <p style={{ fontSize: 13, color: '#334155', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+          {current.message}
+        </p>
+      </div>
+      <button
+        onClick={dismiss}
+        style={{
+          flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer',
+          color: '#94a3b8', fontSize: 18, lineHeight: 1, padding: '2px 4px',
+        }}
+        aria-label="Dismiss"
+      >
+        ×
+      </button>
+    </div>
+  )
+}
+
 // ── Root ───────────────────────────────────────────────────────────────────
 export default function App() {
   return (
@@ -186,6 +259,7 @@ export default function App() {
           <AppTutorialProvider>
             <AppRoutes />
             <NotifLayer />
+            <ReportNotifBanner />
           </AppTutorialProvider>
         </AppSettingsProvider>
       </AuthProvider>

@@ -160,6 +160,30 @@ async function createBooBriefs(count, category = 'Aircrafts', overrides = {}) {
   return briefs;
 }
 
+// Creates `count` Training briefs with trainingWeekStart + weeksOfTraining for BOO tests
+async function createTrainingBooBriefs(count, overrides = {}) {
+  const briefs = [];
+  for (let i = 0; i < count; i++) {
+    const b = await IntelligenceBrief.create({
+      title:               overrides.title ?? `Training Brief ${Date.now()}_${i}`,
+      subtitle:            '',
+      category:            'Training',
+      descriptionSections: ['Section text.'],
+      keywords:            [],
+      sources:             [],
+      isPublished:         true,
+      gameData: {
+        trainingWeekStart: (i + 1) * 2,        // 2, 4, 6 … pipeline start
+        trainingWeekEnd:   (i + 1) * 2 + 1,    // 3, 5, 7 …
+        weeksOfTraining:   (i + 1) * 4,        // 4, 8, 12 … weeks duration
+        ...( overrides.gameData ?? {} ),
+      },
+    });
+    briefs.push(b);
+  }
+  return briefs;
+}
+
 // ── IntelligenceBriefRead ──────────────────────────────────────────────────
 async function createReadRecord(userId, briefId, overrides = {}) {
   return IntelligenceBriefRead.create({
@@ -324,6 +348,7 @@ module.exports = {
   createQuizQuestions,
   createQuizResult,
   createBooBriefs,
+  createTrainingBooBriefs,
   createReadRecord,
   createPassedQuizAttempt,
   createWonBooResult,

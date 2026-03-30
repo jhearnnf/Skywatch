@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue, useTransform, useAnimationControls } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
@@ -10,10 +10,12 @@ import { requiredTier } from '../../utils/subscription'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { playSound } from '../../utils/sound'
 import RafBasesMap from '../../components/RafBasesMap'
+import { buildImageZones } from '../../utils/briefImageZones'
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
 function KeywordSheet({ kw, onClose, navigate }) {
   const isLinked = !!kw?.linkedBriefId
+  const hasDesc  = !!kw?.generatedDescription
 
   const handleOpenBrief = () => {
     onClose()
@@ -47,13 +49,16 @@ function KeywordSheet({ kw, onClose, navigate }) {
               <span className="text-3xl">{isLinked ? '📋' : '🔑'}</span>
               <div>
                 <h3 className="text-lg font-extrabold text-slate-900 mb-1">{kw.keyword}</h3>
-                {isLinked ? (
+                {isLinked && kw.linkedBriefCategory && (
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">{kw.linkedBriefCategory}</p>
+                )}
+                {hasDesc ? (
+                  <p className="text-sm text-slate-600 leading-relaxed">{kw.generatedDescription}</p>
+                ) : isLinked ? (
                   <p className="text-sm text-slate-600 leading-relaxed">
                     This subject has its own Intel Brief. Open it to learn more.
                   </p>
-                ) : (
-                  <p className="text-sm text-slate-600 leading-relaxed">{kw.generatedDescription}</p>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -87,141 +92,325 @@ function KeywordSheet({ kw, onClose, navigate }) {
   )
 }
 
-// ── Media carousel ────────────────────────────────────────────────────────
-function MediaCarousel({ media, title, API }) {
-  const [idx, setIdx] = useState(0)
-  const images = media.filter(m => m?.cloudinaryPublicId)
-  if (!images.length) return null
-  const src = images[idx].mediaUrl
-  const multi = images.length > 1
+// ── Flashcard (final section) ─────────────────────────────────────────────
+function FlashCard({ sectionIdx, total, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap }) {
   return (
-    <div className="relative rounded-2xl overflow-hidden mb-5 aspect-video bg-slate-100 group">
-      <img src={src} alt={title} className="w-full h-full object-cover" />
-      {multi && (
-        <>
-          <button
-            onClick={() => setIdx(i => (i - 1 + images.length) % images.length)}
-            className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
-            aria-label="Previous image"
-          >‹</button>
-          <button
-            onClick={() => setIdx(i => (i + 1) % images.length)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
-            aria-label="Next image"
-          >›</button>
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-            {images.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setIdx(i)}
-                className={`w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? 'bg-white' : 'bg-white/40'}`}
-                aria-label={`Image ${i + 1}`}
-              />
-            ))}
-          </div>
-        </>
-      )}
+    <div className="rounded-2xl overflow-hidden border border-slate-300" style={{ background: 'var(--color-surface)' }}>
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-5 pt-5 pb-4">
+        <motion.div
+          key={sectionIdx}
+          initial={{ scale: 1.35, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.25 }}
+          className="inline-flex items-center gap-2 bg-white/8 rounded-full px-3 py-1"
+        >
+          <span className="text-xs font-bold text-text-muted">{sectionIdx + 1} / {total}</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-brand-400">Flashcard</span>
+        </motion.div>
+        <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-text-faint">Intel Brief</span>
+      </div>
+
+      {/* Clue — description as the context/question */}
+      <div className="px-5 pb-5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-faint mb-3">Context</p>
+        <div className="text-text-muted text-sm leading-6 [&_p]:mb-2 [&_li]:text-text-muted [&_button]:border-white/20 [&_button]:text-text-muted [&_button]:bg-white/6 [&_button:hover]:bg-white/12">
+          <SectionText text={text} keywords={keywords} learnedKws={learnedKws} onKeywordTap={onKeywordTap} />
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="h-px mx-5" style={{ background: 'var(--color-slate-300)' }} />
+
+      {/* Answer — title + classification revealed prominently */}
+      <div className="px-5 py-5" style={{ background: 'var(--color-surface-raised)' }}>
+        <h2 className="text-xl font-extrabold text-text leading-snug">{title}</h2>
+        {subtitle && (
+          <p className="text-sm text-text-muted mt-1 leading-snug">{subtitle}</p>
+        )}
+        {(category || subcategory) && (
+          <p className="text-[10px] font-semibold text-text-faint mt-2 uppercase tracking-widest">
+            {category}{subcategory ? ` · ${subcategory}` : ''}
+          </p>
+        )}
+      </div>
     </div>
+  )
+}
+
+// ── Section card (image zone + stat + text) ───────────────────────────────
+function SectionCard({ imageZone, stat, sectionIdx, total, isLast, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap }) {
+  const hasBases = (highlightedBaseNames ?? []).length > 0
+
+  if (isLast) {
+    return (
+      <FlashCard
+        sectionIdx={sectionIdx}
+        total={total}
+        title={title}
+        subtitle={subtitle}
+        category={category}
+        subcategory={subcategory}
+        text={text}
+        keywords={keywords}
+        learnedKws={learnedKws}
+        onKeywordTap={onKeywordTap}
+      />
+    )
+  }
+
+  return (
+    <div className="rounded-2xl overflow-hidden border border-slate-200 bg-surface">
+      {/* Image zone */}
+      <div className="relative h-44 bg-slate-100 overflow-hidden">
+        <img
+          src={imageZone.src}
+          alt={title}
+          draggable={false}
+          className={`w-full h-full object-cover select-none transition-all duration-300 ${hasBases && mapOpen ? 'opacity-20 blur-sm' : ''}`}
+          style={{ objectPosition: imageZone.position }}
+        />
+        {hasBases && mapOpen && (
+          <div
+            className="absolute inset-0"
+            onPointerDownCapture={e => e.stopPropagation()}
+          >
+            <RafBasesMap mode="view" height="100%" highlightedBaseNames={highlightedBaseNames} centreOn={centreOn} />
+          </div>
+        )}
+        {hasBases && (
+          <button
+            onClick={() => setMapOpen(o => !o)}
+            className="absolute bottom-2 right-2 z-[1000] text-xs font-semibold px-2.5 py-1 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors backdrop-blur-sm"
+          >
+            {mapOpen ? 'Hide map' : 'View map'}
+          </button>
+        )}
+        <motion.div
+          key={sectionIdx}
+          initial={{ scale: 1.35, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.25 }}
+          className="absolute top-2 left-2 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1"
+        >
+          <span className="text-xs font-bold text-white">{sectionIdx + 1} / {total}</span>
+        </motion.div>
+      </div>
+
+      {/* Stat row */}
+      {stat && (
+        <div className="flex items-baseline justify-between gap-4 px-5 py-2.5 border-b border-slate-100 bg-slate-50/50">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400 shrink-0">{stat.label}</span>
+          <span className="text-sm font-semibold text-text text-right">{stat.value}</span>
+        </div>
+      )}
+
+      <div className="p-5">
+        <SectionText text={text} keywords={keywords} learnedKws={learnedKws} onKeywordTap={onKeywordTap} />
+      </div>
+    </div>
+  )
+}
+
+// ── Swipe wrapper (Tinder-style drag) ─────────────────────────────────────
+function SwipeCard({ navDir, canGoBack, onSwipeLeft, onSwipeRight, onFirstSwipe, children }) {
+  const controls = useAnimationControls()
+  const x        = useMotionValue(0)
+  const rotate   = useTransform(x, [-200, 200], [-8, 8])
+
+  useEffect(() => {
+    x.set(navDir * 120)
+    controls.start({ x: 0, opacity: 1, transition: { type: 'spring', stiffness: 280, damping: 26 } })
+  }, []) // fires on mount — remounted via key on each section change
+
+  async function handleDragEnd(_, info) {
+    onFirstSwipe?.()
+    const swipeLeft  = info.offset.x < -80 || info.velocity.x < -500
+    const swipeRight = info.offset.x > 80  || info.velocity.x > 500
+    if (swipeLeft) {
+      await controls.start({ x: -(window.innerWidth + 100), rotate: -12, opacity: 0, transition: { duration: 0.22, ease: 'easeIn' } })
+      onSwipeLeft()
+    } else if (swipeRight && canGoBack) {
+      await controls.start({ x: window.innerWidth + 100, rotate: 12, opacity: 0, transition: { duration: 0.22, ease: 'easeIn' } })
+      onSwipeRight()
+    } else {
+      controls.start({ x: 0, rotate: 0, opacity: 1, transition: { type: 'spring', stiffness: 350, damping: 28 } })
+    }
+  }
+
+  return (
+    <motion.div
+      drag="x"
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.6}
+      style={{ x, rotate }}
+      animate={controls}
+      initial={{ opacity: 0 }}
+      onDragEnd={handleDragEnd}
+      className="cursor-grab active:cursor-grabbing touch-pan-y select-none"
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+// ── First-visit swipe tutorial ────────────────────────────────────────────
+function SwipeTutorial({ onDismiss }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 z-[1100] flex flex-col items-center justify-center rounded-2xl bg-black/35 backdrop-blur-[2px]"
+      onClick={onDismiss}
+    >
+      <motion.p
+        animate={{ x: [-28, 28, -28] }}
+        transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
+        className="text-white font-bold text-xl tracking-widest mb-3 select-none"
+      >
+        ← →
+      </motion.p>
+      <p className="text-white font-bold text-sm">Swipe to navigate sections</p>
+      <p className="text-white/60 text-xs mt-1">Tap to dismiss</p>
+    </motion.div>
   )
 }
 
 // ── Render one section with highlighted keywords ──────────────────────────
+function parseSectionBlocks(text) {
+  const raw = []
+  for (const line of text.split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    if (/^[-*•]\s+/.test(t)) {
+      raw.push({ type: 'bullet', content: t.replace(/^[-*•]\s+/, '') })
+    } else if (/^\d+\.\s+/.test(t)) {
+      raw.push({ type: 'numbered', content: t.replace(/^\d+\.\s+/, '') })
+    } else if (raw.length && raw[raw.length - 1].type === 'p') {
+      raw[raw.length - 1].content += ' ' + t
+    } else {
+      raw.push({ type: 'p', content: t })
+    }
+  }
+  // Group consecutive list items into list blocks
+  const blocks = []
+  for (const item of raw) {
+    if (item.type === 'bullet') {
+      if (blocks.length && blocks[blocks.length - 1].type === 'ul')
+        blocks[blocks.length - 1].items.push(item.content)
+      else
+        blocks.push({ type: 'ul', items: [item.content] })
+    } else if (item.type === 'numbered') {
+      if (blocks.length && blocks[blocks.length - 1].type === 'ol')
+        blocks[blocks.length - 1].items.push(item.content)
+      else
+        blocks.push({ type: 'ol', items: [item.content] })
+    } else {
+      blocks.push({ type: 'p', content: item.content })
+    }
+  }
+  return blocks.length ? blocks : [{ type: 'p', content: text }]
+}
+
 function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
   if (!text) return null
 
-  // Build segments: split text around keyword occurrences
-  const segments = []
-  if (!keywords?.length) {
-    segments.push({ type: 'text', content: text })
-  } else {
-    const sorted  = [...keywords].sort((a, b) => b.keyword.length - a.keyword.length)
-    const pattern = new RegExp(
-      `(?<![a-zA-Z0-9])(${sorted.map(k => k.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?![a-zA-Z0-9])`,
-      'gi'
-    )
-    let last = 0, match
-    while ((match = pattern.exec(text)) !== null) {
-      if (match.index > last) segments.push({ type: 'text', content: text.slice(last, match.index) })
-      const kw = keywords.find(k => k.keyword.toLowerCase() === match[1].toLowerCase())
-      segments.push({ type: 'keyword', content: match[1], keyword: kw })
+  const sorted  = keywords?.length ? [...keywords].sort((a, b) => b.keyword.length - a.keyword.length) : []
+  const pattern = sorted.length
+    ? new RegExp(`(?<![a-zA-Z0-9])(${sorted.map(k => k.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?![a-zA-Z0-9])`, 'gi')
+    : null
+
+  function segmentize(str) {
+    if (!pattern) return [{ type: 'text', content: str }]
+    const segs = []
+    let last = 0
+    pattern.lastIndex = 0
+    let match
+    while ((match = pattern.exec(str)) !== null) {
+      if (match.index > last) segs.push({ type: 'text', content: str.slice(last, match.index) })
+      const kw = sorted.find(k => k.keyword.toLowerCase() === match[1].toLowerCase())
+      segs.push({ type: 'keyword', content: match[1], keyword: kw })
       last = match.index + match[1].length
     }
-    if (last < text.length) segments.push({ type: 'text', content: text.slice(last) })
+    if (last < str.length) segs.push({ type: 'text', content: str.slice(last) })
+    return segs
   }
 
-  return (
-    <p className="text-base leading-8 text-slate-700">
-      {segments.map((seg, i) => {
-        if (seg.type === 'text') return <span key={i}>{seg.content}</span>
-        const learned = learnedKws.has(seg.keyword?.keyword?.toLowerCase())
-        return (
-          <button
-            key={i}
-            onClick={() => onKeywordTap(seg.keyword)}
-            className={`inline rounded px-0.5 -mx-0.5 font-semibold transition-all
-              border-b-2 focus:outline-none cursor-pointer
-              ${learned
-                ? 'text-emerald-700 border-emerald-400 bg-emerald-50'
-                : 'text-brand-700 border-brand-300 bg-brand-50 hover:bg-brand-100 hover:border-brand-500'
-              }`}
-          >
-            {seg.content}
-          </button>
-        )
-      })}
-    </p>
-  )
-}
+  function renderSegs(segs) {
+    return segs.map((seg, i) => {
+      if (seg.type === 'text') return <span key={i}>{seg.content}</span>
+      const learned = learnedKws.has(seg.keyword?.keyword?.toLowerCase())
+      const linked  = !!seg.keyword?.linkedBriefId
+      return (
+        <button
+          key={i}
+          onClick={() => onKeywordTap(seg.keyword)}
+          className={`inline rounded px-0.5 -mx-0.5 font-semibold transition-all
+            border-b-2 focus:outline-none cursor-pointer
+            ${learned
+              ? 'text-emerald-700/70 border-emerald-300/60 bg-emerald-50/30'
+              : linked
+                ? 'text-amber-600/60 border-amber-200/40 bg-amber-50/20 hover:bg-amber-50/35 hover:border-amber-200/50'
+                : 'text-brand-700 border-brand-300/70 bg-brand-50/50 hover:bg-brand-50/80 hover:border-brand-300'
+            }`}
+        >
+          {seg.content}
+        </button>
+      )
+    })
+  }
 
-// ── BOO stats panel ───────────────────────────────────────────────────────
-function StatRow({ label, value }) {
+  const blocks = parseSectionBlocks(text)
+
   return (
-    <div className="bg-brand-100 border border-brand-200 rounded-xl px-3 py-2.5">
-      <span className="text-[9px] font-bold uppercase tracking-widest text-brand-500 block mb-1">{label}</span>
-      <span className="text-sm font-bold text-text leading-tight">{value}</span>
+    <div className="space-y-3 text-base leading-8 text-slate-700">
+      {blocks.map((block, bi) => {
+        if (block.type === 'ul') return (
+          <ul key={bi} className="list-disc list-outside pl-5 space-y-1">
+            {block.items.map((item, ii) => <li key={ii}>{renderSegs(segmentize(item))}</li>)}
+          </ul>
+        )
+        if (block.type === 'ol') return (
+          <ol key={bi} className="list-decimal list-outside pl-5 space-y-1">
+            {block.items.map((item, ii) => <li key={ii}>{renderSegs(segmentize(item))}</li>)}
+          </ol>
+        )
+        return <p key={bi}>{renderSegs(segmentize(block.content))}</p>
+      })}
     </div>
   )
 }
 
-function BriefPill({ b, navigate }) {
-  const isStub = b.status === 'stub'
+// ── Stats panel (above brief content) ────────────────────────────────────
+function StatRow({ label, value }) {
   return (
-    <button
-      onClick={() => navigate(`/brief/${b._id}`)}
-      className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all ${
-        isStub
-          ? 'bg-slate-200 text-slate-500 opacity-50 hover:opacity-70'
-          : 'bg-brand-200 text-brand-700 hover:bg-brand-300 hover:text-brand-800'
-      }`}
-    >
-      {isStub ? `🔒 ${b.title}` : b.title}
-    </button>
+    <div className="flex items-baseline justify-between gap-4 py-2 border-b border-brand-100 last:border-0">
+      <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400 shrink-0">{label}</span>
+      <span className="text-sm font-semibold text-text text-right">{value}</span>
+    </div>
   )
 }
 
-function BooStatsPanel({ brief, navigate }) {
-  const [mapOpen, setMapOpen] = useState(false)
+function buildStats(brief) {
   const gd  = brief.gameData ?? {}
   const cat = brief.category
-
   const stats = []
-
   if (cat === 'Aircrafts') {
     if (gd.topSpeedKph != null)
       stats.push({ label: 'Top Speed', value: `${gd.topSpeedKph.toLocaleString()} km/h · ${Math.round(gd.topSpeedKph * 0.621).toLocaleString()} mph` })
     if (gd.yearIntroduced != null)
       stats.push({ label: 'Introduced', value: String(gd.yearIntroduced) })
     if (gd.yearIntroduced != null)
-      stats.push({
-        label: 'Status',
-        value: gd.yearRetired != null ? `Retired ${gd.yearRetired}` : 'In Service',
-      })
+      stats.push({ label: 'Status', value: gd.yearRetired != null ? `Retired ${gd.yearRetired}` : 'In Service' })
   } else if (cat === 'Ranks') {
     if (gd.rankHierarchyOrder != null)
       stats.push({ label: 'Seniority', value: `#${gd.rankHierarchyOrder}${gd.rankHierarchyOrder === 1 ? ' — Most Senior' : ''}` })
   } else if (cat === 'Training') {
     if (gd.trainingWeekStart != null && gd.trainingWeekEnd != null)
-      stats.push({ label: 'Duration', value: `Week ${gd.trainingWeekStart} – Week ${gd.trainingWeekEnd}` })
+      stats.push({ label: 'Pipeline Position', value: `Week ${gd.trainingWeekStart} – Week ${gd.trainingWeekEnd}` })
+    if (gd.weeksOfTraining != null)
+      stats.push({ label: 'Duration', value: `${gd.weeksOfTraining} week${gd.weeksOfTraining === 1 ? '' : 's'}` })
   } else if (['Missions', 'Tech', 'Treaties'].includes(cat)) {
     if (gd.startYear != null)
       stats.push({ label: 'Period', value: `${gd.startYear} – ${gd.endYear != null ? gd.endYear : 'Present'}` })
@@ -236,85 +425,127 @@ function BooStatsPanel({ brief, navigate }) {
     if (gd.startYear != null)
       stats.push({ label: 'Status', value: gd.endYear != null ? `${L.closed} ${gd.endYear}` : L.active })
   }
+  return stats
+}
 
-  // Typed relationship sections per category
-  const bases     = (brief.associatedBaseBriefIds     ?? []).filter(b => b?._id)
-  const squadrons = (brief.associatedSquadronBriefIds ?? []).filter(b => b?._id)
-  const aircraft  = (brief.associatedAircraftBriefIds ?? []).filter(b => b?._id)
-  const missions  = (brief.associatedMissionBriefIds  ?? []).filter(b => b?._id)
-  const training  = (brief.associatedTrainingBriefIds ?? []).filter(b => b?._id)
+function buildSections(brief) {
+  const cat         = brief.category
+  const bases       = (brief.associatedBaseBriefIds     ?? []).filter(b => b?._id)
+  const squadrons   = (brief.associatedSquadronBriefIds ?? []).filter(b => b?._id)
+  const aircraft    = (brief.associatedAircraftBriefIds ?? []).filter(b => b?._id)
+  const missions    = (brief.associatedMissionBriefIds  ?? []).filter(b => b?._id)
+  const training    = (brief.associatedTrainingBriefIds ?? []).filter(b => b?._id)
   const related         = (brief.relatedBriefIds ?? []).filter(b => b?._id)
   const historicRelated = (brief.relatedHistoric ?? []).filter(b => b?._id)
 
   const sections = []
-  if (cat === 'Bases')
-    sections.push({ label: '🗺️ Location', items: [], isLocationSection: true })
   if (['Aircrafts', 'Squadrons'].includes(cat) && bases.length > 0)
-    sections.push({ label: `🗺️ Home Base${bases.length > 1 ? 's' : ''}`, items: bases, isBasesSection: true })
+    sections.push({ label: `Home Base${bases.length > 1 ? 's' : ''}`, items: bases, isBasesSection: true })
   if (['Bases', 'Aircrafts'].includes(cat) && squadrons.length > 0)
-    sections.push({ label: '✈️ Squadrons', items: squadrons })
+    sections.push({ label: 'Squadrons', items: squadrons })
   if (['Bases', 'Squadrons', 'Tech'].includes(cat) && aircraft.length > 0)
-    sections.push({ label: '🛩️ Aircraft', items: aircraft })
+    sections.push({ label: 'Aircraft', items: aircraft })
   if (['Aircrafts', 'Squadrons'].includes(cat) && missions.length > 0)
-    sections.push({ label: '🎖️ Missions', items: missions })
+    sections.push({ label: 'Missions', items: missions })
   if (['Roles'].includes(cat) && training.length > 0)
-    sections.push({ label: '🎓 Training', items: training })
+    sections.push({ label: 'Training', items: training })
   if (related.length > 0)
-    sections.push({ label: '🔗 Related', items: related })
+    sections.push({ label: 'Related', items: related })
   if (['Bases', 'Squadrons', 'Missions', 'AOR'].includes(cat) && historicRelated.length > 0)
-    sections.push({ label: '🏛️ Historic Intelligence', items: historicRelated, historic: true })
+    sections.push({ label: 'Historic Intelligence', items: historicRelated, historic: true })
+  return sections
+}
 
-  if (stats.length === 0 && sections.length === 0) return null
+
+function BriefPill({ b, navigate, onClick }) {
+  const isStub = b.status === 'stub'
+  return (
+    <button
+      onClick={onClick ?? (() => navigate(`/brief/${b._id}`))}
+      className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-all ${
+        isStub
+          ? 'bg-slate-200 text-slate-500 opacity-50 hover:opacity-70'
+          : 'bg-brand-200 text-brand-700 hover:bg-brand-300 hover:text-brand-800'
+      }`}
+    >
+      {isStub ? `🔒 ${b.title}` : b.title}
+    </button>
+  )
+}
+
+// ── Connections panel (below brief content) ───────────────────────────────
+function BriefConnectionsPanel({ brief, navigate, autoExpand, onBasePillClick }) {
+  const sections = buildSections(brief)
+  const [openSections, setOpenSections] = useState({})
+
+  // Auto-expand all sections after the panel has animated into place
+  useEffect(() => {
+    if (!autoExpand) return
+    const t = setTimeout(() => {
+      const all = {}
+      sections.forEach(s => { all[s.label] = true })
+      setOpenSections(all)
+    }, 420)
+    return () => clearTimeout(t)
+  }, [autoExpand]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleSection = label => setOpenSections(s => ({ ...s, [label]: !s[label] }))
+
+  if (sections.length === 0) return null
 
   return (
-    <div className="bg-surface-raised border border-brand-200 rounded-2xl px-4 py-4 mb-5">
-      {stats.length > 0 && (
-        <>
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-0.5 h-3.5 bg-brand-400 rounded-full" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-500">Intel Stats</span>
+    <div className="border border-brand-200 rounded-2xl overflow-hidden mb-5">
+      <div className="px-4 py-2.5 bg-surface-raised border-b border-brand-200">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400">Connections</span>
+      </div>
+      {sections.map((sec, i) => {
+        const isOpen = !!openSections[sec.label]
+        return (
+          <div key={sec.label} className={i > 0 ? 'border-t border-brand-100' : ''}>
+            <button
+              onClick={() => toggleSection(sec.label)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-brand-50 transition-colors text-left"
+            >
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${sec.historic ? 'text-amber-500' : 'text-brand-500'}`}>
+                {sec.label}
+                {sec.items.length > 0 && (
+                  <span className="ml-1.5 font-normal text-brand-300 normal-case tracking-normal text-[10px]">
+                    ({sec.items.length})
+                  </span>
+                )}
+              </span>
+              <span className="text-brand-300 text-sm leading-none">{isOpen ? '−' : '+'}</span>
+            </button>
+            <AnimatePresence initial={false}>
+              {isOpen && (
+                <motion.div
+                  key="content"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.25, ease: 'easeInOut' }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <div className="px-4 pb-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {sec.items.map(b => (
+                        <BriefPill
+                          key={b._id}
+                          b={b}
+                          navigate={navigate}
+                          onClick={sec.isBasesSection && onBasePillClick
+                            ? () => onBasePillClick(b.title)
+                            : undefined}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {stats.map(s => <StatRow key={s.label} label={s.label} value={s.value} />)}
-          </div>
-        </>
-      )}
-      {sections.map((sec, i) => (
-        <div key={sec.label} className={stats.length > 0 || i > 0 ? 'mt-4 pt-4 border-t border-brand-200' : ''}>
-          <div className="flex items-center justify-between mb-2">
-            <span className={`text-[10px] font-bold uppercase tracking-widest ${sec.historic ? 'text-amber-600' : 'text-brand-500'}`}>{sec.label}</span>
-            {(sec.isBasesSection || sec.isLocationSection) && (
-              <button
-                onClick={() => setMapOpen(o => !o)}
-                className="text-[10px] font-bold uppercase tracking-widest text-brand-600 hover:text-brand-800 transition-colors px-2 py-0.5 rounded-full border border-brand-300 hover:border-brand-500 bg-brand-50 hover:bg-brand-100"
-              >
-                {mapOpen ? 'Hide Map' : 'View on Map'}
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {sec.items.map(b => <BriefPill key={b._id} b={b} navigate={navigate} />)}
-          </div>
-          {sec.isBasesSection && mapOpen && (
-            <div className="mt-3">
-              <RafBasesMap
-                mode="view"
-                height={280}
-                highlightedBaseNames={sec.items.map(b => b.title)}
-              />
-            </div>
-          )}
-          {sec.isLocationSection && mapOpen && (
-            <div className="mt-3">
-              <RafBasesMap
-                mode="view"
-                height={280}
-                highlightedBaseNames={[brief.title]}
-              />
-            </div>
-          )}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -447,9 +678,6 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
       <p className="text-slate-500 mb-8">{subheading}</p>
 
 
-      {/* Continue Learning */}
-      <ContinueLearning brief={brief} navigate={navigate} />
-
       <div className="space-y-3">
         {user ? (
           <>
@@ -558,6 +786,9 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, user
           Back to Subject
         </button>
       </div>
+
+      {/* Continue Learning */}
+      <ContinueLearning brief={brief} navigate={navigate} />
     </motion.div>
   )
 }
@@ -567,7 +798,7 @@ const BOO_CATS = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treatie
 
 function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) {
   const showBoo    = BOO_CATS.includes(brief.category)
-  const booVisible = showBoo && booState !== 'unavailable'
+  const booVisible = showBoo && booState !== 'unavailable' && booState !== 'no-game-data'
 
   return (
     <div>
@@ -688,7 +919,8 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate }) 
                     ? 'Read more Aircrafts briefs to unlock'
                     : booState === 'locked-bases-reads'
                     ? 'Read more Bases briefs to unlock'
-                    : 'Pass the quiz to unlock'}
+                    : 'Pass the quiz to unlock'
+                  }
                 </p>
               </div>
               <span className="text-xs font-semibold text-slate-400 shrink-0">🔒 Locked</span>
@@ -708,7 +940,8 @@ export default function BriefReader() {
   const { user, API, awardAircoins, setUser } = useAuth()
   const { start }      = useAppTutorial()
   const { settings }            = useAppSettings()
-  const [brief, setBrief]       = useState(null)
+  const [brief, setBrief]         = useState(null)
+  const [mentionedBriefs, setMentionedBriefs] = useState([])
   const [loading, setLoading]   = useState(true)
   const [locked, setLocked]     = useState(false)
   const [lockedCategory, setLockedCategory] = useState(null)
@@ -723,7 +956,7 @@ export default function BriefReader() {
   const [activeKw, setActiveKw]    = useState(null)
   const [learnedKws, setLearned]   = useState(new Set())
   const [readRecord, setReadRecord] = useState(null)
-  // 'unavailable' | 'locked-aircraft-reads' | 'locked-quiz' | 'available' | 'completed'
+  // 'unavailable' | 'no-game-data' | 'locked-aircraft-reads' | 'locked-bases-reads' | 'locked-quiz' | 'available' | 'completed'
   const [booState, setBooState]   = useState('unavailable')
   const [quizPassed, setQuizPassed] = useState(null) // null=loading, true/false once fetched
   const [reReadMode, setReReadMode] = useState(false)
@@ -731,6 +964,15 @@ export default function BriefReader() {
   const [spawnCheckPending, setSpawnCheckPending] = useState(false) // true while spawn-check is in-flight
   const [wtaSpawn,          setWtaSpawn]          = useState(null)  // { remaining, prereqsMet } from API
   const [navDir, setNavDir]        = useState(1) // 1 = forward, -1 = backward
+  const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('seenBriefSwipeTutorial'))
+  const [hasSwiped, setHasSwiped]       = useState(false)
+  const [mapOpen, setMapOpen]           = useState(false)
+  const [mapCentreOn, setMapCentreOn]   = useState(null)
+  const [startedAtZero] = useState(() => {
+    const saved = sessionStorage.getItem(`sw_brief_sec_${briefId}`)
+    return !saved || Number(saved) === 0
+  })
+  const [topFaded, setTopFaded] = useState(!startedAtZero)
   const markingRef                 = useRef(false)
   const contentRef                 = useRef(null)
   const briefOpenedRef             = useRef(false)
@@ -746,6 +988,16 @@ export default function BriefReader() {
   }, [])
 
   const BOO_CATEGORIES = BOO_CATS
+
+  // Reset map and map centre when section changes
+  useEffect(() => { setMapOpen(false); setMapCentreOn(null) }, [sectionIdx])
+
+  // Trigger top-chrome fade on section-1 entry
+  useEffect(() => {
+    if (!startedAtZero) return
+    const t = setTimeout(() => setTopFaded(true), 600)
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Flush accumulated read time to the server
   const flushTime = useCallback(() => {
@@ -805,6 +1057,7 @@ export default function BriefReader() {
       .then(data => {
         if (data?.data?.brief) setBrief(data.data.brief)
         if (data?.data?.readRecord) setReadRecord(data.data.readRecord)
+        if (data?.data?.mentionedBriefs) setMentionedBriefs(data.data.mentionedBriefs)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -906,6 +1159,7 @@ export default function BriefReader() {
           if      (reason === 'needs-aircraft-reads') setBooState('locked-aircraft-reads')
           else if (reason === 'needs-bases-reads')    setBooState('locked-bases-reads')
           else if (reason === 'quiz_not_passed')      setBooState('locked-quiz')
+          else if (reason === 'insufficient_briefs')  setBooState('no-game-data')
           else                                        setBooState('unavailable')
           return
         }
@@ -941,11 +1195,21 @@ export default function BriefReader() {
   const sections = brief?.descriptionSections?.filter(Boolean) ?? []
   const total    = sections.length
   const isLast   = sectionIdx >= total - 1
+  const topOpacity = isLast ? 1 : topFaded ? 0.3 : 1
 
   const markRead = useCallback(() => {
     if (markingRef.current || !user) return
     markingRef.current = true
   }, [briefId, user])
+
+  const scrollToContentIfNeeded = () => {
+    const el = contentRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    if (rect.top < 0) {
+      window.scrollTo({ top: window.scrollY + rect.top, behavior: 'smooth' })
+    }
+  }
 
   const handleGoBack = () => {
     if (sectionIdx <= 0) return
@@ -955,7 +1219,7 @@ export default function BriefReader() {
       sessionStorage.setItem(`sw_brief_sec_${briefId}`, String(prev))
       return prev
     })
-    contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    scrollToContentIfNeeded()
   }
 
   const handleContinue = () => {
@@ -1028,7 +1292,7 @@ export default function BriefReader() {
         sessionStorage.setItem(`sw_brief_sec_${briefId}`, String(next))
         return next
       })
-      contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      scrollToContentIfNeeded()
     }
   }
 
@@ -1244,40 +1508,51 @@ export default function BriefReader() {
         />
       )}
 
-      {/* Back */}
-      <button
-        onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
-        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
+      {/* Back + header — fades to 50% after section-1 intro */}
+      <motion.div
+        animate={{ opacity: topOpacity }}
+        transition={{ duration: 1.6, ease: 'easeInOut' }}
       >
-        ← {brief.category}
-      </button>
+        {/* Back */}
+        <button
+          onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
+        >
+          ← {brief.category}
+        </button>
 
-      {/* Brief header */}
-      <div className="mb-5">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-bold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full border border-brand-200">
-            {brief.category}
-          </span>
-          {brief.subcategory && (
-            <span className="text-xs text-slate-400 font-medium">{brief.subcategory}</span>
-          )}
-        </div>
-        <h1 className="text-2xl font-extrabold text-slate-900 leading-tight">{brief.title}</h1>
-        {brief.nickname && (
-          <p className="text-sm text-slate-400 italic mt-0.5">"{brief.nickname}"</p>
-        )}
-        {brief.subtitle && (
-          <p className="text-sm text-slate-500 mt-1.5">{brief.subtitle}</p>
-        )}
-      </div>
+        {/* Brief header */}
+        <motion.div
+          layout
+          transition={{ layout: { type: 'spring', stiffness: 280, damping: 28 } }}
+          className="mb-5 overflow-hidden"
+        >
+          <AnimatePresence initial={false}>
+            {!isLast && (
+              <motion.div
+                key="header-content"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                style={{ overflow: 'hidden' }}
+              >
+                <p className="text-xs font-semibold text-brand-500 mb-1.5">
+                  {brief.category}{brief.subcategory ? ` · ${brief.subcategory}` : ''}
+                </p>
+                <h1 className="text-2xl font-extrabold text-text leading-tight">{brief.title}</h1>
+                {brief.nickname && (
+                  <p className="text-sm text-text-muted italic mt-0.5">"{brief.nickname}"</p>
+                )}
+                {brief.subtitle && (
+                  <p className="text-sm text-text-muted mt-1.5">{brief.subtitle}</p>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </motion.div>
 
-      {/* BOO stats */}
-      <BooStatsPanel brief={brief} navigate={navigate} />
-
-      {/* Cover image(s) */}
-      {brief.media?.[0]?.mediaUrl && (
-        <MediaCarousel media={brief.media} title={brief.title} API={API} />
-      )}
 
       {/* Completion screen */}
       {done ? (
@@ -1295,61 +1570,100 @@ export default function BriefReader() {
       ) : (
         <>
           <div ref={contentRef} />
-          {/* Section progress bar */}
-          {total > 1 && (
-            <div className="mb-5">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold text-slate-500">
-                  Section {sectionIdx + 1} of {total}
-                </span>
-                <span className="text-xs text-slate-400">
-                  {Math.round(((sectionIdx + 1) / total) * 100)}% through
-                </span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-brand-500 rounded-full"
-                  animate={{ width: `${((sectionIdx + 1) / total) * 100}%` }}
-                  transition={{ duration: 0.4 }}
-                />
-              </div>
-              {/* Dot indicators */}
-              <div className="flex gap-1.5 mt-2 justify-center">
-                {sections.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1.5 rounded-full transition-all ${
-                      i < sectionIdx       ? 'bg-emerald-500 w-3' :
-                      i === sectionIdx     ? 'bg-brand-600 w-4'   :
-                                             'bg-slate-200 w-1.5'
-                    }`}
+          {/* Section progress bar — fades to 50% after section-1 intro */}
+          <motion.div
+            animate={{ opacity: topOpacity }}
+            transition={{ duration: 1.6, ease: 'easeInOut' }}
+          >
+            {total > 1 && !isLast && (
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-slate-500">
+                    Section {sectionIdx + 1} of {total}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {Math.round(((sectionIdx + 1) / total) * 100)}% through
+                  </span>
+                </div>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-brand-500 rounded-full"
+                    animate={{ width: `${((sectionIdx + 1) / total) * 100}%` }}
+                    transition={{ duration: 0.4 }}
                   />
-                ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </motion.div>
 
-          {/* Section content */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={sectionIdx}
-              initial={{ opacity: 0, x: navDir * 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: navDir * -20 }}
-              transition={{ duration: 0.25 }}
-              className="bg-surface rounded-2xl p-5 border border-slate-200 mb-4 card-shadow"
-            >
-              <SectionText
-                text={sections[sectionIdx]}
-                keywords={brief.keywords}
-                learnedKws={learnedKws}
-                onKeywordTap={handleKeywordTap}
-              />
-            </motion.div>
-          </AnimatePresence>
+          {/* Swipeable section card */}
+          {(() => {
+            const imageZones = buildImageZones(brief.media, total)
+            const stats      = buildStats(brief)
+            const kwList     = [
+              ...(brief.keywords || []).map(kw => ({ ...kw, linkedBriefCategory: kw.linkedBriefId?.category ?? null })),
+              ...(brief.associatedBaseBriefIds || []).map(b => ({ keyword: b.title, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+              ...(brief.associatedSquadronBriefIds || []).map(b => ({ keyword: b.title, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+              ...mentionedBriefs.map(b => ({ keyword: b.matchTerm, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+            ]
+            return (
+              <motion.div
+                layout
+                transition={{ layout: { type: 'spring', stiffness: 280, damping: 28 } }}
+                className="relative mb-4"
+              >
+                <AnimatePresence>
+                  {showTutorial && (
+                    <SwipeTutorial onDismiss={() => {
+                      setShowTutorial(false)
+                      localStorage.setItem('seenBriefSwipeTutorial', '1')
+                    }} />
+                  )}
+                </AnimatePresence>
+                <SwipeCard
+                  key={sectionIdx}
+                  navDir={navDir}
+                  canGoBack={sectionIdx > 0}
+                  onSwipeLeft={handleContinue}
+                  onSwipeRight={handleGoBack}
+                  onFirstSwipe={() => {
+                    if (!hasSwiped) {
+                      setHasSwiped(true)
+                      setShowTutorial(false)
+                      localStorage.setItem('seenBriefSwipeTutorial', '1')
+                    }
+                  }}
+                >
+                  <SectionCard
+                    imageZone={imageZones[sectionIdx]}
+                    stat={stats[sectionIdx] ?? null}
+                    sectionIdx={sectionIdx}
+                    total={total}
+                    isLast={isLast}
+                    highlightedBaseNames={
+                      brief.category === 'Bases'
+                        ? [brief.title]
+                        : (brief.associatedBaseBriefIds ?? []).filter(b => b?._id).map(b => b.title)
+                    }
+                    mapOpen={mapOpen}
+                    setMapOpen={setMapOpen}
+                    centreOn={mapCentreOn}
+                    title={brief.title}
+                    subtitle={brief.subtitle}
+                    category={brief.category}
+                    subcategory={brief.subcategory}
+                    text={sections[sectionIdx]}
+                    keywords={kwList}
+                    learnedKws={learnedKws}
+                    onKeywordTap={handleKeywordTap}
+                  />
+                </SwipeCard>
+              </motion.div>
+            )
+          })()}
 
-          {/* Keyword hint */}
-          {brief.keywords?.some(kw =>
+          {/* Keyword hint — first section only */}
+          {sectionIdx === 0 && brief.keywords?.some(kw =>
             sections[sectionIdx]?.toLowerCase().includes(kw.keyword.toLowerCase())
           ) && (
             <motion.p
@@ -1358,54 +1672,49 @@ export default function BriefReader() {
               transition={{ delay: 0.5 }}
               className="text-xs text-brand-500 text-center mb-4"
             >
-              💡 Tap a <span className="font-semibold text-brand-600">blue word</span> to learn its meaning
+              💡 Tap a <span className="font-semibold text-brand-700 border-b-2 border-brand-300/70 bg-brand-50/50 rounded px-0.5">highlighted word</span> to learn its meaning
             </motion.p>
           )}
 
-          {/* Continue / Back buttons */}
-          <div className="flex gap-3">
-            {sectionIdx > 0 && (
-              <button
-                onClick={handleGoBack}
-                aria-label="Previous section"
-                className="py-4 px-5 border border-slate-200 text-slate-500 font-semibold rounded-2xl hover:bg-slate-50 transition-colors"
-              >
-                ←
-              </button>
-            )}
-            <motion.button
-              onClick={handleContinue}
-              whileTap={{ scale: 0.97 }}
-              className="flex-1 py-4 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200"
-            >
-              {isLast
-                ? (user && !readRecord?.coinsAwarded
-                    ? '⭐ Complete Brief & Collect Aircoins'
-                    : '✓ Complete Brief')
-                : 'Continue →'
-              }
-            </motion.button>
-          </div>
+          {/* Swipe hint — shown until first swipe */}
+          {!hasSwiped && (
+            <p className="text-xs text-slate-400 text-center mb-4">← swipe to navigate →</p>
+          )}
+
+          {/* Connections */}
+          <motion.div
+            layout
+            animate={{ opacity: isLast ? 1 : 0.3 }}
+            transition={{ layout: { type: 'spring', stiffness: 280, damping: 28 }, opacity: { duration: 1.6, ease: 'easeInOut' } }}
+            className="mt-6"
+          >
+            <BriefConnectionsPanel
+              brief={brief}
+              navigate={navigate}
+              autoExpand={isLast}
+              onBasePillClick={isLast ? undefined : name => { setMapOpen(true); setMapCentreOn(name) }}
+            />
+          </motion.div>
 
           {/* Sources */}
           {brief.sources?.length > 0 && (
-            <div className="mt-6 pt-4 border-t border-slate-100">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Sources</p>
-              <div className="space-y-1">
+            <motion.div layout transition={{ layout: { type: 'spring', stiffness: 280, damping: 28 } }} className="mt-6 pt-4 border-t border-slate-100">
+              <p className="text-xs text-slate-300 mb-1">Sources</p>
+              <div className="space-y-0.5">
                 {brief.sources.map((s, i) => (
                   <a
                     key={i}
                     href={s.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block text-xs text-brand-600 hover:underline truncate"
+                    className="block text-xs text-slate-300 hover:text-slate-400 truncate"
                   >
                     {s.siteName || s.url}
-                    {s.articleDate && <span className="text-slate-400 ml-1">· {new Date(s.articleDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                    {s.articleDate && <span className="ml-1">· {new Date(s.articleDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
                   </a>
                 ))}
               </div>
-            </div>
+            </motion.div>
           )}
         </>
       )}

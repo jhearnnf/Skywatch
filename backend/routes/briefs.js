@@ -284,6 +284,53 @@ router.get('/history', protect, async (req, res) => {
   }
 });
 
+// Generate candidate match strings for a base/squadron brief title.
+// Bases:     try stripping leading "RAF " / "Royal Air Force "
+// Squadrons: try stripping trailing " RAF" / " Royal Air Force"
+//            also try short form "No. 13" for titles like "No. 13 Squadron RAF"
+function getMatchCandidates(title, category) {
+  const candidates = [title];
+  if (category === 'Bases') {
+    if (/^RAF /i.test(title))             candidates.push(title.replace(/^RAF /i, ''));
+    if (/^Royal Air Force /i.test(title)) candidates.push(title.replace(/^Royal Air Force /i, ''));
+  } else {
+    if (/ RAF$/i.test(title))             candidates.push(title.replace(/ RAF$/i, ''));
+    if (/ Royal Air Force$/i.test(title)) candidates.push(title.replace(/ Royal Air Force$/i, ''));
+    const noMatch = title.match(/^(No\.\s*\d+)\s+Squadron/i);
+    if (noMatch) candidates.push(noMatch[1]);
+  }
+  return candidates;
+}
+
+// Scan a brief's description sections for mentions of any Base/Squadron brief titles.
+// Returns objects with { _id, title, subtitle, matchTerm } for each match found.
+async function scanMentionedBriefs(brief) {
+  const descLower = (brief.descriptionSections || []).join(' ').toLowerCase();
+  if (!descLower.trim()) return [];
+
+  const basesSquadrons = await IntelligenceBrief.find(
+    { category: { $in: ['Bases', 'Squadrons'] }, _id: { $ne: brief._id } },
+    '_id title subtitle category'
+  ).lean();
+
+  const linkedIds = new Set([
+    ...(brief.associatedBaseBriefIds || []).map(b => String(b._id ?? b)),
+    ...(brief.associatedSquadronBriefIds || []).map(b => String(b._id ?? b)),
+  ]);
+
+  const results = [];
+  for (const b of basesSquadrons) {
+    if (linkedIds.has(String(b._id))) continue;
+    for (const candidate of getMatchCandidates(b.title, b.category)) {
+      if (descLower.includes(candidate.toLowerCase())) {
+        results.push({ _id: b._id, title: b.title, subtitle: b.subtitle, category: b.category, matchTerm: candidate });
+        break;
+      }
+    }
+  }
+  return results;
+}
+
 // GET /api/briefs/:id — single brief. Works for guests (no readRecord) and authenticated users.
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
@@ -291,11 +338,13 @@ router.get('/:id', optionalAuth, async (req, res) => {
       .populate('media')
       .populate('quizQuestionsEasy')
       .populate('quizQuestionsMedium')
-      .populate('associatedBaseBriefIds',     '_id title category status')
-      .populate('associatedSquadronBriefIds', '_id title category status')
+      .populate('associatedBaseBriefIds',     '_id title subtitle category status')
+      .populate('associatedSquadronBriefIds', '_id title subtitle category status')
       .populate('associatedAircraftBriefIds', '_id title category status')
+      .populate('associatedMissionBriefIds',  '_id title subtitle category status')
       .populate('relatedBriefIds',            '_id title subtitle category status')
-      .populate('relatedHistoric',            '_id title subtitle category status historic');
+      .populate('relatedHistoric',            '_id title subtitle category status historic')
+      .populate('keywords.linkedBriefId',     '_id category');
 
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
@@ -347,7 +396,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
     }
 
     const ammoMax = req.user ? tierAmmo : 0;
-    res.json({ status: 'success', data: { brief, readRecord, ammoMax } });
+    const mentionedBriefs = await scanMentionedBriefs(brief);
+    res.json({ status: 'success', data: { brief, readRecord, ammoMax, mentionedBriefs } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

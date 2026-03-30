@@ -8,6 +8,8 @@ const {
   createUser,
   createSettings,
   createBooBriefs,
+  createTrainingBooBriefs,
+  createReadRecord,
   createPassedQuizAttempt,
   createWonBooResult,
   authCookie,
@@ -460,5 +462,131 @@ describe('GET /api/games/battle-of-order/recommended-briefs', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.briefs).toHaveLength(2);
+  });
+});
+
+// ── Training BOO order types ───────────────────────────────────────────────
+
+// Set up all BOO prerequisites for a Training brief:
+//  1. User has completed the anchor brief
+//  2. User has read 3 Aircrafts briefs (gate category for non-Bases)
+//  3. User has passed the quiz for the anchor brief
+async function setupTrainingBooPrereqs(userId, anchorBriefId) {
+  await createReadRecord(userId, anchorBriefId, { completed: true });
+  const aircraftBriefs = await createBooBriefs(3, 'Aircrafts');
+  for (const b of aircraftBriefs) {
+    await createReadRecord(userId, b._id, { completed: true });
+  }
+  await createPassedQuizAttempt(userId, anchorBriefId);
+}
+
+describe('Training BOO — training_week and training_duration order types', () => {
+  it('options returns training_week when trainingWeekStart is populated', async () => {
+    const briefs = await createTrainingBooBriefs(3);
+    const anchor = briefs[0];
+    await setupTrainingBooPrereqs(user._id, anchor._id);
+
+    const res = await request(app)
+      .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.available).toBe(true);
+    const types = res.body.data.options.map(o => o.orderType);
+    expect(types).toContain('training_week');
+  });
+
+  it('options returns training_duration when weeksOfTraining is populated', async () => {
+    const briefs = await createTrainingBooBriefs(3);
+    const anchor = briefs[0];
+    await setupTrainingBooPrereqs(user._id, anchor._id);
+
+    const res = await request(app)
+      .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.available).toBe(true);
+    const types = res.body.data.options.map(o => o.orderType);
+    expect(types).toContain('training_duration');
+  });
+
+  it('options returns both Training order types when all fields populated', async () => {
+    const briefs = await createTrainingBooBriefs(3);
+    const anchor = briefs[0];
+    await setupTrainingBooPrereqs(user._id, anchor._id);
+
+    const res = await request(app)
+      .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const types = res.body.data.options.map(o => o.orderType);
+    expect(types).toContain('training_week');
+    expect(types).toContain('training_duration');
+  });
+
+  it('options omits training_week when trainingWeekStart is null for anchor', async () => {
+    // All 3 briefs have weeksOfTraining but NOT trainingWeekStart
+    const briefs = await createTrainingBooBriefs(3, {
+      gameData: { trainingWeekStart: null, trainingWeekEnd: null, weeksOfTraining: 8 },
+    });
+    const anchor = briefs[0];
+    await setupTrainingBooPrereqs(user._id, anchor._id);
+
+    const res = await request(app)
+      .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const types = (res.body.data.options ?? []).map(o => o.orderType);
+    expect(types).not.toContain('training_week');
+  });
+
+  it('options omits training_duration when weeksOfTraining is null for anchor', async () => {
+    // All 3 briefs have trainingWeekStart but NOT weeksOfTraining
+    const briefs = await createTrainingBooBriefs(3, {
+      gameData: { trainingWeekStart: 4, trainingWeekEnd: 6, weeksOfTraining: null },
+    });
+    const anchor = briefs[0];
+    await setupTrainingBooPrereqs(user._id, anchor._id);
+
+    const res = await request(app)
+      .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const types = (res.body.data.options ?? []).map(o => o.orderType);
+    expect(types).not.toContain('training_duration');
+  });
+
+  it('generates a training_week game with choices sorted by trainingWeekStart', async () => {
+    const briefs = await createTrainingBooBriefs(3);
+    const anchor = briefs[0];
+    await setupTrainingBooPrereqs(user._id, anchor._id);
+
+    const res = await request(app)
+      .post('/api/games/battle-of-order/generate')
+      .set('Cookie', cookie)
+      .send({ briefId: anchor._id, orderType: 'training_week' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.orderType).toBe('training_week');
+    expect(res.body.data.choices).toHaveLength(3);
+  });
+
+  it('generates a training_duration game with choices sorted by weeksOfTraining', async () => {
+    const briefs = await createTrainingBooBriefs(3);
+    const anchor = briefs[0];
+    await setupTrainingBooPrereqs(user._id, anchor._id);
+
+    const res = await request(app)
+      .post('/api/games/battle-of-order/generate')
+      .set('Cookie', cookie)
+      .send({ briefId: anchor._id, orderType: 'training_duration' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.orderType).toBe('training_duration');
+    expect(res.body.data.choices).toHaveLength(3);
   });
 });

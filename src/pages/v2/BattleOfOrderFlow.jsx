@@ -10,7 +10,8 @@ const ORDER_META = {
   year_introduced:   { label: 'Year Introduced: Oldest → Latest',    desc: 'Rank from earliest to latest year of introduction',  emoji: '📅', startLabel: 'FIRST INTRODUCED',           endLabel: 'MOST RECENTLY INTRODUCED', showValue: false },
   year_retired:      { label: 'Year Retired: Oldest → Latest',       desc: 'Rank from earliest to most recently retired',        emoji: '🗓️', startLabel: 'EARLIEST RETIRED',           endLabel: 'MOST RECENTLY RETIRED',    showValue: false },
   rank_hierarchy:    { label: 'Rank Hierarchy',                       desc: 'Arrange in correct hierarchical rank order',         emoji: '🎖️', startLabel: 'MOST SENIOR (hierarchy #1)', endLabel: 'MOST JUNIOR',              showValue: false },
-  training_week:     { label: 'Training Week Order',                  desc: 'Arrange in order of training schedule',              emoji: '📋', startLabel: 'FIRST WEEK / PHASE',         endLabel: 'LAST WEEK / PHASE',        showValue: false },
+  training_week:     { label: 'Training: Which Happens First',         desc: 'Arrange training phases in pipeline order',          emoji: '📋', startLabel: 'FIRST IN PIPELINE',          endLabel: 'LAST IN PIPELINE',         showValue: false },
+  training_duration: { label: 'Training Duration: Shortest → Longest', desc: 'Arrange training phases from shortest to longest',    emoji: '⏱️', startLabel: 'SHORTEST DURATION',          endLabel: 'LONGEST DURATION',         showValue: true  },
   start_year:        { label: 'Start Year: Oldest → Latest',         desc: 'Rank from earliest to latest start year',            emoji: '📅', startLabel: 'EARLIEST START',             endLabel: 'LATEST START',             showValue: false },
   end_year:          { label: 'End Year: Oldest → Latest',           desc: 'Rank from earliest to latest end/conclusion year',   emoji: '🏁', startLabel: 'EARLIEST END',               endLabel: 'LATEST / ONGOING',         showValue: false },
   aircraft_count_asc: { label: 'Aircraft Count: Fewest → Most',      desc: 'Rank from fewest to most aircraft assigned',         emoji: '✈️', startLabel: 'FEWEST AIRCRAFT',            endLabel: 'MOST AIRCRAFT',            showValue: true  },
@@ -19,11 +20,14 @@ const ORDER_META = {
 // ── Roulette selection screen ─────────────────────────────────────────────
 function RouletteScreen({ options, briefTitle, difficulty, onDone }) {
   const selectedIdxRef             = useRef(Math.floor(Math.random() * options.length))
+  const soundPlayedRef             = useRef(false)
   const [displayIdx, setDisplayIdx] = useState(0)
   const [phase, setPhase]           = useState('spinning') // 'spinning' | 'done'
 
   useEffect(() => {
     if (options.length === 0) return
+    if (soundPlayedRef.current) return
+    soundPlayedRef.current = true
 
     playSound('battle_of_order_selection')
 

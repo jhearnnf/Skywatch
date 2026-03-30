@@ -4,12 +4,43 @@
  * mode="view"  — read-only; highlights specified base names, greys out others
  * mode="game"  — interactive WTA game map with selection/submission state
  */
-import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet'
+import { useEffect } from 'react'
+import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { RAF_BASES } from '../data/rafBases'
 
+// Flies/fits the map to highlighted bases on mount (skipped if centreOn is already set)
+function FlyToHighlighted({ highlightedBaseNames, centreOn }) {
+  const map = useMap()
+  useEffect(() => {
+    if (centreOn) return // FlyToCentre will handle initial positioning
+    const targets = RAF_BASES.filter(b =>
+      (highlightedBaseNames ?? []).some(n => n.toLowerCase() === b.name.toLowerCase())
+    )
+    if (targets.length === 0) return
+    if (targets.length === 1) {
+      map.flyTo([targets[0].lat, targets[0].lng], 9, { duration: 0.8 })
+    } else {
+      map.flyToBounds(targets.map(b => [b.lat, b.lng]), { padding: [50, 50], duration: 0.8 })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return null
+}
+
+// Flies to a specific base whenever centreOn changes
+function FlyToCentre({ centreOn }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!centreOn) return
+    const target = RAF_BASES.find(b => b.name.toLowerCase() === centreOn.toLowerCase())
+    if (!target) return
+    map.flyTo([target.lat, target.lng], 10, { duration: 0.8 })
+  }, [centreOn]) // eslint-disable-line react-hooks/exhaustive-deps
+  return null
+}
+
 // ── View mode ─────────────────────────────────────────────────────────────
-function ViewMap({ highlightedBaseNames, height }) {
+function ViewMap({ highlightedBaseNames, height, centreOn }) {
   const highlighted = new Set((highlightedBaseNames ?? []).map(n => n.toLowerCase()))
 
   return (
@@ -21,6 +52,8 @@ function ViewMap({ highlightedBaseNames, height }) {
         zoomControl={true}
         attributionControl={false}
       >
+        <FlyToHighlighted highlightedBaseNames={highlightedBaseNames} centreOn={centreOn} />
+        <FlyToCentre centreOn={centreOn} />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; OpenStreetMap contributors'
@@ -117,9 +150,9 @@ function GameMap({ bases, selected, submitted, onToggle, height }) {
 }
 
 // ── Public component ───────────────────────────────────────────────────────
-export default function RafBasesMap({ mode = 'view', height = 300, ...props }) {
+export default function RafBasesMap({ mode = 'view', height = 300, centreOn, ...props }) {
   if (mode === 'game') {
     return <GameMap height={height} {...props} />
   }
-  return <ViewMap height={height} {...props} />
+  return <ViewMap height={height} centreOn={centreOn} {...props} />
 }

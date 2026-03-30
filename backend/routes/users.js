@@ -9,6 +9,7 @@ const GameSessionWhereAircraftResult     = require('../models/GameSessionWhereAi
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const ProblemReport = require('../models/ProblemReport');
+const UserNotification = require('../models/UserNotification');
 const AppSettings = require('../models/AppSettings');
 const Level = require('../models/Level');
 const Rank = require('../models/Rank');
@@ -262,6 +263,31 @@ router.get('/me/wta-spawn', protect, async (req, res) => {
     const threshold  = user.whereAircraftSpawnThreshold     ?? 3;
     const prereqsMet = basesRead >= 2 && aircraftsRead >= 2;
     res.json({ status: 'success', data: { readsSince, threshold, remaining: Math.max(0, threshold - readsSince), prereqsMet, basesRead, aircraftsRead } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/users/me/notifications — unread in-app notifications for the current user
+router.get('/me/notifications', protect, async (req, res) => {
+  try {
+    const notifications = await UserNotification.find({ userId: req.user._id, read: false })
+      .sort({ createdAt: -1 })
+      .limit(20);
+    res.json({ status: 'success', data: { notifications } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/users/me/notifications/:id/read — mark a notification as read
+router.post('/me/notifications/:id/read', protect, async (req, res) => {
+  try {
+    await UserNotification.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user._id },
+      { read: true }
+    );
+    res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

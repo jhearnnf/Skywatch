@@ -173,6 +173,7 @@ const intelligenceBriefSchema = new mongoose.Schema(
       // Training
       trainingWeekStart:  { type: Number },
       trainingWeekEnd:    { type: Number },
+      weeksOfTraining:    { type: Number },   // total duration of this training phase in weeks
 
       // Bases / Squadrons / Missions / Tech / Treaties / Threats
       startYear:          { type: Number },

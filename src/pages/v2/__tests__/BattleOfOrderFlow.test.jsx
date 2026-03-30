@@ -380,3 +380,103 @@ describe('BattleOfOrderFlow — results screen', () => {
     expect(calls.filter(u => u.includes('/generate')).length).toBeGreaterThanOrEqual(2)
   })
 })
+
+// ── Training order types ───────────────────────────────────────────────────
+
+const TRAINING_BRIEF_RESPONSE = {
+  data: { brief: { _id: 'brief123', title: 'Basic Flying Training', category: 'Training' } },
+}
+
+const TRAINING_OPTIONS_BOTH = {
+  status: 'success',
+  data: {
+    available:  true,
+    difficulty: 'easy',
+    options: [
+      { orderType: 'training_week' },
+      { orderType: 'training_duration' },
+    ],
+  },
+}
+
+const TRAINING_OPTIONS_DURATION_ONLY = {
+  status: 'success',
+  data: {
+    available:  true,
+    difficulty: 'easy',
+    options: [{ orderType: 'training_duration' }],
+  },
+}
+
+const TRAINING_GENERATE_DURATION = {
+  status: 'success',
+  data: {
+    gameId: 'game2', category: 'Training', difficulty: 'easy',
+    orderType: 'training_duration',
+    choices: [
+      { choiceId: 'd1', briefTitle: 'Phase 1', displayValue: '4 wks' },
+      { choiceId: 'd2', briefTitle: 'Phase 2', displayValue: '8 wks' },
+      { choiceId: 'd3', briefTitle: 'Phase 3', displayValue: '12 wks' },
+    ],
+  },
+}
+
+function setupTrainingFetch(options = TRAINING_OPTIONS_BOTH, generateResp = TRAINING_GENERATE_DURATION) {
+  return vi.fn().mockImplementation((url) => {
+    if (url.includes('/api/briefs/'))
+      return Promise.resolve({ ok: true, status: 200, json: async () => TRAINING_BRIEF_RESPONSE })
+    if (url.includes('/options'))
+      return Promise.resolve({ ok: true, status: 200, json: async () => options })
+    if (url.includes('/generate'))
+      return Promise.resolve({ ok: true, status: 200, json: async () => generateResp })
+    if (url.includes('/submit'))
+      return Promise.resolve({ ok: true, status: 200, json: async () => makeSubmitResponse({ won: true, aircoinsEarned: 8 }) })
+    if (url.includes('/abandon'))
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'success' }) })
+    return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
+  })
+}
+
+describe('BattleOfOrderFlow — Training order types', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockNavigate.mockClear()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('shows roulette and advances to game screen when both Training order types are available', async () => {
+    global.fetch = setupTrainingFetch(TRAINING_OPTIONS_BOTH, TRAINING_GENERATE_DURATION)
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText('Battle of Order'))
+    await act(async () => { vi.advanceTimersByTime(20000) })
+    // Roulette picks one of the two options and proceeds to game screen
+    await waitFor(() => screen.getByText('Submit Order →'))
+  })
+
+  it('advances to game screen for training_duration orderType', async () => {
+    global.fetch = setupTrainingFetch(TRAINING_OPTIONS_DURATION_ONLY, TRAINING_GENERATE_DURATION)
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText('Battle of Order'))
+    await act(async () => { vi.advanceTimersByTime(20000) })
+
+    await waitFor(() => screen.getByText('Submit Order →'))
+  })
+
+  it('shows week values (showValue=true) for training_duration choices on game screen', async () => {
+    global.fetch = setupTrainingFetch(TRAINING_OPTIONS_DURATION_ONLY, TRAINING_GENERATE_DURATION)
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText('Battle of Order'))
+    await act(async () => { vi.advanceTimersByTime(20000) })
+
+    await waitFor(() => screen.getByText('Submit Order →'))
+    // displayValues for training_duration are shown (showValue: true)
+    expect(screen.getByText('4 wks')).toBeDefined()
+  })
+})

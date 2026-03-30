@@ -220,4 +220,70 @@ async function sendPasswordResetEmail({ email, resetUrl }) {
   }
 }
 
-module.exports = { sendWelcomeEmail, sendConfirmationEmail, sendPasswordResetEmail };
+// Send a report reply to a user (email delivery path).
+// Errors are caught internally so a mail failure never blocks the admin route.
+async function sendReportReplyEmail({ email, agentNumber, pageReported, replyMessage }) {
+  try {
+    const appUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: email,
+      subject: 'SkyWatch — Update on Your Report',
+      html: `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f8ff;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8ff;padding:48px 20px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
+
+        <!-- Blue accent bar -->
+        <tr><td style="background:linear-gradient(90deg,#1d4ed8 0%,#3b82f6 100%);height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+        <!-- Body -->
+        <tr><td style="padding:40px 36px;">
+
+          <p style="font-size:11px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#1d4ed8;margin:0 0 24px;">
+            Classified Transmission
+          </p>
+
+          <h1 style="font-size:26px;font-weight:800;color:#0f172a;letter-spacing:-0.02em;margin:0 0 8px;line-height:1.2;">
+            Update on Your Report
+          </h1>
+
+          <p style="font-size:13px;color:#94a3b8;letter-spacing:0.04em;margin:0 0 28px;">
+            Agent ${agentNumber} — re: ${pageReported}
+          </p>
+
+          <!-- Reply block -->
+          <div style="background:#f1f5f9;border-left:3px solid #1d4ed8;border-radius:0 8px 8px 0;padding:20px 20px;margin:0 0 28px;">
+            <p style="font-size:15px;line-height:1.75;color:#334155;margin:0;white-space:pre-wrap;">${replyMessage.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+          </div>
+
+          <a href="${appUrl}"
+             style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;
+                    font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;
+                    padding:13px 30px;border-radius:6px;">
+            Open SkyWatch
+          </a>
+
+          <p style="font-size:11px;color:#94a3b8;margin:36px 0 0;padding-top:24px;border-top:1px solid #e2e8f0;line-height:1.6;">
+            SkyWatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>
+            This is an update to a problem report you submitted.
+          </p>
+
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+    });
+    if (error) throw new Error(error.message);
+  } catch (err) {
+    console.error('[email] Report reply email failed for', email, '—', err.message);
+  }
+}
+
+module.exports = { sendWelcomeEmail, sendConfirmationEmail, sendPasswordResetEmail, sendReportReplyEmail };

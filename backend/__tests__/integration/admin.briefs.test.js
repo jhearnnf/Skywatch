@@ -20,13 +20,15 @@ const app      = require('../../app');
 const db       = require('../helpers/setupDb');
 const {
   createUser, createAdminUser, createBrief, createQuizQuestions,
-  createGameType, createSettings, authCookie,
+  createGameType, createSettings, authCookie, createTrainingBooBriefs, createWonBooResult,
 } = require('../helpers/factories');
-const IntelligenceBrief      = require('../../models/IntelligenceBrief');
-const IntelligenceBriefRead  = require('../../models/IntelligenceBriefRead');
-const GameQuizQuestion       = require('../../models/GameQuizQuestion');
-const Media                  = require('../../models/Media');
-const mongoose               = require('mongoose');
+const IntelligenceBrief               = require('../../models/IntelligenceBrief');
+const IntelligenceBriefRead           = require('../../models/IntelligenceBriefRead');
+const GameQuizQuestion                = require('../../models/GameQuizQuestion');
+const GameOrderOfBattle               = require('../../models/GameOrderOfBattle');
+const GameSessionOrderOfBattleResult  = require('../../models/GameSessionOrderOfBattleResult');
+const Media                           = require('../../models/Media');
+const mongoose                        = require('mongoose');
 
 // ── lifecycle ────────────────────────────────────────────────────────────────
 
@@ -596,6 +598,29 @@ describe('DELETE /api/admin/briefs/:id — cascade completeness', () => {
 
     const after = await IntelligenceBriefRead.countDocuments({ intelBriefId: brief._id });
     expect(after).toBe(0);
+  });
+
+  it('cascades: deletes GameOrderOfBattle and GameSessionOrderOfBattleResult records', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+    const briefs = await createTrainingBooBriefs(3);
+    const anchor = briefs[0];
+
+    // Create a BOO game and result anchored to the brief
+    const { game, result } = await createWonBooResult(user._id, anchor._id, {
+      category: 'Training', orderType: 'training_week',
+    });
+
+    expect(await GameOrderOfBattle.countDocuments({ anchorBriefId: anchor._id })).toBe(1);
+    expect(await GameSessionOrderOfBattleResult.countDocuments({ gameId: game._id })).toBe(1);
+
+    await request(app)
+      .delete(`/api/admin/briefs/${anchor._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: 'Cascade BOO test' });
+
+    expect(await GameOrderOfBattle.countDocuments({ anchorBriefId: anchor._id })).toBe(0);
+    expect(await GameSessionOrderOfBattleResult.countDocuments({ gameId: game._id })).toBe(0);
   });
 
   it('returns 404 for a non-existent brief ID', async () => {

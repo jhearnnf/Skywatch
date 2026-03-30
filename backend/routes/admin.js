@@ -4,7 +4,8 @@ const User = require('../models/User');
 const ProblemReport = require('../models/ProblemReport');
 const AdminAction = require('../models/AdminAction');
 const AppSettings = require('../models/AppSettings');
-const { sendWelcomeEmail } = require('../utils/email');
+const { sendWelcomeEmail, sendReportReplyEmail } = require('../utils/email');
+const UserNotification = require('../models/UserNotification');
 const GameSessionQuizResult               = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt              = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult      = require('../models/GameSessionOrderOfBattleResult');
@@ -380,7 +381,7 @@ async function enrichUsersWithStats(users) {
   if (!users.length) return [];
   const userIds = users.map(u => u._id);
 
-  const [briefCounts, quizCounts, booCounts] = await Promise.all([
+  const [briefCounts, quizCounts, booCounts, wtaCounts, whereCounts, flashCounts] = await Promise.all([
     IntelligenceBriefRead.aggregate([
       { $match: { userId: { $in: userIds }, completed: true } },
       { $group: { _id: '$userId', count: { $sum: 1 } } },
@@ -401,11 +402,26 @@ async function enrichUsersWithStats(users) {
           abandoned:{ $sum: { $cond: ['$abandoned', 1, 0] } },
       }},
     ]),
+    GameSessionWhosAtAircraftResult.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      { $group: { _id: '$userId', total: { $sum: 1 } } },
+    ]),
+    GameSessionWhereAircraftResult.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      { $group: { _id: '$userId', total: { $sum: 1 } } },
+    ]),
+    GameSessionFlashcardRecallResult.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      { $group: { _id: '$userId', total: { $sum: 1 } } },
+    ]),
   ]);
 
-  const briefMap = Object.fromEntries(briefCounts.map(b => [b._id.toString(), b.count]));
-  const quizMap  = Object.fromEntries(quizCounts.map(q  => [q._id.toString(), q]));
-  const booMap   = Object.fromEntries(booCounts.map(b   => [b._id.toString(), b]));
+  const briefMap = Object.fromEntries(briefCounts.map(b  => [b._id.toString(), b.count]));
+  const quizMap  = Object.fromEntries(quizCounts.map(q   => [q._id.toString(), q]));
+  const booMap   = Object.fromEntries(booCounts.map(b    => [b._id.toString(), b]));
+  const wtaMap   = Object.fromEntries(wtaCounts.map(w    => [w._id.toString(), w.total]));
+  const whereMap = Object.fromEntries(whereCounts.map(w  => [w._id.toString(), w.total]));
+  const flashMap = Object.fromEntries(flashCounts.map(f  => [f._id.toString(), f.total]));
 
   return users.map(u => {
     const plain = u.toObject({ virtuals: true });
@@ -420,6 +436,9 @@ async function enrichUsersWithStats(users) {
         booPlayed:        booMap[uid]?.total      ?? 0,
         booWon:           booMap[uid]?.won        ?? 0,
         booAbandoned:     booMap[uid]?.abandoned  ?? 0,
+        wtaPlayed:        wtaMap[uid]            ?? 0,
+        wherePlayed:      whereMap[uid]          ?? 0,
+        flashcardsPlayed: flashMap[uid]          ?? 0,
       },
     };
   });
@@ -629,7 +648,7 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
     const ops = [];
 
     if (fields.includes('aircoins'))        { userUpdates.totalAircoins = 0; userUpdates.cycleAircoins = 0; userUpdates.rank = null; ops.push(AircoinLog.deleteMany({ userId: req.params.id })); }
-    if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); }
+    if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWhosAtAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWhereAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionFlashcardRecallResult.deleteMany({ userId: req.params.id })); }
     if (fields.includes('streak'))          { userUpdates.loginStreak = 0; userUpdates.lastStreakDate = null; }
     if (fields.includes('intelBriefsRead')) {
       userUpdates.loginStreak    = 0;
@@ -695,11 +714,45 @@ router.get('/problems', async (req, res) => {
 // POST /api/admin/problems/:id/update
 router.post('/problems/:id/update', async (req, res) => {
   try {
-    const { description, solved } = req.body;
-    const update = { $push: { updates: { adminUserId: req.user._id, description } } };
-    if (solved !== undefined) update.$set = { solved };
+    const { description, solved, notifyUser, sendEmail } = req.body;
 
-    const report = await ProblemReport.findByIdAndUpdate(req.params.id, update, { new: true });
+    const isUserVisible = notifyUser === true;
+    const updateEntry   = { adminUserId: req.user._id, description, isUserVisible, emailSent: false };
+
+    const mongoUpdate = { $push: { updates: updateEntry } };
+    if (solved !== undefined) mongoUpdate.$set = { solved };
+
+    const report = await ProblemReport.findByIdAndUpdate(req.params.id, mongoUpdate, { new: true })
+      .populate('userId', 'email agentNumber');
+
+    if (isUserVisible && report?.userId) {
+      const { email, agentNumber } = report.userId;
+
+      if (sendEmail) {
+        // Fire email — errors caught inside sendReportReplyEmail
+        await sendReportReplyEmail({
+          email,
+          agentNumber,
+          pageReported: report.pageReported,
+          replyMessage: description,
+        });
+        // Mark the update entry as email-sent
+        await ProblemReport.updateOne(
+          { _id: report._id },
+          { $set: { [`updates.${report.updates.length - 1}.emailSent`]: true } }
+        );
+      } else {
+        // In-app notification
+        await UserNotification.create({
+          userId:          report.userId._id,
+          type:            'report_reply',
+          title:           'Update on your report',
+          message:         description,
+          relatedReportId: report._id,
+        });
+      }
+    }
+
     res.json({ status: 'success', data: { report } });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -934,8 +987,13 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
     // Fetch brief before deletion to get title + category
     const brief = await IntelligenceBrief.findById(briefId).select('title category');
 
-    // Collect question IDs before deleting so we can wipe their results
-    const questionIds = await GameQuizQuestion.distinct('_id', { intelBriefId: briefId });
+    // Collect dependent IDs before deleting so we can cascade their results
+    const [questionIds, booGameIds, flashGameIds, waaGameIds] = await Promise.all([
+      GameQuizQuestion.distinct('_id', { intelBriefId: briefId }),
+      GameOrderOfBattle.distinct('_id', { anchorBriefId: briefId }),
+      GameFlashcardRecall.distinct('_id', { 'cards.intelBriefId': briefId }),
+      GameWhosAtAircraft.distinct('_id', { intelBriefId: briefId }),
+    ]);
 
     await Promise.all([
       IntelligenceBrief.findByIdAndDelete(briefId),
@@ -944,6 +1002,15 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
       GameSessionQuizAttempt.deleteMany({ intelBriefId: briefId }),
       GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
       AircoinLog.deleteMany({ briefId }),
+      // BOO cascade
+      GameSessionOrderOfBattleResult.deleteMany({ gameId: { $in: booGameIds } }),
+      GameOrderOfBattle.deleteMany({ anchorBriefId: briefId }),
+      // Flashcard cascade
+      GameSessionFlashcardRecallResult.deleteMany({ gameId: { $in: flashGameIds } }),
+      GameFlashcardRecall.deleteMany({ 'cards.intelBriefId': briefId }),
+      // Who's That Aircraft cascade
+      GameSessionWhosAtAircraftResult.deleteMany({ gameId: { $in: waaGameIds } }),
+      GameWhosAtAircraft.deleteMany({ intelBriefId: briefId }),
       // Where's That Aircraft cascade
       GameSessionWhereAircraftResult.deleteMany({ aircraftBriefId: briefId }),
       // Remove deleted brief from all relationship arrays across the collection
@@ -1350,12 +1417,22 @@ function hasStaleSource(sources) {
   });
 }
 
+// Returns an additional prompt note for categories where null gameData fields
+// need explicit justification — prevents AI incorrectly populating fields that
+// should be left null for non-pipeline content (e.g. cadet-facing activities).
+function booGameDataNote(category) {
+  if (category === 'Training') {
+    return `GAME DATA NOTE: trainingWeekStart and trainingWeekEnd represent position within the regular RAF career training pipeline (IOT → EFT → AFT → OCU and similar progressions). If this brief covers cadet-facing activities — such as Air Experience Flights (AEF), ATC/CCF flying, gliding scholarships, or any programme primarily intended for Air Cadets rather than regular RAF personnel undergoing career training — set trainingWeekStart and trainingWeekEnd to null. Reason: cadet activities run on a separate schedule that cannot be meaningfully compared with regular RAF career pipeline phases in a chronological ordering game. weeksOfTraining may still be populated if a clear course duration exists.`;
+  }
+  return null;
+}
+
 function booGameDataShape(category) {
   if (category === 'Aircrafts')
     return '"gameData": {"topSpeedKph": 2400, "yearIntroduced": 1976, "yearRetired": null}';
   // Ranks are NOT generated by AI — use lookupRankHierarchy() after generation instead
   if (category === 'Training')
-    return '"gameData": {"trainingWeekStart": 3, "trainingWeekEnd": 5}';
+    return '"gameData": {"trainingWeekStart": 3, "trainingWeekEnd": 5, "weeksOfTraining": 2}';
   if (['Missions', 'Tech', 'Treaties', 'Bases', 'Squadrons', 'Threats'].includes(category))
     return '"gameData": {"startYear": 1976, "endYear": null}';
   return null;
@@ -1387,8 +1464,8 @@ router.post('/ai/generate-brief', async (req, res) => {
     const { headline, topic, category } = req.body;
     if (!headline && !topic) return res.status(400).json({ message: 'headline or topic required' });
 
-    const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    "Section 1 — 50–80 words. Use plain, clear sentences. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Section 2 — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Section 3 — 50–80 words. Operational context, key capabilities, or RAF significance.",\n    "Section 4 — 1–2 sentences only. A concise summary of this subject's role and significance within the modern RAF. CRITICAL: do NOT mention the subject's name, title, designation, or any unique identifier that would immediately reveal what this brief is about. The summary must be specific enough that a reader given a short list of 4–5 candidates could identify the correct one, but it must not name the subject directly."\n  ]`;
-    const SHARED_RULES = `\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of EXACTLY 4 strings — no more, no fewer. Total word count across sections 1–3 must not exceed 220 words. Section 4 must be 1–2 sentences and must not contain the subject's name or any unique identifier. Write each section as plain prose — no bullet points, no headers, no markdown.`;
+    const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    "Section 1 — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Section 2 — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Section 3 — 50–80 words. Operational context, key capabilities, or RAF significance.",\n    "Section 4 — 1–2 sentences only. A concise summary of this subject's role and significance within the modern RAF. CRITICAL: do NOT mention the subject's name, title, designation, or any unique identifier that would immediately reveal what this brief is about. The summary must be specific enough that a reader given a short list of 4–5 candidates could identify the correct one, but it must not name the subject directly."\n  ]`;
+    const SHARED_RULES = `\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of EXACTLY 4 strings — no more, no fewer. Total word count across sections 1–3 must not exceed 220 words. Section 4 must be 1–2 sentences and must not contain the subject's name or any unique identifier. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.`;
 
     // News shape — AI must generate the title
     const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "concise factual title, max 70 characters",\n  ${SHARED_SECTIONS},\n  "sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}${SHARED_RULES}`;
@@ -1403,6 +1480,8 @@ router.post('/ai/generate-brief', async (req, res) => {
         '\n}\nCRITICAL RULES:',
         `,\n  ${gdShape}\n}\nCRITICAL RULES:`
       );
+      const gdNote = booGameDataNote(category);
+      if (gdNote) TOPIC_JSON_SHAPE += `\n${gdNote}`;
     }
 
     const userContent = topic
@@ -1522,7 +1601,7 @@ router.post('/ai/generate-keywords', async (req, res) => {
       content: getPrompt(kwAiSettings, 'keywords'),
     }, {
       role: 'user',
-      content: `Description:\n"""${description}"""\n\n${existingList}${titleExclusion}Extract exactly ${needed} keywords from the description above. Every keyword string MUST appear verbatim (same spelling and capitalisation) in the description. Choose technical terms, acronyms, aircraft designations, operation names, and proper nouns — but never the subject/title of the brief itself.\n\nFor "generatedDescription": write a general RAF-specific definition of the term itself (e.g. what that aircraft/system/operation is, its role and capabilities). Do NOT reference or summarise the intel brief — the description should be useful as a standalone glossary entry.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition of this term"},{"keyword":"...","generatedDescription":"..."}]}`,
+      content: `Description:\n"""${description}"""\n\n${existingList}${titleExclusion}Extract exactly ${needed} keywords from the description above. Every keyword string MUST appear verbatim (same spelling and capitalisation) in the description. Choose technical terms, acronyms, aircraft designations, operation names, and proper nouns — but never the subject/title of the brief itself.\n\nDo NOT include RAF base names (e.g. "RAF Lossiemouth", "RAF Coningsby") or RAF squadron names/numbers (e.g. "No. 617 Squadron", "IX Squadron", "1 Squadron") as keywords — these are handled separately.\n\nFor "generatedDescription": write a general RAF-specific definition of the term itself (e.g. what that aircraft/system/operation is, its role and capabilities). Do NOT reference or summarise the intel brief — the description should be useful as a standalone glossary entry.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition of this term"},{"keyword":"...","generatedDescription":"..."}]}`,
     }], 'perplexity/sonar');
 
     const raw = data.choices?.[0]?.message?.content ?? '{}';
@@ -1739,7 +1818,7 @@ router.post('/ai/regenerate-brief/:id', async (req, res) => {
     const kwCount = aiSettings.aiKeywordsPerBrief ?? 20;
 
     // ── Step 1: regenerate description sections, keywords (+ gameData for BOO) ─
-    let TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use plain, clear sentences. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ],\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim somewhere in the descriptionSections above", "generatedDescription": "2-3 sentences. Explain what this term is and its RAF role or purpose. Where relevant include specific detail: for a base or station — its location, which aircraft types and squadrons are stationed there, and what operations occur there; for a squadron or unit — its primary role and responsibilities, aircraft operated, and home base; for an aircraft or system — its capabilities, current service status, and operating bases/squadrons; for a rank, role, or training concept — its place in the RAF structure and training pathway significance. Draw on broader RAF knowledge beyond this brief — do NOT reference or summarise this intel brief."},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"}\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words. Write each section as plain prose — no bullet points, no headers, no markdown.\n2. Write all sections first, then extract keywords — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere across the sections.\n3. Return exactly 10 keyword objects.\n4. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
+    let TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ],\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim somewhere in the descriptionSections above", "generatedDescription": "2-3 sentences. Explain what this term is and its RAF role or purpose. Where relevant include specific detail: for a base or station — its location, which aircraft types and squadrons are stationed there, and what operations occur there; for a squadron or unit — its primary role and responsibilities, aircraft operated, and home base; for an aircraft or system — its capabilities, current service status, and operating bases/squadrons; for a rank, role, or training concept — its place in the RAF structure and training pathway significance. Draw on broader RAF knowledge beyond this brief — do NOT reference or summarise this intel brief."},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"}\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.\n2. Write all sections first, then extract keywords — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere across the sections.\n3. Return exactly 10 keyword objects.\n4. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
 
     TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace('Return exactly 10 keyword objects', `Return exactly ${kwCount} keyword objects`);
 
@@ -1749,6 +1828,8 @@ router.post('/ai/regenerate-brief/:id', async (req, res) => {
         '\n}\nCRITICAL RULES:',
         `,\n  ${gdShape}\n}\nCRITICAL RULES:`
       );
+      const gdNote = booGameDataNote(brief.category);
+      if (gdNote) TOPIC_JSON_SHAPE += `\n${gdNote}`;
     }
 
     const briefData = await openRouterChat([{
@@ -1828,7 +1909,7 @@ router.post('/ai/regenerate-description/:id', async (req, res) => {
     const brief = await IntelligenceBrief.findById(req.params.id).select('title');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
-    const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use plain, clear sentences. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings.\n2. Total word count across all sections must not exceed 240 words.\n3. Write each section as plain prose — no bullet points, no headers, no markdown.`;
+    const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings.\n2. Total word count across all sections must not exceed 240 words.\n3. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.`;
 
     const descAiSettings = await AppSettings.getSettings();
     const data = await openRouterChat([{
@@ -1897,8 +1978,8 @@ router.post('/ai/generate-battle-order-data', async (req, res) => {
       fieldSpec = 'rankHierarchyOrder (integer, 1 = most senior e.g. Marshal of the RAF, higher numbers = more junior)';
       jsonShape = '{"rankHierarchyOrder":5}';
     } else if (category === 'Training') {
-      fieldSpec = 'trainingWeekStart (integer, the week number in the training pipeline when this phase/element begins), trainingWeekEnd (integer, the week number when this phase/element ends)';
-      jsonShape = '{"trainingWeekStart":3,"trainingWeekEnd":5}';
+      fieldSpec = 'trainingWeekStart (integer, the week number in the RAF career training pipeline when this phase begins — use 0 if unknown; set to null if this brief covers cadet-facing activities such as AEF, ATC/CCF flying, or gliding scholarships, because those run on a separate cadet schedule that cannot be compared with the regular RAF career pipeline), trainingWeekEnd (integer, the week number in the pipeline when this phase ends — same null rule as trainingWeekStart), weeksOfTraining (integer, total duration of this training phase in weeks — may still be populated for cadet-facing activities if a clear duration exists; use 0 if unknown)';
+      jsonShape = '{"trainingWeekStart":3,"trainingWeekEnd":5,"weeksOfTraining":2}';
     } else if (category === 'Bases') {
       fieldSpec = 'startYear (integer, year this RAF base was established/opened), endYear (integer or null if still active)';
       jsonShape = '{"startYear":1936,"endYear":null}';

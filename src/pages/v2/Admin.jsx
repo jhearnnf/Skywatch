@@ -1415,7 +1415,7 @@ function UsersTab({ API }) {
                   {
                     label:   'Game History',
                     fields:  ['gameHistory'],
-                    isReset: (u.profileStats?.quizzesPlayed ?? 0) === 0 && (u.profileStats?.booPlayed ?? 0) === 0,
+                    isReset: (u.profileStats?.quizzesPlayed ?? 0) === 0 && (u.profileStats?.booPlayed ?? 0) === 0 && (u.profileStats?.wtaPlayed ?? 0) === 0 && (u.profileStats?.wherePlayed ?? 0) === 0 && (u.profileStats?.flashcardsPlayed ?? 0) === 0,
                   },
                   {
                     label:   'Briefs Read',
@@ -1471,7 +1471,10 @@ function ProblemsTab({ API }) {
   const [search,   setSearch]   = useState('')
   const [loading,  setLoading]  = useState(true)
   const [expanded, setExpanded] = useState(null)
-  const [updates,  setUpdates]  = useState({})
+  const [updates,  setUpdates]  = useState({})       // { reportId: text }
+  const [notify,   setNotify]   = useState({})        // { reportId: bool }
+  const [delivery, setDelivery] = useState({})        // { reportId: 'email'|'notif' }
+  const [confirm,  setConfirm]  = useState(null)      // { id, description, solved, sendEmail } | null
   const [busy,     setBusy]     = useState(null)
   const [toast,    setToast]    = useState('')
   const [tick,     setTick]     = useState(0)
@@ -1490,23 +1493,81 @@ function ProblemsTab({ API }) {
     ? problems.filter(p => p.description.toLowerCase().includes(search.toLowerCase()) || p.pageReported?.toLowerCase().includes(search.toLowerCase()))
     : problems
 
-  const postUpdate = async (id, description, solved) => {
-    if (!description?.trim()) return
+  const executeUpdate = async ({ id, description, solved, notifyUser, sendEmail }) => {
     setBusy(id)
+    setConfirm(null)
     await fetch(`${API}/api/admin/problems/${id}/update`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description, ...(solved !== undefined ? { solved } : {}) }),
+      body: JSON.stringify({
+        description,
+        ...(solved !== undefined ? { solved } : {}),
+        ...(notifyUser ? { notifyUser: true, sendEmail } : {}),
+      }),
     })
     setUpdates(p => ({ ...p, [id]: '' }))
+    setNotify(p => ({ ...p, [id]: false }))
     setBusy(null)
     setToast(solved !== undefined ? (solved ? '✓ Marked solved' : '✓ Reopened') : '✓ Updated')
     setTick(t => t + 1)
   }
 
+  const handleSaveNote = (p) => {
+    const description = updates[p._id]
+    if (!description?.trim()) return
+    const notifyUser = notify[p._id] ?? false
+    const sendEmail  = notifyUser && (delivery[p._id] ?? 'notif') === 'email'
+    if (notifyUser) {
+      setConfirm({ id: p._id, description, solved: undefined, notifyUser, sendEmail })
+    } else {
+      executeUpdate({ id: p._id, description, solved: undefined, notifyUser: false })
+    }
+  }
+
+  const handleToggleSolved = (p) => {
+    const description = updates[p._id]?.trim() || (p.solved ? 'Reopened' : 'Marked as solved')
+    const solved      = !p.solved
+    const notifyUser  = notify[p._id] ?? false
+    const sendEmail   = notifyUser && (delivery[p._id] ?? 'notif') === 'email'
+    if (notifyUser) {
+      setConfirm({ id: p._id, description, solved, notifyUser, sendEmail })
+    } else {
+      executeUpdate({ id: p._id, description, solved, notifyUser: false })
+    }
+  }
+
   return (
     <div>
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
+
+      {/* Confirmation modal */}
+      {confirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Confirm — send to user</h3>
+            <p className="text-xs text-slate-500">
+              The user will receive the following {confirm.sendEmail ? 'via email' : 'as an in-app notification'}:
+            </p>
+            <div className="bg-slate-50 border-l-4 border-brand-500 rounded-r-xl p-3 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+              {confirm.description}
+            </div>
+            <div className="flex gap-2 justify-end pt-1">
+              <button
+                onClick={() => setConfirm(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => executeUpdate(confirm)}
+                className="px-4 py-2 text-xs font-bold bg-brand-600 text-white rounded-lg hover:bg-brand-700"
+              >
+                Confirm &amp; Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="flex flex-wrap gap-2 mb-5">
@@ -1566,11 +1627,18 @@ function ProblemsTab({ API }) {
                   <div className="space-y-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Update history</p>
                     {p.updates.map((u, i) => (
-                      <div key={i} className="bg-brand-50 border border-brand-100 rounded-xl p-3 text-xs text-slate-700">
+                      <div key={i} className={`border rounded-xl p-3 text-xs text-slate-700 ${u.isUserVisible ? 'bg-brand-50 border-brand-100' : 'bg-slate-50 border-slate-100'}`}>
                         <p className="whitespace-pre-wrap leading-relaxed mb-1">{u.description}</p>
-                        <p className="text-slate-400">
-                          {u.adminUserId?.agentNumber ? `Agent ${u.adminUserId.agentNumber}` : 'Admin'}
-                          {' · '}{new Date(u.time).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+                        <p className="text-slate-400 flex items-center gap-2">
+                          <span>
+                            {u.adminUserId?.agentNumber ? `Agent ${u.adminUserId.agentNumber}` : 'Admin'}
+                            {' · '}{new Date(u.time).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+                          </span>
+                          {u.isUserVisible && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${u.emailSent ? 'bg-violet-100 text-violet-600' : 'bg-sky-100 text-sky-600'}`}>
+                              {u.emailSent ? 'emailed' : 'notified'}
+                            </span>
+                          )}
                         </p>
                       </div>
                     ))}
@@ -1585,16 +1653,57 @@ function ProblemsTab({ API }) {
                   onChange={e => setUpdates(prev => ({ ...prev, [p._id]: e.target.value }))}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-200"
                 />
+
+                {/* Notify user controls */}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={notify[p._id] ?? false}
+                      onChange={e => setNotify(prev => ({ ...prev, [p._id]: e.target.checked }))}
+                      className="accent-brand-600"
+                    />
+                    Send update to user
+                  </label>
+
+                  {(notify[p._id]) && (
+                    <div className="flex gap-4 pl-5 text-xs text-slate-600">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`delivery-${p._id}`}
+                          value="notif"
+                          checked={(delivery[p._id] ?? 'notif') === 'notif'}
+                          onChange={() => setDelivery(prev => ({ ...prev, [p._id]: 'notif' }))}
+                          className="accent-brand-600"
+                        />
+                        In-app notification
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`delivery-${p._id}`}
+                          value="email"
+                          checked={(delivery[p._id] ?? 'notif') === 'email'}
+                          onChange={() => setDelivery(prev => ({ ...prev, [p._id]: 'email' }))}
+                          className="accent-brand-600"
+                        />
+                        Email
+                      </label>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex gap-2">
                   <button
-                    onClick={() => postUpdate(p._id, updates[p._id])}
+                    onClick={() => handleSaveNote(p)}
                     disabled={busy === p._id || !updates[p._id]?.trim()}
                     className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-40"
                   >
                     {busy === p._id ? 'Saving…' : 'Save Note'}
                   </button>
                   <button
-                    onClick={() => postUpdate(p._id, updates[p._id]?.trim() || (p.solved ? 'Reopened' : 'Marked as solved'), !p.solved)}
+                    onClick={() => handleToggleSolved(p)}
                     disabled={busy === p._id}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors disabled:opacity-40
                       ${p.solved ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
@@ -2545,7 +2654,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const [pendingLead,   setPendingLead]   = useState(null)
   const [confirmDelete,     setConfirmDelete]     = useState(false)
   const [confirmRegen,      setConfirmRegen]      = useState(false)
-  const [staleSourceWarning, setStaleSourceWarning] = useState(false)
+  const [staleSourceWarning,    setStaleSourceWarning]    = useState(false)
+  const [missingGameDataWarning, setMissingGameDataWarning] = useState(false)
   // Section open/close
   const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: false, questions: false, images: true, sources: false, gameData: false })
   const [allBasesBriefs,     setAllBasesBriefs]     = useState([]) // Bases briefs for Aircraft/Squadrons picker
@@ -2831,6 +2941,18 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     setBriefId(null)
     setPendingLead(lead ? lead.title : null)
     setStaleSourceWarning(briefData.staleSourceWarning ?? false)
+    // Warn if BOO-eligible category brief came back with missing game data
+    const BOO_NEEDS_AI_DATA = ['Aircrafts', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases', 'Squadrons', 'Threats']
+    if (BOO_NEEDS_AI_DATA.includes(category)) {
+      const gd = briefData.gameData ?? {}
+      let missing = false
+      if (category === 'Aircrafts') missing = gd.topSpeedKph == null && gd.yearIntroduced == null
+      else if (category === 'Training') missing = gd.trainingWeekStart == null && gd.weeksOfTraining == null
+      else missing = gd.startYear == null
+      setMissingGameDataWarning(missing)
+    } else {
+      setMissingGameDataWarning(false)
+    }
     setRelatedSearch('')
     setView('editor')
 
@@ -3403,6 +3525,18 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         </div>
       )}
 
+      {/* ── Missing game data warning ──────────────────────────────────── */}
+      {missingGameDataWarning && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 mb-4">
+          <span className="text-amber-500 text-sm mt-px">⚠️</span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">Game data missing — Battle of Order unavailable</p>
+            <p className="text-xs text-amber-600 mt-0.5">The AI did not return game data for this brief. Open the Game Data section below and use Generate Stats to populate it before publishing.</p>
+          </div>
+          <button onClick={() => setMissingGameDataWarning(false)} className="text-amber-400 hover:text-amber-600 text-lg leading-none">×</button>
+        </div>
+      )}
+
       {/* ── Section A: Core Fields ─────────────────────────────────────── */}
       <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
         <button
@@ -3735,10 +3869,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
               {draft.category === 'Ranks' && (
                 <RankDataField draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
               )}
-              {draft.category === 'Training' && (<>
-                <GameDataField label="Training Week Start" field="trainingWeekStart" draft={draft} setDraft={setDraft} />
-                <GameDataField label="Training Week End" field="trainingWeekEnd" draft={draft} setDraft={setDraft} />
-              </>)}
+              {draft.category === 'Training' && (
+                <TrainingDataSection draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
+              )}
               {['Missions', 'Tech', 'Treaties', 'Bases', 'Squadrons', 'Threats'].includes(draft.category) && (<>
                 <GameDataField
                   label={{ Bases: 'Year Opened', Squadrons: 'Year Formed', Threats: 'Year Introduced' }[draft.category] ?? 'Start Year'}
@@ -4166,6 +4299,55 @@ function AircraftDataSection({ draft, setDraft, briefId, API }) {
       <GameDataField label="Top Speed (km/h)" field="topSpeedKph" draft={draft} setDraft={setDraft} />
       <GameDataField label="Year Introduced" field="yearIntroduced" draft={draft} setDraft={setDraft} />
       <GameDataField label="Year Retired (blank = still in service)" field="yearRetired" draft={draft} setDraft={setDraft} nullable />
+      <div className="pt-1">
+        <button
+          onClick={generate}
+          disabled={busy}
+          className="text-xs px-3 py-2 rounded-xl border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors"
+        >
+          {busy ? '↺ Generating…' : '↺ Generate Stats'}
+        </button>
+        {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+      </div>
+    </>
+  )
+}
+
+function TrainingDataSection({ draft, setDraft, briefId, API }) {
+  const [busy, setBusy] = useState(false)
+  const [err,  setErr]  = useState(null)
+
+  const generate = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      const res  = await fetch(`${API}/api/admin/ai/generate-battle-order-data`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title:       draft.title,
+          description: draft.descriptionSections.join('\n\n'),
+          category:    'Training',
+        }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setDraft(p => ({ ...p, gameData: { ...p.gameData, ...data.data.gameData } }))
+      } else {
+        setErr(data.message ?? 'Generation failed')
+      }
+    } catch {
+      setErr('Generation failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <GameDataField label="Pipeline Week Start (0 if unknown)" field="trainingWeekStart" draft={draft} setDraft={setDraft} />
+      <GameDataField label="Pipeline Week End (0 if unknown)"   field="trainingWeekEnd"   draft={draft} setDraft={setDraft} />
+      <GameDataField label="Training Duration (weeks, 0 if unknown)" field="weeksOfTraining" draft={draft} setDraft={setDraft} />
       <div className="pt-1">
         <button
           onClick={generate}
