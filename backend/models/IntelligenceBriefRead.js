@@ -8,8 +8,10 @@ const intelligenceBriefReadSchema = new mongoose.Schema({
   ammunitionRemaining: { type: Number, default: 0, min: 0 },
   ammoDepletedAt:      { type: Date,   default: null },
 
-  coinsAwarded: { type: Boolean, default: false }, // true once POST /complete has awarded coins
-  completed:    { type: Boolean, default: false }, // true once user clicks "Complete Brief"
+  coinsAwarded:     { type: Boolean, default: false }, // true once POST /complete has awarded coins
+  completed:        { type: Boolean, default: false }, // true once user clicks "Complete Brief"
+  reachedFlashcard: { type: Boolean, default: false }, // true once user reaches section 4 (flashcard)
+  currentSection:   { type: Number,  default: 0 },    // last section the user was reading (for cross-device resume)
 
   firstReadAt: { type: Date, default: Date.now },
   lastReadAt:  { type: Date, default: Date.now },

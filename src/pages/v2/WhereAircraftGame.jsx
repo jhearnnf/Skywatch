@@ -189,7 +189,7 @@ function FailRound1({ onBack }) {
         onClick={onBack}
         className="w-full max-w-xs py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors mx-auto block"
       >
-        Back to Briefs
+        Return to Brief
       </button>
     </motion.div>
   )
@@ -364,7 +364,7 @@ function ResultScreen({ result, aircraftTitle, bases, selectedBaseIds, correctBa
         onClick={onDone}
         className="w-full max-w-xs py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors mx-auto block"
       >
-        Back to Briefs
+        Return to Brief
       </button>
     </motion.div>
   )

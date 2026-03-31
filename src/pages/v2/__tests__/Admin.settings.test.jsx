@@ -6,6 +6,7 @@ import Admin from '../Admin'
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ state: null }),
 }))
 
 vi.mock('../../../context/AuthContext', () => ({
@@ -55,6 +56,11 @@ const MOCK_SETTINGS = {
   aircoins100Percent: 10,
   aircoinsOrderOfBattleEasy: 10,
   aircoinsOrderOfBattleMedium: 20,
+  aircoinsWhereAircraftRound1: 5,
+  aircoinsWhereAircraftRound2: 10,
+  aircoinsWhereAircraftBonus: 5,
+  aircoinsFlashcardPerCard: 3,
+  aircoinsFlashcardPerfectBonus: 5,
   useLiveLeaderboard: false,
   disableLoadingBar: false,
   // Sounds — targeting engaged at 80% to distinguish from default 100
@@ -122,8 +128,10 @@ async function renderAndOpenSettings() {
   const settingsTab = await screen.findByRole('button', { name: /settings/i })
   fireEvent.click(settingsTab)
 
-  // Wait for settings to load
+  // Wait for settings to load then expand the Sound Effects collapsible section
   await waitFor(() => screen.getByText('Sound Effects'))
+  fireEvent.click(screen.getByText('Sound Effects'))
+  await waitFor(() => screen.getByText('Targeting Engaged'))
   return screen
 }
 
@@ -289,6 +297,8 @@ describe('Admin — Settings tab: Sound Effects', () => {
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
     await waitFor(() => screen.getByText('Sound Effects'))
+    fireEvent.click(screen.getByText('Sound Effects'))
+    await waitFor(() => screen.getByText('Targeting Engaged'))
 
     const soundSection = screen.getByText('Sound Effects').closest('div').parentElement
     const saveBtn = within(soundSection).getByText('Save')
@@ -328,6 +338,8 @@ describe('Admin — Settings tab: Subscription', () => {
 
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Subscription'))
+    fireEvent.click(screen.getByText('Subscription'))
 
     await waitFor(() => {
       const input = screen.getByDisplayValue('7')
@@ -341,7 +353,9 @@ describe('Admin — Settings tab: Subscription', () => {
 
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
-    await waitFor(() => screen.getByText('Sound Effects'))
+    await waitFor(() => screen.getByText('Subscription'))
+    fireEvent.click(screen.getByText('Subscription'))
+    await waitFor(() => screen.getByText('Free tier categories'))
 
     // "Aircrafts" is not in freeCategories initially
     const aircraftsBtns = screen.getAllByRole('button', { name: 'Aircrafts' })
@@ -361,7 +375,9 @@ describe('Admin — Settings tab: Subscription', () => {
 
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
-    await waitFor(() => screen.getByText('Sound Effects'))
+    await waitFor(() => screen.getByText('Subscription'))
+    fireEvent.click(screen.getByText('Subscription'))
+    await waitFor(() => screen.getByText('Free tier categories'))
 
     // "News" is in freeCategories — it should be active initially
     const newsBtns = screen.getAllByRole('button', { name: 'News' })
@@ -393,6 +409,8 @@ describe('Admin — Settings tab: Feature Flags', () => {
 
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Feature Flags'))
+    fireEvent.click(screen.getByText('Feature Flags'))
     await waitFor(() => screen.getByText('Live Leaderboard'))
 
     // Initial state: useLiveLeaderboard is false → toggle is bg-slate-200
@@ -411,6 +429,8 @@ describe('Admin — Settings tab: Feature Flags', () => {
 
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Feature Flags'))
+    fireEvent.click(screen.getByText('Feature Flags'))
     await waitFor(() => screen.getByText('Live Leaderboard'))
 
     // "Disable Loading Bar" was removed from the Admin UI — should not appear
@@ -434,6 +454,8 @@ describe('Admin — Settings tab: Aircoins & Game options', () => {
 
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Aircoins'))
+    fireEvent.click(screen.getByText('Aircoins'))
 
     // aircoinsStreakBonus = 2 (unique value in MOCK_SETTINGS)
     await waitFor(() => {
@@ -447,7 +469,9 @@ describe('Admin — Settings tab: Aircoins & Game options', () => {
 
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
-    await waitFor(() => screen.getByText('Sound Effects'))
+    await waitFor(() => screen.getByText('Aircoins'))
+    fireEvent.click(screen.getByText('Aircoins'))
+    await waitFor(() => screen.getByDisplayValue('2'))
 
     // aircoinsStreakBonus = 2 — unique value, only one input has it
     const input = screen.getByDisplayValue('2')

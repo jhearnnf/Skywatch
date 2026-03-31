@@ -35,11 +35,26 @@ vi.mock('../../../components/MissionDetectedModal',    () => ({ default: () => n
 
 vi.mock('framer-motion', () => ({
   motion: {
-    div:    ({ children, className, onClick, style }) => <div className={className} onClick={onClick} style={style}>{children}</div>,
-    button: ({ children, className, onClick })        => <button className={className} onClick={onClick}>{children}</button>,
-    p:      ({ children, className })                 => <p className={className}>{children}</p>,
+    div: ({ children, className, style, onClick, onDragEnd, drag }) => {
+      if (drag === 'x' && onDragEnd) {
+        return (
+          <div className={className} style={style} onClick={onClick}>
+            {children}
+            <button data-testid="swipe-left"  onClick={() => onDragEnd(null, { offset: { x: -150, y: 0 }, velocity: { x: 0, y: 0 } })} />
+            <button data-testid="swipe-right" onClick={() => onDragEnd(null, { offset: { x:  150, y: 0 }, velocity: { x: 0, y: 0 } })} />
+          </div>
+        )
+      }
+      return <div className={className} style={style} onClick={onClick}>{children}</div>
+    },
+    button: ({ children, className, onClick }) => <button className={className} onClick={onClick}>{children}</button>,
+    p:      ({ children, className })          => <p className={className}>{children}</p>,
   },
-  AnimatePresence: ({ children }) => <>{children}</>,
+  AnimatePresence:      ({ children }) => <>{children}</>,
+  LayoutGroup:          ({ children }) => <>{children}</>,
+  useMotionValue:       () => ({ set: vi.fn(), get: () => 0 }),
+  useTransform:         () => 0,
+  useAnimationControls: () => ({ start: vi.fn() }),
 }))
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -103,9 +118,10 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
   async function reachCompletionScreen() {
     global.fetch = vi.fn().mockResolvedValue(makeGetResponse())
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('✓ Complete Brief'))
-    fireEvent.click(screen.getByText('✓ Complete Brief'))
-    await waitFor(() => screen.getByText('Brief Complete!'))
+    // BRIEF has 1 section so isLast=true on mount — one swipe-left completes it
+    const swipeBtn = await waitFor(() => screen.getByTestId('swipe-left'))
+    fireEvent.click(swipeBtn)
+    await waitFor(() => screen.getByText('Brief Complete'))
   }
 
   it('calls /complete and awardAircoins after Google sign-in on completion screen', async () => {

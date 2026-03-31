@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { motion, AnimatePresence, useMotionValue, useTransform, useAnimationControls } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue, useTransform, useAnimationControls, LayoutGroup } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
@@ -8,9 +8,12 @@ import LockedCategoryModal from '../../components/LockedCategoryModal'
 import MissionDetectedModal from '../../components/MissionDetectedModal'
 import { requiredTier } from '../../utils/subscription'
 import { useAppSettings } from '../../context/AppSettingsContext'
+import { useFlashcardBadge } from '../../context/FlashcardBadgeContext'
+import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { playSound } from '../../utils/sound'
 import RafBasesMap from '../../components/RafBasesMap'
 import { buildImageZones } from '../../utils/briefImageZones'
+import FlashcardDeckNotification from '../../components/FlashcardDeckNotification'
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
 function KeywordSheet({ kw, onClose, navigate }) {
@@ -139,7 +142,7 @@ function StatMnemonicSheet({ stat, onClose }) {
 }
 
 // ── Flashcard (final section) ─────────────────────────────────────────────
-function FlashCard({ sectionIdx, total, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap }) {
+function FlashCard({ sectionIdx, total, title, category, subcategory, text, keywords, learnedKws, onKeywordTap }) {
   return (
     <div className="rounded-2xl overflow-hidden border border-slate-300" style={{ background: 'var(--color-surface)' }}>
       {/* Header bar */}
@@ -157,23 +160,20 @@ function FlashCard({ sectionIdx, total, title, subtitle, category, subcategory, 
         <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-text-faint">Intel Brief</span>
       </div>
 
-      {/* Clue — description as the context/question */}
-      <div className="px-5 pb-5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-faint mb-3">Context</p>
-        <div className="text-text-muted text-sm leading-6 [&_p]:mb-2 [&_li]:text-text-muted [&_button]:border-white/20 [&_button]:text-text-muted [&_button]:bg-white/6 [&_button:hover]:bg-white/12">
-          <SectionText text={text} keywords={keywords} learnedKws={learnedKws} onKeywordTap={onKeywordTap} />
-        </div>
+      {/* Title */}
+      <div className="px-5 pb-4">
+        <h2 className="text-xl font-extrabold text-text leading-snug">{title}</h2>
       </div>
 
       {/* Divider */}
       <div className="h-px mx-5" style={{ background: 'var(--color-slate-300)' }} />
 
-      {/* Answer — title + classification revealed prominently */}
+      {/* Description */}
       <div className="px-5 py-5" style={{ background: 'var(--color-surface-raised)' }}>
-        <h2 className="text-xl font-extrabold text-text leading-snug">{title}</h2>
-        {subtitle && (
-          <p className="text-sm text-text-muted mt-1 leading-snug">{subtitle}</p>
-        )}
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-text-faint mb-3">Context</p>
+        <div className="text-text-muted text-sm leading-6 [&_p]:mb-2 [&_li]:text-text-muted [&_button]:border-white/20 [&_button]:text-text-muted [&_button]:bg-white/6 [&_button:hover]:bg-white/12">
+          <SectionText text={text} keywords={keywords} learnedKws={learnedKws} onKeywordTap={onKeywordTap} />
+        </div>
         {(category || subcategory) && (
           <p className="text-[10px] font-semibold text-text-faint mt-2 uppercase tracking-widest">
             {category}{subcategory ? ` · ${subcategory}` : ''}
@@ -1056,15 +1056,14 @@ export default function BriefReader() {
   const startRef = useRef(start)
   useEffect(() => { startRef.current = start }, [start])
   const { settings }            = useAppSettings()
+  const { setBadge }            = useFlashcardBadge()
+  const { applyUnlocks }        = useNewGameUnlock()
   const [brief, setBrief]         = useState(null)
   const [mentionedBriefs, setMentionedBriefs] = useState([])
   const [loading, setLoading]   = useState(true)
   const [locked, setLocked]     = useState(false)
   const [lockedCategory, setLockedCategory] = useState(null)
-  const [sectionIdx, setSection] = useState(() => {
-    const saved = sessionStorage.getItem(`sw_brief_sec_${briefId}`)
-    return saved ? parseInt(saved, 10) : 0
-  })
+  const [sectionIdx, setSection] = useState(0)
   const [isFirstCompletion, setIsFirstCompletion] = useState(false)
   const [done, setDone]          = useState(
     () => sessionStorage.getItem('sw_brief_just_completed') === briefId
@@ -1086,17 +1085,18 @@ export default function BriefReader() {
   const [mapOpen, setMapOpen]           = useState(false)
   const [mapCentreOn, setMapCentreOn]   = useState(null)
   const [randomBriefs, setRandomBriefs] = useState([])
-  const [startedAtZero] = useState(() => {
-    const saved = sessionStorage.getItem(`sw_brief_sec_${briefId}`)
-    return !saved || Number(saved) === 0
-  })
-  const [topFaded, setTopFaded] = useState(!startedAtZero)
+  const [flashcardNotifRect, setFlashcardNotifRect] = useState(null)
+  const [flashcardGlowing, setFlashcardGlowing]     = useState(false)
+  const [topFaded, setTopFaded] = useState(false)
   const markingRef                 = useRef(false)
   const contentRef                 = useRef(null)
   const briefOpenedRef             = useRef(false)
+  const flashcardCardRef           = useRef(null)
+  const badgePendingRef            = useRef(false)
   const accSecondsRef              = useRef(0)
   const lastTickRef                = useRef(null)
   const prevVisibleRef             = useRef(false)
+  const sectionIdxRef              = useRef(0) // mirrors sectionIdx for use inside flushTime without dep-array churn
 
   // Quiz availability — true when the user's difficulty pool has ≥5 questions
   const MIN_QUIZ_QUESTIONS = 5
@@ -1116,12 +1116,15 @@ export default function BriefReader() {
 
   const BOO_CATEGORIES = BOO_CATS
 
+  // Keep sectionIdxRef in sync so flushTime can read the current section without
+  // needing sectionIdx in its dependency array (which would restart the 10s interval)
+  useEffect(() => { sectionIdxRef.current = sectionIdx }, [sectionIdx])
+
   // Reset map and map centre when section changes
   useEffect(() => { setMapOpen(false); setMapCentreOn(null) }, [sectionIdx])
 
   // Trigger top-chrome fade on section-1 entry
   useEffect(() => {
-    if (!startedAtZero) return
     const t = setTimeout(() => setTopFaded(true), 600)
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1135,7 +1138,7 @@ export default function BriefReader() {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ seconds: secs }),
+      body: JSON.stringify({ seconds: secs, currentSection: sectionIdxRef.current }),
     }).catch(() => {})
   }, [user, brief, briefId, API])
 
@@ -1192,7 +1195,23 @@ export default function BriefReader() {
               .catch(() => {})
           }
         }
-        if (data?.data?.readRecord) setReadRecord(data.data.readRecord)
+        const rr = data?.data?.readRecord
+        if (rr) {
+          setReadRecord(rr)
+          // Restore section from server record — enables cross-device resume
+          const saved = rr.currentSection ?? 0
+          if (saved > 0 && !rr.completed) {
+            setSection(saved)
+            setTopFaded(true)
+          }
+        } else {
+          // No read record means guest — restore from localStorage (same-device resume)
+          const stored = localStorage.getItem(`sw_brief_sec_${briefId}`)
+          if (stored && Number(stored) > 0) {
+            setSection(Number(stored))
+            setTopFaded(true)
+          }
+        }
         if (data?.data?.mentionedBriefs) setMentionedBriefs(data.data.mentionedBriefs)
       })
       .catch(() => {})
@@ -1324,7 +1343,7 @@ export default function BriefReader() {
       briefOpenedRef.current = true
       playSound('intel_brief_opened')
       const t = setTimeout(() => startRef.current('briefReader'), 800)
-      return () => { clearTimeout(t); briefOpenedRef.current = false }
+      return () => { clearTimeout(t) }
     }
   }, [loading, brief, readRecord, reReadMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1349,6 +1368,39 @@ export default function BriefReader() {
   const isLast   = sectionIdx >= total - 1
   const topOpacity = isLast ? 1 : topFaded ? 0.3 : 1
 
+  // Fire reached-flashcard once per brief per user when they first hit section 4
+  useEffect(() => {
+    if (!isLast || !user || !brief) return
+    if (readRecord?.reachedFlashcard || readRecord?.completed) return
+    fetch(`${API}/api/briefs/${brief._id}/reached-flashcard`, {
+      method: 'POST', credentials: 'include',
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data?.wasNew) {
+          if ((data.flashcardCount ?? 0) >= 5) badgePendingRef.current = true
+          if (flashcardCardRef.current) {
+            setTimeout(() => {
+              setFlashcardGlowing(true)
+              setTimeout(() => {
+                setFlashcardGlowing(false)
+                if (flashcardCardRef.current) {
+                  setFlashcardNotifRect(flashcardCardRef.current.getBoundingClientRect())
+                }
+              }, 1200)
+            }, 600)
+          }
+        }
+        if (data?.gameUnlocksGranted?.length) applyUnlocks(data.gameUnlocksGranted)
+      })
+      .catch(() => {})
+  }, [isLast, brief?._id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // If the user navigates away while the notification is still animating, commit the badge
+  useEffect(() => {
+    return () => { if (badgePendingRef.current) setBadge() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const markRead = useCallback(() => {
     if (markingRef.current || !user) return
     markingRef.current = true
@@ -1366,11 +1418,9 @@ export default function BriefReader() {
   const handleGoBack = () => {
     if (sectionIdx <= 0) return
     setNavDir(-1)
-    setSection(i => {
-      const prev = i - 1
-      sessionStorage.setItem(`sw_brief_sec_${briefId}`, String(prev))
-      return prev
-    })
+    const prev = sectionIdx - 1
+    if (!user) localStorage.setItem(`sw_brief_sec_${briefId}`, String(prev))
+    setSection(prev)
     scrollToContentIfNeeded()
   }
 
@@ -1381,7 +1431,7 @@ export default function BriefReader() {
       setIsFirstCompletion(first)
       if (!user) playSound('first_brief_complete')
       markRead()
-      sessionStorage.removeItem(`sw_brief_sec_${briefId}`)
+      localStorage.removeItem(`sw_brief_sec_${briefId}`)
       setDone(true)
       // Award coins now that the user has finished reading
       if (user) {
@@ -1408,6 +1458,7 @@ export default function BriefReader() {
                 lastStreakDate: data.data.lastStreakDate ?? u.lastStreakDate,
               } : u)
             }
+            if (data?.data?.gameUnlocksGranted?.length) applyUnlocks(data.data.gameUnlocksGranted)
           })
           .then(() => {
             // Spawn-check for Where's That Aircraft (Aircrafts category only)
@@ -1439,11 +1490,9 @@ export default function BriefReader() {
       }
     } else {
       setNavDir(1)
-      setSection(i => {
-        const next = i + 1
-        sessionStorage.setItem(`sw_brief_sec_${briefId}`, String(next))
-        return next
-      })
+      const next = sectionIdx + 1
+      if (!user) localStorage.setItem(`sw_brief_sec_${briefId}`, String(next))
+      setSection(next)
       scrollToContentIfNeeded()
     }
   }
@@ -1628,7 +1677,7 @@ export default function BriefReader() {
         brief={brief}
         quizPassed={quizPassed}
         booState={booState}
-        onReRead={() => { setReReadMode(true); setSection(0); setNavDir(1) }}
+        onReRead={() => { localStorage.removeItem(`sw_brief_sec_${briefId}`); setReReadMode(true); setSection(0); setNavDir(1) }}
         navigate={navigate}
         quizAvailable={quizAvailable}
       />
@@ -1640,6 +1689,15 @@ export default function BriefReader() {
       <TutorialModal />
       <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} navigate={navigate} />
       <StatMnemonicSheet stat={activeStat} onClose={() => setActiveStat(null)} />
+      {flashcardNotifRect && (
+        <FlashcardDeckNotification
+          cardRect={flashcardNotifRect}
+          onDone={() => {
+            if (badgePendingRef.current) { setBadge(); badgePendingRef.current = false }
+            setFlashcardNotifRect(null)
+          }}
+        />
+      )}
 
       {/* Layer 1: block navigation while spawn-check is in-flight */}
       {spawnCheckPending && (
@@ -1724,7 +1782,7 @@ export default function BriefReader() {
           booState={booState}
           onBattleOrder={booState === 'available' || booState === 'completed' ? () => navigate(`/battle-of-order/${briefId}`) : null}
           onBack={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
-          onReRead={() => { setDone(false); setReReadMode(true); setSection(0); setNavDir(1) }}
+          onReRead={() => { localStorage.removeItem(`sw_brief_sec_${briefId}`); setDone(false); setReReadMode(true); setSection(0); setNavDir(1) }}
           navigate={navigate}
           quizPassed={quizPassed}
           quizAvailable={quizAvailable}
@@ -1758,6 +1816,10 @@ export default function BriefReader() {
             )}
           </motion.div>
 
+          {/* Swipeable section card + below-fold elements share a LayoutGroup so
+              position changes caused by card height differences are FLIP-animated
+              rather than snapping instantly */}
+          <LayoutGroup id="brief-layout">
           {/* Swipeable section card */}
           {(() => {
             const imageZones = buildImageZones(brief.media, total)
@@ -1769,7 +1831,7 @@ export default function BriefReader() {
               ...mentionedBriefs.map(b => ({ keyword: b.matchTerm, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
             ]
             return (
-              <div className="relative mb-4">
+              <motion.div ref={flashcardCardRef} layout transition={{ layout: { duration: 0.35, ease: 'easeInOut' } }} className={`relative mb-4${flashcardGlowing ? ' flashcard-ring-active' : ''}`}>
                 <AnimatePresence>
                   {showTutorial && !visible && (
                     <SwipeTutorial onDismiss={() => {
@@ -1821,7 +1883,7 @@ export default function BriefReader() {
                     onStatTap={handleStatTap}
                   />
                 </SwipeCard>
-              </div>
+              </motion.div>
             )
           })()}
 
@@ -1839,6 +1901,18 @@ export default function BriefReader() {
             </motion.p>
           )}
 
+          {/* Complete hint — final section only */}
+          {isLast && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5, duration: 1.2 }}
+              className="text-xs text-brand-500 text-center mb-4"
+            >
+              Swipe once more to complete the intel brief
+            </motion.p>
+          )}
+
           {/* Swipe hint — shown until first swipe */}
           {!hasSwiped && !visible && (
             <p className="text-xs text-slate-400 text-center mb-4">← swipe to navigate →</p>
@@ -1846,8 +1920,9 @@ export default function BriefReader() {
 
           {/* Connections */}
           <motion.div
+            layout
             animate={{ opacity: isLast ? 1 : 0.3 }}
-            transition={{ opacity: { duration: 1.6, ease: 'easeInOut' } }}
+            transition={{ opacity: { duration: 1.6, ease: 'easeInOut' }, layout: { duration: 0.35, ease: 'easeInOut' } }}
             className="mt-6"
           >
             <BriefConnectionsPanel
@@ -1860,7 +1935,7 @@ export default function BriefReader() {
 
           {/* Sources */}
           {brief.sources?.length > 0 && (
-            <div className="mt-6 pt-4 border-t border-slate-100">
+            <motion.div layout transition={{ layout: { duration: 0.35, ease: 'easeInOut' } }} className="mt-6 pt-4 border-t border-slate-100">
               <p className="text-xs text-slate-300 mb-1">Sources</p>
               <div className="space-y-0.5">
                 {brief.sources.map((s, i) => (
@@ -1876,8 +1951,9 @@ export default function BriefReader() {
                   </a>
                 ))}
               </div>
-            </div>
+            </motion.div>
           )}
+          </LayoutGroup>
         </>
       )}
     </>

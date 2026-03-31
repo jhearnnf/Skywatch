@@ -8,6 +8,7 @@ let mockLocationState = { openLeads: true, leadsSearch: '617 Squadron' }
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ state: null }),
   useLocation: () => ({ state: mockLocationState }),
 }))
 

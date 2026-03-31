@@ -11,6 +11,8 @@ if (window.matchMedia('(update: slow)').matches) {
 import { AuthProvider, useAuth }          from './context/AuthContext'
 import { AppSettingsProvider }             from './context/AppSettingsContext'
 import { AppTutorialProvider }             from './context/AppTutorialContext'
+import { FlashcardBadgeProvider }          from './context/FlashcardBadgeContext'
+import { NewGameUnlockProvider }           from './context/NewGameUnlockContext'
 import AppShell                            from './components/layout/AppShell'
 import AircoinNotification                 from './components/AircoinNotification'
 import LevelUpNotification                 from './components/LevelUpNotification'
@@ -20,6 +22,7 @@ import RankPromotionNotification           from './components/RankPromotionNotif
 import Landing        from './pages/v2/Landing'
 import Home           from './pages/v2/Home'
 import Learn          from './pages/v2/Learn'
+import LearnPriority  from './pages/v2/LearnPriority'
 import CategoryBriefs from './pages/v2/CategoryBriefs'
 import BriefReader    from './pages/v2/BriefReader'
 import QuizFlow            from './pages/v2/QuizFlow'
@@ -147,6 +150,7 @@ function AppRoutes() {
 
           {/* Core learning (accessible without login, progress tracked when logged in) */}
           <Route path="/home"              element={<PageWrapper><Home /></PageWrapper>} />
+          <Route path="/learn-priority"    element={<PageWrapper><LearnPriority /></PageWrapper>} />
           <Route path="/learn"             element={<PageWrapper><Learn /></PageWrapper>} />
           <Route path="/learn/:category"   element={<PageWrapper><CategoryBriefs /></PageWrapper>} />
           <Route path="/brief/:briefId"    element={<PageWrapper><BriefReader /></PageWrapper>} />
@@ -257,9 +261,13 @@ export default function App() {
       <AuthProvider>
         <AppSettingsProvider>
           <AppTutorialProvider>
-            <AppRoutes />
-            <NotifLayer />
-            <ReportNotifBanner />
+            <NewGameUnlockProvider>
+              <FlashcardBadgeProvider>
+                <AppRoutes />
+                <NotifLayer />
+                <ReportNotifBanner />
+              </FlashcardBadgeProvider>
+            </NewGameUnlockProvider>
           </AppTutorialProvider>
         </AppSettingsProvider>
       </AuthProvider>

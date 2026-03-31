@@ -31,6 +31,10 @@ const appSettingsSchema = new mongoose.Schema({
   aircoinsOrderOfBattleEasy:   { type: Number, default: 8,   min: 0 },
   aircoinsOrderOfBattleMedium: { type: Number, default: 18,  min: 0 },
 
+  // Flashcard Recall aircoins
+  aircoinsFlashcardPerCard:     { type: Number, default: 2,  min: 0 },
+  aircoinsFlashcardPerfectBonus:{ type: Number, default: 5,  min: 0 },
+
   // Category access per tier (gold always gets all categories)
   silverCategories: {
     type: [String],
@@ -92,6 +96,14 @@ const appSettingsSchema = new mongoose.Schema({
   volumeBattleOfOrderLost:            { type: Number, default: 100, min: 0, max: 100 },
   volumeBattleOfOrderSelection:       { type: Number, default: 100, min: 0, max: 100 },
 
+  // Flashcard Recall sounds
+  volumeFlashcardStart:     { type: Number, default: 100, min: 0, max: 100 },
+  volumeFlashcardCorrect:   { type: Number, default: 100, min: 0, max: 100 },
+  volumeFlashcardIncorrect: { type: Number, default: 100, min: 0, max: 100 },
+  soundEnabledFlashcardStart:     { type: Boolean, default: true },
+  soundEnabledFlashcardCorrect:   { type: Boolean, default: true },
+  soundEnabledFlashcardIncorrect: { type: Boolean, default: true },
+
   // AI content generation
   aiKeywordsPerBrief: { type: Number, default: 20, min: 1 },
 
@@ -102,6 +114,34 @@ const appSettingsSchema = new mongoose.Schema({
   // Feature flags
   useLiveLeaderboard:   { type: Boolean, default: false },
   disableLoadingBar:    { type: Boolean, default: false },
+
+  // Pathway unlock requirements — each entry gates a category behind level + rank + subscription tier.
+  // levelRequired: Agent Level (1–10). rankRequired: RAF Rank number (1–19). tierRequired: subscription tier.
+  // ALL three conditions must be satisfied for the pathway to unlock.
+  pathwayUnlocks: {
+    type: [{
+      category:      { type: String },
+      levelRequired: { type: Number, default: 1 },
+      rankRequired:  { type: Number, default: 1 },
+      tierRequired:  { type: String, enum: ['free', 'silver', 'gold'], default: 'free' },
+    }],
+    default: [
+      { category: 'Bases',       levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
+      { category: 'Terminology', levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
+      { category: 'Aircrafts',   levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
+      { category: 'Heritage',    levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
+      { category: 'Ranks',       levelRequired: 2, rankRequired: 1, tierRequired: 'silver' },
+      { category: 'Squadrons',   levelRequired: 3, rankRequired: 2, tierRequired: 'silver' },
+      { category: 'Allies',      levelRequired: 3, rankRequired: 2, tierRequired: 'free'   },
+      { category: 'Training',    levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
+      { category: 'AOR',         levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
+      { category: 'Roles',       levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
+      { category: 'Tech',        levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
+      { category: 'Threats',     levelRequired: 6, rankRequired: 3, tierRequired: 'gold'   },
+      { category: 'Missions',    levelRequired: 7, rankRequired: 4, tierRequired: 'gold'   },
+      { category: 'Treaties',    levelRequired: 8, rankRequired: 4, tierRequired: 'gold'   },
+    ],
+  },
 
   // Tutorial text overrides — keys are '<tutorialId>_<stepIndex>' (e.g. 'welcome_0')
   // Absent or empty fields fall back to the hardcoded defaults in TutorialContext.
@@ -154,6 +194,29 @@ appSettingsSchema.statics.getSettings = async function () {
       updates.freeCategories = ['News'];
     if (!settings.silverCategories || settings.silverCategories.length === 0)
       updates.silverCategories = ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'];
+    // Migration: add any pathway categories that are missing from an older document
+    const REQUIRED_PATHWAYS = [
+      { category: 'Bases',       levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
+      { category: 'Terminology', levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
+      { category: 'Aircrafts',   levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
+      { category: 'Heritage',    levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
+      { category: 'Ranks',       levelRequired: 2, rankRequired: 1, tierRequired: 'silver' },
+      { category: 'Squadrons',   levelRequired: 3, rankRequired: 2, tierRequired: 'silver' },
+      { category: 'Allies',      levelRequired: 3, rankRequired: 2, tierRequired: 'free'   },
+      { category: 'Training',    levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
+      { category: 'AOR',         levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
+      { category: 'Roles',       levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
+      { category: 'Tech',        levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
+      { category: 'Threats',     levelRequired: 6, rankRequired: 3, tierRequired: 'gold'   },
+      { category: 'Missions',    levelRequired: 7, rankRequired: 4, tierRequired: 'gold'   },
+      { category: 'Treaties',    levelRequired: 8, rankRequired: 4, tierRequired: 'gold'   },
+    ];
+    const existingCats = (settings.pathwayUnlocks || []).map(u => u.category);
+    const missingPathways = REQUIRED_PATHWAYS.filter(p => !existingCats.includes(p.category));
+    if (missingPathways.length) {
+      updates.pathwayUnlocks = [...(settings.pathwayUnlocks || []), ...missingPathways];
+    }
+
     if (Object.keys(updates).length)
       settings = await this.findByIdAndUpdate(settings._id, updates, { new: true });
   }

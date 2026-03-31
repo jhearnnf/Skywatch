@@ -61,7 +61,7 @@ export default function MissionDetectedModal({ aircraftBriefId, aircraftTitle, m
             ⚠ Mission Detected
           </p>
           <h1 className="text-3xl font-black text-white tracking-tight">
-            IDENTIFY THE AIRCRAFT
+            WHERE'S THAT AIRCRAFT?
           </h1>
         </motion.div>
 

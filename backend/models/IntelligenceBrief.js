@@ -211,6 +211,9 @@ const intelligenceBriefSchema = new mongoose.Schema(
       startYear:          { type: String },   // Bases/Squadrons/Threats: opened/formed/introduced stat
     },
 
+    // Priority order within category for the Learn Pathway page (null = not in pathway)
+    priorityNumber: { type: Number, default: null },
+
     // 'stub' = title/category only, no content yet. 'published' = full brief.
     status: { type: String, enum: ['stub', 'published'], default: 'published' },
 
@@ -230,6 +233,7 @@ const intelligenceBriefSchema = new mongoose.Schema(
 intelligenceBriefSchema.index({ category: 1, subcategory: 1, dateAdded: -1 });
 intelligenceBriefSchema.index({ historic: 1 });
 intelligenceBriefSchema.index({ title: 'text', nickname: 'text', subtitle: 'text' });
+intelligenceBriefSchema.index({ category: 1, priorityNumber: 1 });
 
 module.exports = mongoose.model('IntelligenceBrief', intelligenceBriefSchema);
 module.exports.CATEGORIES = CATEGORIES;

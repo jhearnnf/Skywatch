@@ -47,6 +47,7 @@ function StatusBadge({ session }) {
     return <span className={`${cls} bg-red-100 text-red-600`}>Failed</span>
   }
   if (session.type === 'flashcard') {
+    if (session.status === 'abandoned') return <span className={`${cls} bg-slate-100 text-slate-500`}>Abandoned</span>
     if (session.status === 'perfect') return <span className={`${cls} bg-amber-100 text-amber-700`}>Perfect Recall</span>
     return <span className={`${cls} bg-emerald-100 text-emerald-700`}>Completed</span>
   }
@@ -275,6 +276,55 @@ function BooOrderDrillDown({ sessionId, API }) {
   )
 }
 
+function FlashcardDrillDown({ sessionId, API }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`${API}/api/games/history/flashcard/${sessionId}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(json => {
+        if (json.status === 'success') setData(json.data)
+        else throw new Error(json.message || 'Failed to load')
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [sessionId, API])
+
+  if (loading) return <div className="px-4 py-3 text-xs text-slate-400 animate-pulse">Loading card breakdown…</div>
+  if (error)   return <div className="px-4 py-3 text-xs text-red-500">{error}</div>
+  if (!data)   return null
+
+  return (
+    <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 space-y-2">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+        Card Breakdown — {data.cards.length} card{data.cards.length !== 1 ? 's' : ''}
+        {data.abandoned && <span className="ml-2 text-slate-400 normal-case font-normal">(abandoned)</span>}
+      </p>
+      {data.cards.map((c, i) => (
+        <div
+          key={i}
+          className={`rounded-xl p-3 border text-xs ${c.recalled ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-slate-700 truncate pr-2">{c.briefTitle}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              {formatTime(c.timeTakenSeconds) && (
+                <span className="text-slate-400">{formatTime(c.timeTakenSeconds)}</span>
+              )}
+              <span className={c.recalled ? 'text-emerald-700 font-bold' : 'text-red-600 font-bold'}>
+                {c.recalled ? '✓ Recalled' : '✗ Missed'}
+              </span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function SessionRow({ session, API, index }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -346,9 +396,10 @@ function SessionRow({ session, API, index }) {
             transition={{ duration: 0.2 }}
             style={{ overflow: 'hidden' }}
           >
-            {session.type === 'quiz'            && <QuizDrillDown     attemptId={session._id}  API={API} />}
-            {session.type === 'order_of_battle' && <BooOrderDrillDown sessionId={session._id} API={API} />}
-            {session.type === 'wheres_aircraft' && <WtaDrillDown      sessionId={session._id} API={API} />}
+            {session.type === 'quiz'            && <QuizDrillDown        attemptId={session._id}  API={API} />}
+            {session.type === 'order_of_battle' && <BooOrderDrillDown   sessionId={session._id} API={API} />}
+            {session.type === 'wheres_aircraft' && <WtaDrillDown        sessionId={session._id} API={API} />}
+            {session.type === 'flashcard'       && <FlashcardDrillDown  sessionId={session._id} API={API} />}
           </motion.div>
         )}
       </AnimatePresence>

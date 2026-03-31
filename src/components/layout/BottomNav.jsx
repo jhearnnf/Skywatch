@@ -1,9 +1,10 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 
 const NAV_ITEMS = [
   { to: '/home',     emoji: '🏠', label: 'Home'    },
-  { to: '/learn',    emoji: '✈️',  label: 'Learn'   },
+  { to: '/learn-priority', emoji: '✈️', label: 'Learn' },
   { to: '/play',     emoji: '🎮', label: 'Play'    },
   { to: '/rankings', emoji: '🏆', label: 'Progress' },
   { to: '/profile',  emoji: '👤', label: 'Me'      },
@@ -13,6 +14,8 @@ const ADMIN_ITEM = { to: '/admin', emoji: '⚙️', label: 'Admin' }
 
 export default function BottomNav() {
   const { user } = useAuth()
+  const { hasAnyNew } = useNewGameUnlock()
+
   const items = user?.isAdmin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS
   const location = useLocation()
 
@@ -25,9 +28,11 @@ export default function BottomNav() {
       <div className="flex items-stretch h-16">
         {items.map(({ to, emoji, label }) => {
           const active = location.pathname === to || location.pathname.startsWith(to + '/')
+          const showBadge = to === '/play' && hasAnyNew && user
           return (
             <NavLink
               key={to}
+              data-nav={to === '/play' ? 'play' : undefined}
               to={user || to === '/home' || to === '/rankings' ? to : '/login'}
               className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors
                 ${active
@@ -35,12 +40,16 @@ export default function BottomNav() {
                   : 'text-slate-400 hover:text-slate-600'
                 }`}
             >
-              <span className={`text-xl leading-none transition-transform ${active ? 'scale-110' : ''}`}>
+              <span className={`relative text-xl leading-none transition-transform ${active ? 'scale-110' : ''}`}>
                 {emoji}
+                {showBadge && (
+                  <span className="nav-new-badge" aria-label="New game unlocked" />
+                )}
               </span>
               <span className={`text-[10px] font-semibold tracking-wide ${active ? 'text-brand-600' : ''}`}>
                 {label}
               </span>
+
               {active && (
                 <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-brand-600 rounded-full" />
               )}

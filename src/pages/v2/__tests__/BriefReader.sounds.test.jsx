@@ -36,11 +36,26 @@ vi.mock('../../../components/UpgradePrompt', () => ({
 
 vi.mock('framer-motion', () => ({
   motion: {
-    div:    ({ children, className, onClick, style, ...rest }) => <div className={className} onClick={onClick} style={style}>{children}</div>,
-    button: ({ children, className, onClick, ...rest }) => <button className={className} onClick={onClick}>{children}</button>,
-    p:      ({ children, className, ...rest }) => <p className={className}>{children}</p>,
+    div: ({ children, className, style, onClick, onDragEnd, drag }) => {
+      if (drag === 'x' && onDragEnd) {
+        return (
+          <div className={className} style={style} onClick={onClick}>
+            {children}
+            <button data-testid="swipe-left"  onClick={() => onDragEnd(null, { offset: { x: -150, y: 0 }, velocity: { x: 0, y: 0 } })} />
+            <button data-testid="swipe-right" onClick={() => onDragEnd(null, { offset: { x:  150, y: 0 }, velocity: { x: 0, y: 0 } })} />
+          </div>
+        )
+      }
+      return <div className={className} style={style} onClick={onClick}>{children}</div>
+    },
+    button: ({ children, className, onClick }) => <button className={className} onClick={onClick}>{children}</button>,
+    p:      ({ children, className })          => <p className={className}>{children}</p>,
   },
-  AnimatePresence: ({ children }) => <>{children}</>,
+  AnimatePresence:      ({ children }) => <>{children}</>,
+  LayoutGroup:          ({ children }) => <>{children}</>,
+  useMotionValue:       () => ({ set: vi.fn(), get: () => 0 }),
+  useTransform:         () => 0,
+  useAnimationControls: () => ({ start: vi.fn() }),
 }))
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -103,7 +118,7 @@ describe('BriefReader — sound wiring', () => {
     global.fetch = makeFetchOk()
 
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('Brief Complete!'))
+    await waitFor(() => screen.getByText('Brief Complete'))
 
     expect(playSound).not.toHaveBeenCalledWith('intel_brief_opened')
     sessionStorage.clear()

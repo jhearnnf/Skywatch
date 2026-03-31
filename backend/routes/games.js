@@ -204,6 +204,11 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
       : (settings.passThresholdEasy   ?? 60);
     const won = status === 'completed' && percentageCorrect >= passThreshold;
 
+    // Fetch brief once (needed for coins log label and BOO unlock check)
+    const brief = won
+      ? await IntelligenceBrief.findById(attempt.intelBriefId).select('title category').lean()
+      : null;
+
     // Award coins only on first win
     let aircoinsEarned = 0;
     const breakdown = [];
@@ -223,7 +228,6 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
         breakdown.push({ label: 'Perfect score bonus', amount: bonus });
       }
       if (aircoinsEarned > 0) {
-        const brief = await IntelligenceBrief.findById(attempt.intelBriefId).select('title').lean();
         const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'quiz', `Quiz (${attempt.difficulty}): ${brief?.title ?? 'Unknown Brief'} — ${correct}/${total} correct`, attempt.intelBriefId);
         attempt.rankPromotion = coinResult.rankPromotion;
         attempt.cycleAircoins = coinResult.cycleAircoins;
@@ -238,7 +242,43 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
     attempt.aircoinsEarned    = aircoinsEarned;
     await attempt.save();
 
-    res.json({ status: 'success', data: { attempt, won, aircoinsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAircoins: attempt.cycleAircoins ?? null } });
+    // ── BOO unlock detection (server-driven, fires on first qualifying win) ──
+    const gameUnlocksGranted = [];
+    if (won && brief && BATTLE_CATEGORIES.includes(brief.category)) {
+      const freshUser = await User.findById(req.user._id).select('gameUnlocks difficultySetting').lean();
+      if (!freshUser?.gameUnlocks?.boo?.unlockedAt) {
+        const diff   = freshUser?.difficultySetting ?? 'easy';
+        const needed = diff === 'medium' ? 5 : 3;
+
+        // Check category has enough BOO game data
+        let hasBooData = false;
+        for (const orderType of (ORDER_TYPES[brief.category] ?? [])) {
+          const fieldKey = REQUIRED_FIELD[orderType];
+          const count = await IntelligenceBrief.countDocuments({
+            category: brief.category,
+            [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
+          });
+          if (count >= needed) { hasBooData = true; break; }
+        }
+
+        if (hasBooData) {
+          // Check user meets the read gate for this category
+          const categoryBriefIds = await IntelligenceBrief.distinct('_id', {
+            category: brief.category, status: 'published',
+          });
+          const readsCount = await IntelligenceBriefRead.countDocuments({
+            userId: req.user._id, completed: true, intelBriefId: { $in: categoryBriefIds },
+          });
+
+          if (readsCount >= needed) {
+            await User.findByIdAndUpdate(req.user._id, { 'gameUnlocks.boo.unlockedAt': new Date() });
+            gameUnlocksGranted.push('boo');
+          }
+        }
+      }
+    }
+
+    res.json({ status: 'success', data: { attempt, won, aircoinsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAircoins: attempt.cycleAircoins ?? null, gameUnlocksGranted } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1058,22 +1098,189 @@ router.post('/whos-that-aircraft/result', protect, async (req, res) => {
   }
 });
 
+// GET /api/games/flashcard-recall/available-briefs
+// Returns the count of completed briefs available for flashcard rounds.
+router.get('/flashcard-recall/available-briefs', protect, async (req, res) => {
+  try {
+    const validBriefIds = await IntelligenceBrief.distinct('_id', { status: 'published' });
+    const count = await IntelligenceBriefRead.countDocuments({
+      userId: req.user._id,
+      intelBriefId: { $in: validBriefIds },
+      $or: [{ completed: true }, { reachedFlashcard: true }],
+    });
+    res.json({ status: 'success', data: { count } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/flashcard-recall/start
+// Picks N random completed briefs, creates a GameFlashcardRecall doc, returns cards (no title).
+router.post('/flashcard-recall/start', protect, async (req, res) => {
+  try {
+    const { count = 5 } = req.body;
+    const cardCount = Math.min(Math.max(parseInt(count, 10) || 5, 1), 20);
+
+    const gameType = await require('../models/GameType').findOne({ key: 'flashcard_recall' }).lean();
+
+    // All valid published brief IDs
+    const validBriefIds = await IntelligenceBrief.distinct('_id', { status: 'published' });
+
+    // User's eligible read records — completed briefs OR briefs where they reached section 4
+    const readRecords = await IntelligenceBriefRead.find({
+      userId: req.user._id,
+      intelBriefId: { $in: validBriefIds },
+      $or: [{ completed: true }, { reachedFlashcard: true }],
+    }).select('intelBriefId').lean();
+
+    if (readRecords.length < cardCount) {
+      return res.status(400).json({
+        message: `Not enough eligible briefs. You have ${readRecords.length}, need ${cardCount}.`,
+        available: readRecords.length,
+      });
+    }
+
+    // Build play-count map from past non-abandoned sessions for this user
+    const pastSessions = await GameSessionFlashcardRecallResult.find(
+      { userId: req.user._id, abandoned: false },
+      { 'cardResults.intelBriefId': 1 }
+    ).lean();
+
+    const playCountMap = {};
+    for (const session of pastSessions) {
+      for (const cr of (session.cardResults || [])) {
+        const id = cr.intelBriefId.toString();
+        playCountMap[id] = (playCountMap[id] || 0) + 1;
+      }
+    }
+
+    // Weighted sampling without replacement — fresher (less-played) cards have higher weight
+    // weight = max(0.15, 1 / (timesPlayed + 1))  so never-played = 1.0, floor at 0.15
+    function weightedSample(items, weights, k) {
+      const pool = items.map((item, i) => ({ item, w: weights[i] }));
+      const result = [];
+      while (result.length < k && pool.length > 0) {
+        const total = pool.reduce((s, p) => s + p.w, 0);
+        let r = Math.random() * total;
+        let chosen = pool.length - 1;
+        for (let i = 0; i < pool.length; i++) {
+          r -= pool[i].w;
+          if (r <= 0) { chosen = i; break; }
+        }
+        result.push(pool[chosen].item);
+        pool.splice(chosen, 1);
+      }
+      return result;
+    }
+
+    const eligibleIds = readRecords.map(r => r.intelBriefId);
+    const weights     = eligibleIds.map(id => Math.max(0.15, 1 / ((playCountMap[id.toString()] || 0) + 1)));
+    const picked      = weightedSample(eligibleIds, weights, cardCount);
+
+    // Fetch the full brief data for the picked IDs
+    // descriptionSections[3] = section 4: name-free 1–2 sentence summary designed for flashcard recall
+    const briefs = await IntelligenceBrief.find({ _id: { $in: picked } })
+      .select('_id title category subcategory descriptionSections')
+      .lean();
+
+    // All published brief titles for typeahead (client-side filtering)
+    const allBriefs = await IntelligenceBrief.find({ status: 'published' })
+      .select('_id title')
+      .lean();
+
+    // Build cards — title deliberately excluded from card data
+    // contentSnippet uses section 4 (index 3) which is AI-generated to never include the brief's name/title
+    const cards = briefs.map((brief, idx) => ({
+      cardIndex:      idx,
+      intelBriefId:   brief._id,
+      category:       brief.category,
+      subcategory:    brief.subcategory ?? '',
+      contentSnippet: brief.descriptionSections?.[3] ?? '',
+    }));
+
+    // Shuffle cards so they don't appear in same order as picked
+    cards.sort(() => Math.random() - 0.5);
+    cards.forEach((c, i) => { c.cardIndex = i; });
+
+    // Build GameFlashcardRecall cards with required fields
+    const gameCards = briefs.map(b => ({
+      intelBriefId:      b._id,
+      displayedQuestion: b.descriptionSections?.[3] || b.category,
+      displayedAnswer:   b.title,
+    }));
+
+    const gameDoc = await require('../models/GameFlashcardRecall').create({
+      gameTypeId: gameType?._id ?? new (require('mongoose').Types.ObjectId)(),
+      cards: gameCards,
+    });
+
+    const gameSessionId = crypto.randomUUID();
+
+    res.json({
+      status: 'success',
+      data: {
+        gameId: gameDoc._id,
+        gameSessionId,
+        cards,
+        totalCards: cards.length,
+        allBriefTitles: allBriefs.map(b => ({ _id: b._id, title: b.title })),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/games/flashcard-recall/result
 router.post('/flashcard-recall/result', protect, async (req, res) => {
   try {
     const { gameId, cardResults, gameSessionId } = req.body;
 
-    const settings       = await AppSettings.getSettings();
-    const allCorrect     = cardResults.every(c => c.recalled);
-    const aircoinsEarned = allCorrect ? (settings.aircoins100Percent ?? 15) : (settings.aircoinsPerWin ?? 10);
+    const settings        = await AppSettings.getSettings();
+    const correctCount    = cardResults.filter(c => c.recalled).length;
+    const allCorrect      = correctCount === cardResults.length;
+    const perCard         = settings.aircoinsFlashcardPerCard     ?? 2;
+    const perfectBonus    = settings.aircoinsFlashcardPerfectBonus ?? 5;
+    const aircoinsEarned  = (correctCount * perCard) + (allCorrect ? perfectBonus : 0);
 
     const result = await GameSessionFlashcardRecallResult.create({
       userId: req.user._id, gameId, cardResults, gameSessionId, aircoinsEarned,
     });
 
-    const coinResult  = await awardCoins(req.user._id, aircoinsEarned, 'flashcard', `Flashcard Recall — ${allCorrect ? '100% bonus' : 'completed'}`);
+    const label = `Flashcard Recall — ${correctCount}/${cardResults.length}${allCorrect ? ' (perfect)' : ''}`;
+    const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'flashcard', label);
 
-    res.status(201).json({ status: 'success', data: { result, rankPromotion: coinResult.rankPromotion } });
+    res.status(201).json({
+      status: 'success',
+      data: {
+        result,
+        rankPromotion:  coinResult.rankPromotion,
+        cycleAircoins:  coinResult.cycleAircoins,
+        totalAircoins:  coinResult.totalAircoins,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/flashcard-recall/abandon
+router.post('/flashcard-recall/abandon', protect, async (req, res) => {
+  try {
+    const { gameId, cardResults, gameSessionId } = req.body;
+    if (!gameId || !gameSessionId) return res.status(400).json({ message: 'gameId and gameSessionId required' });
+
+    await GameSessionFlashcardRecallResult.create({
+      userId:        req.user._id,
+      gameId,
+      gameSessionId,
+      cardResults:   Array.isArray(cardResults) ? cardResults : [],
+      aircoinsEarned: 0,
+      abandoned:     true,
+      cardsAnswered: Array.isArray(cardResults) ? cardResults.length : 0,
+    });
+
+    res.status(201).json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1435,9 +1642,25 @@ router.get('/history', protect, async (req, res) => {
         resultCategory:   r.abandoned ? 'abandoned' : r.won ? 'passed' : 'failed',
       })),
       ...flash.map(r => {
-        const recalled = r.cardResults?.filter(c => c.recalled).length ?? 0;
-        const total    = r.cardResults?.length ?? 0;
-        const perfect  = recalled === total && total > 0;
+        const recalled         = r.cardResults?.filter(c => c.recalled).length ?? 0;
+        const total            = r.cardResults?.length ?? 0;
+        const perfect          = recalled === total && total > 0;
+        const timeTakenSeconds = r.cardResults?.reduce((sum, c) => sum + (c.timeTakenSeconds ?? 0), 0) ?? 0;
+        if (r.abandoned) {
+          return {
+            _id:             r._id,
+            type:            'flashcard',
+            gameSessionId:   r.gameSessionId,
+            date:            r.createdAt,
+            status:          'abandoned',
+            recalled,
+            cardCount:       total,
+            timeTakenSeconds,
+            aircoinsEarned:  0,
+            canDrillDown:    total > 0,
+            resultCategory:  'abandoned',
+          };
+        }
         return {
           _id:             r._id,
           type:            'flashcard',
@@ -1446,8 +1669,9 @@ router.get('/history', protect, async (req, res) => {
           status:          perfect ? 'perfect' : 'completed',
           recalled,
           cardCount:       total,
+          timeTakenSeconds,
           aircoinsEarned:  r.aircoinsEarned,
-          canDrillDown:    false,
+          canDrillDown:    total > 0,
           resultCategory:  perfect ? 'perfect' : 'passed',
         };
       }),
@@ -1579,6 +1803,30 @@ router.get('/history/wheres-aircraft/:sessionId', protect, async (req, res) => {
       won:             session.won,
       aircoinsEarned:  session.aircoinsEarned,
     }});
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/history/flashcard/:sessionId — per-card drill-down for a flashcard recall session
+router.get('/history/flashcard/:sessionId', protect, async (req, res) => {
+  try {
+    const session = await GameSessionFlashcardRecallResult.findOne({
+      _id:    req.params.sessionId,
+      userId: req.user._id,
+    })
+      .populate('cardResults.intelBriefId', 'title')
+      .lean();
+
+    if (!session) return res.status(404).json({ message: 'Session not found' });
+
+    const cards = (session.cardResults ?? []).map(c => ({
+      briefTitle:       c.intelBriefId?.title ?? 'Unknown Brief',
+      recalled:         c.recalled ?? false,
+      timeTakenSeconds: c.timeTakenSeconds ?? 0,
+    }));
+
+    res.json({ status: 'success', data: { cards, abandoned: session.abandoned ?? false } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

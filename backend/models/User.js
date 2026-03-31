@@ -43,6 +43,7 @@ const userSchema = new mongoose.Schema(
     cycleAircoins: { type: Number, default: 0 }, // aircoins in current rank cycle — resets to 0 on rank promotion
 
     // Tutorial progress
+    // ⚠ When adding a new tutorial, add it here AND in TUTORIAL_STEPS in src/context/AppTutorialContext.jsx
     tutorials: {
       welcome:         { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       intel_brief:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
@@ -56,6 +57,8 @@ const userSchema = new mongoose.Schema(
       profile:         { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       rankings:        { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       wheres_aircraft: { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      learn_priority:  { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      pathway_swipe:   { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
     },
     tutorialsResetAt: { type: Date, default: null }, // admin-triggered; frontend clears localStorage tutorial keys when newer than last clear
 
@@ -72,6 +75,14 @@ const userSchema = new mongoose.Schema(
     // Where's That Aircraft — spawn tracking
     whereAircraftReadsSinceLastGame: { type: Number, default: 0 },
     whereAircraftSpawnThreshold:     { type: Number, default: 3 }, // randomly set 2–5 on each spawn
+
+    // Game unlock tracking — cross-device "NEW" badge state
+    gameUnlocks: {
+      quiz:      { unlockedAt: { type: Date, default: null }, badgeSeen: { type: Boolean, default: false } },
+      flashcard: { unlockedAt: { type: Date, default: null }, badgeSeen: { type: Boolean, default: false } },
+      boo:       { unlockedAt: { type: Date, default: null }, badgeSeen: { type: Boolean, default: false } },
+      wta:       { unlockedAt: { type: Date, default: null }, badgeSeen: { type: Boolean, default: false } },
+    },
   },
   { timestamps: true }
 );

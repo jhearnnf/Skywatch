@@ -6,6 +6,7 @@ const GameSessionQuizResult              = require('../models/GameSessionQuizRes
 const GameSessionQuizAttempt             = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult     = require('../models/GameSessionOrderOfBattleResult');
 const GameSessionWhereAircraftResult     = require('../models/GameSessionWhereAircraftResult');
+const GameSessionFlashcardRecallResult   = require('../models/GameSessionFlashcardRecallResult');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const ProblemReport = require('../models/ProblemReport');
@@ -47,10 +48,22 @@ router.get('/stats', protect, async (req, res) => {
     const wtaWins      = wtaResults.filter(r => r.won).length;
     const wtaAbandoned = await GameSessionWhereAircraftResult.countDocuments({ userId: req.user._id, status: 'abandoned' });
 
-    const gamesPlayed    = completedQuizAttempts + booPlayed + wtaPlayed;
-    const abandonedGames = abandonedQuizAttempts + booAbandoned + wtaAbandoned;
-    const totalDataPoints = quizAnswered + booPlayed + wtaPlayed;
-    const winPercent = totalDataPoints > 0 ? Math.round((quizCorrect + booWins + wtaWins) / totalDataPoints * 100) : 0;
+    // Flashcard Recall: each card is a data point (recalled = correct)
+    const flashSessions  = await GameSessionFlashcardRecallResult.find({ userId: req.user._id, abandoned: { $ne: true } }).lean();
+    const flashAbandoned = await GameSessionFlashcardRecallResult.countDocuments({ userId: req.user._id, abandoned: true });
+    const flashPlayed    = flashSessions.length;
+    const flashTotal     = flashSessions.reduce((s, r) => s + (r.cardResults?.length ?? 0), 0);
+    const flashRecalled  = flashSessions.reduce((s, r) => s + (r.cardResults?.filter(c => c.recalled).length ?? 0), 0);
+
+    const gamesPlayed    = completedQuizAttempts + booPlayed + wtaPlayed + flashPlayed;
+    const abandonedGames = abandonedQuizAttempts + booAbandoned + wtaAbandoned + flashAbandoned;
+    const totalDataPoints = quizAnswered + booPlayed + wtaPlayed + flashTotal;
+    const winPercent = totalDataPoints > 0 ? Math.round((quizCorrect + booWins + wtaWins + flashRecalled) / totalDataPoints * 100) : 0;
+
+    const flashcardsCollected = await IntelligenceBriefRead.countDocuments({
+      userId: req.user._id,
+      reachedFlashcard: true,
+    });
 
     res.json({
       status: 'success',
@@ -64,6 +77,7 @@ router.get('/stats', protect, async (req, res) => {
         abandonedGames,
         winPercent,
         totalAircoins:    user.totalAircoins,
+        flashcardsCollected,
       },
     });
   } catch (err) {
@@ -183,9 +197,11 @@ router.get('/aircoins/history', protect, async (req, res) => {
 });
 
 // PATCH /api/users/me/tutorials — update a single tutorial status
+// ⚠ Keep in sync with the tutorials sub-schema in backend/models/User.js
 const VALID_TUTORIAL_IDS = [
   'welcome', 'intel_brief', 'user', 'load_up',
   'home', 'learn', 'briefReader', 'quiz', 'play', 'profile', 'rankings', 'wheres_aircraft',
+  'learn_priority', 'pathway_swipe',
 ];
 const TUTORIAL_PRIORITY  = { unseen: 0, skipped: 1, viewed: 2 };
 
@@ -225,6 +241,49 @@ router.patch('/me/tutorials/sync', protect, async (req, res) => {
     if (Object.keys(updates).length > 0) {
       await User.findByIdAndUpdate(req.user._id, { $set: updates });
     }
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+const VALID_UNLOCK_KEYS = ['quiz', 'flashcard', 'boo', 'wta'];
+
+// POST /api/users/me/game-unlocks/:key/unlock — idempotent, marks a game as unlocked
+router.post('/me/game-unlocks/:key/unlock', protect, async (req, res) => {
+  try {
+    const { key } = req.params;
+    if (!VALID_UNLOCK_KEYS.includes(key)) return res.status(400).json({ message: 'Invalid key' });
+    const user = await User.findById(req.user._id).select('gameUnlocks');
+    if (user?.gameUnlocks?.[key]?.unlockedAt) return res.json({ status: 'success', wasNew: false });
+    const unlockedAt = new Date();
+    await User.findByIdAndUpdate(req.user._id, { [`gameUnlocks.${key}.unlockedAt`]: unlockedAt });
+    res.json({ status: 'success', wasNew: true, unlockedAt });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/users/me/game-unlocks/:key/seen — marks the new-game badge as seen
+router.patch('/me/game-unlocks/:key/seen', protect, async (req, res) => {
+  try {
+    const { key } = req.params;
+    if (!VALID_UNLOCK_KEYS.includes(key)) return res.status(400).json({ message: 'Invalid key' });
+    await User.findByIdAndUpdate(req.user._id, { [`gameUnlocks.${key}.badgeSeen`]: true });
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/users/me/game-unlocks/:key/unlock — revokes a game unlock (e.g. after history reset)
+router.delete('/me/game-unlocks/:key/unlock', protect, async (req, res) => {
+  try {
+    const { key } = req.params;
+    if (!VALID_UNLOCK_KEYS.includes(key)) return res.status(400).json({ message: 'Invalid key' });
+    await User.findByIdAndUpdate(req.user._id, {
+      $unset: { [`gameUnlocks.${key}.unlockedAt`]: '', [`gameUnlocks.${key}.badgeSeen`]: '' },
+    });
     res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -157,6 +157,7 @@ router.get('/stats', async (_req, res) => {
       quizTimeAgg,
       booTotal, booWon, booDefeated, booAbandoned, booTimeAgg,
       wtaTotal, wtaWon, wtaAbandoned, wtaRound1Correct, wtaRound2Correct, wtaTimeAgg,
+      flashTotal, flashRecalled, flashSessions, flashAbandoned, flashTimeAgg,
       tutorialAgg,
     ] = await Promise.all([
       User.countDocuments(),
@@ -200,6 +201,21 @@ router.get('/stats', async (_req, res) => {
       GameSessionWhereAircraftResult.countDocuments({ round2Correct: true }),
       GameSessionWhereAircraftResult.aggregate([
         { $group: { _id: null, total: { $sum: { $ifNull: ['$timeTakenSeconds', 0] } } } },
+      ]),
+      // Flashcard Recall
+      GameSessionFlashcardRecallResult.aggregate([
+        { $group: { _id: null, total: { $sum: { $size: { $ifNull: ['$cardResults', []] } } } } },
+      ]),
+      GameSessionFlashcardRecallResult.aggregate([
+        { $unwind: '$cardResults' },
+        { $group: { _id: null, total: { $sum: { $cond: ['$cardResults.recalled', 1, 0] } } } },
+      ]),
+      GameSessionFlashcardRecallResult.countDocuments({ abandoned: { $ne: true } }),
+      GameSessionFlashcardRecallResult.countDocuments({ abandoned: true }),
+      // Flashcard: sum per-card timeTakenSeconds
+      GameSessionFlashcardRecallResult.aggregate([
+        { $unwind: '$cardResults' },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$cardResults.timeTakenSeconds', 0] } } } },
       ]),
       // Tutorial viewed/skipped counts across all users and all 4 tutorial fields
       User.aggregate([{
@@ -260,6 +276,13 @@ router.get('/stats', async (_req, res) => {
             round1Correct: wtaRound1Correct,
             round2Correct: wtaRound2Correct,
             totalSeconds:  wtaTimeAgg[0]?.total ?? 0,
+          },
+          flashcard: {
+            sessions:     flashSessions,
+            totalCards:   flashTotal[0]?.total    ?? 0,
+            recalled:     flashRecalled[0]?.total ?? 0,
+            abandoned:    flashAbandoned,
+            totalSeconds: Math.round(flashTimeAgg[0]?.total ?? 0),
           },
         },
         briefs: { totalBrifsRead, totalBrifsOpened, totalReadSeconds: readTimeAgg[0]?.total ?? 0 },
@@ -357,12 +380,12 @@ router.post('/test-email', async (req, res) => {
 // Send title/body as empty string to clear the override for that field.
 router.patch('/tutorials/content', requireReason, async (req, res) => {
   try {
-    const { key, title, body, guestBody, reason } = req.body;
+    const { key, title, body, emoji, guestBody, reason } = req.body;
     const VALID_KEYS = ['welcome_0','welcome_1','intel_brief_0','user_0','user_1','load_up_0'];
     if (!VALID_KEYS.includes(key)) return res.status(400).json({ message: 'Invalid tutorial key' });
 
     // Build the override object; omit guestBody unless it was provided
-    const override = { title: title ?? '', body: body ?? '' };
+    const override = { title: title ?? '', body: body ?? '', emoji: emoji ?? '' };
     if (guestBody !== undefined) override.guestBody = guestBody;
 
     const settings = await AppSettings.findOne() ?? await AppSettings.create({});
@@ -659,8 +682,11 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
       ops.push(IntelligenceBriefRead.deleteMany({ userId: req.params.id }));
     }
     if (fields.includes('tutorials')) {
+      // Fetch the user to derive tutorial keys dynamically from the schema —
+      // so any new tutorial field added to User.js is automatically reset here.
+      const tutUser = await User.findById(req.params.id).select('tutorials');
       userUpdates.tutorialsResetAt = new Date();
-      for (const k of ['welcome','intel_brief','user','load_up','home','learn','briefReader','quiz','play','profile','rankings','wheres_aircraft']) {
+      for (const k of Object.keys(tutUser?.tutorials?.toObject() ?? {})) {
         userUpdates[`tutorials.${k}`] = 'unseen';
       }
     }
@@ -668,6 +694,17 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
     if (Object.keys(userUpdates).length) ops.push(User.findByIdAndUpdate(req.params.id, userUpdates));
     await Promise.all(ops);
     await AdminAction.create({ userId: req.user._id, actionType: 'reset_user_stats', reason: req.body.reason, targetUserId: req.params.id });
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/users/:id/reset-game-badges
+router.post('/users/:id/reset-game-badges', requireReason, async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.params.id, { $unset: { gameUnlocks: '' } });
+    await AdminAction.create({ userId: req.user._id, actionType: 'reset_game_badges', reason: req.body.reason, targetUserId: req.params.id });
     res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });

@@ -36,6 +36,9 @@ function fetchSettings() {
         volumeBattleOfOrderWon: 100,       soundEnabledBattleOfOrderWon: true,
         volumeBattleOfOrderLost: 100,      soundEnabledBattleOfOrderLost: true,
         volumeBattleOfOrderSelection: 100, soundEnabledBattleOfOrderSelection: true,
+        volumeFlashcardStart: 100,     soundEnabledFlashcardStart: true,
+        volumeFlashcardCorrect: 100,   soundEnabledFlashcardCorrect: true,
+        volumeFlashcardIncorrect: 100, soundEnabledFlashcardIncorrect: true,
         freeCategories: ['News'], silverCategories: [],
       }
     })
@@ -242,6 +245,18 @@ export function playSound(name, { onAudio } = {}) {
         file       = 'battle_of_order_lost.mp3'
         volumeKey  = 'volumeBattleOfOrderLost'
         enabledKey = 'soundEnabledBattleOfOrderLost'
+      } else if (name === 'flashcard_start') {
+        file       = 'flashcard_start.mp3'
+        volumeKey  = 'volumeFlashcardStart'
+        enabledKey = 'soundEnabledFlashcardStart'
+      } else if (name === 'flashcard_correct') {
+        file       = 'flashcard_correct.mp3'
+        volumeKey  = 'volumeFlashcardCorrect'
+        enabledKey = 'soundEnabledFlashcardCorrect'
+      } else if (name === 'flashcard_incorrect') {
+        file       = 'flashcard_incorrect.mp3'
+        volumeKey  = 'volumeFlashcardIncorrect'
+        enabledKey = 'soundEnabledFlashcardIncorrect'
       } else {
         file = name
       }

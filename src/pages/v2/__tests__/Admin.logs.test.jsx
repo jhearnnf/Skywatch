@@ -6,6 +6,7 @@ import Admin from '../Admin'
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ state: null }),
 }))
 
 vi.mock('../../../context/AuthContext', () => ({

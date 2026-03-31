@@ -34,22 +34,40 @@ vi.mock('../../../components/UpgradePrompt',          () => ({ default: () => nu
 
 vi.mock('framer-motion', () => ({
   motion: {
-    div:    ({ children, className, onClick, style }) => <div className={className} onClick={onClick} style={style}>{children}</div>,
-    button: ({ children, className, onClick })        => <button className={className} onClick={onClick}>{children}</button>,
-    p:      ({ children, className })                 => <p className={className}>{children}</p>,
+    div: ({ children, className, style, onClick, onDragEnd, drag }) => {
+      if (drag === 'x' && onDragEnd) {
+        return (
+          <div className={className} style={style} onClick={onClick}>
+            {children}
+            <button data-testid="swipe-left"  onClick={() => onDragEnd(null, { offset: { x: -150, y: 0 }, velocity: { x: 0, y: 0 } })} />
+            <button data-testid="swipe-right" onClick={() => onDragEnd(null, { offset: { x:  150, y: 0 }, velocity: { x: 0, y: 0 } })} />
+          </div>
+        )
+      }
+      return <div className={className} style={style} onClick={onClick}>{children}</div>
+    },
+    button: ({ children, className, onClick }) => <button className={className} onClick={onClick}>{children}</button>,
+    p:      ({ children, className })          => <p className={className}>{children}</p>,
   },
-  AnimatePresence: ({ children }) => <>{children}</>,
+  AnimatePresence:      ({ children }) => <>{children}</>,
+  LayoutGroup:          ({ children }) => <>{children}</>,
+  useMotionValue:       () => ({ set: vi.fn(), get: () => 0 }),
+  useTransform:         () => 0,
+  useAnimationControls: () => ({ start: vi.fn() }),
 }))
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function makeBrief(category, gameData = null) {
+  // Four sections so sectionIdx 0–2 are non-last (show SectionCard with stat row),
+  // and section 3 is isLast (FlashCard). Aircrafts can have up to 3 stats mapped
+  // to stats[0], stats[1], stats[2] — one per section index.
   return {
     _id:                 'brief123',
     title:               'Test Brief',
     subtitle:            '',
     category,
-    descriptionSections: ['Some content here.'],
+    descriptionSections: ['Section 1.', 'Section 2.', 'Section 3.', 'Flashcard section.'],
     keywords:            [],
     sources:             [],
     media:               [],
@@ -57,34 +75,59 @@ function makeBrief(category, gameData = null) {
   }
 }
 
-function setupFetch(brief) {
+function setupFetch(brief, readRecord = null) {
   global.fetch = vi.fn().mockImplementation((url) => {
     if (url.includes('battle-of-order/options'))
       return Promise.resolve({ ok: true, json: async () => ({ data: { available: false } }) })
     if (url.includes('quiz/status'))
       return Promise.resolve({ ok: true, json: async () => ({ data: { hasCompleted: false } }) })
-    return Promise.resolve({ ok: true, json: async () => ({ data: { brief, readRecord: null, ammoMax: 3 } }) })
+    return Promise.resolve({ ok: true, json: async () => ({ data: { brief, readRecord, ammoMax: 3 } }) })
   })
 }
 
 // ── Aircrafts ──────────────────────────────────────────────────────────────
 
 describe('BriefReader — BOO stats: Aircrafts', () => {
-  beforeEach(() => { sessionStorage.clear() })
+  beforeEach(() => { sessionStorage.clear(); localStorage.clear() })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('shows Top Speed (km/h and mph), Introduced, and In Service', async () => {
+  it('shows Top Speed (km/h and mph) on section 0', async () => {
+    // stats[0] = topSpeed — visible at section 0 (default start)
     setupFetch(makeBrief('Aircrafts', { topSpeedKph: 2200, yearIntroduced: 2003, yearRetired: null }))
     render(<BriefReader />)
     await waitFor(() => screen.getByText('Test Brief'))
     expect(screen.getByText(/2,200 km\/h/)).toBeDefined()
     expect(screen.getByText(/1,366 mph/)).toBeDefined()
+  })
+
+  it('shows Introduced year on section 1', async () => {
+    // stats[1] = yearIntroduced — pass readRecord.currentSection=1 to start there
+    setupFetch(
+      makeBrief('Aircrafts', { topSpeedKph: 2200, yearIntroduced: 2003, yearRetired: null }),
+      { currentSection: 1, completed: false },
+    )
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
     expect(screen.getByText('2003')).toBeDefined()
+  })
+
+  it('shows "In Service" status on section 2', async () => {
+    // stats[2] = status — pass readRecord.currentSection=2 to start there
+    setupFetch(
+      makeBrief('Aircrafts', { topSpeedKph: 2200, yearIntroduced: 2003, yearRetired: null }),
+      { currentSection: 2, completed: false },
+    )
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText('Test Brief'))
     expect(screen.getByText('In Service')).toBeDefined()
   })
 
   it('shows "Retired YEAR" when yearRetired is set', async () => {
-    setupFetch(makeBrief('Aircrafts', { topSpeedKph: 1800, yearIntroduced: 1976, yearRetired: 2019 }))
+    // stats[2] = status — pass readRecord.currentSection=2 to start there
+    setupFetch(
+      makeBrief('Aircrafts', { topSpeedKph: 1800, yearIntroduced: 1976, yearRetired: 2019 }),
+      { currentSection: 2, completed: false },
+    )
     render(<BriefReader />)
     await waitFor(() => screen.getByText('Test Brief'))
     expect(screen.getByText('Retired 2019')).toBeDefined()

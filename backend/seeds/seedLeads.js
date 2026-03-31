@@ -1095,6 +1095,13 @@ const LEADS = [
 // ─────────────────────────────────────────────────────────────────────────────
 module.exports = async function seedLeads() {
   try {
+    // 0 — capture any priority numbers already assigned before wiping
+    const existingLeads = await IntelLead.find({}, 'title priorityNumber').lean();
+    const priorityMap = {};
+    for (const l of existingLeads) {
+      if (l.priorityNumber != null) priorityMap[l.title] = l.priorityNumber;
+    }
+
     // 1 — wipe leads + drop any stale indexes from old schema (e.g. text_1)
     await IntelLead.deleteMany({});
     try {
@@ -1118,25 +1125,27 @@ module.exports = async function seedLeads() {
       AircoinLog.deleteMany({}),
     ]);
 
-    // 3 — insert leads
+    // 3 — insert leads, restoring any previously generated priority numbers
     await IntelLead.insertMany(LEADS.map(l => ({
-      title:       l.title,
-      nickname:    l.nickname   || '',
-      subtitle:    l.subtitle   || '',
-      category:    l.category,
-      subcategory: l.subcategory || '',
-      section:     l.section    || '',
-      subsection:  l.subsection || '',
-      isPublished: false,
+      title:          l.title,
+      nickname:       l.nickname    || '',
+      subtitle:       l.subtitle    || '',
+      category:       l.category,
+      subcategory:    l.subcategory || '',
+      section:        l.section     || '',
+      subsection:     l.subsection  || '',
+      isPublished:    false,
+      priorityNumber: priorityMap[l.title] ?? null,
     })));
 
-    // 4 — create one stub brief per lead
+    // 4 — create one stub brief per lead, carrying priority numbers through
     const stubs = LEADS.map(l => ({
       title:               l.title,
       subtitle:            l.subtitle   || '',
       category:            l.category,
       subcategory:         l.subcategory || '',
       status:              'stub',
+      priorityNumber:      priorityMap[l.title] ?? null,
       descriptionSections: [],
       keywords:            [],
       sources:             [],

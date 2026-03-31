@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { MOCK_LEVELS } from '../../data/mockData'
 
 function getLevelInfo(coins) {
@@ -14,11 +15,11 @@ function getLevelInfo(coins) {
 }
 
 const NAV_ITEMS = [
-  { to: '/home',     emoji: '🏠', label: 'Home'       },
-  { to: '/learn',    emoji: '✈️',  label: 'Learn'      },
-  { to: '/play',     emoji: '🎮', label: 'Play'       },
-  { to: '/rankings', emoji: '🏆', label: 'Progression' },
-  { to: '/profile',  emoji: '👤', label: 'Profile'    },
+  { to: '/home',          emoji: '🏠', label: 'Home'       },
+  { to: '/learn-priority', emoji: '✈️', label: 'Learn'     },
+  { to: '/play',          emoji: '🎮', label: 'Play'       },
+  { to: '/rankings',      emoji: '🏆', label: 'Progression' },
+  { to: '/profile',       emoji: '👤', label: 'Profile'    },
 ]
 
 function CrosshairLogo() {
@@ -38,28 +39,39 @@ function CrosshairLogo() {
 export default function Sidebar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { hasAnyNew } = useNewGameUnlock()
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
 
   return (
     <aside className="hidden md:flex flex-col fixed left-0 top-14 bottom-0 w-56 bg-slate-50 border-r border-slate-200 z-30">
       {/* Nav items */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {NAV_ITEMS.map(({ to, emoji, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
-              ${isActive
-                ? 'bg-brand-100 text-brand-600 border-brand-200'
-                : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
-              }`
-            }
-          >
-            <span className="text-lg w-6 text-center">{emoji}</span>
-            {label}
-          </NavLink>
-        ))}
+        {NAV_ITEMS.map(({ to, emoji, label }) => {
+          const isPlay     = to === '/play'
+          const showBadge  = isPlay && hasAnyNew && user
+          return (
+            <NavLink
+              key={to}
+              data-nav={isPlay ? 'play' : undefined}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
+                ${isActive
+                  ? 'bg-brand-100 text-brand-600 border-brand-200'
+                  : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                }`
+              }
+            >
+              <span className="relative text-lg w-6 text-center shrink-0">
+                {emoji}
+                {showBadge && (
+                  <span className="nav-new-badge" aria-label="New game unlocked" />
+                )}
+              </span>
+              {label}
+            </NavLink>
+          )
+        })}
 
         {user?.isAdmin && (
           <NavLink

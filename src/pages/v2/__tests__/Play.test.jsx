@@ -22,6 +22,22 @@ vi.mock('../../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))
 
+vi.mock('../../../components/FlashcardGameModal', () => ({
+  default: () => null,
+}))
+
+vi.mock('../../../context/NewGameUnlockContext', () => ({
+  useNewGameUnlock: vi.fn(() => ({
+    newGames:             new Set(),
+    hasAnyNew:            false,
+    isUnlocked:           () => false,
+    markSeen:             vi.fn(),
+    markUnlockFromServer: vi.fn(),
+    applyUnlocks:         vi.fn(),
+    revokeUnlock:         vi.fn(),
+  })),
+}))
+
 vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, className, ...rest }) => <div className={className}>{children}</div>,
@@ -32,6 +48,7 @@ vi.mock('framer-motion', () => ({
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 import { useAuth } from '../../../context/AuthContext'
+import { useNewGameUnlock } from '../../../context/NewGameUnlockContext'
 
 function renderAsGuest() {
   useAuth.mockReturnValue({ user: null, API: '' })
@@ -51,6 +68,8 @@ function renderAsUser({ quizBriefs = [], booBriefs = [] } = {}) {
       return Promise.resolve({ json: async () => ({ data: { briefs: quizBriefs } }) })
     if (url.includes('battle-of-order/recommended-briefs'))
       return Promise.resolve({ json: async () => ({ data: { briefs: booBriefs } }) })
+    if (url.includes('flashcard-recall/available-briefs'))
+      return Promise.resolve({ json: async () => ({ data: { count: 10 } }) })
     return Promise.resolve({ json: async () => ({ data: { briefs: [] } }) })
   })
   render(<Play />)
@@ -60,7 +79,11 @@ function renderAsUser({ quizBriefs = [], booBriefs = [] } = {}) {
 
 beforeEach(() => {
   window.scrollTo = vi.fn()
-  global.fetch = vi.fn().mockResolvedValue({ json: async () => ({ data: { briefs: [] } }) })
+  global.fetch = vi.fn().mockImplementation((url) => {
+    if (url.includes('flashcard-recall/available-briefs'))
+      return Promise.resolve({ json: async () => ({ data: { count: 0 } }) })
+    return Promise.resolve({ json: async () => ({ data: { briefs: [] } }) })
+  })
 })
 
 afterEach(() => {
@@ -137,9 +160,9 @@ describe('Play page — game cards', () => {
     expect(card.textContent).not.toMatch(/coming soon/i)
   })
 
-  it('unavailable game cards show "Coming soon" badge', () => {
+  it('Flashcard Recall card has no "Coming soon" badge (now available)', () => {
     renderAsGuest()
-    expect(screen.getByTestId('card-flashcard').textContent).toMatch(/coming soon/i)
+    expect(screen.getByTestId('card-flashcard').textContent).not.toMatch(/coming soon/i)
   })
 
   it('Battle of Order card has no "Coming soon" badge (it is now available)', () => {
@@ -166,9 +189,9 @@ describe('Play page — launcher sections', () => {
     expect(titles).toContain('Battle of Order')
   })
 
-  it('Flashcard Recall section has a disabled "Start Drill" button', () => {
+  it('Flashcard Recall section shows sign-in prompt for guests', () => {
     renderAsGuest()
-    expect(screen.getByRole('button', { name: /start drill/i })).toBeDisabled()
+    expect(screen.getByText(/sign in to run flashcard drills/i)).toBeDefined()
   })
 
   it("Where's that Aircraft? section prompts user to learn about aircrafts", () => {
@@ -186,11 +209,9 @@ describe('Play page — launcher sections', () => {
     expect(screen.getByText(/sign in to play battle of order/i)).toBeDefined()
   })
 
-  it('Flashcard Recall section shows dummy keyword rows', () => {
-    renderAsGuest()
-    expect(screen.getByText('ISTAR')).toBeDefined()
-    expect(screen.getByText('QRA')).toBeDefined()
-    expect(screen.getByText('COMAO')).toBeDefined()
+  it('Flashcard Recall section shows description for logged-in user', async () => {
+    renderAsUser({})
+    await waitFor(() => screen.getByText(/identify briefs from their content alone/i))
   })
 
   it('Battle of Order section shows eligible categories hint for logged-in users with no BOO briefs', async () => {
@@ -447,5 +468,226 @@ describe('Play page — Battle of Order states', () => {
     renderAsUser({ booBriefs })
     await waitFor(() => screen.getByText('Locked Brief'))
     expect(screen.queryByText('Play now')).toBeNull()
+  })
+
+  // ── needs-bases-reads ───────────────────────────────────────────────────
+
+  it('shows "Read more Bases" label for a needs-bases-reads brief', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'RAF Fairford', category: 'Bases', booState: 'needs-bases-reads' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('RAF Fairford'))
+    expect(screen.getByText(/read more bases/i)).toBeDefined()
+  })
+
+  it('needs-bases-reads card does not link to the BOO game', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'RAF Fairford', category: 'Bases', booState: 'needs-bases-reads' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('RAF Fairford'))
+    const booLinks = screen.queryAllByRole('link').filter(l => l.getAttribute('href') === '/battle-of-order/b1')
+    expect(booLinks.length).toBe(0)
+  })
+
+  it('needs-bases-reads card does not show "Play now"', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'RAF Fairford', category: 'Bases', booState: 'needs-bases-reads' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('RAF Fairford'))
+    expect(screen.queryByText('Play now')).toBeNull()
+  })
+
+  it('needs-bases-reads card does not show read or quiz prompts', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'RAF Fairford', category: 'Bases', booState: 'needs-bases-reads' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('RAF Fairford'))
+    expect(screen.queryByText(/read first/i)).toBeNull()
+    expect(screen.queryByText(/pass quiz first/i)).toBeNull()
+  })
+
+  // ── unknown future needs-*-reads state (robustness) ────────────────────
+
+  it('an unknown needs-*-reads state falls back to locked UI with generic label', async () => {
+    const booBriefs = [{ _id: 'b1', title: 'Future Brief', category: 'Training', booState: 'needs-training-reads' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Future Brief'))
+    expect(screen.getByText(/read more briefs/i)).toBeDefined()
+    expect(screen.queryByText('Play now')).toBeNull()
+    const booLinks = screen.queryAllByRole('link').filter(l => l.getAttribute('href') === '/battle-of-order/b1')
+    expect(booLinks.length).toBe(0)
+  })
+
+  // ── BOO card padlock (isCardUnlocked) ───────────────────────────────────
+
+  it('BOO card padlock is locked when BOO briefs are only needs-read', async () => {
+    // isCardUnlocked('battle-order') requires at least one 'active' brief
+    const booBriefs = [{ _id: 'b1', title: 'Unread Brief', category: 'Aircrafts', booState: 'needs-read' }]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Unread Brief'))
+    // No active briefs → BOO card should not be unlocked → no green padlock
+    // We verify indirectly: card content should not contain a "Play now" in the launcher section
+    // (the padlock SVG colour is visual-only; the key behaviour is the brief row itself)
+    expect(screen.queryByText('Play now')).toBeNull()
+  })
+
+  it('BOO card padlock is unlocked when there is at least one active brief', async () => {
+    const booBriefs = [
+      { _id: 'b1', title: 'Ready Brief',  category: 'Aircrafts', booState: 'active' },
+      { _id: 'b2', title: 'Unread Brief', category: 'Aircrafts', booState: 'needs-read' },
+    ]
+    renderAsUser({ booBriefs })
+    await waitFor(() => screen.getByText('Ready Brief'))
+    // Active brief present → "Play now" badge visible for that row
+    expect(screen.getByText('Play now')).toBeDefined()
+  })
+})
+
+describe('Play page — BOO client-side unlock detection', () => {
+  it('calls markUnlockFromServer("boo") when BOO fetch returns at least one active brief', async () => {
+    const markUnlockFromServer = vi.fn()
+    useNewGameUnlock.mockReturnValue({
+      newGames: new Set(),
+      hasAnyNew: false,
+      isUnlocked: () => false,
+      markSeen: vi.fn(),
+      markUnlockFromServer,
+      applyUnlocks: vi.fn(),
+      revokeUnlock: vi.fn(),
+    })
+
+    const booBriefs = [{ _id: 'b1', title: 'Ready Brief', category: 'Aircrafts', booState: 'active' }]
+    renderAsUser({ booBriefs })
+
+    await waitFor(() => {
+      expect(markUnlockFromServer).toHaveBeenCalledWith('boo')
+    })
+  })
+
+  it('does NOT call markUnlockFromServer("boo") when no BOO briefs are active', async () => {
+    const markUnlockFromServer = vi.fn()
+    useNewGameUnlock.mockReturnValue({
+      newGames: new Set(),
+      hasAnyNew: false,
+      isUnlocked: () => false,
+      markSeen: vi.fn(),
+      markUnlockFromServer,
+      applyUnlocks: vi.fn(),
+      revokeUnlock: vi.fn(),
+    })
+
+    const booBriefs = [
+      { _id: 'b1', title: 'Unread Brief',    category: 'Aircrafts', booState: 'needs-read' },
+      { _id: 'b2', title: 'Quiz Needed',     category: 'Aircrafts', booState: 'needs-quiz' },
+      { _id: 'b3', title: 'Completed Brief', category: 'Aircrafts', booState: 'completed'  },
+    ]
+    renderAsUser({ booBriefs })
+
+    await waitFor(() => screen.getByText('Unread Brief'))
+    expect(markUnlockFromServer).not.toHaveBeenCalledWith('boo')
+  })
+
+  it('does NOT call markUnlockFromServer("boo") when BOO fetch returns an empty list', async () => {
+    const markUnlockFromServer = vi.fn()
+    useNewGameUnlock.mockReturnValue({
+      newGames: new Set(),
+      hasAnyNew: false,
+      isUnlocked: () => false,
+      markSeen: vi.fn(),
+      markUnlockFromServer,
+      applyUnlocks: vi.fn(),
+      revokeUnlock: vi.fn(),
+    })
+
+    renderAsUser({ booBriefs: [] })
+
+    // Give enough time for the fetch to settle
+    await waitFor(() => screen.getByText(/sign in to play battle of order|read briefs in eligible categories/i))
+    expect(markUnlockFromServer).not.toHaveBeenCalledWith('boo')
+  })
+})
+
+describe('Play page — WTA card padlock', () => {
+  function renderWithWtaSpawn(wtaSpawnData, { isUnlockedFn = () => false, markUnlockFromServer = vi.fn(), revokeUnlock = vi.fn() } = {}) {
+    useNewGameUnlock.mockReturnValue({
+      newGames: new Set(),
+      hasAnyNew: false,
+      isUnlocked: isUnlockedFn,
+      markSeen: vi.fn(),
+      markUnlockFromServer,
+      applyUnlocks: vi.fn(),
+      revokeUnlock,
+    })
+    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '' })
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('wta-spawn'))
+        return Promise.resolve({ json: async () => ({ data: wtaSpawnData }) })
+      if (url.includes('flashcard-recall/available-briefs'))
+        return Promise.resolve({ json: async () => ({ data: { count: 0 } }) })
+      return Promise.resolve({ json: async () => ({ data: { briefs: [] } }) })
+    })
+    render(<Play />)
+  }
+
+  it('WTA card padlock is locked (grey) when wta-spawn returns prereqsMet: false', async () => {
+    renderWithWtaSpawn({ prereqsMet: false })
+    await waitFor(() => screen.getByText(/learn about aircrafts for these random missions to appear/i))
+    const card = screen.getByTestId('card-whos-that-aircraft')
+    // Locked SVG uses grey stroke #94a3b8; unlocked uses green #22c55e
+    const svgPaths = card.querySelectorAll('svg [stroke]')
+    const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
+    expect(strokes.every(s => s === '#94a3b8')).toBe(true)
+  })
+
+  it('WTA card padlock is unlocked (green) when wta-spawn returns prereqsMet: true', async () => {
+    renderWithWtaSpawn({ prereqsMet: true, missions: [] })
+    await waitFor(() => {
+      const card = screen.getByTestId('card-whos-that-aircraft')
+      const svgPaths = card.querySelectorAll('svg [stroke]')
+      const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
+      expect(strokes.every(s => s === '#22c55e')).toBe(true)
+    })
+  })
+
+  it('calls markUnlockFromServer("wta") when prereqsMet: true', async () => {
+    const markUnlockFromServer = vi.fn()
+    renderWithWtaSpawn({ prereqsMet: true, missions: [] }, { markUnlockFromServer })
+    await waitFor(() => {
+      expect(markUnlockFromServer).toHaveBeenCalledWith('wta')
+    })
+  })
+
+  it('does NOT call markUnlockFromServer("wta") when prereqsMet: false', async () => {
+    const markUnlockFromServer = vi.fn()
+    renderWithWtaSpawn({ prereqsMet: false }, { markUnlockFromServer })
+    await waitFor(() => screen.getByText(/learn about aircrafts/i))
+    expect(markUnlockFromServer).not.toHaveBeenCalledWith('wta')
+  })
+
+  it('WTA card padlock is unlocked (green) via isUnlocked("wta") even when wta-spawn is null', async () => {
+    renderWithWtaSpawn(null, { isUnlockedFn: (key) => key === 'wta' })
+    await waitFor(() => {
+      const card = screen.getByTestId('card-whos-that-aircraft')
+      const svgPaths = card.querySelectorAll('svg [stroke]')
+      const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
+      expect(strokes.every(s => s === '#22c55e')).toBe(true)
+    })
+  })
+
+  it('WTA card re-locks after history reset: prereqsMet false overrides cached isUnlocked', async () => {
+    // Simulate: user had the unlock cached (isUnlocked returns true) but then reset their history
+    // so the server now returns prereqsMet: false
+    renderWithWtaSpawn({ prereqsMet: false }, { isUnlockedFn: (key) => key === 'wta' })
+    await waitFor(() => screen.getByText(/learn about aircrafts for these random missions to appear/i))
+    // Once fetch resolves with prereqsMet: false, wtaSpawn is not null so the isUnlocked fallback
+    // no longer applies — padlock must be grey/locked
+    const card = screen.getByTestId('card-whos-that-aircraft')
+    const svgPaths = card.querySelectorAll('svg [stroke]')
+    const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
+    expect(strokes.every(s => s === '#94a3b8')).toBe(true)
+  })
+
+  it('calls revokeUnlock("wta") when prereqsMet: false', async () => {
+    const revokeUnlock = vi.fn()
+    renderWithWtaSpawn({ prereqsMet: false }, { isUnlockedFn: (key) => key === 'wta', revokeUnlock })
+    await waitFor(() => {
+      expect(revokeUnlock).toHaveBeenCalledWith('wta')
+    })
   })
 })

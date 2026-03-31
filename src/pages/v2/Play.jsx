@@ -1,9 +1,46 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
+import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
+import FlashcardGameModal from '../../components/FlashcardGameModal'
+
+// BOO states that trigger the unlock notification (game is actually playable)
+const BOO_ACCESSIBLE_STATES = ['active', 'needs-quiz']
+
+// Labels for needs-*-reads gate states; unknown future states fall back to generic text
+const NEEDS_READS_LABELS = {
+  'needs-aircraft-reads': 'Read more Aircrafts',
+  'needs-bases-reads':    'Read more Bases',
+}
+
+// Map game mode key → unlock context key (they differ for WTA and BOO)
+const MODE_TO_UNLOCK_KEY = {
+  'quiz':               'quiz',
+  'flashcard':          'flashcard',
+  'whos-that-aircraft': 'wta',
+  'battle-order':       'boo',
+}
+// Map unlock key → game mode key (for DOM queries)
+const UNLOCK_TO_MODE_KEY = Object.fromEntries(
+  Object.entries(MODE_TO_UNLOCK_KEY).map(([m, u]) => [u, m])
+)
+
+function PadlockIcon({ unlocked }) {
+  return unlocked ? (
+    <svg width="13" height="15" viewBox="0 0 13 15" fill="none" aria-hidden="true">
+      <rect x="1.5" y="6.5" width="10" height="7" rx="1.5" stroke="#22c55e" strokeWidth="1.4"/>
+      <path d="M3.5 6.5V4.5a3 3 0 0 1 6 0" stroke="#22c55e" strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>
+  ) : (
+    <svg width="13" height="15" viewBox="0 0 13 15" fill="none" aria-hidden="true">
+      <rect x="1.5" y="6.5" width="10" height="7" rx="1.5" stroke="#94a3b8" strokeWidth="1.4"/>
+      <path d="M3.5 6.5V4.5a3 3 0 0 1 6 0v2" stroke="#94a3b8" strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>
+  )
+}
 
 const GAME_MODES = [
   {
@@ -18,9 +55,9 @@ const GAME_MODES = [
     key: 'flashcard',
     emoji: '⚡',
     title: 'Flashcard Recall',
-    desc: 'Quick-fire keyword and terminology drills.',
-    available: false,
-    badge: 'Coming soon',
+    desc: 'Identify briefs from their content alone. Title hidden — type to recall.',
+    available: true,
+    badge: null,
   },
   {
     key: 'whos-that-aircraft',
@@ -43,12 +80,21 @@ const GAME_MODES = [
 export default function Play() {
   const { user, API } = useAuth()
   const { start, step, visible, next: tutorialNext } = useAppTutorial()
+  const { newGames, isUnlocked, markSeen, markUnlockFromServer, revokeUnlock } = useNewGameUnlock()
 
   const isHighlightingGrid = visible && !!step?.highlightGrid
 
-  const [quizBriefs, setQuizBriefs] = useState([])
-  const [booBriefs,  setBooBriefs]  = useState([])
-  const [activeGame, setActiveGame] = useState(null)
+  const [quizBriefs,     setQuizBriefs]     = useState([])
+  const [booBriefs,      setBooBriefs]      = useState([])
+  const [activeGame,     setActiveGame]     = useState(null)
+  const [showFlashcard,  setShowFlashcard]  = useState(false)
+  const [flashcardAvail, setFlashcardAvail] = useState(null)
+  const [wtaSpawn,       setWtaSpawn]       = useState(null)
+
+  // Badge fly animation state
+  const [flyingBadges,  setFlyingBadges]  = useState([]) // [{ key, from:{x,y}, to:{x,y} }]
+  const [flashingCards, setFlashingCards] = useState(new Set())
+  const animatedKeysRef = useRef(new Set())
 
   const quizRef      = useRef(null)
   const flashcardRef = useRef(null)
@@ -78,22 +124,99 @@ export default function Play() {
   // Clear highlight timer on unmount
   useEffect(() => () => clearTimeout(highlightTimerRef.current), [])
 
+  // Badge fly animation — fires when newGames changes
+  const newGamesKey = [...newGames].sort().join(',')
+  useEffect(() => {
+    if (!newGamesKey) return
+    const timer = setTimeout(() => {
+      const toAnimate = newGamesKey.split(',').filter(k => k && !animatedKeysRef.current.has(k))
+      if (!toAnimate.length) return
+      const navEl = document.querySelector('[data-nav="play"]')
+      const badges = []
+      for (const key of toAnimate) {
+        const modeKey = UNLOCK_TO_MODE_KEY[key] ?? key
+        const cardEl = document.querySelector(`[data-testid="card-${modeKey}"]`)
+        animatedKeysRef.current.add(key)
+        if (!navEl || !cardEl) {
+          // Can't animate — dismiss immediately
+          markSeen(key)
+          continue
+        }
+        const navRect  = navEl.getBoundingClientRect()
+        const cardRect = cardEl.getBoundingClientRect()
+        badges.push({
+          key,
+          from: { x: navRect.left + navRect.width / 2 - 18, y: navRect.top  },
+          to:   { x: cardRect.right - 52,                   y: cardRect.top + 4 },
+        })
+      }
+      if (badges.length) setFlyingBadges(prev => [...prev, ...badges])
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [newGamesKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleBadgeArrived(key) {
+    setFlyingBadges(prev => prev.filter(b => b.key !== key))
+    setFlashingCards(prev => new Set([...prev, key]))
+    setTimeout(() => {
+      setFlashingCards(prev => { const n = new Set(prev); n.delete(key); return n })
+      markSeen(key)
+    }, 1500)
+  }
+
+  function isCardUnlocked(modeKey) {
+    if (!user) return false
+    switch (modeKey) {
+      case 'quiz':               return quizBriefs.some(b => b.quizState === 'active')
+      case 'flashcard':          return flashcardAvail !== null && flashcardAvail >= 5
+      case 'battle-order':       return booBriefs.some(b => b.booState === 'active')
+      case 'whos-that-aircraft': return wtaSpawn?.prereqsMet === true || (wtaSpawn === null && isUnlocked('wta'))
+      default:                   return false
+    }
+  }
+
   // Fetch recommended briefs for each game type
   useEffect(() => {
     if (!user) {
       setQuizBriefs([])
       setBooBriefs([])
+      setFlashcardAvail(null)
+      setWtaSpawn(null)
       return
     }
     fetch(`${API}/api/games/quiz/recommended-briefs?limit=6`, { credentials: 'include' })
       .then(r => r.json())
-      .then(data => setQuizBriefs(data?.data?.briefs ?? []))
+      .then(data => {
+        setQuizBriefs(data?.data?.briefs ?? [])
+      })
       .catch(() => {})
     fetch(`${API}/api/games/battle-of-order/recommended-briefs?limit=6`, { credentials: 'include' })
       .then(r => r.json())
-      .then(data => setBooBriefs(data?.data?.briefs ?? []))
+      .then(data => {
+        const briefs = data?.data?.briefs ?? []
+        setBooBriefs(briefs)
+        // Client-side BOO unlock detection
+        if (briefs.some(b => BOO_ACCESSIBLE_STATES.includes(b.booState))) {
+          markUnlockFromServer('boo')
+        }
+      })
       .catch(() => {})
-  }, [user, API])
+    fetch(`${API}/api/games/flashcard-recall/available-briefs`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        setFlashcardAvail(data?.data?.count ?? 0)
+      })
+      .catch(() => setFlashcardAvail(0))
+    fetch(`${API}/api/users/me/wta-spawn`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        const spawn = data?.data ?? null
+        setWtaSpawn(spawn)
+        if (spawn?.prereqsMet === true) markUnlockFromServer('wta')
+        else revokeUnlock('wta')
+      })
+      .catch(() => {})
+  }, [user, API]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Card / scroll ─────────────────────────────────────────────────────────
 
@@ -120,6 +243,26 @@ export default function Play() {
   return (
     <>
       <TutorialModal />
+      {showFlashcard && <FlashcardGameModal onClose={() => setShowFlashcard(false)} />}
+
+      {/* Flying "NEW GAME" badges — animate from nav Play button to game card */}
+      <AnimatePresence>
+        {flyingBadges.map(badge => (
+          <motion.div
+            key={badge.key}
+            initial={{ left: badge.from.x, top: badge.from.y, opacity: 0, scale: 0.5 }}
+            animate={{ left: badge.to.x,   top: badge.to.y,   opacity: 1, scale: 1   }}
+            exit={{ opacity: 0, scale: 0.6 }}
+            transition={{ type: 'spring', stiffness: 180, damping: 22 }}
+            onAnimationComplete={() => handleBadgeArrived(badge.key)}
+            style={{ position: 'fixed', zIndex: 9999, pointerEvents: 'none' }}
+            className="text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full shadow-lg"
+          >
+            NEW GAME
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
       <div className="play-page">
         <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Play</h1>
         <p className="text-sm text-slate-500 mb-6">Test your RAF knowledge with training games.</p>
@@ -144,15 +287,25 @@ export default function Play() {
                   ${mode.available
                     ? 'border-slate-200 hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5'
                     : 'border-slate-100 opacity-60'
-                  }`}
+                  }${flashingCards.has(MODE_TO_UNLOCK_KEY[mode.key]) ? ' game-card--flash' : ''}`}
               >
+                {/* Padlock — top-right corner */}
+                <span className="absolute top-3 right-3 opacity-70">
+                  <PadlockIcon unlocked={isCardUnlocked(mode.key)} />
+                </span>
+
                 <span className="text-3xl shrink-0 group-hover:scale-110 transition-transform">{mode.emoji}</span>
-                <div className="min-w-0">
+                <div className="min-w-0 pr-4">
                   <div className="flex items-center gap-2 mb-0.5">
                     <p className="font-bold text-slate-800">{mode.title}</p>
                     {mode.badge && (
                       <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">
                         {mode.badge}
+                      </span>
+                    )}
+                    {newGames.has(MODE_TO_UNLOCK_KEY[mode.key]) && (
+                      <span className="text-[10px] font-bold bg-brand-100 text-brand-600 px-1.5 py-0.5 rounded-full">
+                        NEW
                       </span>
                     )}
                   </div>
@@ -300,22 +453,54 @@ export default function Play() {
               <div className="flex items-center gap-2">
                 <span className="text-lg">⚡</span>
                 <h2 className="font-bold text-slate-800">Flashcard Recall</h2>
+                {newGames.has('flashcard') && (
+                  <span className="text-[10px] font-bold bg-brand-100 text-brand-600 px-1.5 py-0.5 rounded-full">
+                    NEW
+                  </span>
+                )}
               </div>
-              <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Coming soon</span>
             </div>
             <div className="p-5">
-              <div className="space-y-2 mb-4">
-                {['ISTAR', 'QRA', 'COMAO'].map(kw => (
-                  <div key={kw} className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-50">
-                    <span className="text-base">⚡</span>
-                    <span className="text-sm font-semibold text-slate-600">{kw}</span>
-                    <span className="ml-auto text-xs text-slate-400">keyword</span>
-                  </div>
-                ))}
-              </div>
-              <button disabled className="w-full py-2.5 bg-slate-100 text-slate-400 font-bold rounded-xl text-sm cursor-not-allowed">
-                Start Drill
-              </button>
+              {!user ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-slate-500 mb-4">Sign in to run Flashcard drills and earn Aircoins.</p>
+                  <Link
+                    to="/login"
+                    className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-500 mb-4 leading-relaxed">
+                    Each card shows a brief's content with the title hidden. Type and select the correct title to score.
+                    {flashcardAvail !== null && (
+                      <span className="ml-1 font-semibold text-slate-700">{flashcardAvail} flashcard{flashcardAvail !== 1 ? 's' : ''} available.</span>
+                    )}
+                  </p>
+                  {flashcardAvail !== null && flashcardAvail < 5 ? (
+                    <div className="flex items-center gap-3 bg-amber-50 rounded-xl px-4 py-3 border border-amber-200 mb-3">
+                      <span className="text-base shrink-0">📖</span>
+                      <p className="text-sm text-amber-800 font-medium">
+                        Read at least 5 briefs to unlock Flashcard Round.
+                      </p>
+                    </div>
+                  ) : null}
+                  <button
+                    onClick={() => setShowFlashcard(true)}
+                    disabled={flashcardAvail !== null && flashcardAvail < 5}
+                    data-testid="flashcard-launch-btn"
+                    className="w-full py-2.5 font-extrabold rounded-xl text-sm transition-all"
+                    style={flashcardAvail !== null && flashcardAvail < 5
+                      ? { background: '#f1f5f9', color: '#94a3b8', cursor: 'not-allowed' }
+                      : { background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#0f172a', cursor: 'pointer' }
+                    }
+                  >
+                    {flashcardAvail !== null && flashcardAvail < 5 ? 'Read more briefs to unlock' : 'Start Drill ⚡'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -376,7 +561,8 @@ export default function Play() {
                   {booBriefs.map((brief, i) => {
                     const state = brief.booState
 
-                    if (state === 'needs-aircraft-reads') {
+                    if (state.startsWith('needs-') && state.endsWith('-reads')) {
+                      const readsLabel = NEEDS_READS_LABELS[state] ?? 'Read more briefs'
                       return (
                         <motion.div
                           key={brief._id}
@@ -392,7 +578,7 @@ export default function Play() {
                               <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
                               <p className="text-xs text-slate-400">{brief.category}</p>
                             </div>
-                            <span className="text-xs text-slate-400 shrink-0">Read more Aircrafts</span>
+                            <span className="text-xs text-slate-400 shrink-0">{readsLabel}</span>
                           </div>
                         </motion.div>
                       )

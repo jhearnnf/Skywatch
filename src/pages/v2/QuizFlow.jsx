@@ -9,6 +9,7 @@ import { requiredTier, isFreeUser, isCategoryLocked } from '../../utils/subscrip
 import { CATEGORY_ICONS } from '../../data/mockData'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { playSound } from '../../utils/sound'
+import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 
 // ── Single question card ──────────────────────────────────────────────────
 function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, selectedAnswerId }) {
@@ -251,6 +252,7 @@ export default function QuizFlow() {
   const { briefId }      = useParams()
   const navigate         = useNavigate()
   const { user, API, awardAircoins } = useAuth()
+  const { applyUnlocks } = useNewGameUnlock()
   const { start }        = useAppTutorial()
 
   const { settings }                 = useAppSettings()
@@ -415,6 +417,9 @@ export default function QuizFlow() {
                 rankPromotion: data.data?.rankPromotion ?? null,
               })
             }
+          }
+          if (data.data?.gameUnlocksGranted?.length) {
+            applyUnlocks(data.data.gameUnlocksGranted)
           }
         } catch {}
       }

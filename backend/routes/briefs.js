@@ -227,6 +227,31 @@ router.get('/random-unlocked', optionalAuth, async (req, res) => {
   }
 });
 
+// GET /api/briefs/random-in-progress — returns one random started-but-not-completed brief for the current user
+router.get('/random-in-progress', protect, async (req, res) => {
+  try {
+    const reads = await IntelligenceBriefRead.find({ userId: req.user._id, completed: false })
+      .populate('intelBriefId', 'title category _id')
+      .lean();
+
+    const valid = reads.filter(r => r.intelBriefId);
+    if (!valid.length) return res.json({ status: 'success', data: null });
+
+    const pick = valid[Math.floor(Math.random() * valid.length)];
+    res.json({
+      status: 'success',
+      data: {
+        briefId:        pick.intelBriefId._id,
+        title:          pick.intelBriefId.title,
+        category:       pick.intelBriefId.category,
+        currentSection: pick.currentSection ?? 0,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/briefs/unread-categories — categories with ≥1 unread brief for the current user
 router.get('/unread-categories', optionalAuth, async (req, res) => {
   try {
@@ -278,14 +303,19 @@ router.get('/history', protect, async (req, res) => {
     const limit = Math.min(50, parseInt(req.query.limit) || 30);
     const skip  = (page - 1) * limit;
 
-    const baseMatch = { userId: req.user._id, completed: true };
+    const flashcard = req.query.flashcard === '1';
+    const baseMatch = flashcard
+      ? { userId: req.user._id, reachedFlashcard: true }
+      : { userId: req.user._id, completed: true };
+
+    const populateFields = flashcard ? 'title category descriptionSections' : 'title category';
 
     const [records, total, avgResult] = await Promise.all([
       IntelligenceBriefRead.find(baseMatch)
         .sort({ lastReadAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('intelBriefId', 'title category')
+        .populate('intelBriefId', populateFields)
         .lean(),
       IntelligenceBriefRead.countDocuments(baseMatch),
       IntelligenceBriefRead.aggregate([
@@ -296,15 +326,22 @@ router.get('/history', protect, async (req, res) => {
 
     const avgTimeSeconds = avgResult[0]?.avg ? Math.round(avgResult[0].avg) : 0;
 
-    const reads = records.map(r => ({
-      _id:              r._id,
-      briefId:          r.intelBriefId?._id ?? null,
-      title:            r.intelBriefId?.title    ?? 'Unknown Brief',
-      category:         r.intelBriefId?.category ?? '',
-      timeSpentSeconds: r.timeSpentSeconds,
-      firstReadAt:      r.firstReadAt,
-      lastReadAt:       r.lastReadAt,
-    }));
+    const reads = records.map(r => {
+      const base = {
+        _id:              r._id,
+        briefId:          r.intelBriefId?._id ?? null,
+        title:            r.intelBriefId?.title    ?? 'Unknown Brief',
+        category:         r.intelBriefId?.category ?? '',
+        timeSpentSeconds: r.timeSpentSeconds,
+        firstReadAt:      r.firstReadAt,
+        lastReadAt:       r.lastReadAt,
+      };
+      if (flashcard) {
+        const sections = r.intelBriefId?.descriptionSections ?? [];
+        base.flashcardQuestion = sections[3] ?? null;
+      }
+      return base;
+    });
 
     res.json({ status: 'success', data: { reads, total, avgTimeSeconds } });
   } catch (err) {
@@ -358,6 +395,41 @@ async function scanMentionedBriefs(brief) {
   }
   return results;
 }
+
+// GET /api/briefs/pathway/:category — briefs with a priorityNumber set, sorted ascending, with isRead flag.
+router.get('/pathway/:category', optionalAuth, async (req, res) => {
+  try {
+    const { category } = req.params;
+    const briefs = await IntelligenceBrief.find(
+      { category, priorityNumber: { $ne: null } },
+      '_id title subtitle status priorityNumber category subcategory'
+    )
+      .sort({ priorityNumber: 1 })
+      .lean();
+
+    let readSet = new Set();
+    if (req.user) {
+      const readRecs = await IntelligenceBriefRead.find({ userId: req.user._id, completed: true })
+        .select('intelBriefId').lean();
+      readSet = new Set(readRecs.map(r => r.intelBriefId.toString()));
+    }
+
+    const data = briefs.map(b => ({
+      _id:            b._id,
+      title:          b.title,
+      subtitle:       b.subtitle,
+      status:         b.status,
+      priorityNumber: b.priorityNumber,
+      category:       b.category,
+      subcategory:    b.subcategory,
+      isRead:         readSet.has(b._id.toString()),
+    }));
+
+    res.json({ status: 'success', data: { briefs: data, totalCount: data.length } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 // GET /api/briefs/:id — single brief. Works for guests (no readRecord) and authenticated users.
 router.get('/:id', optionalAuth, async (req, res) => {
@@ -511,8 +583,33 @@ router.post('/:id/complete', protect, async (req, res) => {
       // (This is a server-side complement to the client-side localStorage flag)
     }
 
-    // Always mark completed (handles re-reads where coins were already awarded)
-    await IntelligenceBriefRead.findByIdAndUpdate(readRecord._id, { completed: true });
+    // Always mark completed and reset section position (handles re-reads where coins were already awarded)
+    await IntelligenceBriefRead.findByIdAndUpdate(readRecord._id, { completed: true, currentSection: 0 });
+
+    // ── Game unlock detection (only on first completion) ─────────────────────
+    const gameUnlocksGranted = [];
+    if (!readRecord.coinsAwarded) {
+      // Quiz: unlocks on first brief ever completed
+      if (!req.user.gameUnlocks?.quiz?.unlockedAt) {
+        await User.findByIdAndUpdate(req.user._id, { 'gameUnlocks.quiz.unlockedAt': new Date() });
+        gameUnlocksGranted.push('quiz');
+      }
+      // WTA: unlocks when user first reaches 2+ Aircraft reads AND 2+ Bases reads
+      if (!req.user.gameUnlocks?.wta?.unlockedAt) {
+        const [aircraftIds, baseIds] = await Promise.all([
+          IntelligenceBrief.distinct('_id', { category: 'Aircrafts', status: 'published' }),
+          IntelligenceBrief.distinct('_id', { category: 'Bases',     status: 'published' }),
+        ]);
+        const [ac, ba] = await Promise.all([
+          IntelligenceBriefRead.countDocuments({ userId: req.user._id, completed: true, intelBriefId: { $in: aircraftIds } }),
+          IntelligenceBriefRead.countDocuments({ userId: req.user._id, completed: true, intelBriefId: { $in: baseIds   } }),
+        ]);
+        if (ac >= 2 && ba >= 2) {
+          await User.findByIdAndUpdate(req.user._id, { 'gameUnlocks.wta.unlockedAt': new Date() });
+          gameUnlocksGranted.push('wta');
+        }
+      }
+    }
 
     // Re-fetch lastStreakDate so the client can derive missionDone without localStorage
     const freshUser = await User.findById(req.user._id).select('lastStreakDate');
@@ -522,11 +619,12 @@ router.post('/:id/complete', protect, async (req, res) => {
       data: {
         aircoinsEarned,
         dailyCoinsEarned,
-        loginStreak:     updatedLoginStreak,
-        lastStreakDate:  freshUser?.lastStreakDate ?? null,
+        loginStreak:        updatedLoginStreak,
+        lastStreakDate:     freshUser?.lastStreakDate ?? null,
         newTotalAircoins,
         newCycleAircoins,
         rankPromotion,
+        gameUnlocksGranted,
       },
     });
   } catch (err) {
@@ -534,16 +632,18 @@ router.post('/:id/complete', protect, async (req, res) => {
   }
 });
 
-// PATCH /api/briefs/:id/time — update time spent reading
+// PATCH /api/briefs/:id/time — update time spent reading and persist current section position
 router.patch('/:id/time', protect, async (req, res) => {
   try {
-    const { seconds } = req.body;
+    const { seconds, currentSection } = req.body;
     const brief = await IntelligenceBrief.findById(req.params.id).select('status');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
     if (brief.status === 'stub') return res.status(400).json({ message: 'Brief is not yet available' });
+    const update = { $inc: { timeSpentSeconds: seconds }, $set: { lastReadAt: new Date() } };
+    if (typeof currentSection === 'number') update.$set.currentSection = currentSection;
     await IntelligenceBriefRead.findOneAndUpdate(
       { userId: req.user._id, intelBriefId: req.params.id },
-      { $inc: { timeSpentSeconds: seconds }, lastReadAt: new Date() }
+      update
     );
     res.json({ status: 'success' });
   } catch (err) {
@@ -605,6 +705,46 @@ router.post('/:id/mnemonic-viewed', protect, async (req, res) => {
       { upsert: true }
     );
     res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/briefs/:id/reached-flashcard
+// Idempotent — marks that the user has reached section 4 of this brief.
+// Returns wasNew: true only the first time (drives the deck notification on the client).
+router.post('/:id/reached-flashcard', protect, async (req, res) => {
+  try {
+    const existing = await IntelligenceBriefRead.findOne({
+      userId: req.user._id,
+      intelBriefId: req.params.id,
+    });
+
+    // Already flagged (via flashcard reach or full completion) — nothing to do
+    if (existing?.reachedFlashcard || existing?.completed) {
+      return res.json({ status: 'success', wasNew: false });
+    }
+
+    await IntelligenceBriefRead.findOneAndUpdate(
+      { userId: req.user._id, intelBriefId: req.params.id },
+      { $set: { reachedFlashcard: true } },
+      { upsert: true }
+    );
+
+    const validBriefIds = await IntelligenceBrief.distinct('_id', { status: 'published' });
+    const flashcardCount = await IntelligenceBriefRead.countDocuments({
+      userId:       req.user._id,
+      intelBriefId: { $in: validBriefIds },
+      $or: [{ completed: true }, { reachedFlashcard: true }],
+    });
+
+    const gameUnlocksGranted = [];
+    if (flashcardCount >= 5 && !req.user.gameUnlocks?.flashcard?.unlockedAt) {
+      await User.findByIdAndUpdate(req.user._id, { 'gameUnlocks.flashcard.unlockedAt': new Date() });
+      gameUnlocksGranted.push('flashcard');
+    }
+
+    res.json({ status: 'success', wasNew: true, flashcardCount, gameUnlocksGranted });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

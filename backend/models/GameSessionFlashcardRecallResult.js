@@ -12,9 +12,11 @@ const gameSessionFlashcardRecallResultSchema = new mongoose.Schema({
   gameId:        { type: mongoose.Schema.Types.ObjectId, ref: 'GameFlashcardRecall', required: true },
   gameSessionId: { type: String, required: true },
 
-  cardResults:   [cardResultSchema],
+  cardResults:    [cardResultSchema],
   aircoinsEarned: { type: Number, default: 0 },
-  createdAt:     { type: Date, default: Date.now },
+  abandoned:      { type: Boolean, default: false },
+  cardsAnswered:  { type: Number, default: 0 },
+  createdAt:      { type: Date, default: Date.now },
 });
 
 module.exports = mongoose.model('GameSessionFlashcardRecallResult', gameSessionFlashcardRecallResultSchema);

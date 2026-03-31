@@ -12,6 +12,8 @@ const Ctx = createContext(null)
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 // ── Tutorial default definitions ───────────────────────────────────────────
+// Single source of truth for all tutorial keys.
+// When adding a new tutorial: add it here AND add the field to backend/models/User.js tutorials schema.
 export const TUTORIAL_STEPS = {
   home: [
     { emoji: '👋', title: 'Welcome to SkyWatch!',
@@ -89,7 +91,24 @@ export const TUTORIAL_STEPS = {
     { emoji: '⭐', title: 'Earn Aircoins',
       body: 'Correct identification earns coins. A correct base selection earns more. Complete both rounds successfully for a full mission bonus. The more you read, the more missions become available!' },
   ],
+  'learn-priority': [
+    { emoji: '🗺️', title: 'Welcome to the Pathway',
+      body: 'This is your guided learning path. Follow the stepping stones in order to build your RAF knowledge systematically — arranged from the most essential topics first.' },
+    { emoji: '🪨', title: 'Stepping Stones',
+      body: 'Each stone represents an Intel Brief. Tap it to open and read it. Completed stones are marked with a tick — work through them in order for the best results.' },
+    { emoji: '🔓', title: 'Unlock More Paths',
+      body: 'Level up to unlock new learning pathways covering Aircrafts, Ranks, Squadrons, and more. Some pathways also require a Silver or Gold subscription.' },
+  ],
+  pathway_swipe: [
+    { emoji: '🎉', title: 'New Pathway Unlocked!',
+      body: 'You\'ve unlocked a new learning pathway. You now have multiple subjects to explore on your journey to RAF selection.' },
+    { emoji: '👆', title: 'Switch Pathways',
+      body: 'Swipe left or right anywhere on the pathway to switch between your unlocked subjects. Each pathway has its own colour and stepping stones.' },
+  ],
 }
+
+// Derived key list — import this anywhere that needs to know all tutorial names.
+export const TUTORIAL_KEYS = Object.keys(TUTORIAL_STEPS)
 
 // Apply admin-configured overrides to the default steps.
 // tutorialContent shape: { 'home_0': { title, body }, 'learn_2': { body }, ... }
@@ -104,6 +123,7 @@ function applyOverrides(steps, tutorialContent) {
         ...step,
         ...(override.title?.trim() ? { title: override.title } : {}),
         ...(override.body?.trim()  ? { body:  override.body  } : {}),
+        ...(override.emoji?.trim() ? { emoji: override.emoji } : {}),
       }
     })
   }
@@ -137,7 +157,7 @@ export function AppTutorialProvider({ children }) {
     const clearedAt    = localStorage.getItem(clearedAtKey)
     const resetAt      = new Date(user.tutorialsResetAt).getTime()
     if (!clearedAt || resetAt > Number(clearedAt)) {
-      ;[...Object.keys(TUTORIAL_STEPS), 'swipe'].forEach(name => {
+      ;[...Object.keys(TUTORIAL_STEPS)].forEach(name => {
         localStorage.removeItem(`sw_tut_v2_${user._id}_${name}`)
         localStorage.removeItem(`sw_tut_v2_anon_${name}`)
       })

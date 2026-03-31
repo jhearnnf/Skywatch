@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { invalidateSoundSettings } from '../../utils/sound'
-import { TUTORIAL_STEPS, useAppTutorial } from '../../context/AppTutorialContext'
+import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../../context/AppTutorialContext'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -31,6 +31,35 @@ function fmtSeconds(s) {
 const ALL_CATEGORIES = [
   'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
+]
+
+// RAF rank names indexed by rank number (1–19)
+const RAF_RANKS = [
+  { n: 1,  name: 'Aircraftman',                   abbr: 'AC'    },
+  { n: 2,  name: 'Leading Aircraftman',            abbr: 'LAC'   },
+  { n: 3,  name: 'Senior Aircraftman',             abbr: 'SAC'   },
+  { n: 4,  name: 'Corporal',                       abbr: 'Cpl'   },
+  { n: 5,  name: 'Sergeant',                       abbr: 'Sgt'   },
+  { n: 6,  name: 'Chief Technician',               abbr: 'Chf Tech' },
+  { n: 7,  name: 'Flight Sergeant',                abbr: 'FS'    },
+  { n: 8,  name: 'Warrant Officer',                abbr: 'WO'    },
+  { n: 9,  name: 'Pilot Officer',                  abbr: 'PO'    },
+  { n: 10, name: 'Flying Officer',                 abbr: 'FO'    },
+  { n: 11, name: 'Flight Lieutenant',              abbr: 'Flt Lt' },
+  { n: 12, name: 'Squadron Leader',                abbr: 'Sqn Ldr' },
+  { n: 13, name: 'Wing Commander',                 abbr: 'Wg Cdr' },
+  { n: 14, name: 'Group Captain',                  abbr: 'Gp Capt' },
+  { n: 15, name: 'Air Commodore',                  abbr: 'Air Cdre' },
+  { n: 16, name: 'Air Vice-Marshal',               abbr: 'AVM'   },
+  { n: 17, name: 'Air Marshal',                    abbr: 'AM'    },
+  { n: 18, name: 'Air Chief Marshal',              abbr: 'ACM'   },
+  { n: 19, name: 'Marshal of the Royal Air Force', abbr: 'MRAF'  },
+]
+
+// Pathway categories that can appear in the Learn Pathway page (ordered by default progression)
+const PATHWAY_CATEGORIES = [
+  'Bases', 'Terminology', 'Aircrafts', 'Heritage', 'Ranks', 'Squadrons', 'Allies',
+  'Training', 'AOR', 'Roles', 'Tech', 'Threats', 'Missions', 'Treaties',
 ]
 
 
@@ -215,6 +244,21 @@ function StatsTab({ API }) {
       </section>
 
 
+      {/* Flashcard Recall */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Flashcard Recall</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Sessions"    value={fmtNum(games.flashcard?.sessions)}                                                                        color="brand" />
+          <StatCard label="Cards Total" value={fmtNum(games.flashcard?.totalCards)}                                                                      color="slate" />
+          <StatCard label="Recalled"    value={pct(games.flashcard?.recalled, games.flashcard?.totalCards)}                                              color="emerald" />
+          <StatCard label="Missed"      value={pct((games.flashcard?.totalCards ?? 0) - (games.flashcard?.recalled ?? 0), games.flashcard?.totalCards)}  color="red" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="Time Played" value={fmtSeconds(games.flashcard?.totalSeconds)} color="slate" />
+          <StatCard label="Abandoned"   value={fmtNum(games.flashcard?.abandoned)}        color="red" />
+        </div>
+      </section>
+
       {/* Aircoins + Briefs + Tutorials */}
       <section>
         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Economy & Content</h3>
@@ -269,6 +313,14 @@ const SOUND_GROUPS = [
       { key: 'volumeQuizAnswerIncorrect', enabledKey: 'soundEnabledQuizAnswerIncorrect', label: 'Answer Incorrect', sound: 'quiz_answer_incorrect' },
       { key: 'volumeQuizCompleteWin',  enabledKey: 'soundEnabledQuizCompleteWin',  label: 'Quiz Won',  sound: 'quiz_complete_win'  },
       { key: 'volumeQuizCompleteLose', enabledKey: 'soundEnabledQuizCompleteLose', label: 'Quiz Fail', sound: 'quiz_complete_lose' },
+    ],
+  },
+  {
+    title: 'Flashcard Recall',
+    sounds: [
+      { key: 'volumeFlashcardStart',     enabledKey: 'soundEnabledFlashcardStart',     label: 'Drill Start',       sound: 'flashcard_start'     },
+      { key: 'volumeFlashcardCorrect',   enabledKey: 'soundEnabledFlashcardCorrect',   label: 'Correct Answer',    sound: 'flashcard_correct'   },
+      { key: 'volumeFlashcardIncorrect', enabledKey: 'soundEnabledFlashcardIncorrect', label: 'Incorrect Answer',  sound: 'flashcard_incorrect' },
     ],
   },
   {
@@ -867,24 +919,24 @@ function AiPromptsSection({ API }) {
   if (!prompts) return null
 
   return (
-    <div className="rounded-2xl overflow-hidden mb-4 border-2" style={{ background: '#fff5f5', borderColor: '#fca5a5' }}>
+    <div className="rounded-2xl overflow-hidden mb-4 border-2" style={{ background: '#160808', borderColor: '#5a1a1a' }}>
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full px-5 py-4 border-b flex items-center justify-between text-left"
-        style={{ borderColor: '#fca5a5', background: '#fee2e2' }}
+        style={{ borderColor: '#5a1a1a', background: '#200c0c' }}
       >
         <div className="flex items-center gap-2">
-          <span style={{ color: '#b91c1c', fontSize: 16 }}>⚠</span>
+          <span style={{ color: '#f87171', fontSize: 16 }}>⚠</span>
           <div>
-            <h3 className="font-bold" style={{ color: '#7f1d1d' }}>AI Prompts</h3>
-            <p className="text-xs mt-0.5" style={{ color: '#b91c1c', opacity: 0.75 }}>Leave a field blank or click Restore to use the hardcoded default</p>
+            <h3 className="font-bold" style={{ color: '#fca5a5' }}>AI Prompts</h3>
+            <p className="text-xs mt-0.5" style={{ color: '#f87171', opacity: 0.75 }}>Leave a field blank or click Restore to use the hardcoded default</p>
           </div>
-          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full self-start mt-0.5" style={{ background: '#fca5a5', color: '#7f1d1d' }}>Critical</span>
+          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full self-start mt-0.5" style={{ background: '#3d1010', color: '#fca5a5' }}>Critical</span>
         </div>
         <div className="flex items-center gap-3">
           {dirtyCount > 0 && (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#2d2000', color: '#fbbf24', border: '1px solid #7a4a00' }}>
               {dirtyCount} unsaved
             </span>
           )}
@@ -893,12 +945,12 @@ function AiPromptsSection({ API }) {
               onClick={e => { e.stopPropagation(); saveAll() }}
               disabled={saving || dirtyCount === 0}
               className="px-5 py-2 text-white text-sm font-bold rounded-xl transition-opacity disabled:opacity-40"
-              style={{ background: '#b91c1c' }}
+              style={{ background: '#991b1b' }}
             >
               {saving ? 'Saving…' : 'Save All'}
             </button>
           )}
-          <span className="text-xs" style={{ color: '#b91c1c', opacity: 0.6 }}>{open ? '▲' : '▼'}</span>
+          <span className="text-xs" style={{ color: '#f87171', opacity: 0.6 }}>{open ? '▲' : '▼'}</span>
         </div>
       </button>
 
@@ -911,13 +963,13 @@ function AiPromptsSection({ API }) {
                 <button
                   onClick={() => setOpenGroup(isOpen ? null : group)}
                   className="w-full flex items-center justify-between py-2 text-left border-b"
-                  style={{ borderColor: '#fca5a5' }}
+                  style={{ borderColor: '#3d1010' }}
                 >
-                  <span className="text-sm font-bold" style={{ color: '#7f1d1d' }}>{group}</span>
-                  <span className="text-xs" style={{ color: '#b91c1c', opacity: 0.6 }}>{isOpen ? '▲ collapse' : `${items.length} prompts ▼`}</span>
+                  <span className="text-sm font-bold" style={{ color: '#fca5a5' }}>{group}</span>
+                  <span className="text-xs" style={{ color: '#f87171', opacity: 0.6 }}>{isOpen ? '▲ collapse' : `${items.length} prompts ▼`}</span>
                 </button>
               ) : (
-                <p className="text-sm font-bold border-b pb-2" style={{ color: '#7f1d1d', borderColor: '#fca5a5' }}>{group}</p>
+                <p className="text-sm font-bold border-b pb-2" style={{ color: '#fca5a5', borderColor: '#3d1010' }}>{group}</p>
               )}
               {(!accordion || isOpen) && (
                 <div className="mt-3 space-y-4">
@@ -927,15 +979,15 @@ function AiPromptsSection({ API }) {
                     return (
                       <div key={key}>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs font-semibold" style={{ color: '#991b1b' }}>
+                          <label className="text-xs font-semibold" style={{ color: '#f87171' }}>
                             {label}
-                            {isDirty && <span className="ml-2 font-bold" style={{ color: '#d97706' }}>●</span>}
+                            {isDirty && <span className="ml-2 font-bold" style={{ color: '#fbbf24' }}>●</span>}
                           </label>
                           {!isDefault && (
                             <button
                               onClick={() => restoreDefault(key)}
                               className="text-[11px] transition-colors"
-                              style={{ color: '#b91c1c', opacity: 0.65 }}
+                              style={{ color: '#f87171', opacity: 0.65 }}
                             >
                               Restore default
                             </button>
@@ -946,7 +998,7 @@ function AiPromptsSection({ API }) {
                           onChange={e => onChange(key, e.target.value)}
                           rows={4}
                           className="w-full rounded-lg px-3 py-2 text-xs font-mono outline-none resize-y"
-                          style={{ border: '1px solid #fca5a5', background: '#fff', color: '#1e293b' }}
+                          style={{ border: '1px solid #3d1010', background: '#0f0505', color: '#ddeaf8' }}
                         />
                       </div>
                     )
@@ -1022,6 +1074,14 @@ function SettingsTab({ API }) {
   }
 
   const set = (key, val) => setDraft(p => ({ ...p, [key]: val }))
+  const setPathwayUnlock = (category, field, value) => setDraft(p => {
+    const current = p.pathwayUnlocks ?? []
+    const exists  = current.some(u => u.category === category)
+    const updated = exists
+      ? current.map(u => u.category === category ? { ...u, [field]: value } : u)
+      : [...current, { category, levelRequired: 1, rankRequired: 1, tierRequired: 'free', [field]: value }]
+    return { ...p, pathwayUnlocks: updated }
+  })
   const toggleCat = (key, cat) => setDraft(p => {
     const cats = p[key] ?? []
     return { ...p, [key]: cats.includes(cat) ? cats.filter(c => c !== cat) : [...cats, cat] }
@@ -1068,12 +1128,74 @@ function SettingsTab({ API }) {
         </div>
       </Section>
 
+      {/* ── Pathway Unlock Requirements ──────────────────────── */}
+      <Section title="Pathway Unlock Requirements" collapsible onSave={() => save('Update Pathway Unlock Requirements', ['pathwayUnlocks'])}>
+        <p className="text-xs text-slate-400 mb-3">
+          Each pathway unlocks when <strong>all three conditions</strong> are met: Agent Level, RAF Rank, and Subscription Tier.
+          Set Level 1 / Rank 1 / Free to make a pathway always available.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Category</th>
+                <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Level Required</th>
+                <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Rank Required</th>
+                <th className="text-left py-2 text-xs font-bold text-slate-400 uppercase tracking-wide">Tier Required</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PATHWAY_CATEGORIES.map(cat => {
+                const unlock = (draft.pathwayUnlocks ?? []).find(u => u.category === cat) ?? { levelRequired: 1, rankRequired: 1, tierRequired: 'free' }
+                return (
+                  <tr key={cat} className="border-b border-slate-50 last:border-0">
+                    <td className="py-2.5 pr-3 font-semibold text-slate-700 whitespace-nowrap">{cat}</td>
+                    <td className="py-2.5 pr-3">
+                      <input
+                        type="number" min={1} max={10}
+                        value={unlock.levelRequired ?? 1}
+                        onChange={e => setPathwayUnlock(cat, 'levelRequired', Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))}
+                        className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-sm text-center focus:outline-none focus:border-brand-400"
+                      />
+                      <span className="ml-1.5 text-xs text-slate-400">/ 10</span>
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <select
+                        value={unlock.rankRequired ?? 1}
+                        onChange={e => setPathwayUnlock(cat, 'rankRequired', parseInt(e.target.value))}
+                        className="border border-slate-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-brand-400 max-w-[160px]"
+                      >
+                        {RAF_RANKS.map(r => (
+                          <option key={r.n} value={r.n}>{r.n}. {r.abbr} — {r.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="py-2.5">
+                      <select
+                        value={unlock.tierRequired ?? 'free'}
+                        onChange={e => setPathwayUnlock(cat, 'tierRequired', e.target.value)}
+                        className="border border-slate-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-brand-400"
+                      >
+                        <option value="free">Free</option>
+                        <option value="silver">Silver</option>
+                        <option value="gold">Gold</option>
+                      </select>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
       {/* ── Aircoins ─────────────────────────────────────────── */}
       <Section title="Aircoins" collapsible onSave={() => save('Update Aircoin Options', [
         'aircoinsPerWinEasy', 'aircoinsPerWinMedium', 'aircoinsPerBriefRead',
         'aircoinsFirstLogin', 'aircoinsStreakBonus', 'aircoins100Percent',
         'aircoinsOrderOfBattleEasy', 'aircoinsOrderOfBattleMedium',
         'aircoinsWhereAircraftRound1', 'aircoinsWhereAircraftRound2', 'aircoinsWhereAircraftBonus',
+        'aircoinsFlashcardPerCard', 'aircoinsFlashcardPerfectBonus',
       ])}>
         <NumInput label="Per correct answer — Easy quiz"   value={draft.aircoinsPerWinEasy}          onChange={v => set('aircoinsPerWinEasy', v)} />
         <NumInput label="Per correct answer — Medium quiz" value={draft.aircoinsPerWinMedium}        onChange={v => set('aircoinsPerWinMedium', v)} />
@@ -1083,9 +1205,11 @@ function SettingsTab({ API }) {
         <NumInput label="Streak login bonus"               value={draft.aircoinsStreakBonus}         onChange={v => set('aircoinsStreakBonus', v)} />
         <NumInput label="Battle of Order — Easy win"       value={draft.aircoinsOrderOfBattleEasy}   onChange={v => set('aircoinsOrderOfBattleEasy', v)} />
         <NumInput label="Battle of Order — Medium win"     value={draft.aircoinsOrderOfBattleMedium} onChange={v => set('aircoinsOrderOfBattleMedium', v)} />
-        <NumInput label="Where's That Aircraft — Round 1 correct" value={draft.aircoinsWhereAircraftRound1 ?? 5}  onChange={v => set('aircoinsWhereAircraftRound1', v)} />
-        <NumInput label="Where's That Aircraft — Round 2 correct" value={draft.aircoinsWhereAircraftRound2 ?? 10} onChange={v => set('aircoinsWhereAircraftRound2', v)} />
-        <NumInput label="Where's That Aircraft — Full mission bonus" value={draft.aircoinsWhereAircraftBonus ?? 5}  onChange={v => set('aircoinsWhereAircraftBonus', v)} />
+        <NumInput label="Where's That Aircraft — Round 1 correct"    value={draft.aircoinsWhereAircraftRound1 ?? 5}       onChange={v => set('aircoinsWhereAircraftRound1', v)} />
+        <NumInput label="Where's That Aircraft — Round 2 correct"    value={draft.aircoinsWhereAircraftRound2 ?? 10}      onChange={v => set('aircoinsWhereAircraftRound2', v)} />
+        <NumInput label="Where's That Aircraft — Full mission bonus"  value={draft.aircoinsWhereAircraftBonus ?? 5}        onChange={v => set('aircoinsWhereAircraftBonus', v)} />
+        <NumInput label="Flashcard — per correct answer"              value={draft.aircoinsFlashcardPerCard ?? 2}          onChange={v => set('aircoinsFlashcardPerCard', v)} />
+        <NumInput label="Flashcard — 100% bonus"                     value={draft.aircoinsFlashcardPerfectBonus ?? 5}     onChange={v => set('aircoinsFlashcardPerfectBonus', v)} />
       </Section>
 
       {/* ── Game ────────────────────────────────────────────── */}
@@ -1437,7 +1561,7 @@ function UsersTab({ API }) {
                   {
                     label:   'Tutorials',
                     fields:  ['tutorials'],
-                    isReset: !['home','learn','briefReader','quiz','play','profile','rankings','wheres_aircraft'].some(
+                    isReset: !TUTORIAL_KEYS.some(
                       k => u.tutorials?.[k] === 'viewed' || u.tutorials?.[k] === 'skipped'
                     ),
                   },
@@ -1459,6 +1583,16 @@ function UsersTab({ API }) {
                     ↺ {label}
                   </button>
                 ))}
+                <button
+                  onClick={() => action(
+                    `Reset game badges — Agent ${u.agentNumber}`,
+                    `/api/admin/users/${u._id}/reset-game-badges`,
+                    'POST',
+                  )}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-purple-200 text-purple-700 hover:bg-purple-50 font-semibold transition-colors"
+                >
+                  ↺ Game Badges
+                </button>
               </div>
             </div>
           </div>
@@ -1749,7 +1883,9 @@ const CR_DEFAULTS = {
 // Tutorial names in display order with friendly labels
 const TUTORIAL_META = [
   { key: 'home',           label: 'Home Page' },
-  { key: 'learn',          label: 'Learn Page' },
+  { key: 'learn-priority', label: 'Learn Pathway Page' },
+  { key: 'pathway_swipe',  label: 'Pathway Swipe (multi-pathway unlock)' },
+  { key: 'learn',          label: 'Learn Page (legacy)' },
   { key: 'briefReader',    label: 'Brief Reader' },
   { key: 'quiz',           label: 'Quiz' },
   { key: 'play',           label: 'Play Hub' },
@@ -1785,8 +1921,8 @@ function ContentTab({ API }) {
             const steps = TUTORIAL_STEPS[tutKey] ?? []
             steps.forEach((step, i) => {
               const k = `${tutKey}_${i}`
-              if (!tut[k]?.title && !tut[k]?.body) {
-                tut[k] = { title: step.title ?? '', body: step.body ?? '' }
+              if (!tut[k]?.title && !tut[k]?.body && !tut[k]?.emoji) {
+                tut[k] = { title: step.title ?? '', body: step.body ?? '', emoji: step.emoji ?? '' }
               }
             })
           })
@@ -1922,8 +2058,8 @@ function ContentTab({ API }) {
 
       {/* ── Tutorials ─────────────────────────────────────────────── */}
       <CollapsibleBox
-        bodyStyle={{ border: '1px solid #e2e8f0', borderRadius: undefined }}
-        headerStyle={{ borderColor: '#f1f5f9', background: '#fff' }}
+        bodyStyle={{ border: '1px solid #172236', background: '#0c1829' }}
+        headerStyle={{ borderColor: '#172236', background: '#102040' }}
         headerContent={<>
           <h3 className="font-bold text-slate-800">Tutorials</h3>
           <p className="text-xs text-slate-400 ml-2">Leave a field blank to use the default text</p>
@@ -1948,12 +2084,24 @@ function ContentTab({ API }) {
                       const overrideKey = `${tutKey}_${idx}`
                       const override    = tutDraft[overrideKey] ?? {}
                       return (
-                        <div key={idx} className="bg-slate-50 rounded-xl p-3">
+                        <div key={idx} className="bg-slate-100 rounded-xl p-3">
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xl">{defaultStep.emoji}</span>
+                            <span className="text-xl">{override.emoji || defaultStep.emoji}</span>
                             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Step {idx + 1}</span>
                           </div>
                           <div className="space-y-2">
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">
+                                Emoji <span className="text-slate-300 font-normal">(default: "{defaultStep.emoji}")</span>
+                              </label>
+                              <input
+                                type="text"
+                                placeholder={defaultStep.emoji}
+                                value={override.emoji ?? ''}
+                                onChange={e => setTutField(tutKey, idx, 'emoji', e.target.value)}
+                                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 bg-surface-raised text-slate-800 placeholder:text-slate-500"
+                              />
+                            </div>
                             <div>
                               <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">
                                 Title <span className="text-slate-300 font-normal">(default: "{defaultStep.title}")</span>
@@ -1998,12 +2146,12 @@ function ContentTab({ API }) {
 
       {/* ── AI Content Generation ─────────────────────────────────── */}
       <CollapsibleBox
-        bodyStyle={{ background: '#fff5f5', borderColor: '#fca5a5' }}
-        headerStyle={{ borderColor: '#fca5a5', background: '#fee2e2', color: '#7f1d1d' }}
+        bodyStyle={{ background: '#160808', borderColor: '#5a1a1a' }}
+        headerStyle={{ borderColor: '#5a1a1a', background: '#200c0c' }}
         headerContent={<>
-          <span style={{ color: '#b91c1c', fontSize: 16 }}>⚠</span>
-          <h3 className="font-bold" style={{ color: '#7f1d1d' }}>AI Content Generation</h3>
-          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#fca5a5', color: '#7f1d1d' }}>Critical</span>
+          <span style={{ color: '#f87171', fontSize: 16 }}>⚠</span>
+          <h3 className="font-bold" style={{ color: '#fca5a5' }}>AI Content Generation</h3>
+          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#3d1010', color: '#fca5a5' }}>Critical</span>
         </>}
       >
         <div className="px-5 py-3">
@@ -2020,7 +2168,7 @@ function ContentTab({ API }) {
           <button
             onClick={() => save('Update AI Content Generation', ['aiKeywordsPerBrief'])}
             className="mt-1 px-5 py-2 text-white text-sm font-bold rounded-xl transition-colors"
-            style={{ background: '#b91c1c' }}
+            style={{ background: '#991b1b' }}
           >
             Save
           </button>
@@ -2171,6 +2319,7 @@ const BRIEF_SUBCATEGORIES = {
 
 const EMPTY_DRAFT = {
   title: '', nickname: '', subtitle: '', category: 'News', subcategory: '', historic: false,
+  priorityNumber: null,
   descriptionSections: ['', '', ''],
   keywords: [],
   sources: [],
@@ -2752,6 +2901,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       category:            br.category ?? 'News',
       subcategory:         br.subcategory ?? '',
       historic:            br.historic ?? false,
+      priorityNumber:      br.priorityNumber ?? null,
       descriptionSections: br.descriptionSections?.length ? br.descriptionSections : ['','',''],
       keywords:            br.keywords ?? [],
       sources:             br.sources ?? [],
@@ -3656,6 +3806,20 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 type="text"
                 value={draft.subtitle}
                 onChange={e => setDraft(p => ({ ...p, subtitle: e.target.value }))}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+              />
+            </div>
+            {/* Priority Number */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">
+                Pathway Priority <span className="font-normal text-slate-400">(optional — sets order in Learn Pathway; leave blank to exclude from pathway)</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={draft.priorityNumber ?? ''}
+                onChange={e => setDraft(p => ({ ...p, priorityNumber: e.target.value === '' ? null : parseInt(e.target.value) || null }))}
+                placeholder="e.g. 1 (first), 2 (second)…"
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
               />
             </div>

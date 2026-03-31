@@ -24,11 +24,26 @@ vi.mock('../../../components/UpgradePrompt',          () => ({ default: () => nu
 
 vi.mock('framer-motion', () => ({
   motion: {
-    div:    ({ children, className, onClick, style }) => <div className={className} onClick={onClick} style={style}>{children}</div>,
-    button: ({ children, className, onClick })        => <button className={className} onClick={onClick}>{children}</button>,
-    p:      ({ children, className })                 => <p className={className}>{children}</p>,
+    div: ({ children, className, style, onClick, onDragEnd, drag }) => {
+      if (drag === 'x' && onDragEnd) {
+        return (
+          <div className={className} style={style} onClick={onClick}>
+            {children}
+            <button data-testid="swipe-left"  onClick={() => onDragEnd(null, { offset: { x: -150, y: 0 }, velocity: { x: 0, y: 0 } })} />
+            <button data-testid="swipe-right" onClick={() => onDragEnd(null, { offset: { x:  150, y: 0 }, velocity: { x: 0, y: 0 } })} />
+          </div>
+        )
+      }
+      return <div className={className} style={style} onClick={onClick}>{children}</div>
+    },
+    button: ({ children, className, onClick }) => <button className={className} onClick={onClick}>{children}</button>,
+    p:      ({ children, className })          => <p className={className}>{children}</p>,
   },
-  AnimatePresence: ({ children }) => <>{children}</>,
+  AnimatePresence:      ({ children }) => <>{children}</>,
+  LayoutGroup:          ({ children }) => <>{children}</>,
+  useMotionValue:       () => ({ set: vi.fn(), get: () => 0 }),
+  useTransform:         () => 0,
+  useAnimationControls: () => ({ start: vi.fn() }),
 }))
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
@@ -168,14 +183,15 @@ describe('BriefReader — read time tracking', () => {
 
     render(<BriefReader />)
     await flush()
-    expect(screen.getByText('⭐ Complete Brief & Collect Aircoins')).toBeDefined()
+    // Brief loaded — swipe-left trigger is rendered inside SwipeCard
+    expect(screen.getByTestId('swipe-left')).toBeDefined()
 
     // Advance 5s to accumulate some time
     await act(async () => { vi.advanceTimersByTime(5_000) })
 
-    // Complete the brief — cleanup flushes remaining time, timer stops
+    // Complete the brief via swipe — cleanup flushes remaining time, timer stops
     await act(async () => {
-      fireEvent.click(screen.getByText('⭐ Complete Brief & Collect Aircoins'))
+      fireEvent.click(screen.getByTestId('swipe-left'))
     })
     await flush()
 

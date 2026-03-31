@@ -3,12 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
-import { useAppSettings } from '../../context/AppSettingsContext'
-import { isCategoryLocked, requiredTier } from '../../utils/subscription'
 import TutorialModal from '../../components/tutorial/TutorialModal'
-import LockedCategoryModal from '../../components/LockedCategoryModal'
 import WelcomeAgentFlow from '../../components/onboarding/WelcomeAgentFlow'
-import { CATEGORIES, CATEGORY_ICONS, MOCK_LEVELS } from '../../data/mockData'
+import FlashcardGameModal from '../../components/FlashcardGameModal'
+import { CATEGORY_ICONS, MOCK_LEVELS } from '../../data/mockData'
 
 function getLevelInfo(coins) {
   const levels = MOCK_LEVELS
@@ -45,81 +43,17 @@ function XPRing({ pct = 0, level = 1, size = 72 }) {
   )
 }
 
-// Category card
-function CategoryCard({ category, total = 0, done = 0, index = 0, locked = false, onLockedClick }) {
-  const icon     = CATEGORY_ICONS[category] ?? '📄'
-  const pct      = total > 0 ? Math.round((done / total) * 100) : 0
-  const complete = !locked && pct === 100
-
-  const inner = (
-    <>
-      {/* Icon + label row */}
-      <div className="flex items-start justify-between">
-        <span className={`text-3xl transition-transform ${!locked ? 'group-hover:scale-110' : ''}`}>{icon}</span>
-        {locked
-          ? <span className="text-xs bg-slate-200 text-slate-500 rounded-full px-1.5 py-0.5 font-bold leading-none">🔒</span>
-          : complete && <span className="text-emerald-600 text-xs font-bold bg-emerald-100 px-2 py-0.5 rounded-full">✓ Done</span>
-        }
-      </div>
-
-      <div>
-        <p className="font-bold text-slate-800 text-sm">{category}</p>
-        <p className="text-xs text-slate-400 mt-0.5">{total} briefs</p>
-      </div>
-
-      {/* Progress bar — only for logged-in users on unlocked categories */}
-      {!locked && total > 0 && (
-        <div>
-          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <motion.div
-              className={`h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-brand-500'}`}
-              initial={{ width: 0 }}
-              animate={{ width: `${pct}%` }}
-              transition={{ duration: 0.6, delay: index * 0.05 + 0.3 }}
-            />
-          </div>
-          <p className="text-[10px] text-slate-400 mt-1">{done}/{total} read</p>
-        </div>
-      )}
-    </>
-  )
-
-  const baseClass = `flex flex-col gap-3 rounded-2xl p-4 border transition-all card-shadow card-intel`
-  const stateClass = locked
-    ? 'border-slate-200 bg-surface opacity-60 cursor-not-allowed'
-    : complete
-      ? 'border-emerald-300 bg-emerald-50/40 hover:card-shadow-hover hover:-translate-y-0.5'
-      : 'bg-surface border-slate-200 hover:border-brand-400 hover:card-shadow-hover hover:-translate-y-0.5'
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-    >
-      {locked ? (
-        <button onClick={onLockedClick} className={`w-full text-left ${baseClass} ${stateClass} cursor-pointer opacity-60 hover:opacity-80`}>{inner}</button>
-      ) : (
-        <Link to={`/learn/${encodeURIComponent(category)}`} className={`group ${baseClass} ${stateClass}`}>
-          {inner}
-        </Link>
-      )}
-    </motion.div>
-  )
-}
 
 export default function Home() {
   const { user, API }  = useAuth()
   const { start }      = useAppTutorial()
-  const { settings }   = useAppSettings()
   const navigate       = useNavigate()
-  const [counts,       setCounts]       = useState({}) // { [category]: total } — all categories
-  const [stats,        setStats]        = useState({}) // { [category]: { total, done } } — logged-in only
-  const [missionDone,  setMissionDone]  = useState(false)
-  const [latestBriefs, setLatestBriefs] = useState([])
-  const [lockedModal,       setLockedModal]       = useState(null) // { category, tier }
+  const [missionDone,       setMissionDone]       = useState(false)
+  const [latestBriefs,      setLatestBriefs]      = useState([])
   const [showCROFlow,       setShowCROFlow]       = useState(false)
   const [missionLoading,    setMissionLoading]    = useState(false)
+  const [showFlashcard,     setShowFlashcard]     = useState(false)
+  const [jumpBackBrief,     setJumpBackBrief]     = useState(null)
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
 
   // Mission done if the user completed a brief today (server-authoritative via lastStreakDate)
@@ -142,26 +76,18 @@ export default function Home() {
     }
   }, [])
 
-  // Fetch total brief counts per category — available to all users including guests
+  // Fetch a random in-progress brief for "Jump Back In"
   useEffect(() => {
-    fetch(`${API}/api/briefs/category-counts`)
+    if (!user) { setJumpBackBrief(null); return }
+    fetch(`${API}/api/briefs/random-in-progress`, { credentials: 'include' })
       .then(r => r.json())
-      .then(data => { if (data.status === 'success') setCounts(data.data?.counts ?? {}) })
-      .catch(() => {})
-  }, [API])
-
-  // Fetch per-category read progress — logged-in users only
-  useEffect(() => {
-    if (!user) { setStats({}); return }
-    fetch(`${API}/api/briefs/category-stats`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(data => { if (data.status === 'success') setStats(data.data?.stats ?? {}) })
+      .then(d => setJumpBackBrief(d.data ?? null))
       .catch(() => {})
   }, [user, API])
 
-  // Fetch latest 4 briefs for "keep learning" strip — re-fetch on user change so isRead/isStarted resets after logout
+  // Fetch latest 4 News briefs — re-fetch on user change so isRead/isStarted resets after logout
   useEffect(() => {
-    fetch(`${API}/api/briefs?limit=4&status=published`, { credentials: 'include' })
+    fetch(`${API}/api/briefs?limit=4&status=published&category=News`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => setLatestBriefs(data.data?.briefs ?? []))
       .catch(() => {})
@@ -176,6 +102,7 @@ export default function Home() {
     <>
       <TutorialModal />
       {showCROFlow && <WelcomeAgentFlow onClose={() => setShowCROFlow(false)} />}
+      {showFlashcard && <FlashcardGameModal onClose={() => setShowFlashcard(false)} />}
 
       {/* Greeting + stats */}
       <div className="mb-6">
@@ -271,12 +198,58 @@ export default function Home() {
         )}
       </motion.div>
 
-      {/* Keep learning — latest briefs */}
+      {/* Jump Back In */}
+      {jumpBackBrief && (
+        <motion.div
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.25 }}
+          onClick={() => navigate(`/brief/${jumpBackBrief.briefId}`)}
+          className="rounded-2xl p-4 mb-6 flex items-center gap-3 border border-brand-300/40 transition-all cursor-pointer hover:border-brand-400/60 hover:-translate-y-0.5 card-shadow hover:card-shadow-hover"
+          style={{ background: 'linear-gradient(135deg, #0d1e35 0%, #091628 100%)' }}
+        >
+          <div className="w-10 h-10 rounded-xl bg-brand-200/60 flex items-center justify-center shrink-0 text-xl text-brand-600">
+            ◑
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="intel-mono text-brand-600 mb-0.5">Jump Back In</p>
+            <p className="text-sm font-bold text-white truncate">{jumpBackBrief.title}</p>
+            <p className="text-xs text-brand-700">{jumpBackBrief.category} · In Progress</p>
+          </div>
+          <span className="shrink-0 text-xs font-bold bg-brand-600 text-slate-900 px-3 py-1.5 rounded-xl">Resume →</span>
+        </motion.div>
+      )}
+
+      {/* Quick Actions */}
+      {user && (
+        <motion.div
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.3 }}
+          className="mb-6"
+        >
+          <h2 className="text-base font-bold text-slate-800 mb-3">Quick Actions</h2>
+          <button
+            onClick={() => setShowFlashcard(true)}
+            data-testid="home-flashcard-btn"
+            className="w-full flex items-center gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 cursor-pointer bg-amber-50 border-amber-200 hover:border-amber-400"
+          >
+            <span className="text-2xl">⚡</span>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-bold text-amber-900">Flashcard Round</p>
+              <p className="text-xs text-amber-600">Identify briefs from content alone — title hidden</p>
+            </div>
+            <span className="text-xs font-bold bg-amber-500 text-white px-3 py-1.5 rounded-xl shrink-0">Play →</span>
+          </button>
+        </motion.div>
+      )}
+
+      {/* Latest News */}
       {latestBriefs.length > 0 && (
         <div className="mb-6">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-800">Latest Briefs</h2>
-            <Link to="/learn" className="text-xs font-semibold text-brand-600 hover:text-brand-700">See all →</Link>
+            <h2 className="text-base font-bold text-slate-800">Latest News</h2>
+            <Link to="/learn/News" className="text-xs font-semibold text-brand-600 hover:text-brand-700">See all →</Link>
           </div>
           <div className="space-y-2">
             {latestBriefs.map((brief, i) => {
@@ -335,39 +308,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* Subject grid */}
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-bold text-slate-800">Subject Areas</h2>
-        <Link to="/learn" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-          Browse all →
-        </Link>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {CATEGORIES.map((cat, i) => {
-          const locked = isCategoryLocked(cat, user, settings)
-          return (
-            <CategoryCard
-              key={cat}
-              category={cat}
-              total={counts[cat] ?? stats[cat]?.total ?? 0}
-              done={stats[cat]?.done ?? 0}
-              index={i}
-              locked={locked}
-              onLockedClick={locked ? () => setLockedModal({ category: cat, tier: requiredTier(cat, settings) }) : undefined}
-            />
-          )
-        })}
-      </div>
-
-      {lockedModal && (
-        <LockedCategoryModal
-          category={lockedModal.category}
-          tier={lockedModal.tier}
-          user={user}
-          onClose={() => setLockedModal(null)}
-        />
-      )}
     </>
   )
 }
