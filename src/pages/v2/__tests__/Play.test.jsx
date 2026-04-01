@@ -15,7 +15,7 @@ vi.mock('../../../context/AuthContext', () => ({
 }))
 
 vi.mock('../../../context/AppTutorialContext', () => ({
-  useAppTutorial: () => ({ start: vi.fn() }),
+  useAppTutorial: () => ({ start: vi.fn(), hasSeen: vi.fn().mockReturnValue(false) }),
 }))
 
 vi.mock('../../../components/tutorial/TutorialModal', () => ({

@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
+import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 import { MOCK_LEVELS } from '../../data/mockData'
 
 function getLevelInfo(coins) {
@@ -40,6 +41,7 @@ export default function Sidebar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const { hasAnyNew } = useNewGameUnlock()
+  const { unsolvedCount } = useUnsolvedReports()
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
 
   return (
@@ -84,7 +86,12 @@ export default function Sidebar() {
               }`
             }
           >
-            <span className="text-lg w-6 text-center">⚙️</span>
+            <span className="relative text-lg w-6 text-center shrink-0">
+              ⚙️
+              {unsolvedCount > 0 && (
+                <span className="nav-new-badge" aria-label={`${unsolvedCount} unsolved report${unsolvedCount !== 1 ? 's' : ''}`} />
+              )}
+            </span>
             Admin
           </NavLink>
         )}

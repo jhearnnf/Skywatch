@@ -10,6 +10,7 @@ const intelLeadSchema = new mongoose.Schema({
   section:        { type: String, default: '' },
   subsection:     { type: String, default: '' },
   isPublished:    { type: Boolean, default: false },
+  isHistoric:     { type: Boolean, default: false }, // true = retired/concluded/no current RAF relevance
   priorityNumber: { type: Number, default: null }, // advised learning order within category
 }, { timestamps: true });
 

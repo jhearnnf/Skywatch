@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { displayTier, getAccessibleCategories, isCategoryLocked } from '../subscription'
+import { displayTier, getAccessibleCategories, isCategoryLocked, pathwayTierRequired } from '../subscription'
 
 // ── displayTier ───────────────────────────────────────────────────────────────
 
@@ -110,5 +110,38 @@ describe('isCategoryLocked', () => {
 
   it('returns false (fail open) when settings is null', () => {
     expect(isCategoryLocked('Aircrafts', null, null)).toBe(false)
+  })
+})
+
+// ── pathwayTierRequired ───────────────────────────────────────────────────────
+
+const PATHWAY_SETTINGS = {
+  freeCategories:   ['News', 'Bases'],
+  silverCategories: ['News', 'Bases', 'Aircrafts', 'Ranks'],
+}
+
+describe('pathwayTierRequired', () => {
+  it('returns "free" for a free category', () => {
+    expect(pathwayTierRequired('News', PATHWAY_SETTINGS)).toBe('free')
+    expect(pathwayTierRequired('Bases', PATHWAY_SETTINGS)).toBe('free')
+  })
+
+  it('returns "silver" for a silver-only category', () => {
+    expect(pathwayTierRequired('Aircrafts', PATHWAY_SETTINGS)).toBe('silver')
+    expect(pathwayTierRequired('Ranks', PATHWAY_SETTINGS)).toBe('silver')
+  })
+
+  it('returns "gold" for a category in neither list', () => {
+    expect(pathwayTierRequired('Threats', PATHWAY_SETTINGS)).toBe('gold')
+    expect(pathwayTierRequired('Treaties', PATHWAY_SETTINGS)).toBe('gold')
+  })
+
+  it('returns "free" when settings is null (fail open)', () => {
+    expect(pathwayTierRequired('Threats', null)).toBe('free')
+  })
+
+  it('free tier takes precedence even if also in silverCategories', () => {
+    // News is in both free and silver — should be treated as free
+    expect(pathwayTierRequired('News', PATHWAY_SETTINGS)).toBe('free')
   })
 })

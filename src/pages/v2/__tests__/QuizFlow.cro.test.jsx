@@ -91,7 +91,7 @@ async function completeQuiz(answer = CORRECT_ID) {
   fireEvent.click(screen.getByText(answer === CORRECT_ID ? 'Multirole fighter' : 'Heavy bomber'))
   await waitFor(() => screen.getByRole('button', { name: /see results/i }))
   fireEvent.click(screen.getByRole('button', { name: /see results/i }))
-  await waitFor(() => screen.getByRole('button', { name: /try again/i }))
+  await waitFor(() => screen.getByRole('button', { name: /back to brief/i }))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -117,13 +117,13 @@ describe('QuizFlow — Browse More Briefs button', () => {
     expect(screen.getByRole('button', { name: /browse more briefs/i })).toBeDefined()
   })
 
-  it('clicking "Browse More Briefs" navigates to /learn', async () => {
+  it('clicking "Browse More Briefs" navigates to /learn-priority', async () => {
     mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', awardAircoins: vi.fn() })
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
     await completeQuiz(CORRECT_ID)
     fireEvent.click(screen.getByRole('button', { name: /browse more briefs/i }))
-    expect(mockNavigate).toHaveBeenCalledWith('/learn')
+    expect(mockNavigate).toHaveBeenCalledWith('/learn-priority')
   })
 })
 

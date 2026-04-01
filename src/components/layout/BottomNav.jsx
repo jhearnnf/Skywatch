@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
+import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 
 const NAV_ITEMS = [
   { to: '/home',     emoji: '🏠', label: 'Home'    },
@@ -15,6 +16,7 @@ const ADMIN_ITEM = { to: '/admin', emoji: '⚙️', label: 'Admin' }
 export default function BottomNav() {
   const { user } = useAuth()
   const { hasAnyNew } = useNewGameUnlock()
+  const { unsolvedCount } = useUnsolvedReports()
 
   const items = user?.isAdmin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS
   const location = useLocation()
@@ -29,6 +31,7 @@ export default function BottomNav() {
         {items.map(({ to, emoji, label }) => {
           const active = location.pathname === to || location.pathname.startsWith(to + '/')
           const showBadge = to === '/play' && hasAnyNew && user
+          const showReportBadge = to === '/admin' && unsolvedCount > 0
           return (
             <NavLink
               key={to}
@@ -44,6 +47,9 @@ export default function BottomNav() {
                 {emoji}
                 {showBadge && (
                   <span className="nav-new-badge" aria-label="New game unlocked" />
+                )}
+                {showReportBadge && (
+                  <span className="nav-new-badge" aria-label={`${unsolvedCount} unsolved report${unsolvedCount !== 1 ? 's' : ''}`} />
                 )}
               </span>
               <span className={`text-[10px] font-semibold tracking-wide ${active ? 'text-brand-600' : ''}`}>

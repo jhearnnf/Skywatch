@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 import { invalidateSoundSettings } from '../../utils/sound'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../../context/AppTutorialContext'
 
@@ -58,7 +59,7 @@ const RAF_RANKS = [
 
 // Pathway categories that can appear in the Learn Pathway page (ordered by default progression)
 const PATHWAY_CATEGORIES = [
-  'Bases', 'Terminology', 'Aircrafts', 'Heritage', 'Ranks', 'Squadrons', 'Allies',
+  'News', 'Bases', 'Terminology', 'Aircrafts', 'Heritage', 'Ranks', 'Squadrons', 'Allies',
   'Training', 'AOR', 'Roles', 'Tech', 'Threats', 'Missions', 'Treaties',
 ]
 
@@ -796,17 +797,15 @@ const AI_PROMPT_GROUPS = [
     items: [
       { key: 'brief.news',            label: 'Generate Brief — News' },
       { key: 'brief.topic',           label: 'Generate Brief — Topic' },
-      { key: 'regenerateBrief',       label: 'Regenerate Brief (description)' },
-      { key: 'regenerateDescription', label: 'Regenerate Description Only' },
+      { key: 'regenerateBrief', label: 'Regenerate Brief' },
       { key: 'keywords',              label: 'Extract Keywords' },
     ],
   },
   {
     group: 'Quiz Generation',
     items: [
-      { key: 'quiz',           label: 'Generate Quiz' },
-      { key: 'quizRegenerate', label: 'Regenerate Quiz' },
-      { key: 'quizMissing',    label: 'Generate Missing Questions' },
+      { key: 'quiz',        label: 'Generate Quiz' },
+      { key: 'quizMissing', label: 'Generate Missing Questions' },
     ],
   },
   {
@@ -1079,7 +1078,7 @@ function SettingsTab({ API }) {
     const exists  = current.some(u => u.category === category)
     const updated = exists
       ? current.map(u => u.category === category ? { ...u, [field]: value } : u)
-      : [...current, { category, levelRequired: 1, rankRequired: 1, tierRequired: 'free', [field]: value }]
+      : [...current, { category, levelRequired: 1, rankRequired: 1, [field]: value }]
     return { ...p, pathwayUnlocks: updated }
   })
   const toggleCat = (key, cat) => setDraft(p => {
@@ -1131,8 +1130,9 @@ function SettingsTab({ API }) {
       {/* ── Pathway Unlock Requirements ──────────────────────── */}
       <Section title="Pathway Unlock Requirements" collapsible onSave={() => save('Update Pathway Unlock Requirements', ['pathwayUnlocks'])}>
         <p className="text-xs text-slate-400 mb-3">
-          Each pathway unlocks when <strong>all three conditions</strong> are met: Agent Level, RAF Rank, and Subscription Tier.
-          Set Level 1 / Rank 1 / Free to make a pathway always available.
+          Each pathway unlocks when <strong>both conditions</strong> are met: Agent Level and RAF Rank.
+          Subscription tier is automatically derived from the category tier settings above — no need to set it here.
+          Set Level 1 / Rank 1 to make a pathway always available.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -1140,13 +1140,12 @@ function SettingsTab({ API }) {
               <tr className="border-b border-slate-100">
                 <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Category</th>
                 <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Level Required</th>
-                <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Rank Required</th>
-                <th className="text-left py-2 text-xs font-bold text-slate-400 uppercase tracking-wide">Tier Required</th>
+                <th className="text-left py-2 text-xs font-bold text-slate-400 uppercase tracking-wide">Rank Required</th>
               </tr>
             </thead>
             <tbody>
               {PATHWAY_CATEGORIES.map(cat => {
-                const unlock = (draft.pathwayUnlocks ?? []).find(u => u.category === cat) ?? { levelRequired: 1, rankRequired: 1, tierRequired: 'free' }
+                const unlock = (draft.pathwayUnlocks ?? []).find(u => u.category === cat) ?? { levelRequired: 1, rankRequired: 1 }
                 return (
                   <tr key={cat} className="border-b border-slate-50 last:border-0">
                     <td className="py-2.5 pr-3 font-semibold text-slate-700 whitespace-nowrap">{cat}</td>
@@ -1159,7 +1158,7 @@ function SettingsTab({ API }) {
                       />
                       <span className="ml-1.5 text-xs text-slate-400">/ 10</span>
                     </td>
-                    <td className="py-2.5 pr-3">
+                    <td className="py-2.5">
                       <select
                         value={unlock.rankRequired ?? 1}
                         onChange={e => setPathwayUnlock(cat, 'rankRequired', parseInt(e.target.value))}
@@ -1168,17 +1167,6 @@ function SettingsTab({ API }) {
                         {RAF_RANKS.map(r => (
                           <option key={r.n} value={r.n}>{r.n}. {r.abbr} — {r.name}</option>
                         ))}
-                      </select>
-                    </td>
-                    <td className="py-2.5">
-                      <select
-                        value={unlock.tierRequired ?? 'free'}
-                        onChange={e => setPathwayUnlock(cat, 'tierRequired', e.target.value)}
-                        className="border border-slate-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-brand-400"
-                      >
-                        <option value="free">Free</option>
-                        <option value="silver">Silver</option>
-                        <option value="gold">Gold</option>
                       </select>
                     </td>
                   </tr>
@@ -1197,6 +1185,35 @@ function SettingsTab({ API }) {
         'aircoinsWhereAircraftRound1', 'aircoinsWhereAircraftRound2', 'aircoinsWhereAircraftBonus',
         'aircoinsFlashcardPerCard', 'aircoinsFlashcardPerfectBonus',
       ])}>
+        <AircoinsCeiling API={API} />
+        <Section title="Award Test Coins" collapsible>
+          <p className="text-xs text-slate-400 mb-3">Awards aircoins to your admin account, logged as "Test Coins".</p>
+          <div className="flex items-center gap-3">
+            <input
+              type="number" min={1} placeholder="Amount…"
+              value={testAmount}
+              onChange={e => setTestAmount(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && parseInt(testAmount, 10) > 0 && setCoinModal(true)}
+              className="w-32 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+            />
+            <button
+              onClick={() => setCoinModal(true)}
+              disabled={coinBusy || !testAmount || parseInt(testAmount, 10) <= 0}
+              className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
+            >
+              {coinBusy ? 'Awarding…' : '⬡ Award'}
+            </button>
+          </div>
+          {coinModal && (
+            <ConfirmModal
+              title={`Award ${testAmount} Test Coins`}
+              body="Awards aircoins directly to your admin account. Use for testing reward flows."
+              confirmLabel="Award Coins"
+              onConfirm={awardTest}
+              onCancel={() => setCoinModal(false)}
+            />
+          )}
+        </Section>
         <NumInput label="Per correct answer — Easy quiz"   value={draft.aircoinsPerWinEasy}          onChange={v => set('aircoinsPerWinEasy', v)} />
         <NumInput label="Per correct answer — Medium quiz" value={draft.aircoinsPerWinMedium}        onChange={v => set('aircoinsPerWinMedium', v)} />
         <NumInput label="100% score bonus"                 value={draft.aircoins100Percent}          onChange={v => set('aircoins100Percent', v)} />
@@ -1283,38 +1300,6 @@ function SettingsTab({ API }) {
         ))}
       </Section>
 
-      {/* ── Aircoins Ceiling ────────────────────────────────── */}
-      <AircoinsCeiling API={API} />
-
-      {/* ── Award Test Coins ────────────────────────────────── */}
-      <Section title="Award Test Coins" collapsible>
-        <p className="text-xs text-slate-400 mb-3">Awards aircoins to your admin account, logged as "Test Coins".</p>
-        <div className="flex items-center gap-3">
-          <input
-            type="number" min={1} placeholder="Amount…"
-            value={testAmount}
-            onChange={e => setTestAmount(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && parseInt(testAmount, 10) > 0 && setCoinModal(true)}
-            className="w-32 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
-          />
-          <button
-            onClick={() => setCoinModal(true)}
-            disabled={coinBusy || !testAmount || parseInt(testAmount, 10) <= 0}
-            className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
-          >
-            {coinBusy ? 'Awarding…' : '⬡ Award'}
-          </button>
-        </div>
-        {coinModal && (
-          <ConfirmModal
-            title={`Award ${testAmount} Test Coins`}
-            body="Awards aircoins directly to your admin account. Use for testing reward flows."
-            confirmLabel="Award Coins"
-            onConfirm={awardTest}
-            onCancel={() => setCoinModal(false)}
-          />
-        )}
-      </Section>
     </div>
   )
 }
@@ -1365,7 +1350,8 @@ function UsersTab({ API }) {
   const [search,  setSearch]  = useState(false) // is in search mode
   const [modal,   setModal]   = useState(null)
   const [toast,   setToast]   = useState('')
-  const [resetId, setResetId] = useState(null)
+  const [resetPanel,  setResetPanel]  = useState(null) // user._id of open panel
+  const [resetChecks, setResetChecks] = useState({})
 
   const loadAll = useCallback(async () => {
     setLoading(true); setSearch(false)
@@ -1534,67 +1520,76 @@ function UsersTab({ API }) {
             <SubscriptionTierRow u={u} action={action} />
 
             {/* Reset (testing) */}
-            <div className="px-4 py-2.5">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Reset for testing</p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  {
-                    label:   'Aircoins',
-                    fields:  ['aircoins'],
-                    isReset: (u.totalAircoins ?? 0) === 0,
-                  },
-                  {
-                    label:   'Game History',
-                    fields:  ['gameHistory'],
-                    isReset: (u.profileStats?.quizzesPlayed ?? 0) === 0 && (u.profileStats?.booPlayed ?? 0) === 0 && (u.profileStats?.wtaPlayed ?? 0) === 0 && (u.profileStats?.wherePlayed ?? 0) === 0 && (u.profileStats?.flashcardsPlayed ?? 0) === 0,
-                  },
-                  {
-                    label:   'Briefs Read',
-                    fields:  ['intelBriefsRead'],
-                    isReset: (u.profileStats?.brifsRead ?? 0) === 0,
-                  },
-                  {
-                    label:   'Streak',
-                    fields:  ['streak'],
-                    isReset: (u.loginStreak ?? 0) === 0,
-                  },
-                  {
-                    label:   'Tutorials',
-                    fields:  ['tutorials'],
-                    isReset: !TUTORIAL_KEYS.some(
-                      k => u.tutorials?.[k] === 'viewed' || u.tutorials?.[k] === 'skipped'
-                    ),
-                  },
-                ].map(({ label, fields, isReset }) => (
+            {(() => {
+              const RESET_ITEMS = [
+                { key: 'aircoins',        label: 'Aircoins',      defaultOn: true,  hasData: (u.totalAircoins ?? 0) > 0 },
+                { key: 'gameHistory',     label: 'Game History',  defaultOn: true,  hasData: (u.profileStats?.quizzesPlayed ?? 0) > 0 || (u.profileStats?.booPlayed ?? 0) > 0 || (u.profileStats?.wtaPlayed ?? 0) > 0 || (u.profileStats?.wherePlayed ?? 0) > 0 || (u.profileStats?.flashcardsPlayed ?? 0) > 0 },
+                { key: 'intelBriefsRead', label: 'Briefs Read',   defaultOn: true,  hasData: (u.profileStats?.brifsRead ?? 0) > 0 },
+                { key: 'streak',          label: 'Streak',        defaultOn: true,  hasData: (u.loginStreak ?? 0) > 0 },
+                { key: 'gameBadges',      label: 'Game Badges',   defaultOn: true,  hasData: false },
+                { key: 'tutorials',       label: 'Tutorials',     defaultOn: false, hasData: TUTORIAL_KEYS.some(k => u.tutorials?.[k] === 'viewed' || u.tutorials?.[k] === 'skipped') },
+              ]
+              const anyHasData = RESET_ITEMS.some(i => i.defaultOn && i.hasData)
+              const isOpen = resetPanel === u._id
+              return (
+                <div className="px-4 py-2.5">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Reset for testing</p>
                   <button
-                    key={label}
-                    onClick={() => action(
-                      `Reset ${label} — Agent ${u.agentNumber}`,
-                      `/api/admin/users/${u._id}/reset-stats`,
-                      'POST',
-                      { fields },
-                    )}
+                    onClick={() => {
+                      if (isOpen) { setResetPanel(null); return }
+                      const defaults = {}
+                      RESET_ITEMS.forEach(i => { defaults[i.key] = i.defaultOn })
+                      setResetChecks(defaults)
+                      setResetPanel(u._id)
+                    }}
                     className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
-                      isReset
-                        ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                        : 'border-amber-200 text-amber-700 hover:bg-amber-50'
+                      isOpen
+                        ? 'border-slate-300 text-slate-600 bg-slate-50'
+                        : anyHasData
+                          ? 'border-amber-200 text-amber-700 hover:bg-amber-50'
+                          : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
                     }`}
                   >
-                    ↺ {label}
+                    ↺ Reset {isOpen ? '▲' : '▼'}
                   </button>
-                ))}
-                <button
-                  onClick={() => action(
-                    `Reset game badges — Agent ${u.agentNumber}`,
-                    `/api/admin/users/${u._id}/reset-game-badges`,
-                    'POST',
+                  {isOpen && (
+                    <div className="mt-2 p-3 rounded-lg border border-slate-200 bg-slate-50 inline-flex flex-col gap-2.5 min-w-[180px]">
+                      {RESET_ITEMS.map(item => (
+                        <label key={item.key} className="flex items-center gap-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={resetChecks[item.key] ?? item.defaultOn}
+                            onChange={e => setResetChecks(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                            className="rounded"
+                          />
+                          <span className="text-xs text-slate-600">{item.label}</span>
+                          {item.hasData && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                          )}
+                        </label>
+                      ))}
+                      <button
+                        onClick={() => {
+                          const checked = RESET_ITEMS.filter(i => resetChecks[i.key] ?? i.defaultOn).map(i => i.key)
+                          if (!checked.length) return
+                          const labels = RESET_ITEMS.filter(i => resetChecks[i.key] ?? i.defaultOn).map(i => i.label).join(', ')
+                          setResetPanel(null)
+                          action(
+                            `Reset ${labels} — Agent ${u.agentNumber}`,
+                            `/api/admin/users/${u._id}/reset-stats`,
+                            'POST',
+                            { fields: checked },
+                          )
+                        }}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors mt-1"
+                      >
+                        Apply Reset
+                      </button>
+                    </div>
                   )}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-purple-200 text-purple-700 hover:bg-purple-50 font-semibold transition-colors"
-                >
-                  ↺ Game Badges
-                </button>
-              </div>
-            </div>
+                </div>
+              )
+            })()}
           </div>
         ))}
       </div>
@@ -1607,6 +1602,7 @@ function UsersTab({ API }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProblemsTab({ API }) {
+  const { refresh: refreshUnsolvedCount } = useUnsolvedReports()
   const [problems, setProblems] = useState([])
   const [filter,   setFilter]   = useState('unsolved')
   const [search,   setSearch]   = useState('')
@@ -1650,6 +1646,7 @@ function ProblemsTab({ API }) {
     setNotify(p => ({ ...p, [id]: false }))
     setBusy(null)
     setToast(solved !== undefined ? (solved ? '✓ Marked solved' : '✓ Reopened') : '✓ Updated')
+    if (solved !== undefined) refreshUnsolvedCount()
     setTick(t => t + 1)
   }
 
@@ -1684,18 +1681,18 @@ function ProblemsTab({ API }) {
       {/* Confirmation modal */}
       {confirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Confirm — send to user</h3>
-            <p className="text-xs text-slate-500">
+          <div className="bg-surface rounded-2xl shadow-xl border border-slate-700 max-w-md w-full p-6 space-y-4">
+            <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider">Confirm — send to user</h3>
+            <p className="text-xs text-slate-400">
               The user will receive the following {confirm.sendEmail ? 'via email' : 'as an in-app notification'}:
             </p>
-            <div className="bg-slate-50 border-l-4 border-brand-500 rounded-r-xl p-3 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+            <div className="bg-surface-raised border-l-4 border-brand-600 rounded-r-xl p-3 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
               {confirm.description}
             </div>
             <div className="flex gap-2 justify-end pt-1">
               <button
                 onClick={() => setConfirm(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"
+                className="px-4 py-2 text-xs font-semibold text-slate-300 border border-slate-600 rounded-lg hover:bg-surface-raised"
               >
                 Cancel
               </button>
@@ -1715,14 +1712,14 @@ function ProblemsTab({ API }) {
         {['unsolved', 'solved', 'all'].map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors capitalize
-              ${filter === f ? 'bg-brand-600 text-white' : 'bg-surface border border-slate-200 text-slate-600 hover:border-brand-300'}`}>
+              ${filter === f ? 'bg-brand-600 text-white' : 'bg-surface border border-slate-700 text-slate-300 hover:border-brand-400'}`}>
             {f}
           </button>
         ))}
         <input
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Filter reports…"
-          className="flex-1 min-w-40 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+          className="flex-1 min-w-40 border border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-slate-200 placeholder:text-slate-500"
         />
       </div>
 
@@ -1736,25 +1733,25 @@ function ProblemsTab({ API }) {
 
       <div className="space-y-3">
         {visible.map(p => (
-          <div key={p._id} className={`bg-surface rounded-2xl border overflow-hidden transition-colors ${p.solved ? 'border-emerald-200' : 'border-slate-200'}`}>
+          <div key={p._id} className={`bg-surface rounded-2xl border overflow-hidden transition-colors ${p.solved ? 'border-emerald-700' : 'border-slate-700'}`}>
             <button
               className="w-full flex items-start justify-between gap-3 px-4 py-3 text-left"
               onClick={() => setExpanded(e => e === p._id ? null : p._id)}
             >
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-slate-400 mb-0.5">{p.pageReported || 'Unknown page'} · {new Date(p.time).toLocaleDateString('en-GB')}</p>
-                <p className="text-sm font-semibold text-slate-800 line-clamp-2">{p.description}</p>
+                <p className="text-sm font-semibold text-slate-100 line-clamp-2">{p.description}</p>
               </div>
-              <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${p.solved ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+              <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${p.solved ? 'bg-emerald-900/40 text-emerald-300' : 'bg-red-900/40 text-red-300'}`}>
                 {p.solved ? 'Solved' : 'Open'}
               </span>
             </button>
 
             {expanded === p._id && (
-              <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-3">
+              <div className="px-4 pb-4 border-t border-slate-700 pt-3 space-y-3">
 
                 {/* Full original description */}
-                <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-700">
+                <div className="bg-surface-raised rounded-xl p-3 text-xs text-slate-300">
                   <p className="font-semibold text-slate-400 mb-1 uppercase tracking-wider text-[10px]">Original report</p>
                   <p className="whitespace-pre-wrap leading-relaxed">{p.description}</p>
                   <p className="mt-1 text-slate-400">
@@ -1768,7 +1765,7 @@ function ProblemsTab({ API }) {
                   <div className="space-y-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Update history</p>
                     {p.updates.map((u, i) => (
-                      <div key={i} className={`border rounded-xl p-3 text-xs text-slate-700 ${u.isUserVisible ? 'bg-brand-50 border-brand-100' : 'bg-slate-50 border-slate-100'}`}>
+                      <div key={i} className={`border rounded-xl p-3 text-xs text-slate-300 ${u.isUserVisible ? 'bg-brand-600/10 border-brand-600/20' : 'bg-surface-raised border-slate-700'}`}>
                         <p className="whitespace-pre-wrap leading-relaxed mb-1">{u.description}</p>
                         <p className="text-slate-400 flex items-center gap-2">
                           <span>
@@ -1776,7 +1773,7 @@ function ProblemsTab({ API }) {
                             {' · '}{new Date(u.time).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
                           </span>
                           {u.isUserVisible && (
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${u.emailSent ? 'bg-violet-100 text-violet-600' : 'bg-sky-100 text-sky-600'}`}>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${u.emailSent ? 'bg-violet-900/40 text-violet-300' : 'bg-sky-900/40 text-sky-300'}`}>
                               {u.emailSent ? 'emailed' : 'notified'}
                             </span>
                           )}
@@ -1792,12 +1789,12 @@ function ProblemsTab({ API }) {
                   placeholder="Add admin note…"
                   value={updates[p._id] ?? ''}
                   onChange={e => setUpdates(prev => ({ ...prev, [p._id]: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-200"
+                  className="w-full border border-slate-700 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-slate-200 placeholder:text-slate-500"
                 />
 
                 {/* Notify user controls */}
                 <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={notify[p._id] ?? false}
@@ -1808,7 +1805,7 @@ function ProblemsTab({ API }) {
                   </label>
 
                   {(notify[p._id]) && (
-                    <div className="flex gap-4 pl-5 text-xs text-slate-600">
+                    <div className="flex gap-4 pl-5 text-xs text-slate-300">
                       <label className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="radio"
@@ -1839,15 +1836,15 @@ function ProblemsTab({ API }) {
                   <button
                     onClick={() => handleSaveNote(p)}
                     disabled={busy === p._id || !updates[p._id]?.trim()}
-                    className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-40"
+                    className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {busy === p._id ? 'Saving…' : 'Save Note'}
                   </button>
                   <button
                     onClick={() => handleToggleSolved(p)}
                     disabled={busy === p._id}
-                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors disabled:opacity-40
-                      ${p.solved ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+                      ${p.solved ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-emerald-600 text-white hover:bg-emerald-500'}`}
                   >
                     {p.solved ? 'Reopen' : 'Mark Solved'}
                   </button>
@@ -2002,7 +1999,7 @@ function ContentTab({ API }) {
       {modal && <ConfirmModal title={modal.label} onConfirm={modal.isTutorial ? confirmSaveTutorials : confirmSave} onCancel={() => setModal(null)} />}
 
       {/* ── Email Settings ────────────────────────────────────────── */}
-      <Section title="Email Settings" collapsible onSave={() => save('Update Email Settings', ['emailWelcomeEnabled', 'emailConfirmationEnabled'])}>
+      <Section title="Email Settings" collapsible onSave={() => save('Update Email Settings', ['emailWelcomeEnabled', 'emailConfirmationEnabled', 'emailPasswordResetEnabled'])}>
         <Toggle
           label="Send welcome email"
           hint="When off, new users will not receive a welcome email after registering"
@@ -2014,6 +2011,12 @@ function ContentTab({ API }) {
           hint="When off, new users are registered instantly without entering a confirmation code"
           checked={draft.emailConfirmationEnabled !== false}
           onChange={v => setDraft(p => ({ ...p, emailConfirmationEnabled: v }))}
+        />
+        <Toggle
+          label="Allow password reset emails"
+          hint="When off, users cannot reset their password via email — they will be directed to contact support for a manual reset"
+          checked={draft.emailPasswordResetEnabled !== false}
+          onChange={v => setDraft(p => ({ ...p, emailPasswordResetEnabled: v }))}
         />
       </Section>
 
@@ -2140,37 +2143,6 @@ function ContentTab({ API }) {
             className="mt-1 px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors"
           >
             Save Tutorials
-          </button>
-        </div>
-      </CollapsibleBox>
-
-      {/* ── AI Content Generation ─────────────────────────────────── */}
-      <CollapsibleBox
-        bodyStyle={{ background: '#160808', borderColor: '#5a1a1a' }}
-        headerStyle={{ borderColor: '#5a1a1a', background: '#200c0c' }}
-        headerContent={<>
-          <span style={{ color: '#f87171', fontSize: 16 }}>⚠</span>
-          <h3 className="font-bold" style={{ color: '#fca5a5' }}>AI Content Generation</h3>
-          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#3d1010', color: '#fca5a5' }}>Critical</span>
-        </>}
-      >
-        <div className="px-5 py-3">
-          <NumInput
-            label="Keywords per brief"
-            hint="Number of keywords the AI generates when creating or regenerating a brief"
-            value={draft.aiKeywordsPerBrief ?? 20}
-            onChange={v => setDraft(p => ({ ...p, aiKeywordsPerBrief: v }))}
-            min={1}
-            max={50}
-          />
-        </div>
-        <div className="px-5 pb-4">
-          <button
-            onClick={() => save('Update AI Content Generation', ['aiKeywordsPerBrief'])}
-            className="mt-1 px-5 py-2 text-white text-sm font-bold rounded-xl transition-colors"
-            style={{ background: '#991b1b' }}
-          >
-            Save
           </button>
         </div>
       </CollapsibleBox>
@@ -2318,7 +2290,7 @@ const BRIEF_SUBCATEGORIES = {
 }
 
 const EMPTY_DRAFT = {
-  title: '', nickname: '', subtitle: '', category: 'News', subcategory: '', historic: false,
+  title: '', nickname: '', subtitle: '', category: 'News', subcategory: '', historic: false, eventDate: null,
   priorityNumber: null,
   descriptionSections: ['', '', ''],
   keywords: [],
@@ -2377,7 +2349,7 @@ function LeadRow({ lead, picked, busy, onGenerate }) {
   )
 }
 
-function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
+function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
   const [tab,             setTab]             = useState('leads') // 'leads' | 'news'
   const [leads,           setLeads]           = useState([])
   const [search,          setSearch]          = useState(initialSearch)
@@ -2399,7 +2371,8 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
   const [headlines,     setHeadlines]     = useState([])
   const [existingTitles,setExistingTitles]= useState([])
   const [newsBusy,      setNewsBusy]      = useState(false)
-  const [dupConfirm,    setDupConfirm]    = useState(null) // headline string awaiting confirmation
+  const [dupConfirm,    setDupConfirm]    = useState(null) // { headline, eventDate } awaiting confirmation
+  const [newsDate,      setNewsDate]      = useState(() => new Date().toISOString().slice(0, 10))
 
   useEffect(() => {
     fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
@@ -2438,13 +2411,14 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
     if (sub) setOpenSubsections(prev => { const next = new Set(prev); next.add(`${sec}::${sub}`); return next })
   }
 
-  const generate = async (topicOrHeadline, isHeadline = false) => {
+  const generate = async (topicOrHeadline, isHeadline = false, eventDate = null) => {
     const lead = typeof topicOrHeadline === 'string' ? null : topicOrHeadline
     const key  = lead ? lead.title : topicOrHeadline
     setBusy(key)
     try {
+      const todayStr = new Date().toISOString().slice(0, 10)
       const body = isHeadline
-        ? { headline: key }
+        ? { headline: key, eventDate, isHistoric: !!(eventDate && eventDate !== todayStr) }
         : { topic: key, category: lead?.category ?? 'News' }
       const res  = await fetch(`${API}/api/admin/ai/generate-brief`, {
         method: 'POST', credentials: 'include',
@@ -2479,6 +2453,7 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
           .then(r => r.json())
           .then(d => { if (d.status === 'success') setLeads(d.data.leads) })
           .catch(() => {})
+        onReset?.()
         alert(`Reset complete: ${data.data.leadsInserted} leads, ${data.data.stubsCreated} stub briefs`)
       } else {
         alert(`Reset failed: ${data.message}`)
@@ -2497,20 +2472,24 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
       const res  = await fetch(`${API}/api/admin/ai/news-headlines`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timestamp: new Date().toISOString() }),
+        body: JSON.stringify({ date: newsDate }),
       })
       const data = await res.json()
-      if (data.status === 'success') setHeadlines(data.data.headlines ?? [])
+      if (!res.ok || data.status !== 'success') {
+        alert(`Headlines fetch failed: ${data.message ?? res.status}`)
+        return
+      }
+      setHeadlines(data.data.headlines ?? [])
     } finally {
       setNewsBusy(false)
     }
   }
 
-  const handleHeadlineClick = (headline) => {
+  const handleHeadlineClick = (headline, eventDate) => {
     if (isSimilarTitle(headline, existingTitles)) {
-      setDupConfirm(headline)
+      setDupConfirm({ headline, eventDate })
     } else {
-      generate(headline, true)
+      generate(headline, true, eventDate)
     }
   }
 
@@ -2537,7 +2516,7 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
           <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-            {[{ id: 'leads', label: '📋 Leads' }, { id: 'news', label: '📡 Live News' }].map(t => (
+            {[{ id: 'leads', label: '📋 Leads' }, { id: 'news', label: '📡 News' }].map(t => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
@@ -2673,11 +2652,23 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
           </>
         )}
 
-        {/* ── Live News tab ── */}
+        {/* ── News tab ── */}
         {tab === 'news' && (
           <div className="overflow-y-auto flex-1 px-4 py-4">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs text-slate-500">Latest real RAF news headlines from the web.</p>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2 flex-1">
+                <label className="text-xs text-slate-500 whitespace-nowrap">Date</label>
+                <input
+                  type="date"
+                  value={newsDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => { setNewsDate(e.target.value); setHeadlines([]) }}
+                  className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-brand-400"
+                />
+                {newsDate !== new Date().toISOString().slice(0, 10) && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Historic</span>
+                )}
+              </div>
               <button
                 onClick={fetchHeadlines}
                 disabled={newsBusy}
@@ -2688,7 +2679,7 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
             </div>
 
             {headlines.length === 0 && !newsBusy && (
-              <p className="text-sm text-slate-400 text-center py-8">Press "Fetch Headlines" to load the latest RAF news.</p>
+              <p className="text-sm text-slate-400 text-center py-8">Select a date and press "Fetch Headlines".</p>
             )}
 
             {newsBusy && (
@@ -2700,8 +2691,8 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
             )}
 
             <div className="space-y-2">
-              {headlines.map((headline, i) => {
-                const isDup = isSimilarTitle(headline, existingTitles)
+              {headlines.map((item, i) => {
+                const isDup = isSimilarTitle(item.headline, existingTitles)
                 return (
                   <div
                     key={i}
@@ -2710,22 +2701,27 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
                   >
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-semibold leading-snug ${isDup ? 'text-slate-400' : 'text-slate-800'}`}>
-                        {headline}
+                        {item.headline}
                       </p>
-                      {isDup && (
-                        <p className="text-[10px] text-amber-600 font-semibold mt-0.5">⚠️ Possible duplicate brief</p>
-                      )}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {item.eventDate && (
+                          <span className="text-[10px] text-slate-400 font-medium">{item.eventDate}</span>
+                        )}
+                        {isDup && (
+                          <span className="text-[10px] text-amber-600 font-semibold">⚠️ Possible duplicate brief</span>
+                        )}
+                      </div>
                     </div>
                     <button
-                      onClick={() => handleHeadlineClick(headline)}
-                      disabled={busy === headline}
+                      onClick={() => handleHeadlineClick(item.headline, item.eventDate)}
+                      disabled={busy === item.headline}
                       className={`shrink-0 text-xs px-3 py-1.5 rounded-lg font-bold transition-colors whitespace-nowrap
                         ${isDup
                           ? 'border border-slate-300 text-slate-500 hover:bg-slate-100'
                           : 'border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
                         } disabled:opacity-40`}
                     >
-                      {busy === headline ? '…' : isDup ? 'Create anyway' : 'Generate →'}
+                      {busy === item.headline ? '…' : isDup ? 'Create anyway' : 'Generate →'}
                     </button>
                   </div>
                 )
@@ -2754,14 +2750,14 @@ function LeadsModal({ API, onClose, onGenerate, initialSearch = '' }) {
               A brief with a similar title already exists. Generate anyway?
             </p>
             <p className="text-xs font-semibold text-slate-700 bg-slate-100 rounded-xl px-3 py-2 mb-6 max-w-xs">
-              "{dupConfirm}"
+              "{dupConfirm?.headline}"
             </p>
             <div className="flex gap-3 w-full max-w-xs">
               <button onClick={() => setDupConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50">
                 Cancel
               </button>
               <button
-                onClick={() => { setDupConfirm(null); generate(dupConfirm, true) }}
+                onClick={() => { const d = dupConfirm; setDupConfirm(null); generate(d.headline, true, d.eventDate) }}
                 className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm"
               >
                 Generate Anyway
@@ -2827,14 +2823,23 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const [dupePanel,          setDupePanel]          = useState(false)
   const [dupeGroups,         setDupeGroups]         = useState(null)
   const [dupesLoading,       setDupesLoading]       = useState(false)
-  const [keywordsPerBrief,   setKeywordsPerBrief]   = useState(20)
+  const keywordsPerBrief = 8
 
+  // ── Bulk auto-generate state ─────────────────────────────────────────────
+  const [bulkOpen,     setBulkOpen]     = useState(false)
+  const [bulkCats,     setBulkCats]     = useState(new Set(['Bases', 'Aircrafts']))
+  const [bulkCount,    setBulkCount]    = useState(5)
+  const [bulkRunning,  setBulkRunning]  = useState(false)
+  const [bulkLog,      setBulkLog]      = useState([]) // [{ _id, title, category, status, startedAt?, completedAt?, error? }]
+  const [bulkTotal,    setBulkTotal]    = useState(0)
+  const [bulkDone,     setBulkDone]     = useState(0)
+  const bulkCancelRef = useRef(false)
+  const bulkLogRef    = useRef(null)
+
+  // Auto-scroll terminal log to bottom on each update
   useEffect(() => {
-    fetch(`${API}/api/admin/settings`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => { if (d.data?.settings?.aiKeywordsPerBrief) setKeywordsPerBrief(d.data.settings.aiKeywordsPerBrief) })
-      .catch(() => {})
-  }, [API])
+    if (bulkLogRef.current) bulkLogRef.current.scrollTop = bulkLogRef.current.scrollHeight
+  }, [bulkLog])
 
   const toggleSection = (key) => setOpenSections(p => ({ ...p, [key]: !p[key] }))
 
@@ -2864,6 +2869,51 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     const res  = await fetch(`${API}/api/admin/briefs/duplicates`, { credentials: 'include' })
     const data = await res.json()
     setDupeGroups(data.data?.duplicates ?? [])
+  }
+
+  // ── Bulk auto-generate ───────────────────────────────────────────────────
+  const handleBulkGenerate = async () => {
+    if (bulkCats.size === 0) return
+    setBulkOpen(true)
+    setBulkRunning(true)
+    setBulkLog([])
+    setBulkTotal(0)
+    setBulkDone(0)
+    bulkCancelRef.current = false
+
+    try {
+      const cats = [...bulkCats].join(',')
+      const res  = await fetch(`${API}/api/admin/briefs/stubs-for-bulk?categories=${encodeURIComponent(cats)}&countPerCategory=${bulkCount}`, { credentials: 'include' })
+      const data = await res.json()
+      const stubs = data.data?.stubs ?? []
+      if (!stubs.length) { setToast('No stubs found for selected categories'); setBulkRunning(false); return }
+
+      setBulkTotal(stubs.length)
+      setBulkLog(stubs.map(s => ({ _id: s._id, title: s.title, category: s.category, status: 'pending' })))
+
+      let done = 0
+      for (const stub of stubs) {
+        if (bulkCancelRef.current) break
+
+        const startedAt = Date.now()
+        setBulkLog(prev => prev.map(s => s._id === stub._id ? { ...s, status: 'running', startedAt } : s))
+        try {
+          const r = await fetch(`${API}/api/admin/ai/bulk-generate-stub/${stub._id}`, { method: 'POST', credentials: 'include' })
+          const d = await r.json()
+          if (d.status !== 'success') throw new Error(d.message ?? 'Generation failed')
+          setBulkLog(prev => prev.map(s => s._id === stub._id ? { ...s, status: 'done', completedAt: Date.now(), warnings: d.warnings?.length ? d.warnings : null } : s))
+        } catch (err) {
+          setBulkLog(prev => prev.map(s => s._id === stub._id ? { ...s, status: 'error', completedAt: Date.now(), error: err.message } : s))
+        }
+        done++
+        setBulkDone(done)
+      }
+    } catch (err) {
+      setToast(`Bulk generate failed: ${err.message}`)
+    } finally {
+      setBulkRunning(false)
+      loadList()
+    }
   }
 
   // ── Load list ───────────────────────────────────────────────────────────────
@@ -3011,7 +3061,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         await fetch(`${API}/api/admin/briefs/${id}/media`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId }),
+          body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId, name: img.wikiPage || img.term }),
         })
       }
 
@@ -3081,6 +3131,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       category,
       subcategory,
       historic:            briefData.historic ?? false,
+      eventDate:           briefData.eventDate ?? null,
       descriptionSections: Array.isArray(briefData.descriptionSections) && briefData.descriptionSections.length
         ? briefData.descriptionSections
         : ['','',''],
@@ -3397,7 +3448,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       await fetch(`${API}/api/admin/briefs/${briefId}/media`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId }),
+        body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId, name: img.wikiPage || img.term }),
       })
     }
     // Reload media
@@ -3419,8 +3470,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   // ── Status badge helper ───────────────────────────────────────────────────
   function BriefStatusPills({ brief }) {
     const hasKeywords = (brief.keywords?.length ?? 0) >= keywordsPerBrief
-    const hasEasy     = (brief.quizQuestionsEasy?.length ?? 0) >= 10
-    const hasMedium   = (brief.quizQuestionsMedium?.length ?? 0) >= 10
+    const hasEasy     = (brief.quizQuestionsEasy?.length ?? 0) >= 7
+    const hasMedium   = (brief.quizQuestionsMedium?.length ?? 0) >= 7
     const hasQuiz     = hasEasy && hasMedium
     const hasMedia    = (brief.media ?? []).some(m => m.cloudinaryPublicId)
     return (
@@ -3452,6 +3503,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
             API={API}
             onClose={() => { setShowLeads(false); onBootstrapConsumed?.() }}
             onGenerate={handleLeadGenerate}
+            onReset={loadList}
             initialSearch={initialSearch}
           />
         )}
@@ -3490,6 +3542,150 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
           >
             Find Duplicates
           </button>
+        </div>
+
+        {/* Bulk Auto-Generate panel */}
+        <div className={`mb-4 bg-surface rounded-2xl overflow-hidden border transition-colors duration-300 ${bulkRunning ? 'border-brand-600' : 'border-slate-200'}`}>
+          {/* Header — locked while running */}
+          <button
+            onClick={() => { if (!bulkRunning) setBulkOpen(p => !p) }}
+            className={`w-full flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors ${bulkRunning ? 'cursor-default' : 'hover:bg-slate-50'} text-slate-700`}
+          >
+            <span className="flex items-center gap-2">
+              {bulkRunning
+                ? <span className="inline-block w-2 h-2 rounded-full bg-brand-600 animate-pulse" />
+                : '⚡'}
+              {bulkRunning
+                ? `Generating ${Math.min(bulkDone + 1, bulkTotal)} of ${bulkTotal}…`
+                : 'Bulk Auto-Generate'}
+            </span>
+            {!bulkRunning && <span className="text-slate-400 text-xs">{bulkOpen ? '▲' : '▼'}</span>}
+          </button>
+
+          {bulkOpen && (
+            <div className="border-t border-slate-200 px-4 py-4">
+              {/* Controls — faded + locked while running */}
+              <div className={`transition-opacity duration-200 ${bulkRunning ? 'opacity-40 pointer-events-none' : ''}`}>
+                <p className="text-xs font-semibold text-slate-500 mb-2">Categories to generate:</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4">
+                  {BRIEF_CATEGORIES.map(cat => (
+                    <label key={cat} className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={bulkCats.has(cat)}
+                        onChange={e => setBulkCats(prev => {
+                          const next = new Set(prev)
+                          e.target.checked ? next.add(cat) : next.delete(cat)
+                          return next
+                        })}
+                        className="accent-brand-600"
+                      />
+                      <span className="text-xs text-slate-700">{cat}</span>
+                    </label>
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-600 mb-4">
+                  Briefs per category:
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={bulkCount}
+                    onChange={e => setBulkCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+                    className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center outline-none focus:ring-2 focus:ring-brand-200 bg-surface text-text"
+                  />
+                </label>
+              </div>
+
+              {/* Action button */}
+              <div className="flex items-center gap-3">
+                {!bulkRunning ? (
+                  <button
+                    onClick={handleBulkGenerate}
+                    disabled={bulkCats.size === 0}
+                    className="text-xs px-4 py-1.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-colors disabled:opacity-40"
+                  >
+                    Generate Briefs
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => { bulkCancelRef.current = true }}
+                    className="text-xs px-4 py-1.5 rounded-lg border border-red-300 text-red-600 font-semibold hover:bg-red-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              {/* Terminal log */}
+              {bulkLog.length > 0 && (
+                <div className="mt-4">
+                  {/* Progress bar */}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-brand-600 rounded-full transition-all duration-500"
+                        style={{ width: bulkTotal > 0 ? `${(bulkDone / bulkTotal) * 100}%` : '0%' }}
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-400 tabular-nums shrink-0">
+                      {bulkDone}/{bulkTotal} · {bulkTotal > 0 ? Math.round((bulkDone / bulkTotal) * 100) : 0}%
+                    </span>
+                  </div>
+                  {/* Terminal box */}
+                  <div
+                    ref={bulkLogRef}
+                    className="bg-slate-900 rounded-xl p-3 font-mono text-[11px] max-h-96 overflow-y-auto space-y-0.5 select-text"
+                  >
+                    {bulkLog.map(entry => {
+                      const ts = entry.startedAt
+                        ? new Date(entry.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                        : '--:--:--'
+                      const dur = (entry.completedAt && entry.startedAt)
+                        ? `(${Math.round((entry.completedAt - entry.startedAt) / 1000)}s)`
+                        : ''
+                      const icon =
+                        entry.status === 'done'    ? '✓' :
+                        entry.status === 'error'   ? '✗' :
+                        entry.status === 'running' ? '⟳' : '○'
+                      const iconCls =
+                        entry.status === 'done'    ? 'text-emerald-400' :
+                        entry.status === 'error'   ? 'text-red-400'     :
+                        entry.status === 'running' ? 'text-cyan-400 animate-pulse' :
+                        'text-slate-600'
+                      const titleCls =
+                        entry.status === 'running' ? 'text-slate-100' :
+                        entry.status === 'done'    ? 'text-slate-300' :
+                        entry.status === 'error'   ? 'text-slate-300' :
+                        'text-slate-600'
+                      return (
+                        <div key={entry._id} className="leading-5">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-slate-600 shrink-0">[{ts}]</span>
+                            <span className={`shrink-0 ${iconCls}`}>{icon}</span>
+                            <span className={titleCls}>{entry.title}</span>
+                            <span className="text-slate-500 shrink-0">{entry.category}</span>
+                            {dur && <span className="text-slate-600 shrink-0">{dur}</span>}
+                          </div>
+                          {entry.status === 'error' && entry.error && (
+                            <div className="text-red-400 italic pl-[7.5rem] leading-4 mt-0.5 whitespace-pre-wrap break-all">{entry.error}</div>
+                          )}
+                          {entry.warnings?.map((w, i) => (
+                            <div key={i} className="text-amber-400 pl-[7.5rem] leading-4 mt-0.5 whitespace-pre-wrap break-all">⚠ {w}</div>
+                          ))}
+                        </div>
+                      )
+                    })}
+                    {!bulkRunning && bulkDone > 0 && (
+                      <div className="text-slate-500 mt-1 pt-1 border-t border-slate-700">
+                        — {bulkLog.filter(l => l.status === 'done').length} succeeded · {bulkLog.filter(l => l.status === 'error').length} failed
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Duplicates panel */}
@@ -3857,7 +4053,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                   onChange={e => setDraft(p => {
                     const s = [...p.descriptionSections]; s[idx] = e.target.value; return { ...p, descriptionSections: s }
                   })}
-                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-200"
+                  className="w-full border border-slate-700 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-slate-200 placeholder:text-slate-500"
                 />
               </div>
             ))}
@@ -3972,9 +4168,11 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                     >
                       ✕
                     </button>
-                    <p className="text-[10px] text-slate-400 truncate mt-1 px-0.5">
-                      {m.cloudinaryPublicId ?? m.mediaUrl.split('/').pop().replace(/\.[^.]+$/, '')}
-                    </p>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 rounded-b-xl px-2 py-1 pointer-events-none">
+                      <p className="text-[10px] text-white truncate">
+                        {m.name ?? m.cloudinaryPublicId ?? m.mediaUrl.split('/').pop().replace(/\.[^.]+$/, '')}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -4004,7 +4202,11 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                         onChange={e => setPendingImages(p => p.map((x, j) => j === i ? { ...x, selected: e.target.checked } : x))}
                         className="absolute top-2 left-2"
                       />
-                      <p className="text-[10px] text-slate-400 truncate mt-1 px-0.5">{img.wikiPage || img.term}</p>
+                      {(img.wikiPage || img.term) && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 rounded-b-xl px-2 py-1 pointer-events-none">
+                          <p className="text-[10px] text-white truncate">{img.wikiPage || img.term}</p>
+                        </div>
+                      )}
                     </label>
                   ))}
                 </div>
@@ -4332,8 +4534,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         >
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-slate-800">Quiz Questions</h3>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${easyQuestions.length >= 10 && mediumQuestions.length >= 10 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-              {easyQuestions.length + mediumQuestions.length} / 20
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${easyQuestions.length >= 7 && mediumQuestions.length >= 7 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+              {easyQuestions.length + mediumQuestions.length} / 14
             </span>
           </div>
           <span className="text-slate-400 text-xs">{openSections.questions ? '▲' : '▼'}</span>
@@ -4405,16 +4607,16 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
               >
                 {generating === 'questions' || autoGenerating ? '↺ Generating…' : '↺ Generate Questions'}
               </button>
-              {currentQuestions.length < 10 && (
+              {currentQuestions.length < 5 && (
                 <button
                   onClick={generateSingleQuestion}
                   disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}
                   className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
                 >
-                  {generating === 'questions-single' ? '↺ Generating…' : `↺ Generate Missing (${10 - currentQuestions.length})`}
+                  {generating === 'questions-single' ? '↺ Generating…' : `↺ Generate Missing (${5 - currentQuestions.length})`}
                 </button>
               )}
-              {currentQuestions.length < 10 && (
+              {currentQuestions.length < 5 && (
                 <button
                   onClick={addBlankQuestion}
                   disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}
@@ -4781,34 +4983,38 @@ function RankDataField({ draft, setDraft, briefId, API }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ACTION_TYPE_LABELS = {
-  ban_user:                  { label: 'Ban User',              color: 'bg-red-100 text-red-700'       },
-  unban_user:                { label: 'Unban User',            color: 'bg-green-100 text-green-700'   },
-  delete_user:               { label: 'Delete User',           color: 'bg-red-100 text-red-700'       },
-  remove_admin:              { label: 'Remove Admin',          color: 'bg-orange-100 text-orange-700' },
-  reset_user_stats:          { label: 'Reset Stats',           color: 'bg-amber-100 text-amber-700'   },
-  make_admin:                { label: 'Make Admin',            color: 'bg-purple-100 text-purple-700' },
-  change_quiz_questions:     { label: 'Quiz Questions',        color: 'bg-blue-100 text-blue-700'     },
-  change_aircoins:           { label: 'Aircoins',              color: 'bg-amber-100 text-amber-700'   },
-  change_trial_duration:     { label: 'Trial Duration',        color: 'bg-slate-100 text-slate-600'   },
-  change_silver_categories:  { label: 'Silver Categories',     color: 'bg-slate-100 text-slate-600'   },
-  change_ammo_defaults:      { label: 'Ammo Defaults',         color: 'bg-slate-100 text-slate-600'   },
-  create_brief:              { label: 'Create Brief',          color: 'bg-emerald-100 text-emerald-700' },
-  edit_brief:                { label: 'Edit Brief',            color: 'bg-sky-100 text-sky-700'       },
-  delete_brief:              { label: 'Delete Brief',          color: 'bg-red-100 text-red-700'       },
-  regenerate_brief_cascade:  { label: 'Regenerate Brief',      color: 'bg-violet-100 text-violet-700' },
-  award_test_coins:          { label: 'Award Coins',           color: 'bg-amber-100 text-amber-700'   },
-  change_subscription:       { label: 'Change Subscription',   color: 'bg-indigo-100 text-indigo-700' },
+  ban_user:                  { label: 'Ban User',              color: 'bg-red-900/40 text-red-300'       },
+  unban_user:                { label: 'Unban User',            color: 'bg-green-900/40 text-green-300'   },
+  delete_user:               { label: 'Delete User',           color: 'bg-red-900/40 text-red-300'       },
+  remove_admin:              { label: 'Remove Admin',          color: 'bg-orange-900/40 text-orange-300' },
+  reset_user_stats:          { label: 'Reset Stats',           color: 'bg-amber-900/40 text-amber-300'   },
+  make_admin:                { label: 'Make Admin',            color: 'bg-purple-900/40 text-purple-300' },
+  change_quiz_questions:     { label: 'Quiz Questions',        color: 'bg-blue-900/40 text-blue-300'     },
+  change_aircoins:           { label: 'Aircoins',              color: 'bg-amber-900/40 text-amber-300'   },
+  change_trial_duration:     { label: 'Trial Duration',        color: 'bg-slate-700 text-slate-300'      },
+  change_silver_categories:  { label: 'Silver Categories',     color: 'bg-slate-700 text-slate-300'      },
+  change_ammo_defaults:      { label: 'Ammo Defaults',         color: 'bg-slate-700 text-slate-300'      },
+  create_brief:              { label: 'Create Brief',          color: 'bg-emerald-900/40 text-emerald-300' },
+  edit_brief:                { label: 'Edit Brief',            color: 'bg-sky-900/40 text-sky-300'       },
+  delete_brief:              { label: 'Delete Brief',          color: 'bg-red-900/40 text-red-300'       },
+  regenerate_brief_cascade:  { label: 'Regenerate Brief',      color: 'bg-violet-900/40 text-violet-300' },
+  award_test_coins:          { label: 'Award Coins',           color: 'bg-amber-900/40 text-amber-300'   },
+  change_subscription:       { label: 'Change Subscription',   color: 'bg-indigo-900/40 text-indigo-300' },
 }
 
 const ALL_ACTION_TYPES = Object.keys(ACTION_TYPE_LABELS)
 
-function ActionBadge({ type }) {
-  const meta = ACTION_TYPE_LABELS[type] ?? { label: type, color: 'bg-slate-100 text-slate-500' }
+function LabelBadge({ label, color, uppercase = false }) {
   return (
-    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${meta.color}`}>
-      {meta.label}
+    <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${uppercase ? 'uppercase tracking-wide' : ''} ${color}`}>
+      {label}
     </span>
   )
+}
+
+function ActionBadge({ type }) {
+  const meta = ACTION_TYPE_LABELS[type] ?? { label: type, color: 'bg-slate-700 text-slate-300' }
+  return <LabelBadge label={meta.label} color={meta.color} />
 }
 
 function LogsTab({ API }) {
@@ -4842,11 +5048,11 @@ function LogsTab({ API }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4 gap-3">
-        <h2 className="text-base font-bold text-slate-800">Admin Action Logs</h2>
+        <h2 className="text-base font-bold text-slate-900">Admin Action Logs</h2>
         <select
           value={typeFilter}
           onChange={handleTypeChange}
-          className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 text-slate-600 bg-white focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 bg-surface focus:outline-none focus:ring-1 focus:ring-brand-400"
         >
           <option value="">All actions</option>
           {ALL_ACTION_TYPES.map(t => (
@@ -4855,7 +5061,7 @@ function LogsTab({ API }) {
         </select>
       </div>
 
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="bg-surface rounded-2xl border border-slate-700 overflow-hidden mb-4">
         {loading && <p className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading…</p>}
         {!loading && actions.length === 0 && (
           <p className="py-8 text-center text-slate-400 text-sm">No logs found</p>
@@ -4866,7 +5072,7 @@ function LogsTab({ API }) {
           return (
             <div
               key={a._id}
-              className={`px-4 py-3 ${i !== 0 ? 'border-t border-slate-100' : ''}`}
+              className={`px-4 py-3 ${i !== 0 ? 'border-t border-slate-700/50' : ''}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -4878,7 +5084,7 @@ function LogsTab({ API }) {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-600 truncate">{a.reason}</p>
+                  <p className="text-xs text-slate-300 truncate">{a.reason}</p>
                   <p className="text-[10px] text-slate-400 mt-0.5">
                     Agent {admin?.agentNumber ?? admin?.email ?? '?'}
                   </p>
@@ -4897,7 +5103,7 @@ function LogsTab({ API }) {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
           >
             ← Prev
           </button>
@@ -4905,12 +5111,216 @@ function LogsTab({ API }) {
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
           >
             Next →
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EMAIL LOGS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EMAIL_TYPE_LABELS = {
+  welcome:        { label: 'Welcome',        color: 'bg-blue-900/40 text-blue-300' },
+  confirmation:   { label: 'Confirmation',   color: 'bg-purple-900/40 text-purple-300' },
+  password_reset: { label: 'Password Reset', color: 'bg-amber-900/40 text-amber-300' },
+  report_reply:   { label: 'Report Reply',   color: 'bg-teal-900/40 text-teal-300' },
+  test:           { label: 'Test',           color: 'bg-slate-700 text-slate-300' },
+}
+
+function EmailTypeBadge({ type }) {
+  const info = EMAIL_TYPE_LABELS[type] ?? { label: type, color: 'bg-slate-700 text-slate-300' }
+  return <LabelBadge label={info.label} color={info.color} uppercase />
+}
+
+function EmailLogsTab({ API }) {
+  const [logs,       setLogs]       = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [page,       setPage]       = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total,      setTotal]      = useState(0)
+  const [typeFilter, setTypeFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [search,     setSearch]     = useState('')
+  const [searchInput, setSearchInput] = useState('')
+
+  useEffect(() => {
+    setLoading(true)
+    const params = new URLSearchParams({ page, limit: 50 })
+    if (typeFilter)   params.set('type',   typeFilter)
+    if (statusFilter) params.set('status', statusFilter)
+    if (search)       params.set('search', search)
+    fetch(`${API}/api/admin/email-logs?${params}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        setLogs(d.data?.logs ?? [])
+        setTotal(d.data?.total ?? 0)
+        setTotalPages(d.data?.totalPages ?? 1)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [API, page, typeFilter, statusFilter, search])
+
+  const handleSearch = (e) => {
+    e.preventDefault()
+    setSearch(searchInput.trim())
+    setPage(1)
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <h2 className="text-base font-bold text-slate-900">Email Logs</h2>
+        <div className="flex gap-2 flex-wrap">
+          <select
+            value={typeFilter}
+            onChange={e => { setTypeFilter(e.target.value); setPage(1) }}
+            className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 bg-surface focus:outline-none focus:ring-1 focus:ring-brand-400"
+          >
+            <option value="">All types</option>
+            {Object.entries(EMAIL_TYPE_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v.label}</option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
+            className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 bg-surface focus:outline-none focus:ring-1 focus:ring-brand-400"
+          >
+            <option value="">All statuses</option>
+            <option value="sent">Sent</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
+      </div>
+
+      <form onSubmit={handleSearch} className="flex gap-2 mb-4">
+        <input
+          type="text"
+          placeholder="Search by email…"
+          value={searchInput}
+          onChange={e => setSearchInput(e.target.value)}
+          className="flex-1 text-xs border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 bg-surface placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-400"
+        />
+        <button
+          type="submit"
+          className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-colors"
+        >
+          Search
+        </button>
+        {search && (
+          <button
+            type="button"
+            onClick={() => { setSearch(''); setSearchInput(''); setPage(1) }}
+            className="text-xs px-2 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:bg-surface-raised transition-colors"
+          >
+            Clear
+          </button>
+        )}
+      </form>
+
+      <div className="bg-surface rounded-2xl border border-slate-700 overflow-hidden mb-4">
+        {loading && <p className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading…</p>}
+        {!loading && logs.length === 0 && (
+          <p className="py-8 text-center text-slate-400 text-sm">No email logs found</p>
+        )}
+        {!loading && logs.map((log, i) => (
+          <div
+            key={log._id}
+            className={`px-4 py-3 ${i !== 0 ? 'border-t border-slate-700/50' : ''} ${log.status === 'failed' ? 'bg-red-900/10' : ''}`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <EmailTypeBadge type={log.type} />
+                  <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${log.status === 'sent' ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'}`}>
+                    {log.status}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-200 font-medium truncate">{log.recipientEmail}</p>
+                {log.subject && (
+                  <p className="text-[11px] text-slate-400 truncate">{log.subject}</p>
+                )}
+                {log.status === 'failed' && log.error && (
+                  <p className="text-[11px] text-red-400 mt-0.5 truncate">{log.error}</p>
+                )}
+                {log.metadata && Object.keys(log.metadata).length > 0 && (
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {Object.entries(log.metadata).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                  </p>
+                )}
+              </div>
+              <span className="text-[10px] text-slate-400 whitespace-nowrap shrink-0">
+                {new Date(log.sentAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs text-slate-400">Page {page} of {totalPages} ({total} total)</span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTEL TAB (Reports + Action Logs + Email Logs)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const INTEL_SUBTABS = [
+  { id: 'reports',    label: 'Reports'      },
+  { id: 'action-log', label: 'Action Logs'  },
+  { id: 'email-log',  label: 'Email Logs'   },
+]
+
+function IntelTab({ API, unsolvedCount }) {
+  const [sub, setSub] = useState('reports')
+  return (
+    <div>
+      <div className="flex gap-1 bg-surface-raised rounded-xl p-1 mb-5">
+        {INTEL_SUBTABS.map(s => (
+          <button
+            key={s.id}
+            onClick={() => setSub(s.id)}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap
+              ${sub === s.id
+                ? 'bg-surface text-slate-900 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+              }`}
+          >
+            {s.label}
+            {s.id === 'reports' && unsolvedCount > 0 && (
+              <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            )}
+          </button>
+        ))}
+      </div>
+      {sub === 'reports'    && <ProblemsTab  API={API} />}
+      {sub === 'action-log' && <LogsTab      API={API} />}
+      {sub === 'email-log'  && <EmailLogsTab API={API} />}
     </div>
   )
 }
@@ -4923,33 +5333,25 @@ const TABS = [
   { id: 'stats',    label: 'Stats',    icon: '📊' },
   { id: 'settings', label: 'Settings', icon: '⚙️'  },
   { id: 'users',    label: 'Users',    icon: '👥'  },
-  { id: 'problems', label: 'Reports',  icon: '🚩'  },
   { id: 'content',  label: 'Content',  icon: '✏️'  },
   { id: 'briefs',   label: 'Briefs',   icon: '📄'  },
-  { id: 'logs',     label: 'Logs',     icon: '📋'  },
+  { id: 'intel',    label: 'Intel',    icon: '🗂️'  },
 ]
 
 export default function Admin() {
   const { user, setUser, loading, API } = useAuth()
+  const { unsolvedCount, refresh: refreshUnsolvedCount } = useUnsolvedReports()
   const navigate = useNavigate()
   const location = useLocation()
   const [tab, setTab] = useState(() => location.state?.openLeads ? 'briefs' : 'stats')
-  const [unsolvedCount, setUnsolvedCount] = useState(null)
   const [leadsInitialSearch, setLeadsInitialSearch] = useState(() => location.state?.leadsSearch ?? '')
   const [openLeadsOnMount,   setOpenLeadsOnMount]   = useState(() => !!location.state?.openLeads)
+
+  useEffect(() => { refreshUnsolvedCount() }, [])
 
   useEffect(() => {
     if (!loading && (!user || !user.isAdmin)) navigate('/home', { replace: true })
   }, [loading, user, navigate])
-
-  // Fetch unsolved count for tab badge; refresh whenever leaving the problems tab
-  useEffect(() => {
-    if (!user?.isAdmin) return
-    fetch(`${API}/api/admin/problems/count`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => setUnsolvedCount(d.data?.unsolvedCount ?? 0))
-      .catch(() => {})
-  }, [API, user, tab])
 
   if (loading || !user?.isAdmin) return null
 
@@ -4980,7 +5382,7 @@ export default function Admin() {
             >
               <span>{t.icon}</span>
               <span>{t.label}</span>
-              {t.id === 'problems' && unsolvedCount > 0 && (
+              {t.id === 'intel' && unsolvedCount > 0 && (
                 <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
               )}
             </button>
@@ -4999,10 +5401,9 @@ export default function Admin() {
             {tab === 'stats'    && <StatsTab    API={API} />}
             {tab === 'settings' && <SettingsTab API={API} />}
             {tab === 'users'    && <UsersTab    API={API} />}
-            {tab === 'problems' && <ProblemsTab API={API} />}
             {tab === 'content'  && <ContentTab  API={API} />}
             {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false) }} />}
-            {tab === 'logs'     && <LogsTab     API={API} />}
+            {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} />}
           </motion.div>
         </AnimatePresence>
 

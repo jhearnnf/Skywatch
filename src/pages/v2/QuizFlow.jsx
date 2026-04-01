@@ -529,7 +529,7 @@ export default function QuizFlow() {
           won={won}
           onRetry={handleRetry}
           onBack={() => navigate(`/brief/${briefId}`)}
-          onBrowse={() => navigate('/learn')}
+          onBrowse={() => navigate('/learn-priority')}
           booAvailable={(won || !isFirstAttempt) && booAvailable}
           onStartBoo={() => navigate(`/battle-of-order/${briefId}`)}
           user={user}

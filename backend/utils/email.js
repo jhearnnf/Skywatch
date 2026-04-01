@@ -1,7 +1,13 @@
 const { Resend }      = require('resend');
 const AppSettings     = require('../models/AppSettings');
+const EmailLog        = require('../models/EmailLog');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+
+// Fire-and-forget — never blocks email delivery
+function logEmail({ type, recipientEmail, recipientUserId = null, subject = null, status, error = null, metadata = {} }) {
+  EmailLog.create({ type, recipientEmail, recipientUserId, subject, status, error, metadata }).catch(() => {});
+}
 
 // Sender — update to a verified domain before going to production.
 // In development, Resend allows sending from onboarding@resend.dev.
@@ -18,7 +24,7 @@ const DEFAULTS = {
 
 // Send a welcome email to a newly registered agent.
 // Errors are caught internally so a mail failure never blocks registration.
-async function sendWelcomeEmail({ email, agentNumber }) {
+async function sendWelcomeEmail({ email, agentNumber, userId = null }) {
   try {
     const appUrl  = process.env.CLIENT_URL || 'http://localhost:5173';
     const s       = await AppSettings.getSettings();
@@ -84,21 +90,24 @@ async function sendWelcomeEmail({ email, agentNumber }) {
 </html>`,
     });
     if (error) throw new Error(error.message);
+    logEmail({ type: 'welcome', recipientEmail: email, recipientUserId: userId, subject, status: 'sent', metadata: { agentNumber } });
   } catch (err) {
     console.error('[email] Welcome email failed for', email, '—', err.message);
+    logEmail({ type: 'welcome', recipientEmail: email, recipientUserId: userId, subject: DEFAULTS.subject, status: 'failed', error: err.message, metadata: { agentNumber } });
   }
 }
 
 // Send a 6-digit confirmation code to a new registrant.
 // Errors are caught internally so a mail failure returns a clear message to the caller.
-async function sendConfirmationEmail({ email, code }) {
+async function sendConfirmationEmail({ email, code, userId = null }) {
   const appUrl = process.env.CLIENT_URL || 'http://localhost:5173';
   const s = await AppSettings.getSettings();
   if (s.emailConfirmationEnabled === false) return;
+  const subject = 'SkyWatch — Confirm Your Email';
   const { error } = await resend.emails.send({
     from: FROM,
     to: email,
-    subject: 'SkyWatch — Confirm Your Email',
+    subject,
     html: `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -154,20 +163,25 @@ async function sendConfirmationEmail({ email, code }) {
 </body>
 </html>`,
   });
-  if (error) throw new Error(error.message);
+  if (error) {
+    logEmail({ type: 'confirmation', recipientEmail: email, recipientUserId: userId, subject, status: 'failed', error: error.message });
+    throw new Error(error.message);
+  }
+  logEmail({ type: 'confirmation', recipientEmail: email, recipientUserId: userId, subject, status: 'sent' });
 }
 
 // Send a password reset link to an existing agent.
 // Errors are caught internally so a mail failure never blocks the route response.
-async function sendPasswordResetEmail({ email, resetUrl }) {
+async function sendPasswordResetEmail({ email, resetUrl, userId = null }) {
   try {
     const s = await AppSettings.getSettings();
     if (s.emailPasswordResetEnabled === false) return;
 
+    const subject = 'SkyWatch — Password Reset Request';
     const { error } = await resend.emails.send({
       from: FROM,
       to: email,
-      subject: 'SkyWatch — Password Reset Request',
+      subject,
       html: `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -215,21 +229,24 @@ async function sendPasswordResetEmail({ email, resetUrl }) {
 </html>`,
     });
     if (error) throw new Error(error.message);
+    logEmail({ type: 'password_reset', recipientEmail: email, recipientUserId: userId, subject, status: 'sent' });
   } catch (err) {
     console.error('[email] Password reset email failed for', email, '—', err.message);
+    logEmail({ type: 'password_reset', recipientEmail: email, recipientUserId: userId, subject: 'SkyWatch — Password Reset Request', status: 'failed', error: err.message });
   }
 }
 
 // Send a report reply to a user (email delivery path).
 // Errors are caught internally so a mail failure never blocks the admin route.
-async function sendReportReplyEmail({ email, agentNumber, pageReported, replyMessage }) {
+async function sendReportReplyEmail({ email, agentNumber, pageReported, replyMessage, userId = null }) {
   try {
     const appUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const subject = 'SkyWatch — Update on Your Report';
 
     const { error } = await resend.emails.send({
       from: FROM,
       to: email,
-      subject: 'SkyWatch — Update on Your Report',
+      subject,
       html: `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -281,8 +298,10 @@ async function sendReportReplyEmail({ email, agentNumber, pageReported, replyMes
 </html>`,
     });
     if (error) throw new Error(error.message);
+    logEmail({ type: 'report_reply', recipientEmail: email, recipientUserId: userId, subject, status: 'sent', metadata: { agentNumber, pageReported } });
   } catch (err) {
     console.error('[email] Report reply email failed for', email, '—', err.message);
+    logEmail({ type: 'report_reply', recipientEmail: email, recipientUserId: userId, subject: 'SkyWatch — Update on Your Report', status: 'failed', error: err.message, metadata: { agentNumber, pageReported } });
   }
 }
 

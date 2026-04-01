@@ -31,7 +31,7 @@ function makeKeywords(n = 10) {
 async function addQuizQuestions(briefId, gameTypeId, count = 10, difficulty = 'easy') {
   const ids = [];
   for (let i = 0; i < count; i++) {
-    const answers = Array.from({ length: 10 }, (_, j) => ({ title: `A${j} Q${i}` }));
+    const answers = Array.from({ length: 7 }, (_, j) => ({ title: `A${j} Q${i}` }));
     const q = new GameQuizQuestion({
       intelBriefId: briefId,
       gameTypeId,

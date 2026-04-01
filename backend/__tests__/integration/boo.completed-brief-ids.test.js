@@ -12,6 +12,7 @@ const db      = require('../helpers/setupDb');
 const {
   createUser,
   createBrief,
+  createBooBriefs,
   createSettings,
   createWonBooResult,
   authCookie,
@@ -42,8 +43,10 @@ describe('GET /api/games/battle-of-order/completed-brief-ids', () => {
   });
 
   it('returns the brief ID when user has a won result', async () => {
-    const user  = await createUser();
-    const brief = await createBrief({ category: 'Aircrafts' });
+    const user   = await createUser();
+    // Use yearIntroduced: null so only 'speed' is available (winning speed is sufficient)
+    const briefs = await createBooBriefs(3, 'Aircrafts', { gameData: { yearIntroduced: null } });
+    const brief  = briefs[0];
     await createWonBooResult(user._id, brief._id);
 
     const res = await request(app)
@@ -56,8 +59,9 @@ describe('GET /api/games/battle-of-order/completed-brief-ids', () => {
   });
 
   it('deduplicates — multiple wins for the same brief appear once', async () => {
-    const user  = await createUser();
-    const brief = await createBrief({ category: 'Aircrafts' });
+    const user   = await createUser();
+    const briefs = await createBooBriefs(3, 'Aircrafts');
+    const brief  = briefs[0];
     await createWonBooResult(user._id, brief._id, { orderType: 'speed' });
     await createWonBooResult(user._id, brief._id, { orderType: 'year_introduced' });
 
@@ -72,8 +76,10 @@ describe('GET /api/games/battle-of-order/completed-brief-ids', () => {
 
   it('returns ids for all briefs the user has won, across multiple briefs', async () => {
     const user   = await createUser();
-    const briefA = await createBrief({ category: 'Aircrafts' });
-    const briefB = await createBrief({ category: 'Aircrafts' });
+    // Use yearIntroduced: null so only 'speed' is available (winning speed is sufficient)
+    const briefs = await createBooBriefs(3, 'Aircrafts', { gameData: { yearIntroduced: null } });
+    const briefA = briefs[0];
+    const briefB = briefs[1];
     await createWonBooResult(user._id, briefA._id);
     await createWonBooResult(user._id, briefB._id);
 

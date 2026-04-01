@@ -11,9 +11,10 @@ const VIEW = {
   SIGNIN:          'signin',
   REGISTER:        'register',
   VERIFY:          'verify',
-  FORGOT_PASSWORD: 'forgot-password',
-  RESET_SENT:      'reset-sent',
-  RESET_PASSWORD:  'reset-password',
+  FORGOT_PASSWORD:  'forgot-password',
+  RESET_SENT:       'reset-sent',
+  RESET_DISABLED:   'reset-disabled',
+  RESET_PASSWORD:   'reset-password',
 }
 
 function CrosshairLogo() {
@@ -216,8 +217,9 @@ export default function LoginPage() {
         body: JSON.stringify({ email: forgotEmail }),
       })
       const data = await res.json()
-      // Only surface the rate-limit error inline; all other responses show the neutral sent screen
+      // Surface specific error cases; all other responses show the neutral sent screen
       if (res.status === 429) { setError(data.message); return }
+      if (data.resetDisabled) { setView(VIEW.RESET_DISABLED); return }
       setView(VIEW.RESET_SENT)
     } catch {
       setError('Connection failed. Is the server running?')
@@ -510,6 +512,35 @@ export default function LoginPage() {
                 If your account matches the email provided, a password reset link has been dispatched.
                 Check your inbox — the link expires in 1 hour.
               </p>
+              <button
+                onClick={() => reset(VIEW.SIGNIN)}
+                className="w-full py-3.5 border-2 border-slate-200 hover:border-brand-300 hover:bg-brand-50 text-slate-700 font-bold rounded-2xl transition-all text-sm"
+              >
+                Back to Sign In
+              </button>
+            </motion.div>
+          )}
+
+          {/* Password reset disabled */}
+          {view === VIEW.RESET_DISABLED && (
+            <motion.div
+              key="reset-disabled"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="bg-surface rounded-3xl border border-slate-200 p-6 card-shadow space-y-4"
+            >
+              <h2 className="text-xl font-extrabold text-slate-900">Reset Unavailable</h2>
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Automatic password reset is not currently available. Please contact the development
+                team and they will reset your password manually.
+              </p>
+              <Link
+                to="/contact"
+                className="block w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl transition-colors text-sm text-center"
+              >
+                Contact Support
+              </Link>
               <button
                 onClick={() => reset(VIEW.SIGNIN)}
                 className="w-full py-3.5 border-2 border-slate-200 hover:border-brand-300 hover:bg-brand-50 text-slate-700 font-bold rounded-2xl transition-all text-sm"

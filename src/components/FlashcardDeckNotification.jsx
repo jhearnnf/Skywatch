@@ -19,7 +19,8 @@ export default function FlashcardDeckNotification({ cardRect, onDone }) {
   // phase: 'flying-in' | 'showing' | 'flying-out'
   const [phase,       setPhase]       = useState('flying-in')
   const [playNavRect, setPlayNavRect] = useState(null)
-  const flyOutTimerRef = useRef(null)
+  const flyOutTimerRef  = useRef(null)
+  const handledPhaseRef = useRef(null)
 
   const notifLeft = Math.round((window.innerWidth - NOTIF_W) / 2)
 
@@ -27,6 +28,9 @@ export default function FlashcardDeckNotification({ cardRect, onDone }) {
   useEffect(() => () => clearTimeout(flyOutTimerRef.current), [])
 
   function handleAnimationComplete() {
+    if (handledPhaseRef.current === phase) return
+    handledPhaseRef.current = phase
+
     if (phase === 'flying-in') {
       setPhase('showing')
       flyOutTimerRef.current = setTimeout(() => {
@@ -136,26 +140,6 @@ export default function FlashcardDeckNotification({ cardRect, onDone }) {
         onAnimationComplete={handleAnimationComplete}
         style={{ position: 'fixed', overflow: 'hidden', zIndex: 1202 }}
       >
-        {/* Flashcard label — fades out during fly-in */}
-        {phase === 'flying-in' && (
-          <motion.div
-            initial={{ opacity: 0.7 }}
-            animate={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            style={{
-              position: 'absolute', inset: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <span style={{
-              fontSize: 10, fontWeight: 700,
-              letterSpacing: '0.16em', textTransform: 'uppercase',
-              color: '#64748b',
-            }}>
-              Flashcard
-            </span>
-          </motion.div>
-        )}
 
         {/* Notification content — visible in showing phase */}
         {phase === 'showing' && (

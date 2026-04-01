@@ -3,14 +3,15 @@ const { protect, adminOnly } = require('../middleware/auth');
 const User = require('../models/User');
 const ProblemReport = require('../models/ProblemReport');
 const AdminAction = require('../models/AdminAction');
+const EmailLog    = require('../models/EmailLog');
 const AppSettings = require('../models/AppSettings');
 const { sendWelcomeEmail, sendReportReplyEmail } = require('../utils/email');
 const UserNotification = require('../models/UserNotification');
 const GameSessionQuizResult               = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt              = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult      = require('../models/GameSessionOrderOfBattleResult');
-const GameWhosAtAircraft                  = require('../models/GameWhosAtAircraft');
-const GameSessionWhosAtAircraftResult     = require('../models/GameSessionWhosAtAircraftResult');
+const GameWheresThatAircraft                  = require('../models/GameWheresThatAircraft');
+const GameSessionWheresThatAircraftResult     = require('../models/GameSessionWheresThatAircraftResult');
 const GameOrderOfBattle                   = require('../models/GameOrderOfBattle');
 const GameFlashcardRecall                 = require('../models/GameFlashcardRecall');
 const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashcardRecallResult');
@@ -41,11 +42,9 @@ const AI_PROMPT_DEFAULTS = {
   'brief.news':              'You are a factual intelligence writer for a Royal Air Force news platform. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
   'brief.topic':             'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
   'regenerateBrief':         'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
-  'regenerateDescription':   'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
   // Quiz generation
-  'quiz':                    'You are a quiz question writer for a Royal Air Force training platform. Favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description.',
-  'quizRegenerate':          'You are a quiz question writer for a Royal Air Force training platform. Favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description.',
-  'quizMissing':             'You are a quiz question writer for a Royal Air Force training platform. Favour questions that test understanding of training pathways, base locations and their resident aircraft/squadrons, role requirements, and operational context. Every question you write must be directly and fully answerable using only the information contained in the provided intel brief description — do not rely on external knowledge, general RAF facts, or anything not stated in the description. You will be given a list of existing questions — do not repeat or closely paraphrase any of them.',
+  'quiz':                    'You are a quiz question writer for a Royal Air Force training platform. Prioritise the most important and high-value facts from the brief — operational capabilities, training pathways and their phases, aircraft designations and roles, base locations and resident units, command structures, and key distinguishing facts that define this subject. Questions should test knowledge that builds genuine understanding of the RAF, not trivial details. Every question must be directly and fully answerable using only the information in the provided intel brief description — do not rely on external knowledge or anything not stated in the description.',
+  'quizMissing':             'You are a quiz question writer for a Royal Air Force training platform. Prioritise the most important and high-value facts from the brief — operational capabilities, training pathways and their phases, aircraft designations and roles, base locations and resident units, command structures, and key distinguishing facts that define this subject. Questions should test knowledge that builds genuine understanding of the RAF, not trivial details. Every question must be directly and fully answerable using only the information in the provided intel brief description — do not rely on external knowledge or anything not stated in the description. You will be given a list of existing questions — do not repeat or closely paraphrase any of them.',
   // Keywords
   'keywords':                'You are a keyword extractor for a Royal Air Force training platform. Prioritise terms that build understanding of the modern RAF — training pathways, bases, aircraft, roles, and operational context. You only select terms that appear verbatim in the provided description text. For each keyword you write a general RAF-specific definition of that term — what it is, its role and capabilities — without referencing the specific intel brief it was found in.',
   // Linking — current
@@ -368,7 +367,7 @@ router.patch('/ai-prompts', async (req, res) => {
 // POST /api/admin/test-email — sends a test welcome email to the admin's own address
 router.post('/test-email', async (req, res) => {
   try {
-    await sendWelcomeEmail({ email: req.user.email, agentNumber: req.user.agentNumber });
+    await sendWelcomeEmail({ email: req.user.email, agentNumber: req.user.agentNumber, userId: req.user._id });
     res.json({ status: 'success', message: `Test email sent to ${req.user.email}` });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
@@ -428,7 +427,7 @@ async function enrichUsersWithStats(users) {
           abandoned:{ $sum: { $cond: ['$abandoned', 1, 0] } },
       }},
     ]),
-    GameSessionWhosAtAircraftResult.aggregate([
+    GameSessionWheresThatAircraftResult.aggregate([
       { $match: { userId: { $in: userIds } } },
       { $group: { _id: '$userId', total: { $sum: 1 } } },
     ]),
@@ -674,7 +673,7 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
     const ops = [];
 
     if (fields.includes('aircoins'))        { userUpdates.totalAircoins = 0; userUpdates.cycleAircoins = 0; userUpdates.rank = null; ops.push(AircoinLog.deleteMany({ userId: req.params.id })); }
-    if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWhosAtAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWhereAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionFlashcardRecallResult.deleteMany({ userId: req.params.id })); }
+    if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWheresThatAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWhereAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionFlashcardRecallResult.deleteMany({ userId: req.params.id })); }
     if (fields.includes('streak'))          { userUpdates.loginStreak = 0; userUpdates.lastStreakDate = null; }
     if (fields.includes('intelBriefsRead')) {
       userUpdates.loginStreak    = 0;
@@ -689,6 +688,9 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
       for (const k of Object.keys(tutUser?.tutorials?.toObject() ?? {})) {
         userUpdates[`tutorials.${k}`] = 'unseen';
       }
+    }
+    if (fields.includes('gameBadges')) {
+      ops.push(User.findByIdAndUpdate(req.params.id, { $unset: { gameUnlocks: '' } }));
     }
 
     if (Object.keys(userUpdates).length) ops.push(User.findByIdAndUpdate(req.params.id, userUpdates));
@@ -840,8 +842,8 @@ router.get('/briefs', async (req, res) => {
               vars: {
                 hasK: { $cond: [{ $gte: [{ $size: { $ifNull: ['$keywords', []] } }, 10] }, 1, 0] },
                 hasQ: { $cond: [{ $and: [
-                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsEasy', []] } }, 10] },
-                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsMedium', []] } }, 10] },
+                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsEasy', []] } }, 7] },
+                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsMedium', []] } }, 7] },
                 ]}, 1, 0] },
                 hasM: { $cond: [{ $in: ['$_id', briefIdsWithMedia] }, 1, 0] },
               },
@@ -861,6 +863,42 @@ router.get('/briefs', async (req, res) => {
       IntelligenceBrief.countDocuments(filter),
     ]);
     res.json({ status: 'success', data: { briefs, total } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/briefs/stubs-for-bulk
+// Returns the next N stub briefs per category, ordered by priorityNumber ASC (nulls last) then createdAt ASC.
+router.get('/briefs/stubs-for-bulk', async (req, res) => {
+  try {
+    const { categories = '', countPerCategory = '5' } = req.query;
+    const categoriesArray = categories.split(',').map(c => c.trim()).filter(Boolean);
+    const count = Math.max(1, Math.min(50, parseInt(countPerCategory, 10) || 5));
+    if (!categoriesArray.length) return res.json({ status: 'success', data: { stubs: [] } });
+
+    const stubs = await IntelligenceBrief
+      .find({ status: 'stub', category: { $in: categoriesArray } }, 'title category priorityNumber createdAt')
+      .lean();
+
+    // Group by category, sort each group by priority (null last) then creation date, take top N
+    const grouped = {};
+    for (const s of stubs) {
+      if (!grouped[s.category]) grouped[s.category] = [];
+      grouped[s.category].push(s);
+    }
+    const result = [];
+    for (const cat of categoriesArray) {
+      const group = grouped[cat] ?? [];
+      group.sort((a, b) => {
+        const pa = a.priorityNumber ?? Infinity;
+        const pb = b.priorityNumber ?? Infinity;
+        if (pa !== pb) return pa - pb;
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      });
+      result.push(...group.slice(0, count));
+    }
+    res.json({ status: 'success', data: { stubs: result } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1037,7 +1075,7 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
       GameQuizQuestion.distinct('_id', { intelBriefId: briefId }),
       GameOrderOfBattle.distinct('_id', { anchorBriefId: briefId }),
       GameFlashcardRecall.distinct('_id', { 'cards.intelBriefId': briefId }),
-      GameWhosAtAircraft.distinct('_id', { intelBriefId: briefId }),
+      GameWheresThatAircraft.distinct('_id', { intelBriefId: briefId }),
     ]);
 
     await Promise.all([
@@ -1053,9 +1091,9 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
       // Flashcard cascade
       GameSessionFlashcardRecallResult.deleteMany({ gameId: { $in: flashGameIds } }),
       GameFlashcardRecall.deleteMany({ 'cards.intelBriefId': briefId }),
-      // Who's That Aircraft cascade
-      GameSessionWhosAtAircraftResult.deleteMany({ gameId: { $in: waaGameIds } }),
-      GameWhosAtAircraft.deleteMany({ intelBriefId: briefId }),
+      // Where's That Aircraft cascade
+      GameSessionWheresThatAircraftResult.deleteMany({ gameId: { $in: waaGameIds } }),
+      GameWheresThatAircraft.deleteMany({ intelBriefId: briefId }),
       // Where's That Aircraft cascade
       GameSessionWhereAircraftResult.deleteMany({ aircraftBriefId: briefId }),
       // Remove deleted brief from all relationship arrays across the collection
@@ -1098,7 +1136,7 @@ router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) 
       GameQuizQuestion.distinct('_id', { intelBriefId: briefId }),
       GameOrderOfBattle.distinct('_id', { anchorBriefId: briefId }),
       GameFlashcardRecall.distinct('_id', { 'cards.intelBriefId': briefId }),
-      GameWhosAtAircraft.distinct('_id', { intelBriefId: briefId }),
+      GameWheresThatAircraft.distinct('_id', { intelBriefId: briefId }),
     ]);
 
     // ── Step 2: reverse Aircoins per user ────────────────────────────────
@@ -1140,8 +1178,8 @@ router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) 
       GameOrderOfBattle.deleteMany({ anchorBriefId: briefId }),
       GameSessionFlashcardRecallResult.deleteMany({ gameId: { $in: flashGameIds } }),
       GameFlashcardRecall.deleteMany({ 'cards.intelBriefId': briefId }),
-      GameSessionWhosAtAircraftResult.deleteMany({ gameId: { $in: waaGameIds } }),
-      GameWhosAtAircraft.deleteMany({ intelBriefId: briefId }),
+      GameSessionWheresThatAircraftResult.deleteMany({ gameId: { $in: waaGameIds } }),
+      GameWheresThatAircraft.deleteMany({ intelBriefId: briefId }),
       GameSessionWhereAircraftResult.deleteMany({ aircraftBriefId: briefId }),
       IntelligenceBrief.findByIdAndUpdate(briefId, { $set: {
         quizQuestionsEasy:          [],
@@ -1209,7 +1247,7 @@ router.post('/briefs/:id/questions', async (req, res) => {
       for (const q of questions) {
         const answers = q.answers.map(a => ({
           _id: new mongoose.Types.ObjectId(),
-          title: a.title,
+          title: typeof a === 'string' ? a : a.title,
         }));
         const doc = await GameQuizQuestion.create({
           gameTypeId:      gameType._id,
@@ -1249,12 +1287,13 @@ router.post('/briefs/:id/questions', async (req, res) => {
 // POST /api/admin/briefs/:id/media — add a media item to a brief
 router.post('/briefs/:id/media', async (req, res) => {
   try {
-    const { mediaType, mediaUrl, cloudinaryPublicId, showOnSummary } = req.body;
+    const { mediaType, mediaUrl, cloudinaryPublicId, name, showOnSummary } = req.body;
     if (!mediaUrl || !mediaType) return res.status(400).json({ message: 'mediaType and mediaUrl required' });
     const media = await Media.create({
       mediaType,
       mediaUrl: mediaUrl.trim(),
       ...(cloudinaryPublicId ? { cloudinaryPublicId } : {}),
+      ...(name ? { name } : {}),
       showOnSummary: showOnSummary !== false,
     });
     const brief = await IntelligenceBrief.findByIdAndUpdate(
@@ -1324,7 +1363,7 @@ router.post('/briefs/:id/questions/bulk', requireReason, async (req, res) => {
       for (const q of questions) {
         const answers = q.answers.map(a => ({
           _id: new mongoose.Types.ObjectId(),
-          title: a.title,
+          title: typeof a === 'string' ? a : a.title,
         }));
         const doc = await GameQuizQuestion.create({
           gameTypeId:      gameType._id,
@@ -1404,12 +1443,189 @@ async function openRouterChat(messages, model, maxTokens = 2048) {
   return res.json();
 }
 
+function extractBalanced(str, open, close) {
+  const start = str.indexOf(open);
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = start; i < str.length; i++) {
+    if (str[i] === open) depth++;
+    else if (str[i] === close) { depth--; if (depth === 0) return str.slice(start, i + 1); }
+  }
+  return null; // unbalanced / truncated
+}
+
 function cleanJson(raw) {
   // Strip markdown fences and inline citation markers like [1]
   let cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').replace(/\[\d+\]/g, '').trim();
-  // Extract the JSON object — Perplexity Sonar often appends source URLs after the closing brace
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  return match ? match[0] : cleaned;
+  // Use balanced-bracket extraction so trailing prose/citations after the JSON don't get included.
+  const objStart = cleaned.indexOf('{');
+  const arrStart = cleaned.indexOf('[');
+  // Prefer whichever token comes first
+  if (objStart !== -1 && (arrStart === -1 || objStart < arrStart)) {
+    const obj = extractBalanced(cleaned, '{', '}');
+    if (obj) return obj;
+  }
+  if (arrStart !== -1) {
+    const arr = extractBalanced(cleaned, '[', ']');
+    if (arr) return arr;
+  }
+  // If no closing bracket/brace found (truncated output), extract from first { to end for repair attempt.
+  const openMatch = cleaned.match(/\{[\s\S]*/);
+  return openMatch ? openMatch[0] : cleaned;
+}
+
+// Attempt to close truncated JSON produced when the AI hits its output token limit.
+function repairJson(str) {
+  let s = str.trimEnd();
+  // Close any unclosed string
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && inString) { escaped = true; continue; }
+    if (ch === '"') inString = !inString;
+  }
+  if (inString) s += '"';
+  // Track open brackets/braces
+  const stack = [];
+  inString = false; escaped = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && inString) { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{' || ch === '[') stack.push(ch);
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  // Strip trailing comma before closing
+  s = s.replace(/,\s*$/, '');
+  // Close in reverse order
+  while (stack.length) {
+    s += stack.pop() === '{' ? '}' : ']';
+  }
+  return s;
+}
+
+// Normalize quiz question answers: models sometimes collapse [{title:a},{title:b},...] into
+// one object with duplicate keys, yielding a 1-element array. Prompting for flat string arrays
+// avoids this, and this helper converts them back to {title} objects.
+function normalizeQuizAnswers(questions) {
+  return (questions ?? []).map(q => ({
+    ...q,
+    answers: Array.isArray(q.answers)
+      ? q.answers.map(a => (typeof a === 'string' ? { title: a } : a))
+      : q.answers,
+  }));
+}
+
+// ── Quiz quality helpers ─────────────────────────────────────────────────────
+
+// Asks the AI for additional wrong answers to fill a question up to 7.
+// existingAnswers may be strings or {title} objects. Returns a string[] of all answers.
+async function topUpAnswers(question, description, existingAnswers, systemPrompt) {
+  const needed = 7 - existingAnswers.length;
+  if (needed <= 0) return existingAnswers;
+  const existingTitles = existingAnswers.map(a => (typeof a === 'string' ? a : a.title));
+  const data = await openRouterChat([{
+    role: 'system',
+    content: systemPrompt,
+  }, {
+    role: 'user',
+    content: `Question: "${question}"\n\nIntel Brief Description:\n"""\n${description}\n"""\n\nExisting answer options (do NOT repeat these):\n${existingTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\nProvide exactly ${needed} more WRONG answer options so the total reaches 7. Each must be a plausible but clearly incorrect complete sentence or meaningful phrase (minimum 5 words), answerable from the description context.\n\nReturn ONLY a JSON array of strings, e.g. ["wrong answer 1", "wrong answer 2"]`,
+  }], 'perplexity/sonar', 1024);
+  const raw = data.choices?.[0]?.message?.content ?? '[]';
+  let newAnswers;
+  try {
+    newAnswers = JSON.parse(cleanJson(raw));
+  } catch {
+    return existingTitles;
+  }
+  if (!Array.isArray(newAnswers)) return existingTitles;
+  return [...existingTitles, ...newAnswers.filter(a => typeof a === 'string').slice(0, needed)];
+}
+
+// Asks the AI for additional quiz questions of a given difficulty, avoiding repeats.
+// Returns an array of raw question objects (not yet normalized).
+async function topUpQuestions(difficulty, description, briefTitle, existingQuestions, needed, systemPrompt) {
+  if (needed <= 0) return [];
+  const existingList = existingQuestions.map((q, i) => `${i + 1}. ${q.question}`).join('\n');
+  const diffLabel = difficulty === 'medium'
+    ? 'medium (require understanding of context or relationships between facts in the description)'
+    : 'easy (test direct recall of the most important specific facts: names, dates, locations, aircraft types, unit designations, etc.)';
+  const data = await openRouterChat([{
+    role: 'system',
+    content: systemPrompt,
+  }, {
+    role: 'user',
+    content: `Intel Brief Title: ${briefTitle}\n\nIntel Brief Description:\n"""\n${description}\n"""\n\nExisting questions already written (do NOT repeat or closely paraphrase any):\n${existingList || '(none yet)'}\n\nWrite exactly ${needed} more ${diffLabel} questions using ONLY the facts in the description above.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text.\n2. The correct answer must be explicitly supported by the description.\n3. Wrong answers must be plausible but clearly incorrect based on the description.\n4. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n5. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each).\n6. The correct answer must also be a complete sentence or meaningful phrase.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"questions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}]}`,
+  }], 'perplexity/sonar', 4096);
+  const raw = data.choices?.[0]?.message?.content ?? '{}';
+  let generated;
+  try {
+    const cleaned = cleanJson(raw);
+    try { generated = JSON.parse(cleaned); } catch { generated = JSON.parse(repairJson(cleaned)); }
+  } catch {
+    return [];
+  }
+  return Array.isArray(generated.questions) ? generated.questions : [];
+}
+
+// Ensures both tiers have 7 questions each with 7 answers each.
+// Inner loop tops up answers per question; outer loop tops up question count.
+// Mutates nothing — returns new arrays. Appends warnings to the provided array.
+async function ensureQuizQuality(easyQuestions, mediumQuestions, description, briefTitle, quizSystemPrompt, warnings) {
+  const TARGET_Q = 7;
+  const TARGET_A = 7;
+  const MAX_RETRIES = 3;
+
+  async function fixAnswers(q) {
+    let answers = Array.isArray(q.answers) ? q.answers : [];
+    let attempts = 0;
+    while (answers.length < TARGET_A && attempts < MAX_RETRIES) {
+      attempts++;
+      const topped = await topUpAnswers(q.question, description, answers, quizSystemPrompt);
+      // normalize back to {title} objects
+      answers = topped.map(a => (typeof a === 'string' ? { title: a } : a));
+    }
+    if (answers.length < TARGET_A) {
+      warnings.push(`Could not reach 7 answers for question after ${MAX_RETRIES} retries: "${q.question?.slice(0, 60)}"`);
+    }
+    return { ...q, answers };
+  }
+
+  async function fixAllAnswers(questions) {
+    const result = [];
+    for (const q of questions) result.push(await fixAnswers(q));
+    return result;
+  }
+
+  async function fixQuestionCount(questions, difficulty) {
+    let attempts = 0;
+    while (questions.length < TARGET_Q && attempts < MAX_RETRIES) {
+      attempts++;
+      const needed = TARGET_Q - questions.length;
+      const newRaw = await topUpQuestions(difficulty, description, briefTitle, questions, needed, quizSystemPrompt);
+      if (!newRaw.length) break;
+      const fixed = await fixAllAnswers(normalizeQuizAnswers(newRaw));
+      questions = [...questions, ...fixed];
+    }
+    if (questions.length < TARGET_Q) {
+      warnings.push(`Could only generate ${questions.length}/${TARGET_Q} ${difficulty} questions after ${MAX_RETRIES} retries`);
+    }
+    return questions;
+  }
+
+  // Step 1: fix answers on initial batch
+  easyQuestions   = await fixAllAnswers(easyQuestions);
+  mediumQuestions = await fixAllAnswers(mediumQuestions);
+
+  // Step 2: top up question counts (new questions also go through fixAllAnswers)
+  easyQuestions   = await fixQuestionCount(easyQuestions,   'easy');
+  mediumQuestions = await fixQuestionCount(mediumQuestions, 'medium');
+
+  return { easyQuestions, mediumQuestions };
 }
 
 // ── BOO gameData helpers ────────────────────────────────────────────────────
@@ -1550,18 +1766,32 @@ function booGameDataShape(category) {
 // POST /api/admin/ai/news-headlines
 router.post('/ai/news-headlines', async (req, res) => {
   try {
-    const { timestamp } = req.body;
+    const { date } = req.body; // YYYY-MM-DD string
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const isToday  = !date || date === todayStr;
     const aiSettings = await AppSettings.getSettings();
+    const userContent = isToday
+      ? `The current date is ${todayStr}. Search the web right now for real UK Royal Air Force (RAF) news stories published in the last 24 hours only. Return ONLY a JSON array of up to 6 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the date the story was published). No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from the last 24 hours, return an empty array []. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`
+      : `The target date is ${date}. Search the web for real UK Royal Air Force (RAF) news stories published on or around ${date}. Return ONLY a JSON array of up to 6 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the actual date the story was published). No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from that date, return an empty array []. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`;
     const data = await openRouterChat([{
       role: 'system',
       content: getPrompt(aiSettings, 'newsHeadlines'),
     }, {
       role: 'user',
-      content: `The current date and time is ${timestamp}. Search the web right now for real UK Royal Air Force (RAF) news stories published in the last 24 hours only. Return ONLY a JSON array of up to 6 headline strings taken verbatim or closely paraphrased from actual published sources. No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from the last 24 hours, return an empty array []. Format: ["Headline one", "Headline two"]`,
+      content: userContent,
     }], 'perplexity/sonar');
-    const raw = data.choices?.[0]?.message?.content ?? '[]';
-    const headlines = JSON.parse(cleanJson(raw));
-    res.json({ status: 'success', data: { headlines: Array.isArray(headlines) ? headlines : [] } });
+    const raw    = data.choices?.[0]?.message?.content ?? '[]';
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanJson(raw));
+    } catch {
+      parsed = [];
+    }
+    // Normalise: accept plain strings (legacy fallback) and {headline, eventDate} objects
+    const headlines = Array.isArray(parsed)
+      ? parsed.map(h => typeof h === 'string' ? { headline: h, eventDate: todayStr } : h)
+      : [];
+    res.json({ status: 'success', data: { headlines } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1570,7 +1800,7 @@ router.post('/ai/news-headlines', async (req, res) => {
 // POST /api/admin/ai/generate-brief
 router.post('/ai/generate-brief', async (req, res) => {
   try {
-    const { headline, topic, category } = req.body;
+    const { headline, topic, category, eventDate, isHistoric } = req.body;
     if (!headline && !topic) return res.status(400).json({ message: 'headline or topic required' });
 
     const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    "Section 1 — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Section 2 — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Section 3 — 50–80 words. Operational context, key capabilities, or RAF significance.",\n    "Section 4 — 1–2 sentences only. A concise summary of this subject's role and significance within the modern RAF. CRITICAL: do NOT mention the subject's name, title, designation, or any unique identifier that would immediately reveal what this brief is about. The summary must be specific enough that a reader given a short list of 4–5 candidates could identify the correct one, but it must not name the subject directly."\n  ]`;
@@ -1627,6 +1857,10 @@ router.post('/ai/generate-brief', async (req, res) => {
       if (rankOrder !== null) brief.gameData = { rankHierarchyOrder: rankOrder };
     }
     const staleSourceWarning = isNews && hasStaleSource(brief.sources);
+    if (isNews) {
+      if (isHistoric) brief.historic = true;
+      if (eventDate)  brief.eventDate = eventDate;
+    }
     res.json({ status: 'success', data: { brief: { ...brief, staleSourceWarning } } });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1858,7 +2092,7 @@ router.post('/ai/generate-quiz', async (req, res) => {
       content: getPrompt(quizAiSettings, 'quiz'),
     }, {
       role: 'user',
-      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 10 easy and 10 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Easy questions test direct recall of specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n3. Medium questions require understanding of context or relationships between facts stated in the description.\n4. The correct answer must be explicitly supported by the description.\n5. Wrong answers must be plausible but clearly incorrect based on the description.\n6. Exactly 10 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":[{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."}],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
+      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 7 easy and 7 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
     }], 'perplexity/sonar', 4096);
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     let generated;
@@ -1868,7 +2102,16 @@ router.post('/ai/generate-quiz', async (req, res) => {
       console.error('[generate-quiz] JSON parse failed. Raw response:', raw.slice(0, 500));
       throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
     }
-    res.json({ status: 'success', data: { easyQuestions: generated.easyQuestions ?? [], mediumQuestions: generated.mediumQuestions ?? [] } });
+    const warnings = [];
+    const { easyQuestions, mediumQuestions } = await ensureQuizQuality(
+      normalizeQuizAnswers(generated.easyQuestions),
+      normalizeQuizAnswers(generated.mediumQuestions),
+      description ?? '',
+      title ?? '',
+      getPrompt(quizAiSettings, 'quiz'),
+      warnings,
+    );
+    res.json({ status: 'success', data: { easyQuestions, mediumQuestions, warnings } });
   } catch (err) {
     console.error('[generate-quiz] error:', err.message);
     res.status(500).json({ message: err.message });
@@ -1898,7 +2141,7 @@ router.post('/ai/generate-quiz-missing', async (req, res) => {
       content: getPrompt(aiSettings, 'quizMissing'),
     }, {
       role: 'user',
-      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""${existingList}\n\nUsing ONLY the facts stated in the description above, generate exactly ${needed} NEW ${difficultyLabel} quiz question${needed > 1 ? 's' : ''}.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. ${difficultyRule}\n3. The correct answer must be explicitly supported by the description.\n4. Wrong answers must be plausible but clearly incorrect based on the description.\n5. Exactly 10 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n6. Do NOT repeat or closely paraphrase any of the existing questions listed above.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"questions":[{"question":"...","answers":[{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."}],"correctAnswerIndex":0}]}`,
+      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""${existingList}\n\nUsing ONLY the facts stated in the description above, generate exactly ${needed} NEW ${difficultyLabel} quiz question${needed > 1 ? 's' : ''}.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. ${difficultyRule}\n3. The correct answer must be explicitly supported by the description.\n4. Wrong answers must be plausible but clearly incorrect based on the description.\n5. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n6. Do NOT repeat or closely paraphrase any of the existing questions listed above.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"questions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}]}`,
     }], 'perplexity/sonar', 4096);
 
     const raw = data.choices?.[0]?.message?.content ?? '{}';
@@ -1909,7 +2152,20 @@ router.post('/ai/generate-quiz-missing', async (req, res) => {
       console.error('[generate-quiz-missing] JSON parse failed. Raw response:', raw.slice(0, 500));
       throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
     }
-    res.json({ status: 'success', data: { questions: (generated.questions ?? []).slice(0, needed) } });
+    // Fix answer counts on returned questions (inner loop only — question count is caller-controlled)
+    const MAX_RETRIES = 3;
+    let questions = normalizeQuizAnswers(generated.questions ?? []).slice(0, needed);
+    for (let i = 0; i < questions.length; i++) {
+      let answers = questions[i].answers ?? [];
+      let attempts = 0;
+      while (answers.length < 7 && attempts < MAX_RETRIES) {
+        attempts++;
+        const topped = await topUpAnswers(questions[i].question, description ?? '', answers, getPrompt(aiSettings, 'quizMissing'));
+        answers = topped.map(a => (typeof a === 'string' ? { title: a } : a));
+      }
+      questions[i] = { ...questions[i], answers };
+    }
+    res.json({ status: 'success', data: { questions } });
   } catch (err) {
     console.error('[generate-quiz-missing] error:', err.message);
     res.status(500).json({ message: err.message });
@@ -1918,103 +2174,367 @@ router.post('/ai/generate-quiz-missing', async (req, res) => {
 
 // POST /api/admin/ai/regenerate-brief/:id
 // Regenerates description sections, keywords, and quiz questions for an existing brief.
+// ── Shared helper: generate description, keywords, quiz, gameData, mnemonics ─
+async function generateBriefContent(brief, aiSettings) {
+  // Cap at 8 for reliability — sonar hits its real output token limit with more keywords + descriptions
+  const kwCount = Math.min(aiSettings.aiKeywordsPerBrief ?? 20, 8);
+
+  let TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ],\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim somewhere in the descriptionSections above", "generatedDescription": "1-2 sentences. Explain what this term is and its RAF role or purpose. Include one specific detail: location/aircraft for a base; role/aircraft for a squadron; capabilities for an aircraft; or training significance for a rank/concept. Draw on broader RAF knowledge only — do NOT reference or summarise this intel brief."},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"}\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.\n2. Write all sections first, then extract keywords — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere across the sections.\n3. Return exactly 10 keyword objects.\n4. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
+
+  TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace('Return exactly 10 keyword objects', `Return exactly ${kwCount} keyword objects`);
+  TOPIC_JSON_SHAPE += `\n5. Do NOT use the topic title "${brief.title}" or any shortened form of it as a keyword — the title itself must never appear in the keywords array.`;
+
+  const gdShape = booGameDataShape(brief.category);
+  if (gdShape) {
+    TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace(
+      '\n}\nCRITICAL RULES:',
+      `,\n  ${gdShape}\n}\nCRITICAL RULES:`
+    );
+    const gdNote = booGameDataNote(brief.category);
+    if (gdNote) TOPIC_JSON_SHAPE += `\n${gdNote}`;
+  }
+
+  const briefData = await openRouterChat([{
+    role: 'system',
+    content: getPrompt(aiSettings, 'regenerateBrief'),
+  }, {
+    role: 'user',
+    content: `Rewrite a comprehensive intelligence brief about this RAF topic: "${brief.title}"\n\nUsing verified facts from published sources, produce a reference-style brief suitable for someone building foundational knowledge of the modern RAF. Where relevant, cover: training pathways and which training blocks/phases apply to this subject; RAF bases associated with this subject and which aircraft or squadrons are stationed there and what operations occur there; roles that interact with or are defined by this subject and how those roles relate to specific training pipelines; and the broader operational and modern-day RAF significance.\n\n${TOPIC_JSON_SHAPE}`,
+  }], 'perplexity/sonar', 8192);
+
+  const briefRaw = briefData.choices?.[0]?.message?.content ?? '{}';
+  let briefGenerated;
+  try {
+    const cleaned = cleanJson(briefRaw);
+    try {
+      briefGenerated = JSON.parse(cleaned);
+    } catch {
+      briefGenerated = JSON.parse(repairJson(cleaned));
+    }
+  } catch (parseErr) {
+    console.error('[generateBriefContent] brief JSON parse failed. Raw:', briefRaw);
+    throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
+  }
+
+  const descriptionSections = Array.isArray(briefGenerated.descriptionSections) ? briefGenerated.descriptionSections : [];
+  let keywords = Array.isArray(briefGenerated.keywords) ? briefGenerated.keywords : [];
+  if (descriptionSections.length) {
+    const descText = descriptionSections.join(' ').toLowerCase();
+    const titleLower = brief.title.toLowerCase();
+    keywords = keywords.filter(k => {
+      if (!k.keyword) return false;
+      const kl = k.keyword.toLowerCase();
+      if (!descText.includes(kl)) return false;
+      // Exclude if keyword is the title itself or either contains the other
+      if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
+      return true;
+    });
+  }
+  let gameData = (gdShape && briefGenerated.gameData && typeof briefGenerated.gameData === 'object')
+    ? briefGenerated.gameData
+    : null;
+
+  if (brief.category === 'Ranks') {
+    const rankOrder = lookupRankHierarchy(brief.title);
+    if (rankOrder !== null) gameData = { rankHierarchyOrder: rankOrder };
+  }
+
+  const freshDescription = descriptionSections.join('\n\n');
+  const quizData = await openRouterChat([{
+    role: 'system',
+    content: getPrompt(aiSettings, 'quiz'),
+  }, {
+    role: 'user',
+    content: `Intel Brief Title: ${brief.title}\n\nIntel Brief Description:\n"""\n${freshDescription}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 7 easy and 7 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n8. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each) — never single words, never just a number or acronym alone.\n9. The correct answer must also be a complete sentence or meaningful phrase drawn directly from the description — never a single word or bare number.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
+  }], 'perplexity/sonar', 8192);
+
+  const quizRaw = quizData.choices?.[0]?.message?.content ?? '{}';
+  let quizGenerated;
+  try {
+    const cleaned = cleanJson(quizRaw);
+    try {
+      quizGenerated = JSON.parse(cleaned);
+    } catch {
+      quizGenerated = JSON.parse(repairJson(cleaned));
+    }
+  } catch (parseErr) {
+    console.error('[generateBriefContent] quiz JSON parse failed. Raw:', quizRaw.slice(0, 500));
+    throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
+  }
+
+  const resolvedGameData = gameData ?? brief.gameData?.toObject?.() ?? brief.gameData ?? {};
+  let mnemonics = null;
+  try {
+    mnemonics = await generateMnemonicsForBrief(brief.title, brief.category, resolvedGameData, getPrompt(aiSettings, 'mnemonic.batch'));
+  } catch (mnemonicErr) {
+    console.error('[generateBriefContent] mnemonic generation failed (non-fatal):', mnemonicErr.message);
+  }
+
+  const quizWarnings = [];
+  let { easyQuestions, mediumQuestions } = await ensureQuizQuality(
+    normalizeQuizAnswers(quizGenerated.easyQuestions),
+    normalizeQuizAnswers(quizGenerated.mediumQuestions),
+    freshDescription,
+    brief.title,
+    getPrompt(aiSettings, 'quiz'),
+    quizWarnings,
+  );
+
+  return {
+    descriptionSections,
+    keywords,
+    easyQuestions,
+    mediumQuestions,
+    gameData,
+    mnemonics,
+    _quizWarnings: quizWarnings,
+  };
+}
+
+// POST /api/admin/ai/regenerate-brief/:id
+// Regenerates description sections, keywords, and quiz questions for an existing brief.
 router.post('/ai/regenerate-brief/:id', async (req, res) => {
   try {
     const brief = await IntelligenceBrief.findById(req.params.id);
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
-
     const aiSettings = await AppSettings.getSettings();
-    const kwCount = aiSettings.aiKeywordsPerBrief ?? 20;
-
-    // ── Step 1: regenerate description sections, keywords (+ gameData for BOO) ─
-    let TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ],\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim somewhere in the descriptionSections above", "generatedDescription": "2-3 sentences. Explain what this term is and its RAF role or purpose. Where relevant include specific detail: for a base or station — its location, which aircraft types and squadrons are stationed there, and what operations occur there; for a squadron or unit — its primary role and responsibilities, aircraft operated, and home base; for an aircraft or system — its capabilities, current service status, and operating bases/squadrons; for a rank, role, or training concept — its place in the RAF structure and training pathway significance. Draw on broader RAF knowledge beyond this brief — do NOT reference or summarise this intel brief."},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "2-3 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"}\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.\n2. Write all sections first, then extract keywords — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere across the sections.\n3. Return exactly 10 keyword objects.\n4. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
-
-    TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace('Return exactly 10 keyword objects', `Return exactly ${kwCount} keyword objects`);
-
-    const gdShape = booGameDataShape(brief.category);
-    if (gdShape) {
-      TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace(
-        '\n}\nCRITICAL RULES:',
-        `,\n  ${gdShape}\n}\nCRITICAL RULES:`
-      );
-      const gdNote = booGameDataNote(brief.category);
-      if (gdNote) TOPIC_JSON_SHAPE += `\n${gdNote}`;
-    }
-
-    const briefData = await openRouterChat([{
-      role: 'system',
-      content: getPrompt(aiSettings, 'regenerateBrief'),
-    }, {
-      role: 'user',
-      content: `Rewrite a comprehensive intelligence brief about this RAF topic: "${brief.title}"\n\nUsing verified facts from published sources, produce a reference-style brief suitable for someone building foundational knowledge of the modern RAF. Where relevant, cover: training pathways and which training blocks/phases apply to this subject; RAF bases associated with this subject and which aircraft or squadrons are stationed there and what operations occur there; roles that interact with or are defined by this subject and how those roles relate to specific training pipelines; and the broader operational and modern-day RAF significance.\n\n${TOPIC_JSON_SHAPE}`,
-    }], 'perplexity/sonar', 4096);
-
-    const briefRaw = briefData.choices?.[0]?.message?.content ?? '{}';
-    let briefGenerated;
-    try {
-      briefGenerated = JSON.parse(cleanJson(briefRaw));
-    } catch (parseErr) {
-      console.error('[regenerate-brief] brief JSON parse failed. Raw:', briefRaw);
-      throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
-    }
-
-    // Safety net: discard keywords that don't appear verbatim in the sections
-    const descriptionSections = Array.isArray(briefGenerated.descriptionSections) ? briefGenerated.descriptionSections : [];
-    let keywords = Array.isArray(briefGenerated.keywords) ? briefGenerated.keywords : [];
-    if (descriptionSections.length) {
-      const descText = descriptionSections.join(' ').toLowerCase();
-      keywords = keywords.filter(k => k.keyword && descText.includes(k.keyword.toLowerCase()));
-    }
-    let gameData = (gdShape && briefGenerated.gameData && typeof briefGenerated.gameData === 'object')
-      ? briefGenerated.gameData
-      : null;
-
-    // For Ranks briefs, always override with deterministic hierarchy lookup
-    if (brief.category === 'Ranks') {
-      const rankOrder = lookupRankHierarchy(brief.title);
-      if (rankOrder !== null) gameData = { rankHierarchyOrder: rankOrder };
-    }
-
-    // ── Step 2: regenerate quiz questions from the fresh description ────────
-    const freshDescription = descriptionSections.join('\n\n');
-
-    const quizData = await openRouterChat([{
-      role: 'system',
-      content: getPrompt(aiSettings, 'quizRegenerate'),
-    }, {
-      role: 'user',
-      content: `Intel Brief Title: ${brief.title}\n\nIntel Brief Description:\n"""\n${freshDescription}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 10 easy and 10 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Easy questions test direct recall of specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n3. Medium questions require understanding of context or relationships between facts stated in the description.\n4. The correct answer must be explicitly supported by the description.\n5. Wrong answers must be plausible but clearly incorrect based on the description.\n6. Exactly 10 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n7. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each) — never single words, never just a number or acronym alone.\n8. The correct answer must also be a complete sentence or meaningful phrase drawn directly from the description — never a single word or bare number.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":[{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."},{"title":"..."}],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
-    }], 'perplexity/sonar');
-
-    const quizRaw = quizData.choices?.[0]?.message?.content ?? '{}';
-    let quizGenerated;
-    try {
-      quizGenerated = JSON.parse(cleanJson(quizRaw));
-    } catch (parseErr) {
-      console.error('[regenerate-brief] quiz JSON parse failed. Raw:', quizRaw.slice(0, 500));
-      throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
-    }
-
-    // ── Step 3: generate mnemonics from the resolved gameData ───────────────
-    const resolvedGameData = gameData ?? brief.gameData?.toObject?.() ?? brief.gameData ?? {};
-    let mnemonics = null;
-    try {
-      mnemonics = await generateMnemonicsForBrief(brief.title, brief.category, resolvedGameData, getPrompt(aiSettings, 'mnemonic.batch'));
-    } catch (mnemonicErr) {
-      console.error('[regenerate-brief] mnemonic generation failed (non-fatal):', mnemonicErr.message);
-    }
-
+    const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData, mnemonics } = await generateBriefContent(brief, aiSettings);
     res.json({
       status: 'success',
       data: {
         descriptionSections,
         keywords,
-        easyQuestions:   quizGenerated.easyQuestions   ?? [],
-        mediumQuestions: quizGenerated.mediumQuestions ?? [],
-        ...(gameData   ? { gameData }   : {}),
-        ...(mnemonics  ? { mnemonics }  : {}),
+        easyQuestions,
+        mediumQuestions,
+        ...(gameData  ? { gameData }  : {}),
+        ...(mnemonics ? { mnemonics } : {}),
       },
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/bulk-generate-stub/:id
+// Full server-side pipeline for a single stub: generates content, image, and links,
+// then saves everything to DB and promotes the stub to published.
+const BULK_LINK_CONFIG = {
+  Aircrafts: [
+    { linkType: 'bases',     field: 'associatedBaseBriefIds',     poolCategory: 'Bases' },
+    { linkType: 'squadrons', field: 'associatedSquadronBriefIds', poolCategory: 'Squadrons' },
+    { linkType: 'missions',  field: 'associatedMissionBriefIds',  poolCategory: 'Missions' },
+  ],
+  Squadrons: [
+    { linkType: 'bases',    field: 'associatedBaseBriefIds',     poolCategory: 'Bases' },
+    { linkType: 'aircraft', field: 'associatedAircraftBriefIds', poolCategory: 'Aircrafts' },
+    { linkType: 'missions', field: 'associatedMissionBriefIds',  poolCategory: 'Missions' },
+  ],
+  Bases: [
+    { linkType: 'squadrons', field: 'associatedSquadronBriefIds', poolCategory: 'Squadrons' },
+    { linkType: 'aircraft',  field: 'associatedAircraftBriefIds', poolCategory: 'Aircrafts' },
+  ],
+  Roles: [
+    { linkType: 'training', field: 'associatedTrainingBriefIds', poolCategory: 'Training' },
+  ],
+  Tech: [
+    { linkType: 'aircraft', field: 'associatedAircraftBriefIds', poolCategory: 'Aircrafts' },
+  ],
+};
+
+router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
+  try {
+    const brief = await IntelligenceBrief.findById(req.params.id);
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    if (brief.status !== 'stub') return res.status(400).json({ message: 'Brief is not a stub' });
+
+    const aiSettings = await AppSettings.getSettings();
+    const generationWarnings = [];
+
+    // ── Part A: description + keywords + quiz + gameData + mnemonics ─────────
+    const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData, mnemonics, _quizWarnings } =
+      await generateBriefContent(brief, aiSettings);
+    if (_quizWarnings?.length) {
+      for (const w of _quizWarnings) generationWarnings.push(`Quiz: ${w}`);
+    }
+
+    // ── Part B: image (first result only) ────────────────────────────────────
+    let newMedia = null;
+    try {
+      const imagePromptBase = getPrompt(aiSettings, 'imageExtraction');
+      const aiImgRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
+          'X-Title': 'SkyWatch',
+        },
+        body: JSON.stringify({
+          model: 'openai/gpt-4o-mini',
+          messages: [{ role: 'user', content: `${imagePromptBase}\n\nTitle: "${brief.title}"` }],
+        }),
+      });
+      const aiImgData = await aiImgRes.json();
+      let terms = [];
+      try { terms = JSON.parse((aiImgData.choices?.[0]?.message?.content ?? '[]').replace(/```json\n?|```/g, '').trim()); } catch { terms = [brief.title]; }
+      if (!Array.isArray(terms) || !terms.length) terms = [brief.title];
+
+      // Try each term in order and take the first one that produces an image
+      for (const term of terms.slice(0, 3)) {
+        try {
+          const searchRes = await fetch(
+            `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`
+          );
+          const searchData = await searchRes.json();
+          const pageTitle = searchData.query?.search?.[0]?.title;
+          if (!pageTitle) continue;
+
+          const thumbRes = await fetch(
+            `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=800&origin=*`
+          );
+          const thumbData = await thumbRes.json();
+          const imageUrl = Object.values(thumbData.query?.pages ?? {})[0]?.thumbnail?.source;
+          if (!imageUrl) continue;
+
+          const imgRes = await fetch(imageUrl, { headers: { 'User-Agent': 'SkyWatch/1.0 (educational-platform)' } });
+          if (!imgRes.ok) continue;
+
+          const buffer = Buffer.from(await imgRes.arrayBuffer());
+          const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}-bulk` });
+          newMedia = { url: result.secure_url, publicId: result.public_id };
+          break;
+        } catch { continue; }
+      }
+    } catch (imgErr) {
+      console.error('[bulk-generate-stub] image generation failed (non-fatal):', imgErr.message);
+    }
+
+    // ── Part C: linked brief IDs ──────────────────────────────────────────────
+    const linkUpdates = {};
+    const linkConfig = BULK_LINK_CONFIG[brief.category] ?? [];
+    if (linkConfig.length > 0) {
+      const descriptionText = descriptionSections.join('\n\n');
+      // Fetch all needed pools in parallel
+      const poolCategories = [...new Set(linkConfig.map(l => l.poolCategory))];
+      const pools = {};
+      await Promise.all(poolCategories.map(async (cat) => {
+        // When the brief being generated is not itself historic, exclude historic
+        // aircraft from the pool so retired/retired types are never linked to
+        // current bases, squadrons, or tech briefs.
+        const query = { category: cat };
+        if (cat === 'Aircrafts' && !brief.historic) query.historic = { $ne: true };
+        const items = await IntelligenceBrief
+          .find(query, '_id title')
+          .lean();
+        pools[cat] = items;
+      }));
+
+      // Generate links for each type (sequentially to avoid rate limits)
+      for (const { linkType, field, poolCategory } of linkConfig) {
+        const pool = pools[poolCategory] ?? [];
+        if (!pool.length) {
+          generationWarnings.push(`[${linkType}] Skipped — no published ${poolCategory} briefs in pool`);
+          continue;
+        }
+        try {
+          const linkKey = `${brief.category}:${linkType}`;
+          const systemPrompt = brief.historic
+            ? (getPrompt(aiSettings, `links.historic.${linkKey}`) ?? getPrompt(aiSettings, `links.${linkKey}`))
+            : getPrompt(aiSettings, `links.${linkKey}`);
+          if (!systemPrompt) {
+            generationWarnings.push(`[${linkType}] Skipped — no prompt found for key links.${linkKey}`);
+            continue;
+          }
+
+          const poolList = pool.map(b => `- "${b.title}"`).join('\n');
+          const linkData = await openRouterChat([{
+            role: 'system',
+            content: systemPrompt + ' Return ONLY valid JSON — no markdown, no code blocks.',
+          }, {
+            role: 'user',
+            content: `Brief: "${brief.title}"\n\nDescription:\n"""\n${descriptionText}\n"""\n\nAvailable ${linkType} briefs:\n${poolList}\n\nReturn the titles of all matching ${linkType} from the list above, copied exactly as written. Always use Arabic numerals for squadron numbers (e.g. "No. 4 Squadron RAF", never "No. IV Squadron RAF"). If none match, return an empty array.\n\nReturn ONLY valid JSON: {"titles":["Exact Title One","Exact Title Two"]}`,
+          }], 'perplexity/sonar', 1024);
+
+          const linkRaw = linkData.choices?.[0]?.message?.content ?? '{}';
+          const parsed = JSON.parse(cleanJson(linkRaw));
+          const poolByNorm = new Map(pool.map(b => [normTitle(b.title), String(b._id)]));
+          const ids = (Array.isArray(parsed.titles) ? parsed.titles : [])
+            .map(t => poolByNorm.get(normTitle(t)))
+            .filter(Boolean);
+          if (ids.length) {
+            linkUpdates[field] = ids;
+            generationWarnings.push(`[${linkType}] Linked ${ids.length} brief(s)`);
+          } else {
+            generationWarnings.push(`[${linkType}] AI matched 0 of ${pool.length} pool briefs`);
+          }
+        } catch (linkErr) {
+          console.error(`[bulk-generate-stub] link generation for ${linkType} failed (non-fatal):`, linkErr.message);
+          generationWarnings.push(`[${linkType}] Error: ${linkErr.message}`);
+        }
+      }
+    }
+
+    // ── Part D: save to DB ────────────────────────────────────────────────────
+    // 1. Save quiz questions
+    const gameType = await GameType.findOne({ gameTitle: 'quiz' });
+    if (gameType) {
+      await GameQuizQuestion.deleteMany({ intelBriefId: brief._id });
+      const createQs = async (questions, difficulty) => {
+        const ids = [];
+        for (const q of questions) {
+          if (!Array.isArray(q.answers) || q.answers.length !== 7) {
+            const got = Array.isArray(q.answers) ? q.answers.length : 0;
+            const msg = `Skipped ${difficulty} question (got ${got} answers, expected 7): "${q.question?.slice(0, 60)}"`;
+            generationWarnings.push(msg);
+            console.warn(`[bulk-generate-stub] ${msg}`);
+            continue;
+          }
+          const answers = q.answers.map(a => ({ _id: new mongoose.Types.ObjectId(), title: typeof a === 'string' ? a : a.title }));
+          const doc = await GameQuizQuestion.create({
+            gameTypeId:      gameType._id,
+            intelBriefId:    brief._id,
+            difficulty,
+            question:        q.question,
+            answers,
+            correctAnswerId: answers[q.correctAnswerIndex]?._id ?? answers[0]._id,
+          });
+          ids.push(doc._id);
+        }
+        return ids;
+      };
+      const [easyIds, mediumIds] = await Promise.all([
+        createQs(easyQuestions, 'easy'),
+        createQs(mediumQuestions, 'medium'),
+      ]);
+      brief.quizQuestionsEasy   = easyIds;
+      brief.quizQuestionsMedium = mediumIds;
+    }
+
+    // 2. Save image
+    if (newMedia) {
+      const mediaDoc = await Media.create({
+        mediaType: 'picture',
+        mediaUrl: newMedia.url,
+        cloudinaryPublicId: newMedia.publicId,
+        showOnSummary: true,
+      });
+      brief.media = [mediaDoc._id];
+    }
+
+    // 3. Update brief fields
+    brief.descriptionSections = descriptionSections;
+    brief.keywords = keywords;
+    brief.status = 'published';
+    if (gameData) brief.gameData = gameData;
+    if (mnemonics) brief.mnemonics = mnemonics;
+    for (const [field, ids] of Object.entries(linkUpdates)) {
+      brief[field] = ids;
+    }
+    await brief.save();
+
+    await AdminAction.create({ userId: req.user._id, actionType: 'create_brief', reason: 'Bulk auto-generate' });
+
+    res.json({ status: 'success', data: { _id: brief._id, title: brief.title, category: brief.category }, warnings: generationWarnings });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -2033,7 +2553,7 @@ router.post('/ai/regenerate-description/:id', async (req, res) => {
     const descAiSettings = await AppSettings.getSettings();
     const data = await openRouterChat([{
       role: 'system',
-      content: getPrompt(descAiSettings, 'regenerateDescription'),
+      content: getPrompt(descAiSettings, 'regenerateBrief'),
     }, {
       role: 'user',
       content: `Write fresh description sections for this RAF intel brief: "${brief.title}"\n\nUsing verified facts from published sources, produce clear, informative paragraphs suitable for someone building foundational knowledge of the modern RAF.\n\n${DESC_JSON_SHAPE}`,
@@ -2417,6 +2937,31 @@ router.post('/save-generated-image', async (req, res) => {
     const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}`, format: 'png' });
 
     res.json({ status: 'success', data: { url: result.secure_url, publicId: result.public_id } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/email-logs?page=1&limit=50&type=welcome&status=failed&search=user@example.com
+router.get('/email-logs', async (req, res) => {
+  try {
+    const page   = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const filter = {};
+    if (req.query.type)   filter.type   = req.query.type;
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.search) filter.recipientEmail = { $regex: req.query.search.trim(), $options: 'i' };
+
+    const [logs, total] = await Promise.all([
+      EmailLog.find(filter)
+        .sort({ sentAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      EmailLog.countDocuments(filter),
+    ]);
+
+    res.json({ status: 'success', data: { logs, total, page, totalPages: Math.ceil(total / limit) } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

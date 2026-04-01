@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../../data/mockData'
+import { pathwayTierRequired } from '../../utils/subscription'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PATHWAY_COLORS = {
+  News:        { stone: '#a16207', glow: 'rgba(161,98,7,0.4)',    ring: '#eab308', bg: '#422006' },
   Bases:       { stone: '#2563eb', glow: 'rgba(37,99,235,0.4)',   ring: '#3b82f6', bg: '#1e3a8a' },
   Aircrafts:   { stone: '#475569', glow: 'rgba(71,85,105,0.4)',   ring: '#64748b', bg: '#1e293b' },
   Ranks:       { stone: '#d97706', glow: 'rgba(217,119,6,0.4)',   ring: '#f59e0b', bg: '#451a03' },
@@ -27,20 +29,21 @@ const PATHWAY_COLORS = {
 const DEFAULT_COLORS = { stone: '#334155', glow: 'rgba(51,65,85,0.4)', ring: '#475569', bg: '#1e293b' }
 
 const DEFAULT_PATHWAY_UNLOCKS = [
-  { category: 'Bases',       levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
-  { category: 'Terminology', levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
-  { category: 'Aircrafts',   levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
-  { category: 'Heritage',    levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
-  { category: 'Ranks',       levelRequired: 2, rankRequired: 1, tierRequired: 'silver' },
-  { category: 'Squadrons',   levelRequired: 3, rankRequired: 2, tierRequired: 'silver' },
-  { category: 'Allies',      levelRequired: 3, rankRequired: 2, tierRequired: 'free'   },
-  { category: 'Training',    levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
-  { category: 'AOR',         levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
-  { category: 'Roles',       levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
-  { category: 'Tech',        levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
-  { category: 'Threats',     levelRequired: 6, rankRequired: 3, tierRequired: 'gold'   },
-  { category: 'Missions',    levelRequired: 7, rankRequired: 4, tierRequired: 'gold'   },
-  { category: 'Treaties',    levelRequired: 8, rankRequired: 4, tierRequired: 'gold'   },
+  { category: 'News',        levelRequired: 1, rankRequired: 1 },
+  { category: 'Bases',       levelRequired: 1, rankRequired: 1 },
+  { category: 'Terminology', levelRequired: 1, rankRequired: 1 },
+  { category: 'Aircrafts',   levelRequired: 2, rankRequired: 1 },
+  { category: 'Heritage',    levelRequired: 2, rankRequired: 1 },
+  { category: 'Ranks',       levelRequired: 2, rankRequired: 1 },
+  { category: 'Squadrons',   levelRequired: 3, rankRequired: 2 },
+  { category: 'Allies',      levelRequired: 3, rankRequired: 2 },
+  { category: 'Training',    levelRequired: 4, rankRequired: 2 },
+  { category: 'AOR',         levelRequired: 4, rankRequired: 2 },
+  { category: 'Roles',       levelRequired: 5, rankRequired: 3 },
+  { category: 'Tech',        levelRequired: 5, rankRequired: 3 },
+  { category: 'Threats',     levelRequired: 6, rankRequired: 3 },
+  { category: 'Missions',    levelRequired: 7, rankRequired: 4 },
+  { category: 'Treaties',    levelRequired: 8, rankRequired: 4 },
 ]
 
 // Zigzag horizontal offsets (px), cycling every 4 stones
@@ -80,11 +83,13 @@ function getRankName(rankNumber) {
 // ── Stone component ───────────────────────────────────────────────────────────
 
 function Stone({ brief, state, colors, milestone, onTap, index }) {
-  const size     = milestone ? 72 : 60
-  const isNext   = state === 'next'
-  const isRead   = state === 'read'
-  const isLocked = state.startsWith('locked')
-  const isStub   = state === 'stub'
+  const size         = milestone ? 72 : 60
+  const isNext       = state === 'next'
+  const isRead       = state === 'read'
+  const isInProgress = state === 'inprogress'
+  const isLocked     = state.startsWith('locked')
+  const isStub       = state === 'stub'
+  const [hovered, setHovered] = useState(false)
 
   const xOffset = ZIGZAG[index % ZIGZAG.length]
 
@@ -92,6 +97,8 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
     <div
       className="flex flex-col items-center"
       style={{ paddingLeft: `calc(50% + ${xOffset}px - ${size / 2}px)`, alignItems: 'flex-start' }}
+      onMouseEnter={() => { if (isStub) setHovered(true) }}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Connector dot strip above (except first) */}
       {index > 0 && (
@@ -113,11 +120,12 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
         style={{
           width:  size,
           height: size,
-          background: (isLocked || isStub) ? '#172236' : isRead ? colors.bg : colors.stone,
-          border: `2px solid ${(isLocked || isStub) ? '#243650' : isNext ? colors.ring : isRead ? colors.stone + '80' : colors.stone}`,
+          background: (isLocked || isStub) ? '#172236' : isRead ? colors.bg : isInProgress ? colors.stone + '44' : colors.stone,
+          border: `2px solid ${(isLocked || isStub) ? '#243650' : isNext ? colors.ring : isRead ? colors.stone + '80' : isInProgress ? colors.stone + 'aa' : colors.stone}`,
           boxShadow: isNext ? `0 0 0 6px ${colors.glow}, 0 0 20px ${colors.glow}` :
                      isRead ? 'none' :
                      (isLocked || isStub) ? 'none' :
+                     isInProgress ? `0 2px 8px ${colors.glow}` :
                      `0 2px 12px ${colors.glow}`,
         }}
       >
@@ -131,7 +139,7 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
           />
         )}
 
-        <span className="text-xl leading-none select-none" style={{ opacity: (isLocked || isStub) ? 0.5 : isRead ? 0.5 : 1 }}>
+        <span className="text-xl leading-none select-none" style={{ opacity: (isLocked || isStub) ? 0.5 : isRead ? 0.5 : isInProgress ? 0.75 : 1 }}>
           {isLocked ? '🔒' : isStub ? '📡' : isRead ? '✓' : milestone ? '⭐' : CATEGORY_ICONS[brief.category] ?? '📄'}
         </span>
 
@@ -144,18 +152,58 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
             ✓
           </span>
         )}
+
+        {/* In-progress badge */}
+        {isInProgress && (
+          <span
+            className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
+            style={{ background: colors.stone + 'cc', color: '#fff', border: `1px solid ${colors.ring}` }}
+          >
+            ●
+          </span>
+        )}
       </button>
 
       {/* Title label */}
       <p
-        className="text-xs font-semibold mt-1.5 text-center leading-tight max-w-[100px]"
+        className="text-xs font-semibold mt-1.5 text-center leading-tight relative overflow-hidden"
         style={{
-          color: (isLocked || isStub) ? '#3d5a7a' : isRead ? '#4a6282' : isNext ? '#ddeaf8' : '#8ba0c0',
+          color: (isLocked || isStub) ? '#3d5a7a' : isRead ? '#4a6282' : isNext ? '#ddeaf8' : isInProgress ? '#a0c4e4' : '#8ba0c0',
           marginLeft: -(size / 2) + 6,
           width: size + 40,
+          minHeight: '2.5em',
         }}
       >
-        {isStub ? 'Intel being collected' : brief.title}
+        <AnimatePresence mode="wait">
+          {isStub ? (
+            hovered ? (
+              <motion.span
+                key="title"
+                className="block"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18 }}
+                style={{ color: '#8ba0c0' }}
+              >
+                {brief.title}
+              </motion.span>
+            ) : (
+              <motion.span
+                key="collecting"
+                className="block"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.18 }}
+              >
+                Intel being collected
+              </motion.span>
+            )
+          ) : (
+            <span className="block">{brief.title}</span>
+          )}
+        </AnimatePresence>
       </p>
     </div>
   )
@@ -163,7 +211,7 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
 
 // ── Pathway view (vertical list of stones for one category) ──────────────────
 
-function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, onStoneTap, onLockedTap, direction }) {
+function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, onStoneTap, onLockedTap, direction }) {
   const navigate = useNavigate()
 
   const variants = {
@@ -237,10 +285,11 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
       className="pb-8"
     >
       {briefs.map((brief, i) => {
-        const isStub    = brief.status === 'stub'
-        const isRead    = !isStub && readSet.has(brief._id)
-        const isNext    = !isStub && !isRead && i === firstUnreadIdx
-        const state     = isStub ? 'stub' : isRead ? 'read' : isNext ? 'next' : 'unread'
+        const isStub       = brief.status === 'stub'
+        const isRead       = !isStub && readSet.has(brief._id)
+        const isInProgress = !isStub && !isRead && inProgressSet.has(brief._id)
+        const isNext       = !isStub && !isRead && !isInProgress && i === firstUnreadIdx
+        const state        = isStub ? 'stub' : isRead ? 'read' : isInProgress ? 'inprogress' : isNext ? 'next' : 'unread'
         const milestone = (i + 1) % 5 === 0
 
         return (
@@ -374,15 +423,18 @@ function RequirementRow({ label, value, met, current }) {
 export default function LearnPriority() {
   const { user, API } = useAuth()
   const navigate      = useNavigate()
+  const location      = useLocation()
   const { start }     = useAppTutorial()
 
   const [levels,         setLevels]         = useState(MOCK_LEVELS)
   const [pathwayUnlocks, setPathwayUnlocks] = useState(DEFAULT_PATHWAY_UNLOCKS)
+  const [catSettings,    setCatSettings]    = useState(null) // { freeCategories, silverCategories }
   const [briefsCache,    setBriefsCache]    = useState({}) // { [category]: brief[] }
   const [loading,        setLoading]        = useState(false)
-  const [activeCatIndex, setActiveCatIndex] = useState(0)
+  const [activeCatIndex, setActiveCatIndex] = useState(1)
   const [direction,      setDirection]      = useState(1)   // 1=forward, -1=backward
   const [unlockModal,    setUnlockModal]    = useState(null) // { unlock, category, colors }
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
   const dragX = useMotionValue(0)
 
   // ── Tutorial ────────────────────────────────────────────────────────────────
@@ -391,14 +443,16 @@ export default function LearnPriority() {
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fetch settings (pathwayUnlocks) ────────────────────────────────────────
+  // ── Fetch settings (pathwayUnlocks + category tier lists) ─────────────────
   useEffect(() => {
     fetch(`${API}/api/settings`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.pathwayUnlocks?.length) setPathwayUnlocks(d.pathwayUnlocks)
+        if (d) setCatSettings({ freeCategories: d.freeCategories ?? [], silverCategories: d.silverCategories ?? [] })
+        setSettingsLoaded(true)
       })
-      .catch(() => {})
+      .catch(() => { setSettingsLoaded(true) })
   }, [API])
 
   // ── Fetch level thresholds ──────────────────────────────────────────────────
@@ -418,19 +472,33 @@ export default function LearnPriority() {
 
   // ── Derive ordered pathway list ─────────────────────────────────────────────
   const TIER_ORDER = { free: 0, silver: 1, gold: 2 }
-  const pathways = [...pathwayUnlocks]
+  const pathways = pathwayUnlocks
+    .map(unlock => {
+      const tierRequired = pathwayTierRequired(unlock.category, catSettings)
+      return {
+        ...unlock,
+        tierRequired,
+        colors:   PATHWAY_COLORS[unlock.category] ?? DEFAULT_COLORS,
+        unlocked: isPathwayUnlocked({ ...unlock, tierRequired }, userLevel, userRankNumber, userTier),
+      }
+    })
     .sort((a, b) =>
       (a.levelRequired - b.levelRequired) ||
       (a.rankRequired  - b.rankRequired)  ||
       ((TIER_ORDER[a.tierRequired] ?? 0) - (TIER_ORDER[b.tierRequired] ?? 0))
     )
-    .map(unlock => ({
-      ...unlock,
-      colors:     PATHWAY_COLORS[unlock.category] ?? DEFAULT_COLORS,
-      unlocked:   isPathwayUnlocked(unlock, userLevel, userRankNumber, userTier),
-    }))
 
   const unlockedCount = pathways.filter(p => p.unlocked).length
+
+  // ── Jump to category passed via navigation state (e.g. back from BriefReader) ─
+  // Fires once, after settings fetch settles, so pathways reflect server order.
+  useEffect(() => {
+    if (!settingsLoaded) return
+    const cat = location.state?.category
+    if (!cat) return
+    const idx = pathways.findIndex(p => p.category === cat)
+    if (idx !== -1) setActiveCatIndex(idx)
+  }, [settingsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fire pathway_swipe tutorial when ≥2 pathways unlocked ──────────────────
   useEffect(() => {
@@ -463,6 +531,9 @@ export default function LearnPriority() {
   const activeBriefs = briefsCache[activePathway?.category] ?? []
   const readSet = new Set(
     activeBriefs.filter(b => b.isRead).map(b => b._id)
+  )
+  const inProgressSet = new Set(
+    activeBriefs.filter(b => b.isInProgress).map(b => b._id)
   )
   const readCount  = readSet.size
   const totalCount = activeBriefs.length
@@ -629,6 +700,7 @@ export default function LearnPriority() {
                 pathwayUnlocked={activePathway.unlocked}
                 lockReason={getLockReason(activePathway)}
                 readSet={readSet}
+                inProgressSet={inProgressSet}
                 direction={direction}
                 onStoneTap={() => {}}
                 onLockedTap={() => setUnlockModal({

@@ -23,7 +23,7 @@ const {
   createWonBooResult,
   createAircoinLog,
   createFlashcardGame, createFlashcardResult,
-  createWhosAtAircraftGame, createWhosAtAircraftResult,
+  createWheresThatAircraftGame, createWheresThatAircraftResult,
 } = require('../helpers/factories');
 
 const IntelligenceBrief               = require('../../models/IntelligenceBrief');
@@ -35,8 +35,8 @@ const GameOrderOfBattle               = require('../../models/GameOrderOfBattle'
 const GameSessionOrderOfBattleResult  = require('../../models/GameSessionOrderOfBattleResult');
 const GameFlashcardRecall             = require('../../models/GameFlashcardRecall');
 const GameSessionFlashcardRecallResult = require('../../models/GameSessionFlashcardRecallResult');
-const GameWhosAtAircraft              = require('../../models/GameWhosAtAircraft');
-const GameSessionWhosAtAircraftResult = require('../../models/GameSessionWhosAtAircraftResult');
+const GameWheresThatAircraft              = require('../../models/GameWheresThatAircraft');
+const GameSessionWheresThatAircraftResult = require('../../models/GameSessionWheresThatAircraftResult');
 const AircoinLog                      = require('../../models/AircoinLog');
 const AdminAction                     = require('../../models/AdminAction');
 const User                            = require('../../models/User');
@@ -209,11 +209,11 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — cascade deletions'
     expect(await GameSessionFlashcardRecallResult.countDocuments({ gameId: game._id })).toBe(0);
   });
 
-  it('deletes GameWhosAtAircraft records for this brief', async () => {
+  it('deletes GameWheresThatAircraft records for this brief', async () => {
     const brief    = await createBrief({ category: 'Aircrafts' });
     const gameType = await createGameType();
     const admin    = await createAdminUser();
-    const result   = await createWhosAtAircraftGame(brief._id, gameType._id);
+    const result   = await createWheresThatAircraftGame(brief._id, gameType._id);
     const gameId   = result.insertedId;
 
     await request(app)
@@ -221,24 +221,24 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — cascade deletions'
       .set('Cookie', authCookie(admin._id))
       .send({ reason: REASON });
 
-    expect(await GameWhosAtAircraft.countDocuments({ intelBriefId: brief._id })).toBe(0);
+    expect(await GameWheresThatAircraft.countDocuments({ intelBriefId: brief._id })).toBe(0);
   });
 
-  it('deletes GameSessionWhosAtAircraftResult records for affected WAA games', async () => {
+  it('deletes GameSessionWheresThatAircraftResult records for affected WAA games', async () => {
     const brief    = await createBrief({ category: 'Aircrafts' });
     const gameType = await createGameType();
     const user     = await createUser();
     const admin    = await createAdminUser();
-    const result   = await createWhosAtAircraftGame(brief._id, gameType._id);
+    const result   = await createWheresThatAircraftGame(brief._id, gameType._id);
     const gameId   = result.insertedId;
-    await createWhosAtAircraftResult(user._id, gameId);
+    await createWheresThatAircraftResult(user._id, gameId);
 
     await request(app)
       .post(`/api/admin/briefs/${brief._id}/confirm-regeneration`)
       .set('Cookie', authCookie(admin._id))
       .send({ reason: REASON });
 
-    expect(await GameSessionWhosAtAircraftResult.countDocuments({ gameId })).toBe(0);
+    expect(await GameSessionWheresThatAircraftResult.countDocuments({ gameId })).toBe(0);
   });
 
   it('deletes AircoinLog entries with matching briefId', async () => {

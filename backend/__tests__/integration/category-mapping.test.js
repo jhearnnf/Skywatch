@@ -139,6 +139,7 @@ describe('leadSubsectionToSubcategory', () => {
     ['BILATERAL DEFENCE AGREEMENTS',                         'Bilateral Defence Agreements'],
     ['ARMS CONTROL & NON-PROLIFERATION',                     'Arms Control & Non-Proliferation'],
     ['OPERATIONAL & STATUS AGREEMENTS',                      'Operational & Status Agreements'],
+    ['DEFENCE POLICY & STRATEGY',                            'Defence Policy & Strategy'],
     // AOR (previously unmapped — regression)
     ['UK / HOME AIR DEFENCE',                                'UK Home Air Defence'],
     ['NATO AOR STRUCTURE',                                   'NATO AOR'],
@@ -238,6 +239,7 @@ describe('leadSubsectionToSubcategory — model coverage', () => {
               ['BILATERAL DEFENCE AGREEMENTS', 'Bilateral Defence Agreements'],
               ['ARMS CONTROL & NON-PROLIFERATION', 'Arms Control & Non-Proliferation'],
               ['OPERATIONAL & STATUS AGREEMENTS', 'Operational & Status Agreements'],
+              ['DEFENCE POLICY & STRATEGY', 'Defence Policy & Strategy'],
               ['UK / HOME AIR DEFENCE', 'UK Home Air Defence'],
               ['NATO AOR STRUCTURE', 'NATO AOR'],
               ['CENTCOM / MIDDLE EAST AOR', 'Middle East & CENTCOM'],

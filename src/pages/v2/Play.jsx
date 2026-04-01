@@ -8,7 +8,7 @@ import TutorialModal from '../../components/tutorial/TutorialModal'
 import FlashcardGameModal from '../../components/FlashcardGameModal'
 
 // BOO states that trigger the unlock notification (game is actually playable)
-const BOO_ACCESSIBLE_STATES = ['active', 'needs-quiz']
+const BOO_ACCESSIBLE_STATES = ['active']
 
 // Labels for needs-*-reads gate states; unknown future states fall back to generic text
 const NEEDS_READS_LABELS = {
@@ -79,7 +79,7 @@ const GAME_MODES = [
 
 export default function Play() {
   const { user, API } = useAuth()
-  const { start, step, visible, next: tutorialNext } = useAppTutorial()
+  const { start, step, visible, next: tutorialNext, hasSeen } = useAppTutorial()
   const { newGames, isUnlocked, markSeen, markUnlockFromServer, revokeUnlock } = useNewGameUnlock()
 
   const isHighlightingGrid = visible && !!step?.highlightGrid
@@ -95,6 +95,14 @@ export default function Play() {
   const [flyingBadges,  setFlyingBadges]  = useState([]) // [{ key, from:{x,y}, to:{x,y} }]
   const [flashingCards, setFlashingCards] = useState(new Set())
   const animatedKeysRef = useRef(new Set())
+
+  // Suppress badge animations until the play tutorial is completed/skipped
+  const [playTutorialDone, setPlayTutorialDone] = useState(() => hasSeen('play'))
+  const prevVisibleRef = useRef(false)
+  useEffect(() => {
+    if (prevVisibleRef.current && !visible) setPlayTutorialDone(true)
+    prevVisibleRef.current = visible
+  }, [visible])
 
   const quizRef      = useRef(null)
   const flashcardRef = useRef(null)
@@ -124,10 +132,10 @@ export default function Play() {
   // Clear highlight timer on unmount
   useEffect(() => () => clearTimeout(highlightTimerRef.current), [])
 
-  // Badge fly animation — fires when newGames changes
+  // Badge fly animation — fires when newGames changes, but only after play tutorial is done
   const newGamesKey = [...newGames].sort().join(',')
   useEffect(() => {
-    if (!newGamesKey) return
+    if (!newGamesKey || !playTutorialDone) return
     const timer = setTimeout(() => {
       const toAnimate = newGamesKey.split(',').filter(k => k && !animatedKeysRef.current.has(k))
       if (!toAnimate.length) return
@@ -153,7 +161,7 @@ export default function Play() {
       if (badges.length) setFlyingBadges(prev => [...prev, ...badges])
     }, 600)
     return () => clearTimeout(timer)
-  }, [newGamesKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [newGamesKey, playTutorialDone]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleBadgeArrived(key) {
     setFlyingBadges(prev => prev.filter(b => b.key !== key))
@@ -437,7 +445,7 @@ export default function Play() {
                 <div className="text-center py-4">
                   <p className="text-sm text-slate-500 mb-4">Read some briefs first, then return here to quiz yourself.</p>
                   <Link
-                    to="/learn"
+                    to="/learn-priority"
                     className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
                   >
                     Browse Briefs
@@ -513,7 +521,7 @@ export default function Play() {
               </div>
             </div>
             <div className="p-5">
-              <Link to="/learn/Aircrafts" className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group mb-3">
+              <Link to="/learn-priority" className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group mb-3">
                 <span className="text-xl shrink-0">✈️</span>
                 <p className="text-sm font-semibold text-slate-700 leading-snug">
                   Learn about aircrafts for these random missions to appear
@@ -724,7 +732,7 @@ export default function Play() {
                     Read briefs in eligible categories (Aircrafts, Ranks, Training, Missions, Tech, Treaties) to unlock Battle of Order.
                   </p>
                   <Link
-                    to="/learn"
+                    to="/learn-priority"
                     className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
                   >
                     Explore Subjects

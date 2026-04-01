@@ -349,44 +349,58 @@ router.get('/history', protect, async (req, res) => {
   }
 });
 
-// Generate candidate match strings for a base/squadron brief title.
-// Bases:     try stripping leading "RAF " / "Royal Air Force "
-// Squadrons: try stripping trailing " RAF" / " Royal Air Force"
-//            also try short form "No. 13" for titles like "No. 13 Squadron RAF"
-function getMatchCandidates(title, category) {
-  const candidates = [title];
+// Generate candidate match strings for a brief title.
+// Returns an array of strings to try against the description text (longest first
+// so the most specific match wins).  All returned strings are >= 4 chars.
+function getMatchCandidates(title, category, nickname) {
+  const raw = [title];
+
   if (category === 'Bases') {
-    if (/^RAF /i.test(title))             candidates.push(title.replace(/^RAF /i, ''));
-    if (/^Royal Air Force /i.test(title)) candidates.push(title.replace(/^Royal Air Force /i, ''));
-  } else {
-    if (/ RAF$/i.test(title))             candidates.push(title.replace(/ RAF$/i, ''));
-    if (/ Royal Air Force$/i.test(title)) candidates.push(title.replace(/ Royal Air Force$/i, ''));
+    if (/^RAF /i.test(title))             raw.push(title.replace(/^RAF /i, ''));
+    if (/^Royal Air Force /i.test(title)) raw.push(title.replace(/^Royal Air Force /i, ''));
+  } else if (category === 'Squadrons') {
+    if (/ RAF$/i.test(title))             raw.push(title.replace(/ RAF$/i, ''));
+    if (/ Royal Air Force$/i.test(title)) raw.push(title.replace(/ Royal Air Force$/i, ''));
     const noMatch = title.match(/^(No\.\s*\d+)\s+Squadron/i);
-    if (noMatch) candidates.push(noMatch[1]);
+    if (noMatch) raw.push(noMatch[1]);
+  } else if (category === 'Aircrafts') {
+    if (nickname) raw.push(nickname);
+  } else if (category === 'Missions') {
+    // "Operation Shader" → also try "Op Shader"
+    if (/^Operation /i.test(title)) raw.push(title.replace(/^Operation /i, 'Op '));
   }
-  return candidates;
+
+  // Filter out anything too short to reliably match (avoids "F-5", "IOT", etc.)
+  return [...new Set(raw)].filter(c => c.length >= 4);
 }
 
-// Scan a brief's description sections for mentions of any Base/Squadron brief titles.
+// Scan a brief's description sections for verbatim mentions of other brief titles.
 // Returns objects with { _id, title, subtitle, matchTerm } for each match found.
+const SCAN_CATEGORIES = ['Bases', 'Squadrons', 'Aircrafts', 'Missions', 'Tech', 'Threats', 'Terminology', 'Allies'];
+
 async function scanMentionedBriefs(brief) {
   const descLower = (brief.descriptionSections || []).join(' ').toLowerCase();
   if (!descLower.trim()) return [];
 
-  const basesSquadrons = await IntelligenceBrief.find(
-    { category: { $in: ['Bases', 'Squadrons'] }, _id: { $ne: brief._id } },
-    '_id title subtitle category'
+  const candidates = await IntelligenceBrief.find(
+    { category: { $in: SCAN_CATEGORIES }, _id: { $ne: brief._id } },
+    '_id title subtitle nickname category'
   ).lean();
 
+  // Build exclusion set from all explicit association arrays so we don't duplicate
   const linkedIds = new Set([
-    ...(brief.associatedBaseBriefIds || []).map(b => String(b._id ?? b)),
+    ...(brief.associatedBaseBriefIds     || []).map(b => String(b._id ?? b)),
     ...(brief.associatedSquadronBriefIds || []).map(b => String(b._id ?? b)),
+    ...(brief.associatedAircraftBriefIds || []).map(b => String(b._id ?? b)),
+    ...(brief.associatedMissionBriefIds  || []).map(b => String(b._id ?? b)),
+    ...(brief.associatedTrainingBriefIds || []).map(b => String(b._id ?? b)),
+    ...(brief.relatedBriefIds            || []).map(b => String(b._id ?? b)),
   ]);
 
   const results = [];
-  for (const b of basesSquadrons) {
+  for (const b of candidates) {
     if (linkedIds.has(String(b._id))) continue;
-    for (const candidate of getMatchCandidates(b.title, b.category)) {
+    for (const candidate of getMatchCandidates(b.title, b.category, b.nickname)) {
       if (descLower.includes(candidate.toLowerCase())) {
         results.push({ _id: b._id, title: b.title, subtitle: b.subtitle, category: b.category, matchTerm: candidate });
         break;
@@ -408,10 +422,15 @@ router.get('/pathway/:category', optionalAuth, async (req, res) => {
       .lean();
 
     let readSet = new Set();
+    let inProgressSet = new Set();
     if (req.user) {
       const readRecs = await IntelligenceBriefRead.find({ userId: req.user._id, completed: true })
         .select('intelBriefId').lean();
       readSet = new Set(readRecs.map(r => r.intelBriefId.toString()));
+
+      const inProgressRecs = await IntelligenceBriefRead.find({ userId: req.user._id, completed: false })
+        .select('intelBriefId').lean();
+      inProgressSet = new Set(inProgressRecs.map(r => r.intelBriefId.toString()));
     }
 
     const data = briefs.map(b => ({
@@ -423,6 +442,7 @@ router.get('/pathway/:category', optionalAuth, async (req, res) => {
       category:       b.category,
       subcategory:    b.subcategory,
       isRead:         readSet.has(b._id.toString()),
+      isInProgress:   !readSet.has(b._id.toString()) && inProgressSet.has(b._id.toString()),
     }));
 
     res.json({ status: 'success', data: { briefs: data, totalCount: data.length } });
@@ -440,8 +460,9 @@ router.get('/:id', optionalAuth, async (req, res) => {
       .populate('quizQuestionsMedium')
       .populate('associatedBaseBriefIds',     '_id title subtitle category status')
       .populate('associatedSquadronBriefIds', '_id title subtitle category status')
-      .populate('associatedAircraftBriefIds', '_id title category status')
+      .populate('associatedAircraftBriefIds', '_id title subtitle nickname category status')
       .populate('associatedMissionBriefIds',  '_id title subtitle category status')
+      .populate('associatedTrainingBriefIds', '_id title subtitle category status')
       .populate('relatedBriefIds',            '_id title subtitle category status')
       .populate('relatedHistoric',            '_id title subtitle category status historic')
       .populate('keywords.linkedBriefId',     '_id category');
@@ -474,11 +495,21 @@ router.get('/:id', optionalAuth, async (req, res) => {
       const AMMO_REGEN_MS = 24 * 60 * 60 * 1000;
 
       if (!readRecord) {
-        readRecord = await IntelligenceBriefRead.create({
-          userId: req.user._id,
-          intelBriefId: brief._id,
-          ammunitionRemaining: tierAmmo,
-        });
+        try {
+          readRecord = await IntelligenceBriefRead.create({
+            userId: req.user._id,
+            intelBriefId: brief._id,
+            ammunitionRemaining: tierAmmo,
+          });
+        } catch (e) {
+          if (e.code !== 11000) throw e
+          // Race condition (e.g. StrictMode double-invoke): another request already created
+          // the record — just fetch it instead of returning a 500.
+          readRecord = await IntelligenceBriefRead.findOne({
+            userId: req.user._id,
+            intelBriefId: brief._id,
+          })
+        }
       } else if (readRecord.ammunitionRemaining === 0 && readRecord.ammoDepletedAt) {
         const elapsed = Date.now() - new Date(readRecord.ammoDepletedAt).getTime();
         if (elapsed >= AMMO_REGEN_MS) {

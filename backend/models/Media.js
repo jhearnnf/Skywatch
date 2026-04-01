@@ -4,6 +4,7 @@ const mediaSchema = new mongoose.Schema({
   mediaType:          { type: String, enum: ['picture', 'video'], required: true },
   mediaUrl:           { type: String, required: true, trim: true },
   cloudinaryPublicId: { type: String, trim: true },
+  name:               { type: String, trim: true },
   showOnSummary:      { type: Boolean, default: true },
 }, { timestamps: true });
 

@@ -28,7 +28,7 @@ export default function NotFound() {
           🏠 Return to Home
         </Link>
         <Link
-          to="/learn"
+          to="/learn-priority"
           className="px-6 py-3 border border-slate-200 text-slate-700 font-bold rounded-2xl hover:bg-slate-50 transition-colors"
         >
           ✈️ Browse Subjects

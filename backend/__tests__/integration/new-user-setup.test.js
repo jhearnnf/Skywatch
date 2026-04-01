@@ -31,10 +31,8 @@ const AircoinLog             = require('../../models/AircoinLog');
 const GameSessionQuizAttempt = require('../../models/GameSessionQuizAttempt');
 const GameSessionQuizResult  = require('../../models/GameSessionQuizResult');
 
-beforeAll(async () => {
-  await db.connect();
-  await createSettings();
-});
+beforeAll(async () => { await db.connect(); });
+beforeEach(async () => { await createSettings(); });
 afterEach(async () => db.clearDatabase());
 afterAll(async () => db.closeDatabase());
 

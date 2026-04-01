@@ -15,5 +15,6 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.js'],
     globals: true,
     include: ['src/**/*.test.{js,jsx,ts,tsx}'],
+    fileParallelism: false,
   },
 })

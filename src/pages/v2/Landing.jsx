@@ -135,7 +135,7 @@ export default function Landing() {
               </button>
             )}
             <Link
-              to="/learn"
+              to="/learn-priority"
               className="bg-surface hover:bg-surface-raised text-slate-700 font-bold px-8 py-4 rounded-2xl text-lg border border-slate-200 transition-all hover:-translate-y-0.5"
             >
               Browse Subjects
@@ -191,7 +191,7 @@ export default function Landing() {
               transition={{ delay: i * 0.05, duration: 0.35 }}
             >
               <Link
-                to={`/learn/${encodeURIComponent(label)}`}
+                to="/learn-priority"
                 className="relative flex flex-col items-center gap-2 rounded-2xl p-4 border transition-all card-intel hover:card-intel hover:-translate-y-0.5 group"
               >
                 <CornerBrackets size={10} />

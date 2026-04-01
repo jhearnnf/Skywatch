@@ -269,7 +269,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     expect(record.aircoinsEarned).toBe(0);
   });
 
-  it('abandoned attempts are counted in /api/users/stats gamesPlayed (quiz-specific behaviour)', async () => {
+  it('abandoned attempts are NOT counted in /api/users/stats gamesPlayed', async () => {
     await createQuizQuestions(brief._id, gameType._id, 5, 'easy');
     const startRes = await request(app)
       .post('/api/games/quiz/start')
@@ -287,8 +287,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
       .set('Cookie', cookie);
 
     expect(statsRes.status).toBe(200);
-    // Quiz abandoned attempts are included in gamesPlayed (per-question answering model)
-    expect(statsRes.body.data.gamesPlayed).toBe(1);
+    expect(statsRes.body.data.gamesPlayed).toBe(0);
   });
 
   it('returns 400 for invalid status value', async () => {

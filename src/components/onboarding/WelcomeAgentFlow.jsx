@@ -30,7 +30,7 @@ export default function WelcomeAgentFlow({ onClose }) {
   function pickCategory(cat) {
     markOnboarded()
     onClose()
-    navigate(`/learn/${encodeURIComponent(cat)}`)
+    navigate('/learn-priority', { state: { category: cat } })
   }
 
   const freeCategories = settings?.freeCategories ?? ['News']

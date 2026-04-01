@@ -219,7 +219,7 @@ describe('Profile page API calls', () => {
   });
 
   it('"Advanced" difficulty button — PATCH /api/users/me/difficulty to medium', async () => {
-    const user   = await createUser({ difficultySetting: 'easy' });
+    const user   = await createUser({ difficultySetting: 'easy', subscriptionTier: 'silver' });
     const cookie = authCookie(user._id);
 
     const res = await request(app)

@@ -12,6 +12,7 @@ const db      = require('../helpers/setupDb');
 const {
   createUser,
   createBrief,
+  createBooBriefs,
   createSettings,
   createWonBooResult,
   authCookie,
@@ -45,8 +46,10 @@ describe('GET /api/games/battle-of-order/status/:briefId', () => {
   });
 
   it('returns hasCompleted: true when user has a won result for the brief', async () => {
-    const user  = await createUser();
-    const brief = await createBrief({ category: 'Aircrafts' });
+    const user   = await createUser();
+    // Use yearIntroduced: null so only 'speed' is available (winning speed is sufficient)
+    const briefs = await createBooBriefs(3, 'Aircrafts', { gameData: { yearIntroduced: null } });
+    const brief  = briefs[0];
     await createWonBooResult(user._id, brief._id);
 
     const res = await request(app)

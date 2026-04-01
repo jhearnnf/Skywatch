@@ -13,6 +13,7 @@ import { AppSettingsProvider }             from './context/AppSettingsContext'
 import { AppTutorialProvider }             from './context/AppTutorialContext'
 import { FlashcardBadgeProvider }          from './context/FlashcardBadgeContext'
 import { NewGameUnlockProvider }           from './context/NewGameUnlockContext'
+import { UnsolvedReportsProvider }          from './context/UnsolvedReportsContext'
 import AppShell                            from './components/layout/AppShell'
 import AircoinNotification                 from './components/AircoinNotification'
 import LevelUpNotification                 from './components/LevelUpNotification'
@@ -21,9 +22,7 @@ import RankPromotionNotification           from './components/RankPromotionNotif
 // v2 pages
 import Landing        from './pages/v2/Landing'
 import Home           from './pages/v2/Home'
-import Learn          from './pages/v2/Learn'
 import LearnPriority  from './pages/v2/LearnPriority'
-import CategoryBriefs from './pages/v2/CategoryBriefs'
 import BriefReader    from './pages/v2/BriefReader'
 import QuizFlow            from './pages/v2/QuizFlow'
 import BattleOfOrderFlow  from './pages/v2/BattleOfOrderFlow'
@@ -40,6 +39,7 @@ import AircoinHistory from './pages/v2/AircoinHistory'
 import GameHistory        from './pages/v2/GameHistory'
 import IntelBriefHistory from './pages/v2/IntelBriefHistory'
 import ReportProblem  from './pages/v2/ReportProblem'
+import Contact        from './pages/v2/Contact'
 import Subscription   from './pages/v2/Subscription'
 import NotFound       from './pages/v2/NotFound'
 
@@ -151,8 +151,6 @@ function AppRoutes() {
           {/* Core learning (accessible without login, progress tracked when logged in) */}
           <Route path="/home"              element={<PageWrapper><Home /></PageWrapper>} />
           <Route path="/learn-priority"    element={<PageWrapper><LearnPriority /></PageWrapper>} />
-          <Route path="/learn"             element={<PageWrapper><Learn /></PageWrapper>} />
-          <Route path="/learn/:category"   element={<PageWrapper><CategoryBriefs /></PageWrapper>} />
           <Route path="/brief/:briefId"    element={<PageWrapper><BriefReader /></PageWrapper>} />
           <Route path="/quiz/:briefId"          element={<RequireAuth><PageWrapper><QuizFlow /></PageWrapper></RequireAuth>} />
           <Route path="/battle-of-order/:briefId" element={<RequireAuth><PageWrapper><BattleOfOrderFlow /></PageWrapper></RequireAuth>} />
@@ -168,6 +166,7 @@ function AppRoutes() {
           {/* v2 protected pages */}
           <Route path="/subscribe"        element={<PageWrapper><Subscription /></PageWrapper>} />
           <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
+          <Route path="/contact"          element={<PageWrapper><Contact /></PageWrapper>} />
           <Route path="/aircoin-history"       element={<RequireAuth><PageWrapper><AircoinHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"          element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
           <Route path="/intel-brief-history"   element={<RequireAuth><PageWrapper><IntelBriefHistory /></PageWrapper></RequireAuth>} />
@@ -262,11 +261,13 @@ export default function App() {
         <AppSettingsProvider>
           <AppTutorialProvider>
             <NewGameUnlockProvider>
+              <UnsolvedReportsProvider>
               <FlashcardBadgeProvider>
                 <AppRoutes />
                 <NotifLayer />
                 <ReportNotifBanner />
               </FlashcardBadgeProvider>
+              </UnsolvedReportsProvider>
             </NewGameUnlockProvider>
           </AppTutorialProvider>
         </AppSettingsProvider>

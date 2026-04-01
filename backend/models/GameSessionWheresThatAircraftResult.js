@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 
-const gameSessionWhosAtAircraftResultSchema = new mongoose.Schema({
+const gameSessionWheresThatAircraftResultSchema = new mongoose.Schema({
   userId:        { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  gameId:        { type: mongoose.Schema.Types.ObjectId, ref: 'GameWhosAtAircraft', required: true },
+  gameId:        { type: mongoose.Schema.Types.ObjectId, ref: 'GameWheresThatAircraft', required: true },
   gameSessionId: { type: String, required: true },
 
   userAnswer:       String, // aircraft name the user guessed
@@ -12,4 +12,4 @@ const gameSessionWhosAtAircraftResultSchema = new mongoose.Schema({
   createdAt:        { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model('GameSessionWhosAtAircraftResult', gameSessionWhosAtAircraftResultSchema);
+module.exports = mongoose.model('GameSessionWheresThatAircraftResult', gameSessionWheresThatAircraftResultSchema);

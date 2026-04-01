@@ -11,12 +11,12 @@ const gameQuizQuestionSchema = new mongoose.Schema({
   difficulty:   { type: String, enum: ['easy', 'medium'], required: true },
   question:     { type: String, required: true, trim: true },
 
-  // Exactly 10 answer options; one is correct
+  // Exactly 7 answer options; one is correct
   answers: {
     type: [answerSchema],
     validate: {
-      validator: (arr) => arr.length === 10,
-      message: 'Each quiz question must have exactly 10 answer options',
+      validator: (arr) => arr.length === 7,
+      message: 'Each quiz question must have exactly 7 answer options',
     },
   },
 

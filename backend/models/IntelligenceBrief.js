@@ -148,7 +148,8 @@ const intelligenceBriefSchema = new mongoose.Schema(
       },
     },
 
-    historic: { type: Boolean, default: false },
+    historic:  { type: Boolean, default: false },
+    eventDate: { type: Date, default: null },   // date of the news event (News briefs only)
 
     media: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Media' }],
 

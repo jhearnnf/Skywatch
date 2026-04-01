@@ -4,6 +4,7 @@ const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const GameSessionOrderOfBattleResult = require('../../models/GameSessionOrderOfBattleResult');
+const IntelligenceBrief = require('../../models/IntelligenceBrief');
 const {
   createUser,
   createSettings,
@@ -30,10 +31,28 @@ beforeEach(async () => {
 afterEach(async () => db.clearDatabase());
 afterAll(async () => db.closeDatabase());
 
+// Satisfies all three BOO prerequisites for user+anchor:
+//   1. Read record for the anchor brief
+//   2. Aircraft-reads gate: 3 no-game-data aircraft reads (won't inflate brief count)
+//   3. Passed quiz attempt for the anchor brief
+async function ensureBOOReady(anchorBrief) {
+  await createReadRecord(user._id, anchorBrief._id);
+  await createPassedQuizAttempt(user._id, anchorBrief._id);
+  for (let i = 0; i < 3; i++) {
+    const filler = await IntelligenceBrief.create({
+      title: `Aircraft Gate Filler ${Date.now()}_${i}`, subtitle: '',
+      category: 'Aircrafts', descriptionSections: ['Section.'],
+      keywords: [], sources: [], isPublished: true, gameData: {},
+    });
+    await createReadRecord(user._id, filler._id);
+  }
+}
+
 // ── GET /api/games/battle-of-order/options ────────────────────────────────
 describe('GET /api/games/battle-of-order/options', () => {
   it('returns available=false for ineligible category (News)', async () => {
     const [anchor] = await createBooBriefs(1, 'News');
+    await ensureBOOReady(anchor);
 
     const res = await request(app)
       .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
@@ -47,6 +66,7 @@ describe('GET /api/games/battle-of-order/options', () => {
   it('returns available=false when insufficient briefs with game data', async () => {
     // Only 2 Aircrafts briefs — easy needs 3
     const [anchor] = await createBooBriefs(2, 'Aircrafts');
+    await ensureBOOReady(anchor);
 
     const res = await request(app)
       .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
@@ -60,6 +80,7 @@ describe('GET /api/games/battle-of-order/options', () => {
   it('returns available=true with options when enough briefs exist', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
     const anchor = briefs[0];
+    await ensureBOOReady(anchor);
 
     const res = await request(app)
       .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
@@ -94,6 +115,7 @@ describe('POST /api/games/battle-of-order/generate', () => {
   it('generates a game with shuffled choices', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
     const anchor = briefs[0];
+    await ensureBOOReady(anchor);
 
     const res = await request(app)
       .post('/api/games/battle-of-order/generate')
@@ -114,6 +136,7 @@ describe('POST /api/games/battle-of-order/generate', () => {
   it('returns 400 for invalid orderType', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
     const anchor = briefs[0];
+    await ensureBOOReady(anchor);
 
     const res = await request(app)
       .post('/api/games/battle-of-order/generate')
@@ -125,6 +148,7 @@ describe('POST /api/games/battle-of-order/generate', () => {
 
   it('returns 400 if insufficient briefs', async () => {
     const [anchor] = await createBooBriefs(1, 'Aircrafts');
+    await ensureBOOReady(anchor);
 
     const res = await request(app)
       .post('/api/games/battle-of-order/generate')
@@ -156,6 +180,7 @@ describe('POST /api/games/battle-of-order/submit', () => {
 
   it('returns won=false for any submitted order before we know the correct one', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
+    await ensureBOOReady(briefs[0]);
     const game   = await generateGame(briefs[0]._id);
 
     // Submit in the order the server gave us (shuffled — likely wrong)
@@ -177,15 +202,16 @@ describe('POST /api/games/battle-of-order/submit', () => {
 
   it('wins and earns coins when choices match the correct order exactly', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
+    await ensureBOOReady(briefs[0]);
     const game   = await generateGame(briefs[0]._id);
 
-    // First do a dummy submit to discover correct order
+    // First do a dummy submit to discover correct order — use order 99 to guarantee a loss
     const dummy = await request(app)
       .post('/api/games/battle-of-order/submit')
       .set('Cookie', cookie)
       .send({
         gameId:     game.gameId,
-        userChoices: game.choices.map((c, i) => ({ choiceId: c.choiceId, userOrderNumber: i + 1 })),
+        userChoices: game.choices.map(c => ({ choiceId: c.choiceId, userOrderNumber: 99 })),
         timeTakenSeconds: 5,
       });
 
@@ -212,6 +238,7 @@ describe('POST /api/games/battle-of-order/submit', () => {
 
   it('does not award coins on a second win (repeat attempt same anchor+orderType)', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
+    await ensureBOOReady(briefs[0]);
 
     // First game — get correct order
     const g1 = await generateGame(briefs[0]._id);
@@ -277,6 +304,7 @@ describe('POST /api/games/battle-of-order/submit', () => {
 describe('POST /api/games/battle-of-order/abandon', () => {
   it('records an abandoned session', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
+    await ensureBOOReady(briefs[0]);
     const genRes = await request(app)
       .post('/api/games/battle-of-order/generate')
       .set('Cookie', cookie)
@@ -302,6 +330,7 @@ describe('POST /api/games/battle-of-order/abandon', () => {
 
   it('stores abandoned=true, won=false, aircoinsEarned=0 in the DB', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
+    await ensureBOOReady(briefs[0]);
     const genRes = await request(app)
       .post('/api/games/battle-of-order/generate')
       .set('Cookie', cookie)
@@ -323,6 +352,7 @@ describe('POST /api/games/battle-of-order/abandon', () => {
 
   it('abandoned games are NOT counted in /api/users/stats gamesPlayed', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
+    await ensureBOOReady(briefs[0]);
     const genRes = await request(app)
       .post('/api/games/battle-of-order/generate')
       .set('Cookie', cookie)
@@ -338,7 +368,8 @@ describe('POST /api/games/battle-of-order/abandon', () => {
       .set('Cookie', cookie);
 
     expect(statsRes.status).toBe(200);
-    expect(statsRes.body.data.gamesPlayed).toBe(0);
+    // 1 = the quiz pass created by ensureBOOReady; the BOO abandon should NOT add a 2nd count
+    expect(statsRes.body.data.gamesPlayed).toBe(1);
   });
 });
 
@@ -366,6 +397,19 @@ describe('GET /api/games/battle-of-order/status/:briefId', () => {
   });
 });
 
+// Creates 3 no-game-data aircraft reads for userId — satisfies aircraft-reads gate
+// without affecting the BOO-data brief count
+async function ensureAircraftGate(userId) {
+  for (let i = 0; i < 3; i++) {
+    const filler = await IntelligenceBrief.create({
+      title: `Gate Filler Rec ${Date.now()}_${i}`, subtitle: '',
+      category: 'Aircrafts', descriptionSections: ['Section.'],
+      keywords: [], sources: [], isPublished: true, gameData: {},
+    });
+    await createReadRecord(userId, filler._id);
+  }
+}
+
 // ── GET /api/games/battle-of-order/recommended-briefs ─────────────────────
 describe('GET /api/games/battle-of-order/recommended-briefs', () => {
   it('returns 401 if not authenticated', async () => {
@@ -382,8 +426,10 @@ describe('GET /api/games/battle-of-order/recommended-briefs', () => {
     expect(res.body.data.briefs).toHaveLength(0);
   });
 
-  it('returns needs-quiz when quiz not passed but category has BOO data', async () => {
+  it('returns quiz-pending when brief is read but quiz not playable', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts'); // >=3 needed for easy
+    await ensureAircraftGate(user._id);
+    await createReadRecord(user._id, briefs[0]._id); // read the brief
 
     const res = await request(app)
       .get('/api/games/battle-of-order/recommended-briefs')
@@ -392,12 +438,15 @@ describe('GET /api/games/battle-of-order/recommended-briefs', () => {
     expect(res.status).toBe(200);
     const returned = res.body.data.briefs;
     expect(returned.length).toBeGreaterThan(0);
-    expect(returned[0].booState).toBe('needs-quiz');
+    const b = returned.find(b => b._id.toString() === briefs[0]._id.toString());
+    expect(b.booState).toBe('quiz-pending'); // no quiz questions → quiz-pending
   });
 
   it('returns active when quiz is passed and BOO not yet won', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
     const anchor = briefs[0];
+    await ensureAircraftGate(user._id);
+    await createReadRecord(user._id, anchor._id);
     await createPassedQuizAttempt(user._id, anchor._id);
 
     const res = await request(app)
@@ -413,8 +462,12 @@ describe('GET /api/games/battle-of-order/recommended-briefs', () => {
   it('returns completed when quiz is passed and BOO already won', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
     const anchor = briefs[0];
+    await ensureAircraftGate(user._id);
+    await createReadRecord(user._id, anchor._id);
     await createPassedQuizAttempt(user._id, anchor._id);
+    // Win both available order types (speed + year_introduced both have count=3 ≥ 3)
     await createWonBooResult(user._id, anchor._id, { category: 'Aircrafts', orderType: 'speed' });
+    await createWonBooResult(user._id, anchor._id, { category: 'Aircrafts', orderType: 'year_introduced' });
 
     const res = await request(app)
       .get('/api/games/battle-of-order/recommended-briefs')
@@ -426,18 +479,23 @@ describe('GET /api/games/battle-of-order/recommended-briefs', () => {
     expect(completed.booState).toBe('completed');
   });
 
-  it('orders active before completed before needs-quiz', async () => {
+  it('orders active before quiz-pending before completed', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
-    const [bActive, bCompleted, bNeedsQuiz] = briefs;
+    const [bActive, bCompleted, bQuizPending] = briefs;
+    await ensureAircraftGate(user._id);
 
-    // bActive: quiz passed, BOO not won
+    // bActive: read + quiz passed, BOO not won
+    await createReadRecord(user._id, bActive._id);
     await createPassedQuizAttempt(user._id, bActive._id);
 
-    // bCompleted: quiz passed, BOO won
+    // bCompleted: read + quiz passed + BOO won (both speed and year_introduced)
+    await createReadRecord(user._id, bCompleted._id);
     await createPassedQuizAttempt(user._id, bCompleted._id);
     await createWonBooResult(user._id, bCompleted._id, { category: 'Aircrafts', orderType: 'speed' });
+    await createWonBooResult(user._id, bCompleted._id, { category: 'Aircrafts', orderType: 'year_introduced' });
 
-    // bNeedsQuiz: quiz not passed (no action)
+    // bQuizPending: read but no quiz pass and no quiz questions → quiz-pending
+    await createReadRecord(user._id, bQuizPending._id);
 
     const res = await request(app)
       .get('/api/games/battle-of-order/recommended-briefs')
@@ -445,12 +503,13 @@ describe('GET /api/games/battle-of-order/recommended-briefs', () => {
 
     expect(res.status).toBe(200);
     const briefs2 = res.body.data.briefs;
-    const activeIdx    = briefs2.findIndex(b => b._id.toString() === bActive._id.toString());
-    const completedIdx = briefs2.findIndex(b => b._id.toString() === bCompleted._id.toString());
-    const needsQuizIdx = briefs2.findIndex(b => b._id.toString() === bNeedsQuiz._id.toString());
+    const activeIdx      = briefs2.findIndex(b => b._id.toString() === bActive._id.toString());
+    const completedIdx   = briefs2.findIndex(b => b._id.toString() === bCompleted._id.toString());
+    const quizPendingIdx = briefs2.findIndex(b => b._id.toString() === bQuizPending._id.toString());
 
-    expect(activeIdx).toBeLessThan(completedIdx);
-    expect(completedIdx).toBeLessThan(needsQuizIdx);
+    // Route order: active → quiz-pending → completed
+    expect(activeIdx).toBeLessThan(quizPendingIdx);
+    expect(quizPendingIdx).toBeLessThan(completedIdx);
   });
 
   it('respects the limit query parameter', async () => {

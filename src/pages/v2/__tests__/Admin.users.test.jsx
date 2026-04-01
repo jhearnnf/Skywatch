@@ -22,6 +22,8 @@ vi.mock('../../../context/AuthContext', () => ({
 
 vi.mock('../../../context/AppTutorialContext', () => ({
   TUTORIAL_STEPS: {},
+  TUTORIAL_KEYS: [],
+  useAppTutorial: () => ({ start: vi.fn(), hasSeen: vi.fn().mockReturnValue(false) }),
 }))
 
 vi.mock('../../../utils/sound', () => ({

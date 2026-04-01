@@ -187,6 +187,7 @@ function FlashCard({ sectionIdx, total, title, category, subcategory, text, keyw
 // ── Section card (image zone + stat + text) ───────────────────────────────
 function SectionCard({ imageZone, stat, sectionIdx, total, isLast, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap }) {
   const hasBases = (highlightedBaseNames ?? []).length > 0
+  const statTapOrigin = useRef(null)
 
   if (isLast) {
     return (
@@ -247,7 +248,14 @@ function SectionCard({ imageZone, stat, sectionIdx, total, isLast, tutorialActiv
       {stat && (
         stat.mnemonic ? (
           <button
-            onClick={() => onStatTap?.(stat)}
+            onPointerDown={e => { statTapOrigin.current = { x: e.clientX, y: e.clientY } }}
+            onPointerUp={e => {
+              if (!statTapOrigin.current) return
+              const dx = e.clientX - statTapOrigin.current.x
+              const dy = e.clientY - statTapOrigin.current.y
+              if (Math.sqrt(dx * dx + dy * dy) < 10) onStatTap?.(stat)
+              statTapOrigin.current = null
+            }}
             className="w-full flex items-baseline justify-between gap-4 px-5 py-2.5 border-b border-slate-100 bg-slate-50/50 hover:bg-brand-50/50 transition-colors text-left"
           >
             <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400 shrink-0">{stat.label}</span>
@@ -272,7 +280,7 @@ function SectionCard({ imageZone, stat, sectionIdx, total, isLast, tutorialActiv
 }
 
 // ── Swipe wrapper (Tinder-style drag) ─────────────────────────────────────
-function SwipeCard({ navDir, canGoBack, onSwipeLeft, onSwipeRight, onFirstSwipe, showTutorial, children }) {
+function SwipeCard({ navDir, canGoBack, onSwipeLeft, onSwipeRight, onFirstSwipe, showTutorial, onDismissTutorial, children }) {
   const controls    = useAnimationControls()
   const x           = useMotionValue(0)
   const rotate      = useTransform(x, [-200, 200], [-8, 8])
@@ -326,8 +334,13 @@ function SwipeCard({ navDir, canGoBack, onSwipeLeft, onSwipeRight, onFirstSwipe,
       animate={controls}
       initial={{ opacity: 0 }}
       onDragEnd={handleDragEnd}
-      className="cursor-grab active:cursor-grabbing touch-pan-y select-none"
+      className="relative cursor-grab active:cursor-grabbing touch-pan-y select-none"
     >
+      <AnimatePresence>
+        {showTutorial && onDismissTutorial && (
+          <SwipeTutorial onDismiss={onDismissTutorial} />
+        )}
+      </AnimatePresence>
       {children}
     </motion.div>
   )
@@ -340,18 +353,34 @@ function SwipeTutorial({ onDismiss }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[1100] flex flex-col items-end justify-end pb-5 px-4 rounded-2xl pointer-events-auto cursor-pointer"
+      className="absolute inset-0 z-[1100] flex items-center justify-center rounded-2xl pointer-events-auto cursor-pointer"
+      style={{ background: 'rgba(10,20,40,0.55)' }}
       onClick={onDismiss}
     >
-      <motion.div
-        animate={{ opacity: [1, 0.35, 1] }}
-        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-        className="pointer-events-auto mx-auto bg-black/60 rounded-full px-5 py-2 flex items-center gap-2 cursor-pointer select-none"
-        onClick={onDismiss}
-      >
-        <span className="text-white text-sm font-semibold">← Swipe to navigate →</span>
-        <span className="text-white/50 text-xs">tap to dismiss</span>
-      </motion.div>
+      <div className="flex flex-col items-center gap-3 px-6 py-8 select-none">
+        {/* Animated arrows */}
+        <div className="flex items-center gap-4">
+          <motion.span
+            animate={{ x: [-6, 0, -6] }}
+            transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+            className="text-3xl text-white/90"
+          >←</motion.span>
+          <motion.div
+            animate={{ scaleX: [1, 1.08, 1] }}
+            transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+            className="w-10 h-10 rounded-full border-2 border-white/60 flex items-center justify-center"
+          >
+            <span className="text-white/80 text-lg">☰</span>
+          </motion.div>
+          <motion.span
+            animate={{ x: [6, 0, 6] }}
+            transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+            className="text-3xl text-white/90"
+          >→</motion.span>
+        </div>
+        <p className="text-white font-bold text-base tracking-wide">Swipe to navigate</p>
+        <p className="text-white/50 text-xs">tap anywhere to dismiss</p>
+      </div>
     </motion.div>
   )
 }
@@ -831,19 +860,26 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
               <span className="text-xl shrink-0">⭐</span>
               <div>
                 <p className="text-sm font-bold text-amber-800">{coinReward} Aircoins waiting to be claimed</p>
-                <p className="text-xs text-amber-700">Sign up to collect your reward and track your streak</p>
+                <p className="text-xs text-amber-700">Create a free account to collect your reward and track your streak</p>
               </div>
             </div>
 
             {/* Google button */}
             <div ref={googleBtnRef} className="flex justify-center" />
             {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
-              <p className="text-xs text-slate-400 text-center">Google sign-in unavailable</p>
+              <p className="text-xs text-slate-500 text-center">Google sign-in unavailable</p>
             )}
+
+            {/* OR divider */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-slate-200" />
+              <span className="text-xs text-slate-500 font-medium tracking-wide">or</span>
+              <div className="flex-1 h-px bg-slate-200" />
+            </div>
 
             {/* Email — collapsed by default */}
             {showEmailInput ? (
-              <div className="flex gap-2">
+              <div className="space-y-2">
                 <input
                   type="email"
                   value={email}
@@ -851,11 +887,11 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
                   onKeyDown={(e) => { if (e.key === 'Enter') handleEmailContinue() }}
                   placeholder="your@email.com"
                   autoFocus
-                  className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm"
+                  className="w-full px-3 py-2.5 rounded-2xl border border-slate-200 bg-slate-100 text-slate-900 placeholder:text-slate-500 focus:border-brand-400 focus:ring-2 focus:ring-brand-200 outline-none text-sm"
                 />
                 <button
                   onClick={handleEmailContinue}
-                  className="px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+                  className="w-full py-3 bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold rounded-2xl text-sm transition-colors"
                 >
                   Continue →
                 </button>
@@ -863,13 +899,13 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             ) : (
               <button
                 onClick={() => setShowEmailInput(true)}
-                className="w-full py-2.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+                className="w-full py-3 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-slate-50 font-bold rounded-2xl text-sm transition-colors"
               >
-                or continue with email →
+                Continue with email
               </button>
             )}
 
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 text-center">
               Already have an account?{' '}
               <button
                 onClick={() => { localStorage.setItem('sw_pending_brief', brief._id); navigate(`/login?tab=signin&pendingBrief=${brief._id}`) }}
@@ -904,7 +940,7 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, qu
     <div>
       {/* Back */}
       <button
-        onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+        onClick={() => navigate('/learn-priority', { state: { category: brief?.category } })}
         className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
       >
         ← {brief.category}
@@ -1087,6 +1123,7 @@ export default function BriefReader() {
   const [randomBriefs, setRandomBriefs] = useState([])
   const [flashcardNotifRect, setFlashcardNotifRect] = useState(null)
   const [flashcardGlowing, setFlashcardGlowing]     = useState(false)
+  const [swipePromptReady, setSwipePromptReady]     = useState(false)
   const [topFaded, setTopFaded] = useState(false)
   const markingRef                 = useRef(false)
   const contentRef                 = useRef(null)
@@ -1176,7 +1213,8 @@ export default function BriefReader() {
   }, [user, loading, brief, done, flushTime])
 
   useEffect(() => {
-    fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
+    const controller = new AbortController()
+    fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include', signal: controller.signal })
       .then(r => {
         if (r.status === 403) {
           r.json().then(d => setLockedCategory(d?.category ?? null)).catch(() => {})
@@ -1185,6 +1223,7 @@ export default function BriefReader() {
         return r.json()
       })
       .then(data => {
+        if (controller.signal.aborted) return
         if (data?.data?.brief) {
           const b = data.data.brief
           setBrief(b)
@@ -1215,7 +1254,8 @@ export default function BriefReader() {
         if (data?.data?.mentionedBriefs) setMentionedBriefs(data.data.mentionedBriefs)
       })
       .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
   }, [briefId, API])
 
   // Fetch WTA spawn status whenever brief or user resolves — handles mobile where auth loads after brief
@@ -1262,6 +1302,7 @@ export default function BriefReader() {
           lastStreakDate: d.lastStreakDate ?? u.lastStreakDate,
         } : u)
       }
+      if (d.gameUnlocksGranted?.length) applyUnlocks(d.gameUnlocksGranted)
     } catch { /* malformed — skip */ }
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1343,7 +1384,7 @@ export default function BriefReader() {
       briefOpenedRef.current = true
       playSound('intel_brief_opened')
       const t = setTimeout(() => startRef.current('briefReader'), 800)
-      return () => { clearTimeout(t) }
+      return () => { clearTimeout(t); briefOpenedRef.current = false }
     }
   }, [loading, brief, readRecord, reReadMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1370,8 +1411,10 @@ export default function BriefReader() {
 
   // Fire reached-flashcard once per brief per user when they first hit section 4
   useEffect(() => {
-    if (!isLast || !user || !brief) return
-    if (readRecord?.reachedFlashcard || readRecord?.completed) return
+    if (!isLast) return
+    setSwipePromptReady(false)
+    if (!user || !brief) { setSwipePromptReady(true); return }
+    if (readRecord?.reachedFlashcard || readRecord?.completed) { setSwipePromptReady(true); return }
     fetch(`${API}/api/briefs/${brief._id}/reached-flashcard`, {
       method: 'POST', credentials: 'include',
     })
@@ -1390,10 +1433,13 @@ export default function BriefReader() {
               }, 1200)
             }, 600)
           }
+          // swipePromptReady will be set by onDone after animation completes
+        } else {
+          setSwipePromptReady(true)
         }
         if (data?.gameUnlocksGranted?.length) applyUnlocks(data.gameUnlocksGranted)
       })
-      .catch(() => {})
+      .catch(() => { setSwipePromptReady(true) })
   }, [isLast, brief?._id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // If the user navigates away while the notification is still animating, commit the badge
@@ -1529,7 +1575,7 @@ export default function BriefReader() {
     return (
       <>
         <button
-          onClick={() => navigate('/learn')}
+          onClick={() => navigate('/learn-priority', { state: { category: brief?.category } })}
           className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
         >
           ← Back
@@ -1539,7 +1585,7 @@ export default function BriefReader() {
           tier={lockedCategory ? requiredTier(lockedCategory, settings) : 'silver'}
           user={user}
           pendingBriefId={briefId}
-          onClose={() => navigate('/learn')}
+          onClose={() => navigate('/learn-priority', { state: { category: brief?.category } })}
         />
       </>
     )
@@ -1559,7 +1605,7 @@ export default function BriefReader() {
     return (
       <>
         <button
-          onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          onClick={() => navigate('/learn-priority', { state: { category: brief?.category } })}
           className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
         >
           ← {brief.category}
@@ -1615,7 +1661,7 @@ export default function BriefReader() {
     return (
       <>
         <button
-          onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          onClick={() => navigate('/learn-priority', { state: { category: brief?.category } })}
           className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
         >
           ← {brief.category}
@@ -1661,7 +1707,7 @@ export default function BriefReader() {
           )}
         </motion.div>
         <button
-          onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          onClick={() => navigate('/learn-priority', { state: { category: brief?.category } })}
           className="mt-5 w-full py-3 border border-slate-200 text-slate-600 font-semibold rounded-2xl hover:bg-slate-50 transition-colors"
         >
           ← Back to {brief.category}
@@ -1693,6 +1739,7 @@ export default function BriefReader() {
         <FlashcardDeckNotification
           cardRect={flashcardNotifRect}
           onDone={() => {
+            setSwipePromptReady(true)
             if (badgePendingRef.current) { setBadge(); badgePendingRef.current = false }
             setFlashcardNotifRect(null)
           }}
@@ -1736,7 +1783,7 @@ export default function BriefReader() {
       >
         {/* Back */}
         <button
-          onClick={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          onClick={() => navigate('/learn-priority', { state: { category: brief?.category } })}
           className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
         >
           ← {brief.category}
@@ -1781,7 +1828,7 @@ export default function BriefReader() {
           onQuiz={() => navigate(`/quiz/${briefId}`)}
           booState={booState}
           onBattleOrder={booState === 'available' || booState === 'completed' ? () => navigate(`/battle-of-order/${briefId}`) : null}
-          onBack={() => navigate(`/learn/${encodeURIComponent(brief.category)}`)}
+          onBack={() => navigate('/learn-priority', { state: { category: brief?.category } })}
           onReRead={() => { localStorage.removeItem(`sw_brief_sec_${briefId}`); setDone(false); setReReadMode(true); setSection(0); setNavDir(1) }}
           navigate={navigate}
           quizPassed={quizPassed}
@@ -1826,21 +1873,16 @@ export default function BriefReader() {
             const stats      = buildStats(brief)
             const kwList     = [
               ...(brief.keywords || []).map(kw => ({ ...kw, linkedBriefCategory: kw.linkedBriefId?.category ?? null })),
-              ...(brief.associatedBaseBriefIds || []).map(b => ({ keyword: b.title, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
-              ...(brief.associatedSquadronBriefIds || []).map(b => ({ keyword: b.title, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+              ...(brief.associatedBaseBriefIds     || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+              ...(brief.associatedSquadronBriefIds || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+              ...(brief.associatedAircraftBriefIds || []).map(b => ({ keyword: b.nickname ?? b.title, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+              ...(brief.associatedMissionBriefIds  || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+              ...(brief.associatedTrainingBriefIds || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+              ...(brief.relatedBriefIds            || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
               ...mentionedBriefs.map(b => ({ keyword: b.matchTerm, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
             ]
             return (
               <motion.div ref={flashcardCardRef} layout transition={{ layout: { duration: 0.35, ease: 'easeInOut' } }} className={`relative mb-4${flashcardGlowing ? ' flashcard-ring-active' : ''}`}>
-                <AnimatePresence>
-                  {showTutorial && !visible && (
-                    <SwipeTutorial onDismiss={() => {
-                      setShowTutorial(false)
-                      const _swipeKey = user?._id ? `sw_tut_v2_${user._id}_swipe` : 'sw_tut_v2_anon_swipe'
-                      localStorage.setItem(_swipeKey, '1')
-                    }} />
-                  )}
-                </AnimatePresence>
                 <SwipeCard
                   key={sectionIdx}
                   navDir={navDir}
@@ -1848,6 +1890,11 @@ export default function BriefReader() {
                   onSwipeLeft={handleContinue}
                   onSwipeRight={handleGoBack}
                   showTutorial={showTutorial && !visible}
+                  onDismissTutorial={showTutorial && !visible ? () => {
+                    setShowTutorial(false)
+                    const _swipeKey = user?._id ? `sw_tut_v2_${user._id}_swipe` : 'sw_tut_v2_anon_swipe'
+                    localStorage.setItem(_swipeKey, '1')
+                  } : null}
                   onFirstSwipe={() => {
                     if (!hasSwiped) {
                       setHasSwiped(true)
@@ -1901,15 +1948,16 @@ export default function BriefReader() {
             </motion.p>
           )}
 
-          {/* Complete hint — final section only */}
-          {isLast && (
+          {/* Complete hint — final section only, shown after flashcard animation completes */}
+          {isLast && swipePromptReady && (
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5, duration: 1.2 }}
               className="text-xs text-brand-500 text-center mb-4"
             >
-              Swipe once more to complete the intel brief
+              Swipe once more to complete the intel brief{' '}
+              <span className="swipe-arrow-pulse" style={{ display: 'inline-block' }}>→</span>
             </motion.p>
           )}
 

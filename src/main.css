@@ -244,6 +244,14 @@ body.play-mode::before {
   border-radius: 16px;
 }
 
+@keyframes swipe-arrow-pulse {
+  0%, 100% { transform: translateX(0); }
+  50%       { transform: translateX(5px); }
+}
+.swipe-arrow-pulse {
+  animation: swipe-arrow-pulse 0.9s ease-in-out infinite;
+}
+
 @keyframes tutorialGlowPulse {
   0%, 100% { box-shadow: 0 0 60px 10px rgba(99, 155, 255, 0.18); }
   50%       { box-shadow: 0 0 110px 30px rgba(99, 155, 255, 0.40); }

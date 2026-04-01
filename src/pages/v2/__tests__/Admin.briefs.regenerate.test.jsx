@@ -170,6 +170,8 @@ describe('Admin Briefs — Regenerate All confirmation modal', () => {
     fireEvent.click(screen.getByRole('button', { name: /regenerate all/i }))
     await screen.findByText(/confirm & regenerate/i)
 
+    // Clear the pre-populated reason so the button is disabled
+    fireEvent.change(screen.getByPlaceholderText(/briefly describe why/i), { target: { value: '' } })
     const confirmBtn = screen.getByRole('button', { name: /confirm & regenerate/i })
     expect(confirmBtn.disabled).toBe(true)
   })
@@ -549,7 +551,7 @@ describe('Admin Briefs — BriefStatusPills badges', () => {
 
   it('M badge is green when brief has at least one media item', async () => {
     global.fetch = vi.fn().mockImplementation(briefListHandler({
-      media: [{ _id: 'media1', mediaType: 'picture', mediaUrl: 'https://example.com/img.jpg' }],
+      media: [{ _id: 'media1', mediaType: 'picture', cloudinaryPublicId: 'media1', mediaUrl: 'https://example.com/img.jpg' }],
     }))
     render(<Admin />)
     await navigateToBriefsTab()

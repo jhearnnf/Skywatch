@@ -115,31 +115,31 @@ const appSettingsSchema = new mongoose.Schema({
   useLiveLeaderboard:   { type: Boolean, default: false },
   disableLoadingBar:    { type: Boolean, default: false },
 
-  // Pathway unlock requirements — each entry gates a category behind level + rank + subscription tier.
-  // levelRequired: Agent Level (1–10). rankRequired: RAF Rank number (1–19). tierRequired: subscription tier.
-  // ALL three conditions must be satisfied for the pathway to unlock.
+  // Pathway unlock requirements — each entry gates a category behind level + rank.
+  // levelRequired: Agent Level (1–10). rankRequired: RAF Rank number (1–19).
+  // Subscription tier is derived from freeCategories/silverCategories — not stored here.
   pathwayUnlocks: {
     type: [{
       category:      { type: String },
       levelRequired: { type: Number, default: 1 },
       rankRequired:  { type: Number, default: 1 },
-      tierRequired:  { type: String, enum: ['free', 'silver', 'gold'], default: 'free' },
     }],
     default: [
-      { category: 'Bases',       levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
-      { category: 'Terminology', levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
-      { category: 'Aircrafts',   levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
-      { category: 'Heritage',    levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
-      { category: 'Ranks',       levelRequired: 2, rankRequired: 1, tierRequired: 'silver' },
-      { category: 'Squadrons',   levelRequired: 3, rankRequired: 2, tierRequired: 'silver' },
-      { category: 'Allies',      levelRequired: 3, rankRequired: 2, tierRequired: 'free'   },
-      { category: 'Training',    levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
-      { category: 'AOR',         levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
-      { category: 'Roles',       levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
-      { category: 'Tech',        levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
-      { category: 'Threats',     levelRequired: 6, rankRequired: 3, tierRequired: 'gold'   },
-      { category: 'Missions',    levelRequired: 7, rankRequired: 4, tierRequired: 'gold'   },
-      { category: 'Treaties',    levelRequired: 8, rankRequired: 4, tierRequired: 'gold'   },
+      { category: 'News',        levelRequired: 1, rankRequired: 1 },
+      { category: 'Bases',       levelRequired: 1, rankRequired: 1 },
+      { category: 'Terminology', levelRequired: 1, rankRequired: 1 },
+      { category: 'Aircrafts',   levelRequired: 2, rankRequired: 1 },
+      { category: 'Heritage',    levelRequired: 2, rankRequired: 1 },
+      { category: 'Ranks',       levelRequired: 2, rankRequired: 1 },
+      { category: 'Squadrons',   levelRequired: 3, rankRequired: 2 },
+      { category: 'Allies',      levelRequired: 3, rankRequired: 2 },
+      { category: 'Training',    levelRequired: 4, rankRequired: 2 },
+      { category: 'AOR',         levelRequired: 4, rankRequired: 2 },
+      { category: 'Roles',       levelRequired: 5, rankRequired: 3 },
+      { category: 'Tech',        levelRequired: 5, rankRequired: 3 },
+      { category: 'Threats',     levelRequired: 6, rankRequired: 3 },
+      { category: 'Missions',    levelRequired: 7, rankRequired: 4 },
+      { category: 'Treaties',    levelRequired: 8, rankRequired: 4 },
     ],
   },
 
@@ -196,25 +196,31 @@ appSettingsSchema.statics.getSettings = async function () {
       updates.silverCategories = ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'];
     // Migration: add any pathway categories that are missing from an older document
     const REQUIRED_PATHWAYS = [
-      { category: 'Bases',       levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
-      { category: 'Terminology', levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
-      { category: 'Aircrafts',   levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
-      { category: 'Heritage',    levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
-      { category: 'Ranks',       levelRequired: 2, rankRequired: 1, tierRequired: 'silver' },
-      { category: 'Squadrons',   levelRequired: 3, rankRequired: 2, tierRequired: 'silver' },
-      { category: 'Allies',      levelRequired: 3, rankRequired: 2, tierRequired: 'free'   },
-      { category: 'Training',    levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
-      { category: 'AOR',         levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
-      { category: 'Roles',       levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
-      { category: 'Tech',        levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
-      { category: 'Threats',     levelRequired: 6, rankRequired: 3, tierRequired: 'gold'   },
-      { category: 'Missions',    levelRequired: 7, rankRequired: 4, tierRequired: 'gold'   },
-      { category: 'Treaties',    levelRequired: 8, rankRequired: 4, tierRequired: 'gold'   },
+      { category: 'News',        levelRequired: 1, rankRequired: 1 },
+      { category: 'Bases',       levelRequired: 1, rankRequired: 1 },
+      { category: 'Terminology', levelRequired: 1, rankRequired: 1 },
+      { category: 'Aircrafts',   levelRequired: 2, rankRequired: 1 },
+      { category: 'Heritage',    levelRequired: 2, rankRequired: 1 },
+      { category: 'Ranks',       levelRequired: 2, rankRequired: 1 },
+      { category: 'Squadrons',   levelRequired: 3, rankRequired: 2 },
+      { category: 'Allies',      levelRequired: 3, rankRequired: 2 },
+      { category: 'Training',    levelRequired: 4, rankRequired: 2 },
+      { category: 'AOR',         levelRequired: 4, rankRequired: 2 },
+      { category: 'Roles',       levelRequired: 5, rankRequired: 3 },
+      { category: 'Tech',        levelRequired: 5, rankRequired: 3 },
+      { category: 'Threats',     levelRequired: 6, rankRequired: 3 },
+      { category: 'Missions',    levelRequired: 7, rankRequired: 4 },
+      { category: 'Treaties',    levelRequired: 8, rankRequired: 4 },
     ];
     const existingCats = (settings.pathwayUnlocks || []).map(u => u.category);
     const missingPathways = REQUIRED_PATHWAYS.filter(p => !existingCats.includes(p.category));
     if (missingPathways.length) {
-      updates.pathwayUnlocks = [...(settings.pathwayUnlocks || []), ...missingPathways];
+      // News must be prepended (appears first in the pathway UI); all others appended
+      const [missingFront, missingRest] = missingPathways.reduce(
+        ([front, rest], p) => p.category === 'News' ? [[p, ...front], rest] : [front, [...rest, p]],
+        [[], []]
+      );
+      updates.pathwayUnlocks = [...missingFront, ...(settings.pathwayUnlocks || []), ...missingRest];
     }
 
     if (Object.keys(updates).length)

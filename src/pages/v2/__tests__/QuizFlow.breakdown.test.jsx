@@ -77,7 +77,7 @@ async function completeQuiz() {
   fireEvent.click(screen.getByText('Multirole fighter'))
   await waitFor(() => screen.getByRole('button', { name: /see results/i }))
   fireEvent.click(screen.getByRole('button', { name: /see results/i }))
-  await waitFor(() => screen.getByRole('button', { name: /try again/i }))
+  await waitFor(() => screen.getByRole('button', { name: /back to brief/i }))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -190,7 +190,7 @@ describe('QuizFlow — Battle of Order button on results screen', () => {
       { booAvailable: false },
     )
     await completeQuiz()
-    await waitFor(() => screen.getByRole('button', { name: /try again/i }))
+    await waitFor(() => screen.getByRole('button', { name: /back to brief/i }))
     expect(screen.queryByRole('button', { name: /start battle of order/i })).toBeNull()
   })
 
@@ -200,13 +200,13 @@ describe('QuizFlow — Battle of Order button on results screen', () => {
       { booAvailable: true },
     )
     await completeQuiz()
-    await waitFor(() => screen.getByRole('button', { name: /try again/i }))
+    await waitFor(() => screen.getByRole('button', { name: /back to brief/i }))
     expect(screen.queryByRole('button', { name: /start battle of order/i })).toBeNull()
   })
 
   it('BOO button appears above Try Again button', async () => {
     global.fetch = setupFetch(
-      { won: true, isFirstAttempt: true, aircoinsEarned: 0, breakdown: [] },
+      { won: false, isFirstAttempt: false, aircoinsEarned: 0, breakdown: [] },
       { booAvailable: true },
     )
     await completeQuiz()

@@ -47,11 +47,12 @@ async function createBooBrief(overrides = {}) {
   });
 }
 
-// The BOO endpoint requires ≥3 briefs with game data in a category (easy difficulty).
-// Call this to make Aircrafts BOO-eligible, then create your test-specific brief on top.
-async function ensureBooEligible() {
-  for (let i = 0; i < 2; i++) {
-    await createBooBrief({ title: `Filler BOO ${Date.now()}_${i}` });
+// Creates 3 aircraft briefs with game data + read records for userId.
+// Satisfies the 3-brief count gate AND the aircraft-reads threshold gate.
+async function ensureBooReady(userId) {
+  for (let i = 0; i < 3; i++) {
+    const b = await createBooBrief({ title: `Filler BOO ${Date.now()}_${i}` });
+    await createReadRecord(userId, b._id);
   }
 }
 
@@ -69,6 +70,7 @@ describe('GET /api/games/battle-of-order/briefs — auth', () => {
 describe('GET /api/games/battle-of-order/briefs?state=available', () => {
   it('returns BOO-category briefs not yet won', async () => {
     const user   = await createUser();
+    await ensureBooReady(user._id);
     const brief1 = await createBooBrief({ title: 'Not Won' });
     const brief2 = await createBooBrief({ title: 'Won' });
     await createWonBooResult(user._id, brief2._id);
@@ -102,6 +104,7 @@ describe('GET /api/games/battle-of-order/briefs?state=available', () => {
 describe('GET /api/games/battle-of-order/briefs?state=completed', () => {
   it('returns only briefs the user has won a BOO game for', async () => {
     const user   = await createUser();
+    await ensureBooReady(user._id);
     const brief1 = await createBooBrief({ title: 'Won' });
     const brief2 = await createBooBrief({ title: 'Not Won' });
     await createWonBooResult(user._id, brief1._id);
@@ -153,7 +156,7 @@ describe('GET /api/games/battle-of-order/briefs?state=all', () => {
 describe('GET /api/games/battle-of-order/briefs — booState', () => {
   it('returns booState=needs-read when brief not yet read', async () => {
     const user  = await createUser();
-    await ensureBooEligible();
+    await ensureBooReady(user._id);
     const brief = await createBooBrief({ title: 'Target Brief' });
 
     const res = await request(app)
@@ -164,9 +167,9 @@ describe('GET /api/games/battle-of-order/briefs — booState', () => {
     expect(b.booState).toBe('needs-read');
   });
 
-  it('returns booState=needs-quiz when read but quiz not passed', async () => {
+  it('returns booState=quiz-pending when read but quiz not yet playable', async () => {
     const user  = await createUser();
-    await ensureBooEligible();
+    await ensureBooReady(user._id);
     const brief = await createBooBrief({ title: 'Target Brief' });
     await createReadRecord(user._id, brief._id);
 
@@ -175,12 +178,12 @@ describe('GET /api/games/battle-of-order/briefs — booState', () => {
       .set('Cookie', authCookie(user._id));
 
     const b = res.body.data.briefs.find(b => b._id === brief._id.toString());
-    expect(b.booState).toBe('needs-quiz');
+    expect(b.booState).toBe('quiz-pending');
   });
 
   it('returns booState=active when read + quiz passed + BOO not won', async () => {
     const user  = await createUser();
-    await ensureBooEligible();
+    await ensureBooReady(user._id);
     const brief = await createBooBrief({ title: 'Target Brief' });
     await createReadRecord(user._id, brief._id);
     await createPassedQuizAttempt(user._id, brief._id);
@@ -195,6 +198,7 @@ describe('GET /api/games/battle-of-order/briefs — booState', () => {
 
   it('returns booState=completed when BOO won', async () => {
     const user  = await createUser();
+    await ensureBooReady(user._id);
     const brief = await createBooBrief();
     await createWonBooResult(user._id, brief._id);
 
@@ -208,6 +212,16 @@ describe('GET /api/games/battle-of-order/briefs — booState', () => {
 
   it('returns booState=no-data for a BOO-category brief with no game data', async () => {
     const user  = await createUser();
+    // Create 3 aircraft briefs without game data + reads to satisfy the aircraft-reads gate
+    // (no topSpeedKph so they don't make Aircrafts BOO-eligible)
+    for (let i = 0; i < 3; i++) {
+      const filler = await IntelligenceBrief.create({
+        title: `No-Data Filler ${Date.now()}_${i}`, subtitle: '',
+        category: 'Aircrafts', descriptionSections: ['Section.'],
+        keywords: [], sources: [], isPublished: true, gameData: {},
+      });
+      await createReadRecord(user._id, filler._id);
+    }
     // Brief in a BOO category but no gameData.topSpeedKph
     const brief = await IntelligenceBrief.create({
       title:               'No Game Data',

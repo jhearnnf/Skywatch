@@ -18,10 +18,8 @@ const db      = require('../helpers/setupDb');
 const User    = require('../../models/User');
 const { createUser, createBrief, createSettings, authCookie } = require('../helpers/factories');
 
-beforeAll(async () => {
-  await db.connect();
-  await createSettings(); // aircoinsFirstLogin=5, aircoinsStreakBonus=2
-});
+beforeAll(async () => { await db.connect(); });
+beforeEach(async () => { await createSettings(); }); // aircoinsFirstLogin=5, aircoinsStreakBonus=2
 afterEach(async () => db.clearDatabase());
 afterAll(async () => db.closeDatabase());
 

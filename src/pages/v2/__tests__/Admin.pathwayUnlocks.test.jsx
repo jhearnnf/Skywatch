@@ -55,20 +55,20 @@ const MOCK_SETTINGS = {
   useLiveLeaderboard: false,
   disableLoadingBar: false,
   pathwayUnlocks: [
-    { category: 'Bases',       levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
-    { category: 'Terminology', levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
-    { category: 'Aircrafts',   levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
-    { category: 'Heritage',    levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
-    { category: 'Ranks',       levelRequired: 2, rankRequired: 1, tierRequired: 'silver' },
-    { category: 'Squadrons',   levelRequired: 3, rankRequired: 2, tierRequired: 'silver' },
-    { category: 'Allies',      levelRequired: 3, rankRequired: 2, tierRequired: 'free'   },
-    { category: 'Training',    levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
-    { category: 'AOR',         levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
-    { category: 'Roles',       levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
-    { category: 'Tech',        levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
-    { category: 'Threats',     levelRequired: 6, rankRequired: 3, tierRequired: 'gold'   },
-    { category: 'Missions',    levelRequired: 7, rankRequired: 4, tierRequired: 'gold'   },
-    { category: 'Treaties',    levelRequired: 8, rankRequired: 4, tierRequired: 'gold'   },
+    { category: 'Bases',       levelRequired: 1, rankRequired: 1 },
+    { category: 'Terminology', levelRequired: 1, rankRequired: 1 },
+    { category: 'Aircrafts',   levelRequired: 2, rankRequired: 1 },
+    { category: 'Heritage',    levelRequired: 2, rankRequired: 1 },
+    { category: 'Ranks',       levelRequired: 2, rankRequired: 1 },
+    { category: 'Squadrons',   levelRequired: 3, rankRequired: 2 },
+    { category: 'Allies',      levelRequired: 3, rankRequired: 2 },
+    { category: 'Training',    levelRequired: 4, rankRequired: 2 },
+    { category: 'AOR',         levelRequired: 4, rankRequired: 2 },
+    { category: 'Roles',       levelRequired: 5, rankRequired: 3 },
+    { category: 'Tech',        levelRequired: 5, rankRequired: 3 },
+    { category: 'Threats',     levelRequired: 6, rankRequired: 3 },
+    { category: 'Missions',    levelRequired: 7, rankRequired: 4 },
+    { category: 'Treaties',    levelRequired: 8, rankRequired: 4 },
   ],
 }
 
@@ -125,37 +125,47 @@ describe('Admin — Pathway Unlock Requirements', () => {
     }
   })
 
-  it('shows the correct tier for Treaties (gold)', async () => {
+  it('does not render a Tier Required column header', async () => {
+    await renderAndOpenPathwaySection()
+    expect(screen.queryByText(/tier required/i)).toBeNull()
+  })
+
+  it('each row has exactly one rank select (no tier select)', async () => {
     await renderAndOpenPathwaySection()
 
-    // Find the Treaties row — it should have a tier select displaying 'gold'
+    const basesCell = screen.getByText('Bases')
+    const row = basesCell.closest('tr')
+    const selects = row.querySelectorAll('select')
+    expect(selects).toHaveLength(1) // only rank select
+  })
+
+  it('shows the correct level for Treaties (8)', async () => {
+    await renderAndOpenPathwaySection()
+
     const treatiesCell = screen.getByText('Treaties')
     const row = treatiesCell.closest('tr')
-    const selects = row.querySelectorAll('select')
-    const tierSelect = selects[selects.length - 1]
-    expect(tierSelect.value).toBe('gold')
+    const input = row.querySelector('input[type="number"]')
+    expect(input.value).toBe('8')
   })
 
-  it('shows the correct tier for Allies (free)', async () => {
+  it('shows the correct level for Bases (1)', async () => {
     await renderAndOpenPathwaySection()
 
-    const alliesCell = screen.getByText('Allies')
-    const row = alliesCell.closest('tr')
-    const selects = row.querySelectorAll('select')
-    const tierSelect = selects[selects.length - 1]
-    expect(tierSelect.value).toBe('free')
+    const basesCell = screen.getByText('Bases')
+    const row = basesCell.closest('tr')
+    const input = row.querySelector('input[type="number"]')
+    expect(input.value).toBe('1')
   })
 
-  it('changing tier for Terminology updates the select', async () => {
+  it('changing level for Terminology updates the input', async () => {
     await renderAndOpenPathwaySection()
 
     const cell = screen.getByText('Terminology')
     const row = cell.closest('tr')
-    const selects = row.querySelectorAll('select')
-    const tierSelect = selects[selects.length - 1]
+    const input = row.querySelector('input[type="number"]')
 
-    fireEvent.change(tierSelect, { target: { value: 'silver' } })
+    fireEvent.change(input, { target: { value: '3' } })
 
-    await waitFor(() => expect(tierSelect.value).toBe('silver'))
+    await waitFor(() => expect(input.value).toBe('3'))
   })
 })

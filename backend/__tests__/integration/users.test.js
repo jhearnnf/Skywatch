@@ -99,7 +99,7 @@ describe('GET /api/users/stats', () => {
 // ── PATCH /api/users/me/difficulty ────────────────────────────────────────
 describe('PATCH /api/users/me/difficulty', () => {
   it('updates difficulty to medium', async () => {
-    const user   = await createUser({ difficultySetting: 'easy' });
+    const user   = await createUser({ difficultySetting: 'easy', subscriptionTier: 'silver' });
     const cookie = authCookie(user._id);
 
     const res = await request(app)

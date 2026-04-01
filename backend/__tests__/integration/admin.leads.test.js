@@ -76,7 +76,7 @@ describe('GET /api/admin/intel-leads — auth guards', () => {
 
 describe('POST /api/admin/intel-leads/mark-complete — auth guards', () => {
   it('returns 401 for unauthenticated request', async () => {
-    const res = await request(app).post('/api/admin/intel-leads/mark-complete').send({ lead: 'test' });
+    const res = await request(app).post('/api/admin/intel-leads/mark-complete').send({ title: 'test' });
     expect(res.status).toBe(401);
   });
 });
@@ -155,7 +155,7 @@ describe('POST /api/admin/intel-leads/mark-complete', () => {
     const res = await request(app)
       .post('/api/admin/intel-leads/mark-complete')
       .set('Cookie', cookie)
-      .send({ lead: 'Typhoon FGR4' });
+      .send({ title: 'Typhoon FGR4' });
 
     expect(res.status).toBe(200);
     const updated = await IntelLead.findOne({ title: 'Typhoon FGR4' });
@@ -168,7 +168,7 @@ describe('POST /api/admin/intel-leads/mark-complete', () => {
     const res = await request(app)
       .post('/api/admin/intel-leads/mark-complete')
       .set('Cookie', cookie)
-      .send({ lead: 'Nonexistent Lead' });
+      .send({ title: 'Nonexistent Lead' });
 
     expect(res.status).toBe(404);
   });
@@ -181,7 +181,7 @@ describe('POST /api/admin/intel-leads/mark-complete', () => {
     const res = await request(app)
       .post('/api/admin/intel-leads/mark-complete')
       .set('Cookie', cookie)
-      .send({ lead: 'Already Done' });
+      .send({ title: 'Already Done' });
 
     expect(res.status).toBe(404);
   });
@@ -205,7 +205,7 @@ describe('POST /api/admin/intel-leads/mark-complete', () => {
     const res = await request(app)
       .post('/api/admin/intel-leads/mark-complete')
       .set('Cookie', cookie)
-      .send({ lead: '  Padded Lead  ' });
+      .send({ title: '  Padded Lead  ' });
 
     expect(res.status).toBe(200);
     const updated = await IntelLead.findOne({ title: 'Padded Lead' });

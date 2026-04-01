@@ -244,7 +244,7 @@ export function AppTutorialProvider({ children }) {
   const visible = !!step
 
   return (
-    <Ctx.Provider value={{ start, next, skip, replay, step, total, current, visible, tutorialContent, refreshContent: fetchContent }}>
+    <Ctx.Provider value={{ start, next, skip, replay, step, total, current, visible, hasSeen, tutorialContent, refreshContent: fetchContent }}>
       {children}
     </Ctx.Provider>
   )

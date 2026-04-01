@@ -31,6 +31,17 @@ export function requiredTier(category, settings) {
   return silver.includes(category) ? 'silver' : 'gold'
 }
 
+// Returns 'free', 'silver', or 'gold' — the tier required to unlock a pathway.
+// Derived from freeCategories/silverCategories so it stays in sync with category access.
+export function pathwayTierRequired(category, settings) {
+  if (!settings) return 'free'  // fail open — show nothing as requiring upgrade
+  const free   = settings.freeCategories   ?? []
+  const silver = settings.silverCategories ?? []
+  if (free.includes(category))   return 'free'
+  if (silver.includes(category)) return 'silver'
+  return 'gold'
+}
+
 // Returns true if the user cannot access Advanced (medium) difficulty
 export function isFreeUser(user) {
   if (!user) return true

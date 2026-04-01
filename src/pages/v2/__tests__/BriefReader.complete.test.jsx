@@ -320,7 +320,7 @@ describe('BriefReader — guest completion prompt', () => {
   it('guest sees coin hook and email option after completing a brief', async () => {
     await completeAsGuest()
     expect(screen.getByText('5 Aircoins waiting to be claimed')).toBeDefined()
-    expect(screen.getByText('or continue with email →')).toBeDefined()
+    expect(screen.getByText('Continue with email')).toBeDefined()
   })
 
   it('guest sees investment hook with coin reward', async () => {
@@ -330,7 +330,7 @@ describe('BriefReader — guest completion prompt', () => {
 
   it('guest sees email input and Continue button after expanding email option', async () => {
     await completeAsGuest()
-    fireEvent.click(screen.getByText('or continue with email →'))
+    fireEvent.click(screen.getByText('Continue with email'))
     expect(screen.getByPlaceholderText('your@email.com')).toBeDefined()
     expect(screen.getByText('Continue →')).toBeDefined()
   })
@@ -342,14 +342,14 @@ describe('BriefReader — guest completion prompt', () => {
 
   it('guest clicking Continue without email navigates to /login?tab=register with pendingBrief param', async () => {
     await completeAsGuest()
-    fireEvent.click(screen.getByText('or continue with email →'))
+    fireEvent.click(screen.getByText('Continue with email'))
     fireEvent.click(screen.getByText('Continue →'))
     expect(mockNavigate).toHaveBeenCalledWith('/login?tab=register&pendingBrief=brief123')
   })
 
   it('guest clicking Continue with email pre-fills the URL', async () => {
     await completeAsGuest()
-    fireEvent.click(screen.getByText('or continue with email →'))
+    fireEvent.click(screen.getByText('Continue with email'))
     const input = screen.getByPlaceholderText('your@email.com')
     fireEvent.change(input, { target: { value: 'agent@raf.mod.uk' } })
     fireEvent.click(screen.getByText('Continue →'))
@@ -360,7 +360,7 @@ describe('BriefReader — guest completion prompt', () => {
 
   it('saves pending brief to localStorage', async () => {
     await completeAsGuest()
-    fireEvent.click(screen.getByText('or continue with email →'))
+    fireEvent.click(screen.getByText('Continue with email'))
     fireEvent.click(screen.getByText('Continue →'))
     expect(localStorage.getItem('sw_pending_brief')).toBe('brief123')
   })

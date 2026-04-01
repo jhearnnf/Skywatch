@@ -137,7 +137,7 @@ export default function BOOBriefsList() {
           <p className="font-semibold text-slate-600 mb-1">
             {debouncedSearch ? 'No briefs match your search' : 'No briefs in this category yet'}
           </p>
-          <Link to="/learn" className="text-brand-600 font-semibold text-sm hover:text-brand-700">Browse all briefs →</Link>
+          <Link to="/learn-priority" className="text-brand-600 font-semibold text-sm hover:text-brand-700">Browse all briefs →</Link>
         </div>
       ) : (
         <>

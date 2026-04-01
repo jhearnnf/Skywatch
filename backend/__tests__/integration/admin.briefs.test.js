@@ -45,7 +45,7 @@ afterAll(async ()   => db.closeDatabase());
 function makeQuestions(count = 10) {
   return Array.from({ length: count }, (_, i) => ({
     question: `Question ${i + 1}: What is this?`,
-    answers: Array.from({ length: 10 }, (__, j) => ({ title: `Answer ${j + 1} for Q${i + 1}` })),
+    answers: Array.from({ length: 7 }, (__, j) => ({ title: `Answer ${j + 1} for Q${i + 1}` })),
     correctAnswerIndex: 0,
   }));
 }
@@ -507,7 +507,7 @@ describe('GET /api/admin/intel-leads', () => {
 // ── POST /api/admin/intel-leads/mark-complete ─────────────────────────────────
 
 describe('POST /api/admin/intel-leads/mark-complete', () => {
-  it('returns 400 when lead is missing from body', async () => {
+  it('returns 400 when title is missing from body', async () => {
     const admin = await createAdminUser();
 
     const res = await request(app)
@@ -516,16 +516,16 @@ describe('POST /api/admin/intel-leads/mark-complete', () => {
       .send({});
 
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/lead required/i);
+    expect(res.body.message).toMatch(/title required/i);
   });
 
-  it('returns 404 when the lead text is not found in the file', async () => {
+  it('returns 404 when the lead title is not found in the DB', async () => {
     const admin = await createAdminUser();
 
     const res = await request(app)
       .post('/api/admin/intel-leads/mark-complete')
       .set('Cookie', authCookie(admin._id))
-      .send({ lead: 'This lead does not exist in the file at all 99999' });
+      .send({ title: 'This lead does not exist in the DB at all 99999' });
 
     expect(res.status).toBe(404);
   });
@@ -533,7 +533,7 @@ describe('POST /api/admin/intel-leads/mark-complete', () => {
   it('returns 401 for unauthenticated requests', async () => {
     const res = await request(app)
       .post('/api/admin/intel-leads/mark-complete')
-      .send({ lead: 'some lead' });
+      .send({ title: 'some lead' });
 
     expect(res.status).toBe(401);
   });

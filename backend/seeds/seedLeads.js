@@ -8,8 +8,8 @@ const GameOrderOfBattle = require('../models/GameOrderOfBattle');
 const GameSessionOrderOfBattleResult = require('../models/GameSessionOrderOfBattleResult');
 const GameFlashcardRecall = require('../models/GameFlashcardRecall');
 const GameSessionFlashcardRecallResult = require('../models/GameSessionFlashcardRecallResult');
-const GameWhosAtAircraft = require('../models/GameWhosAtAircraft');
-const GameSessionWhosAtAircraftResult = require('../models/GameSessionWhosAtAircraftResult');
+const GameWheresThatAircraft = require('../models/GameWheresThatAircraft');
+const GameSessionWheresThatAircraftResult = require('../models/GameSessionWheresThatAircraftResult');
 const GameSessionWhereAircraftResult = require('../models/GameSessionWhereAircraftResult');
 const AircoinLog = require('../models/AircoinLog');
 
@@ -1089,6 +1089,19 @@ const LEADS = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// isHistoricLead — derives the isHistoric flag from category + subcategory.
+// Historic subcategories indicate retired aircraft, former bases, or disbanded
+// squadrons — anything with no current RAF operational relevance.
+// ─────────────────────────────────────────────────────────────────────────────
+function isHistoricLead(category, subcategory) {
+  if (!subcategory) return false;
+  if (category === 'Aircrafts' && subcategory.startsWith('Historic')) return true;
+  if (category === 'Bases'     && subcategory === 'UK Former') return true;
+  if (category === 'Squadrons' && subcategory === 'Historic') return true;
+  return false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // seedLeads — drops all leads and briefs, re-inserts from LEADS array,
 //             then creates one stub IntelligenceBrief per lead.
 // Called on server startup (first run) and via POST /api/admin/leads/reset.
@@ -1119,8 +1132,8 @@ module.exports = async function seedLeads() {
       GameSessionOrderOfBattleResult.deleteMany({}),
       GameFlashcardRecall.deleteMany({}),
       GameSessionFlashcardRecallResult.deleteMany({}),
-      GameWhosAtAircraft.deleteMany({}),
-      GameSessionWhosAtAircraftResult.deleteMany({}),
+      GameWheresThatAircraft.deleteMany({}),
+      GameSessionWheresThatAircraftResult.deleteMany({}),
       GameSessionWhereAircraftResult.deleteMany({}),
       AircoinLog.deleteMany({}),
     ]);
@@ -1135,16 +1148,18 @@ module.exports = async function seedLeads() {
       section:        l.section     || '',
       subsection:     l.subsection  || '',
       isPublished:    false,
+      isHistoric:     isHistoricLead(l.category, l.subcategory),
       priorityNumber: priorityMap[l.title] ?? null,
     })));
 
-    // 4 — create one stub brief per lead, carrying priority numbers through
+    // 4 — create one stub brief per lead, carrying priority numbers and historic flag through
     const stubs = LEADS.map(l => ({
       title:               l.title,
       subtitle:            l.subtitle   || '',
       category:            l.category,
       subcategory:         l.subcategory || '',
       status:              'stub',
+      historic:            isHistoricLead(l.category, l.subcategory),
       priorityNumber:      priorityMap[l.title] ?? null,
       descriptionSections: [],
       keywords:            [],

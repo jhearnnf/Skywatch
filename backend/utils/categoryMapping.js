@@ -109,6 +109,7 @@ function leadSubsectionToSubcategory(subsection) {
     'BILATERAL DEFENCE AGREEMENTS':                        'Bilateral Defence Agreements',
     'ARMS CONTROL & NON-PROLIFERATION':                    'Arms Control & Non-Proliferation',
     'OPERATIONAL & STATUS AGREEMENTS':                     'Operational & Status Agreements',
+    'DEFENCE POLICY & STRATEGY':                           'Defence Policy & Strategy',
     // AOR — Section 14
     'UK / HOME AIR DEFENCE':                               'UK Home Air Defence',
     'NATO AOR STRUCTURE':                                  'NATO AOR',

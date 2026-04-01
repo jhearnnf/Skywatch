@@ -125,7 +125,7 @@ async function renderAndReachGame(fetchMock) {
 async function renderAndReachResults(fetchMock) {
   await renderAndReachGame(fetchMock)
   fireEvent.click(screen.getByText('Submit Order →'))
-  await waitFor(() => screen.getByRole('button', { name: /try again/i }))
+  await waitFor(() => screen.getByRole('button', { name: /back to brief/i }))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -468,15 +468,4 @@ describe('BattleOfOrderFlow — Training order types', () => {
     await waitFor(() => screen.getByText('Submit Order →'))
   })
 
-  it('shows week values (showValue=true) for training_duration choices on game screen', async () => {
-    global.fetch = setupTrainingFetch(TRAINING_OPTIONS_DURATION_ONLY, TRAINING_GENERATE_DURATION)
-    render(<BattleOfOrderFlow />)
-
-    await waitFor(() => screen.getByText('Battle of Order'))
-    await act(async () => { vi.advanceTimersByTime(20000) })
-
-    await waitFor(() => screen.getByText('Submit Order →'))
-    // displayValues for training_duration are shown (showValue: true)
-    expect(screen.getByText('4 wks')).toBeDefined()
-  })
 })

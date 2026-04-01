@@ -158,6 +158,12 @@ router.post('/forgot-password', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ message: 'Email required' });
 
+    // Check if password reset emails are enabled
+    const settings = await AppSettings.getSettings();
+    if (settings.emailPasswordResetEnabled === false) {
+      return res.status(503).json({ message: 'Password reset is currently unavailable.', resetDisabled: true });
+    }
+
     const normEmail = email.toLowerCase().trim();
     const window24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 

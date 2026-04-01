@@ -4,7 +4,7 @@ const { protect } = require('../middleware/auth');
 const GameSessionQuizResult  = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult    = require('../models/GameSessionOrderOfBattleResult');
-const GameSessionWhosAtAircraftResult   = require('../models/GameSessionWhosAtAircraftResult');
+const GameSessionWheresThatAircraftResult   = require('../models/GameSessionWheresThatAircraftResult');
 const GameSessionWhereAircraftResult    = require('../models/GameSessionWhereAircraftResult');
 const GameSessionFlashcardRecallResult  = require('../models/GameSessionFlashcardRecallResult');
 const GameQuizQuestion = require('../models/GameQuizQuestion');
@@ -1082,7 +1082,7 @@ router.post('/whos-that-aircraft/result', protect, async (req, res) => {
     const settings       = await AppSettings.getSettings();
     const aircoinsEarned = isCorrect ? settings.aircoinsPerWin : 0;
 
-    const result = await GameSessionWhosAtAircraftResult.create({
+    const result = await GameSessionWheresThatAircraftResult.create({
       userId: req.user._id, gameId, userAnswer, isCorrect, timeTakenSeconds, gameSessionId, aircoinsEarned,
     });
 
@@ -1551,7 +1551,7 @@ router.get('/history', protect, async (req, res) => {
         .populate('intelBriefId', 'title')
         .sort({ timeStarted: -1 })
         .lean(),
-      GameSessionWhosAtAircraftResult.find({ userId }).sort({ createdAt: -1 }).lean(),
+      GameSessionWheresThatAircraftResult.find({ userId }).sort({ createdAt: -1 }).lean(),
       GameSessionOrderOfBattleResult.find({ userId }).populate({ path: 'gameId', select: 'category difficulty orderType anchorBriefId', populate: { path: 'anchorBriefId', select: 'title' } }).sort({ createdAt: -1 }).lean(),
       GameSessionFlashcardRecallResult.find({ userId }).sort({ createdAt: -1 }).lean(),
       GameSessionWhereAircraftResult.find({ userId })

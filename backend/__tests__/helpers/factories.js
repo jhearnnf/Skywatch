@@ -14,8 +14,8 @@ const GameOrderOfBattle    = require('../../models/GameOrderOfBattle');
 const GameSessionOrderOfBattleResult = require('../../models/GameSessionOrderOfBattleResult');
 const GameFlashcardRecall  = require('../../models/GameFlashcardRecall');
 const GameSessionFlashcardRecallResult = require('../../models/GameSessionFlashcardRecallResult');
-const GameWhosAtAircraft   = require('../../models/GameWhosAtAircraft');
-const GameSessionWhosAtAircraftResult  = require('../../models/GameSessionWhosAtAircraftResult');
+const GameWheresThatAircraft   = require('../../models/GameWheresThatAircraft');
+const GameSessionWheresThatAircraftResult  = require('../../models/GameSessionWheresThatAircraftResult');
 const AircoinLog           = require('../../models/AircoinLog');
 const AdminAction          = require('../../models/AdminAction');
 const GameType             = require('../../models/GameType');
@@ -29,15 +29,16 @@ async function createSettings(overrides = {}) {
     {
       $setOnInsert: {
         _singleton: true,
-        aircoinsFirstLogin:    5,
-        aircoinsStreakBonus:   2,
-        aircoinsPerWinEasy:    10,
-        aircoinsPerWinMedium:  20,
-        aircoins100Percent:    15,
-        passThresholdEasy:     60,
-        passThresholdMedium:   60,
-        easyAnswerCount:       3,
-        mediumAnswerCount:     5,
+        aircoinsFirstLogin:         5,
+        aircoinsStreakBonus:        2,
+        aircoinsPerWinEasy:         10,
+        aircoinsPerWinMedium:       20,
+        aircoins100Percent:         15,
+        passThresholdEasy:          60,
+        passThresholdMedium:        60,
+        easyAnswerCount:            3,
+        mediumAnswerCount:          5,
+        emailConfirmationEnabled:   false,
         freeCategories:        ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
         silverCategories:      ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
         guestCategories:       ['News'],
@@ -113,12 +114,12 @@ async function createBrief(overrides = {}) {
 }
 
 // ── Quiz Questions ─────────────────────────────────────────────────────────
-// Creates `count` questions for a brief with exactly 10 answers each (schema requirement)
+// Creates `count` questions for a brief with exactly 7 answers each (schema requirement)
 async function createQuizQuestions(briefId, gameTypeId, count = 5, difficulty = 'easy') {
   const questions = [];
   for (let i = 0; i < count; i++) {
-    // Build 10 answers (schema validator requires exactly 10)
-    const answers = Array.from({ length: 10 }, (_, j) => ({
+    // Build 7 answers (schema validator requires exactly 7)
+    const answers = Array.from({ length: 7 }, (_, j) => ({
       title: j === 0 ? `Correct answer for Q${i}` : `Wrong answer ${j} for Q${i}`,
     }));
     const q = new GameQuizQuestion({
@@ -272,10 +273,10 @@ async function createFlashcardResult(userId, gameId, overrides = {}) {
   });
 }
 
-// ── GameWhosAtAircraft + result ────────────────────────────────────────────
-async function createWhosAtAircraftGame(briefId, gameTypeId, overrides = {}) {
+// ── GameWheresThatAircraft + result ────────────────────────────────────────────
+async function createWheresThatAircraftGame(briefId, gameTypeId, overrides = {}) {
   // Bypass the pre-save hook that validates category by using insertOne directly
-  return GameWhosAtAircraft.collection.insertOne({
+  return GameWheresThatAircraft.collection.insertOne({
     _id:               new mongoose.Types.ObjectId(),
     gameTypeId:        new mongoose.Types.ObjectId(gameTypeId),
     intelBriefId:      new mongoose.Types.ObjectId(briefId),
@@ -283,8 +284,8 @@ async function createWhosAtAircraftGame(briefId, gameTypeId, overrides = {}) {
   });
 }
 
-async function createWhosAtAircraftResult(userId, gameId, overrides = {}) {
-  return GameSessionWhosAtAircraftResult.create({
+async function createWheresThatAircraftResult(userId, gameId, overrides = {}) {
+  return GameSessionWheresThatAircraftResult.create({
     userId,
     gameId,
     gameSessionId:   overrides.gameSessionId ?? `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`,
@@ -355,8 +356,8 @@ module.exports = {
   createAircoinLog,
   createFlashcardGame,
   createFlashcardResult,
-  createWhosAtAircraftGame,
-  createWhosAtAircraftResult,
+  createWheresThatAircraftGame,
+  createWheresThatAircraftResult,
   createAdminAction,
   createPasswordResetToken,
 };

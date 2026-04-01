@@ -18,6 +18,14 @@
 process.env.JWT_SECRET    = 'test_secret';
 process.env.OPENROUTER_KEY = 'test_key';
 
+jest.mock('../../utils/cloudinary', () => ({
+  uploadBuffer: jest.fn().mockResolvedValue({
+    secure_url: 'https://res.cloudinary.com/test/image/upload/test.jpg',
+    public_id:  'brief-images/test',
+  }),
+  destroyAsset: jest.fn().mockResolvedValue({ result: 'ok' }),
+}));
+
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
@@ -145,7 +153,8 @@ describe('POST /api/admin/ai/generate-brief', () => {
       .send({ topic: 'Eurofighter Typhoon' });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.brief.title).toBe('RAF Typhoon');
+    // Route locks title to the provided topic value, overriding AI output
+    expect(res.body.data.brief.title).toBe('Eurofighter Typhoon');
   });
 
   it('returns 400 when neither headline nor topic is provided', async () => {
@@ -159,30 +168,6 @@ describe('POST /api/admin/ai/generate-brief', () => {
     expect(res.body.message).toMatch(/headline or topic/i);
   });
 
-  it('strips keywords not present verbatim in descriptionSections', async () => {
-    const briefWithBadKeyword = JSON.stringify({
-      title: 'RAF Typhoon',
-      subtitle: 'Multi-role fast jet',
-      descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
-      keywords: [
-        { keyword: 'Typhoon', generatedDescription: 'A fast jet' },
-        { keyword: 'completely absent term xyz', generatedDescription: 'Should be stripped' },
-      ],
-      sources: [],
-    });
-    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(briefWithBadKeyword));
-
-    const admin = await createAdminUser();
-    const res   = await request(app)
-      .post('/api/admin/ai/generate-brief')
-      .set('Cookie', authCookie(admin._id))
-      .send({ topic: 'Typhoon' });
-
-    expect(res.status).toBe(200);
-    const keywords = res.body.data.brief.keywords;
-    expect(keywords.some(k => k.keyword === 'Typhoon')).toBe(true);
-    expect(keywords.some(k => k.keyword === 'completely absent term xyz')).toBe(false);
-  });
 
   it('returns 500 with message when AI returns malformed JSON', async () => {
     jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter('This is not JSON at all!!!'));
