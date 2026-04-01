@@ -410,16 +410,25 @@ async function scanMentionedBriefs(brief) {
   return results;
 }
 
-// GET /api/briefs/pathway/:category — briefs with a priorityNumber set, sorted ascending, with isRead flag.
+// GET /api/briefs/pathway/:category — ordered pathway briefs with isRead flag.
+// News: all briefs sorted by eventDate DESC (newest first).
+// Other categories: briefs with priorityNumber set, sorted by priorityNumber ASC.
 router.get('/pathway/:category', optionalAuth, async (req, res) => {
   try {
     const { category } = req.params;
-    const briefs = await IntelligenceBrief.find(
-      { category, priorityNumber: { $ne: null } },
-      '_id title subtitle status priorityNumber category subcategory'
-    )
-      .sort({ priorityNumber: 1 })
-      .lean();
+    const isNews = category === 'News';
+
+    const query  = isNews
+      ? { category }
+      : { category, priorityNumber: { $ne: null } };
+    const fields = isNews
+      ? '_id title subtitle status category subcategory eventDate'
+      : '_id title subtitle status priorityNumber category subcategory';
+    const sortBy = isNews
+      ? { eventDate: -1 }
+      : { priorityNumber: 1 };
+
+    const briefs = await IntelligenceBrief.find(query, fields).sort(sortBy).lean();
 
     let readSet = new Set();
     let inProgressSet = new Set();
@@ -438,7 +447,8 @@ router.get('/pathway/:category', optionalAuth, async (req, res) => {
       title:          b.title,
       subtitle:       b.subtitle,
       status:         b.status,
-      priorityNumber: b.priorityNumber,
+      priorityNumber: b.priorityNumber ?? null,
+      eventDate:      b.eventDate ?? null,
       category:       b.category,
       subcategory:    b.subcategory,
       isRead:         readSet.has(b._id.toString()),

@@ -100,9 +100,11 @@ const appSettingsSchema = new mongoose.Schema({
   volumeFlashcardStart:     { type: Number, default: 100, min: 0, max: 100 },
   volumeFlashcardCorrect:   { type: Number, default: 100, min: 0, max: 100 },
   volumeFlashcardIncorrect: { type: Number, default: 100, min: 0, max: 100 },
+  volumeFlashcardCollect:   { type: Number, default: 100, min: 0, max: 100 },
   soundEnabledFlashcardStart:     { type: Boolean, default: true },
   soundEnabledFlashcardCorrect:   { type: Boolean, default: true },
   soundEnabledFlashcardIncorrect: { type: Boolean, default: true },
+  soundEnabledFlashcardCollect:   { type: Boolean, default: true },
 
   // AI content generation
   aiKeywordsPerBrief: { type: Number, default: 20, min: 1 },

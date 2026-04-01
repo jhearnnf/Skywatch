@@ -39,6 +39,7 @@ function fetchSettings() {
         volumeFlashcardStart: 100,     soundEnabledFlashcardStart: true,
         volumeFlashcardCorrect: 100,   soundEnabledFlashcardCorrect: true,
         volumeFlashcardIncorrect: 100, soundEnabledFlashcardIncorrect: true,
+        volumeFlashcardCollect: 100,   soundEnabledFlashcardCollect: true,
         freeCategories: ['News'], silverCategories: [],
       }
     })
@@ -257,6 +258,10 @@ export function playSound(name, { onAudio } = {}) {
         file       = 'flashcard_incorrect.mp3'
         volumeKey  = 'volumeFlashcardIncorrect'
         enabledKey = 'soundEnabledFlashcardIncorrect'
+      } else if (name === 'flashcard_collect') {
+        file       = 'flashcard_collect.mp3'
+        volumeKey  = 'volumeFlashcardCollect'
+        enabledKey = 'soundEnabledFlashcardCollect'
       } else {
         file = name
       }

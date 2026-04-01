@@ -322,6 +322,7 @@ const SOUND_GROUPS = [
       { key: 'volumeFlashcardStart',     enabledKey: 'soundEnabledFlashcardStart',     label: 'Drill Start',       sound: 'flashcard_start'     },
       { key: 'volumeFlashcardCorrect',   enabledKey: 'soundEnabledFlashcardCorrect',   label: 'Correct Answer',    sound: 'flashcard_correct'   },
       { key: 'volumeFlashcardIncorrect', enabledKey: 'soundEnabledFlashcardIncorrect', label: 'Incorrect Answer',  sound: 'flashcard_incorrect' },
+      { key: 'volumeFlashcardCollect',   enabledKey: 'soundEnabledFlashcardCollect',   label: 'Card Collected',    sound: 'flashcard_collect'   },
     ],
   },
   {
@@ -693,7 +694,7 @@ function AircoinsCeiling({ API }) {
 function Section({ title, children, onSave, saving, collapsible = false }) {
   const [open, setOpen] = useState(!collapsible)
   return (
-    <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+    <div className="bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
       {collapsible ? (
         <button
           onClick={() => setOpen(o => !o)}
@@ -756,7 +757,7 @@ function CategoryGrid({ selected, onChange }) {
             className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
               ${on
                 ? 'bg-brand-600 text-white border-brand-600'
-                : 'bg-surface text-slate-600 border-slate-200 hover:border-brand-300'
+                : 'bg-surface-raised text-slate-600 border-slate-400 hover:border-brand-500'
               }`}
           >
             {cat}
@@ -1789,7 +1790,7 @@ function ProblemsTab({ API }) {
                   placeholder="Add admin note…"
                   value={updates[p._id] ?? ''}
                   onChange={e => setUpdates(prev => ({ ...prev, [p._id]: e.target.value }))}
-                  className="w-full border border-slate-700 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-slate-200 placeholder:text-slate-500"
+                  className="w-full border border-slate-500 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text placeholder:text-text-muted"
                 />
 
                 {/* Notify user controls */}
@@ -1988,7 +1989,7 @@ function ContentTab({ API }) {
       ) : (
         <input type="text" placeholder={placeholder} value={draft[key] ?? ''}
           onChange={e => setDraft(p => ({ ...p, [key]: e.target.value }))}
-          className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200" />
+          className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text" />
       )}
     </div>
   )
@@ -2951,6 +2952,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       category:            br.category ?? 'News',
       subcategory:         br.subcategory ?? '',
       historic:            br.historic ?? false,
+      eventDate:           br.eventDate ? new Date(br.eventDate).toISOString().slice(0, 10) : null,
       priorityNumber:      br.priorityNumber ?? null,
       descriptionSections: br.descriptionSections?.length ? br.descriptionSections : ['','',''],
       keywords:            br.keywords ?? [],
@@ -3725,7 +3727,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         )}
 
         {/* Brief list */}
-        <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <div className="bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
           {loading && <p className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading…</p>}
           {!loading && briefs.length === 0 && <p className="py-8 text-center text-slate-400 text-sm">No briefs found</p>}
           {briefs.map((b, i) => {
@@ -3895,10 +3897,10 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       )}
 
       {/* ── Section A: Core Fields ─────────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
         <button
           onClick={() => toggleSection('core')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
         >
           <h3 className="font-bold text-slate-800">Core Fields</h3>
           <span className="text-slate-400 text-xs">{openSections.core ? '▲' : '▼'}</span>
@@ -3934,7 +3936,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                     className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
                       ${draft.category === c
                         ? 'bg-brand-600 text-white border-brand-600'
-                        : 'bg-surface text-slate-600 border-slate-200 hover:border-brand-300'
+                        : 'bg-surface-raised text-slate-600 border-slate-400 hover:border-brand-500'
                       }`}
                   >
                     {c}
@@ -3955,7 +3957,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                       className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
                         ${draft.subcategory === s
                           ? 'bg-brand-600 text-white border-brand-600'
-                          : 'bg-surface text-slate-600 border-slate-200 hover:border-brand-300'
+                          : 'bg-surface-raised text-slate-600 border-slate-400 hover:border-brand-500'
                         }`}
                     >
                       {s}
@@ -3974,6 +3976,20 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
               />
               <span className="text-sm text-slate-700 font-medium">Historic (retired/outdated)</span>
             </label>
+            {/* Event Date — News briefs only */}
+            {draft.category === 'News' && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">
+                  Event Date <span className="font-normal text-slate-400">(optional — date the news event occurred)</span>
+                </label>
+                <input
+                  type="date"
+                  value={draft.eventDate ?? ''}
+                  onChange={e => setDraft(p => ({ ...p, eventDate: e.target.value || null }))}
+                  className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
+                />
+              </div>
+            )}
             {/* Title */}
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1">Title</label>
@@ -3981,7 +3997,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 type="text"
                 value={draft.title}
                 onChange={e => setDraft(p => ({ ...p, title: e.target.value }))}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
               />
             </div>
             {/* Nickname */}
@@ -3992,7 +4008,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 value={draft.nickname ?? ''}
                 onChange={e => setDraft(p => ({ ...p, nickname: e.target.value }))}
                 placeholder="e.g. Typhoon, Tonka, Widow Maker"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
               />
             </div>
             {/* Subtitle */}
@@ -4002,7 +4018,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 type="text"
                 value={draft.subtitle}
                 onChange={e => setDraft(p => ({ ...p, subtitle: e.target.value }))}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
               />
             </div>
             {/* Priority Number */}
@@ -4016,7 +4032,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 value={draft.priorityNumber ?? ''}
                 onChange={e => setDraft(p => ({ ...p, priorityNumber: e.target.value === '' ? null : parseInt(e.target.value) || null }))}
                 placeholder="e.g. 1 (first), 2 (second)…"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
               />
             </div>
           </div>
@@ -4024,11 +4040,11 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       </div>
 
       {/* ── Section B: Description ─────────────────────────────────────── */}
-      <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
         {(generating === 'description' || regeneratingAll) && <GeneratingOverlay />}
         <button
           onClick={() => toggleSection('desc')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
         >
           <h3 className="font-bold text-slate-800">Description Sections</h3>
           <span className="text-slate-400 text-xs">{openSections.desc ? '▲' : '▼'}</span>
@@ -4053,7 +4069,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                   onChange={e => setDraft(p => {
                     const s = [...p.descriptionSections]; s[idx] = e.target.value; return { ...p, descriptionSections: s }
                   })}
-                  className="w-full border border-slate-700 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-slate-200 placeholder:text-slate-500"
+                  className="w-full border border-slate-500 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text placeholder:text-text-muted"
                 />
               </div>
             ))}
@@ -4061,7 +4077,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
               <button
                 onClick={() => setDraft(p => ({ ...p, descriptionSections: [...p.descriptionSections, ''] }))}
                 disabled={draft.descriptionSections.length >= 4}
-                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-600 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
               >
                 + Add Section
               </button>
@@ -4069,7 +4085,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 <button
                   onClick={generateDescription}
                   disabled={generating === 'description' || regeneratingAll}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 font-semibold hover:bg-sky-100 transition-colors disabled:opacity-40"
+                  className="text-xs px-3 py-1.5 rounded-lg border border-brand-400/60 bg-brand-100 text-brand-600 font-semibold hover:bg-brand-200 transition-colors disabled:opacity-40"
                 >
                   {generating === 'description' ? '↺ Generating…' : '↺ Generate Description'}
                 </button>
@@ -4083,15 +4099,15 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       </div>
 
       {/* ── Section C: Sources ────────────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
         <button
           onClick={() => toggleSection('sources')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
         >
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-slate-800">Sources</h3>
             {draft.sources.length > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-surface-raised text-text-muted">
                 {draft.sources.length} {draft.sources.length === 1 ? 'source' : 'sources'}
               </span>
             )}
@@ -4101,7 +4117,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         {openSections.sources && (
           <div className="px-5 py-4 space-y-3">
             {draft.sources.map((src, idx) => (
-              <div key={idx} className="border border-slate-100 rounded-xl p-3 bg-slate-50 space-y-2">
+              <div key={idx} className="border border-slate-300 rounded-xl p-3 bg-surface-raised space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-500">Source {idx + 1}</span>
                   <button
@@ -4116,27 +4132,27 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                   value={src.url}
                   onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], url: e.target.value }; return { ...p, sources: s } })}
                   placeholder="URL"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                  className="w-full border border-slate-400 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-text"
                 />
                 <input
                   type="text"
                   value={src.siteName ?? ''}
                   onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], siteName: e.target.value }; return { ...p, sources: s } })}
                   placeholder="Site Name"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                  className="w-full border border-slate-400 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-text"
                 />
                 <input
                   type="text"
                   value={src.articleDate ?? ''}
                   onChange={e => setDraft(p => { const s = [...p.sources]; s[idx] = { ...s[idx], articleDate: e.target.value }; return { ...p, sources: s } })}
                   placeholder="Date (YYYY-MM-DD)"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+                  className="w-full border border-slate-400 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-text"
                 />
               </div>
             ))}
             <button
               onClick={() => setDraft(p => ({ ...p, sources: [...p.sources, { url: '', siteName: '', articleDate: '' }] }))}
-              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-600 font-semibold hover:bg-surface-raised transition-colors"
             >
               + Add Source
             </button>
@@ -4145,11 +4161,11 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       </div>
 
       {/* ── Section D: Images ─────────────────────────────────────────── */}
-      <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
         {(generating === 'images' || autoGenerating) && <GeneratingOverlay />}
         <button
           onClick={() => toggleSection('images')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
         >
           <h3 className="font-bold text-slate-800">Images</h3>
           <span className="text-slate-400 text-xs">{openSections.images ? '▲' : '▼'}</span>
@@ -4229,11 +4245,11 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
       {/* ── Section D: Stats & Mnemonics (BOO categories only) ────────── */}
       {BOO_CATEGORIES.includes(draft.category) && (
-        <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+        <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
           {(autoGenerating || regeneratingAll) && <GeneratingOverlay />}
           <button
             onClick={() => toggleSection('stats')}
-            className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+            className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
           >
             <h3 className="font-bold text-slate-800">📊 Stats & Mnemonics</h3>
             <span className="text-slate-400 text-xs">{openSections.stats ? '▲' : '▼'}</span>
@@ -4310,9 +4326,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         const selectedRelatedBriefs = allRelatedPool.filter(b => selectedRelated.includes(String(b._id)))
 
         return (
-          <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+          <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
             {autoGenerating && <GeneratingOverlay />}
-            <div className="px-5 py-4 border-b border-slate-100">
+            <div className="px-5 py-4 border-b border-slate-300">
               <h3 className="font-bold text-slate-800">🕸️ Linked Briefs</h3>
               <p className="text-xs text-slate-400 mt-0.5">Connect related briefs to build the knowledge graph</p>
             </div>
@@ -4323,7 +4339,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                     <div className="flex items-center gap-1.5">
                       <p className="text-xs font-bold text-slate-600">{sec.label}</p>
                       {(() => { const n = (draft[sec.field] ?? []).length; return (
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${n > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>{n} selected</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${n > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-raised text-text-muted'}`}>{n} selected</span>
                       )})()}
                     </div>
                     <GenerateSectionLinksButton
@@ -4341,7 +4357,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                   {sec.pool.length === 0 ? (
                     <p className="text-xs text-slate-400">No briefs available yet.</p>
                   ) : (
-                    <div className="space-y-1 max-h-40 overflow-y-auto border border-slate-100 rounded-xl p-2">
+                    <div className="space-y-1 max-h-40 overflow-y-auto border border-slate-300 rounded-xl p-2">
                       {sec.pool.slice().sort((a, b) => a.title.localeCompare(b.title)).map(b => {
                         const checked = (draft[sec.field] ?? []).includes(String(b._id))
                         return (
@@ -4395,14 +4411,14 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                     value={relatedSearch}
                     onChange={e => setRelatedSearch(e.target.value)}
                     placeholder="Search briefs…"
-                    className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400"
+                    className="w-full border border-slate-400 rounded-xl px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 focus:border-brand-500 bg-surface-raised text-text"
                   />
                   {relatedSearch && (
                     <button onClick={() => setRelatedSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>
                   )}
                 </div>
                 {relatedSearch && (
-                  <div className="space-y-1 max-h-48 overflow-y-auto border border-slate-100 rounded-xl p-2">
+                  <div className="space-y-1 max-h-48 overflow-y-auto border border-slate-300 rounded-xl p-2">
                     {relatedFiltered.length === 0 ? (
                       <p className="text-xs text-slate-400 py-1 px-1">No results</p>
                     ) : relatedFiltered.map(b => {
@@ -4440,15 +4456,15 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       })()}
 
       {/* ── Section F: Keywords ───────────────────────────────────────── */}
-      <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
         {(generating === 'keywords' || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
         <button
           onClick={() => toggleSection('keywords')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
         >
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-slate-800">Keywords</h3>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${draft.keywords.length >= keywordsPerBrief ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${draft.keywords.length >= keywordsPerBrief ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-raised text-text-muted'}`}>
               {draft.keywords.length} / {keywordsPerBrief}
             </span>
             {badKeywords.length > 0 && (
@@ -4462,7 +4478,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         {openSections.keywords && (
           <div className="px-5 py-4 space-y-3">
             {draft.keywords.map((kw, idx) => (
-              <div key={idx} className={`p-3 rounded-xl border ${!descLower.includes(kw.keyword?.toLowerCase()) && kw.keyword ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}>
+              <div key={idx} className={`p-3 rounded-xl border ${!descLower.includes(kw.keyword?.toLowerCase()) && kw.keyword ? 'border-amber-200 bg-amber-50' : 'border-slate-300 bg-surface-raised'}`}>
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
                     <label className="text-xs font-semibold text-slate-500">Keyword {idx + 1}</label>
@@ -4484,7 +4500,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                     const kws = [...p.keywords]; kws[idx] = { ...kws[idx], keyword: e.target.value }; return { ...p, keywords: kws }
                   })}
                   placeholder="Keyword"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 mb-1.5"
+                  className="w-full border border-slate-400 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-text mb-1.5"
                 />
                 <textarea
                   rows={2}
@@ -4493,14 +4509,14 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                     const kws = [...p.keywords]; kws[idx] = { ...kws[idx], generatedDescription: e.target.value }; return { ...p, keywords: kws }
                   })}
                   placeholder="Description"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-200"
+                  className="w-full border border-slate-400 rounded-lg px-3 py-1.5 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-text"
                 />
               </div>
             ))}
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setDraft(p => ({ ...p, keywords: [...p.keywords, { keyword: '', generatedDescription: '' }] }))}
-                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-600 font-semibold hover:bg-surface-raised transition-colors"
               >
                 + Add Keyword
               </button>
@@ -4526,15 +4542,15 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       </div>
 
       {/* ── Section G: Quiz Questions ─────────────────────────────────── */}
-      <div className="relative bg-surface rounded-2xl border border-slate-200 overflow-hidden mb-4">
+      <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
         {(generating === 'questions' || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
         <button
           onClick={() => toggleSection('questions')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-100 text-left"
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
         >
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-slate-800">Quiz Questions</h3>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${easyQuestions.length >= 7 && mediumQuestions.length >= 7 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${easyQuestions.length >= 7 && mediumQuestions.length >= 7 ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-raised text-text-muted'}`}>
               {easyQuestions.length + mediumQuestions.length} / 14
             </span>
           </div>
@@ -4543,7 +4559,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         {openSections.questions && (
           <div className="px-5 py-4">
             {/* Tab switcher */}
-            <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-4">
+            <div className="flex gap-1 bg-surface-raised rounded-xl p-1 mb-4">
               {['easy', 'medium'].map(t => (
                 <button
                   key={t}
@@ -4558,7 +4574,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
             {/* Questions list */}
             <div className="space-y-4">
               {currentQuestions.map((q, qIdx) => (
-                <div key={qIdx} className="border border-slate-200 rounded-xl p-4">
+                <div key={qIdx} className="border border-slate-300 rounded-xl p-4 bg-surface-raised">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-slate-500">Q{qIdx + 1}</span>
                     <button
@@ -4573,7 +4589,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                     value={q.question}
                     onChange={e => updateQuestion(qIdx, 'question', e.target.value)}
                     placeholder="Question text"
-                    className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 mb-3"
+                    className="w-full border border-slate-400 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-text mb-3"
                   />
                   <div className="grid grid-cols-2 gap-2">
                     {(q.answers ?? []).map((ans, aIdx) => (
@@ -4590,7 +4606,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                           value={ans.title}
                           onChange={e => updateAnswer(qIdx, aIdx, e.target.value)}
                           placeholder={`Answer ${aIdx + 1}`}
-                          className="flex-1 border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-brand-200"
+                          className="flex-1 border border-slate-400 rounded-lg px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-text"
                         />
                       </label>
                     ))}
@@ -4620,7 +4636,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 <button
                   onClick={addBlankQuestion}
                   disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors disabled:opacity-40"
+                  className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-600 font-semibold hover:bg-surface-raised transition-colors disabled:opacity-40"
                 >
                   + Add Question
                 </button>
@@ -4733,7 +4749,7 @@ function MnemonicField({ mnemonicKey, draft, setDraft, API }) {
         onChange={e => setDraft(p => ({ ...p, mnemonics: { ...p.mnemonics, [mnemonicKey]: e.target.value } }))}
         rows={2}
         placeholder="💡 Memory aid…"
-        className="flex-1 border border-slate-100 bg-slate-50/60 rounded-xl px-3 py-2 text-xs text-slate-600 outline-none focus:ring-2 focus:ring-brand-100 resize-none"
+        className="flex-1 border border-slate-400 bg-surface-raised rounded-xl px-3 py-2 text-xs text-text outline-none focus:ring-2 focus:ring-brand-600/40 resize-none"
       />
       <button
         onClick={generate}
@@ -4762,7 +4778,7 @@ function GameDataField({ label, field, draft, setDraft, nullable = false }) {
           setDraft(p => ({ ...p, gameData: { ...p.gameData, [field]: raw === '' ? null : num } }))
         }}
         placeholder={nullable ? 'blank = null' : ''}
-        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+        className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
       />
     </div>
   )

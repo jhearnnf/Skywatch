@@ -1797,6 +1797,9 @@ router.post('/ai/news-headlines', async (req, res) => {
   }
 });
 
+// Universal rule enforcing bullet-list format whenever multiple items are enumerated
+const LIST_FORMAT_RULE = 'LIST FORMAT RULE: Whenever a sentence would list 3 or more items of the same type — weapons, aircraft, squadrons, bases, roles, capabilities, systems, or any other nouns — format each item on its own line as "- Item" (e.g. "- No. 1 Squadron", "- RAF Lossiemouth", "- Typhoon FGR4") instead of a comma-separated sentence or bare lines without a leading hyphen. Every listed item MUST start with "- ". Prioritise legibility over prose style.';
+
 // POST /api/admin/ai/generate-brief
 router.post('/ai/generate-brief', async (req, res) => {
   try {
@@ -1804,7 +1807,7 @@ router.post('/ai/generate-brief', async (req, res) => {
     if (!headline && !topic) return res.status(400).json({ message: 'headline or topic required' });
 
     const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    "Section 1 — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Section 2 — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Section 3 — 50–80 words. Operational context, key capabilities, or RAF significance.",\n    "Section 4 — 1–2 sentences only. A concise summary of this subject's role and significance within the modern RAF. CRITICAL: do NOT mention the subject's name, title, designation, or any unique identifier that would immediately reveal what this brief is about. The summary must be specific enough that a reader given a short list of 4–5 candidates could identify the correct one, but it must not name the subject directly."\n  ]`;
-    const SHARED_RULES = `\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of EXACTLY 4 strings — no more, no fewer. Total word count across sections 1–3 must not exceed 220 words. Section 4 must be 1–2 sentences and must not contain the subject's name or any unique identifier. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.`;
+    const SHARED_RULES = `\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of EXACTLY 4 strings — no more, no fewer. Total word count across sections 1–3 must not exceed 220 words. Section 4 must be 1–2 sentences and must not contain the subject's name or any unique identifier. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.\n${LIST_FORMAT_RULE}`;
 
     // News shape — AI must generate the title
     const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "concise factual title, max 70 characters",\n  ${SHARED_SECTIONS},\n  "sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}${SHARED_RULES}`;
@@ -2183,6 +2186,7 @@ async function generateBriefContent(brief, aiSettings) {
 
   TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace('Return exactly 10 keyword objects', `Return exactly ${kwCount} keyword objects`);
   TOPIC_JSON_SHAPE += `\n5. Do NOT use the topic title "${brief.title}" or any shortened form of it as a keyword — the title itself must never appear in the keywords array.`;
+  TOPIC_JSON_SHAPE += `\n${LIST_FORMAT_RULE}`;
 
   const gdShape = booGameDataShape(brief.category);
   if (gdShape) {
@@ -2545,10 +2549,10 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
 // Does not cascade-delete any user data — purely a generation endpoint.
 router.post('/ai/regenerate-description/:id', async (req, res) => {
   try {
-    const brief = await IntelligenceBrief.findById(req.params.id).select('title');
+    const brief = await IntelligenceBrief.findById(req.params.id).select('title category');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
-    const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings.\n2. Total word count across all sections must not exceed 240 words.\n3. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.`;
+    const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings.\n2. Total word count across all sections must not exceed 240 words.\n3. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.\n${LIST_FORMAT_RULE}`;
 
     const descAiSettings = await AppSettings.getSettings();
     const data = await openRouterChat([{

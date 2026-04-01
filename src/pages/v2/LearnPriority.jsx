@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 import TutorialModal from '../../components/tutorial/TutorialModal'
 import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../../data/mockData'
-import { pathwayTierRequired } from '../../utils/subscription'
+import { pathwayTierRequired, getAccessibleCategories } from '../../utils/subscription'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -81,6 +81,13 @@ function getRankName(rankNumber) {
 }
 
 // ── Stone component ───────────────────────────────────────────────────────────
+
+function formatEventDate(dateStr) {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  if (isNaN(d)) return null
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
 
 function Stone({ brief, state, colors, milestone, onTap, index }) {
   const size         = milestone ? 72 : 60
@@ -205,6 +212,20 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
           )}
         </AnimatePresence>
       </p>
+
+      {/* Event date label — News pathway only */}
+      {brief.category === 'News' && brief.eventDate && (
+        <p
+          className="text-[10px] mt-0.5 text-center leading-none"
+          style={{
+            color: (isLocked || isStub) ? '#2a4060' : isRead ? '#2e4d6a' : '#4a6a8a',
+            marginLeft: -(size / 2) + 6,
+            width: size + 40,
+          }}
+        >
+          {formatEventDate(brief.eventDate)}
+        </p>
+      )}
     </div>
   )
 }
@@ -265,7 +286,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
       >
         <span className="text-4xl mb-4">{CATEGORY_ICONS[category] ?? '📄'}</span>
         <p className="text-base font-bold text-slate-700 mb-1">No pathway briefs yet</p>
-        <p className="text-sm text-slate-500">Priority numbers haven't been assigned to {category} briefs yet. Check back soon.</p>
+        <p className="text-sm text-slate-500">{category === 'News' ? 'No news briefs available yet. Check back soon.' : `Priority numbers haven't been assigned to ${category} briefs yet. Check back soon.`}</p>
       </motion.div>
     )
   }
@@ -301,7 +322,6 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
             milestone={milestone}
             index={i}
             onTap={() => {
-              if (brief.status === 'stub') return
               navigate(`/brief/${brief._id}`)
             }}
           />
@@ -495,9 +515,17 @@ export default function LearnPriority() {
   useEffect(() => {
     if (!settingsLoaded) return
     const cat = location.state?.category
-    if (!cat) return
-    const idx = pathways.findIndex(p => p.category === cat)
-    if (idx !== -1) setActiveCatIndex(idx)
+    if (cat) {
+      const idx = pathways.findIndex(p => p.category === cat)
+      if (idx !== -1) setActiveCatIndex(idx)
+      return
+    }
+    // Guest / free users: snap to their first accessible pathway (e.g. News)
+    const accessible = getAccessibleCategories(user, catSettings)
+    if (accessible !== null && accessible.length > 0) {
+      const idx = pathways.findIndex(p => accessible.includes(p.category))
+      if (idx !== -1) setActiveCatIndex(idx)
+    }
   }, [settingsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fire pathway_swipe tutorial when ≥2 pathways unlocked ──────────────────

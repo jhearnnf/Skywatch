@@ -395,6 +395,12 @@ function parseSectionBlocks(text) {
       raw.push({ type: 'bullet', content: t.replace(/^[-*•]\s+/, '') })
     } else if (/^\d+\.\s+/.test(t)) {
       raw.push({ type: 'numbered', content: t.replace(/^\d+\.\s+/, '') })
+    } else if (raw.length && raw[raw.length - 1].type === 'p' && raw[raw.length - 1].content.endsWith(':') && t.length <= 60 && !t.endsWith('.')) {
+      // AI omitted "- " prefix but this looks like a list item (short, no full stop, after a colon intro)
+      raw.push({ type: 'bullet', content: t })
+    } else if (raw.length && (raw[raw.length - 1].type === 'bullet' || raw[raw.length - 1].type === 'numbered') && t.length <= 60 && !t.endsWith('.') && !t.includes(':')) {
+      // Continuation of an implicit list (previous item was also a short label)
+      raw.push({ type: 'bullet', content: t })
     } else if (raw.length && raw[raw.length - 1].type === 'p') {
       raw[raw.length - 1].content += ' ' + t
     } else {
@@ -1424,6 +1430,7 @@ export default function BriefReader() {
           if ((data.flashcardCount ?? 0) >= 5) badgePendingRef.current = true
           if (flashcardCardRef.current) {
             setTimeout(() => {
+              playSound('flashcard_collect')
               setFlashcardGlowing(true)
               setTimeout(() => {
                 setFlashcardGlowing(false)
@@ -1804,6 +1811,11 @@ export default function BriefReader() {
                 <p className="text-xs font-semibold text-brand-500 mb-1.5">
                   {brief.category}{brief.subcategory ? ` · ${brief.subcategory}` : ''}
                 </p>
+                {brief.category === 'News' && brief.eventDate && (
+                  <p className="text-xs tracking-widest uppercase text-slate-400 font-mono mb-2">
+                    {new Date(brief.eventDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                )}
                 <h1 className="text-2xl font-extrabold text-text leading-tight">{brief.title}</h1>
                 {brief.nickname && (
                   <p className="text-sm text-text-muted italic mt-0.5">"{brief.nickname}"</p>
@@ -1875,7 +1887,7 @@ export default function BriefReader() {
               ...(brief.keywords || []).map(kw => ({ ...kw, linkedBriefCategory: kw.linkedBriefId?.category ?? null })),
               ...(brief.associatedBaseBriefIds     || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
               ...(brief.associatedSquadronBriefIds || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
-              ...(brief.associatedAircraftBriefIds || []).map(b => ({ keyword: b.nickname ?? b.title, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+              ...(brief.associatedAircraftBriefIds || []).map(b => ({ keyword: b.nickname || b.title, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
               ...(brief.associatedMissionBriefIds  || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
               ...(brief.associatedTrainingBriefIds || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
               ...(brief.relatedBriefIds            || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),

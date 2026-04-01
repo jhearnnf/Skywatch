@@ -36,7 +36,7 @@ const CATEGORY   = getArg('--category')
 const ALL        = hasFlag('--all')
 const DRY_RUN    = hasFlag('--dry-run')
 const CLEAR      = hasFlag('--clear')
-const CHUNK_SIZE = parseInt(getArg('--chunk') || '60', 10)
+const CHUNK_SIZE = parseInt(getArg('--chunk') || '200', 10)
 
 const PATHWAY_CATEGORIES = ['Bases', 'Aircrafts', 'Ranks', 'Squadrons', 'Training', 'Roles', 'Threats', 'Missions', 'Terminology', 'Heritage', 'Allies', 'AOR', 'Tech', 'Treaties']
 

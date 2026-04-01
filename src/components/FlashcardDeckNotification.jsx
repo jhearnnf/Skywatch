@@ -17,28 +17,34 @@ function getPlayNavElement() {
 
 export default function FlashcardDeckNotification({ cardRect, onDone }) {
   // phase: 'flying-in' | 'showing' | 'flying-out'
-  const [phase,       setPhase]       = useState('flying-in')
-  const [playNavRect, setPlayNavRect] = useState(null)
-  const flyOutTimerRef  = useRef(null)
-  const handledPhaseRef = useRef(null)
+  const [phase,       setPhase]   = useState('flying-in')
+  const playNavRectRef            = useRef(null)   // populated just before flying-out
+  const phaseGenRef               = useRef(0)      // increments each phase advance
+  const handledGenRef             = useRef(-1)     // last generation handled
+  const flyOutTimerRef            = useRef(null)
 
   const notifLeft = Math.round((window.innerWidth - NOTIF_W) / 2)
 
   // Cleanup timer on unmount
   useEffect(() => () => clearTimeout(flyOutTimerRef.current), [])
 
+  function advancePhase(next) {
+    phaseGenRef.current += 1
+    setPhase(next)
+  }
+
   function handleAnimationComplete() {
-    if (handledPhaseRef.current === phase) return
-    handledPhaseRef.current = phase
+    const gen = phaseGenRef.current
+    if (handledGenRef.current === gen) return
+    handledGenRef.current = gen
 
     if (phase === 'flying-in') {
-      setPhase('showing')
+      advancePhase('showing')
       flyOutTimerRef.current = setTimeout(() => {
         const el = getPlayNavElement()
         if (!el) { onDone(); return }
-        const r = el.getBoundingClientRect()
-        setPlayNavRect(r)
-        setPhase('flying-out')
+        playNavRectRef.current = el.getBoundingClientRect()
+        advancePhase('flying-out')
       }, 1600)
     } else if (phase === 'flying-out') {
       const el = getPlayNavElement()
@@ -51,10 +57,11 @@ export default function FlashcardDeckNotification({ cardRect, onDone }) {
   }
 
   // Animate target — fly-out collapses card to the centre of the Play nav button
-  const animateTarget = (phase === 'flying-out' && playNavRect)
+  const navRect = playNavRectRef.current
+  const animateTarget = (phase === 'flying-out' && navRect)
     ? {
-        top:          playNavRect.top  + playNavRect.height / 2 - 18,
-        left:         playNavRect.left + playNavRect.width  / 2 - 18,
+        top:          navRect.top  + navRect.height / 2 - 18,
+        left:         navRect.left + navRect.width  / 2 - 18,
         width:        36,
         height:       36,
         borderRadius: 50,
