@@ -199,6 +199,8 @@ const intelligenceBriefSchema = new mongoose.Schema(
     relatedBriefIds:            [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
     // Back-links from historic briefs — populated automatically when a historic brief is saved
     relatedHistoric:            [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+    // Text-scan discovered mentions — computed at generation/save time, populated on read
+    mentionedBriefIds:          [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
 
     // Mnemonics — short memory-aid sentences keyed by stat field, one per stat row
     mnemonics: {

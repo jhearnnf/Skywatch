@@ -96,7 +96,14 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
   const isInProgress = state === 'inprogress'
   const isLocked     = state.startsWith('locked')
   const isStub       = state === 'stub'
+  const isHistoric   = !!brief.historic && !isLocked && !isStub
   const [hovered, setHovered] = useState(false)
+
+  // Amber historic tones — overlaid regardless of pathway colour
+  const HISTORIC_BG     = '#1e1200'
+  const HISTORIC_BORDER = '#7a5200'
+  const HISTORIC_RING   = '#c8860a'
+  const HISTORIC_GLOW   = 'rgba(180,110,10,0.35)'
 
   const xOffset = ZIGZAG[index % ZIGZAG.length]
 
@@ -114,7 +121,13 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
             <div
               key={i}
               className="w-1.5 h-1.5 rounded-full"
-              style={{ background: isRead ? colors.stone : '#243650', opacity: isRead ? 0.5 : 0.4 }}
+              style={{
+                background: isHistoric && isRead ? HISTORIC_BORDER
+                  : isHistoric                   ? HISTORIC_BORDER + '88'
+                  : isRead                       ? colors.stone
+                  :                                '#243650',
+                opacity: isRead ? 0.5 : 0.4,
+              }}
             />
           ))}
         </div>
@@ -127,36 +140,100 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
         style={{
           width:  size,
           height: size,
-          background: (isLocked || isStub) ? '#172236' : isRead ? colors.bg : isInProgress ? colors.stone + '44' : colors.stone,
-          border: `2px solid ${(isLocked || isStub) ? '#243650' : isNext ? colors.ring : isRead ? colors.stone + '80' : isInProgress ? colors.stone + 'aa' : colors.stone}`,
-          boxShadow: isNext ? `0 0 0 6px ${colors.glow}, 0 0 20px ${colors.glow}` :
-                     isRead ? 'none' :
-                     (isLocked || isStub) ? 'none' :
-                     isInProgress ? `0 2px 8px ${colors.glow}` :
-                     `0 2px 12px ${colors.glow}`,
+          background: (isLocked || isStub) ? '#172236'
+            : isHistoric && isRead       ? HISTORIC_BG
+            : isHistoric && isInProgress ? HISTORIC_BORDER + '44'
+            : isHistoric                 ? HISTORIC_BORDER + 'bb'
+            : isRead                     ? colors.bg
+            : isInProgress               ? colors.stone + '44'
+            :                              colors.stone,
+          border: `2px solid ${
+            (isLocked || isStub) ? '#243650'
+            : isHistoric && isNext       ? HISTORIC_RING
+            : isHistoric && isRead       ? HISTORIC_BORDER + '80'
+            : isHistoric && isInProgress ? HISTORIC_BORDER + 'aa'
+            : isHistoric                 ? HISTORIC_BORDER
+            : isNext                     ? colors.ring
+            : isRead                     ? colors.stone + '80'
+            : isInProgress               ? colors.stone + 'aa'
+            :                              colors.stone
+          }`,
+          boxShadow: isNext && isHistoric ? `0 0 0 6px ${HISTORIC_GLOW}, 0 0 20px ${HISTORIC_GLOW}`
+            : isNext                      ? `0 0 0 6px ${colors.glow}, 0 0 20px ${colors.glow}`
+            : isRead                      ? 'none'
+            : (isLocked || isStub)        ? 'none'
+            : isHistoric && isInProgress  ? `0 2px 8px ${HISTORIC_GLOW}`
+            : isHistoric                  ? `0 2px 12px ${HISTORIC_GLOW}`
+            : isInProgress                ? `0 2px 8px ${colors.glow}`
+            :                               `0 2px 12px ${colors.glow}`,
         }}
       >
         {/* Pulsing ring for 'next' stone */}
         {isNext && (
           <motion.div
             className="absolute inset-0 rounded-full"
-            style={{ border: `2px solid ${colors.ring}` }}
+            style={{ border: `2px solid ${isHistoric ? HISTORIC_RING : colors.ring}` }}
             animate={{ scale: [1, 1.35, 1], opacity: [0.8, 0, 0.8] }}
             transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
           />
         )}
 
-        <span className="text-xl leading-none select-none" style={{ opacity: (isLocked || isStub) ? 0.5 : isRead ? 0.5 : isInProgress ? 0.75 : 1 }}>
-          {isLocked ? '🔒' : isStub ? '📡' : isRead ? '✓' : milestone ? '⭐' : CATEGORY_ICONS[brief.category] ?? '📄'}
+        <span className="text-xl leading-none select-none" style={{ opacity: (isLocked || isStub) ? 0.5 : (isRead || isHistoric) ? 0.45 : isInProgress ? 0.75 : 1 }}>
+          {isLocked ? '🔒' : isStub ? '📡' : milestone ? '⭐' : CATEGORY_ICONS[brief.category] ?? '📄'}
         </span>
 
-        {/* Read badge */}
+        {/* Diagonal "cleared" line for read stones */}
+        {isRead && (
+          <svg
+            className="absolute inset-0 pointer-events-none"
+            width={size}
+            height={size}
+            viewBox={`0 0 ${size} ${size}`}
+          >
+            <line
+              x1={size * 0.25}
+              y1={size * 0.25}
+              x2={size * 0.75}
+              y2={size * 0.75}
+              stroke={isHistoric ? HISTORIC_RING : colors.ring}
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              opacity="0.45"
+            />
+            <line
+              x1={size * 0.75}
+              y1={size * 0.25}
+              x2={size * 0.25}
+              y2={size * 0.75}
+              stroke={isHistoric ? HISTORIC_RING : colors.ring}
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              opacity="0.45"
+            />
+          </svg>
+        )}
+
+        {/* Historic hourglass badge — unread */}
+        {isHistoric && !isRead && !isInProgress && (
+          <span
+            className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold"
+            style={{ background: HISTORIC_BG, color: HISTORIC_RING, border: `1px solid ${HISTORIC_BORDER}` }}
+          >
+            ⧗
+          </span>
+        )}
+
+        {/* Read badge — rank pip (historic variant uses hourglass) */}
         {isRead && (
           <span
-            className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
-            style={{ background: colors.stone, color: '#fff' }}
+            className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold"
+            style={{
+              background: isHistoric ? HISTORIC_BG          : colors.stone + 'cc',
+              color:      isHistoric ? HISTORIC_RING         : colors.ring,
+              border:     `1px solid ${isHistoric ? HISTORIC_BORDER : colors.ring + '55'}`,
+            }}
           >
-            ✓
+            {isHistoric ? '⧗' : '★'}
           </span>
         )}
 
@@ -164,9 +241,13 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
         {isInProgress && (
           <span
             className="absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold"
-            style={{ background: colors.stone + 'cc', color: '#fff', border: `1px solid ${colors.ring}` }}
+            style={{
+              background: isHistoric ? HISTORIC_BG           : colors.stone + 'cc',
+              color:      isHistoric ? HISTORIC_RING         : '#fff',
+              border:     `1px solid ${isHistoric ? HISTORIC_BORDER : colors.ring}`,
+            }}
           >
-            ●
+            {isHistoric ? '⧗' : '●'}
           </span>
         )}
       </button>
@@ -175,7 +256,15 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
       <p
         className="text-xs font-semibold mt-1.5 text-center leading-tight relative overflow-hidden"
         style={{
-          color: (isLocked || isStub) ? '#3d5a7a' : isRead ? '#4a6282' : isNext ? '#ddeaf8' : isInProgress ? '#a0c4e4' : '#8ba0c0',
+          color: (isLocked || isStub) ? '#3d5a7a'
+            : isHistoric && isRead       ? '#6b5020'
+            : isHistoric && isInProgress ? '#8a6828'
+            : isHistoric && isNext       ? '#c8a050'
+            : isHistoric                 ? '#7a6040'
+            : isRead                     ? '#5a7a9a'
+            : isNext                     ? '#ddeaf8'
+            : isInProgress               ? '#a0c4e4'
+            :                              '#8ba0c0',
           marginLeft: -(size / 2) + 6,
           width: size + 40,
           minHeight: '2.5em',
@@ -218,7 +307,7 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
         <p
           className="text-[10px] mt-0.5 text-center leading-none"
           style={{
-            color: (isLocked || isStub) ? '#2a4060' : isRead ? '#2e4d6a' : '#4a6a8a',
+            color: (isLocked || isStub) ? '#2a4060' : isRead ? '#3d6080' : '#4a6a8a',
             marginLeft: -(size / 2) + 6,
             width: size + 40,
           }}

@@ -14,14 +14,21 @@ const FEATURES = [
 ]
 
 const PREVIEW_CATEGORIES = [
+  { emoji: '📰', label: 'News'        },
   { emoji: '✈️', label: 'Aircrafts'   },
   { emoji: '🏔️', label: 'Bases'       },
-  { emoji: '🎯', label: 'Training'    },
-  { emoji: '🛡️', label: 'Roles'       },
-  { emoji: '🚀', label: 'Missions'    },
   { emoji: '🎖️', label: 'Ranks'       },
   { emoji: '⚡', label: 'Squadrons'   },
-  { emoji: '📰', label: 'News'        },
+  { emoji: '🎯', label: 'Training'    },
+  { emoji: '🛡️', label: 'Roles'       },
+  { emoji: '⚠️', label: 'Threats'     },
+  { emoji: '🤝', label: 'Allies'      },
+  { emoji: '🚀', label: 'Missions'    },
+  { emoji: '🌍', label: 'AOR'         },
+  { emoji: '💡', label: 'Tech'        },
+  { emoji: '📖', label: 'Terminology' },
+  { emoji: '📜', label: 'Treaties'    },
+  { emoji: '🏅', label: 'Heritage'    },
 ]
 
 const fadeUp = {
@@ -151,7 +158,7 @@ export default function Landing() {
           className="mt-16 flex flex-wrap justify-center gap-10 text-center"
         >
           {[
-            { value: '14',    label: 'Subject Areas'   },
+            { value: '15',    label: 'Subject Areas'   },
             { value: '100+',  label: 'Intel Briefs'    },
             { value: '1000+', label: 'Quiz Questions'  },
             { value: 'Free',  label: 'To Start'        },
@@ -178,10 +185,10 @@ export default function Landing() {
             <span className="intel-tag">SUBJECT INDEX</span>
           </div>
           <h2 className="text-3xl font-bold text-slate-900 mb-3">Everything You Need to Know</h2>
-          <p className="text-slate-500 max-w-lg mx-auto">Fourteen subject areas covering the full breadth of modern RAF knowledge.</p>
+          <p className="text-slate-500 max-w-lg mx-auto">Fifteen subject areas covering the full breadth of modern RAF knowledge.</p>
         </motion.div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
           {PREVIEW_CATEGORIES.map(({ emoji, label }, i) => (
             <motion.div
               key={label}
@@ -215,7 +222,7 @@ export default function Landing() {
             <span className="intel-tag">MISSION BRIEFING</span>
           </div>
           <h2 className="text-3xl font-bold text-slate-900 mb-3">How It Works</h2>
-          <p className="text-slate-500">Designed from the ground up for RAF applicants.</p>
+          <p className="text-slate-500">Designed from the ground up for RAF applicants and enthusiasts.</p>
         </motion.div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -257,8 +264,8 @@ export default function Landing() {
           </div>
 
           <div className="text-5xl mb-4">🎯</div>
-          <h2 className="text-3xl font-extrabold text-slate-900 mb-3">Ready to Begin?</h2>
-          <p className="text-slate-600 text-lg mb-8 max-w-md mx-auto">
+          <h2 className="text-3xl font-extrabold text-slate-50 mb-3">Ready to Begin?</h2>
+          <p className="text-lg mb-8 max-w-md mx-auto" style={{ color: '#a8c4e0' }}>
             Join RAF applicants already using SkyWatch to prepare for their selection journey.
           </p>
           {user ? (
@@ -283,7 +290,7 @@ export default function Landing() {
 
       {/* ── Footer ────────────────────────────────────────── */}
       <footer className="py-8 px-5 border-t border-slate-200 text-center">
-        <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR RAF APPLICANTS</p>
+        <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR RAF APPLICANTS & ENTHUSIASTS</p>
       </footer>
 
       {/* ── Onboarding overlay ────────────────────────────── */}

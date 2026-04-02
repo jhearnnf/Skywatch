@@ -9,9 +9,9 @@
  */
 
 const mongoose = require('mongoose');
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
-const MONGO_URI =
-  'mongodb://osmightymanos_db_user:tXUhOdfVOj2ZWrqE@ac-oddqhg3-shard-00-00.ftikjmd.mongodb.net:27017,ac-oddqhg3-shard-00-01.ftikjmd.mongodb.net:27017,ac-oddqhg3-shard-00-02.ftikjmd.mongodb.net:27017/skywatch?ssl=true&replicaSet=atlas-qoe982-shard-0&authSource=admin&appName=Cluster0';
+const MONGO_URI = process.env.MONGODB_URI;
 
 const COLLECTION = 'intelligencebriefs';
 

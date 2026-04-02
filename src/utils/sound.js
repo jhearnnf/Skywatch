@@ -67,6 +67,13 @@ export function invalidateSoundSettings() {
   inflight = null
 }
 
+// Stop the current sound immediately and drain the pending queue
+export function stopAllSounds() {
+  for (const entry of queue) entry.resolve()
+  queue.length = 0
+  if (currentSlot) interruptCurrent()
+}
+
 // ── Sound queue ───────────────────────────────────────────────────────────────
 // Sounds are played one at a time in the order they are requested.
 // playSound() returns a Promise that resolves when the sound finishes.

@@ -7,6 +7,7 @@ const User = require('../models/User');
 const AircoinLog = require('../models/AircoinLog');
 const { awardCoins } = require('../utils/awardCoins');
 const { effectiveTier, getAccessibleCategories } = require('../utils/subscription');
+const { enrichWithMatchTerms } = require('../utils/mentionedBriefs');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
 require('../models/GameQuizQuestion');
 const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
@@ -349,66 +350,6 @@ router.get('/history', protect, async (req, res) => {
   }
 });
 
-// Generate candidate match strings for a brief title.
-// Returns an array of strings to try against the description text (longest first
-// so the most specific match wins).  All returned strings are >= 4 chars.
-function getMatchCandidates(title, category, nickname) {
-  const raw = [title];
-
-  if (category === 'Bases') {
-    if (/^RAF /i.test(title))             raw.push(title.replace(/^RAF /i, ''));
-    if (/^Royal Air Force /i.test(title)) raw.push(title.replace(/^Royal Air Force /i, ''));
-  } else if (category === 'Squadrons') {
-    if (/ RAF$/i.test(title))             raw.push(title.replace(/ RAF$/i, ''));
-    if (/ Royal Air Force$/i.test(title)) raw.push(title.replace(/ Royal Air Force$/i, ''));
-    const noMatch = title.match(/^(No\.\s*\d+)\s+Squadron/i);
-    if (noMatch) raw.push(noMatch[1]);
-  } else if (category === 'Aircrafts') {
-    if (nickname) raw.push(nickname);
-  } else if (category === 'Missions') {
-    // "Operation Shader" → also try "Op Shader"
-    if (/^Operation /i.test(title)) raw.push(title.replace(/^Operation /i, 'Op '));
-  }
-
-  // Filter out anything too short to reliably match (avoids "F-5", "IOT", etc.)
-  return [...new Set(raw)].filter(c => c.length >= 4);
-}
-
-// Scan a brief's description sections for verbatim mentions of other brief titles.
-// Returns objects with { _id, title, subtitle, matchTerm } for each match found.
-const SCAN_CATEGORIES = ['Bases', 'Squadrons', 'Aircrafts', 'Missions', 'Tech', 'Threats', 'Terminology', 'Allies'];
-
-async function scanMentionedBriefs(brief) {
-  const descLower = (brief.descriptionSections || []).join(' ').toLowerCase();
-  if (!descLower.trim()) return [];
-
-  const candidates = await IntelligenceBrief.find(
-    { category: { $in: SCAN_CATEGORIES }, _id: { $ne: brief._id } },
-    '_id title subtitle nickname category'
-  ).lean();
-
-  // Build exclusion set from all explicit association arrays so we don't duplicate
-  const linkedIds = new Set([
-    ...(brief.associatedBaseBriefIds     || []).map(b => String(b._id ?? b)),
-    ...(brief.associatedSquadronBriefIds || []).map(b => String(b._id ?? b)),
-    ...(brief.associatedAircraftBriefIds || []).map(b => String(b._id ?? b)),
-    ...(brief.associatedMissionBriefIds  || []).map(b => String(b._id ?? b)),
-    ...(brief.associatedTrainingBriefIds || []).map(b => String(b._id ?? b)),
-    ...(brief.relatedBriefIds            || []).map(b => String(b._id ?? b)),
-  ]);
-
-  const results = [];
-  for (const b of candidates) {
-    if (linkedIds.has(String(b._id))) continue;
-    for (const candidate of getMatchCandidates(b.title, b.category, b.nickname)) {
-      if (descLower.includes(candidate.toLowerCase())) {
-        results.push({ _id: b._id, title: b.title, subtitle: b.subtitle, category: b.category, matchTerm: candidate });
-        break;
-      }
-    }
-  }
-  return results;
-}
 
 // GET /api/briefs/pathway/:category — ordered pathway briefs with isRead flag.
 // News: all briefs sorted by eventDate DESC (newest first).
@@ -422,8 +363,8 @@ router.get('/pathway/:category', optionalAuth, async (req, res) => {
       ? { category }
       : { category, priorityNumber: { $ne: null } };
     const fields = isNews
-      ? '_id title subtitle status category subcategory eventDate'
-      : '_id title subtitle status priorityNumber category subcategory';
+      ? '_id title subtitle status category subcategory eventDate historic'
+      : '_id title subtitle status priorityNumber category subcategory historic';
     const sortBy = isNews
       ? { eventDate: -1 }
       : { priorityNumber: 1 };
@@ -451,6 +392,7 @@ router.get('/pathway/:category', optionalAuth, async (req, res) => {
       eventDate:      b.eventDate ?? null,
       category:       b.category,
       subcategory:    b.subcategory,
+      historic:       b.historic ?? false,
       isRead:         readSet.has(b._id.toString()),
       isInProgress:   !readSet.has(b._id.toString()) && inProgressSet.has(b._id.toString()),
     }));
@@ -468,14 +410,14 @@ router.get('/:id', optionalAuth, async (req, res) => {
       .populate('media')
       .populate('quizQuestionsEasy')
       .populate('quizQuestionsMedium')
-      .populate('associatedBaseBriefIds',     '_id title subtitle category status')
-      .populate('associatedSquadronBriefIds', '_id title subtitle category status')
+      .populate('associatedBaseBriefIds',     '_id title subtitle nickname category status')
+      .populate('associatedSquadronBriefIds', '_id title subtitle nickname category status')
       .populate('associatedAircraftBriefIds', '_id title subtitle nickname category status')
-      .populate('associatedMissionBriefIds',  '_id title subtitle category status')
-      .populate('associatedTrainingBriefIds', '_id title subtitle category status')
-      .populate('relatedBriefIds',            '_id title subtitle category status')
+      .populate('associatedMissionBriefIds',  '_id title subtitle nickname category status')
+      .populate('associatedTrainingBriefIds', '_id title subtitle nickname category status')
+      .populate('relatedBriefIds',            '_id title subtitle nickname category status')
       .populate('relatedHistoric',            '_id title subtitle category status historic')
-      .populate('keywords.linkedBriefId',     '_id category');
+      .populate('mentionedBriefIds',          '_id title subtitle nickname category');
 
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
@@ -537,8 +479,41 @@ router.get('/:id', optionalAuth, async (req, res) => {
     }
 
     const ammoMax = req.user ? tierAmmo : 0;
-    const mentionedBriefs = await scanMentionedBriefs(brief);
-    res.json({ status: 'success', data: { brief, readRecord, ammoMax, mentionedBriefs } });
+
+    // Convert to plain object and enrich every associated array with matchTerms
+    // so the frontend can flatMap over all variant forms without a live DB scan.
+    const briefObj = brief.toObject();
+    briefObj.associatedBaseBriefIds     = enrichWithMatchTerms(briefObj.associatedBaseBriefIds);
+    briefObj.associatedSquadronBriefIds = enrichWithMatchTerms(briefObj.associatedSquadronBriefIds);
+    briefObj.associatedAircraftBriefIds = enrichWithMatchTerms(briefObj.associatedAircraftBriefIds);
+    briefObj.associatedMissionBriefIds  = enrichWithMatchTerms(briefObj.associatedMissionBriefIds);
+    briefObj.associatedTrainingBriefIds = enrichWithMatchTerms(briefObj.associatedTrainingBriefIds);
+    briefObj.relatedBriefIds            = enrichWithMatchTerms(briefObj.relatedBriefIds);
+    briefObj.mentionedBriefIds          = enrichWithMatchTerms(briefObj.mentionedBriefIds);
+
+    // Resolve keyword linked brief titles explicitly — populate can silently return
+    // null if linkedBriefId points to a stale/regenerated document, so we do a
+    // direct lookup and map titles back regardless of populate result.
+    if (briefObj.keywords?.length) {
+      const linkedIds = briefObj.keywords
+        .map(k => k.linkedBriefId?._id ?? k.linkedBriefId)
+        .filter(Boolean);
+      if (linkedIds.length) {
+        const linkedBriefs = await IntelligenceBrief.find(
+          { _id: { $in: linkedIds } },
+          '_id title nickname category'
+        ).lean();
+const idToLinked = new Map(linkedBriefs.map(b => [String(b._id), b]));
+        briefObj.keywords = briefObj.keywords.map(k => {
+          const rawId = k.linkedBriefId?._id ?? k.linkedBriefId;
+          if (!rawId) return k;
+          const linked = idToLinked.get(String(rawId));
+          return linked ? { ...k, linkedBriefId: linked } : k;
+        });
+      }
+    }
+
+    res.json({ status: 'success', data: { brief: briefObj, readRecord, ammoMax } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

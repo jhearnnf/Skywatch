@@ -32,6 +32,8 @@ const fs                = require('fs');
 const { uploadBuffer, destroyAsset } = require('../utils/cloudinary');
 const IntelLead = require('../models/IntelLead');
 const seedLeads = require('../seeds/seedLeads');
+const { scanMentionedBriefIds } = require('../utils/mentionedBriefs');
+const { autoLinkKeywords }     = require('../utils/keywordLinking');
 
 // ── AI prompt defaults ────────────────────────────────────────────────────────
 // These are the canonical system prompts used throughout the AI generation
@@ -317,9 +319,21 @@ router.patch('/settings', requireReason, async (req, res) => {
     // Mixed field tutorialContent needs explicit mark after findOneAndUpdate via set,
     // but findOneAndUpdate at the DB level handles it correctly already.
 
+    const updatedKeys = Object.keys(updates);
+    const actionType = (() => {
+      if (updatedKeys.some(k => k.startsWith('volume') || k.startsWith('soundEnabled'))) return 'change_sound_settings';
+      if (updatedKeys.some(k => k.startsWith('ammo') || k.startsWith('aircoins') || k === 'trialDurationDays')) return 'change_economy_settings';
+      if (updatedKeys.some(k => k.startsWith('passThreshold') || k.endsWith('AnswerCount') || k.startsWith('easyAnswer') || k.startsWith('mediumAnswer'))) return 'change_quiz_settings';
+      if (updatedKeys.some(k => k === 'tutorialContent')) return 'edit_tutorial_content';
+      if (updatedKeys.some(k => k.startsWith('pathway') || k.endsWith('Categories'))) return 'change_pathway_settings';
+      if (updatedKeys.some(k => k.startsWith('email') || k.startsWith('welcome') || k.startsWith('combatReadiness'))) return 'change_content_settings';
+      if (updatedKeys.some(k => k.startsWith('aiKeywords') || k.startsWith('aiPrompts'))) return 'change_ai_settings';
+      return 'change_app_settings';
+    })();
+
     await AdminAction.create({
       userId: req.user._id,
-      actionType: 'change_quiz_questions',
+      actionType,
       reason,
     });
 
@@ -1028,6 +1042,19 @@ router.post('/briefs', requireReason, async (req, res) => {
         );
       }
     }
+    // Scan for text-mentioned briefs if description was provided at creation time
+    if (fields.descriptionSections?.length) {
+      try {
+        const mentionedIds = await scanMentionedBriefIds(brief);
+        if (mentionedIds.length) {
+          await IntelligenceBrief.findByIdAndUpdate(brief._id, { mentionedBriefIds: mentionedIds });
+          brief.mentionedBriefIds = mentionedIds;
+        }
+      } catch (scanErr) {
+        console.error('[POST briefs] mentionedBriefIds scan failed (non-fatal):', scanErr.message);
+      }
+    }
+
     await AdminAction.create({ userId: req.user._id, actionType: 'create_brief', reason });
     res.json({ status: 'success', data: { brief } });
   } catch (err) {
@@ -1041,6 +1068,17 @@ router.patch('/briefs/:id', requireReason, async (req, res) => {
     const { reason, ...fields } = req.body;
     const brief = await IntelligenceBrief.findByIdAndUpdate(req.params.id, fields, { new: true, runValidators: true }).populate('media');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
+
+    // Re-scan mentioned briefs whenever description content changes
+    if (fields.descriptionSections) {
+      try {
+        const mentionedIds = await scanMentionedBriefIds(brief);
+        await IntelligenceBrief.findByIdAndUpdate(brief._id, { mentionedBriefIds: mentionedIds });
+        brief.mentionedBriefIds = mentionedIds;
+      } catch (scanErr) {
+        console.error('[PATCH briefs] mentionedBriefIds scan failed (non-fatal):', scanErr.message);
+      }
+    }
     if (brief.historic) {
       const targetIds = [
         ...(brief.associatedBaseBriefIds     ?? []),
@@ -1798,7 +1836,33 @@ router.post('/ai/news-headlines', async (req, res) => {
 });
 
 // Universal rule enforcing bullet-list format whenever multiple items are enumerated
-const LIST_FORMAT_RULE = 'LIST FORMAT RULE: Whenever a sentence would list 3 or more items of the same type — weapons, aircraft, squadrons, bases, roles, capabilities, systems, or any other nouns — format each item on its own line as "- Item" (e.g. "- No. 1 Squadron", "- RAF Lossiemouth", "- Typhoon FGR4") instead of a comma-separated sentence or bare lines without a leading hyphen. Every listed item MUST start with "- ". Prioritise legibility over prose style.';
+const LIST_FORMAT_RULE = 'LIST FORMAT RULE: Whenever you name 3 or more items of the same type (squadrons, aircraft, bases, roles, weapons, capabilities, or any other nouns), you MUST format them as a bullet list — NEVER as inline prose. This applies regardless of whether you would otherwise separate them with commas, semicolons, em-dashes (—), or parenthetical asides. BAD: "supports No. 1, No. 6 and No. 9 Squadron". BAD: "four squadrons—No. 1, No. 6, No. 9". GOOD: "supports four Typhoon squadrons:\\n- No. 1 Squadron\\n- No. 6 Squadron\\n- No. 9 Squadron". Each "- Item" MUST be on its own line using \\n escape sequences inside the JSON string. Introduce the list with a short lead sentence ending in a colon, then list every item on its own line.';
+
+// Shared builder for descriptionSections prompt text used by both generate-brief and
+// generateBriefContent. Single source of truth — keeps section 4 blind-identity rule
+// consistent across both paths.
+//   strict=true  → generate-brief:      EXACTLY 4 sections, 220-word cap, "Section N" labels
+//   strict=false → generateBriefContent: 2–4 sections,       240-word cap, "Paragraph N" labels
+function buildDescriptionSectionsSpec({ strict = true } = {}) {
+  const label = strict ? 'Section' : 'Paragraph';
+  const s4Omit = strict ? '' : ' (only include if genuinely needed — omit if not)';
+  const s4BlindRule = 'CRITICAL: do NOT mention the subject\'s name, title, designation, or any unique identifier that would immediately reveal what this brief is about. The summary must be specific enough that a reader given a short list of 4–5 candidates could identify the correct one, but it must not name the subject directly.';
+
+  const array = [
+    `"${label} 1 — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF."`,
+    `"${label} 2 — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject."`,
+    `"${label} 3 — 50–80 words. Operational context, key capabilities, or RAF significance."`,
+    `"${label} 4 — 1–2 sentences only${s4Omit}. A concise summary of this subject's role and significance within the modern RAF. ${s4BlindRule}"`,
+  ].join(',\n    ');
+
+  const countRule = strict
+    ? 'descriptionSections must be a JSON array of EXACTLY 4 strings — no more, no fewer. Total word count across sections 1–3 must not exceed 220 words.'
+    : 'descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words.';
+
+  const sharedRuleTail = 'Section 4 must be 1–2 sentences and must not contain the subject\'s name or any unique identifier. Write each section as readable prose or formatted text. IMPORTANT: when listing multiple items (features, roles, bases, capabilities, etc.) put each item on its own line using \\n escape sequences inside the JSON string, with each item prefixed by "- " (e.g. "Intro sentence:\\n- Item one\\n- Item two\\n- Item three"). Use "1." prefixes for ordered steps. Never use markdown bold/italic or headers. Plain prose is fine for flowing narrative — only use the list format when genuinely listing discrete items.';
+
+  return { array, countRule, sharedRuleTail };
+}
 
 // POST /api/admin/ai/generate-brief
 router.post('/ai/generate-brief', async (req, res) => {
@@ -1806,8 +1870,9 @@ router.post('/ai/generate-brief', async (req, res) => {
     const { headline, topic, category, eventDate, isHistoric } = req.body;
     if (!headline && !topic) return res.status(400).json({ message: 'headline or topic required' });
 
-    const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    "Section 1 — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Section 2 — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Section 3 — 50–80 words. Operational context, key capabilities, or RAF significance.",\n    "Section 4 — 1–2 sentences only. A concise summary of this subject's role and significance within the modern RAF. CRITICAL: do NOT mention the subject's name, title, designation, or any unique identifier that would immediately reveal what this brief is about. The summary must be specific enough that a reader given a short list of 4–5 candidates could identify the correct one, but it must not name the subject directly."\n  ]`;
-    const SHARED_RULES = `\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of EXACTLY 4 strings — no more, no fewer. Total word count across sections 1–3 must not exceed 220 words. Section 4 must be 1–2 sentences and must not contain the subject's name or any unique identifier. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.\n${LIST_FORMAT_RULE}`;
+    const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: true });
+    const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    ${dsArray}\n  ]`;
+    const SHARED_RULES = `\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n${LIST_FORMAT_RULE}`;
 
     // News shape — AI must generate the title
     const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "concise factual title, max 70 characters",\n  ${SHARED_SECTIONS},\n  "sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}${SHARED_RULES}`;
@@ -2182,7 +2247,8 @@ async function generateBriefContent(brief, aiSettings) {
   // Cap at 8 for reliability — sonar hits its real output token limit with more keywords + descriptions
   const kwCount = Math.min(aiSettings.aiKeywordsPerBrief ?? 20, 8);
 
-  let TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ],\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim somewhere in the descriptionSections above", "generatedDescription": "1-2 sentences. Explain what this term is and its RAF role or purpose. Include one specific detail: location/aircraft for a base; role/aircraft for a squadron; capabilities for an aircraft; or training significance for a rank/concept. Draw on broader RAF knowledge only — do NOT reference or summarise this intel brief."},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"}\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.\n2. Write all sections first, then extract keywords — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere across the sections.\n3. Return exactly 10 keyword objects.\n4. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
+  const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: false });
+  let TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    ${dsArray}\n  ],\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim somewhere in the descriptionSections above", "generatedDescription": "1-2 sentences. Explain what this term is and its RAF role or purpose. Include one specific detail: location/aircraft for a base; role/aircraft for a squadron; capabilities for an aircraft; or training significance for a rank/concept. Draw on broader RAF knowledge only — do NOT reference or summarise this intel brief."},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"}\n  ]\n}\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n2. Write all sections first, then extract keywords — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere across the sections.\n3. Return exactly 10 keyword objects.\n4. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
 
   TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace('Return exactly 10 keyword objects', `Return exactly ${kwCount} keyword objects`);
   TOPIC_JSON_SHAPE += `\n5. Do NOT use the topic title "${brief.title}" or any shortened form of it as a keyword — the title itself must never appear in the keywords array.`;
@@ -2234,6 +2300,14 @@ async function generateBriefContent(brief, aiSettings) {
       return true;
     });
   }
+  // Auto-link keywords to their corresponding Intel Brief stubs/published briefs
+  // using a two-stage pipeline: word-level pre-filter → AI disambiguation.
+  try {
+    keywords = await autoLinkKeywords(keywords, descriptionSections, openRouterChat);
+  } catch (linkErr) {
+    console.error('[generateBriefContent] keyword auto-linking failed (non-fatal):', linkErr.message);
+  }
+
   let gameData = (gdShape && briefGenerated.gameData && typeof briefGenerated.gameData === 'object')
     ? briefGenerated.gameData
     : null;
@@ -2534,6 +2608,15 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
     for (const [field, ids] of Object.entries(linkUpdates)) {
       brief[field] = ids;
     }
+
+    // Scan description for text mentions of other briefs — stored so page load
+    // can populate them directly instead of running a live 850+ brief scan.
+    try {
+      brief.mentionedBriefIds = await scanMentionedBriefIds(brief);
+    } catch (scanErr) {
+      console.error('[bulk-generate-stub] mentionedBriefIds scan failed (non-fatal):', scanErr.message);
+    }
+
     await brief.save();
 
     await AdminAction.create({ userId: req.user._id, actionType: 'create_brief', reason: 'Bulk auto-generate' });
@@ -2552,7 +2635,8 @@ router.post('/ai/regenerate-description/:id', async (req, res) => {
     const brief = await IntelligenceBrief.findById(req.params.id).select('title category');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
-    const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text:\n{\n  "descriptionSections": [\n    "Paragraph one — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF.",\n    "Paragraph two — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject.",\n    "Paragraph three — 50–80 words (include if there is enough verified content). Operational context, key capabilities, or RAF significance.",\n    "Paragraph four — 50–80 words (only include if genuinely needed — omit if not). Additional important detail about this subject's significance within the modern RAF."\n  ]\n}\nCRITICAL RULES:\n1. descriptionSections must be a JSON array of 2–4 strings.\n2. Total word count across all sections must not exceed 240 words.\n3. Write each section as readable prose or formatted text — use paragraphs for narrative, "- " bullet points for lists of features, roles, or facts, and "1." numbered lists for steps or sequences. Do not use headers or markdown bold/italic.\n${LIST_FORMAT_RULE}`;
+    const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: false });
+    const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text:\n{\n  "descriptionSections": [\n    ${dsArray}\n  ]\n}\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n${LIST_FORMAT_RULE}`;
 
     const descAiSettings = await AppSettings.getSettings();
     const data = await openRouterChat([{

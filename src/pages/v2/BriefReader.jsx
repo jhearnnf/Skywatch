@@ -10,7 +10,7 @@ import { requiredTier } from '../../utils/subscription'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { useFlashcardBadge } from '../../context/FlashcardBadgeContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
-import { playSound } from '../../utils/sound'
+import { playSound, stopAllSounds } from '../../utils/sound'
 import RafBasesMap from '../../components/RafBasesMap'
 import { buildImageZones } from '../../utils/briefImageZones'
 import FlashcardDeckNotification from '../../components/FlashcardDeckNotification'
@@ -52,9 +52,6 @@ function KeywordSheet({ kw, onClose, navigate }) {
               <span className="text-3xl">{isLinked ? '📋' : '🔑'}</span>
               <div>
                 <h3 className="text-lg font-extrabold text-slate-900 mb-1">{kw.keyword}</h3>
-                {isLinked && kw.linkedBriefCategory && (
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">{kw.linkedBriefCategory}</p>
-                )}
                 {hasDesc ? (
                   <p className="text-sm text-slate-600 leading-relaxed">{kw.generatedDescription}</p>
                 ) : isLinked ? (
@@ -67,12 +64,34 @@ function KeywordSheet({ kw, onClose, navigate }) {
 
             {isLinked ? (
               <div className="mt-5 flex flex-col gap-2">
-                <button
-                  onClick={handleOpenBrief}
-                  className="w-full py-3 rounded-2xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors"
-                >
-                  Open Intel Brief →
-                </button>
+                {(() => {
+                  const linked   = kw.linkedBriefId
+                  const title    = linked?.title
+                  const nickname = linked?.nickname
+                  const category = linked?.category ?? kw.linkedBriefCategory
+                  return (
+                    <button
+                      onClick={handleOpenBrief}
+                      className="w-full text-left rounded-2xl overflow-hidden border border-slate-200 hover:border-brand-600 active:opacity-80 transition-all group"
+                    >
+                      <div className="px-4 pt-4 pb-3 bg-slate-50">
+                        {category && (
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{category}</p>
+                        )}
+                        <p className="text-base font-extrabold text-slate-900 leading-snug">
+                          {title || kw.keyword}
+                        </p>
+                        {nickname && (
+                          <p className="text-xs text-slate-500 italic mt-0.5">"{nickname}"</p>
+                        )}
+                      </div>
+                      <div className="px-4 py-3 bg-brand-600 group-hover:bg-brand-500 transition-colors flex items-center justify-between">
+                        <span className="text-sm font-bold text-white">Open Intel Brief</span>
+                        <span className="text-white text-lg leading-none">→</span>
+                      </div>
+                    </button>
+                  )
+                })()}
                 <button
                   onClick={onClose}
                   className="w-full py-2 rounded-2xl text-slate-500 text-sm font-semibold hover:text-slate-700 transition-colors"
@@ -1101,7 +1120,6 @@ export default function BriefReader() {
   const { setBadge }            = useFlashcardBadge()
   const { applyUnlocks }        = useNewGameUnlock()
   const [brief, setBrief]         = useState(null)
-  const [mentionedBriefs, setMentionedBriefs] = useState([])
   const [loading, setLoading]   = useState(true)
   const [locked, setLocked]     = useState(false)
   const [lockedCategory, setLockedCategory] = useState(null)
@@ -1136,6 +1154,8 @@ export default function BriefReader() {
   const briefOpenedRef             = useRef(false)
   const flashcardCardRef           = useRef(null)
   const badgePendingRef            = useRef(false)
+  const collectTimer1Ref           = useRef(null)
+  const collectTimer2Ref           = useRef(null)
   const accSecondsRef              = useRef(0)
   const lastTickRef                = useRef(null)
   const prevVisibleRef             = useRef(false)
@@ -1257,7 +1277,6 @@ export default function BriefReader() {
             setTopFaded(true)
           }
         }
-        if (data?.data?.mentionedBriefs) setMentionedBriefs(data.data.mentionedBriefs)
       })
       .catch(() => {})
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
@@ -1429,10 +1448,10 @@ export default function BriefReader() {
         if (data?.wasNew) {
           if ((data.flashcardCount ?? 0) >= 5) badgePendingRef.current = true
           if (flashcardCardRef.current) {
-            setTimeout(() => {
+            collectTimer1Ref.current = setTimeout(() => {
               playSound('flashcard_collect')
               setFlashcardGlowing(true)
-              setTimeout(() => {
+              collectTimer2Ref.current = setTimeout(() => {
                 setFlashcardGlowing(false)
                 if (flashcardCardRef.current) {
                   setFlashcardNotifRect(flashcardCardRef.current.getBoundingClientRect())
@@ -1454,6 +1473,19 @@ export default function BriefReader() {
     return () => { if (badgePendingRef.current) setBadge() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  function cancelCollectAnimation() {
+    clearTimeout(collectTimer1Ref.current)
+    clearTimeout(collectTimer2Ref.current)
+    setFlashcardGlowing(false)
+    setFlashcardNotifRect(null)
+    stopAllSounds()
+  }
+
+  // Cancel collect animation on unmount
+  useEffect(() => {
+    return () => cancelCollectAnimation()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const markRead = useCallback(() => {
     if (markingRef.current || !user) return
     markingRef.current = true
@@ -1470,6 +1502,7 @@ export default function BriefReader() {
 
   const handleGoBack = () => {
     if (sectionIdx <= 0) return
+    cancelCollectAnimation()
     setNavDir(-1)
     const prev = sectionIdx - 1
     if (!user) localStorage.setItem(`sw_brief_sec_${briefId}`, String(prev))
@@ -1478,6 +1511,7 @@ export default function BriefReader() {
   }
 
   const handleContinue = () => {
+    cancelCollectAnimation()
     if (isLast) {
       const first = !localStorage.getItem('skywatch_first_brief')
       if (first) localStorage.setItem('skywatch_first_brief', '1')
@@ -1883,15 +1917,27 @@ export default function BriefReader() {
           {(() => {
             const imageZones = buildImageZones(brief.media, total)
             const stats      = buildStats(brief)
+            // Each associated brief now carries matchTerms[] (all variant forms of its
+            // title, e.g. "No. 14 Squadron", "No. 14 Squadron RAF", "No. 14").
+            // flatMap expands each brief into one keyword entry per variant so any
+            // form that appears in the text gets highlighted.
+            const assocToKws = (arr) => (arr || []).flatMap(b =>
+              (b.matchTerms?.length ? b.matchTerms : [b.nickname || b.title]).map(term => ({
+                keyword: term,
+                linkedBriefId: b,
+                generatedDescription: b.subtitle,
+                linkedBriefCategory: b.category,
+              }))
+            )
             const kwList     = [
               ...(brief.keywords || []).map(kw => ({ ...kw, linkedBriefCategory: kw.linkedBriefId?.category ?? null })),
-              ...(brief.associatedBaseBriefIds     || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
-              ...(brief.associatedSquadronBriefIds || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
-              ...(brief.associatedAircraftBriefIds || []).map(b => ({ keyword: b.nickname || b.title, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
-              ...(brief.associatedMissionBriefIds  || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
-              ...(brief.associatedTrainingBriefIds || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
-              ...(brief.relatedBriefIds            || []).map(b => ({ keyword: b.title,    linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
-              ...mentionedBriefs.map(b => ({ keyword: b.matchTerm, linkedBriefId: b._id, generatedDescription: b.subtitle, linkedBriefCategory: b.category })),
+              ...assocToKws(brief.associatedBaseBriefIds),
+              ...assocToKws(brief.associatedSquadronBriefIds),
+              ...assocToKws(brief.associatedAircraftBriefIds),
+              ...assocToKws(brief.associatedMissionBriefIds),
+              ...assocToKws(brief.associatedTrainingBriefIds),
+              ...assocToKws(brief.relatedBriefIds),
+              ...assocToKws(brief.mentionedBriefIds),
             ]
             return (
               <motion.div ref={flashcardCardRef} layout transition={{ layout: { duration: 0.35, ease: 'easeInOut' } }} className={`relative mb-4${flashcardGlowing ? ' flashcard-ring-active' : ''}`}>
