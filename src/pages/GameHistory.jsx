@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../context/AuthContext'
 
 const TYPE_LABELS = {
   quiz:            'Intel Brief Quiz',
@@ -408,7 +408,7 @@ function SessionRow({ session, API, index }) {
 }
 
 export default function GameHistory() {
-  const { user, API } = useAuth()
+  const { user, API, apiFetch } = useAuth()
   const navigate = useNavigate()
 
   const [sessions,      setSessions]      = useState([])
@@ -427,7 +427,7 @@ export default function GameHistory() {
       const params = new URLSearchParams({ page: p, limit: LIMIT })
       if (type   !== 'all') params.set('type',   type)
       if (result !== 'all') params.set('result', result)
-      const res  = await fetch(`${API}/api/games/history?${params}`, { credentials: 'include' })
+      const res  = await apiFetch(`${API}/api/games/history?${params}`, { credentials: 'include' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || 'Failed to load history')
       setSessions(json.data.sessions)

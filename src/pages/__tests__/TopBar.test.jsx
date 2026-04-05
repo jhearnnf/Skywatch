@@ -26,7 +26,7 @@ const BASE_USER = {
   displayName:   'Agent Test',
   totalAircoins: 850,
   loginStreak:   5,
-  rank: { rankName: 'Corporal', rankAbbreviation: 'Cpl', rankNumber: 3 },
+  rank: { rankName: 'Aircraftman', rankAbbreviation: 'AC', rankNumber: 1 },
 }
 
 function setupAuth(userOverrides) {
@@ -68,21 +68,23 @@ describe('TopBar — aircoin display', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/profile')
   })
 
-  it('avatar shows rank abbreviation when user has a rank', () => {
+  it('avatar shows AC abbreviation for rank 1 (no badge SVG for AC)', () => {
     render(<TopBar />)
-    expect(screen.getByText('Cpl')).toBeDefined()
+    expect(screen.getByText('AC')).toBeDefined()
   })
 
-  it('avatar falls back to first letter of displayName when user has no rank', () => {
-    setupAuth({ rank: null, displayName: 'Agent Test' })
+  it('avatar shows badge SVG (not text) for a non-AC rank', () => {
+    setupAuth({ rank: { rankName: 'Corporal', rankAbbreviation: 'Cpl', rankNumber: 4 } })
     render(<TopBar />)
-    expect(screen.getByText('A')).toBeDefined()
+    // RankBadge renders an SVG for rankNumber > 1 — no abbreviation text in the button
+    expect(screen.queryByText('Cpl')).toBeNull()
+    expect(screen.getByLabelText('View RAF ranks').querySelector('svg')).toBeDefined()
   })
 
-  it('avatar falls back to first letter of email when displayName is absent', () => {
-    setupAuth({ rank: null, displayName: null, email: 'zara@test.com' })
+  it('avatar falls back to AC when user has no rank', () => {
+    setupAuth({ rank: null })
     render(<TopBar />)
-    expect(screen.getByText('Z')).toBeDefined()
+    expect(screen.getByText('AC')).toBeDefined()
   })
 
   it('clicking avatar navigates to /rankings with ranks tab state', () => {

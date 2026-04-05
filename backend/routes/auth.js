@@ -3,6 +3,7 @@ const bcrypt      = require('bcryptjs');
 const crypto      = require('crypto');
 const jwt         = require('jsonwebtoken');
 const User        = require('../models/User');
+const Rank        = require('../models/Rank');
 const PendingRegistration    = require('../models/PendingRegistration');
 const PasswordResetToken     = require('../models/PasswordResetToken');
 const PasswordResetRateLimit = require('../models/PasswordResetRateLimit');
@@ -12,6 +13,13 @@ const { sendWelcomeEmail, sendConfirmationEmail, sendPasswordResetEmail } = requ
 const { awardCoins }       = require('../utils/awardCoins');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Returns the ObjectId of the AC (Aircraftman) rank — assigned to every new user.
+// Falls back to null gracefully if ranks haven't been seeded yet (e.g. test env).
+const getAcRankId = async () => {
+  const rank = await Rank.findOne({ rankNumber: 1 }).select('_id');
+  return rank?._id ?? null;
+};
 
 const signToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
@@ -54,7 +62,8 @@ router.post('/register', async (req, res) => {
 
     if (settings.emailConfirmationEnabled === false) {
       // Instant registration — no verification step
-      const user = await User.create({ email: email.toLowerCase(), password });
+      const acRankId = await getAcRankId();
+      const user = await User.create({ email: email.toLowerCase(), password, rank: acRankId });
       sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
       const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
       return sendToken(user, 201, res, { isNew: true, loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
@@ -88,7 +97,8 @@ router.post('/verify-email', async (req, res) => {
     if (new Date() > pending.expiresAt)   return res.status(400).json({ message: 'Code has expired. Please register again.' });
     if (pending.code !== String(code).trim()) return res.status(400).json({ message: 'Incorrect code. Please try again.' });
 
-    const user = await User.create({ email: pending.email, password: pending.password });
+    const acRankId = await getAcRankId();
+    const user = await User.create({ email: pending.email, password: pending.password, rank: acRankId });
     await PendingRegistration.deleteOne({ email: pending.email });
 
     sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
@@ -263,7 +273,8 @@ router.post('/google', async (req, res) => {
 
     let isNew = false;
     if (!user) {
-      user = await User.create({ email, googleId });
+      const acRankId = await getAcRankId();
+      user = await User.create({ email, googleId, rank: acRankId });
       sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
       isNew = true;
     } else {

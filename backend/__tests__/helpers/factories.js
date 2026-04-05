@@ -22,6 +22,15 @@ const GameType             = require('../../models/GameType');
 const AppSettings          = require('../../models/AppSettings');
 const IntelLead            = require('../../models/IntelLead');
 
+// Permissive pathway unlocks used as the default in tests: every category is
+// accessible from the start (level 1, rank 1) so subscription-only tests are
+// not affected by pathway gating. Override in pathway-specific tests.
+const PERMISSIVE_PATHWAY_UNLOCKS = [
+  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training',
+  'Roles', 'Threats', 'Allies', 'Missions', 'AOR', 'Tech',
+  'Terminology', 'Treaties', 'Heritage',
+].map(category => ({ category, levelRequired: 1, rankRequired: 1 }));
+
 // ── AppSettings ────────────────────────────────────────────────────────────
 async function createSettings(overrides = {}) {
   return AppSettings.findOneAndUpdate(
@@ -42,6 +51,7 @@ async function createSettings(overrides = {}) {
         freeCategories:        ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
         silverCategories:      ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
         guestCategories:       ['News'],
+        pathwayUnlocks:        PERMISSIVE_PATHWAY_UNLOCKS,
         ...overrides,
       },
     },
@@ -70,11 +80,10 @@ async function createGameType(overrides = {}) {
 // ── Rank ───────────────────────────────────────────────────────────────────
 async function createRank(overrides = {}) {
   return Rank.create({
-    rankNumber:       overrides.rankNumber    ?? 1,
-    title:            overrides.title         ?? 'Aircraftsman',
-    abbreviation:     overrides.abbreviation  ?? 'AC',
-    description:      overrides.description   ?? 'Entry rank',
-    aircoinsRequired: overrides.aircoinsRequired ?? 0,
+    rankNumber:       overrides.rankNumber       ?? 1,
+    rankName:         overrides.rankName         ?? 'Aircraftman',
+    rankAbbreviation: overrides.rankAbbreviation ?? 'AC',
+    rankType:         overrides.rankType         ?? 'enlisted_aviator',
     ...overrides,
   });
 }

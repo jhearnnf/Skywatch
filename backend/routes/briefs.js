@@ -6,7 +6,7 @@ const AppSettings = require('../models/AppSettings');
 const User = require('../models/User');
 const AircoinLog = require('../models/AircoinLog');
 const { awardCoins } = require('../utils/awardCoins');
-const { effectiveTier, getAccessibleCategories } = require('../utils/subscription');
+const { effectiveTier, getAccessibleCategories, isPathwayUnlocked, getPathwayAccessibleCategories } = require('../utils/subscription');
 const { enrichWithMatchTerms } = require('../utils/mentionedBriefs');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
 require('../models/GameQuizQuestion');
@@ -91,7 +91,7 @@ router.get('/', optionalAuth, async (req, res) => {
       ...b,
       isRead:    readSet.has(b._id.toString()),
       isStarted: startedSet.has(b._id.toString()),
-      isLocked:  accessible !== null && !accessible.includes(b.category),
+      isLocked:  (accessible !== null && !accessible.includes(b.category)) || !isPathwayUnlocked(b.category, req.user, settings),
     }));
 
     const totalPages = Math.ceil(total / limitNum);
@@ -163,9 +163,20 @@ router.get('/random-sample', optionalAuth, async (req, res) => {
     const settings = await AppSettings.getSettings();
     const tier     = req.user ? effectiveTier(req.user) : 'guest';
     const accessible = getAccessibleCategories(tier, settings);
+    const pathway    = getPathwayAccessibleCategories(req.user, settings);
+
+    // Intersect subscription-accessible and pathway-accessible category lists
+    let finalCategories = null;
+    if (accessible !== null && pathway !== null) {
+      finalCategories = accessible.filter(c => pathway.includes(c));
+    } else if (accessible !== null) {
+      finalCategories = accessible;
+    } else if (pathway !== null) {
+      finalCategories = pathway;
+    }
 
     const filter = { status: 'published' };
-    if (accessible !== null) filter.category = { $in: accessible };
+    if (finalCategories !== null) filter.category = { $in: finalCategories };
 
     // Exclude the requested brief if provided
     if (req.query.exclude) filter._id = { $ne: req.query.exclude };
@@ -187,9 +198,20 @@ router.get('/random-unlocked', optionalAuth, async (req, res) => {
     const settings   = await AppSettings.getSettings();
     const tier       = req.user ? effectiveTier(req.user) : 'guest';
     const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
+    const pathway    = getPathwayAccessibleCategories(req.user, settings);
+
+    // Intersect subscription-accessible and pathway-accessible category lists
+    let finalCategories = null;
+    if (accessible !== null && pathway !== null) {
+      finalCategories = accessible.filter(c => pathway.includes(c));
+    } else if (accessible !== null) {
+      finalCategories = accessible;
+    } else if (pathway !== null) {
+      finalCategories = pathway;
+    }
 
     const baseFilter = { status: 'published' };
-    if (accessible !== null) baseFilter.category = { $in: accessible };
+    if (finalCategories !== null) baseFilter.category = { $in: finalCategories };
 
     // Build a set of brief IDs the user has already completed
     let completedIds = [];
@@ -275,6 +297,7 @@ router.get('/unread-categories', optionalAuth, async (req, res) => {
 
     const tier       = effectiveTier(req.user);
     const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
+    const pathway    = getPathwayAccessibleCategories(req.user, settings);
 
     // Get IDs of briefs this user has already read
     const readRecords = await IntelligenceBriefRead.find({ userId: req.user._id, completed: true })
@@ -282,7 +305,7 @@ router.get('/unread-categories', optionalAuth, async (req, res) => {
     const readSet = new Set(readRecords.map(r => r.intelBriefId.toString()));
 
     const categories = briefsByCat
-      .filter(c => accessible === null || accessible.includes(c._id))
+      .filter(c => (accessible === null || accessible.includes(c._id)) && (pathway === null || pathway.includes(c._id)))
       .map(c => ({
         name: c._id,
         totalBriefs: c.total,
@@ -357,6 +380,27 @@ router.get('/history', protect, async (req, res) => {
 router.get('/pathway/:category', optionalAuth, async (req, res) => {
   try {
     const { category } = req.params;
+
+    // Enforce both subscription-tier and pathway (level + rank) access
+    {
+      const settings = await AppSettings.getSettings();
+      const tier = req.user ? effectiveTier(req.user) : 'guest';
+      const accessible = getAccessibleCategories(tier, settings);
+      if (accessible !== null && !accessible.includes(category)) {
+        return res.status(403).json({ message: 'Upgrade your subscription to access this category.', category });
+      }
+      if (!isPathwayUnlocked(category, req.user, settings)) {
+        const unlock = settings.pathwayUnlocks.find(p => p.category === category);
+        return res.status(403).json({
+          message: 'This category requires a higher level or rank.',
+          category,
+          levelRequired: unlock?.levelRequired,
+          rankRequired:  unlock?.rankRequired,
+          reason: 'pathway',
+        });
+      }
+    }
+
     const isNews = category === 'News';
 
     const query  = isNews
@@ -424,19 +468,25 @@ router.get('/:id', optionalAuth, async (req, res) => {
     let readRecord = null;
     let tierAmmo = 0;
 
-    // Category access check — applies to guests and authenticated users alike
-    {
-      const settings = await AppSettings.getSettings();
-      const tier = req.user ? effectiveTier(req.user) : 'guest';
-      const accessible = getAccessibleCategories(tier, settings);
-      if (accessible !== null && !accessible.includes(brief.category)) {
-        return res.status(403).json({ message: 'Upgrade your subscription to access this category.', category: brief.category });
-      }
+    // Category access check — subscription tier then pathway (level + rank)
+    const settings = await AppSettings.getSettings();
+    const tier = req.user ? effectiveTier(req.user) : 'guest';
+    const accessible = getAccessibleCategories(tier, settings);
+    if (accessible !== null && !accessible.includes(brief.category)) {
+      return res.status(403).json({ message: 'Upgrade your subscription to access this category.', category: brief.category });
+    }
+    if (!isPathwayUnlocked(brief.category, req.user, settings)) {
+      const unlock = settings.pathwayUnlocks.find(p => p.category === brief.category);
+      return res.status(403).json({
+        message: 'This category requires a higher level or rank.',
+        category: brief.category,
+        levelRequired: unlock?.levelRequired,
+        rankRequired:  unlock?.rankRequired,
+        reason: 'pathway',
+      });
     }
 
     if (req.user) {
-      const settings = await AppSettings.getSettings();
-      const tier = effectiveTier(req.user);
       tierAmmo = getTierAmmo(tier, settings);
 
       readRecord = await IntelligenceBriefRead.findOne({
@@ -490,6 +540,20 @@ router.get('/:id', optionalAuth, async (req, res) => {
     briefObj.associatedTrainingBriefIds = enrichWithMatchTerms(briefObj.associatedTrainingBriefIds);
     briefObj.relatedBriefIds            = enrichWithMatchTerms(briefObj.relatedBriefIds);
     briefObj.mentionedBriefIds          = enrichWithMatchTerms(briefObj.mentionedBriefIds);
+
+    // Strip related/mentioned briefs the user cannot access — stubs, wrong tier, or locked pathway.
+    const filterAccessible = (arr) => (arr ?? []).filter(b =>
+      b &&
+      (accessible === null || accessible.includes(b.category)) &&
+      isPathwayUnlocked(b.category, req.user, settings)
+    );
+    briefObj.associatedBaseBriefIds     = filterAccessible(briefObj.associatedBaseBriefIds);
+    briefObj.associatedSquadronBriefIds = filterAccessible(briefObj.associatedSquadronBriefIds);
+    briefObj.associatedAircraftBriefIds = filterAccessible(briefObj.associatedAircraftBriefIds);
+    briefObj.associatedMissionBriefIds  = filterAccessible(briefObj.associatedMissionBriefIds);
+    briefObj.associatedTrainingBriefIds = filterAccessible(briefObj.associatedTrainingBriefIds);
+    briefObj.relatedBriefIds            = filterAccessible(briefObj.relatedBriefIds);
+    briefObj.mentionedBriefIds          = filterAccessible(briefObj.mentionedBriefIds);
 
     // Resolve keyword linked brief titles explicitly — populate can silently return
     // null if linkedBriefId points to a stale/regenerated document, so we do a

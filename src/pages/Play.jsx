@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { useAppTutorial } from '../../context/AppTutorialContext'
-import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
-import TutorialModal from '../../components/tutorial/TutorialModal'
-import FlashcardGameModal from '../../components/FlashcardGameModal'
+import { useAuth } from '../context/AuthContext'
+import { useAppTutorial } from '../context/AppTutorialContext'
+import { useNewGameUnlock } from '../context/NewGameUnlockContext'
+import TutorialModal from '../components/tutorial/TutorialModal'
+import FlashcardGameModal from '../components/FlashcardGameModal'
 
 // BOO states that trigger the unlock notification (game is actually playable)
 const BOO_ACCESSIBLE_STATES = ['active']

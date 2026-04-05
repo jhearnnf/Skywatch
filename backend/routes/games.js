@@ -84,7 +84,7 @@ router.post('/quiz/start', protect, async (req, res) => {
     const { briefId } = req.body;
     if (!briefId) return res.status(400).json({ message: 'briefId required' });
 
-    const { effectiveTier, canAccessCategory } = require('../utils/subscription');
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked } = require('../utils/subscription');
 
     const brief = await IntelligenceBrief.findById(briefId).select('category title');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
@@ -98,6 +98,16 @@ router.post('/quiz/start', protect, async (req, res) => {
       return res.status(403).json({
         message: 'Upgrade your subscription to access quizzes for this category.',
         category: brief.category,
+      });
+    }
+    if (!isPathwayUnlocked(brief.category, req.user, settings)) {
+      const unlock = settings.pathwayUnlocks.find(p => p.category === brief.category);
+      return res.status(403).json({
+        message: 'This category requires a higher level or rank.',
+        category: brief.category,
+        levelRequired: unlock?.levelRequired,
+        rankRequired:  unlock?.rankRequired,
+        reason: 'pathway',
       });
     }
 
@@ -368,7 +378,7 @@ router.get('/quiz/briefs', protect, async (req, res) => {
     const limit  = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const search = req.query.search?.trim() || '';
 
-    const { effectiveTier, canAccessCategory } = require('../utils/subscription');
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked } = require('../utils/subscription');
     const diff     = req.user.difficultySetting ?? 'easy';
     const settings = await AppSettings.getSettings();
     const tier     = effectiveTier(req.user);
@@ -420,10 +430,10 @@ router.get('/quiz/briefs', protect, async (req, res) => {
       .sort({ dateAdded: -1 })
       .lean();
 
-    // Annotate with quizState + apply subscription filter
+    // Annotate with quizState + apply subscription + pathway filters
     // (completed tab skips the filter — past completions are always visible)
     const annotated = allDocs
-      .filter(b => state === 'completed' || canAccessCategory(b.category, tier, settings))
+      .filter(b => state === 'completed' || (canAccessCategory(b.category, tier, settings) && isPathwayUnlocked(b.category, req.user, settings)))
       .map(b => {
         const id = b._id.toString();
         const quizState = passedSet.has(id) ? 'passed' : readSet.has(id) ? 'active' : 'needs-read';
@@ -465,7 +475,7 @@ router.get('/battle-of-order/briefs', protect, async (req, res) => {
     const limit  = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const search = req.query.search?.trim() || '';
 
-    const { effectiveTier, canAccessCategory } = require('../utils/subscription');
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked } = require('../utils/subscription');
     const diff     = req.user.difficultySetting ?? 'easy';
     const needed   = diff === 'medium' ? 5 : 3;
     const settings = await AppSettings.getSettings();
@@ -533,9 +543,29 @@ router.get('/battle-of-order/briefs', protect, async (req, res) => {
     });
     const meetsBasesThreshold = basesReadsCount >= needed;
 
-    // Annotate + subscription filter
+    // Per-category: does the user have enough READ briefs with game data for at least one orderType?
+    // This ensures the "active" state only shows when a game can actually be generated from read briefs.
+    const categoryPlayable = {};
+    for (const category of BATTLE_CATEGORIES) {
+      let playable = false;
+      for (const orderType of (ORDER_TYPES[category] ?? [])) {
+        const fieldKey = REQUIRED_FIELD[orderType];
+        const withDataIds = await IntelligenceBrief.distinct('_id', {
+          category, status: 'published',
+          [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
+        });
+        const readCount = await IntelligenceBriefRead.countDocuments({
+          userId: req.user._id, completed: true,
+          intelBriefId: { $in: withDataIds },
+        });
+        if (readCount >= needed) { playable = true; break; }
+      }
+      categoryPlayable[category] = playable;
+    }
+
+    // Annotate + subscription + pathway filter
     const annotated = allDocs
-      .filter(b => canAccessCategory(b.category, tier, settings))
+      .filter(b => canAccessCategory(b.category, tier, settings) && isPathwayUnlocked(b.category, req.user, settings))
       .map(b => {
         const id = b._id.toString();
         const hasData = booCategories.has(b.category);
@@ -547,12 +577,13 @@ router.get('/battle-of-order/briefs', protect, async (req, res) => {
         else if (!readSet.has(id))                                    booState = 'needs-read';
         else if (!passedQuizSet.has(id) && !quizPlayableSet.has(id)) booState = 'quiz-pending';
         else if (!passedQuizSet.has(id))                              booState = 'needs-quiz';
+        else if (!categoryPlayable[b.category])                       booState = 'needs-more-reads';
         else                                                          booState = 'active';
         return { _id: b._id, title: b.title, category: b.category, subcategory: b.subcategory, booState };
       });
 
-    // Sort: active → needs-quiz → quiz-pending → needs-read → completed → no-data → needs-aircraft-reads / needs-bases-reads
-    const STATE_ORDER = { active: 0, 'needs-quiz': 1, 'quiz-pending': 2, 'needs-read': 3, completed: 4, 'no-data': 5, 'needs-aircraft-reads': 6, 'needs-bases-reads': 6 };
+    // Sort: active → needs-quiz → quiz-pending → needs-read → needs-more-reads → completed → no-data → gates
+    const STATE_ORDER = { active: 0, 'needs-quiz': 1, 'quiz-pending': 2, 'needs-read': 3, 'needs-more-reads': 3, completed: 4, 'no-data': 5, 'needs-aircraft-reads': 6, 'needs-bases-reads': 6 };
     annotated.sort((a, b) => (STATE_ORDER[a.booState] ?? 99) - (STATE_ORDER[b.booState] ?? 99));
 
     const total      = annotated.length;
@@ -578,7 +609,7 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
     const diff     = user.difficultySetting ?? 'easy';
     const needed   = diff === 'medium' ? 5 : 3;
     const settings = await AppSettings.getSettings();
-    const { effectiveTier, canAccessCategory } = require('../utils/subscription');
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked } = require('../utils/subscription');
     const tier = effectiveTier(user);
 
     // Which BOO categories have enough game data?
@@ -599,7 +630,7 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
       .select('_id title category subcategory')
       .sort({ createdAt: -1 })
       .lean();
-    const accessible = allBooBriefs.filter(b => canAccessCategory(b.category, tier, settings));
+    const accessible = allBooBriefs.filter(b => canAccessCategory(b.category, tier, settings) && isPathwayUnlocked(b.category, req.user, settings));
     if (accessible.length === 0) return res.json({ status: 'success', data: { briefs: [] } });
 
     const accessibleIds = accessible.map(b => b._id);
@@ -690,7 +721,7 @@ router.get('/quiz/recommended-briefs', protect, async (req, res) => {
     const user     = await User.findById(req.user._id).lean();
     const diff     = user.difficultySetting ?? 'easy';
     const settings = await AppSettings.getSettings();
-    const { effectiveTier, canAccessCategory } = require('../utils/subscription');
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked } = require('../utils/subscription');
     const tier = effectiveTier(user);
 
     // Brief IDs with enough questions for this difficulty
@@ -747,7 +778,7 @@ router.get('/quiz/recommended-briefs', protect, async (req, res) => {
         if (result.length >= limit) break;
         const doc = docMap.get(id.toString());
         if (!doc) continue;
-        if (!canAccessCategory(doc.category, tier, settings)) continue;
+        if (!canAccessCategory(doc.category, tier, settings) || !isPathwayUnlocked(doc.category, req.user, settings)) continue;
         result.push({ ...doc, quizState: state });
       }
     };
@@ -823,15 +854,20 @@ router.get('/battle-of-order/options', protect, async (req, res) => {
     for (const orderType of orderTypes) {
       const fieldKey = REQUIRED_FIELD[orderType];
       if (anchor.gameData?.[fieldKey] == null) continue;
-      const count = await IntelligenceBrief.countDocuments({
+      // Only count briefs the user has actually read — these are the ones that can appear in the game
+      const withDataIds = await IntelligenceBrief.distinct('_id', {
         category,
         [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
       });
-      if (count >= needed) options.push({ orderType });
+      const readCount = await IntelligenceBriefRead.countDocuments({
+        userId: req.user._id, completed: true,
+        intelBriefId: { $in: withDataIds },
+      });
+      if (readCount >= needed) options.push({ orderType });
     }
 
     if (options.length === 0) {
-      return res.json({ status: 'success', data: { available: false, reason: 'insufficient_briefs', difficulty } });
+      return res.json({ status: 'success', data: { available: false, reason: 'insufficient_read_pool', threshold: needed, difficulty } });
     }
     res.json({ status: 'success', data: { available: true, options, difficulty } });
   } catch (err) {
@@ -887,9 +923,18 @@ router.post('/battle-of-order/generate', protect, async (req, res) => {
       [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
     }).select('_id title media gameData').lean();
 
-    if (pool.length < needed) return res.status(400).json({ message: `Not enough qualifying briefs (need ${needed}, found ${pool.length})` });
+    // Filter pool to only briefs the user has completed — players should only see briefs they've read
+    const readBriefIds = await IntelligenceBriefRead.distinct('intelBriefId', {
+      userId: req.user._id, completed: true,
+    });
+    const readIdSet  = new Set(readBriefIds.map(id => id.toString()));
+    const readablePool = pool.filter(b => readIdSet.has(b._id.toString()));
 
-    const others         = pool.filter(b => b._id.toString() !== briefId.toString());
+    if (readablePool.length < needed) {
+      return res.status(400).json({ message: `Not enough read briefs to generate a game. You need ${needed} read briefs with game data in this category (you have ${readablePool.length}).` });
+    }
+
+    const others         = readablePool.filter(b => b._id.toString() !== briefId.toString());
     const shuffledOthers = others.sort(() => Math.random() - 0.5).slice(0, needed - 1);
     const selected       = [anchor, ...shuffledOthers];
 

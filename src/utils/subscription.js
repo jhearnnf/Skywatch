@@ -50,18 +50,62 @@ export function isFreeUser(user) {
   return tier === 'free'
 }
 
-export function isCategoryLocked(category, user, settings) {
-  const accessible = getAccessibleCategories(user, settings)
-  if (accessible === null) return false      // gold
-  if (accessible.length === 0) return false  // settings not loaded — fail open
-  return !accessible.includes(category)
+// Cumulative totalAircoins needed to reach each level (mirrors backend LEVEL_THRESHOLDS)
+export const LEVEL_THRESHOLDS = [0, 100, 350, 850, 1700, 3000, 4850, 7350, 10600, 14700]
+
+export function getUserLevel(totalAircoins) {
+  const coins = totalAircoins ?? 0
+  let level = 1
+  for (let i = 1; i < LEVEL_THRESHOLDS.length; i++) {
+    if (coins >= LEVEL_THRESHOLDS[i]) level = i + 1
+    else break
+  }
+  return level
 }
 
-// Returns why a category is locked: 'signin' (guest), 'upgrade' (wrong tier), or null (accessible)
+// Returns true if the user meets the pathway (level + rank) requirements for a category.
+// Guests always pass. If userRank > rankRequired, the level check is bypassed —
+// having surpassed the unlock rank means level resets from prior cycles are irrelevant.
+export function isPathwayUnlocked(category, user, settings) {
+  if (!user) return true
+  if (!settings?.pathwayUnlocks) return true
+  const unlock = settings.pathwayUnlocks.find(p => p.category === category)
+  if (!unlock) return true
+  const userLevel = getUserLevel(user.totalAircoins)
+  const userRank  = user.rank?.rankNumber ?? 1
+  return userRank > unlock.rankRequired || (userRank >= unlock.rankRequired && userLevel >= unlock.levelRequired)
+}
+
+// Returns the pathway unlock requirements for a category, or null if none.
+export function getPathwayRequirements(category, settings) {
+  if (!settings?.pathwayUnlocks) return null
+  return settings.pathwayUnlocks.find(p => p.category === category) ?? null
+}
+
+export function isCategoryLocked(category, user, settings) {
+  const accessible = getAccessibleCategories(user, settings)
+  if (accessible === null) {
+    // Gold subscription — only pathway can lock it
+    return !isPathwayUnlocked(category, user, settings)
+  }
+  if (accessible.length === 0) return false  // settings not loaded — fail open
+  if (!accessible.includes(category)) return true
+  return !isPathwayUnlocked(category, user, settings)
+}
+
+// Returns why a category is locked:
+//   'signin'  — guest (not logged in)
+//   'upgrade' — subscription tier too low
+//   'pathway' — level or rank requirement not met
+//   null      — accessible
 export function lockReason(category, user, settings) {
   const accessible = getAccessibleCategories(user, settings)
-  if (accessible === null) return null
-  if (accessible.length === 0) return null
-  if (accessible.includes(category)) return null
-  return user ? 'upgrade' : 'signin'
+  if (accessible === null) {
+    // Gold subscription — only pathway can lock it
+    return isPathwayUnlocked(category, user, settings) ? null : 'pathway'
+  }
+  if (accessible.length === 0) return null  // settings not loaded — fail open
+  if (!accessible.includes(category)) return user ? 'upgrade' : 'signin'
+  // Subscription OK — check pathway
+  return isPathwayUnlocked(category, user, settings) ? null : 'pathway'
 }

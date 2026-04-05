@@ -9,8 +9,43 @@ export function AuthProvider({ children }) {
   const [user,       setUser]       = useState(null)
   const [loading,    setLoading]    = useState(true)
   const [notifQueue, setNotifQueue] = useState([]) // [{ id, type, ...data }]
+  const [isLoading,       setIsLoading]       = useState(false)
+  const [loadingStartTime, setLoadingStartTime] = useState(null)
+  const loadingCountRef = useRef(0)
   const userRef = useRef(null)
   useEffect(() => { userRef.current = user }, [user])
+
+  // apiFetch — wraps fetch for user-triggered calls:
+  //   • Shows a loading overlay after 400ms if still in-flight (suppresses flicker on fast responses)
+  //   • Reports the duration to the backend for admin stats
+  const apiFetch = useCallback(async (url, options) => {
+    const t0 = Date.now()
+    let overlayShown = false
+    const showTimer = setTimeout(() => {
+      overlayShown = true
+      loadingCountRef.current += 1
+      if (loadingCountRef.current === 1) {
+        setIsLoading(true)
+        setLoadingStartTime(t0)
+      }
+    }, 400)
+    try {
+      return await fetch(url, options)
+    } finally {
+      clearTimeout(showTimer)
+      if (overlayShown) {
+        loadingCountRef.current = Math.max(0, loadingCountRef.current - 1)
+        if (loadingCountRef.current === 0) setIsLoading(false)
+      }
+      // Fire-and-forget: report duration for admin stats (uses raw fetch to avoid recursion)
+      fetch(`${API}/api/admin/loading-time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ durationMs: Date.now() - t0 }),
+      }).catch(() => {})
+    }
+  }, [])
 
   // Check session on mount
   useEffect(() => {
@@ -91,7 +126,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, setUser, logout, loading, API, notifQueue, shiftNotif, awardAircoins, refreshUser }}>
+    <AuthContext.Provider value={{ user, setUser, logout, loading, API, apiFetch, isLoading, loadingStartTime, notifQueue, shiftNotif, awardAircoins, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

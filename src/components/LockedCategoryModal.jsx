@@ -37,7 +37,7 @@ const TIER_CONFIG = {
 
 export default function LockedCategoryModal({ category, tier = 'silver', user, pendingBriefId = null, onClose }) {
   const navigate           = useNavigate()
-  const { API, setUser }   = useAuth()
+  const { API, apiFetch, setUser }   = useAuth()
   const { settings }       = useAppSettings()
   const cfg                = TIER_CONFIG[tier] ?? TIER_CONFIG.silver
   const icon               = CATEGORY_ICONS[category] ?? '📄'
@@ -69,7 +69,7 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, p
       client_id: clientId,
       callback: async (response) => {
         try {
-          const res = await fetch(`${API}/api/auth/google`, {
+          const res = await apiFetch(`${API}/api/auth/google`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',

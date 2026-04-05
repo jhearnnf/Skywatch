@@ -1,15 +1,57 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { useAppTutorial } from '../../context/AppTutorialContext'
-import TutorialModal from '../../components/tutorial/TutorialModal'
-import LockedCategoryModal from '../../components/LockedCategoryModal'
-import { requiredTier, isFreeUser, isCategoryLocked } from '../../utils/subscription'
-import { CATEGORY_ICONS } from '../../data/mockData'
-import { useAppSettings } from '../../context/AppSettingsContext'
-import { playSound } from '../../utils/sound'
-import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
+import { useAuth } from '../context/AuthContext'
+import { useAppTutorial } from '../context/AppTutorialContext'
+import TutorialModal from '../components/tutorial/TutorialModal'
+import LockedCategoryModal from '../components/LockedCategoryModal'
+import { requiredTier, isFreeUser, isCategoryLocked } from '../utils/subscription'
+import { CATEGORY_ICONS } from '../data/mockData'
+import { useAppSettings } from '../context/AppSettingsContext'
+import { playSound } from '../utils/sound'
+import { useNewGameUnlock } from '../context/NewGameUnlockContext'
+
+// ── Related briefs strip ─────────────────────────────────────────────────
+function RelatedBriefs({ brief, navigate }) {
+  if (!brief) return null
+  const seen = new Set()
+  const cards = [
+    ...(brief.associatedBaseBriefIds     ?? []),
+    ...(brief.associatedSquadronBriefIds ?? []),
+    ...(brief.associatedAircraftBriefIds ?? []),
+    ...(brief.associatedMissionBriefIds  ?? []),
+    ...(brief.associatedTrainingBriefIds ?? []),
+    ...(brief.relatedBriefIds            ?? []),
+  ]
+    .filter(b => b?._id && !seen.has(String(b._id)) && seen.add(String(b._id)))
+    .sort((a, b) => (a.status === 'stub' ? 1 : 0) - (b.status === 'stub' ? 1 : 0))
+    .slice(0, 5)
+
+  if (cards.length === 0) return null
+
+  return (
+    <div className="mt-4 text-left">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">📡 Related Briefs</p>
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {cards.map(b => (
+          <button
+            key={b._id}
+            onClick={() => b.status !== 'stub' && navigate(`/brief/${b._id}`)}
+            className={`shrink-0 flex flex-col gap-1 p-3 rounded-xl border transition-all text-left w-36 ${b.status === 'stub' ? 'border-slate-100 opacity-60 cursor-default' : 'border-slate-200 hover:border-brand-300 hover:bg-brand-50 cursor-pointer'}`}
+          >
+            <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wide">{b.category}</span>
+            <span className={`text-xs font-semibold leading-tight ${b.status === 'stub' ? 'text-slate-400' : 'text-slate-700'}`}>
+              {b.status === 'stub' ? `🔒 ${b.title}` : b.title}
+            </span>
+            {b.status === 'stub' && (
+              <span className="text-[10px] text-slate-400 font-medium">Coming soon</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ── Single question card ──────────────────────────────────────────────────
 function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, selectedAnswerId }) {
@@ -93,7 +135,7 @@ function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, 
 const UPSELL_PRIORITY = ['Threats', 'Tech', 'Missions', 'Allies', 'Squadrons', 'Bases']
 
 // ── Results screen ────────────────────────────────────────────────────────
-function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack, onBrowse, booAvailable = false, onStartBoo, user, settings }) {
+function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack, brief, booAvailable = false, onStartBoo, user, settings, navigate }) {
   const pct     = total > 0 ? Math.round((score / total) * 100) : 0
   const perfect = score === total
 
@@ -190,7 +232,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
         {booAvailable && onStartBoo && (
           <button
             onClick={onStartBoo}
-            className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
+            className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors"
           >
             ⚔️ Start Battle of Order
           </button>
@@ -209,13 +251,9 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
         >
           ↩ Back to Brief
         </button>
-        <button
-          onClick={onBrowse}
-          className="w-full py-3 text-slate-500 font-semibold text-sm hover:text-slate-700 transition-colors"
-        >
-          Browse More Briefs →
-        </button>
       </div>
+
+      <RelatedBriefs brief={brief} navigate={navigate} />
 
       {/* Locked category upsell — win only, free signed-in users */}
       {upsellCategory && (
@@ -251,7 +289,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
 export default function QuizFlow() {
   const { briefId }      = useParams()
   const navigate         = useNavigate()
-  const { user, API, awardAircoins } = useAuth()
+  const { user, API, apiFetch, awardAircoins } = useAuth()
   const { applyUnlocks } = useNewGameUnlock()
   const { start }        = useAppTutorial()
 
@@ -285,7 +323,7 @@ export default function QuizFlow() {
     async function startQuiz() {
       try {
         const [briefRes, startRes] = await Promise.all([
-          fetch(`${API}/api/briefs/${briefId}`),
+          fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' }),
           fetch(`${API}/api/games/quiz/start`, {
             method: 'POST',
             credentials: 'include',
@@ -360,7 +398,7 @@ export default function QuizFlow() {
     if (!attemptId || !gameSessionId || !current) return
     const timeTaken = Math.round((Date.now() - questionStartRef.current) / 1000)
     try {
-      await fetch(`${API}/api/games/quiz/result`, {
+      await apiFetch(`${API}/api/games/quiz/result`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -374,7 +412,7 @@ export default function QuizFlow() {
         }),
       })
     } catch {}
-  }, [API, attemptId, gameSessionId, current])
+  }, [API, apiFetch, attemptId, gameSessionId, current])
 
   const handleAnswer = (answerId) => {
     setSelected(answerId)
@@ -395,7 +433,7 @@ export default function QuizFlow() {
       if (!finishedRef.current && attemptId) {
         finishedRef.current = true
         try {
-          const res  = await fetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
+          const res  = await apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
@@ -529,7 +567,8 @@ export default function QuizFlow() {
           won={won}
           onRetry={handleRetry}
           onBack={() => navigate(`/brief/${briefId}`)}
-          onBrowse={() => navigate('/learn-priority')}
+          brief={brief}
+          navigate={navigate}
           booAvailable={(won || !isFirstAttempt) && booAvailable}
           onStartBoo={() => navigate(`/battle-of-order/${briefId}`)}
           user={user}
@@ -556,7 +595,7 @@ export default function QuizFlow() {
               // Abandon the attempt before navigating away
               if (attemptId && !finishedRef.current) {
                 finishedRef.current = true
-                await fetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
+                await apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
                   method: 'POST', credentials: 'include',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ status: 'abandoned' }),

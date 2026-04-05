@@ -26,10 +26,58 @@ function getAccessibleCategories(tier, settings) {
   return settings.freeCategories ?? [];
 }
 
-// Returns true if the user can access this category
+// Returns true if the user can access this category (subscription tier check only)
 function canAccessCategory(category, tier, settings) {
   const accessible = getAccessibleCategories(tier, settings);
   return accessible === null || accessible.includes(category);
 }
 
-module.exports = { effectiveTier, getAccessibleCategories, canAccessCategory };
+// Cumulative totalAircoins needed to reach each level (index 0 = level 1 start)
+const LEVEL_THRESHOLDS = [0, 100, 350, 850, 1700, 3000, 4850, 7350, 10600, 14700];
+
+// Returns the user's current level (1–10) based on total aircoins
+function getUserLevel(totalAircoins) {
+  const coins = totalAircoins ?? 0;
+  let level = 1;
+  for (let i = 1; i < LEVEL_THRESHOLDS.length; i++) {
+    if (coins >= LEVEL_THRESHOLDS[i]) level = i + 1;
+    else break;
+  }
+  return level;
+}
+
+// Returns true if the user meets the pathway (level + rank) requirements for a category.
+// Guests always pass — pathway gating only applies to authenticated users.
+// If no entry exists in pathwayUnlocks for the category, access is granted.
+// Rule: if userRank > rankRequired, the level check is bypassed (they've already surpassed
+// the rank at which this category first unlocks, so level resets are irrelevant).
+// If userRank === rankRequired, both level and rank must be met.
+function isPathwayUnlocked(category, user, settings) {
+  if (!user) return true;
+  const unlock = (settings.pathwayUnlocks ?? []).find(p => p.category === category);
+  if (!unlock) return true;
+  const userLevel = getUserLevel(user.totalAircoins);
+  const userRank  = user.rank?.rankNumber ?? 1;
+  return userRank > unlock.rankRequired || (userRank >= unlock.rankRequired && userLevel >= unlock.levelRequired);
+}
+
+// Returns an array of categories accessible to the user based on pathway requirements.
+// Returns null if the user is a guest (no pathway restriction applies to guests).
+// Useful for building DB query $in filters.
+function getPathwayAccessibleCategories(user, settings) {
+  if (!user) return null;
+  const userLevel = getUserLevel(user.totalAircoins);
+  const userRank  = user.rank?.rankNumber ?? 1;
+  return (settings.pathwayUnlocks ?? [])
+    .filter(p => userRank > p.rankRequired || (userRank >= p.rankRequired && userLevel >= p.levelRequired))
+    .map(p => p.category);
+}
+
+module.exports = {
+  effectiveTier,
+  getAccessibleCategories,
+  canAccessCategory,
+  getUserLevel,
+  isPathwayUnlocked,
+  getPathwayAccessibleCategories,
+};

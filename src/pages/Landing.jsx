@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import WelcomeAgentFlow from '../../components/onboarding/WelcomeAgentFlow'
+import { useAuth } from '../context/AuthContext'
+import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 
 const FEATURES = [
   { icon: '✈️', title: 'Learn About the RAF',        body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — written for RAF applicants.' },

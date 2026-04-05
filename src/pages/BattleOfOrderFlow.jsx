@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { playSound } from '../../utils/sound'
+import { useAuth } from '../context/AuthContext'
+import { playSound } from '../utils/sound'
 
 // ── Order type display metadata ───────────────────────────────────────────
 const ORDER_META = {
@@ -306,7 +306,49 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
 }
 
 // ── Results screen ────────────────────────────────────────────────────────
-function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, userChoices, orderType, onRetry, onBack }) {
+// ── Related briefs strip ─────────────────────────────────────────────────
+function RelatedBriefs({ brief, navigate }) {
+  if (!brief) return null
+  const seen = new Set()
+  const cards = [
+    ...(brief.associatedBaseBriefIds     ?? []),
+    ...(brief.associatedSquadronBriefIds ?? []),
+    ...(brief.associatedAircraftBriefIds ?? []),
+    ...(brief.associatedMissionBriefIds  ?? []),
+    ...(brief.associatedTrainingBriefIds ?? []),
+    ...(brief.relatedBriefIds            ?? []),
+  ]
+    .filter(b => b?._id && !seen.has(String(b._id)) && seen.add(String(b._id)))
+    .sort((a, b) => (a.status === 'stub' ? 1 : 0) - (b.status === 'stub' ? 1 : 0))
+    .slice(0, 5)
+
+  if (cards.length === 0) return null
+
+  return (
+    <div className="mt-4 text-left">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">📡 Related Briefs</p>
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {cards.map(b => (
+          <button
+            key={b._id}
+            onClick={() => b.status !== 'stub' && navigate(`/brief/${b._id}`)}
+            className={`shrink-0 flex flex-col gap-1 p-3 rounded-xl border transition-all text-left w-36 ${b.status === 'stub' ? 'border-slate-100 opacity-60 cursor-default' : 'border-slate-200 hover:border-brand-300 hover:bg-brand-50 cursor-pointer'}`}
+          >
+            <span className="text-[10px] font-bold text-brand-600 uppercase tracking-wide">{b.category}</span>
+            <span className={`text-xs font-semibold leading-tight ${b.status === 'stub' ? 'text-slate-400' : 'text-slate-700'}`}>
+              {b.status === 'stub' ? `🔒 ${b.title}` : b.title}
+            </span>
+            {b.status === 'stub' && (
+              <span className="text-[10px] text-slate-400 font-medium">Coming soon</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, userChoices, orderType, onRetry, onBack, brief, navigate }) {
   const meta = ORDER_META[orderType] ?? { label: orderType, emoji: '📊' }
 
   // Build a map from choiceId → correctOrder for quick lookup
@@ -453,6 +495,8 @@ function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, u
           Back to Brief
         </button>
       </div>
+
+      <RelatedBriefs brief={brief} navigate={navigate} />
     </motion.div>
   )
 }
@@ -461,13 +505,14 @@ function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, u
 export default function BattleOfOrderFlow() {
   const { briefId }              = useParams()
   const navigate                 = useNavigate()
-  const { API, awardAircoins }   = useAuth()
+  const { API, apiFetch, awardAircoins }   = useAuth()
 
   // 'loading' | 'roulette' | 'generating' | 'game' | 'results' | 'unavailable'
   const [screen, setScreen]          = useState('loading')
   const [options, setOptions]        = useState([])
   const [difficulty, setDifficulty]  = useState('easy')
   const [briefTitle, setBriefTitle]  = useState('')
+  const [brief, setBrief]            = useState(null)
   const [unavailableReason, setUnavailableReason] = useState(null)
 
   const [gameId, setGameId]          = useState(null)
@@ -490,7 +535,7 @@ export default function BattleOfOrderFlow() {
     const controller = new AbortController()
     const timeoutId  = setTimeout(() => controller.abort(), 12000)
     try {
-      const res  = await fetch(`${API}/api/games/battle-of-order/generate`, {
+      const res  = await apiFetch(`${API}/api/games/battle-of-order/generate`, {
         method:      'POST',
         credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },
@@ -535,6 +580,7 @@ export default function BattleOfOrderFlow() {
         const optData   = await optRes.json()
 
         setBriefTitle(briefData.data?.brief?.title ?? '')
+        setBrief(briefData.data?.brief ?? null)
 
         if (!optData.data?.available) {
           setUnavailableReason(optData.data?.reason ?? 'unavailable')
@@ -586,7 +632,7 @@ export default function BattleOfOrderFlow() {
   const handleSubmit = async (userChoices, timeTakenSeconds) => {
     setLastUserChoices(userChoices)
     try {
-      const res  = await fetch(`${API}/api/games/battle-of-order/submit`, {
+      const res  = await apiFetch(`${API}/api/games/battle-of-order/submit`, {
         method:      'POST',
         credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },
@@ -621,7 +667,7 @@ export default function BattleOfOrderFlow() {
   const handleQuit = async () => {
     if (gameId && !abandonedRef.current) {
       abandonedRef.current = true
-      await fetch(`${API}/api/games/battle-of-order/abandon`, {
+      await apiFetch(`${API}/api/games/battle-of-order/abandon`, {
         method:      'POST',
         credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },
@@ -757,6 +803,8 @@ export default function BattleOfOrderFlow() {
         orderType={orderType}
         onRetry={handleRetry}
         onBack={() => navigate(`/brief/${briefId}`)}
+        brief={brief}
+        navigate={navigate}
       />
     )
   }

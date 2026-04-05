@@ -18,33 +18,34 @@ import AppShell                            from './components/layout/AppShell'
 import AircoinNotification                 from './components/AircoinNotification'
 import LevelUpNotification                 from './components/LevelUpNotification'
 import RankPromotionNotification           from './components/RankPromotionNotification'
+import LoadingOverlay                      from './components/LoadingOverlay'
 
 // v2 pages
-import Landing        from './pages/v2/Landing'
-import Home           from './pages/v2/Home'
-import LearnPriority  from './pages/v2/LearnPriority'
-import BriefReader    from './pages/v2/BriefReader'
-import QuizFlow            from './pages/v2/QuizFlow'
-import BattleOfOrderFlow  from './pages/v2/BattleOfOrderFlow'
-import WhereAircraftGame  from './pages/v2/WhereAircraftGame'
-import QuizBriefsList     from './pages/v2/QuizBriefsList'
-import BOOBriefsList      from './pages/v2/BOOBriefsList'
+import Landing        from './pages/Landing'
+import Home           from './pages/Home'
+import LearnPriority  from './pages/LearnPriority'
+import BriefReader    from './pages/BriefReader'
+import QuizFlow            from './pages/QuizFlow'
+import BattleOfOrderFlow  from './pages/BattleOfOrderFlow'
+import WhereAircraftGame  from './pages/WhereAircraftGame'
+import QuizBriefsList     from './pages/QuizBriefsList'
+import BOOBriefsList      from './pages/BOOBriefsList'
 
 // v2 pages (continued)
-import LoginPage      from './pages/v2/Login'
-import Profile        from './pages/v2/Profile'
-import Rankings       from './pages/v2/Rankings'
-import Play           from './pages/v2/Play'
-import AircoinHistory from './pages/v2/AircoinHistory'
-import GameHistory        from './pages/v2/GameHistory'
-import IntelBriefHistory from './pages/v2/IntelBriefHistory'
-import ReportProblem  from './pages/v2/ReportProblem'
-import Contact        from './pages/v2/Contact'
-import Subscription   from './pages/v2/Subscription'
-import NotFound       from './pages/v2/NotFound'
+import LoginPage      from './pages/Login'
+import Profile        from './pages/Profile'
+import Rankings       from './pages/Rankings'
+import Play           from './pages/Play'
+import AircoinHistory from './pages/AircoinHistory'
+import GameHistory        from './pages/GameHistory'
+import IntelBriefHistory from './pages/IntelBriefHistory'
+import ReportProblem  from './pages/ReportProblem'
+import Contact        from './pages/Contact'
+import Subscription   from './pages/Subscription'
+import NotFound       from './pages/NotFound'
 
 // v2 admin
-import Admin          from './pages/v2/Admin'
+import Admin          from './pages/Admin'
 
 import { playSound } from './utils/sound'
 
@@ -266,6 +267,7 @@ export default function App() {
                 <AppRoutes />
                 <NotifLayer />
                 <ReportNotifBanner />
+                <LoadingOverlay />
               </FlashcardBadgeProvider>
               </UnsolvedReportsProvider>
             </NewGameUnlockProvider>

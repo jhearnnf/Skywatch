@@ -19,6 +19,7 @@ const {
   createSettings,
   createAdminUser,
   createUser,
+  createRank,
   createBrief,
   createGameType,
   createQuizQuestions,
@@ -63,9 +64,13 @@ describe('New user — registration response', () => {
     expect(user.cycleAircoins).toBe(0);
   });
 
-  it('new user has no rank assigned', async () => {
-    const user = await createUser();
-    expect(user.rank == null).toBe(true); // undefined or null — not yet earned
+  it('new user starts at rank AC (rankNumber 1)', async () => {
+    const acRank    = await createRank({ rankNumber: 1, rankName: 'Aircraftman', rankAbbreviation: 'AC', rankType: 'enlisted_aviator' });
+    const user      = await createUser({ rank: acRank._id });
+    const populated = await User.findById(user._id).populate('rank');
+    expect(populated.rank).not.toBeNull();
+    expect(populated.rank.rankNumber).toBe(1);
+    expect(populated.rank.rankAbbreviation).toBe('AC');
   });
 
   it('new user has null tutorialsResetAt', async () => {

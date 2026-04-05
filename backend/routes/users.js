@@ -208,14 +208,16 @@ const TUTORIAL_PRIORITY  = { unseen: 0, skipped: 1, viewed: 2 };
 router.patch('/me/tutorials', protect, async (req, res) => {
   try {
     const { tutorialId, status } = req.body;
-    if (!VALID_TUTORIAL_IDS.includes(tutorialId))
+    // Normalise hyphenated keys (e.g. 'learn-priority') to underscore to match schema fields
+    const dbId = (tutorialId || '').replace(/-/g, '_');
+    if (!VALID_TUTORIAL_IDS.includes(dbId))
       return res.status(400).json({ message: 'Invalid tutorialId' });
     if (!['unseen','skipped','viewed'].includes(status))
       return res.status(400).json({ message: 'Invalid status' });
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { [`tutorials.${tutorialId}`]: status },
+      { [`tutorials.${dbId}`]: status },
       { new: true }
     );
     res.json({ status: 'success', data: { tutorials: user.tutorials } });

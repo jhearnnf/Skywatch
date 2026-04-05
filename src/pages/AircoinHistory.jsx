@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../context/AuthContext'
 
 const REASON_LABELS = {
   brief_read:      'Intel Brief Read',
@@ -32,7 +32,7 @@ function formatDate(iso) {
 }
 
 export default function AircoinHistory() {
-  const { user, API } = useAuth()
+  const { user, API, apiFetch } = useAuth()
   const navigate = useNavigate()
 
   const [logs,    setLogs]    = useState([])
@@ -46,7 +46,7 @@ export default function AircoinHistory() {
   const fetchHistory = useCallback(async (p) => {
     setLoading(true); setError(null)
     try {
-      const res  = await fetch(`${API}/api/users/aircoins/history?page=${p}&limit=${LIMIT}`, { credentials: 'include' })
+      const res  = await apiFetch(`${API}/api/users/aircoins/history?page=${p}&limit=${LIMIT}`, { credentials: 'include' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || 'Failed to load history')
       setLogs(json.data.logs)

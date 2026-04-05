@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { useAppSettings } from '../../context/AppSettingsContext'
-import { CATEGORIES, CATEGORY_ICONS } from '../../data/mockData'
+import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
+import { CATEGORIES, CATEGORY_ICONS } from '../data/mockData'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
@@ -144,7 +144,7 @@ function ActionButton({ label, onClick, disabled = false, loading = false, varia
 
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function Subscription() {
-  const { user, refreshUser }      = useAuth()
+  const { user, refreshUser, apiFetch } = useAuth()
   const { settings, loading }      = useAppSettings()
   const navigate                   = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -176,7 +176,7 @@ export default function Subscription() {
     setActionLoading(true)
     setBanner(null)
     try {
-      const res = await fetch(`${API}/api/stripe/create-checkout-session`, {
+      const res = await apiFetch(`${API}/api/stripe/create-checkout-session`, {
         method:      'POST',
         credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },
@@ -196,7 +196,7 @@ export default function Subscription() {
     setActionLoading(true)
     setBanner(null)
     try {
-      const res = await fetch(`${API}/api/stripe/create-portal-session`, {
+      const res = await apiFetch(`${API}/api/stripe/create-portal-session`, {
         method:      'POST',
         credentials: 'include',
       })

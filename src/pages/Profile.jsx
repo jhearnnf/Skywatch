@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { useAppTutorial } from '../../context/AppTutorialContext'
-import TutorialModal from '../../components/tutorial/TutorialModal'
-import { MOCK_LEVELS, MOCK_LEADERBOARD } from '../../data/mockData'
-import { getMasterVolume, setMasterVolume } from '../../utils/sound'
-import { displayTier, isFreeUser } from '../../utils/subscription'
+import { useAuth } from '../context/AuthContext'
+import { useAppTutorial } from '../context/AppTutorialContext'
+import TutorialModal from '../components/tutorial/TutorialModal'
+import { MOCK_LEVELS, MOCK_LEADERBOARD } from '../data/mockData'
+import { getMasterVolume, setMasterVolume } from '../utils/sound'
+import { displayTier, isFreeUser } from '../utils/subscription'
+import RankBadge from '../components/RankBadge'
 
 function getLevelInfo(coins) {
   const levels = MOCK_LEVELS
@@ -51,7 +52,7 @@ const TUTORIAL_LABELS = [
 ]
 
 export default function Profile() {
-  const { user, setUser, API, logout } = useAuth()
+  const { user, setUser, API, apiFetch, logout } = useAuth()
   const navigate = useNavigate()
   const { start, replay } = useAppTutorial()
 
@@ -106,7 +107,7 @@ export default function Profile() {
     if (diffBusy || d === user?.difficultySetting) return
     setDiffBusy(true)
     try {
-      const res  = await fetch(`${API}/api/users/me/difficulty`, {
+      const res  = await apiFetch(`${API}/api/users/me/difficulty`, {
         method: 'PATCH', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ difficulty: d }),
@@ -138,9 +139,12 @@ export default function Profile() {
           style={{ background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)' }}
         >
           <div className="flex items-center gap-4">
-            {/* Avatar */}
-            <div className="w-14 h-14 rounded-2xl bg-brand-200/60 border-2 border-brand-400/50 flex items-center justify-center text-xl font-extrabold text-brand-600 shrink-0">
-              {(user.displayName || user.email || 'A')[0].toUpperCase()}
+            {/* Avatar — rank badge */}
+            <div className="w-14 h-14 rounded-2xl bg-brand-200/60 border-2 border-brand-400/50 flex items-center justify-center shrink-0">
+              {(user.rank?.rankNumber ?? 1) > 1
+                ? <RankBadge rankNumber={user.rank.rankNumber} size={38} />
+                : <span className="text-xl font-extrabold text-brand-600">{user.rank?.rankAbbreviation ?? 'AC'}</span>
+              }
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-extrabold text-lg text-slate-800 leading-tight truncate">{user.displayName || 'Agent'}</p>

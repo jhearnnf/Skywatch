@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { consumePendingBrief } from '../../utils/pendingBrief'
-import { ONBOARDING_KEY } from '../../components/onboarding/WelcomeAgentFlow'
+import { useAuth } from '../context/AuthContext'
+import { consumePendingBrief } from '../utils/pendingBrief'
+import { ONBOARDING_KEY } from '../components/onboarding/WelcomeAgentFlow'
 
 const VIEW = {
   CHOICE:          'choice',
@@ -32,7 +32,7 @@ function CrosshairLogo() {
 }
 
 export default function LoginPage() {
-  const { setUser, API, awardAircoins } = useAuth()
+  const { setUser, API, apiFetch, awardAircoins } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -84,7 +84,7 @@ export default function LoginPage() {
   // JWT cookie is set by the auth response before this runs, so all fetches work.
   const finishNewUser = async (userObj) => {
     try {
-      await fetch(`${API}/api/users/me/difficulty`, {
+      await apiFetch(`${API}/api/users/me/difficulty`, {
         method: 'PATCH', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ difficulty: 'easy' }),
@@ -107,7 +107,7 @@ export default function LoginPage() {
   const handleGoogleCredential = async ({ credential }) => {
     setBusy(true); setError('')
     try {
-      const res  = await fetch(`${API}/api/auth/google`, {
+      const res  = await apiFetch(`${API}/api/auth/google`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential }),
@@ -138,7 +138,7 @@ export default function LoginPage() {
     setBusy(true); setError('')
     const endpoint = view === VIEW.SIGNIN ? 'login' : 'register'
     try {
-      const res  = await fetch(`${API}/api/auth/${endpoint}`, {
+      const res  = await apiFetch(`${API}/api/auth/${endpoint}`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password: pass }),
@@ -169,7 +169,7 @@ export default function LoginPage() {
     e.preventDefault()
     setBusy(true); setError('')
     try {
-      const res  = await fetch(`${API}/api/auth/verify-email`, {
+      const res  = await apiFetch(`${API}/api/auth/verify-email`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: pendingEmail, code: code.trim() }),
@@ -188,7 +188,7 @@ export default function LoginPage() {
     if (resendCooldown > 0) return
     setBusy(true); setError('')
     try {
-      const res  = await fetch(`${API}/api/auth/resend-confirmation`, {
+      const res  = await apiFetch(`${API}/api/auth/resend-confirmation`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: pendingEmail }),
@@ -211,7 +211,7 @@ export default function LoginPage() {
     e.preventDefault()
     setBusy(true); setError('')
     try {
-      const res  = await fetch(`${API}/api/auth/forgot-password`, {
+      const res  = await apiFetch(`${API}/api/auth/forgot-password`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail }),
@@ -235,7 +235,7 @@ export default function LoginPage() {
     if (newPass.length < 8) { setError('Password must be at least 8 characters.'); return }
     setBusy(true)
     try {
-      const res  = await fetch(`${API}/api/auth/reset-password`, {
+      const res  = await apiFetch(`${API}/api/auth/reset-password`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: resetToken, newPassword: newPass }),

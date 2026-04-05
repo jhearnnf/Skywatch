@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { useAppTutorial } from '../../context/AppTutorialContext'
-import TutorialModal from '../../components/tutorial/TutorialModal'
-import WelcomeAgentFlow from '../../components/onboarding/WelcomeAgentFlow'
-import FlashcardGameModal from '../../components/FlashcardGameModal'
-import { CATEGORY_ICONS, MOCK_LEVELS } from '../../data/mockData'
+import { useAuth } from '../context/AuthContext'
+import { useAppTutorial } from '../context/AppTutorialContext'
+import TutorialModal from '../components/tutorial/TutorialModal'
+import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
+import FlashcardGameModal from '../components/FlashcardGameModal'
+import { CATEGORY_ICONS, MOCK_LEVELS } from '../data/mockData'
 
 function getLevelInfo(coins) {
   const levels = MOCK_LEVELS
@@ -45,7 +45,7 @@ function XPRing({ pct = 0, level = 1, size = 72 }) {
 
 
 export default function Home() {
-  const { user, API }  = useAuth()
+  const { user, API, apiFetch }  = useAuth()
   const { start }      = useAppTutorial()
   const navigate       = useNavigate()
   const [missionDone,       setMissionDone]       = useState(false)
@@ -167,7 +167,7 @@ export default function Home() {
         onClick={!missionDone && !missionLoading ? async () => {
           setMissionLoading(true)
           try {
-            const res = await fetch(`${API}/api/briefs/random-unlocked`, { credentials: 'include' })
+            const res = await apiFetch(`${API}/api/briefs/random-unlocked`, { credentials: 'include' })
             const data = await res.json()
             if (data.status === 'success') {
               navigate(`/brief/${data.data.briefId}`)
@@ -266,27 +266,47 @@ export default function Home() {
             {latestBriefs.map((brief, i) => {
               const locked = brief.isLocked
 
+              const accentBar = locked
+                ? 'bg-slate-600/30'
+                : brief.isRead
+                  ? 'bg-emerald-500/40'
+                  : brief.isStarted
+                    ? 'bg-amber-400'
+                    : 'bg-brand-600'
+
               const inner = (
                 <>
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg
-                    ${locked ? 'bg-slate-100' : brief.isRead ? 'bg-emerald-100/80' : brief.isStarted ? 'bg-amber-100/80' : 'bg-brand-100'}`}>
-                    {locked ? '🔒' : brief.isRead ? '✓' : brief.isStarted ? '◑' : (CATEGORY_ICONS[brief.category] ?? '📄')}
-                  </div>
+                  {/* left accent bar */}
+                  <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${accentBar}`} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold truncate ${locked ? 'text-slate-400' : brief.isRead ? 'text-emerald-800' : brief.isStarted ? 'text-amber-900' : 'text-slate-800'}`}>
+                    <p className={`text-sm truncate leading-snug
+                      ${locked ? 'font-semibold text-slate-500'
+                        : brief.isRead ? 'font-semibold text-slate-600'
+                        : brief.isStarted ? 'font-bold text-amber-300'
+                        : 'font-semibold text-slate-900'}`}>
                       {brief.title}
                     </p>
-                    <p className="text-xs text-slate-400 truncate">
-                      {locked ? 'Sign in to read' : brief.isStarted && !brief.isRead ? 'In Progress' : brief.category}
+                    <p className={`text-xs mt-0.5 intel-mono truncate
+                      ${locked ? 'text-slate-600'
+                        : brief.isRead ? 'text-slate-500'
+                        : brief.isStarted ? 'text-amber-600'
+                        : 'text-slate-500'}`}>
+                      {locked ? 'Sign in to read'
+                        : brief.isRead ? `${brief.category} · Read`
+                        : brief.isStarted ? `${brief.category} · In Progress`
+                        : brief.category}
                     </p>
                   </div>
                   {!locked && (
-                    <span className={`transition-colors ${brief.isRead ? 'text-emerald-300 group-hover:text-emerald-500' : brief.isStarted ? 'text-amber-300 group-hover:text-amber-500' : 'text-slate-300 group-hover:text-brand-400'}`}>→</span>
+                    <span className={`text-sm shrink-0 transition-colors
+                      ${brief.isRead ? 'text-slate-600 group-hover:text-emerald-400'
+                        : brief.isStarted ? 'text-amber-500/80 group-hover:text-amber-300'
+                        : 'text-slate-500 group-hover:text-brand-400'}`}>→</span>
                   )}
                 </>
               )
 
-              const baseClass = `flex items-center gap-3 rounded-2xl px-4 py-3 border transition-all card-shadow card-intel`
+              const baseClass = `relative overflow-hidden flex items-center gap-3 pl-5 pr-4 py-3.5 rounded-2xl border transition-all card-shadow`
 
               return (
                 <motion.div
@@ -296,18 +316,18 @@ export default function Home() {
                   transition={{ delay: i * 0.06 }}
                 >
                   {locked ? (
-                    <div className={`${baseClass} opacity-60 cursor-not-allowed bg-surface border-slate-200`}>
+                    <div className={`${baseClass} opacity-50 cursor-not-allowed bg-surface border-slate-700/30`}>
                       {inner}
                     </div>
                   ) : (
                     <Link
                       to={`/brief/${brief._id}`}
-                      className={`group ${baseClass} hover:-translate-y-0.5
+                      className={`group ${baseClass} bg-surface hover:-translate-y-0.5
                         ${brief.isRead
-                          ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
+                          ? 'border-slate-700/25 hover:border-slate-600/50'
                           : brief.isStarted
-                            ? 'bg-amber-50/60 border-amber-200 hover:border-amber-300'
-                            : 'bg-surface border-slate-200 hover:border-brand-400'}`}
+                            ? 'border-slate-700/30 hover:border-amber-500/30'
+                            : 'border-slate-700/30 hover:border-brand-600/40'}`}
                     >
                       {inner}
                     </Link>

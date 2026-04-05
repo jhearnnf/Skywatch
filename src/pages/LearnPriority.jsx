@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { motion, AnimatePresence, useMotionValue } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { useAppTutorial } from '../../context/AppTutorialContext'
-import TutorialModal from '../../components/tutorial/TutorialModal'
-import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../../data/mockData'
-import { pathwayTierRequired, getAccessibleCategories } from '../../utils/subscription'
+import { motion, AnimatePresence, useMotionValue, useAnimationControls } from 'framer-motion'
+import { useAuth } from '../context/AuthContext'
+import { useAppTutorial } from '../context/AppTutorialContext'
+import TutorialModal from '../components/tutorial/TutorialModal'
+import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
+import { pathwayTierRequired, getAccessibleCategories } from '../utils/subscription'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -69,11 +69,10 @@ function tierRank(tier) {
 }
 
 function isPathwayUnlocked(unlock, userLevel, userRankNumber, userTier) {
-  return (
-    userLevel      >= (unlock.levelRequired ?? 1) &&
-    userRankNumber >= (unlock.rankRequired  ?? 1) &&
-    tierRank(userTier) >= tierRank(unlock.tierRequired ?? 'free')
-  )
+  const levelRequired = unlock.levelRequired ?? 1
+  const rankRequired  = unlock.rankRequired  ?? 1
+  const pathwayMet    = userRankNumber > rankRequired || (userRankNumber >= rankRequired && userLevel >= levelRequired)
+  return pathwayMet && tierRank(userTier) >= tierRank(unlock.tierRequired ?? 'free')
 }
 
 function getRankName(rankNumber) {
@@ -423,10 +422,13 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
 // ── Upgrade / unlock info modal ───────────────────────────────────────────────
 
 function UnlockInfoModal({ unlock, category, colors, userLevel, userRankNumber, userTier, onClose, onUpgrade }) {
-  const lvlOk    = userLevel      >= (unlock?.levelRequired ?? 1)
-  const rankOk   = userRankNumber >= (unlock?.rankRequired  ?? 1)
-  const tierOk   = tierRank(userTier) >= tierRank(unlock?.tierRequired ?? 'free')
-  const needsTier = unlock?.tierRequired !== 'free'
+  const rankRequired  = unlock?.rankRequired  ?? 1
+  const levelRequired = unlock?.levelRequired ?? 1
+  const rankOk        = userRankNumber >= rankRequired
+  const rankSurpassed = userRankNumber > rankRequired
+  const lvlOk         = rankSurpassed || userLevel >= levelRequired
+  const tierOk        = tierRank(userTier) >= tierRank(unlock?.tierRequired ?? 'free')
+  const needsTier     = unlock?.tierRequired !== 'free'
 
   return (
     <motion.div
@@ -468,7 +470,7 @@ function UnlockInfoModal({ unlock, category, colors, userLevel, userRankNumber, 
               label="Agent Level"
               value={`Level ${unlock?.levelRequired ?? 1}`}
               met={lvlOk}
-              current={`You are Level ${userLevel}`}
+              current={rankSurpassed ? 'Bypassed (rank surpassed)' : `You are Level ${userLevel}`}
             />
             <RequirementRow
               label="RAF Rank"
@@ -527,13 +529,52 @@ function RequirementRow({ label, value, met, current }) {
   )
 }
 
+// ── Pathway swipe inline hint ─────────────────────────────────────────────────
+
+function PathwaySwipeHint({ onDismiss }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[1100] flex items-center justify-center pointer-events-auto cursor-pointer"
+      style={{ background: 'rgba(10,20,40,0.55)' }}
+      onClick={onDismiss}
+    >
+      <div className="flex flex-col items-center gap-3 px-7 py-6 rounded-2xl select-none" style={{ background: 'rgba(6,16,30,0.85)', backdropFilter: 'blur(6px)' }}>
+        <div className="flex items-center gap-4">
+          <motion.span
+            animate={{ x: [-6, 0, -6] }}
+            transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+            className="text-3xl text-white/90"
+          >←</motion.span>
+          <motion.div
+            animate={{ scaleX: [1, 1.08, 1] }}
+            transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+            className="w-10 h-10 rounded-full border-2 border-white/60 flex items-center justify-center"
+          >
+            <span className="text-white/80 text-lg">☰</span>
+          </motion.div>
+          <motion.span
+            animate={{ x: [6, 0, 6] }}
+            transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }}
+            className="text-3xl text-white/90"
+          >→</motion.span>
+        </div>
+        <p className="text-white font-bold text-base tracking-wide">Swipe to change pathway</p>
+        <p className="text-white/60 text-xs">tap anywhere to dismiss</p>
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LearnPriority() {
   const { user, API } = useAuth()
   const navigate      = useNavigate()
   const location      = useLocation()
-  const { start }     = useAppTutorial()
+  const { start, visible, hasSeen } = useAppTutorial()
 
   const [levels,         setLevels]         = useState(MOCK_LEVELS)
   const [pathwayUnlocks, setPathwayUnlocks] = useState(DEFAULT_PATHWAY_UNLOCKS)
@@ -544,7 +585,9 @@ export default function LearnPriority() {
   const [direction,      setDirection]      = useState(1)   // 1=forward, -1=backward
   const [unlockModal,    setUnlockModal]    = useState(null) // { unlock, category, colors }
   const [settingsLoaded, setSettingsLoaded] = useState(false)
-  const dragX = useMotionValue(0)
+  const dragX        = useMotionValue(0)
+  const swipeControls = useAnimationControls()
+  const [showSwipeHint, setShowSwipeHint] = useState(false)
 
   // ── Tutorial ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -617,13 +660,37 @@ export default function LearnPriority() {
     }
   }, [settingsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Fire pathway_swipe tutorial when ≥2 pathways unlocked ──────────────────
+  // ── Show inline swipe hint after learn-priority tutorial is seen ───────────
+  // Gates on `visible` (no modal open) + hasSeen('learn-priority') so the hint
+  // never fights with the modal. hasSeen reads live from localStorage — next()
+  // sets the key before returning null, so the very next render sees both
+  // visible=false and hasSeen=true simultaneously.
   useEffect(() => {
-    if (unlockedCount >= 2) {
-      const t = setTimeout(() => start('pathway_swipe'), 800)
+    if (visible) return
+    if (pathways.length < 2) return
+    if (!hasSeen('learn-priority')) return
+    const uid = user?._id
+    const key = uid ? `sw_tut_v2_${uid}_pathway_swipe` : 'sw_tut_v2_anon_pathway_swipe'
+    if (localStorage.getItem(key)) return
+    const t = setTimeout(() => setShowSwipeHint(true), 800)
+    return () => clearTimeout(t)
+  }, [visible, pathways.length, user?._id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Oscillate the pathway content while the hint is visible — x-only (no rotate) so
+  // the displacement stays constant regardless of how many stones are in the pathway.
+  useEffect(() => {
+    if (showSwipeHint) {
+      const t = setTimeout(() => {
+        swipeControls.start({
+          x: [0, -28, 0, 28, 0],
+          transition: { repeat: Infinity, duration: 2.4, ease: 'easeInOut' },
+        })
+      }, 600)
       return () => clearTimeout(t)
+    } else {
+      swipeControls.start({ x: 0, transition: { type: 'spring', stiffness: 350, damping: 28 } })
     }
-  }, [unlockedCount]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showSwipeHint]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch briefs for the active pathway ────────────────────────────────────
   const activePathway = pathways[activeCatIndex] ?? pathways[0]
@@ -656,6 +723,12 @@ export default function LearnPriority() {
   const totalCount = activeBriefs.length
 
   // ── Swipe handler ───────────────────────────────────────────────────────────
+  function markPathwaySwipeSeen() {
+    const uid = user?._id
+    const key = uid ? `sw_tut_v2_${uid}_pathway_swipe` : 'sw_tut_v2_anon_pathway_swipe'
+    localStorage.setItem(key, '1')
+  }
+
   function handleDragEnd(_, info) {
     const goNext = info.offset.x < -80 || info.velocity.x < -500
     const goPrev = info.offset.x > 80  || info.velocity.x > 500
@@ -668,6 +741,11 @@ export default function LearnPriority() {
       setActiveCatIndex(i => i - 1)
     }
     dragX.set(0)
+
+    if (showSwipeHint) {
+      setShowSwipeHint(false)
+      markPathwaySwipeSeen()
+    }
   }
 
   function goToPathway(index) {
@@ -693,6 +771,15 @@ export default function LearnPriority() {
   return (
     <>
       <TutorialModal />
+
+      <AnimatePresence>
+        {showSwipeHint && (
+          <PathwaySwipeHint onDismiss={() => {
+            setShowSwipeHint(false)
+            markPathwaySwipeSeen()
+          }} />
+        )}
+      </AnimatePresence>
 
       {/* Unlock info modal */}
       <AnimatePresence>
@@ -789,6 +876,7 @@ export default function LearnPriority() {
           drag={pathways.length > 1 ? 'x' : false}
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.15}
+          animate={swipeControls}
           style={{ x: dragX }}
           onDragEnd={handleDragEnd}
           className="touch-pan-y cursor-grab active:cursor-grabbing min-h-[300px]"

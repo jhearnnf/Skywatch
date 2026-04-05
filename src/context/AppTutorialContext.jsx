@@ -27,14 +27,6 @@ export const TUTORIAL_STEPS = {
     { emoji: '⭐', title: 'Earn Aircoins',
       body: 'Reading briefs and completing quizzes earns you Aircoins. Collect enough Aircoins to level up — the more you learn, the higher your level climbs.' },
   ],
-  learn: [
-    { emoji: '📚', title: 'Subject Areas',
-      body: 'Every subject covers a different part of RAF knowledge — from aircraft and bases to roles, squadrons, and live news. Pick any subject to start reading intel briefs.' },
-    { emoji: '🔍', title: 'Search Subjects',
-      body: 'Use the search bar at the top to find a specific subject quickly. Great if you already know what you want to study!' },
-    { emoji: '📊', title: 'Brief Counts',
-      body: 'Each subject card shows how many intel briefs are available inside it. Aim to read every brief in a subject to fully master that area.' },
-  ],
   briefReader: [
     { emoji: '📋', title: 'Reading Intel Briefs',
       body: 'Each brief is split into short sections — swipe left or tap Continue to move forward, swipe right to go back. The counter in the top corner of each card shows where you are in the brief.' },
@@ -99,11 +91,23 @@ export const TUTORIAL_STEPS = {
     { emoji: '🔓', title: 'Unlock More Paths',
       body: 'Level up to unlock new learning pathways covering Aircrafts, Ranks, Squadrons, and more. Some pathways also require a Silver or Gold subscription.' },
   ],
+  // pathway_swipe is an inline mini-tutorial — the modal is never triggered for this key.
+  // It lives here solely so the admin reset loop clears its localStorage entry.
   pathway_swipe: [
-    { emoji: '🎉', title: 'New Pathway Unlocked!',
-      body: 'You\'ve unlocked a new learning pathway. You now have multiple subjects to explore on your journey to RAF selection.' },
     { emoji: '👆', title: 'Switch Pathways',
-      body: 'Swipe left or right anywhere on the pathway to switch between your unlocked subjects. Each pathway has its own colour and stepping stones.' },
+      body: 'Swipe left or right anywhere on the pathway to switch between your unlocked subjects.' },
+  ],
+  // stat_mnemonic is an inline mini-tutorial — the modal is never triggered for this key.
+  // It lives here solely so the admin reset loop clears its localStorage entry.
+  stat_mnemonic: [
+    { emoji: '💡', title: 'Memory Aids',
+      body: 'Press and hold the 💡 icon next to a stat to reveal a memory aid that helps you retain that fact.' },
+  ],
+  // swipe is an inline mini-tutorial — the modal is never triggered for this key.
+  // It lives here solely so the admin reset loop clears its localStorage entry.
+  swipe: [
+    { emoji: '👆', title: 'Navigate Sections',
+      body: 'Swipe left to advance to the next section, or swipe right to go back.' },
   ],
 }
 
@@ -238,13 +242,14 @@ export function AppTutorialProvider({ children }) {
     start(name, true)
   }, [start])
 
-  const step    = active ? active.steps[active.stepIndex]  : null
-  const total   = active ? active.steps.length             : 0
-  const current = active ? active.stepIndex + 1            : 0
-  const visible = !!step
+  const step        = active ? active.steps[active.stepIndex]  : null
+  const total       = active ? active.steps.length             : 0
+  const current     = active ? active.stepIndex + 1            : 0
+  const visible     = !!step
+  const activeName  = active?.name ?? null
 
   return (
-    <Ctx.Provider value={{ start, next, skip, replay, step, total, current, visible, hasSeen, tutorialContent, refreshContent: fetchContent }}>
+    <Ctx.Provider value={{ start, next, skip, replay, step, total, current, visible, activeName, hasSeen, tutorialContent, refreshContent: fetchContent }}>
       {children}
     </Ctx.Provider>
   )

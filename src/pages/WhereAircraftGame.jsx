@@ -10,11 +10,11 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { useAppTutorial } from '../../context/AppTutorialContext'
-import TutorialModal from '../../components/tutorial/TutorialModal'
-import { playSound } from '../../utils/sound'
-import RafBasesMap from '../../components/RafBasesMap'
+import { useAuth } from '../context/AuthContext'
+import { useAppTutorial } from '../context/AppTutorialContext'
+import TutorialModal from '../components/tutorial/TutorialModal'
+import { playSound } from '../utils/sound'
+import RafBasesMap from '../components/RafBasesMap'
 
 // ── Phase constants ────────────────────────────────────────────────────────
 const PHASE_LOADING     = 'loading'
@@ -385,7 +385,7 @@ function RoundRow({ label, correct }) {
 export default function WhereAircraftGame() {
   const { aircraftBriefId } = useParams()
   const navigate = useNavigate()
-  const { user, API, awardAircoins } = useAuth()
+  const { user, API, apiFetch, awardAircoins } = useAuth()
   const { start } = useAppTutorial()
   const gameSessionId  = useRef(crypto.randomUUID())
   const startTimeRef   = useRef(Date.now())
@@ -509,7 +509,7 @@ export default function WhereAircraftGame() {
   const handleQuit = useCallback(async () => {
     if (!abandonedRef.current) {
       abandonedRef.current = true
-      await fetch(`${API}/api/games/wheres-aircraft/submit`, {
+      await apiFetch(`${API}/api/games/wheres-aircraft/submit`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -533,7 +533,7 @@ export default function WhereAircraftGame() {
     abandonedRef.current = true // mark submitted so unmount cleanup doesn't double-fire
     const totalElapsed = Math.round((Date.now() - startTimeRef.current) / 1000)
     try {
-      const res = await fetch(`${API}/api/games/wheres-aircraft/submit`, {
+      const res = await apiFetch(`${API}/api/games/wheres-aircraft/submit`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

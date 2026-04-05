@@ -88,6 +88,16 @@
   --font-family-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Courier New', monospace;
 }
 
+/* ── Loading overlay animations ──────────────────────────────────────── */
+@keyframes radar-sweep {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes radar-ring {
+  0%   { transform: scale(0.85); opacity: 0.7; }
+  100% { transform: scale(1.6);  opacity: 0; }
+}
+
 /* ── Base ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -255,6 +265,23 @@ body.play-mode::before {
 @keyframes tutorialGlowPulse {
   0%, 100% { box-shadow: 0 0 60px 10px rgba(99, 155, 255, 0.18); }
   50%       { box-shadow: 0 0 110px 30px rgba(99, 155, 255, 0.40); }
+}
+
+@keyframes mnemonicTooltipPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(91, 170, 255, 0.0), 0 4px 16px rgba(0, 0, 0, 0.35);
+    border-color: rgba(45, 114, 212, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px rgba(91, 170, 255, 0.30), 0 4px 16px rgba(0, 0, 0, 0.35);
+    border-color: rgba(91, 170, 255, 0.75);
+  }
+}
+.mnemonic-tooltip-pulse {
+  animation: mnemonicTooltipPulse 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mnemonic-tooltip-pulse { animation: none; }
 }
 
 @keyframes flashcardRingPulse {

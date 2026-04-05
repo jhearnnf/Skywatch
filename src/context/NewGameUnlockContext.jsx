@@ -14,7 +14,7 @@ const NewGameUnlockContext = createContext({
 const GAME_KEYS = ['quiz', 'flashcard', 'boo', 'wta']
 
 export function NewGameUnlockProvider({ children }) {
-  const { user, setUser, API } = useAuth()
+  const { user, setUser, API, apiFetch } = useAuth()
 
   const gameUnlocks = user?.gameUnlocks ?? {}
 
@@ -82,7 +82,7 @@ export function NewGameUnlockProvider({ children }) {
   const markUnlockFromServer = useCallback(async (key) => {
     if (!user?._id || !GAME_KEYS.includes(key)) return
     if (gameUnlocks[key]?.unlockedAt) return // already unlocked
-    const r = await fetch(`${API}/api/users/me/game-unlocks/${key}/unlock`, {
+    const r = await apiFetch(`${API}/api/users/me/game-unlocks/${key}/unlock`, {
       method: 'POST', credentials: 'include',
     }).catch(() => null)
     if (!r?.ok) return

@@ -101,7 +101,7 @@ function TitleSearch({ allTitles, onSelect, disabled }) {
 
 // ── Main modal ──────────────────────────────────────────────────────────────
 export default function FlashcardGameModal({ onClose }) {
-  const { API, awardAircoins } = useAuth()
+  const { API, apiFetch, awardAircoins } = useAuth()
   const { clearBadge } = useFlashcardBadge()
 
   // screen: 'pick' | 'game' | 'result'
@@ -216,7 +216,7 @@ export default function FlashcardGameModal({ onClose }) {
     setLoading(true)
     setError('')
     try {
-      const res  = await fetch(`${API}/api/games/flashcard-recall/start`, {
+      const res  = await apiFetch(`${API}/api/games/flashcard-recall/start`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -267,7 +267,7 @@ export default function FlashcardGameModal({ onClose }) {
     clearBadge()
     setSubmitting(true)
     try {
-      const res  = await fetch(`${API}/api/games/flashcard-recall/result`, {
+      const res  = await apiFetch(`${API}/api/games/flashcard-recall/result`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

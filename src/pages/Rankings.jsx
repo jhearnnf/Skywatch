@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { useAppTutorial } from '../../context/AppTutorialContext'
-import TutorialModal from '../../components/tutorial/TutorialModal'
-import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../../data/mockData'
+import { useAuth } from '../context/AuthContext'
+import { useAppTutorial } from '../context/AppTutorialContext'
+import TutorialModal from '../components/tutorial/TutorialModal'
+import LockedCategoryModal from '../components/LockedCategoryModal'
+import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
+import RankBadge from '../components/RankBadge'
 
 // ── Defaults (overridden by /api/settings) ────────────────────────────────────
 
@@ -48,34 +50,35 @@ function getLevelInfo(coins, levels) {
 
 // ── Pathway badge strip ───────────────────────────────────────────────────────
 
-function UnlockBadges({ unlocks, userLevel, userRankNumber, userTier }) {
+function UnlockBadges({ unlocks, userLevel, userRankNumber, userTier, onSubscriptionLocked }) {
   if (!unlocks.length) return null
   return (
     <div className="flex flex-wrap gap-1 mt-2">
       {unlocks.map(u => {
-        const color    = PATHWAY_COLORS[u.category] ?? '#475569'
-        const icon     = CATEGORY_ICONS?.[u.category] ?? '📄'
-        const tier     = u.tierRequired ?? 'free'
-        const unlocked = (
-          userLevel      >= (u.levelRequired ?? 1) &&
-          userRankNumber >= (u.rankRequired  ?? 1) &&
-          tierRankNum(userTier) >= tierRankNum(tier)
-        )
+        const color       = PATHWAY_COLORS[u.category] ?? '#475569'
+        const icon        = CATEGORY_ICONS?.[u.category] ?? '📄'
+        const tier        = u.tierRequired ?? 'free'
+        const pathwayMet = userRankNumber > (u.rankRequired ?? 1) || (userRankNumber >= (u.rankRequired ?? 1) && userLevel >= (u.levelRequired ?? 1))
+        const tierMet    = tierRankNum(userTier) >= tierRankNum(tier)
+        const unlocked   = pathwayMet && tierMet
+        const subLocked  = !tierMet
         return (
           <span
             key={u.category}
-            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+            className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full${subLocked ? ' cursor-pointer' : ''}`}
             style={{
               background: unlocked ? `${color}28` : '#0c1829',
               color:      unlocked ? color         : '#3d5a7a',
-              border:    `1px solid ${unlocked ? `${color}55` : '#1a3060'}`,
+              border:    `1px solid ${unlocked ? `${color}55` : subLocked ? (tier === 'gold' ? '#92400e' : '#1a3a6b') : '#1a3060'}`,
             }}
+            onClick={subLocked ? () => onSubscriptionLocked(u.category, tier) : undefined}
           >
             <span style={{ fontSize: 11, lineHeight: 1 }}>{icon}</span>
             {u.category}
-            {tier === 'gold'   && <span style={{ color: unlocked ? '#fbbf24' : '#3d5a7a' }}>★</span>}
-            {tier === 'silver' && <span style={{ color: unlocked ? '#7eb8e8' : '#3d5a7a' }}>◆</span>}
-            {!unlocked && <span style={{ opacity: 0.5 }}>🔒</span>}
+            {tier === 'gold'   && <span style={{ color: unlocked ? '#fbbf24' : subLocked ? '#92400e' : '#3d5a7a' }}>★</span>}
+            {tier === 'silver' && <span style={{ color: unlocked ? '#7eb8e8' : subLocked ? '#1a3a6b' : '#3d5a7a' }}>◆</span>}
+            {unlocked  && <span style={{ opacity: 0.7 }}>🔓</span>}
+            {!unlocked && <span style={{ opacity: subLocked ? 0.8 : 0.5 }}>🔒</span>}
           </span>
         )
       })}
@@ -94,6 +97,7 @@ export default function Rankings() {
   const [levels,         setLevels]         = useState(MOCK_LEVELS)
   const [ranks,          setRanks]          = useState(MOCK_RANKS?.map(r => ({ ...r, rankAbbreviation: r.abbreviation })) ?? [])
   const [pathwayUnlocks, setPathwayUnlocks] = useState(DEFAULT_PATHWAY_UNLOCKS)
+  const [upgradeModal,   setUpgradeModal]   = useState(null) // { category, tier }
 
   const validTabs = ['levels', 'ranks']
   const [tab, setTab] = useState(validTabs.includes(location.state?.tab) ? location.state.tab : 'levels')
@@ -165,7 +169,10 @@ export default function Rankings() {
   // First locked level that has new pathway unlocks (the carrot)
   const nextUnlockLevel = [...levels]
     .sort((a, b) => a.levelNumber - b.levelNumber)
-    .find(lvl => lvl.levelNumber > userLevel && pathwayUnlocks.some(u => u.levelRequired === lvl.levelNumber))
+    .find(lvl =>
+      lvl.levelNumber > userLevel &&
+      pathwayUnlocks.some(u => u.levelRequired === lvl.levelNumber && (u.rankRequired ?? 1) === userRankNumber)
+    )
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -262,7 +269,7 @@ export default function Rankings() {
               const isCurrent  = lvl.levelNumber === userLevel
               const isAbove    = lvl.levelNumber > userLevel
               const isMax      = lvl.levelNumber === 10
-              const lvlUnlocks = pathwayUnlocks.filter(u => u.levelRequired === lvl.levelNumber)
+              const lvlUnlocks = pathwayUnlocks.filter(u => u.levelRequired === lvl.levelNumber && (u.rankRequired ?? 1) === userRankNumber)
               return (
                 <motion.div
                   key={lvl.levelNumber}
@@ -325,6 +332,7 @@ export default function Rankings() {
                         userLevel={userLevel}
                         userRankNumber={userRankNumber}
                         userTier={userTier}
+                        onSubscriptionLocked={(cat, t) => setUpgradeModal({ category: cat, tier: t })}
                       />
                     </div>
                   )}
@@ -366,15 +374,33 @@ export default function Rankings() {
             </div>
 
             {/* Rank identity */}
-            <p className="text-lg font-extrabold" style={{ color: '#ddeaf8' }}>
-              {selectedRank?.rankName ?? (isPreviewing ? 'Unknown Rank' : 'Unranked')}
-            </p>
-            {selectedRank && (
-              <p className="text-sm" style={{ color: '#5baaff' }}>
-                {selectedRank.rankAbbreviation ?? selectedRank.abbreviation ?? ''}
-                {selectedRank.rankType ? ` · ${selectedRank.rankType.replace(/_/g, ' ')}` : ''}
-              </p>
-            )}
+            <div className="flex items-center gap-3">
+              {/* Badge */}
+              <div
+                className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: '#06101e', border: '1.5px solid rgba(91,170,255,0.2)' }}
+              >
+                {selectedRank && selectedRank.rankNumber > 1
+                  ? <RankBadge rankNumber={selectedRank.rankNumber} size={40} />
+                  : <span className="text-base font-extrabold intel-mono" style={{ color: '#5baaff' }}>
+                      {selectedRank?.rankAbbreviation ?? '—'}
+                    </span>
+                }
+              </div>
+
+              {/* Name + meta */}
+              <div>
+                <p className="text-lg font-extrabold leading-tight" style={{ color: '#ddeaf8' }}>
+                  {selectedRank?.rankName ?? (isPreviewing ? 'Unknown Rank' : 'Unranked')}
+                </p>
+                {selectedRank && (
+                  <p className="text-sm mt-0.5" style={{ color: '#5baaff' }}>
+                    {selectedRank.rankAbbreviation ?? selectedRank.abbreviation ?? ''}
+                    {selectedRank.rankType ? ` · ${selectedRank.rankType.replace(/_/g, ' ')}` : ''}
+                  </p>
+                )}
+              </div>
+            </div>
 
             {/* Pathway unlocks for this rank */}
             <div className="mt-3 pt-3" style={{ borderTop: '1px solid #1a3060' }}>
@@ -387,6 +413,7 @@ export default function Rankings() {
                   userLevel={userLevel}
                   userRankNumber={userRankNumber}
                   userTier={userTier}
+                  onSubscriptionLocked={(cat, t) => setUpgradeModal({ category: cat, tier: t })}
                 />
               ) : (
                 <p className="text-xs" style={{ color: '#3d5a7a' }}>No pathway unlocks at this rank.</p>
@@ -422,7 +449,7 @@ export default function Rankings() {
                     opacity:      isAbove && !isSelected ? 0.45 : 1,
                   }}
                 >
-                  {/* Rank number */}
+                  {/* Rank badge / number */}
                   <span
                     className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold intel-mono shrink-0"
                     style={{
@@ -432,7 +459,9 @@ export default function Rankings() {
                       boxShadow:  isUser ? '0 0 14px rgba(91,170,255,0.5)' : 'none',
                     }}
                   >
-                    {rank.rankNumber}
+                    {rank.rankNumber > 1
+                      ? <RankBadge rankNumber={rank.rankNumber} size={18} color={isUser ? '#06101e' : '#5baaff'} />
+                      : (rank.rankAbbreviation ?? 'AC')}
                   </span>
 
                   {/* Info */}
@@ -475,6 +504,15 @@ export default function Rankings() {
       )}
 
     </div>
+
+    {upgradeModal && (
+      <LockedCategoryModal
+        category={upgradeModal.category}
+        tier={upgradeModal.tier}
+        user={user}
+        onClose={() => setUpgradeModal(null)}
+      />
+    )}
     </>
   )
 }

@@ -34,6 +34,7 @@ const IntelLead = require('../models/IntelLead');
 const seedLeads = require('../seeds/seedLeads');
 const { scanMentionedBriefIds } = require('../utils/mentionedBriefs');
 const { autoLinkKeywords }     = require('../utils/keywordLinking');
+const SystemLog                = require('../models/SystemLog');
 
 // ── AI prompt defaults ────────────────────────────────────────────────────────
 // These are the canonical system prompts used throughout the AI generation
@@ -77,8 +78,8 @@ const AI_PROMPT_DEFAULTS = {
   'battleOrderData':         'You are a factual data extractor for a Royal Air Force training platform. You only return verified numeric data based on published facts. Return ONLY valid JSON with no markdown, no code blocks, no extra text.',
   'imageExtraction':         'Extract the 3 most visually distinct subjects from this RAF article that are each likely to have their own Wikipedia page with a photograph. Prioritise specific aircraft designations, named bases/locations, named operations, or specific units.\n\nReturn ONLY a JSON array of exactly 3 search terms, e.g. ["Eurofighter Typhoon", "RAF Lossiemouth", "Operation Shader"]',
   // Mnemonics
-  'mnemonic.single':         'You are a memory coach writing mnemonics for young RAF applicants (18–25) who have little military background. Use pop culture references — movies, TV shows, celebrities, music, sports, or internet culture — to make specific numbers and facts easy to remember. Write a single punchy sentence, max 20 words. Be specific to the exact value shown. Return ONLY the sentence, no preamble, no quotes, no citation markers like [1] or [2].',
-  'mnemonic.batch':          'You are a memory coach writing mnemonics for young RAF applicants (18–25) who have little military background. Use pop culture references — movies, TV shows, celebrities, music, sports, or internet culture — to make specific numbers and facts easy to remember. Each mnemonic must be a single punchy sentence, max 20 words. Be specific to the exact value. No preamble. No citation markers like [1] or [2].',
+  'mnemonic.single':         'You are a memory coach creating strikingly memorable mnemonics for RAF applicants (18–25). Your goal is a mnemonic so vivid it cannot be forgotten. TECHNIQUE: exploit what that number MEANS — its cultural weight, symbolism, or universal associations (e.g. 18 = finally an adult, 21 = key to the door, 007 = James Bond, 2020 = perfect vision, 42 = answer to life). Then anchor it to a movie quote, video game moment, TV catchphrase, or famous phrase that reinforces that meaning. Prioritise in this order: (1) iconic movie quotes or scenes, (2) video game references, (3) TV show catchphrases or moments, (4) famous phrases or cultural touchstones. The number MUST carry its own meaning in the sentence — not just appear in it. Write one punchy sentence, max 20 words. Return ONLY the plain sentence — no markdown, no asterisks, no bold, no italics, no preamble, no quotes, no citation markers.',
+  'mnemonic.batch':          'You are a memory coach creating strikingly memorable mnemonics for RAF applicants (18–25). Your goal is a mnemonic so vivid it cannot be forgotten. TECHNIQUE: exploit what that number MEANS — its cultural weight, symbolism, or universal associations (e.g. 18 = finally an adult, 21 = key to the door, 007 = James Bond, 2020 = perfect vision, 42 = answer to life). Then anchor it to a movie quote, video game moment, TV catchphrase, or famous phrase that reinforces that meaning. Prioritise in this order: (1) iconic movie quotes or scenes, (2) video game references, (3) TV show catchphrases or moments, (4) famous phrases or cultural touchstones. The number MUST carry its own meaning in the sentence — not just appear in it. Each mnemonic must be a single plain-text sentence, max 20 words — no markdown, no asterisks, no bold, no italics, no citation markers.',
 };
 
 // Returns the DB override if set, otherwise the hardcoded default.
@@ -104,6 +105,20 @@ async function unmarkLeadInDb(briefTitle) {
     return { matched: false, error: err.message };
   }
 }
+
+// POST /api/admin/loading-time — open (no auth), accumulates frontend fetch durations
+router.post('/loading-time', async (req, res) => {
+  try {
+    const { durationMs } = req.body;
+    if (typeof durationMs !== 'number' || durationMs < 0 || durationMs > 300000) {
+      return res.status(400).json({ message: 'Invalid durationMs' });
+    }
+    await AppSettings.findOneAndUpdate({}, { $inc: { totalLoadingMs: durationMs } }, { upsert: true });
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 router.use(protect, adminOnly);
 
@@ -293,6 +308,7 @@ router.get('/stats', async (_req, res) => {
         },
         server: {
           serverUptimeSeconds: Math.floor(process.uptime()),
+          totalLoadingMs: settings.totalLoadingMs ?? 0,
         },
       },
     });
@@ -686,7 +702,13 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
     const userUpdates = {};
     const ops = [];
 
-    if (fields.includes('aircoins'))        { userUpdates.totalAircoins = 0; userUpdates.cycleAircoins = 0; userUpdates.rank = null; ops.push(AircoinLog.deleteMany({ userId: req.params.id })); }
+    if (fields.includes('aircoins')) {
+      const acRank = await Rank.findOne({ rankNumber: 1 }).select('_id');
+      userUpdates.totalAircoins = 0;
+      userUpdates.cycleAircoins = 0;
+      userUpdates.rank = acRank?._id ?? null;
+      ops.push(AircoinLog.deleteMany({ userId: req.params.id }));
+    }
     if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWheresThatAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWhereAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionFlashcardRecallResult.deleteMany({ userId: req.params.id })); }
     if (fields.includes('streak'))          { userUpdates.loginStreak = 0; userUpdates.lastStreakDate = null; }
     if (fields.includes('intelBriefsRead')) {
@@ -738,6 +760,56 @@ router.post('/award-coins', async (req, res) => {
 
     await AdminAction.create({ userId: req.user._id, actionType: 'award_test_coins', reason: `Awarded ${parsed} test coins to self` });
     res.json({ status: 'success', awarded: parsed, totalAircoins: result.totalAircoins, cycleAircoins: result.cycleAircoins, rankPromotion: result.rankPromotion });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── SYSTEM LOGS ───────────────────────────────────────────────────────────────
+
+// GET /api/admin/system-logs/count — unresolved count for tab badge
+router.get('/system-logs/count', async (req, res) => {
+  try {
+    const unresolvedCount = await SystemLog.countDocuments({ resolved: false });
+    res.json({ status: 'success', data: { unresolvedCount } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/system-logs?page=1&limit=20&resolved=false
+router.get('/system-logs', async (req, res) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.min(50, parseInt(req.query.limit) || 20);
+    const filter = {};
+    if (req.query.resolved !== undefined) filter.resolved = req.query.resolved === 'true';
+
+    const [logs, total] = await Promise.all([
+      SystemLog.find(filter)
+        .sort({ time: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      SystemLog.countDocuments(filter),
+    ]);
+
+    res.json({ status: 'success', data: { logs, total, totalPages: Math.ceil(total / limit) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/admin/system-logs/:id/resolve
+router.patch('/system-logs/:id/resolve', async (req, res) => {
+  try {
+    const log = await SystemLog.findByIdAndUpdate(
+      req.params.id,
+      { resolved: true },
+      { new: true }
+    );
+    if (!log) return res.status(404).json({ message: 'Log not found' });
+    res.json({ status: 'success', data: { log } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1045,7 +1117,7 @@ router.post('/briefs', requireReason, async (req, res) => {
     // Scan for text-mentioned briefs if description was provided at creation time
     if (fields.descriptionSections?.length) {
       try {
-        const mentionedIds = await scanMentionedBriefIds(brief);
+        const mentionedIds = await scanMentionedBriefIds(brief, openRouterChat);
         if (mentionedIds.length) {
           await IntelligenceBrief.findByIdAndUpdate(brief._id, { mentionedBriefIds: mentionedIds });
           brief.mentionedBriefIds = mentionedIds;
@@ -1072,7 +1144,7 @@ router.patch('/briefs/:id', requireReason, async (req, res) => {
     // Re-scan mentioned briefs whenever description content changes
     if (fields.descriptionSections) {
       try {
-        const mentionedIds = await scanMentionedBriefIds(brief);
+        const mentionedIds = await scanMentionedBriefIds(brief, openRouterChat);
         await IntelligenceBrief.findByIdAndUpdate(brief._id, { mentionedBriefIds: mentionedIds });
         brief.mentionedBriefIds = mentionedIds;
       } catch (scanErr) {
@@ -1719,8 +1791,8 @@ function buildMnemonicStats(category, gameData) {
       stats.push({ key: 'topSpeedKph', label: 'Top Speed', value: `${gd.topSpeedKph.toLocaleString()} km/h · ${Math.round(gd.topSpeedKph * 0.621).toLocaleString()} mph` });
     if (gd.yearIntroduced != null)
       stats.push({ key: 'yearIntroduced', label: 'Introduced', value: String(gd.yearIntroduced) });
-    if (gd.yearIntroduced != null)
-      stats.push({ key: 'status', label: 'Status', value: gd.yearRetired != null ? `Retired ${gd.yearRetired}` : 'In Service' });
+    if (gd.yearRetired != null)
+      stats.push({ key: 'status', label: 'Status', value: `Retired ${gd.yearRetired}` });
   } else if (category === 'Ranks') {
     if (gd.rankHierarchyOrder != null)
       stats.push({ key: 'rankHierarchyOrder', label: 'Seniority', value: `#${gd.rankHierarchyOrder}` });
@@ -1730,8 +1802,12 @@ function buildMnemonicStats(category, gameData) {
     if (gd.weeksOfTraining != null)
       stats.push({ key: 'trainingDuration', label: 'Duration', value: `${gd.weeksOfTraining} week${gd.weeksOfTraining === 1 ? '' : 's'}` });
   } else if (['Missions', 'Tech', 'Treaties'].includes(category)) {
-    if (gd.startYear != null)
-      stats.push({ key: 'period', label: 'Period', value: `${gd.startYear} – ${gd.endYear != null ? gd.endYear : 'Present'}` });
+    if (gd.startYear != null) {
+      // Only generate a start-year mnemonic; skip end if still ongoing (no memorable fact to anchor)
+      stats.push({ key: 'startYear', label: 'Started', value: String(gd.startYear) });
+      if (gd.endYear != null)
+        stats.push({ key: 'endYear', label: 'Ended', value: String(gd.endYear) });
+    }
   } else if (['Bases', 'Squadrons', 'Threats'].includes(category)) {
     const L = {
       Bases:     { start: 'Opened',     active: 'Active',     closed: 'Closed'    },
@@ -1740,8 +1816,8 @@ function buildMnemonicStats(category, gameData) {
     }[category];
     if (gd.startYear != null)
       stats.push({ key: 'startYear', label: L.start, value: String(gd.startYear) });
-    if (gd.startYear != null)
-      stats.push({ key: 'status', label: 'Status', value: gd.endYear != null ? `${L.closed} ${gd.endYear}` : L.active });
+    if (gd.endYear != null)
+      stats.push({ key: 'status', label: 'Status', value: `${L.closed} ${gd.endYear}` });
   }
   return stats;
 }
@@ -1765,7 +1841,12 @@ async function generateMnemonicsForBrief(title, category, gameData, systemPrompt
 
   const raw = data.choices?.[0]?.message?.content ?? '{}';
   try {
-    return JSON.parse(cleanJson(raw));
+    const parsed = JSON.parse(cleanJson(raw));
+    // Strip any markdown formatting the model may have snuck in
+    for (const k of Object.keys(parsed)) {
+      if (typeof parsed[k] === 'string') parsed[k] = parsed[k].replace(/[*_`#]/g, '');
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -1835,6 +1916,223 @@ router.post('/ai/news-headlines', async (req, res) => {
   }
 });
 
+// POST /api/admin/ai/news-headlines-month
+// Fetches up to 10 real RAF news headlines for a given calendar month (YYYY-MM).
+// Duplicate detection is done on the frontend using existing isSimilarTitle logic.
+router.post('/ai/news-headlines-month', async (req, res) => {
+  try {
+    const { month } = req.body; // "YYYY-MM"
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ message: 'month required in YYYY-MM format' });
+    }
+    const [year, mon] = month.split('-').map(Number);
+    const monthName = new Date(year, mon - 1, 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+    const aiSettings = await AppSettings.getSettings();
+    const data = await openRouterChat([{
+      role: 'system',
+      content: getPrompt(aiSettings, 'newsHeadlines'),
+    }, {
+      role: 'user',
+      content: `Search the web for the top 10 most significant real UK Royal Air Force (RAF) news stories published during ${monthName}. Return ONLY a JSON array of up to 10 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the date the story was published within that month). No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If fewer than 10 real RAF stories exist for that month, return what you find. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`,
+    }], 'perplexity/sonar');
+    const raw = data.choices?.[0]?.message?.content ?? '[]';
+    let parsed;
+    try { parsed = JSON.parse(cleanJson(raw)); } catch { parsed = []; }
+    const headlines = Array.isArray(parsed)
+      ? parsed.map(h => typeof h === 'string' ? { headline: h, eventDate: `${month}-01` } : h)
+      : [];
+    res.json({ status: 'success', data: { headlines } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/bulk-generate-news-item
+// Full server-side pipeline for a single news headline: generates content, keywords,
+// and image, then saves a new published News IntelligenceBrief to DB.
+router.post('/ai/bulk-generate-news-item', async (req, res) => {
+  try {
+    const { headline, eventDate } = req.body;
+    if (!headline) return res.status(400).json({ message: 'headline required' });
+
+    const aiSettings = await AppSettings.getSettings();
+    const warnings = [];
+
+    // ── Step 1: Generate content ───────────────────────────────────────────────
+    const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: true });
+    const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    ${dsArray}\n  ]`;
+    const SHARED_RULES = `\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n${LIST_FORMAT_RULE}`;
+    const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "concise factual title, max 70 characters",\n  ${SHARED_SECTIONS},\n  "sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}${SHARED_RULES}`;
+
+    const contentData = await openRouterChat([{
+      role: 'system',
+      content: getPrompt(aiSettings, 'brief.news'),
+    }, {
+      role: 'user',
+      content: `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources, return a JSON object for an RAF news intelligence brief. Be as informative as possible about the current RAF affairs covered by this story.\n\n${JSON_SHAPE}`,
+    }], 'perplexity/sonar', 2048);
+
+    const contentRaw = contentData.choices?.[0]?.message?.content ?? '{}';
+    let briefContent;
+    try {
+      briefContent = JSON.parse(cleanJson(contentRaw));
+    } catch (parseErr) {
+      throw new Error(`Content generation failed: ${parseErr.message}`);
+    }
+
+    // ── Step 2: Event date clamping ────────────────────────────────────────────
+    let resolvedEventDate = eventDate || null;
+    if (resolvedEventDate && briefContent.sources?.length) {
+      const sourceDates = briefContent.sources.map(s => s.articleDate).filter(Boolean).sort();
+      const oldestSource = sourceDates[0];
+      if (oldestSource && resolvedEventDate > oldestSource) {
+        warnings.push(`eventDate clamped: ${resolvedEventDate} → ${oldestSource} (oldest source)`);
+        resolvedEventDate = oldestSource;
+      }
+    }
+
+    // ── Step 3: Keywords ───────────────────────────────────────────────────────
+    const descriptionText = (briefContent.descriptionSections ?? []).join('\n\n');
+    let keywords = [];
+    if (descriptionText) {
+      try {
+        const kwData = await openRouterChat([{
+          role: 'system',
+          content: getPrompt(aiSettings, 'keywords'),
+        }, {
+          role: 'user',
+          content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 6 keywords from the description above. Every keyword string MUST appear verbatim (same spelling and capitalisation) in the description. Choose technical terms, acronyms, aircraft designations, operation names, and proper nouns — but never the subject/title of the brief itself. Do NOT include RAF base names or RAF squadron names/numbers as keywords.\n\nFor "generatedDescription": write a general RAF-specific definition of the term. Do NOT reference or summarise this intel brief.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition"},{"keyword":"...","generatedDescription":"..."}]}`,
+        }], 'perplexity/sonar');
+        const kwRaw = kwData.choices?.[0]?.message?.content ?? '{}';
+        const kwParsed = JSON.parse(cleanJson(kwRaw));
+        const descLower = descriptionText.toLowerCase();
+        const titleLower = (briefContent.title ?? '').toLowerCase();
+        const filtered = (Array.isArray(kwParsed.keywords) ? kwParsed.keywords : [])
+          .filter(k => {
+            if (!k.keyword) return false;
+            const kl = k.keyword.toLowerCase();
+            if (!descLower.includes(kl)) return false;
+            if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
+            return true;
+          })
+          .slice(0, 6);
+        // Auto-link keywords to existing briefs
+        const allBriefs = await IntelligenceBrief.find({}, { _id: 1, title: 1 }).lean();
+        const briefPool = allBriefs.map(b => ({ id: String(b._id), norm: normTitle(b.title) }));
+        const exactMap = new Map(briefPool.map(b => [b.norm, b.id]));
+        keywords = filtered.map(k => {
+          const normKw = normTitle(k.keyword);
+          let linkedBriefId = exactMap.get(normKw) ?? null;
+          if (!linkedBriefId && normKw.length >= 6) {
+            const candidates = briefPool.filter(b => b.norm.includes(normKw));
+            if (candidates.length > 0) {
+              candidates.sort((a, b) => a.norm.length - b.norm.length);
+              linkedBriefId = candidates[0].id;
+            }
+          }
+          return linkedBriefId ? { ...k, linkedBriefId } : k;
+        });
+      } catch (kwErr) {
+        warnings.push(`Keywords: ${kwErr.message}`);
+      }
+    }
+
+    // ── Step 4: Image ──────────────────────────────────────────────────────────
+    let newMedia = null;
+    let imageSearchTerms = [];
+    try {
+      const imagePromptBase = getPrompt(aiSettings, 'imageExtraction');
+      const aiImgRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
+          'X-Title': 'SkyWatch',
+        },
+        body: JSON.stringify({
+          model: 'openai/gpt-4o-mini',
+          messages: [{ role: 'user', content: `${imagePromptBase}\n\nTitle: "${briefContent.title}"` }],
+        }),
+      });
+      const aiImgData = await aiImgRes.json();
+      let terms = [];
+      try { terms = JSON.parse((aiImgData.choices?.[0]?.message?.content ?? '[]').replace(/```json\n?|```/g, '').trim()); } catch { terms = [briefContent.title]; }
+      if (!Array.isArray(terms) || !terms.length) terms = [briefContent.title];
+      imageSearchTerms = terms.slice(0, 3);
+      for (const term of imageSearchTerms) {
+        try {
+          const searchRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`);
+          const searchData = await searchRes.json();
+          const pageTitle = searchData.query?.search?.[0]?.title;
+          if (!pageTitle) continue;
+          const thumbRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=800&origin=*`);
+          const thumbData = await thumbRes.json();
+          const imageUrl = Object.values(thumbData.query?.pages ?? {})[0]?.thumbnail?.source;
+          if (!imageUrl) continue;
+          const imgRes = await fetch(imageUrl, { headers: { 'User-Agent': 'SkyWatch/1.0 (educational-platform)' } });
+          if (!imgRes.ok) continue;
+          const buffer = Buffer.from(await imgRes.arrayBuffer());
+          const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}-news-bulk` });
+          newMedia = { url: result.secure_url, publicId: result.public_id };
+          break;
+        } catch { continue; }
+      }
+    } catch (imgErr) {
+      console.error('[bulk-generate-news-item] image generation failed (non-fatal):', imgErr.message);
+    }
+    if (!newMedia) {
+      SystemLog.create({
+        type:          'image_fetch_failure',
+        briefTitle:    briefContent.title ?? headline,
+        briefCategory: 'News',
+        searchTerms:   imageSearchTerms,
+        failureReason: 'All Wikipedia search terms failed to produce an image',
+      }).catch(() => {});
+      warnings.push('Image: no image found — see System Logs');
+    }
+
+    // ── Step 5: Save to DB ─────────────────────────────────────────────────────
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const isHistoric = !!(resolvedEventDate && resolvedEventDate < todayStr);
+
+    const brief = new IntelligenceBrief({
+      category:            'News',
+      title:               briefContent.title,
+      subtitle:            briefContent.subtitle,
+      descriptionSections: (briefContent.descriptionSections ?? []).map(s => typeof s === 'string' ? s.replace(/[*_`#]/g, '') : s),
+      sources:             briefContent.sources ?? [],
+      keywords,
+      status:              'published',
+      historic:            isHistoric,
+      ...(resolvedEventDate ? { eventDate: resolvedEventDate } : {}),
+    });
+
+    if (newMedia) {
+      const mediaDoc = await Media.create({
+        mediaType:          'picture',
+        mediaUrl:           newMedia.url,
+        cloudinaryPublicId: newMedia.publicId,
+        showOnSummary:      true,
+      });
+      brief.media = [mediaDoc._id];
+    }
+
+    try {
+      brief.mentionedBriefIds = await scanMentionedBriefIds(brief, openRouterChat);
+    } catch (scanErr) {
+      console.error('[bulk-generate-news-item] mentionedBriefIds scan failed (non-fatal):', scanErr.message);
+    }
+
+    await brief.save();
+    await AdminAction.create({ userId: req.user._id, actionType: 'create_brief', reason: 'Bulk news auto-generate' });
+
+    res.json({ status: 'success', data: { _id: brief._id, title: brief.title, eventDate: resolvedEventDate }, warnings });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Universal rule enforcing bullet-list format whenever multiple items are enumerated
 const LIST_FORMAT_RULE = 'LIST FORMAT RULE: Whenever you name 3 or more items of the same type (squadrons, aircraft, bases, roles, weapons, capabilities, or any other nouns), you MUST format them as a bullet list — NEVER as inline prose. This applies regardless of whether you would otherwise separate them with commas, semicolons, em-dashes (—), or parenthetical asides. BAD: "supports No. 1, No. 6 and No. 9 Squadron". BAD: "four squadrons—No. 1, No. 6, No. 9". GOOD: "supports four Typhoon squadrons:\\n- No. 1 Squadron\\n- No. 6 Squadron\\n- No. 9 Squadron". Each "- Item" MUST be on its own line using \\n escape sequences inside the JSON string. Introduce the list with a short lead sentence ending in a colon, then list every item on its own line.';
 
@@ -1859,7 +2157,7 @@ function buildDescriptionSectionsSpec({ strict = true } = {}) {
     ? 'descriptionSections must be a JSON array of EXACTLY 4 strings — no more, no fewer. Total word count across sections 1–3 must not exceed 220 words.'
     : 'descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words.';
 
-  const sharedRuleTail = 'Section 4 must be 1–2 sentences and must not contain the subject\'s name or any unique identifier. Write each section as readable prose or formatted text. IMPORTANT: when listing multiple items (features, roles, bases, capabilities, etc.) put each item on its own line using \\n escape sequences inside the JSON string, with each item prefixed by "- " (e.g. "Intro sentence:\\n- Item one\\n- Item two\\n- Item three"). Use "1." prefixes for ordered steps. Never use markdown bold/italic or headers. Plain prose is fine for flowing narrative — only use the list format when genuinely listing discrete items.';
+  const sharedRuleTail = 'Section 4 must be 1–2 sentences and must not contain the subject\'s name or any unique identifier. Write each section as readable prose or formatted text. IMPORTANT: when listing multiple items (features, roles, bases, capabilities, etc.) put each item on its own line using \\n escape sequences inside the JSON string, with each item prefixed by "- " (e.g. "Intro sentence:\\n- Item one\\n- Item two\\n- Item three"). Use "1." prefixes for ordered steps. Never use markdown bold/italic or headers. Plain prose is fine for flowing narrative — only use the list format when genuinely listing discrete items. DATE FORMAT: any dates written in prose must use UK format — day before month — e.g. "3rd March 2026" or "14 January 2025", never "March 3rd 2026" or "January 14, 2025".';
 
   return { array, countRule, sharedRuleTail };
 }
@@ -1928,6 +2226,16 @@ router.post('/ai/generate-brief', async (req, res) => {
     if (isNews) {
       if (isHistoric) brief.historic = true;
       if (eventDate)  brief.eventDate = eventDate;
+      // Clamp eventDate so it's never newer than the oldest source articleDate —
+      // a source can't exist before the event it describes, so the event must have
+      // happened on or before the earliest source publication date.
+      if (brief.eventDate && brief.sources?.length) {
+        const sourceDates = brief.sources.map(s => s.articleDate).filter(Boolean).sort();
+        const oldestSource = sourceDates[0];
+        if (oldestSource && brief.eventDate > oldestSource) {
+          brief.eventDate = oldestSource;
+        }
+      }
     }
     res.json({ status: 'success', data: { brief: { ...brief, staleSourceWarning } } });
   } catch (err) {
@@ -1935,11 +2243,11 @@ router.post('/ai/generate-brief', async (req, res) => {
   }
 });
 
-// GET /api/admin/intel-leads — return unpublished leads from DB
+// GET /api/admin/intel-leads — return all leads from DB
 router.get('/intel-leads', async (req, res) => {
   try {
-    const leads = await IntelLead.find({ isPublished: false })
-      .select('title nickname subtitle category subcategory section subsection')
+    const leads = await IntelLead.find()
+      .select('title nickname subtitle category subcategory section subsection isPublished')
       .sort({ section: 1, subsection: 1, title: 1 })
       .lean();
     res.json({ status: 'success', data: { leads } });
@@ -1953,17 +2261,34 @@ router.post('/intel-leads/mark-complete', async (req, res) => {
   try {
     const { title } = req.body;
     if (!title) return res.status(400).json({ message: 'title required' });
-    const lead = title;
 
-    const result = await IntelLead.updateOne(
-      { title: lead.trim(), isPublished: false },
-      { isPublished: true }
-    );
+    const norm  = normaliseLeadTitle(title);
+    const leads = await IntelLead.find({ isPublished: false }).select('title');
+    const match = leads.find(l => normaliseLeadTitle(l.title) === norm);
+    if (!match) return res.status(404).json({ message: 'Lead not found or already marked' });
 
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ message: 'Lead not found or already marked' });
-    }
+    await IntelLead.updateOne({ _id: match._id }, { isPublished: true });
     res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/intel-leads/backfill-published — mark leads that have a matching published brief (stubs excluded).
+// Mark-only: never unmarks. mark-complete is the authority for permanent state.
+router.post('/intel-leads/backfill-published', async (req, res) => {
+  try {
+    const briefTitles = await IntelligenceBrief.distinct('title', { status: 'published' });
+    const normPublished = new Set(briefTitles.map(normaliseLeadTitle));
+
+    const leads = await IntelLead.find({ isPublished: false }).select('_id title');
+    const toMark = leads.filter(l => normPublished.has(normaliseLeadTitle(l.title)));
+
+    if (toMark.length) {
+      await IntelLead.updateMany({ _id: { $in: toMark.map(l => l._id) } }, { isPublished: true });
+    }
+
+    res.json({ status: 'success', marked: toMark.length });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -2161,7 +2486,7 @@ router.post('/ai/generate-quiz', async (req, res) => {
     }, {
       role: 'user',
       content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 7 easy and 7 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
-    }], 'perplexity/sonar', 4096);
+    }], 'openai/gpt-4o', 4096);
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     let generated;
     try {
@@ -2210,7 +2535,7 @@ router.post('/ai/generate-quiz-missing', async (req, res) => {
     }, {
       role: 'user',
       content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""${existingList}\n\nUsing ONLY the facts stated in the description above, generate exactly ${needed} NEW ${difficultyLabel} quiz question${needed > 1 ? 's' : ''}.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. ${difficultyRule}\n3. The correct answer must be explicitly supported by the description.\n4. Wrong answers must be plausible but clearly incorrect based on the description.\n5. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n6. Do NOT repeat or closely paraphrase any of the existing questions listed above.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"questions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}]}`,
-    }], 'perplexity/sonar', 4096);
+    }], 'openai/gpt-4o', 4096);
 
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     let generated;
@@ -2286,8 +2611,19 @@ async function generateBriefContent(brief, aiSettings) {
     throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
   }
 
-  const descriptionSections = Array.isArray(briefGenerated.descriptionSections) ? briefGenerated.descriptionSections : [];
+  const descriptionSections = (Array.isArray(briefGenerated.descriptionSections) ? briefGenerated.descriptionSections : [])
+    .map(s => typeof s === 'string' ? s.replace(/[*_`#]/g, '') : s);
   let keywords = Array.isArray(briefGenerated.keywords) ? briefGenerated.keywords : [];
+
+  // Terms too generic to ever be useful as keywords — the whole app is about the RAF,
+  // so highlighting these adds noise rather than value. Units with their own brief
+  // (e.g. RAF Regiment) are surfaced via mentionedBriefIds/associatedBriefIds instead.
+  const GENERIC_KEYWORD_EXCLUSIONS = new Set([
+    'royal air force',
+    'raf',
+    'raf regiment',
+  ]);
+
   if (descriptionSections.length) {
     const descText = descriptionSections.join(' ').toLowerCase();
     const titleLower = brief.title.toLowerCase();
@@ -2297,15 +2633,25 @@ async function generateBriefContent(brief, aiSettings) {
       if (!descText.includes(kl)) return false;
       // Exclude if keyword is the title itself or either contains the other
       if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
+      // Exclude globally generic terms that add no value as standalone keywords
+      if (GENERIC_KEYWORD_EXCLUSIONS.has(kl)) return false;
       return true;
     });
   }
   // Auto-link keywords to their corresponding Intel Brief stubs/published briefs
   // using a two-stage pipeline: word-level pre-filter → AI disambiguation.
   try {
-    keywords = await autoLinkKeywords(keywords, descriptionSections, openRouterChat);
+    keywords = await autoLinkKeywords(keywords, descriptionSections, openRouterChat, brief._id, brief.title);
   } catch (linkErr) {
     console.error('[generateBriefContent] keyword auto-linking failed (non-fatal):', linkErr.message);
+    SystemLog.create({
+      type:          'brief_generation_failure',
+      briefId:       brief._id,
+      briefTitle:    brief.title,
+      briefCategory: brief.category,
+      stage:         'keyword_linking',
+      failureReason: linkErr.message,
+    }).catch(() => {});
   }
 
   let gameData = (gdShape && briefGenerated.gameData && typeof briefGenerated.gameData === 'object')
@@ -2324,7 +2670,7 @@ async function generateBriefContent(brief, aiSettings) {
   }, {
     role: 'user',
     content: `Intel Brief Title: ${brief.title}\n\nIntel Brief Description:\n"""\n${freshDescription}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 7 easy and 7 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n8. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each) — never single words, never just a number or acronym alone.\n9. The correct answer must also be a complete sentence or meaningful phrase drawn directly from the description — never a single word or bare number.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
-  }], 'perplexity/sonar', 8192);
+  }], 'openai/gpt-4o', 8192);
 
   const quizRaw = quizData.choices?.[0]?.message?.content ?? '{}';
   let quizGenerated;
@@ -2346,6 +2692,14 @@ async function generateBriefContent(brief, aiSettings) {
     mnemonics = await generateMnemonicsForBrief(brief.title, brief.category, resolvedGameData, getPrompt(aiSettings, 'mnemonic.batch'));
   } catch (mnemonicErr) {
     console.error('[generateBriefContent] mnemonic generation failed (non-fatal):', mnemonicErr.message);
+    SystemLog.create({
+      type:          'brief_generation_failure',
+      briefId:       brief._id,
+      briefTitle:    brief.title,
+      briefCategory: brief.category,
+      stage:         'mnemonic',
+      failureReason: mnemonicErr.message,
+    }).catch(() => {});
   }
 
   const quizWarnings = [];
@@ -2372,11 +2726,12 @@ async function generateBriefContent(brief, aiSettings) {
 // POST /api/admin/ai/regenerate-brief/:id
 // Regenerates description sections, keywords, and quiz questions for an existing brief.
 router.post('/ai/regenerate-brief/:id', async (req, res) => {
+  let brief;
   try {
-    const brief = await IntelligenceBrief.findById(req.params.id);
+    brief = await IntelligenceBrief.findById(req.params.id);
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
     const aiSettings = await AppSettings.getSettings();
-    const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData, mnemonics } = await generateBriefContent(brief, aiSettings);
+    const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData, mnemonics, _quizWarnings } = await generateBriefContent(brief, aiSettings);
     res.json({
       status: 'success',
       data: {
@@ -2387,8 +2742,17 @@ router.post('/ai/regenerate-brief/:id', async (req, res) => {
         ...(gameData  ? { gameData }  : {}),
         ...(mnemonics ? { mnemonics } : {}),
       },
+      warnings: _quizWarnings ?? [],
     });
   } catch (err) {
+    SystemLog.create({
+      type:          'brief_generation_failure',
+      briefId:       brief?._id ?? null,
+      briefTitle:    brief?.title ?? '',
+      briefCategory: brief?.category ?? '',
+      stage:         err.message?.includes('quiz') ? 'quiz' : 'description',
+      failureReason: err.message,
+    }).catch(logErr => console.error('[regenerate-brief] SystemLog write failed:', logErr.message));
     res.status(500).json({ message: err.message });
   }
 });
@@ -2437,6 +2801,7 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
 
     // ── Part B: image (first result only) ────────────────────────────────────
     let newMedia = null;
+    let imageSearchTerms = [];
     try {
       const imagePromptBase = getPrompt(aiSettings, 'imageExtraction');
       const aiImgRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -2456,9 +2821,10 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
       let terms = [];
       try { terms = JSON.parse((aiImgData.choices?.[0]?.message?.content ?? '[]').replace(/```json\n?|```/g, '').trim()); } catch { terms = [brief.title]; }
       if (!Array.isArray(terms) || !terms.length) terms = [brief.title];
+      imageSearchTerms = terms.slice(0, 3);
 
       // Try each term in order and take the first one that produces an image
-      for (const term of terms.slice(0, 3)) {
+      for (const term of imageSearchTerms) {
         try {
           const searchRes = await fetch(
             `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`
@@ -2485,6 +2851,17 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
       }
     } catch (imgErr) {
       console.error('[bulk-generate-stub] image generation failed (non-fatal):', imgErr.message);
+    }
+    if (!newMedia) {
+      SystemLog.create({
+        type:          'image_fetch_failure',
+        briefId:       brief._id,
+        briefTitle:    brief.title,
+        briefCategory: brief.category,
+        searchTerms:   imageSearchTerms,
+        failureReason: 'All Wikipedia search terms failed to produce an image',
+      }).catch(() => {});
+      generationWarnings.push('Image: no image found — see System Logs');
     }
 
     // ── Part C: linked brief IDs ──────────────────────────────────────────────
@@ -2612,7 +2989,7 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
     // Scan description for text mentions of other briefs — stored so page load
     // can populate them directly instead of running a live 850+ brief scan.
     try {
-      brief.mentionedBriefIds = await scanMentionedBriefIds(brief);
+      brief.mentionedBriefIds = await scanMentionedBriefIds(brief, openRouterChat);
     } catch (scanErr) {
       console.error('[bulk-generate-stub] mentionedBriefIds scan failed (non-fatal):', scanErr.message);
     }
@@ -2621,8 +2998,31 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
 
     await AdminAction.create({ userId: req.user._id, actionType: 'create_brief', reason: 'Bulk auto-generate' });
 
+    // Persist any non-trivial warnings so they survive beyond this HTTP response
+    const seriousWarnings = generationWarnings.filter(w =>
+      w.includes('Error:') || w.includes('Skipped') || w.includes('System Logs') ||
+      w.includes('quiz') || w.includes('Quiz')
+    );
+    if (seriousWarnings.length) {
+      SystemLog.create({
+        type:          'bulk_generation_warnings',
+        briefId:       brief._id,
+        briefTitle:    brief.title,
+        briefCategory: brief.category,
+        warnings:      seriousWarnings,
+      }).catch(() => {});
+    }
+
     res.json({ status: 'success', data: { _id: brief._id, title: brief.title, category: brief.category }, warnings: generationWarnings });
   } catch (err) {
+    SystemLog.create({
+      type:          'brief_generation_failure',
+      briefId:       brief?._id ?? null,
+      briefTitle:    brief?.title ?? '',
+      briefCategory: brief?.category ?? '',
+      stage:         err.message?.includes('quiz') ? 'quiz' : 'description',
+      failureReason: err.message,
+    }).catch(logErr => console.error('[bulk-generate-stub] SystemLog write failed:', logErr.message));
     res.status(500).json({ message: err.message });
   }
 });
@@ -2656,7 +3056,8 @@ router.post('/ai/regenerate-description/:id', async (req, res) => {
       throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
     }
 
-    const descriptionSections = Array.isArray(generated.descriptionSections) ? generated.descriptionSections : [];
+    const descriptionSections = (Array.isArray(generated.descriptionSections) ? generated.descriptionSections : [])
+      .map(s => typeof s === 'string' ? s.replace(/[*_`#]/g, '') : s);
     res.json({ status: 'success', data: { descriptionSections } });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -2958,7 +3359,7 @@ router.post('/ai/generate-mnemonic', async (req, res) => {
         content: `Brief: "${title}" (${category})\nStat: ${stat.label} — ${stat.value}\n\nWrite one memorable sentence that helps an RAF applicant remember this exact value and connect it to this subject.`,
       }], 'perplexity/sonar', 128);
 
-      const sentence = (data.choices?.[0]?.message?.content ?? '').trim();
+      const sentence = (data.choices?.[0]?.message?.content ?? '').trim().replace(/[*_`#]/g, '');
       res.json({ status: 'success', data: { mnemonics: { [statKey]: sentence } } });
     } else {
       // All stats at once

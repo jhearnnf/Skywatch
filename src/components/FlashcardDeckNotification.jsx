@@ -18,41 +18,52 @@ function getPlayNavElement() {
 export default function FlashcardDeckNotification({ cardRect, onDone }) {
   // phase: 'flying-in' | 'showing' | 'flying-out'
   const [phase,       setPhase]   = useState('flying-in')
-  const playNavRectRef            = useRef(null)   // populated just before flying-out
-  const phaseGenRef               = useRef(0)      // increments each phase advance
-  const handledGenRef             = useRef(-1)     // last generation handled
-  const flyOutTimerRef            = useRef(null)
+  const playNavRectRef            = useRef(null)
+  const doneSentRef               = useRef(false)
 
   const notifLeft = Math.round((window.innerWidth - NOTIF_W) / 2)
 
-  // Cleanup timer on unmount
-  useEffect(() => () => clearTimeout(flyOutTimerRef.current), [])
+  // Safety fallback: if onAnimationComplete never fires for flying-in (framer-motion
+  // edge case when initial ≈ animate, or a re-render resets the animation), advance
+  // to showing after 800ms so the animation is never permanently stuck.
+  useEffect(() => {
+    if (phase !== 'flying-in') return
+    const t = setTimeout(() => setPhase('showing'), 800)
+    return () => clearTimeout(t)
+  }, [phase])
 
-  function advancePhase(next) {
-    phaseGenRef.current += 1
-    setPhase(next)
+  // Drive showing → flying-out via useEffect instead of onAnimationComplete.
+  // This fires exactly once per 'showing' entry, can't be called spuriously,
+  // and cleans up if the component unmounts mid-wait.
+  useEffect(() => {
+    if (phase !== 'showing') return
+    const t = setTimeout(() => {
+      const el = getPlayNavElement()
+      if (!el) { callDone(); return }
+      playNavRectRef.current = el.getBoundingClientRect()
+      setPhase('flying-out')
+    }, 1600)
+    return () => clearTimeout(t)
+  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function callDone() {
+    if (doneSentRef.current) return
+    doneSentRef.current = true
+    onDone()
   }
 
   function handleAnimationComplete() {
-    const gen = phaseGenRef.current
-    if (handledGenRef.current === gen) return
-    handledGenRef.current = gen
-
     if (phase === 'flying-in') {
-      advancePhase('showing')
-      flyOutTimerRef.current = setTimeout(() => {
-        const el = getPlayNavElement()
-        if (!el) { onDone(); return }
-        playNavRectRef.current = el.getBoundingClientRect()
-        advancePhase('flying-out')
-      }, 1600)
+      // Advance to showing; the safety timeout above is cancelled by its own
+      // useEffect cleanup, so there's no double-transition.
+      setPhase('showing')
     } else if (phase === 'flying-out') {
       const el = getPlayNavElement()
       if (el) {
         el.classList.add('play-nav-flash')
         setTimeout(() => el.classList.remove('play-nav-flash'), 1200)
       }
-      onDone()
+      callDone()
     }
   }
 

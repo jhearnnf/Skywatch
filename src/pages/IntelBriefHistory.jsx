@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../context/AuthContext'
 
 const CATEGORY_LABELS = {
   aviation:    'Aviation',
@@ -91,7 +91,7 @@ function FlashcardRow({ read, index }) {
 }
 
 export default function IntelBriefHistory() {
-  const { user, API } = useAuth()
+  const { user, API, apiFetch } = useAuth()
   const navigate = useNavigate()
 
   const [tab, setTab] = useState('briefs') // 'briefs' | 'flashcards'
@@ -116,7 +116,7 @@ export default function IntelBriefHistory() {
   const fetchHistory = useCallback(async (p) => {
     setLoading(true); setError(null)
     try {
-      const res  = await fetch(`${API}/api/briefs/history?page=${p}&limit=${LIMIT}`, { credentials: 'include' })
+      const res  = await apiFetch(`${API}/api/briefs/history?page=${p}&limit=${LIMIT}`, { credentials: 'include' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || 'Failed to load history')
       setReads(json.data.reads)
@@ -132,7 +132,7 @@ export default function IntelBriefHistory() {
   const fetchFlashcards = useCallback(async (p) => {
     setFcLoading(true); setFcError(null)
     try {
-      const res  = await fetch(`${API}/api/briefs/history?flashcard=1&page=${p}&limit=${LIMIT}`, { credentials: 'include' })
+      const res  = await apiFetch(`${API}/api/briefs/history?flashcard=1&page=${p}&limit=${LIMIT}`, { credentials: 'include' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || 'Failed to load flashcards')
       setFcReads(json.data.reads)

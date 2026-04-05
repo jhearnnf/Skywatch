@@ -50,7 +50,6 @@ const userSchema = new mongoose.Schema(
       user:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       load_up:         { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       home:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      learn:           { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       briefReader:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       quiz:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       play:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
@@ -59,6 +58,7 @@ const userSchema = new mongoose.Schema(
       wheres_aircraft: { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       learn_priority:  { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
       pathway_swipe:   { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      stat_mnemonic:   { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
     },
     tutorialsResetAt: { type: Date, default: null }, // admin-triggered; frontend clears localStorage tutorial keys when newer than last clear
 

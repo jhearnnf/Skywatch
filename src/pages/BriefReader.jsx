@@ -1,19 +1,31 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useTransform, useAnimationControls, LayoutGroup } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
-import { useAppTutorial } from '../../context/AppTutorialContext'
-import TutorialModal from '../../components/tutorial/TutorialModal'
-import LockedCategoryModal from '../../components/LockedCategoryModal'
-import MissionDetectedModal from '../../components/MissionDetectedModal'
-import { requiredTier } from '../../utils/subscription'
-import { useAppSettings } from '../../context/AppSettingsContext'
-import { useFlashcardBadge } from '../../context/FlashcardBadgeContext'
-import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
-import { playSound, stopAllSounds } from '../../utils/sound'
-import RafBasesMap from '../../components/RafBasesMap'
-import { buildImageZones } from '../../utils/briefImageZones'
-import FlashcardDeckNotification from '../../components/FlashcardDeckNotification'
+import { useAuth } from '../context/AuthContext'
+import { useAppTutorial } from '../context/AppTutorialContext'
+import TutorialModal from '../components/tutorial/TutorialModal'
+import LockedCategoryModal from '../components/LockedCategoryModal'
+import MissionDetectedModal from '../components/MissionDetectedModal'
+import { requiredTier } from '../utils/subscription'
+import { useAppSettings } from '../context/AppSettingsContext'
+import { useFlashcardBadge } from '../context/FlashcardBadgeContext'
+import { useNewGameUnlock } from '../context/NewGameUnlockContext'
+import { playSound, stopAllSounds } from '../utils/sound'
+import RafBasesMap from '../components/RafBasesMap'
+import { buildImageZones } from '../utils/briefImageZones'
+import RankBadge from '../components/RankBadge'
+import FlashcardDeckNotification from '../components/FlashcardDeckNotification'
+
+// Render **bold** markdown syntax as <strong> spans
+function renderBoldMarkdown(text) {
+  if (!text) return null
+  return text.split(/(\*\*[^*]+\*\*)/).map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>
+    }
+    return part
+  })
+}
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
 function KeywordSheet({ kw, onClose, navigate }) {
@@ -53,7 +65,7 @@ function KeywordSheet({ kw, onClose, navigate }) {
               <div>
                 <h3 className="text-lg font-extrabold text-slate-900 mb-1">{kw.keyword}</h3>
                 {hasDesc ? (
-                  <p className="text-sm text-slate-600 leading-relaxed">{kw.generatedDescription}</p>
+                  <p className="text-sm text-slate-600 leading-relaxed">{renderBoldMarkdown(kw.generatedDescription)}</p>
                 ) : isLinked ? (
                   <p className="text-sm text-slate-600 leading-relaxed">
                     This subject has its own Intel Brief. Open it to learn more.
@@ -204,7 +216,7 @@ function FlashCard({ sectionIdx, total, title, category, subcategory, text, keyw
 }
 
 // ── Section card (image zone + stat + text) ───────────────────────────────
-function SectionCard({ imageZone, stat, sectionIdx, total, isLast, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap }) {
+function SectionCard({ imageZone, rankHierarchyOrder, stat, sectionIdx, total, isLast, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial }) {
   const hasBases = (highlightedBaseNames ?? []).length > 0
   const statTapOrigin = useRef(null)
 
@@ -228,14 +240,33 @@ function SectionCard({ imageZone, stat, sectionIdx, total, isLast, tutorialActiv
   return (
     <div className="rounded-2xl overflow-hidden border border-slate-200 bg-surface">
       {/* Image zone */}
-      <div className="relative h-44 bg-slate-100 overflow-hidden">
-        <img
-          src={imageZone.src}
-          alt={title}
-          draggable={false}
-          className={`w-full h-full object-cover select-none transition-all duration-300 ${hasBases && mapOpen ? 'opacity-20 blur-sm' : ''}`}
-          style={{ objectPosition: imageZone.position }}
-        />
+      <div className="relative h-44 bg-slate-900 overflow-hidden">
+        {category === 'Ranks' && rankHierarchyOrder != null ? (() => {
+          const rn = 20 - rankHierarchyOrder
+          const hasInsignia = rn >= 2 && rn <= 19
+          return (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+              {hasInsignia ? (
+                <RankBadge rankNumber={rn} size={100} color="#5baaff" />
+              ) : (
+                <div className="flex flex-col items-center gap-1 opacity-40">
+                  <div className="w-16 h-16 rounded-full border-2 border-dashed border-brand-400 flex items-center justify-center">
+                    <span className="text-brand-400 text-xs font-bold tracking-widest">AC</span>
+                  </div>
+                  <span className="text-[10px] text-brand-400 tracking-widest uppercase">No Insignia</span>
+                </div>
+              )}
+            </div>
+          )
+        })() : (
+          <img
+            src={imageZone.src}
+            alt={title}
+            draggable={false}
+            className={`w-full h-full object-cover select-none transition-all duration-300 ${hasBases && mapOpen ? 'opacity-20 blur-sm' : ''}`}
+            style={{ objectPosition: imageZone.position }}
+          />
+        )}
         {hasBases && mapOpen && (
           <div
             className={`absolute inset-0${tutorialActive ? ' pointer-events-none' : ''}`}
@@ -266,23 +297,34 @@ function SectionCard({ imageZone, stat, sectionIdx, total, isLast, tutorialActiv
       {/* Stat row */}
       {stat && (
         stat.mnemonic ? (
-          <button
-            onPointerDown={e => { statTapOrigin.current = { x: e.clientX, y: e.clientY } }}
-            onPointerUp={e => {
-              if (!statTapOrigin.current) return
-              const dx = e.clientX - statTapOrigin.current.x
-              const dy = e.clientY - statTapOrigin.current.y
-              if (Math.sqrt(dx * dx + dy * dy) < 10) onStatTap?.(stat)
-              statTapOrigin.current = null
-            }}
-            className="w-full flex items-baseline justify-between gap-4 px-5 py-2.5 border-b border-slate-100 bg-slate-50/50 hover:bg-brand-50/50 transition-colors text-left"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400 shrink-0">{stat.label}</span>
-            <span className="flex items-center gap-1.5">
-              <span className="text-sm font-semibold text-text text-right">{stat.value}</span>
-              <span className="text-base leading-none">💡</span>
-            </span>
-          </button>
+          <div className="relative">
+            <button
+              onPointerDown={e => { statTapOrigin.current = { x: e.clientX, y: e.clientY } }}
+              onPointerUp={e => {
+                if (!statTapOrigin.current) return
+                const dx = e.clientX - statTapOrigin.current.x
+                const dy = e.clientY - statTapOrigin.current.y
+                if (Math.sqrt(dx * dx + dy * dy) < 10) {
+                  onDismissStatTutorial?.()
+                  onStatTap?.(stat)
+                }
+                statTapOrigin.current = null
+              }}
+              className={`w-full flex items-baseline justify-between gap-4 px-5 py-2.5 border-b border-slate-100 bg-slate-50/50 hover:bg-brand-50/50 transition-colors text-left${showStatTutorial ? ' ring-2 ring-brand-400/70 ring-inset' : ''}`}
+            >
+              <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400 shrink-0">{stat.label}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-text text-right">{stat.value}</span>
+                <span className={`text-base leading-none${showStatTutorial ? ' animate-pulse' : ''}`}>💡</span>
+              </span>
+            </button>
+            {showStatTutorial && (
+              <div className="absolute right-4 top-full mt-1.5 z-10 bg-surface-raised border border-brand-400/40 rounded-xl px-3 py-2 shadow-lg pointer-events-none mnemonic-tooltip-pulse">
+                <p className="text-[11px] font-semibold text-brand-300 whitespace-nowrap">Press &amp; hold 💡 to reveal a memory aid</p>
+                <div className="absolute -top-1.5 right-5 w-3 h-3 bg-surface-raised border-l border-t border-brand-400/40 rotate-45" />
+              </div>
+            )}
+          </div>
         ) : (
           <div className="flex items-baseline justify-between gap-4 px-5 py-2.5 border-b border-slate-100 bg-slate-50/50">
             <span className="text-[10px] font-bold uppercase tracking-widest text-brand-400 shrink-0">{stat.label}</span>
@@ -376,7 +418,7 @@ function SwipeTutorial({ onDismiss }) {
       style={{ background: 'rgba(10,20,40,0.55)' }}
       onClick={onDismiss}
     >
-      <div className="flex flex-col items-center gap-3 px-6 py-8 select-none">
+      <div className="flex flex-col items-center gap-3 px-7 py-6 rounded-2xl select-none" style={{ background: 'rgba(6,16,30,0.85)', backdropFilter: 'blur(6px)' }}>
         {/* Animated arrows */}
         <div className="flex items-center gap-4">
           <motion.span
@@ -398,7 +440,7 @@ function SwipeTutorial({ onDismiss }) {
           >→</motion.span>
         </div>
         <p className="text-white font-bold text-base tracking-wide">Swipe to navigate</p>
-        <p className="text-white/50 text-xs">tap anywhere to dismiss</p>
+        <p className="text-white/60 text-xs">tap anywhere to dismiss</p>
       </div>
     </motion.div>
   )
@@ -700,14 +742,14 @@ function ContinueLearning({ brief, navigate, fallbackCards }) {
     .sort((a, b) => (a.status === 'stub' ? 1 : 0) - (b.status === 'stub' ? 1 : 0))
     .slice(0, 5)
 
-  const displayCards = cards.length > 0 ? cards : (fallbackCards ?? [])
+  const displayCards = cards.length > 0 ? cards : (fallbackCards ?? []).filter(b => b.status !== 'stub')
 
   if (displayCards.length === 0) return null
 
   return (
     <div className="bg-surface rounded-2xl p-4 border border-slate-200 mb-6 card-shadow">
       <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-        📡 Continue Learning
+        📡 Related Briefs
       </p>
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
         {displayCards.map(b => (
@@ -734,7 +776,7 @@ function ContinueLearning({ brief, navigate, fallbackCards }) {
 
 // ── Completion screen ─────────────────────────────────────────────────────
 function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onReRead, user, isFirstCompletion, coinReward, navigate, quizPassed, quizAvailable }) {
-  const { API, setUser, awardAircoins } = useAuth()
+  const { API, apiFetch, setUser, awardAircoins } = useAuth()
   const [email, setEmail]             = useState('')
   const [showEmailInput, setShowEmailInput] = useState(false)
   const googleBtnRef                  = useRef(null)
@@ -748,7 +790,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
     const handleCredential = async (response) => {
       try {
         // 1. Authenticate
-        const authRes  = await fetch(`${API}/api/auth/google`, {
+        const authRes  = await apiFetch(`${API}/api/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -759,7 +801,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
         setUser(authData.data.user)
 
         // 2. Complete the brief now that we're authenticated — cookie is set by the auth response above
-        const completeRes  = await fetch(`${API}/api/briefs/${brief._id}/complete`, {
+        const completeRes  = await apiFetch(`${API}/api/briefs/${brief._id}/complete`, {
           method: 'POST', credentials: 'include',
         })
         const completeData = await completeRes.json()
@@ -832,7 +874,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             {quizAvailable ? (
               <button
                 onClick={onQuiz}
-                className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-lg transition-colors shadow-lg shadow-brand-200"
+                className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200"
               >
                 🧠 {quizPassed ? 'Retake Quiz' : 'Take the Quiz → Earn Aircoins'}
               </button>
@@ -851,7 +893,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             {booState === 'available' && (
               <button
                 onClick={onBattleOrder}
-                className="w-full py-3.5 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
+                className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
               >
                 🗺️ Battle of Order — Earn Aircoins
               </button>
@@ -859,7 +901,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             {booState === 'completed' && (
               <button
                 onClick={onBattleOrder}
-                className="w-full py-3.5 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
+                className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
               >
                 🗺️ Replay Battle of Order
               </button>
@@ -1112,8 +1154,8 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, qu
 export default function BriefReader() {
   const { briefId }    = useParams()
   const navigate       = useNavigate()
-  const { user, API, awardAircoins, setUser } = useAuth()
-  const { start, visible } = useAppTutorial()
+  const { user, API, apiFetch, awardAircoins, setUser } = useAuth()
+  const { start, visible, activeName, hasSeen } = useAppTutorial()
   const startRef = useRef(start)
   useEffect(() => { startRef.current = start }, [start])
   const { settings }            = useAppSettings()
@@ -1123,6 +1165,7 @@ export default function BriefReader() {
   const [loading, setLoading]   = useState(true)
   const [locked, setLocked]     = useState(false)
   const [lockedCategory, setLockedCategory] = useState(null)
+  const [lockedPathway, setLockedPathway]   = useState(null) // { category, levelRequired, rankRequired }
   const [sectionIdx, setSection] = useState(0)
   const [isFirstCompletion, setIsFirstCompletion] = useState(false)
   const [done, setDone]          = useState(
@@ -1140,8 +1183,9 @@ export default function BriefReader() {
   const [spawnCheckPending, setSpawnCheckPending] = useState(false) // true while spawn-check is in-flight
   const [wtaSpawn,          setWtaSpawn]          = useState(null)  // { remaining, prereqsMet } from API
   const [navDir, setNavDir]        = useState(1) // 1 = forward, -1 = backward
-  const [showTutorial, setShowTutorial] = useState(false)
-  const [hasSwiped, setHasSwiped]       = useState(false)
+  const [showTutorial, setShowTutorial]         = useState(false)
+  const [showStatTutorial, setShowStatTutorial] = useState(false)
+  const [hasSwiped, setHasSwiped]               = useState(false)
   const [mapOpen, setMapOpen]           = useState(false)
   const [mapCentreOn, setMapCentreOn]   = useState(null)
   const [randomBriefs, setRandomBriefs] = useState([])
@@ -1243,7 +1287,13 @@ export default function BriefReader() {
     fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include', signal: controller.signal })
       .then(r => {
         if (r.status === 403) {
-          r.json().then(d => setLockedCategory(d?.category ?? null)).catch(() => {})
+          r.json().then(d => {
+            if (d?.reason === 'pathway') {
+              setLockedPathway({ category: d.category, levelRequired: d.levelRequired, rankRequired: d.rankRequired })
+            } else {
+              setLockedCategory(d?.category ?? null)
+            }
+          }).catch(() => {})
           setLocked(true); return null
         }
         return r.json()
@@ -1418,16 +1468,30 @@ export default function BriefReader() {
     const uid = user?._id
     const swipeKey = uid ? `sw_tut_v2_${uid}_swipe` : 'sw_tut_v2_anon_swipe'
     if (localStorage.getItem(swipeKey)) return
+    // Track when briefReader tutorial was active so we can detect when it just closed
+    if (activeName === 'briefReader') {
+      prevVisibleRef.current = true
+      return
+    }
+    const briefReaderJustClosed = prevVisibleRef.current
     const briefReaderAlreadySeen = !!(
       (uid && localStorage.getItem(`sw_tut_v2_${uid}_briefReader`)) ||
       localStorage.getItem('sw_tut_v2_anon_briefReader')
     )
-    const mainTutJustClosed = prevVisibleRef.current && !visible
-    if (!visible && (briefReaderAlreadySeen || mainTutJustClosed)) {
+    if (!visible && (briefReaderAlreadySeen || briefReaderJustClosed)) {
+      prevVisibleRef.current = false
       setShowTutorial(true)
     }
-    prevVisibleRef.current = visible
-  }, [visible, user?._id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visible, activeName, user?._id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show the stat mnemonic mini-tutorial the first time a brief with a mnemonic stat is loaded
+  useEffect(() => {
+    if (!brief) return
+    const hasMnemonic = brief.descriptionSections?.some((_, i) => buildStats(brief)[i]?.mnemonic)
+    if (!hasMnemonic) return
+    if (hasSeen('stat_mnemonic')) return
+    setShowStatTutorial(true)
+  }, [brief?._id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sections = brief?.descriptionSections?.filter(Boolean) ?? []
   const total    = sections.length
@@ -1522,7 +1586,7 @@ export default function BriefReader() {
       setDone(true)
       // Award coins now that the user has finished reading
       if (user) {
-        fetch(`${API}/api/briefs/${briefId}/complete`, {
+        apiFetch(`${API}/api/briefs/${briefId}/complete`, {
           method: 'POST',
           credentials: 'include',
         })
@@ -1613,6 +1677,39 @@ export default function BriefReader() {
   }
 
   if (locked) {
+    if (lockedPathway) {
+      return (
+        <>
+          <button
+            onClick={() => navigate('/learn-priority', { state: { category: lockedPathway.category } })}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
+          >
+            ← Back
+          </button>
+          <div className="rounded-2xl border border-slate-200 bg-surface p-6 text-center max-w-sm mx-auto mt-8">
+            <div className="text-4xl mb-3">🔒</div>
+            <p className="font-extrabold text-slate-900 text-lg mb-1">{lockedPathway.category}</p>
+            <p className="text-sm text-slate-600 mb-4">
+              This category is locked. Reach{' '}
+              <span className="font-bold text-slate-800">Rank {lockedPathway.rankRequired}</span> to bypass the level gate,
+              or reach <span className="font-bold text-slate-800">Level {lockedPathway.levelRequired}</span> at your current rank.
+            </p>
+            <button
+              onClick={() => navigate('/rankings')}
+              className="w-full py-2.5 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm transition-colors mb-2"
+            >
+              View Progression
+            </button>
+            <button
+              onClick={() => navigate('/learn-priority', { state: { category: lockedPathway.category } })}
+              className="w-full py-2.5 rounded-2xl text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              Back to Pathways
+            </button>
+          </div>
+        </>
+      )
+    }
     return (
       <>
         <button
@@ -1780,7 +1877,7 @@ export default function BriefReader() {
         <FlashcardDeckNotification
           cardRect={flashcardNotifRect}
           onDone={() => {
-            setSwipePromptReady(true)
+            setTimeout(() => setSwipePromptReady(true), 3000)
             if (badgePendingRef.current) { setBadge(); badgePendingRef.current = false }
             setFlashcardNotifRect(null)
           }}
@@ -1930,7 +2027,9 @@ export default function BriefReader() {
               }))
             )
             const kwList     = [
-              ...(brief.keywords || []).map(kw => ({ ...kw, linkedBriefCategory: kw.linkedBriefId?.category ?? null })),
+              ...(brief.keywords || [])
+                .filter(kw => !kw.linkedBriefId || String(kw.linkedBriefId._id ?? kw.linkedBriefId) !== String(brief._id))
+                .map(kw => ({ ...kw, linkedBriefCategory: kw.linkedBriefId?.category ?? null })),
               ...assocToKws(brief.associatedBaseBriefIds),
               ...assocToKws(brief.associatedSquadronBriefIds),
               ...assocToKws(brief.associatedAircraftBriefIds),
@@ -1964,6 +2063,7 @@ export default function BriefReader() {
                 >
                   <SectionCard
                     imageZone={imageZones[sectionIdx]}
+                    rankHierarchyOrder={brief.gameData?.rankHierarchyOrder}
                     stat={stats[sectionIdx] ?? null}
                     sectionIdx={sectionIdx}
                     total={total}
@@ -1986,6 +2086,19 @@ export default function BriefReader() {
                     learnedKws={learnedKws}
                     onKeywordTap={handleKeywordTap}
                     onStatTap={handleStatTap}
+                    showStatTutorial={showStatTutorial && !!(stats[sectionIdx]?.mnemonic)}
+                    onDismissStatTutorial={() => {
+                      setShowStatTutorial(false)
+                      const key = user?._id ? `sw_tut_v2_${user._id}_stat_mnemonic` : 'sw_tut_v2_anon_stat_mnemonic'
+                      localStorage.setItem(key, '1')
+                      if (user?._id) {
+                        fetch(`${API}/api/users/me/tutorials`, {
+                          method: 'PATCH', credentials: 'include',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ tutorialId: 'stat_mnemonic', status: 'viewed' }),
+                        }).catch(() => {})
+                      }
+                    }}
                   />
                 </SwipeCard>
               </motion.div>

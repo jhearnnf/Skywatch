@@ -113,6 +113,9 @@ const appSettingsSchema = new mongoose.Schema({
   // Absent or empty string falls back to the hardcoded default.
   aiPrompts: { type: Map, of: String, default: {} },
 
+  // Site performance stats (accumulated by apiFetch on the frontend)
+  totalLoadingMs: { type: Number, default: 0 },
+
   // Feature flags
   useLiveLeaderboard:   { type: Boolean, default: false },
   disableLoadingBar:    { type: Boolean, default: false },

@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import RankBadge from '../RankBadge'
 
 function CrosshairLogo() {
   return (
@@ -61,7 +62,9 @@ export default function TopBar() {
                 className="w-8 h-8 rounded-full bg-brand-100 border-2 border-brand-200 flex items-center justify-center text-sm font-bold text-brand-700 hover:border-brand-400 transition-colors outline-none focus:outline-none"
                 aria-label="View RAF ranks"
               >
-                {user.rank?.rankAbbreviation ?? user.rank?.abbreviation ?? (user.displayName || user.email || 'U')[0].toUpperCase()}
+                {(user.rank?.rankNumber ?? 1) > 1
+                  ? <RankBadge rankNumber={user.rank.rankNumber} size={20} />
+                  : (user.rank?.rankAbbreviation ?? 'AC')}
               </button>
             </>
           ) : (

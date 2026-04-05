@@ -1,25 +1,23 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../context/AuthContext'
 
 const TABS = ['Available', 'Completed', 'All']
 const TAB_STATE = { Available: 'available', Completed: 'completed', All: 'all' }
 const LIMIT = 20
 
-export default function QuizBriefsList() {
-  const { user, API } = useAuth()
+export default function BOOBriefsList() {
+  const { user, API, apiFetch } = useAuth()
 
-  const [briefs,        setBriefs]        = useState([])
-  const [hasMore,       setHasMore]       = useState(false)
-  const [availableMode, setAvailableMode] = useState(null)
-  const [loading,       setLoading]       = useState(true)
-  const [loadingMore,   setLoadingMore]   = useState(false)
-  const [error,         setError]         = useState(null)
-  const [activeTab,     setActiveTab]     = useState('Available')
-  const [search,        setSearch]        = useState('')
+  const [briefs,      setBriefs]      = useState([])
+  const [hasMore,     setHasMore]     = useState(false)
+  const [loading,     setLoading]     = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [activeTab,   setActiveTab]   = useState('Available')
+  const [search,      setSearch]      = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [page,          setPage]          = useState(1)
+  const [page,        setPage]        = useState(1)
 
   // Debounce search input
   useEffect(() => {
@@ -29,7 +27,7 @@ export default function QuizBriefsList() {
 
   const fetchBriefs = useCallback(async (pageNum, reset) => {
     if (!user) return
-    if (reset) { setLoading(true); setError(null) }
+    if (reset) setLoading(true)
     else       setLoadingMore(true)
 
     try {
@@ -39,21 +37,13 @@ export default function QuizBriefsList() {
         limit: LIMIT,
         ...(debouncedSearch ? { search: debouncedSearch } : {}),
       })
-      const res  = await fetch(`${API}/api/games/quiz/briefs?${params}`, { credentials: 'include' })
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data?.message ?? 'Failed to load briefs')
-        return
-      }
+      const data = await apiFetch(`${API}/api/games/battle-of-order/briefs?${params}`, { credentials: 'include' })
+        .then(r => r.json())
 
       const incoming = data?.data?.briefs ?? []
       setBriefs(prev => reset ? incoming : [...prev, ...incoming])
       setHasMore(pageNum < (data?.data?.totalPages ?? 0))
-      if (reset) setAvailableMode(data?.data?.availableMode ?? null)
-    } catch (err) {
-      setError('Connection error — is the server running?')
-    }
+    } catch {}
     finally {
       setLoading(false)
       setLoadingMore(false)
@@ -73,7 +63,6 @@ export default function QuizBriefsList() {
     setActiveTab(tab)
     setSearch('')
     setDebouncedSearch('')
-    setError(null)
   }
 
   function handleLoadMore() {
@@ -93,8 +82,8 @@ export default function QuizBriefsList() {
           ← Back
         </Link>
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">🧠 Intel Quiz</h1>
-          <p className="text-sm text-slate-500">All briefs available for quizzing</p>
+          <h1 className="text-2xl font-extrabold text-slate-900">🗺️ Battle of Order</h1>
+          <p className="text-sm text-slate-500">All eligible briefs for Battle of Order</p>
         </div>
       </div>
 
@@ -136,19 +125,8 @@ export default function QuizBriefsList() {
 
       {!user ? (
         <div className="text-center py-16 text-slate-400">
-          <p className="font-semibold text-slate-600 mb-2">Sign in to track your quiz progress</p>
+          <p className="font-semibold text-slate-600 mb-2">Sign in to play Battle of Order</p>
           <Link to="/login" className="text-brand-600 font-semibold text-sm hover:text-brand-700">Sign In →</Link>
-        </div>
-      ) : error ? (
-        <div className="text-center py-16 text-slate-400">
-          <p className="font-semibold text-red-600 mb-1">Something went wrong</p>
-          <p className="text-xs text-slate-400 mb-3">{error}</p>
-          <button
-            onClick={() => fetchBriefs(1, true)}
-            className="text-brand-600 font-semibold text-sm hover:text-brand-700"
-          >
-            Try again →
-          </button>
         </div>
       ) : loading ? (
         <div className="space-y-3 animate-pulse">
@@ -163,23 +141,75 @@ export default function QuizBriefsList() {
         </div>
       ) : (
         <>
-          {/* Contextual banner for Available tab */}
-          {activeTab === 'Available' && !debouncedSearch && availableMode === 'needs-read' && (
-            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-3">
-              <span className="text-base shrink-0">📖</span>
-              <p className="text-xs text-amber-800">Read these briefs to unlock their quizzes.</p>
-            </div>
-          )}
-          {activeTab === 'Available' && !debouncedSearch && availableMode === 'all-passed' && (
-            <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-3">
-              <span className="text-base shrink-0">🎉</span>
-              <p className="text-xs text-emerald-800">All quizzes complete — replay any below to keep sharp.</p>
-            </div>
-          )}
-
           <div className="space-y-2">
             {briefs.map((brief, i) => {
-              const state = brief.quizState
+              const state = brief.booState
+
+              if (state === 'needs-aircraft-reads') {
+                return (
+                  <motion.div
+                    key={brief._id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                  >
+                    <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed">
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                        <span className="text-slate-400 text-xs">🔒</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                        <p className="text-xs text-slate-400">{brief.category}</p>
+                      </div>
+                      <span className="text-xs text-slate-400 shrink-0">Read more Aircrafts</span>
+                    </div>
+                  </motion.div>
+                )
+              }
+
+              if (state === 'no-data') {
+                return (
+                  <motion.div
+                    key={brief._id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                  >
+                    <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed">
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                        <span className="text-slate-400 text-xs">🔒</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                        <p className="text-xs text-slate-400">{brief.category}</p>
+                      </div>
+                      <span className="text-xs text-slate-400 shrink-0">No data yet</span>
+                    </div>
+                  </motion.div>
+                )
+              }
+
+              if (state === 'needs-more-reads') {
+                return (
+                  <motion.div
+                    key={brief._id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                  >
+                    <div className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200 opacity-60 cursor-not-allowed">
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+                        <span className="text-slate-400 text-xs">📚</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                        <p className="text-xs text-slate-400">{brief.category}</p>
+                      </div>
+                      <span className="text-xs text-slate-400 shrink-0">Read more {brief.category}</span>
+                    </div>
+                  </motion.div>
+                )
+              }
 
               if (state === 'needs-read') {
                 return (
@@ -208,7 +238,34 @@ export default function QuizBriefsList() {
                 )
               }
 
-              const passed = state === 'passed'
+              if (state === 'needs-quiz') {
+                return (
+                  <motion.div
+                    key={brief._id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                  >
+                    <Link
+                      to={`/quiz/${brief._id}`}
+                      className="flex items-center gap-3 rounded-xl px-4 py-3 border bg-amber-50 border-amber-200 hover:border-amber-300 transition-all group"
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                        <span className="font-bold text-xs text-amber-600">🧠</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
+                        <p className="text-xs text-slate-400">{brief.category}</p>
+                      </div>
+                      <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full shrink-0">
+                        Pass quiz first →
+                      </span>
+                    </Link>
+                  </motion.div>
+                )
+              }
+
+              const completed = state === 'completed'
               return (
                 <motion.div
                   key={brief._id}
@@ -217,26 +274,26 @@ export default function QuizBriefsList() {
                   transition={{ delay: i * 0.03 }}
                 >
                   <Link
-                    to={`/quiz/${brief._id}`}
+                    to={`/battle-of-order/${brief._id}`}
                     className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all group
-                      ${passed
+                      ${completed
                         ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
                         : 'bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50'
                       }`}
                   >
                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
-                      ${passed ? 'bg-emerald-100' : 'bg-brand-100'}`}
+                      ${completed ? 'bg-emerald-100' : 'bg-slate-800 group-hover:bg-slate-700 transition-colors'}`}
                     >
-                      <span className={`font-bold text-xs ${passed ? 'text-emerald-600' : 'text-brand-600'}`}>
-                        {passed ? '✓' : 'Q'}
+                      <span className={`font-bold text-xs ${completed ? 'text-emerald-600' : 'text-white'}`}>
+                        {completed ? '✓' : '⊞'}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>
                       <p className="text-xs text-slate-400">{brief.category}</p>
                     </div>
-                    {passed
-                      ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Passed</span>
+                    {completed
+                      ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Played</span>
                       : <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
                     }
                   </Link>

@@ -2,6 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
+import RankBadge from '../RankBadge'
 
 const NAV_ITEMS = [
   { to: '/home',     emoji: '🏠', label: 'Home'    },
@@ -32,6 +33,8 @@ export default function BottomNav() {
           const active = location.pathname === to || location.pathname.startsWith(to + '/')
           const showBadge = to === '/play' && hasAnyNew && user
           const showReportBadge = to === '/admin' && unsolvedCount > 0
+          const isProfileItem = to === '/profile'
+          const rankNumber = user?.rank?.rankNumber ?? 1
           return (
             <NavLink
               key={to}
@@ -44,7 +47,13 @@ export default function BottomNav() {
                 }`}
             >
               <span className={`relative text-xl leading-none transition-transform ${active ? 'scale-110' : ''}`}>
-                {emoji}
+                {isProfileItem && user
+                  ? (rankNumber > 1
+                    ? <RankBadge rankNumber={rankNumber} size={20} color={active ? '#5baaff' : '#94a3b8'} />
+                    : <span className="text-xs font-bold" style={{ color: active ? '#5baaff' : '#94a3b8' }}>{user.rank?.rankAbbreviation ?? 'AC'}</span>
+                  )
+                  : emoji
+                }
                 {showBadge && (
                   <span className="nav-new-badge" aria-label="New game unlocked" />
                 )}

@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useAuth } from '../../context/AuthContext'
+import { useAuth } from '../context/AuthContext'
 
 export default function ReportProblem() {
-  const { user, API } = useAuth()
+  const { user, API, apiFetch } = useAuth()
   const navigate = useNavigate()
 
   const [description, setDescription] = useState('')
@@ -17,7 +17,7 @@ export default function ReportProblem() {
     if (!description.trim()) { setError('Please describe the problem.'); return }
     setBusy(true); setError('')
     try {
-      const res = await fetch(`${API}/api/users/report-problem`, {
+      const res = await apiFetch(`${API}/api/users/report-problem`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description, pageReported: document.referrer || 'unknown' }),

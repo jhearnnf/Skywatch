@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../../context/AuthContext'
-import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
-import { invalidateSoundSettings } from '../../utils/sound'
-import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../../context/AppTutorialContext'
+import { useAuth } from '../context/AuthContext'
+import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
+import { invalidateSoundSettings } from '../utils/sound'
+import RankBadge from '../components/RankBadge'
+import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -270,7 +271,8 @@ function StatsTab({ API }) {
           <StatCard label="Time Reading"       value={fmtSeconds(briefs.totalReadSeconds ?? 0)} color="brand" />
           <StatCard label="Tutorials Viewed"   value={fmtNum(tutorials.viewed)}                color="slate" />
           <StatCard label="Tutorials Skipped"  value={fmtNum(tutorials.skipped)}               color="slate" />
-          <StatCard label="Uptime Since Deploy" value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="emerald" />
+          <StatCard label="Uptime Since Deploy"  value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="emerald" />
+          <StatCard label="Total Loading Time"  value={fmtSeconds(Math.round((server?.totalLoadingMs ?? 0) / 1000))} color="brand" sub="cumulative user fetch wait" />
         </div>
       </section>
     </div>
@@ -535,6 +537,7 @@ function CeilingScenarioColumn({ label, difficulty, sim, meta, simCycleThreshold
 }
 
 function AircoinsCeiling({ API }) {
+  const { apiFetch } = useAuth()
   const [meta,    setMeta]    = useState(null)   // rates, ranks, levels, cycleThreshold, totalRanks
   const [sim,     setSim]     = useState(null)   // editable content inputs
   const [dbSim,   setDbSim]   = useState(null)   // last DB snapshot for reset
@@ -544,7 +547,7 @@ function AircoinsCeiling({ API }) {
   const runCheck = async () => {
     setBusy(true); setError('')
     try {
-      const res  = await fetch(`${API}/api/admin/economy-viability`, { credentials: 'include' })
+      const res  = await apiFetch(`${API}/api/admin/economy-viability`, { credentials: 'include' })
       const data = await res.json()
       if (data.status === 'success') {
         const { rates, cycleThreshold, totalRanks, ranks, levels, content } = data.data
@@ -864,6 +867,7 @@ const AI_PROMPT_GROUPS = [
 ]
 
 function AiPromptsSection({ API }) {
+  const { apiFetch } = useAuth()
   const [open,      setOpen]      = useState(false)
   const [prompts,   setPrompts]   = useState(null)   // { key: currentValue }
   const [defaults,  setDefaults]  = useState(null)   // { key: hardcodedDefault }
@@ -899,7 +903,7 @@ function AiPromptsSection({ API }) {
   const saveAll = async () => {
     setSaving(true)
     try {
-      await fetch(`${API}/api/admin/ai-prompts`, {
+      await apiFetch(`${API}/api/admin/ai-prompts`, {
         method: 'PATCH', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompts: draft }),
@@ -1014,7 +1018,7 @@ function AiPromptsSection({ API }) {
 }
 
 function SettingsTab({ API }) {
-  const { awardAircoins } = useAuth()
+  const { awardAircoins, apiFetch } = useAuth()
   const [settings, setSettings] = useState(null)
   const [draft,    setDraft]    = useState({})
   const [modal,    setModal]    = useState(null)   // { label, fields }
@@ -1042,7 +1046,7 @@ function SettingsTab({ API }) {
   const confirmSave = async (reason) => {
     const updates = {}
     modal.fields.forEach(f => { updates[f] = draft[f] })
-    await fetch(`${API}/api/admin/settings`, {
+    await apiFetch(`${API}/api/admin/settings`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...updates, reason }),
@@ -1059,7 +1063,7 @@ function SettingsTab({ API }) {
     setCoinModal(false)
     setCoinBusy(true)
     try {
-      const res  = await fetch(`${API}/api/admin/award-coins`, {
+      const res  = await apiFetch(`${API}/api/admin/award-coins`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: amt, reason }),
@@ -1087,6 +1091,34 @@ function SettingsTab({ API }) {
     return { ...p, [key]: cats.includes(cat) ? cats.filter(c => c !== cat) : [...cats, cat] }
   })
 
+  const reorderPathways = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return
+    setDraft(p => {
+      const arr = [...(p.pathwayUnlocks ?? [])]
+      arr.splice(toIndex, 0, arr.splice(fromIndex, 1)[0])
+      return { ...p, pathwayUnlocks: arr }
+    })
+  }
+
+  // Derive subscription tier for a category from the three tier arrays
+  const getCatTier = (cat) => {
+    if ((draft.guestCategories ?? []).includes(cat)) return 'guest'
+    if ((draft.freeCategories  ?? []).includes(cat)) return 'free'
+    if ((draft.silverCategories ?? []).includes(cat)) return 'silver'
+    return 'gold'
+  }
+
+  // Set subscription tier for a category by updating the three tier arrays
+  const setCatTier = (cat, tier) => setDraft(p => {
+    const remove = arr => (arr ?? []).filter(c => c !== cat)
+    return {
+      ...p,
+      guestCategories:  tier === 'guest'  ? [...(p.guestCategories  ?? []), cat] : remove(p.guestCategories),
+      freeCategories:   tier === 'free'   ? [...(p.freeCategories   ?? []), cat] : remove(p.freeCategories),
+      silverCategories: tier === 'silver' ? [...(p.silverCategories ?? []), cat] : remove(p.silverCategories),
+    }
+  })
+
   if (!settings) return <div className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading settings…</div>
 
   return (
@@ -1102,54 +1134,55 @@ function SettingsTab({ API }) {
         />
       )}
 
-      {/* ── Subscription ─────────────────────────────────────── */}
-      <Section title="Subscription" collapsible onSave={() => save('Update Subscription Settings', ['trialDurationDays', 'freeCategories', 'silverCategories', 'guestCategories'])}>
+      {/* ── Pathway Access & Unlock Requirements ─────────────── */}
+      <Section title="Pathway Access & Unlock Requirements" collapsible onSave={() => save('Update Pathway Access & Unlock Requirements', ['trialDurationDays', 'guestCategories', 'freeCategories', 'silverCategories', 'pathwayUnlocks'])}>
         <NumInput label="Trial duration (days)" value={draft.trialDurationDays} min={1} max={365} onChange={v => set('trialDurationDays', v)} />
 
-        <div className="pt-3">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
-            Not signed in (Guest) categories
-            <span className="ml-2 bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] normal-case">Briefs outside these categories are locked for guests</span>
-          </p>
-          <CategoryGrid selected={draft.guestCategories} onChange={cat => toggleCat('guestCategories', cat)} />
-        </div>
-
-        <div className="pt-4">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
-            Free tier categories
-            <span className="ml-2 bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px] normal-case">Gold = all categories always</span>
-          </p>
-          <CategoryGrid selected={draft.freeCategories} onChange={cat => toggleCat('freeCategories', cat)} />
-        </div>
-
-        <div className="pt-4">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Silver tier categories</p>
-          <CategoryGrid selected={draft.silverCategories} onChange={cat => toggleCat('silverCategories', cat)} />
-        </div>
-      </Section>
-
-      {/* ── Pathway Unlock Requirements ──────────────────────── */}
-      <Section title="Pathway Unlock Requirements" collapsible onSave={() => save('Update Pathway Unlock Requirements', ['pathwayUnlocks'])}>
-        <p className="text-xs text-slate-400 mb-3">
-          Each pathway unlocks when <strong>both conditions</strong> are met: Agent Level and RAF Rank.
-          Subscription tier is automatically derived from the category tier settings above — no need to set it here.
-          Set Level 1 / Rank 1 to make a pathway always available.
+        <p className="text-xs text-slate-400 mt-4 mb-3">
+          Each row controls all access conditions for a pathway. A pathway is visible when the user's subscription tier, agent level, and RAF rank all meet the requirements.
+          Gold tier users always have access to all categories. Set Level 1 / Rank 1 to impose no level/rank gate.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100">
+                <th className="py-2 pr-2 w-6"></th>
                 <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Category</th>
+                <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Subscription Tier</th>
                 <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Level Required</th>
                 <th className="text-left py-2 text-xs font-bold text-slate-400 uppercase tracking-wide">Rank Required</th>
               </tr>
             </thead>
             <tbody>
-              {PATHWAY_CATEGORIES.map(cat => {
-                const unlock = (draft.pathwayUnlocks ?? []).find(u => u.category === cat) ?? { levelRequired: 1, rankRequired: 1 }
+              {(draft.pathwayUnlocks ?? []).map((unlock, idx) => {
+                const cat  = unlock.category
+                const tier = getCatTier(cat)
+                const TIER_BADGE = { guest: 'bg-slate-100 text-slate-500', free: 'bg-green-100 text-green-700', silver: 'bg-blue-100 text-blue-700', gold: 'bg-amber-100 text-amber-700' }
                 return (
-                  <tr key={cat} className="border-b border-slate-50 last:border-0">
+                  <tr
+                    key={cat}
+                    draggable
+                    onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', idx) }}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                    onDrop={e => { e.preventDefault(); reorderPathways(parseInt(e.dataTransfer.getData('text/plain')), idx) }}
+                    className="border-b border-slate-50 last:border-0 transition-opacity"
+                    style={{ cursor: 'grab' }}
+                  >
+                    <td className="py-2.5 pr-2 text-slate-300 select-none text-base leading-none">⠿</td>
                     <td className="py-2.5 pr-3 font-semibold text-slate-700 whitespace-nowrap">{cat}</td>
+                    <td className="py-2.5 pr-3">
+                      <select
+                        value={tier}
+                        onChange={e => setCatTier(cat, e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                        className={`border border-slate-200 rounded-lg px-2 py-1 text-sm font-semibold focus:outline-none focus:border-brand-400 ${TIER_BADGE[tier]}`}
+                      >
+                        <option value="guest">Guest</option>
+                        <option value="free">Free</option>
+                        <option value="silver">Silver</option>
+                        <option value="gold">Gold</option>
+                      </select>
+                    </td>
                     <td className="py-2.5 pr-3">
                       <input
                         type="number" min={1} max={10}
@@ -1163,6 +1196,7 @@ function SettingsTab({ API }) {
                       <select
                         value={unlock.rankRequired ?? 1}
                         onChange={e => setPathwayUnlock(cat, 'rankRequired', parseInt(e.target.value))}
+                        onClick={e => e.stopPropagation()}
                         className="border border-slate-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-brand-400 max-w-[160px]"
                       >
                         {RAF_RANKS.map(r => (
@@ -1344,7 +1378,7 @@ function SubscriptionTierRow({ u, action }) {
 }
 
 function UsersTab({ API }) {
-  const { refreshUser } = useAuth()
+  const { refreshUser, apiFetch } = useAuth()
   const [users,   setUsers]   = useState([])
   const [q,       setQ]       = useState('')
   const [loading, setLoading] = useState(true)
@@ -1356,7 +1390,7 @@ function UsersTab({ API }) {
 
   const loadAll = useCallback(async () => {
     setLoading(true); setSearch(false)
-    const res  = await fetch(`${API}/api/admin/users`, { credentials: 'include' })
+    const res  = await apiFetch(`${API}/api/admin/users`, { credentials: 'include' })
     const data = await res.json()
     setUsers(data.data?.users ?? [])
     setLoading(false)
@@ -1367,7 +1401,7 @@ function UsersTab({ API }) {
   const runSearch = async () => {
     if (!q.trim()) { loadAll(); return }
     setLoading(true); setSearch(true)
-    const res  = await fetch(`${API}/api/admin/users/search?q=${encodeURIComponent(q.trim())}`, { credentials: 'include' })
+    const res  = await apiFetch(`${API}/api/admin/users/search?q=${encodeURIComponent(q.trim())}`, { credentials: 'include' })
     const data = await res.json()
     setUsers(data.data?.users ?? [])
     setLoading(false)
@@ -1376,7 +1410,7 @@ function UsersTab({ API }) {
   const action = (label, endpoint, method = 'POST', extra = {}) => setModal({ label, endpoint, method, extra })
 
   const confirmAction = async (reason) => {
-    const res  = await fetch(`${API}${modal.endpoint}`, {
+    const res  = await apiFetch(`${API}${modal.endpoint}`, {
       method: modal.method, credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason, ...modal.extra }),
@@ -1603,6 +1637,7 @@ function UsersTab({ API }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProblemsTab({ API }) {
+  const { apiFetch } = useAuth()
   const { refresh: refreshUnsolvedCount } = useUnsolvedReports()
   const [problems, setProblems] = useState([])
   const [filter,   setFilter]   = useState('unsolved')
@@ -1634,7 +1669,7 @@ function ProblemsTab({ API }) {
   const executeUpdate = async ({ id, description, solved, notifyUser, sendEmail }) => {
     setBusy(id)
     setConfirm(null)
-    await fetch(`${API}/api/admin/problems/${id}/update`, {
+    await apiFetch(`${API}/api/admin/problems/${id}/update`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1882,8 +1917,7 @@ const CR_DEFAULTS = {
 const TUTORIAL_META = [
   { key: 'home',           label: 'Home Page' },
   { key: 'learn-priority', label: 'Learn Pathway Page' },
-  { key: 'pathway_swipe',  label: 'Pathway Swipe (multi-pathway unlock)' },
-  { key: 'learn',          label: 'Learn Page (legacy)' },
+  { key: 'pathway_swipe',  label: 'Pathway Swipe Hint', inline: true },
   { key: 'briefReader',    label: 'Brief Reader' },
   { key: 'quiz',           label: 'Quiz' },
   { key: 'play',           label: 'Play Hub' },
@@ -1900,6 +1934,7 @@ function ContentTab({ API }) {
   const [emailBusy,   setEmailBusy]   = useState(false)
   const [expandedTut, setExpandedTut] = useState(null)
   const { refreshContent } = useAppTutorial()
+  const { apiFetch } = useAuth()
 
   const load = useCallback(() => {
     fetch(`${API}/api/admin/settings`, { credentials: 'include' })
@@ -1936,7 +1971,7 @@ function ContentTab({ API }) {
   const confirmSave = async (reason) => {
     const updates = {}
     modal.fields.forEach(f => { updates[f] = draft[f] })
-    await fetch(`${API}/api/admin/settings`, {
+    await apiFetch(`${API}/api/admin/settings`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...updates, reason }),
@@ -1947,7 +1982,7 @@ function ContentTab({ API }) {
   }
 
   const confirmSaveTutorials = async (reason) => {
-    await fetch(`${API}/api/admin/settings`, {
+    await apiFetch(`${API}/api/admin/settings`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tutorialContent: tutDraft, reason }),
@@ -1961,7 +1996,7 @@ function ContentTab({ API }) {
   const sendTestEmail = async () => {
     setEmailBusy(true)
     try {
-      const res  = await fetch(`${API}/api/admin/test-email`, { method: 'POST', credentials: 'include' })
+      const res  = await apiFetch(`${API}/api/admin/test-email`, { method: 'POST', credentials: 'include' })
       const data = await res.json()
       setToast(data.status === 'success' ? `✓ ${data.message}` : `✗ ${data.message}`)
     } catch {
@@ -2070,11 +2105,17 @@ function ContentTab({ API }) {
         </>}
       >
         <div className="px-5 py-3">
-          {TUTORIAL_META.map(({ key: tutKey, label: tutLabel }) => {
+          {TUTORIAL_META.map(({ key: tutKey, label: tutLabel, inline: isInline }) => {
             const steps    = TUTORIAL_STEPS[tutKey] ?? []
             const isOpen   = expandedTut === tutKey
             return (
               <div key={tutKey} className="border-b border-slate-100 last:border-0">
+                {isInline ? (
+                  <div className="flex items-center justify-between py-3">
+                    <span className="text-sm font-semibold text-slate-700">{tutLabel}</span>
+                    <span className="text-xs text-slate-400 italic">inline visual hint — no text to edit</span>
+                  </div>
+                ) : (
                 <button
                   onClick={() => setExpandedTut(isOpen ? null : tutKey)}
                   className="w-full flex items-center justify-between py-3 text-left"
@@ -2082,7 +2123,8 @@ function ContentTab({ API }) {
                   <span className="text-sm font-semibold text-slate-700">{tutLabel}</span>
                   <span className="text-slate-400 text-xs">{isOpen ? '▲ collapse' : `${steps.length} steps ▼`}</span>
                 </button>
-                {isOpen && (
+                )}
+                {!isInline && isOpen && (
                   <div className="pb-4 space-y-5">
                     {steps.map((defaultStep, idx) => {
                       const overrideKey = `${tutKey}_${idx}`
@@ -2168,6 +2210,7 @@ const TIER_BTN = {
 }
 
 function SubEmulator({ user, API, onTierChange }) {
+  const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const effectiveTier = (user.subscriptionTier === 'trial' && !user.isTrialActive)
     ? 'free'
@@ -2175,7 +2218,7 @@ function SubEmulator({ user, API, onTierChange }) {
   const setTier = async (tier) => {
     if (tier === effectiveTier || busy) return
     setBusy(true)
-    const res  = await fetch(`${API}/api/admin/self/subscription`, {
+    const res  = await apiFetch(`${API}/api/admin/self/subscription`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tier }),
@@ -2215,6 +2258,7 @@ function SubEmulator({ user, API, onTierChange }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function GenerateSectionLinksButton({ sourceTitle, sourceDescription, sourceCategory, linkType, pool, isHistoric, API, onResult }) {
+  const { apiFetch } = useAuth()
   const [status, setStatus] = useState(null) // null | 'loading' | 'done' | 'error'
   const [msg, setMsg]       = useState('')
 
@@ -2224,7 +2268,7 @@ function GenerateSectionLinksButton({ sourceTitle, sourceDescription, sourceCate
     setStatus('loading')
     setMsg('')
     try {
-      const res  = await fetch(`${API}/api/admin/ai/generate-links`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-links`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2330,7 +2374,7 @@ function LeadRow({ lead, picked, busy, onGenerate }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <p className={`text-sm ${isPublished ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{lead.title}</p>
-          {isPublished && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full shrink-0">✓ Published</span>}
+          {isPublished && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full shrink-0">✓ Generated</span>}
         </div>
         {lead.nickname && (
           <p className="text-[11px] text-slate-400 mt-0.5">"{lead.nickname}"</p>
@@ -2351,6 +2395,7 @@ function LeadRow({ lead, picked, busy, onGenerate }) {
 }
 
 function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
+  const { apiFetch } = useAuth()
   const [tab,             setTab]             = useState('leads') // 'leads' | 'news'
   const [leads,           setLeads]           = useState([])
   const [search,          setSearch]          = useState(initialSearch)
@@ -2374,12 +2419,26 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
   const [newsBusy,      setNewsBusy]      = useState(false)
   const [dupConfirm,    setDupConfirm]    = useState(null) // { headline, eventDate } awaiting confirmation
   const [newsDate,      setNewsDate]      = useState(() => new Date().toISOString().slice(0, 10))
+  // Bulk news generation
+  const [bulkNewsOpen,      setBulkNewsOpen]      = useState(false)
+  const [bulkNewsMonth,     setBulkNewsMonth]     = useState(() => new Date().toISOString().slice(0, 7))
+  const [bulkNewsHeadlines, setBulkNewsHeadlines] = useState([])
+  const [bulkNewsSelected,  setBulkNewsSelected]  = useState(new Set())
+  const [bulkNewsRunning,   setBulkNewsRunning]   = useState(false)
+  const [bulkNewsLog,       setBulkNewsLog]       = useState([])
+  const bulkNewsCancelRef = useRef(false)
+  const bulkNewsLogRef    = useRef(null)
 
   useEffect(() => {
-    fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => { if (d.status === 'success') setLeads(d.data.leads) })
+    // Backfill isPublished on leads that already have a generated brief, then load
+    fetch(`${API}/api/admin/intel-leads/backfill-published`, { method: 'POST', credentials: 'include' })
       .catch(() => {})
+      .finally(() => {
+        fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
+          .then(r => r.json())
+          .then(d => { if (d.status === 'success') setLeads(d.data.leads) })
+          .catch(() => {})
+      })
     // Pre-load existing titles for duplicate detection
     fetch(`${API}/api/admin/briefs/titles`, { credentials: 'include' })
       .then(r => r.json())
@@ -2388,7 +2447,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
   }, [API])
 
   const filtered = leads.filter(l => {
-    if (!showCompleted && l.isPublished) return false
+    if (showCompleted && !l.isPublished) return false
     if (!search) return true
     return (
       (l.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
@@ -2421,7 +2480,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
       const body = isHeadline
         ? { headline: key, eventDate, isHistoric: !!(eventDate && eventDate !== todayStr) }
         : { topic: key, category: lead?.category ?? 'News' }
-      const res  = await fetch(`${API}/api/admin/ai/generate-brief`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-brief`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -2442,7 +2501,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
     setResetModal(false)
     setResetBusy(true)
     try {
-      const res  = await fetch(`${API}/api/admin/leads/reset`, {
+      const res  = await apiFetch(`${API}/api/admin/leads/reset`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
@@ -2470,7 +2529,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
     setNewsBusy(true)
     setHeadlines([])
     try {
-      const res  = await fetch(`${API}/api/admin/ai/news-headlines`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/news-headlines`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: newsDate }),
@@ -2492,6 +2551,80 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
     } else {
       generate(headline, true, eventDate)
     }
+  }
+
+  const fetchBulkNewsHeadlines = async () => {
+    setBulkNewsHeadlines([])
+    setBulkNewsSelected(new Set())
+    setBulkNewsLog([])
+    setNewsBusy(true)
+    try {
+      const res  = await apiFetch(`${API}/api/admin/ai/news-headlines-month`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: bulkNewsMonth }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.status !== 'success') {
+        alert(`Bulk headlines fetch failed: ${data.message ?? res.status}`)
+        return
+      }
+      const items = data.data.headlines ?? []
+      setBulkNewsHeadlines(items)
+      // Default: select all non-duplicates
+      const defaultSelected = new Set(
+        items.reduce((acc, item, i) => {
+          if (!isSimilarTitle(item.headline, existingTitles)) acc.push(i)
+          return acc
+        }, [])
+      )
+      setBulkNewsSelected(defaultSelected)
+    } finally {
+      setNewsBusy(false)
+    }
+  }
+
+  const handleBulkNewsGenerate = async () => {
+    const selected = [...bulkNewsSelected].sort((a, b) => a - b).filter(i => i < bulkNewsHeadlines.length)
+    if (!selected.length) return
+    setBulkNewsRunning(true)
+    bulkNewsCancelRef.current = false
+    setBulkNewsLog(selected.map(i => ({
+      idx: i,
+      headline: bulkNewsHeadlines[i].headline,
+      status: 'pending',
+      startedAt: null,
+      completedAt: null,
+      warnings: [],
+      error: null,
+    })))
+    const updateEntry = (idx, patch) => {
+      setBulkNewsLog(prev => prev.map(e => e.idx === idx ? { ...e, ...patch } : e))
+      setTimeout(() => {
+        if (bulkNewsLogRef.current) bulkNewsLogRef.current.scrollTop = bulkNewsLogRef.current.scrollHeight
+      }, 50)
+    }
+    for (const idx of selected) {
+      if (bulkNewsCancelRef.current) break
+      const item = bulkNewsHeadlines[idx]
+      updateEntry(idx, { status: 'running', startedAt: Date.now() })
+      try {
+        const res  = await apiFetch(`${API}/api/admin/ai/bulk-generate-news-item`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ headline: item.headline, eventDate: item.eventDate }),
+        })
+        const data = await res.json()
+        if (!res.ok || data.status !== 'success') {
+          updateEntry(idx, { status: 'error', completedAt: Date.now(), error: data.message ?? 'Unknown error' })
+        } else {
+          updateEntry(idx, { status: 'done', completedAt: Date.now(), warnings: data.warnings ?? [] })
+        }
+      } catch (err) {
+        updateEntry(idx, { status: 'error', completedAt: Date.now(), error: err.message })
+      }
+    }
+    setBulkNewsRunning(false)
   }
 
   // Group leads by section → subsection
@@ -2559,7 +2692,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
                     : 'bg-surface text-slate-600 border-slate-200 hover:border-emerald-300'
                 }`}
               >
-                ✓ Completed ({publishedCount})
+                ✓ Generated ({publishedCount})
               </button>
               <span className="text-[10px] text-slate-400 ml-auto">{unpublishedCount} remaining</span>
             </div>
@@ -2728,6 +2861,195 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
                 )
               })}
             </div>
+
+            {/* ── Bulk Month Generate ─────────────────────────────────────── */}
+            <div className="mt-4 rounded-xl border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => { if (!bulkNewsRunning) setBulkNewsOpen(o => !o) }}
+                className={`w-full flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors ${bulkNewsRunning ? 'cursor-default' : 'hover:bg-slate-50'} text-slate-700`}
+              >
+                <span className="flex items-center gap-2">
+                  {bulkNewsRunning
+                    ? <span className="inline-block w-2 h-2 rounded-full bg-brand-600 animate-pulse" />
+                    : '📅'}
+                  {bulkNewsRunning
+                    ? `Generating ${bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length + 1} of ${bulkNewsLog.length}…`
+                    : 'Bulk Month Generate'}
+                </span>
+                {!bulkNewsRunning && <span className="text-slate-400 text-xs">{bulkNewsOpen ? '▲' : '▼'}</span>}
+              </button>
+
+              {bulkNewsOpen && (
+                <div className="border-t border-slate-200 px-4 py-4">
+                  {/* Controls */}
+                  <div className={`transition-opacity duration-200 ${bulkNewsRunning ? 'opacity-40 pointer-events-none' : ''}`}>
+                    <p className="text-xs font-semibold text-slate-500 mb-2">Fetch top 10 RAF headlines for a month:</p>
+                    <div className="flex items-center gap-2 mb-4">
+                      <input
+                        type="month"
+                        value={bulkNewsMonth}
+                        max={new Date().toISOString().slice(0, 7)}
+                        onChange={e => { setBulkNewsMonth(e.target.value); setBulkNewsHeadlines([]); setBulkNewsSelected(new Set()); setBulkNewsLog([]) }}
+                        className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-brand-400"
+                      />
+                      <button
+                        onClick={fetchBulkNewsHeadlines}
+                        disabled={newsBusy}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {newsBusy ? '⏳ Fetching…' : '🔄 Fetch Top 10'}
+                      </button>
+                    </div>
+
+                    {bulkNewsHeadlines.length > 0 && (
+                      <>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-semibold text-slate-500">
+                            {bulkNewsSelected.size} of {bulkNewsHeadlines.length} selected
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setBulkNewsSelected(new Set(bulkNewsHeadlines.map((_, i) => i)))}
+                              className="text-[10px] text-brand-600 hover:underline"
+                            >All</button>
+                            <button
+                              onClick={() => setBulkNewsSelected(new Set())}
+                              className="text-[10px] text-slate-400 hover:underline"
+                            >None</button>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5 mb-4">
+                          {bulkNewsHeadlines.map((item, i) => {
+                            const isDup = isSimilarTitle(item.headline, existingTitles)
+                            const checked = bulkNewsSelected.has(i)
+                            return (
+                              <label
+                                key={i}
+                                className={`flex items-start gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all
+                                  ${isDup ? 'border-slate-200 bg-slate-50 opacity-60' : checked ? 'border-brand-300 bg-brand-50/40' : 'border-slate-200 bg-surface hover:border-slate-300'}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={e => {
+                                    setBulkNewsSelected(prev => {
+                                      const next = new Set(prev)
+                                      e.target.checked ? next.add(i) : next.delete(i)
+                                      return next
+                                    })
+                                  }}
+                                  className="mt-0.5 accent-brand-600 shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-xs font-semibold leading-snug ${isDup ? 'text-slate-400' : 'text-slate-800'}`}>
+                                    {item.headline}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    {item.eventDate && (
+                                      <span className="text-[10px] text-slate-400">{item.eventDate}</span>
+                                    )}
+                                    {isDup && (
+                                      <span className="text-[10px] text-amber-600 font-semibold">⚠️ Possible duplicate</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Action button */}
+                  {bulkNewsHeadlines.length > 0 && (
+                    <div className="flex items-center gap-3 mb-0">
+                      {!bulkNewsRunning ? (
+                        <button
+                          onClick={handleBulkNewsGenerate}
+                          disabled={bulkNewsSelected.size === 0}
+                          className="text-xs px-4 py-1.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-colors disabled:opacity-40"
+                        >
+                          Generate Selected ({bulkNewsSelected.size})
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => { bulkNewsCancelRef.current = true }}
+                          className="text-xs px-4 py-1.5 rounded-lg border border-red-300 text-red-600 font-semibold hover:bg-red-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Terminal log */}
+                  {bulkNewsLog.length > 0 && (
+                    <div className="mt-4">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-brand-600 rounded-full transition-all duration-500"
+                            style={{ width: bulkNewsLog.length > 0 ? `${(bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length / bulkNewsLog.length) * 100}%` : '0%' }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-slate-400 tabular-nums shrink-0">
+                          {bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length}/{bulkNewsLog.length}
+                        </span>
+                      </div>
+                      <div
+                        ref={bulkNewsLogRef}
+                        className="bg-slate-900 rounded-xl p-3 font-mono text-[11px] max-h-64 overflow-y-auto space-y-0.5 select-text"
+                      >
+                        {bulkNewsLog.map(entry => {
+                          const ts = entry.startedAt
+                            ? new Date(entry.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                            : '--:--:--'
+                          const dur = (entry.completedAt && entry.startedAt)
+                            ? `(${Math.round((entry.completedAt - entry.startedAt) / 1000)}s)`
+                            : ''
+                          const icon =
+                            entry.status === 'done'    ? '✓' :
+                            entry.status === 'error'   ? '✗' :
+                            entry.status === 'running' ? '⟳' : '○'
+                          const iconCls =
+                            entry.status === 'done'    ? 'text-emerald-400' :
+                            entry.status === 'error'   ? 'text-red-400' :
+                            entry.status === 'running' ? 'text-cyan-400 animate-pulse' :
+                            'text-slate-600'
+                          const titleCls =
+                            entry.status === 'running' ? 'text-slate-100' :
+                            entry.status === 'done'    ? 'text-slate-300' :
+                            entry.status === 'error'   ? 'text-slate-300' :
+                            'text-slate-600'
+                          return (
+                            <div key={entry.idx} className="leading-5">
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-slate-600 shrink-0">[{ts}]</span>
+                                <span className={`shrink-0 ${iconCls}`}>{icon}</span>
+                                <span className={`${titleCls} truncate`}>{entry.headline}</span>
+                                {dur && <span className="text-slate-600 shrink-0">{dur}</span>}
+                              </div>
+                              {entry.status === 'error' && entry.error && (
+                                <div className="text-red-400 italic pl-[7.5rem] leading-4 mt-0.5 whitespace-pre-wrap break-all">{entry.error}</div>
+                              )}
+                              {entry.warnings?.map((w, wi) => (
+                                <div key={wi} className="text-amber-400 pl-[7.5rem] leading-4 mt-0.5 whitespace-pre-wrap break-all">⚠ {w}</div>
+                              ))}
+                            </div>
+                          )
+                        })}
+                        {!bulkNewsRunning && bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length === bulkNewsLog.length && bulkNewsLog.length > 0 && (
+                          <div className="text-slate-500 mt-1 pt-1 border-t border-slate-700">
+                            — {bulkNewsLog.filter(e => e.status === 'done').length} succeeded · {bulkNewsLog.filter(e => e.status === 'error').length} failed
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -2781,6 +3103,7 @@ function GeneratingOverlay({ label = 'AI Generation Underway' }) {
 }
 
 function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapConsumed }) {
+  const { apiFetch } = useAuth()
   const [view,          setView]          = useState('list')
   // List state
   const [briefs,        setBriefs]        = useState([])
@@ -2849,7 +3172,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     setDupesLoading(true)
     setDupePanel(true)
     try {
-      const res  = await fetch(`${API}/api/admin/briefs/duplicates`, { credentials: 'include' })
+      const res  = await apiFetch(`${API}/api/admin/briefs/duplicates`, { credentials: 'include' })
       const data = await res.json()
       setDupeGroups(data.data?.duplicates ?? [])
     } catch {
@@ -2860,14 +3183,14 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   }
 
   const deleteOlderDupe = async (brief) => {
-    await fetch(`${API}/api/admin/briefs/${brief._id}`, {
+    await apiFetch(`${API}/api/admin/briefs/${brief._id}`, {
       method: 'DELETE', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason: 'Delete duplicate brief' }),
     })
     setToast('Duplicate deleted')
     loadList()
-    const res  = await fetch(`${API}/api/admin/briefs/duplicates`, { credentials: 'include' })
+    const res  = await apiFetch(`${API}/api/admin/briefs/duplicates`, { credentials: 'include' })
     const data = await res.json()
     setDupeGroups(data.data?.duplicates ?? [])
   }
@@ -2884,7 +3207,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
     try {
       const cats = [...bulkCats].join(',')
-      const res  = await fetch(`${API}/api/admin/briefs/stubs-for-bulk?categories=${encodeURIComponent(cats)}&countPerCategory=${bulkCount}`, { credentials: 'include' })
+      const res  = await apiFetch(`${API}/api/admin/briefs/stubs-for-bulk?categories=${encodeURIComponent(cats)}&countPerCategory=${bulkCount}`, { credentials: 'include' })
       const data = await res.json()
       const stubs = data.data?.stubs ?? []
       if (!stubs.length) { setToast('No stubs found for selected categories'); setBulkRunning(false); return }
@@ -2899,7 +3222,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         const startedAt = Date.now()
         setBulkLog(prev => prev.map(s => s._id === stub._id ? { ...s, status: 'running', startedAt } : s))
         try {
-          const r = await fetch(`${API}/api/admin/ai/bulk-generate-stub/${stub._id}`, { method: 'POST', credentials: 'include' })
+          const r = await apiFetch(`${API}/api/admin/ai/bulk-generate-stub/${stub._id}`, { method: 'POST', credentials: 'include' })
           const d = await r.json()
           if (d.status !== 'success') throw new Error(d.message ?? 'Generation failed')
           setBulkLog(prev => prev.map(s => s._id === stub._id ? { ...s, status: 'done', completedAt: Date.now(), warnings: d.warnings?.length ? d.warnings : null } : s))
@@ -2924,7 +3247,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       const params = new URLSearchParams({ page, limit: 20 })
       if (search)   params.set('search', search)
       if (category) params.set('category', category)
-      const res  = await fetch(`${API}/api/admin/briefs?${params}`, { credentials: 'include' })
+      const res  = await apiFetch(`${API}/api/admin/briefs?${params}`, { credentials: 'include' })
       const data = await res.json()
       if (data.status === 'success') {
         setBriefs(data.data.briefs)
@@ -2941,7 +3264,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
   // ── Open brief in editor ─────────────────────────────────────────────────
   const openBrief = async (b) => {
-    const res  = await fetch(`${API}/api/admin/briefs/${b._id}`, { credentials: 'include' })
+    const res  = await apiFetch(`${API}/api/admin/briefs/${b._id}`, { credentials: 'include' })
     const data = await res.json()
     if (data.status !== 'success') return
     const br = data.data.brief
@@ -3050,7 +3373,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
       // Save questions if present
       if (easyQuestions.length > 0 || mediumQuestions.length > 0) {
-        await fetch(`${API}/api/admin/briefs/${id}/questions`, {
+        await apiFetch(`${API}/api/admin/briefs/${id}/questions`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ easyQuestions, mediumQuestions }),
@@ -3060,7 +3383,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       // Add any selected pending images
       const selected = pendingImages.filter(img => img.selected)
       for (const img of selected) {
-        await fetch(`${API}/api/admin/briefs/${id}/media`, {
+        await apiFetch(`${API}/api/admin/briefs/${id}/media`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId, name: img.wikiPage || img.term }),
@@ -3068,7 +3391,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       }
 
       // Reload full brief
-      const reloadRes  = await fetch(`${API}/api/admin/briefs/${id}`, { credentials: 'include' })
+      const reloadRes  = await apiFetch(`${API}/api/admin/briefs/${id}`, { credentials: 'include' })
       const reloadData = await reloadRes.json()
       if (reloadData.status === 'success') {
         const br = reloadData.data.brief
@@ -3078,7 +3401,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
       // Mark lead complete if applicable
       if (pendingLead) {
-        await fetch(`${API}/api/admin/intel-leads/mark-complete`, {
+        await apiFetch(`${API}/api/admin/intel-leads/mark-complete`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title: pendingLead }),
@@ -3097,7 +3420,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
   // ── Delete brief ──────────────────────────────────────────────────────────
   const deleteBrief = async (reason) => {
-    const res  = await fetch(`${API}/api/admin/briefs/${briefId}`, {
+    const res  = await apiFetch(`${API}/api/admin/briefs/${briefId}`, {
       method: 'DELETE', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reason }),
@@ -3274,7 +3597,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     setGenerating('keywords')
     try {
       const description = draft.descriptionSections.join(' ')
-      const res  = await fetch(`${API}/api/admin/ai/generate-keywords`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-keywords`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description, existingKeywords: [], needed: keywordsPerBrief, title: draft.title, briefId: briefId || null }),
@@ -3292,7 +3615,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const generateQuestions = async () => {
     setGenerating('questions')
     try {
-      const res  = await fetch(`${API}/api/admin/ai/generate-quiz`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-quiz`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: draft.title, description: draft.descriptionSections.join('\n\n') }),
@@ -3314,7 +3637,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     setGenerating('keywords-single')
     try {
       const description = draft.descriptionSections.join(' ')
-      const res = await fetch(`${API}/api/admin/ai/generate-keywords`, {
+      const res = await apiFetch(`${API}/api/admin/ai/generate-keywords`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description, existingKeywords: draft.keywords.map(k => k.keyword), needed, title: draft.title, briefId: briefId || null }),
@@ -3335,7 +3658,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     if (missing <= 0) return
     setGenerating('questions-single')
     try {
-      const res = await fetch(`${API}/api/admin/ai/generate-quiz-missing`, {
+      const res = await apiFetch(`${API}/api/admin/ai/generate-quiz-missing`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3368,7 +3691,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const generateImages = async () => {
     setGenerating('images')
     try {
-      const res  = await fetch(`${API}/api/admin/ai/generate-image`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-image`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: draft.title, subtitle: draft.subtitle }),
@@ -3396,7 +3719,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     setRegeneratingAll(true)
     try {
       // Cascade: wipe all user stats / coins tied to this brief
-      const cascadeRes  = await fetch(`${API}/api/admin/briefs/${briefId}/confirm-regeneration`, {
+      const cascadeRes  = await apiFetch(`${API}/api/admin/briefs/${briefId}/confirm-regeneration`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
@@ -3405,7 +3728,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       if (cascadeData.status !== 'success') throw new Error(cascadeData.message ?? 'Cascade failed')
 
       // AI regeneration
-      const regenRes  = await fetch(`${API}/api/admin/ai/regenerate-brief/${briefId}`, {
+      const regenRes  = await apiFetch(`${API}/api/admin/ai/regenerate-brief/${briefId}`, {
         method: 'POST', credentials: 'include',
       })
       const regenData = await regenRes.json()
@@ -3428,7 +3751,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     if (!briefId) return
     setGenerating('description')
     try {
-      const res  = await fetch(`${API}/api/admin/ai/regenerate-description/${briefId}`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/regenerate-description/${briefId}`, {
         method: 'POST', credentials: 'include',
       })
       const data = await res.json()
@@ -3447,14 +3770,14 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     if (!briefId) return
     const selected = pendingImages.filter(img => img.selected)
     for (const img of selected) {
-      await fetch(`${API}/api/admin/briefs/${briefId}/media`, {
+      await apiFetch(`${API}/api/admin/briefs/${briefId}/media`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId, name: img.wikiPage || img.term }),
       })
     }
     // Reload media
-    const res  = await fetch(`${API}/api/admin/briefs/${briefId}`, { credentials: 'include' })
+    const res  = await apiFetch(`${API}/api/admin/briefs/${briefId}`, { credentials: 'include' })
     const data = await res.json()
     if (data.status === 'success') setMedia(data.data.brief.media ?? [])
     setPendingImages([])
@@ -3463,7 +3786,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
   // ── Remove media item ─────────────────────────────────────────────────────
   const removeMedia = async (mediaId) => {
-    await fetch(`${API}/api/admin/briefs/${briefId}/media/${mediaId}`, {
+    await apiFetch(`${API}/api/admin/briefs/${briefId}/media/${mediaId}`, {
       method: 'DELETE', credentials: 'include',
     })
     setMedia(p => p.filter(m => String(m._id) !== String(mediaId)))
@@ -3471,13 +3794,15 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
   // ── Status badge helper ───────────────────────────────────────────────────
   function BriefStatusPills({ brief }) {
-    const hasKeywords = (brief.keywords?.length ?? 0) >= keywordsPerBrief
-    const hasEasy     = (brief.quizQuestionsEasy?.length ?? 0) >= 7
-    const hasMedium   = (brief.quizQuestionsMedium?.length ?? 0) >= 7
-    const hasQuiz     = hasEasy && hasMedium
-    const hasMedia    = (brief.media ?? []).some(m => m.cloudinaryPublicId)
+    const hasKeywords    = (brief.keywords?.length ?? 0) >= keywordsPerBrief
+    const hasEasy        = (brief.quizQuestionsEasy?.length ?? 0) >= 7
+    const hasMedium      = (brief.quizQuestionsMedium?.length ?? 0) >= 7
+    const hasQuiz        = hasEasy && hasMedium
+    const hasMedia       = (brief.media ?? []).some(m => m.cloudinaryPublicId)
+    const hasDescription = (brief.descriptionSections ?? []).filter(s => s?.trim()).length >= 4
     return (
       <span className="flex gap-1 items-center">
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasDescription ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>D</span>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasKeywords ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>K</span>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasQuiz ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>Q</span>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasMedia ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>M</span>
@@ -4172,6 +4497,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         </button>
         {openSections.images && (
           <div className="px-5 py-4">
+            {draft.category === 'Ranks' ? (
+              <p className="text-sm text-slate-400 italic">Rank briefs use the auto-generated SVG insignia — no images needed.</p>
+            ) : (<>
             {/* Existing media */}
             {media.length > 0 && (
               <div className="grid grid-cols-2 gap-3 mb-4">
@@ -4239,6 +4567,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 )}
               </div>
             )}
+            </>)}
           </div>
         )}
       </div>
@@ -4664,6 +4993,7 @@ function getMnemonicRequiredFields(category, statKey) {
 }
 
 function GenerateAllMnemonicsButton({ draft, setDraft, API }) {
+  const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState(null)
 
@@ -4671,7 +5001,7 @@ function GenerateAllMnemonicsButton({ draft, setDraft, API }) {
     setBusy(true)
     setErr(null)
     try {
-      const res  = await fetch(`${API}/api/admin/ai/generate-mnemonic`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-mnemonic`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: draft.title, category: draft.category, gameData: draft.gameData ?? {} }),
@@ -4713,6 +5043,7 @@ function GenerateAllMnemonicsButton({ draft, setDraft, API }) {
 
 // ── MnemonicField — paired mnemonic textarea + generate button ────────────
 function MnemonicField({ mnemonicKey, draft, setDraft, API }) {
+  const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState(null)
 
@@ -4720,7 +5051,7 @@ function MnemonicField({ mnemonicKey, draft, setDraft, API }) {
     setBusy(true)
     setErr(null)
     try {
-      const res  = await fetch(`${API}/api/admin/ai/generate-mnemonic`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-mnemonic`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: draft.title, category: draft.category, gameData: draft.gameData ?? {}, statKey: mnemonicKey }),
@@ -4785,6 +5116,7 @@ function GameDataField({ label, field, draft, setDraft, nullable = false }) {
 }
 
 function GenerateStatsButton({ draft, setDraft, API }) {
+  const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState(null)
 
@@ -4792,7 +5124,7 @@ function GenerateStatsButton({ draft, setDraft, API }) {
     setBusy(true)
     setErr(null)
     try {
-      const res  = await fetch(`${API}/api/admin/ai/generate-battle-order-data`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-battle-order-data`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4829,6 +5161,7 @@ function GenerateStatsButton({ draft, setDraft, API }) {
 }
 
 function AircraftDataSection({ draft, setDraft, briefId, API }) {
+  const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState(null)
 
@@ -4836,7 +5169,7 @@ function AircraftDataSection({ draft, setDraft, briefId, API }) {
     setBusy(true)
     setErr(null)
     try {
-      const res  = await fetch(`${API}/api/admin/ai/generate-battle-order-data`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-battle-order-data`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4885,6 +5218,7 @@ function AircraftDataSection({ draft, setDraft, briefId, API }) {
 }
 
 function TrainingDataSection({ draft, setDraft, briefId, API }) {
+  const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState(null)
 
@@ -4892,7 +5226,7 @@ function TrainingDataSection({ draft, setDraft, briefId, API }) {
     setBusy(true)
     setErr(null)
     try {
-      const res  = await fetch(`${API}/api/admin/ai/generate-battle-order-data`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-battle-order-data`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4939,6 +5273,7 @@ function TrainingDataSection({ draft, setDraft, briefId, API }) {
 }
 
 function RankDataField({ draft, setDraft, briefId, API }) {
+  const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState(null)
 
@@ -4947,7 +5282,7 @@ function RankDataField({ draft, setDraft, briefId, API }) {
     setBusy(true)
     setErr(null)
     try {
-      const res  = await fetch(`${API}/api/admin/ai/generate-rank-data/${briefId}`, {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-rank-data/${briefId}`, {
         method: 'POST', credentials: 'include',
       })
       const data = await res.json()
@@ -4963,8 +5298,17 @@ function RankDataField({ draft, setDraft, briefId, API }) {
     }
   }
 
+  const rankNumber = draft.gameData?.rankHierarchyOrder != null
+    ? 20 - draft.gameData.rankHierarchyOrder
+    : null
+
   return (
     <div>
+      {rankNumber != null && rankNumber >= 1 && rankNumber <= 19 && (
+        <div className="flex justify-center py-4 bg-slate-900 rounded-xl mb-3">
+          <RankBadge rankNumber={rankNumber} size={80} color="#5baaff" />
+        </div>
+      )}
       <label className="block text-xs font-semibold text-slate-500 mb-1">Seniority Order (1 = most senior)</label>
       <div className="flex gap-2">
         <input
@@ -5307,13 +5651,191 @@ function EmailLogsTab({ API }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const INTEL_SUBTABS = [
-  { id: 'reports',    label: 'Reports'      },
-  { id: 'action-log', label: 'Action Logs'  },
-  { id: 'email-log',  label: 'Email Logs'   },
+  { id: 'reports',     label: 'Reports'      },
+  { id: 'action-log',  label: 'Action Logs'  },
+  { id: 'email-log',   label: 'Email Logs'   },
+  { id: 'system-logs', label: 'System Logs'  },
 ]
 
-function IntelTab({ API, unsolvedCount }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM LOGS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SystemLogsTab({ API, onResolved }) {
+  const [logs,       setLogs]       = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [page,       setPage]       = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total,      setTotal]      = useState(0)
+  const [showAll,    setShowAll]    = useState(false)
+  const [resolving,  setResolving]  = useState(null)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    const params = new URLSearchParams({ page, limit: 20 })
+    if (!showAll) params.set('resolved', 'false')
+    fetch(`${API}/api/admin/system-logs?${params}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        setLogs(d.data?.logs ?? [])
+        setTotal(d.data?.total ?? 0)
+        setTotalPages(d.data?.totalPages ?? 1)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [API, page, showAll])
+
+  useEffect(() => { load() }, [load])
+
+  const resolve = async (id) => {
+    setResolving(id)
+    try {
+      await fetch(`${API}/api/admin/system-logs/${id}/resolve`, { method: 'PATCH', credentials: 'include' })
+      load()
+      onResolved?.()
+    } catch (_) {}
+    setResolving(null)
+  }
+
+  const TYPE_LABELS = {
+    priority_ranking_failure:  { label: 'Priority Ranking Failed',  color: 'bg-red-900/40 text-red-300'    },
+    brief_generation_failure:  { label: 'Generation Failed',        color: 'bg-orange-900/40 text-orange-300' },
+    image_fetch_failure:       { label: 'Image Fetch Failed',       color: 'bg-amber-900/40 text-amber-300' },
+    bulk_generation_warnings:  { label: 'Generation Warnings',      color: 'bg-yellow-900/40 text-yellow-300' },
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 gap-3">
+        <h2 className="text-base font-bold text-slate-900">System Logs</h2>
+        <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showAll}
+            onChange={e => { setShowAll(e.target.checked); setPage(1) }}
+            className="rounded"
+          />
+          Show resolved
+        </label>
+      </div>
+
+      <div className="bg-surface rounded-2xl border border-slate-700 overflow-hidden mb-4">
+        {loading && <p className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading…</p>}
+        {!loading && logs.length === 0 && (
+          <p className="py-8 text-center text-slate-400 text-sm">
+            {showAll ? 'No system logs' : 'No unresolved system logs'}
+          </p>
+        )}
+        {!loading && logs.map((log, i) => {
+          const typeInfo = TYPE_LABELS[log.type] ?? { label: log.type, color: 'bg-slate-700 text-slate-300' }
+          return (
+            <div key={log._id} className={`px-4 py-3 ${i !== 0 ? 'border-t border-slate-700/50' : ''}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                    <LabelBadge label={typeInfo.label} color={typeInfo.color} uppercase />
+                    <LabelBadge label={log.category} color="bg-slate-700 text-slate-300" />
+                    {log.resolved && <LabelBadge label="Resolved" color="bg-green-900/40 text-green-300" />}
+                  </div>
+
+                  {/* Brief context */}
+                  {log.briefTitle && (
+                    <p className="text-xs text-slate-300 mb-1">
+                      Brief: <span className="font-semibold">{log.briefTitle}</span>
+                      {log.briefCategory && <span className="text-slate-500"> [{log.briefCategory}]</span>}
+                    </p>
+                  )}
+
+                  {/* priority_ranking_failure */}
+                  {log.sourceBriefTitle && (
+                    <p className="text-xs text-slate-400 mb-1">
+                      Source brief: <span className="font-semibold">{log.sourceBriefTitle}</span>
+                    </p>
+                  )}
+                  {log.newStubs?.length > 0 && (
+                    <p className="text-xs text-slate-400 mb-1">
+                      New stubs: {log.newStubs.map(s => `"${s.title}"`).join(', ')}
+                    </p>
+                  )}
+                  {log.attempts > 0 && log.type === 'priority_ranking_failure' && (
+                    <p className="text-[10px] text-slate-500 mb-1">{log.attempts} attempt(s) made</p>
+                  )}
+
+                  {/* brief_generation_failure */}
+                  {log.stage && (
+                    <p className="text-xs text-slate-400 mb-1">
+                      Stage: <span className="font-semibold">{log.stage.replace(/_/g, ' ')}</span>
+                    </p>
+                  )}
+
+                  {/* image_fetch_failure */}
+                  {log.searchTerms?.length > 0 && (
+                    <p className="text-xs text-slate-400 mb-1">
+                      Search terms tried: {log.searchTerms.map(t => `"${t}"`).join(', ')}
+                    </p>
+                  )}
+
+                  {/* bulk_generation_warnings */}
+                  {log.warnings?.length > 0 && (
+                    <ul className="mt-1 space-y-0.5">
+                      {log.warnings.map((w, wi) => (
+                        <li key={wi} className="text-[10px] text-yellow-400 font-mono break-words">• {w}</li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {/* common error detail */}
+                  {log.failureReason && log.type !== 'bulk_generation_warnings' && (
+                    <p className="text-[10px] text-red-400 font-mono mt-1 break-words">{log.failureReason}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                  <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                    {new Date(log.time).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  {!log.resolved && (
+                    <button
+                      onClick={() => resolve(log._id)}
+                      disabled={resolving === log._id}
+                      className="text-[10px] px-2 py-1 rounded-lg border border-slate-600 text-slate-300 font-semibold hover:bg-surface-raised transition-colors disabled:opacity-40"
+                    >
+                      {resolving === log._id ? '…' : 'Resolve'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs text-slate-400">Page {page} of {totalPages} ({total} total)</span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function IntelTab({ API, unsolvedCount, unresolvedSystemLogs }) {
   const [sub, setSub] = useState('reports')
+  const { refresh } = useUnsolvedReports()
   return (
     <div>
       <div className="flex gap-1 bg-surface-raised rounded-xl p-1 mb-5">
@@ -5328,15 +5850,15 @@ function IntelTab({ API, unsolvedCount }) {
               }`}
           >
             {s.label}
-            {s.id === 'reports' && unsolvedCount > 0 && (
-              <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            )}
+            {s.id === 'reports'     && unsolvedCount        > 0 && <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+            {s.id === 'system-logs' && unresolvedSystemLogs > 0 && <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
           </button>
         ))}
       </div>
-      {sub === 'reports'    && <ProblemsTab  API={API} />}
-      {sub === 'action-log' && <LogsTab      API={API} />}
-      {sub === 'email-log'  && <EmailLogsTab API={API} />}
+      {sub === 'reports'     && <ProblemsTab    API={API} />}
+      {sub === 'action-log'  && <LogsTab        API={API} />}
+      {sub === 'email-log'   && <EmailLogsTab   API={API} />}
+      {sub === 'system-logs' && <SystemLogsTab  API={API} onResolved={refresh} />}
     </div>
   )
 }
@@ -5355,8 +5877,8 @@ const TABS = [
 ]
 
 export default function Admin() {
-  const { user, setUser, loading, API } = useAuth()
-  const { unsolvedCount, refresh: refreshUnsolvedCount } = useUnsolvedReports()
+  const { user, setUser, loading, API, apiFetch } = useAuth()
+  const { unsolvedCount, unresolvedSystemLogs, refresh: refreshUnsolvedCount } = useUnsolvedReports()
   const navigate = useNavigate()
   const location = useLocation()
   const [tab, setTab] = useState(() => location.state?.openLeads ? 'briefs' : 'stats')
@@ -5398,7 +5920,7 @@ export default function Admin() {
             >
               <span>{t.icon}</span>
               <span>{t.label}</span>
-              {t.id === 'intel' && unsolvedCount > 0 && (
+              {t.id === 'intel' && (unsolvedCount > 0 || unresolvedSystemLogs > 0) && (
                 <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
               )}
             </button>
@@ -5419,7 +5941,7 @@ export default function Admin() {
             {tab === 'users'    && <UsersTab    API={API} />}
             {tab === 'content'  && <ContentTab  API={API} />}
             {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false) }} />}
-            {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} />}
+            {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} />}
           </motion.div>
         </AnimatePresence>
 

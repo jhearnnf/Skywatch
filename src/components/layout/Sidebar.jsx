@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 import { MOCK_LEVELS } from '../../data/mockData'
+import RankBadge from '../RankBadge'
 
 function getLevelInfo(coins) {
   const levels = MOCK_LEVELS
@@ -101,8 +102,11 @@ export default function Sidebar() {
       {user && levelInfo && (
         <div className="border-t border-slate-200 p-4">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-full bg-brand-200 border-2 border-brand-300 flex items-center justify-center text-sm font-bold text-brand-600">
-              {(user.displayName || user.email || 'U')[0].toUpperCase()}
+            <div className="w-8 h-8 rounded-full bg-brand-200 border-2 border-brand-300 flex items-center justify-center shrink-0">
+              {(user.rank?.rankNumber ?? 1) > 1
+                ? <RankBadge rankNumber={user.rank.rankNumber} size={18} />
+                : <span className="text-xs font-bold text-brand-600">{user.rank?.rankAbbreviation ?? 'AC'}</span>
+              }
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-800 truncate">
