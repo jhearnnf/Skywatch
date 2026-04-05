@@ -337,6 +337,7 @@ router.patch('/settings', requireReason, async (req, res) => {
 
     const updatedKeys = Object.keys(updates);
     const actionType = (() => {
+      if (updatedKeys.includes('betaTesterAutoGold')) return 'change_beta_settings';
       if (updatedKeys.some(k => k.startsWith('volume') || k.startsWith('soundEnabled'))) return 'change_sound_settings';
       if (updatedKeys.some(k => k.startsWith('ammo') || k.startsWith('aircoins') || k === 'trialDurationDays')) return 'change_economy_settings';
       if (updatedKeys.some(k => k.startsWith('passThreshold') || k.endsWith('AnswerCount') || k.startsWith('easyAnswer') || k.startsWith('mediumAnswer'))) return 'change_quiz_settings';

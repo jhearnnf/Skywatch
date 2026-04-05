@@ -119,6 +119,7 @@ const appSettingsSchema = new mongoose.Schema({
   // Feature flags
   useLiveLeaderboard:   { type: Boolean, default: false },
   disableLoadingBar:    { type: Boolean, default: false },
+  betaTesterAutoGold:   { type: Boolean, default: false },
 
   // Pathway unlock requirements — each entry gates a category behind level + rank.
   // levelRequired: Agent Level (1–10). rankRequired: RAF Rank number (1–19).

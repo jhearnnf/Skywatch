@@ -1306,12 +1306,18 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'betaTesterAutoGold'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
           checked={draft.useLiveLeaderboard ?? false}
           onChange={v => set('useLiveLeaderboard', v)}
+        />
+        <Toggle
+          label="Beta Tester Auto-Gold"
+          hint="When on, every newly registered account is automatically granted gold subscription"
+          checked={draft.betaTesterAutoGold ?? false}
+          onChange={v => set('betaTesterAutoGold', v)}
         />
       </Section>
 

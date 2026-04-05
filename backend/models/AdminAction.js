@@ -19,6 +19,7 @@ const ACTION_TYPES = [
   'award_test_coins',
   'change_subscription',
   'reset_leads',
+  'change_beta_settings',
 ];
 
 const adminActionSchema = new mongoose.Schema({

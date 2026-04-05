@@ -64,6 +64,11 @@ router.post('/register', async (req, res) => {
       // Instant registration — no verification step
       const acRankId = await getAcRankId();
       const user = await User.create({ email: email.toLowerCase(), password, rank: acRankId });
+      if (settings.betaTesterAutoGold) {
+        user.subscriptionTier = 'gold';
+        user.subscriptionStartDate = new Date();
+        await user.save();
+      }
       sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
       const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
       return sendToken(user, 201, res, { isNew: true, loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
@@ -97,8 +102,14 @@ router.post('/verify-email', async (req, res) => {
     if (new Date() > pending.expiresAt)   return res.status(400).json({ message: 'Code has expired. Please register again.' });
     if (pending.code !== String(code).trim()) return res.status(400).json({ message: 'Incorrect code. Please try again.' });
 
+    const settings = await AppSettings.getSettings();
     const acRankId = await getAcRankId();
     const user = await User.create({ email: pending.email, password: pending.password, rank: acRankId });
+    if (settings.betaTesterAutoGold) {
+      user.subscriptionTier = 'gold';
+      user.subscriptionStartDate = new Date();
+      await user.save();
+    }
     await PendingRegistration.deleteOne({ email: pending.email });
 
     sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
@@ -271,10 +282,16 @@ router.post('/google', async (req, res) => {
     // Find by googleId first, then fall back to email (links existing account)
     let user = await User.findOne({ $or: [{ googleId }, { email }] });
 
+    const settings = await AppSettings.getSettings();
     let isNew = false;
     if (!user) {
       const acRankId = await getAcRankId();
       user = await User.create({ email, googleId, rank: acRankId });
+      if (settings.betaTesterAutoGold) {
+        user.subscriptionTier = 'gold';
+        user.subscriptionStartDate = new Date();
+        await user.save();
+      }
       sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
       isNew = true;
     } else {
