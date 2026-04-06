@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
-import { invalidateSoundSettings } from '../utils/sound'
+import { invalidateSoundSettings, previewTypingSound } from '../utils/sound'
 import RankBadge from '../components/RankBadge'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 
@@ -343,6 +343,12 @@ const SOUND_GROUPS = [
       { key: 'volumeWhereAircraftLose',            enabledKey: 'soundEnabledWhereAircraftLose',            label: 'Mission Failed',   sound: 'where_aircraft_lose'             },
     ],
   },
+  {
+    title: 'Aptitude Sync / Terminal',
+    sounds: [
+      { key: 'volumeTypingSound', enabledKey: 'soundEnabledTypingSound', label: 'Typing Sound', sound: '__typing__' },
+    ],
+  },
 ]
 
 const ALL_SOUND_KEYS = SOUND_GROUPS.flatMap(g => g.sounds.flatMap(s => [s.key, s.enabledKey]))
@@ -387,6 +393,10 @@ const OUT_OF_AMMO_VARIANTS = ['out_of_ammo_1', 'out_of_ammo_2', 'out_of_ammo_3']
 function SoundRowV2({ label, sound, value, onChange, enabled, onToggle }) {
   const preview = () => {
     invalidateSoundSettings()
+    if (sound === '__typing__') {
+      previewTypingSound(value ?? 30)
+      return
+    }
     try {
       const file = sound === 'out_of_ammo'
         ? OUT_OF_AMMO_VARIANTS[Math.floor(Math.random() * OUT_OF_AMMO_VARIANTS.length)]

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
+import { playTypingSound } from '../utils/sound'
 
 // ── CRT colour palette — electric blue to match site theme ───────────────────
 const G_BRIGHT  = '#5baaff'   // brand-600 electric blue
@@ -81,6 +82,93 @@ const SKYWATCH_ASCII_LOGO = [
   '                                                ####                                                ',
   '                                                ####                                                ',
 ].join('\n')
+
+// ── CRT loading overlay — shown inside the terminal window during apiFetch ───
+const MATRIX_CHARS = '01アイウエオカキクケコサシスセソタチツテトナニヌネノ!@#$%^&*<>[]{}|\\/'
+const NUM_COLS = 18
+
+function CrtLoadingOverlay() {
+  const [cols, setCols] = useState(() =>
+    Array.from({ length: NUM_COLS }, (_, i) => ({
+      id:    i,
+      chars: Array.from({ length: 12 }, () => MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)]),
+      delay: (i * 0.19) % 2.1,
+      dur:   1.6 + (i * 0.13) % 1.2,
+      x:     (i / NUM_COLS) * 100,
+    }))
+  )
+  const [tick, setTick] = useState(0)
+
+  // Randomly mutate a few chars each frame to give the rain a live feel
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 120)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    setCols(prev => prev.map(col => ({
+      ...col,
+      chars: col.chars.map(ch =>
+        Math.random() < 0.15
+          ? MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)]
+          : ch
+      ),
+    })))
+  }, [tick])
+
+  const STATUS_LINES = ['SYNCING CHANNEL', 'ESTABLISHING LINK', 'AWAITING SIGNAL']
+  const statusIdx = Math.floor(tick / 6) % STATUS_LINES.length
+
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-[60] rounded-lg overflow-hidden flex flex-col items-center justify-center"
+      style={{ background: 'rgba(3,13,24,0.88)', backdropFilter: 'blur(2px)' }}
+    >
+      {/* Matrix rain columns */}
+      {cols.map(col => (
+        <div
+          key={col.id}
+          className="absolute top-0 flex flex-col items-center font-mono text-xs select-none"
+          style={{
+            left:      `${col.x}%`,
+            width:     `${100 / NUM_COLS}%`,
+            animation: `apt-matrix-col ${col.dur}s linear ${col.delay}s infinite`,
+            color:     G_DIM,
+            lineHeight: 1.45,
+            textShadow: `0 0 6px ${G_DIM}`,
+          }}
+        >
+          {col.chars.map((ch, i) => (
+            <span
+              key={i}
+              style={{
+                color:      i === col.chars.length - 1 ? G_BRIGHT : i > col.chars.length - 4 ? G_MID : G_DIM,
+                textShadow: i === col.chars.length - 1 ? `0 0 10px ${G_BRIGHT}` : undefined,
+                opacity:    1 - i * 0.06,
+              }}
+            >
+              {ch}
+            </span>
+          ))}
+        </div>
+      ))}
+
+      {/* Status label */}
+      <div
+        className="relative z-10 flex flex-col items-center gap-2 px-6 py-4 rounded"
+        style={{ background: 'rgba(3,13,24,0.75)', border: `1px solid ${G_DIM}` }}
+      >
+        <span
+          className="font-mono text-xs tracking-[0.3em] uppercase"
+          style={{ color: G_BRIGHT, textShadow: `0 0 12px ${G_BRIGHT}` }}
+        >
+          {STATUS_LINES[statusIdx]}
+          <span className="apt-loader-cursor">_</span>
+        </span>
+      </div>
+    </div>
+  )
+}
 
 // ── Responsive ASCII logo panel — with CRT glitch effects ────────────────────
 const GLITCH_CHARS = '!@/\\|<>[]{}01234*%$+-~^?#='
@@ -349,6 +437,7 @@ function useTypewriter(queue, onDone) {
     const delay = line.type === 'logo' || line.type === 'divider' ? 4 : 18
     const t = setTimeout(() => {
       setPartial(line.text.slice(0, charIndex + 1))
+      if (line.type !== 'logo' && line.type !== 'divider') playTypingSound()
       setCharIndex(i => i + 1)
     }, delay)
     return () => clearTimeout(t)
@@ -382,7 +471,7 @@ export default function AptitudeSync() {
   const { briefId }  = useParams()
   const navigate     = useNavigate()
   const location     = useLocation()
-  const { user, API, apiFetch, awardAircoins } = useAuth()
+  const { user, API, apiFetch, awardAircoins, isLoading } = useAuth()
   const { settings } = useAppSettings()
 
   // Brief title / category — may be passed via navigation state or fetched
@@ -620,7 +709,12 @@ export default function AptitudeSync() {
       }
 
       setOutputLines(prev => [...prev, ...aiLines])
-      setHistory([...newHistory, { role: 'assistant', content: response ?? '' }])
+      // Include the follow-up question in history so the AI knows what it just asked
+      // when evaluating the next round (important for the "I don't know" rule)
+      const assistantHistoryContent = followUp
+        ? `${response ?? ''}\n\nDebriefer follow-up question: ${followUp}`
+        : (response ?? '')
+      setHistory([...newHistory, { role: 'assistant', content: assistantHistoryContent }])
 
       if (done) {
         setPhase('complete')
@@ -749,6 +843,17 @@ export default function AptitudeSync() {
         .apt-objective-pulse {
           animation: apt-objective-pulse 1.6s ease-in-out infinite;
         }
+        @keyframes apt-matrix-col {
+          0%   { transform: translateY(-100%); opacity: 0; }
+          8%   { opacity: 1; }
+          92%  { opacity: 0.6; }
+          100% { transform: translateY(100%); opacity: 0; }
+        }
+        @keyframes apt-loader-blink {
+          0%,100% { opacity: 1; }
+          50%      { opacity: 0; }
+        }
+        .apt-loader-cursor { animation: apt-loader-blink 0.9s step-end infinite; }
       `}</style>
 
       {/* Page wrapper — flex column that fills exactly the available viewport height.
@@ -802,6 +907,9 @@ export default function AptitudeSync() {
             background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.5) 100%)',
           }}
         />
+
+        {/* CRT loading overlay — shown only when apiFetch is in-flight on this page */}
+        {isLoading && <CrtLoadingOverlay />}
 
         {/* ASCII logo watermark — behind CRT overlays and terminal text */}
         <div

@@ -106,6 +106,10 @@ const appSettingsSchema = new mongoose.Schema({
   soundEnabledFlashcardIncorrect: { type: Boolean, default: true },
   soundEnabledFlashcardCollect:   { type: Boolean, default: true },
 
+  // Typing / terminal sounds (Aptitude Sync card + terminal)
+  volumeTypingSound:       { type: Number, default: 30, min: 0, max: 100 },
+  soundEnabledTypingSound: { type: Boolean, default: true },
+
   // AI content generation
   aiKeywordsPerBrief: { type: Number, default: 20, min: 1 },
 

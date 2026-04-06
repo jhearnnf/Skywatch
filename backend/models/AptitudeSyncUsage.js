@@ -8,8 +8,8 @@ const aptitudeSyncUsageSchema = new mongoose.Schema({
   briefId: { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', required: true },
   date:    { type: String, required: true }, // 'YYYY-MM-DD' UTC
   // Populated on session completion (final round response)
-  finalResponse: { type: String, default: null }, // full AI evaluation text from final round
   finalSummary:  { type: String, default: null }, // 2–3 sentence closing debrief
+  knowledgeGaps: { type: String, default: null }, // missed/incorrect facts with correct answers
   aircoinsEarned: { type: Number, default: null }, // total awarded at end of session
   completedAt:   { type: Date,   default: null },
 }, { timestamps: false });

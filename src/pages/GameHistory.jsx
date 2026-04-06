@@ -328,7 +328,7 @@ function FlashcardDrillDown({ sessionId, API }) {
 // ── APTITUDE_SYNC debrief row ─────────────────────────────────────────────────
 function AptitudeSyncRow({ session, index }) {
   const [expanded, setExpanded] = useState(false)
-  const hasDrillDown = !!(session.finalSummary || session.finalResponse)
+  const hasDrillDown = !!(session.finalSummary || session.knowledgeGaps)
 
   return (
     <motion.div
@@ -381,10 +381,14 @@ function AptitudeSyncRow({ session, index }) {
                   <p className="text-xs text-slate-700 leading-relaxed">{session.finalSummary}</p>
                 </div>
               )}
-              {session.finalResponse && (
+              {session.knowledgeGaps && (
                 <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Full AI Evaluation</p>
-                  <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{session.finalResponse}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Knowledge Gaps — Correct Answers</p>
+                  {session.knowledgeGaps === 'No significant gaps.' ? (
+                    <p className="text-xs text-emerald-600 font-semibold">No significant gaps — outstanding recall.</p>
+                  ) : (
+                    <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{session.knowledgeGaps}</p>
+                  )}
                 </div>
               )}
             </div>

@@ -6,6 +6,7 @@ import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
 import { pathwayTierRequired, getAccessibleCategories } from '../utils/subscription'
+import { playTypingSound } from '../utils/sound'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -101,6 +102,7 @@ function SyncHoverCard() {
       if (cancelled) return
       if (i < CARD_LINE1.length) {
         setLine1(CARD_LINE1.slice(0, i + 1))
+        playTypingSound()
         i++
         setTimeout(typeL1, 12)
       } else {
@@ -110,6 +112,7 @@ function SyncHoverCard() {
             if (cancelled) return
             if (j < CARD_LINE2.length) {
               setLine2(CARD_LINE2.slice(0, j + 1))
+              playTypingSound()
               j++
               setTimeout(typeL2, 16)
             }
@@ -923,8 +926,7 @@ export default function LearnPriority() {
       }
     })
     .sort((a, b) =>
-      (a.levelRequired - b.levelRequired) ||
-      (a.rankRequired  - b.rankRequired)  ||
+      ((10 * a.rankRequired + a.levelRequired) - (10 * b.rankRequired + b.levelRequired)) ||
       ((TIER_ORDER[a.tierRequired] ?? 0) - (TIER_ORDER[b.tierRequired] ?? 0))
     )
 
@@ -1044,9 +1046,11 @@ export default function LearnPriority() {
 
   // ── Lock reason string ──────────────────────────────────────────────────────
   function getLockReason(unlock) {
+    if (userRankNumber < (unlock.rankRequired ?? 1)) {
+      return `Unlocks at ${getRankName(unlock.rankRequired)}`
+    }
     const reasons = []
-    if (userLevel      < (unlock.levelRequired ?? 1)) reasons.push(`Reach Agent Level ${unlock.levelRequired}`)
-    if (userRankNumber < (unlock.rankRequired  ?? 1)) reasons.push(`Achieve ${getRankName(unlock.rankRequired)}`)
+    if (userLevel < (unlock.levelRequired ?? 1)) reasons.push(`Reach Agent Level ${unlock.levelRequired}`)
     if (tierRank(userTier) < tierRank(unlock.tierRequired ?? 'free')) {
       const t = unlock.tierRequired
       reasons.push(`${t.charAt(0).toUpperCase() + t.slice(1)} subscription required`)

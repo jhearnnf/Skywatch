@@ -1,5 +1,48 @@
 const API = import.meta.env.VITE_API_URL || ''
 
+// ── Typing / terminal sound (Web Audio API — no file, synthesised) ────────────
+let typingAudioCtx = null
+
+function getTypingAudioCtx() {
+  if (!typingAudioCtx || typingAudioCtx.state === 'closed') {
+    typingAudioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  }
+  if (typingAudioCtx.state === 'suspended') typingAudioCtx.resume().catch(() => {})
+  return typingAudioCtx
+}
+
+function _playTypingOscillator(vol) {
+  if (vol <= 0) return
+  try {
+    const ctx  = getTypingAudioCtx()
+    const now  = ctx.currentTime
+    const freq = 300 + Math.random() * 500   // 300–800 Hz — random pitch per key
+    const osc  = ctx.createOscillator()
+    osc.type = 'square'
+    osc.frequency.setValueAtTime(freq, now)
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(vol * 0.3, now)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(now)
+    osc.stop(now + 0.04)
+  } catch {}
+}
+
+// Called per typed character — reads from cache synchronously (zero latency)
+export function playTypingSound() {
+  const s = cache || {}
+  if (s.soundEnabledTypingSound === false) return
+  const vol = masterVol((s.volumeTypingSound ?? 30) / 100)
+  _playTypingOscillator(vol)
+}
+
+// For admin preview — bypasses cache, uses raw slider value directly
+export function previewTypingSound(sliderValue) {
+  _playTypingOscillator(Math.min(1, (sliderValue ?? 30) / 100))
+}
+
 const OUT_OF_AMMO_VARIANTS = ['out_of_ammo_1.mp3', 'out_of_ammo_2.mp3', 'out_of_ammo_3.mp3']
 
 // Module-level settings cache
@@ -40,6 +83,7 @@ function fetchSettings() {
         volumeFlashcardCorrect: 100,   soundEnabledFlashcardCorrect: true,
         volumeFlashcardIncorrect: 100, soundEnabledFlashcardIncorrect: true,
         volumeFlashcardCollect: 100,   soundEnabledFlashcardCollect: true,
+        volumeTypingSound: 30,         soundEnabledTypingSound: true,
         freeCategories: ['News'], silverCategories: [],
       }
     })

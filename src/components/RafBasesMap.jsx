@@ -19,7 +19,7 @@ function FlyToHighlighted({ highlightedBaseNames, centreOn }) {
     )
     if (targets.length === 0) return
     if (targets.length === 1) {
-      map.flyTo([targets[0].lat, targets[0].lng], 9, { duration: 0.8 })
+      map.flyTo([targets[0].lat, targets[0].lng], 6, { duration: 0.8 })
     } else {
       map.flyToBounds(targets.map(b => [b.lat, b.lng]), { padding: [50, 50], duration: 0.8 })
     }
@@ -51,6 +51,8 @@ function ViewMap({ highlightedBaseNames, height, centreOn }) {
         style={{ height: '100%', width: '100%' }}
         zoomControl={true}
         attributionControl={false}
+        dragging={false}
+        scrollWheelZoom={false}
       >
         <FlyToHighlighted highlightedBaseNames={highlightedBaseNames} centreOn={centreOn} />
         <FlyToCentre centreOn={centreOn} />

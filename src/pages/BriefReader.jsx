@@ -270,7 +270,6 @@ function SectionCard({ imageZone, rankHierarchyOrder, stat, sectionIdx, total, i
         {hasBases && mapOpen && (
           <div
             className={`absolute inset-0${tutorialActive ? ' pointer-events-none' : ''}`}
-            onPointerDownCapture={e => e.stopPropagation()}
           >
             <RafBasesMap mode="view" height="100%" highlightedBaseNames={highlightedBaseNames} centreOn={centreOn} />
           </div>
@@ -496,8 +495,9 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
     ? new RegExp(`(?<![a-zA-Z0-9])(${sorted.map(k => k.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?![a-zA-Z0-9])`, 'gi')
     : null
 
-  function segmentize(str) {
-    if (!pattern) return [{ type: 'text', content: str }]
+  // Segment a plain string by keyword matches only (no bold handling)
+  function segmentizeKw(str) {
+    if (!pattern || !str) return [{ type: 'text', content: str }]
     const segs = []
     let last = 0
     pattern.lastIndex = 0
@@ -512,9 +512,9 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
     return segs
   }
 
-  function renderSegs(segs) {
+  function renderKwSegs(segs) {
     return segs.map((seg, i) => {
-      if (seg.type === 'text') return <span key={i}>{seg.content}</span>
+      if (seg.type === 'text') return seg.content
       const learned = learnedKws.has(seg.keyword?.keyword?.toLowerCase())
       const linked  = !!seg.keyword?.linkedBriefId
       return (
@@ -536,6 +536,16 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
     })
   }
 
+  // Parse bold first, then keyword-highlight within each part
+  function renderInline(str) {
+    return str.split(/(\*\*[^*]+\*\*)/).map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i}>{renderKwSegs(segmentizeKw(part.slice(2, -2)))}</strong>
+      }
+      return <span key={i}>{renderKwSegs(segmentizeKw(part))}</span>
+    })
+  }
+
   const blocks = parseSectionBlocks(text)
 
   return (
@@ -543,15 +553,15 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
       {blocks.map((block, bi) => {
         if (block.type === 'ul') return (
           <ul key={bi} className="list-disc list-outside pl-5 space-y-1">
-            {block.items.map((item, ii) => <li key={ii}>{renderSegs(segmentize(item))}</li>)}
+            {block.items.map((item, ii) => <li key={ii}>{renderInline(item)}</li>)}
           </ul>
         )
         if (block.type === 'ol') return (
           <ol key={bi} className="list-decimal list-outside pl-5 space-y-1">
-            {block.items.map((item, ii) => <li key={ii}>{renderSegs(segmentize(item))}</li>)}
+            {block.items.map((item, ii) => <li key={ii}>{renderInline(item)}</li>)}
           </ol>
         )
-        return <p key={bi}>{renderSegs(segmentize(block.content))}</p>
+        return <p key={bi}>{renderInline(block.content)}</p>
       })}
     </div>
   )
@@ -1229,8 +1239,11 @@ export default function BriefReader() {
   // needing sectionIdx in its dependency array (which would restart the 10s interval)
   useEffect(() => { sectionIdxRef.current = sectionIdx }, [sectionIdx])
 
-  // Reset map and map centre when section changes
-  useEffect(() => { setMapOpen(false); setMapCentreOn(null) }, [sectionIdx])
+  // Reset map and map centre when section changes; auto-open on section 1 of Bases briefs
+  useEffect(() => {
+    setMapOpen(brief?.category === 'Bases' && sectionIdx === 0)
+    setMapCentreOn(null)
+  }, [sectionIdx, brief?.category])
 
   // Trigger top-chrome fade on section-1 entry
   useEffect(() => {

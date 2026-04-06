@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function LoadingOverlay() {
   const { isLoading, loadingStartTime } = useAuth()
+  const location = useLocation()
+  // AptitudeSync handles its own CRT loading overlay inside the terminal window
+  if (location.pathname.startsWith('/aptitude-sync')) return null
   const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
