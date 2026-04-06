@@ -90,6 +90,7 @@ function AsciiLogo({ maxHeightPx = 220 }) {
   const preRef     = useRef(null)
   const [scale,       setScale]       = useState(1)
   const [wrapH,       setWrapH]       = useState(maxHeightPx)
+  const [offsetX,     setOffsetX]     = useState(0)
   const [corruptions, setCorruptions] = useState(new Map())
 
   // ── Scale / ResizeObserver ────────────────────────────────────────────────
@@ -100,13 +101,19 @@ function AsciiLogo({ maxHeightPx = 220 }) {
     const naturalW = pre.scrollWidth
     const naturalH = pre.scrollHeight
     const update = () => {
-      const s = Math.min(1, wrapper.offsetWidth / naturalW, maxHeightPx / naturalH)
+      const containerW = wrapper.offsetWidth
+      const parentH = wrapper.parentElement?.clientHeight ?? maxHeightPx
+      const s = Math.min(1, containerW / naturalW, parentH / naturalH)
       setScale(s)
       setWrapH(Math.round(naturalH * s))
+      // Centre the visually-scaled element: layout width stays naturalW,
+      // visual width is naturalW*s, so shift right by half the difference.
+      setOffsetX(Math.round((containerW - naturalW * s) / 2))
     }
     update()
     const obs = new ResizeObserver(update)
     obs.observe(wrapper)
+    if (wrapper.parentElement) obs.observe(wrapper.parentElement)
     return () => obs.disconnect()
   }, [maxHeightPx])
 
@@ -204,7 +211,6 @@ function AsciiLogo({ maxHeightPx = 220 }) {
           width:     '100%',
           height:    wrapH,
           overflow:  'hidden',
-          textAlign: 'center',
           position:  'relative',
           animation: 'logo-flicker 6s linear infinite',
         }}
@@ -223,8 +229,8 @@ function AsciiLogo({ maxHeightPx = 220 }) {
           }}
         />
 
-        {/* Scale wrapper */}
-        <div style={{ display: 'inline-block', transformOrigin: 'top center', transform: `scale(${scale})`, position: 'relative' }}>
+        {/* Scale wrapper — absolute so offsetX centres it regardless of natural layout width */}
+        <div style={{ position: 'absolute', top: 0, left: offsetX, transformOrigin: 'top left', transform: `scale(${scale})` }}>
           {/* Base logo */}
           <pre
             ref={preRef}
@@ -703,22 +709,27 @@ export default function AptitudeSync() {
         }
       `}</style>
 
+      {/* Page wrapper — flex column that fills exactly the available viewport height.
+          100dvh (dynamic) excludes mobile browser chrome; 15rem covers topbar (3.5rem)
+          + layout padding (3rem) + mobile bottom-nav (5rem) + back button (~2rem) + buffer. */}
+      <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100dvh - 15rem)', minHeight: 0 }}>
+
       {/* Page back link */}
       <button
         onClick={handleExit}
-        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-300 mb-4 transition-colors"
+        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-300 mb-3 shrink-0 transition-colors"
       >
         ← Back to brief
       </button>
 
-      {/* Terminal container — fills available page height below the navbar */}
+      {/* Terminal container — fills remaining height inside the flex wrapper */}
       <div
         className="relative overflow-hidden rounded-lg flex flex-col"
         style={{
           background:  '#030d18',
           fontFamily:  "'Courier New', Courier, monospace",
-          height:      'calc(100vh - 10rem)',
-          minHeight:   '480px',
+          flex:        1,
+          minHeight:   0,
           border:      `1px solid ${G_DIM}`,
           boxShadow:   `0 0 24px rgba(91,170,255,0.08), inset 0 0 40px rgba(0,0,0,0.4)`,
         }}
@@ -942,6 +953,8 @@ export default function AptitudeSync() {
           )}
         </div>
       </div>
+
+      </div>{/* end page wrapper */}
     </>
   )
 }
