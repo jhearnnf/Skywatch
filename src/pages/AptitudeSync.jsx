@@ -671,6 +671,34 @@ export default function AptitudeSync() {
     return () => window.removeEventListener('keydown', handler)
   }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Escape during loading/booting — skip the loading sequence ────────────
+  useEffect(() => {
+    if (phase !== 'loading' && phase !== 'booting') return
+    const handler = (e) => {
+      if (e.key !== 'Escape') return
+      if (phase === 'loading') {
+        handleExit()
+      } else {
+        // Skip boot animation — jump straight to active
+        if (bootDoneRef.current) return
+        bootDoneRef.current = true
+        const limit = lockInfo.limitToday
+        const used  = lockInfo.usedToday
+        const usageLine = limit != null
+          ? `> SESSION ${used + 1}/${limit} READY`
+          : '> SESSION READY — UNLIMITED ACCESS'
+        setOutputLines(prev => [
+          ...prev,
+          { text: usageLine, type: 'info' },
+          { text: '', type: 'blank' },
+        ])
+        setPhase('active')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [phase, lockInfo]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleExit() {
     if (categoryName) {
       navigate('/learn-priority', { state: { category: categoryName } })

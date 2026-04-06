@@ -175,7 +175,7 @@ export default function Play() {
   function isCardUnlocked(modeKey) {
     if (!user) return false
     switch (modeKey) {
-      case 'quiz':               return quizBriefs.some(b => b.quizState === 'active')
+      case 'quiz':               return isUnlocked('quiz') || quizBriefs.some(b => b.quizState === 'active')
       case 'flashcard':          return flashcardAvail !== null && flashcardAvail >= 5
       case 'battle-order':       return booBriefs.some(b => b.booState === 'active')
       case 'wheres-that-aircraft': return wtaSpawn?.prereqsMet === true || (wtaSpawn === null && isUnlocked('wta'))
