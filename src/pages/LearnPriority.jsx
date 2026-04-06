@@ -81,56 +81,227 @@ function getRankName(rankNumber) {
 
 // ── AptitudeSync badge ────────────────────────────────────────────────────────
 
-const SYNC_GLITCH_CHARS = '!@/\\|<>{}01*%$-~^?#='
-const SYNC_BASE_TEXT    = '[ SYNC ]'
+const SYNC_GLITCH_CHARS = '!@/\\|<>{}01*%$-~^?#=_'
+const SYNC_BASE_TEXT    = 'aptitude_sync'
 
-function SyncBadge({ onClick }) {
-  const [label, setLabel] = useState(SYNC_BASE_TEXT)
+const CARD_LINE1 = '> APTITUDE_SYNC — initiate terminal debrief sequence'
+const CARD_LINE2 = 'knowledge verification protocol'
 
+function SyncHoverCard() {
+  const [line1, setLine1]       = useState('')
+  const [line2, setLine2]       = useState('')
+  const [cursor, setCursor]     = useState(true)
+  const cardRef                 = useRef(null)
+
+  // Typewriter
   useEffect(() => {
-    let tid
-    const fire = () => {
-      // Pick a random index inside the brackets (not the outer [ or ])
-      const idx = 2 + Math.floor(Math.random() * (SYNC_BASE_TEXT.length - 4))
-      const ch  = SYNC_GLITCH_CHARS[Math.floor(Math.random() * SYNC_GLITCH_CHARS.length)]
-      setLabel(SYNC_BASE_TEXT.slice(0, idx) + ch + SYNC_BASE_TEXT.slice(idx + 1))
-      setTimeout(() => setLabel(SYNC_BASE_TEXT), 60 + Math.random() * 80)
-      tid = setTimeout(fire, 1800 + Math.random() * 2600)
+    let cancelled = false
+    let i = 0
+    const typeL1 = () => {
+      if (cancelled) return
+      if (i < CARD_LINE1.length) {
+        setLine1(CARD_LINE1.slice(0, i + 1))
+        i++
+        setTimeout(typeL1, 12)
+      } else {
+        setTimeout(() => {
+          let j = 0
+          const typeL2 = () => {
+            if (cancelled) return
+            if (j < CARD_LINE2.length) {
+              setLine2(CARD_LINE2.slice(0, j + 1))
+              j++
+              setTimeout(typeL2, 16)
+            }
+          }
+          typeL2()
+        }, 80)
+      }
     }
-    tid = setTimeout(fire, 900 + Math.random() * 1600)
-    return () => clearTimeout(tid)
+    typeL1()
+    return () => { cancelled = true }
+  }, [])
+
+  // Blinking cursor
+  useEffect(() => {
+    const id = setInterval(() => setCursor(c => !c), 530)
+    return () => clearInterval(id)
+  }, [])
+
+  // Edge detection: flip to right-anchor if card overflows viewport
+  useEffect(() => {
+    const el = cardRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    if (rect.right > window.innerWidth - 8) {
+      el.style.left  = 'auto'
+      el.style.right = '0'
+    }
   }, [])
 
   return (
-    <motion.button
-      initial={{ opacity: 0, x: -6 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      onClick={e => { e.stopPropagation(); onClick() }}
-      title="APTITUDE_SYNC — knowledge debrief for this brief"
+    <motion.div
+      ref={cardRef}
+      initial={{ opacity: 0, y: -4, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0,  scale: 1 }}
+      exit={{    opacity: 0, y: -4, scale: 0.96 }}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
       style={{
-        fontFamily:  "'Courier New', Courier, monospace",
-        fontSize:    '9px',
-        letterSpacing: '0.04em',
-        padding:     '2px 5px',
-        borderRadius: '3px',
-        background:  '#030d18',
-        border:      '1px solid #1a4a70',
-        color:       '#1a4a70',
-        cursor:      'pointer',
-        whiteSpace:  'nowrap',
-        lineHeight:  1.4,
-        flexShrink:  0,
-        transition:  'color 0.2s, border-color 0.2s, text-shadow 0.2s',
-      }}
-      whileHover={{
-        color:       '#3d8fd9',
-        borderColor: '#3d8fd9',
-        textShadow:  '0 0 6px #3d8fd9',
+        position:      'absolute',
+        top:           'calc(100% + 6px)',
+        left:          0,
+        minWidth:      180,
+        maxWidth:      220,
+        zIndex:        50,
+        fontFamily:    "'Courier New', Courier, monospace",
+        fontSize:      '9px',
+        lineHeight:    1.65,
+        background:    '#030d18',
+        border:        '1px solid #1a4060',
+        borderLeft:    '2px solid #2d8ad4',
+        borderRadius:  '4px',
+        padding:       '5px 8px',
+        boxShadow:     '0 4px 18px rgba(0,20,50,0.8), inset 0 0 8px #040f1e',
+        pointerEvents: 'none',
+        whiteSpace:    'pre-wrap',
+        wordBreak:     'break-word',
       }}
     >
-      {label}
-    </motion.button>
+      <span style={{ color: '#7dd4fc', display: 'block' }}>{line1}</span>
+      <span style={{ color: '#2d6a9a', display: 'block' }}>{line2}{line2.length === CARD_LINE2.length && cursor && <span style={{ color: '#4ab0f5', marginLeft: 1 }}>█</span>}</span>
+    </motion.div>
+  )
+}
+
+function SyncBadge({ onClick }) {
+  const [label, setLabel]         = useState(SYNC_BASE_TEXT)
+  const [scanline, setScanline]   = useState(false)
+  const [cardVisible, setCardVisible] = useState(false)
+  const [touchPhase, setTouchPhase]   = useState('idle')
+  const dismissTimer = useRef(null)
+  const isTouchRef   = useRef(
+    typeof window !== 'undefined' &&
+    ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  )
+
+  // Glitch effect
+  useEffect(() => {
+    let tid
+    const fire = () => {
+      const corruptions = 1 + (Math.random() < 0.3 ? 1 : 0)
+      let chars = SYNC_BASE_TEXT.split('')
+      for (let c = 0; c < corruptions; c++) {
+        const idx = Math.floor(Math.random() * SYNC_BASE_TEXT.length)
+        chars[idx] = SYNC_GLITCH_CHARS[Math.floor(Math.random() * SYNC_GLITCH_CHARS.length)]
+      }
+      setLabel(chars.join(''))
+      setScanline(true)
+      setTimeout(() => { setLabel(SYNC_BASE_TEXT); setScanline(false) }, 55 + Math.random() * 90)
+      tid = setTimeout(fire, 1600 + Math.random() * 2800)
+    }
+    tid = setTimeout(fire, 700 + Math.random() * 1400)
+    return () => clearTimeout(tid)
+  }, [])
+
+  // Dismiss timer cleanup
+  useEffect(() => () => clearTimeout(dismissTimer.current), [])
+
+  const handleMouseEnter = () => { if (!isTouchRef.current) setCardVisible(true) }
+  const handleMouseLeave = () => { if (!isTouchRef.current) setCardVisible(false) }
+
+  const handleTouchStart = (e) => {
+    if (!isTouchRef.current) return
+    e.preventDefault()
+    if (touchPhase === 'idle') {
+      setCardVisible(true)
+      setTouchPhase('card-shown')
+      clearTimeout(dismissTimer.current)
+      dismissTimer.current = setTimeout(() => {
+        setCardVisible(false)
+        setTouchPhase('idle')
+      }, 2500)
+    }
+  }
+
+  const handleClick = (e) => {
+    e.stopPropagation()
+    if (isTouchRef.current) {
+      if (touchPhase === 'card-shown') {
+        clearTimeout(dismissTimer.current)
+        setCardVisible(false)
+        setTouchPhase('idle')
+        onClick()
+      }
+    } else {
+      onClick()
+    }
+  }
+
+  const cornerStyle = (pos) => ({
+    position:  'absolute',
+    width:     5,
+    height:    5,
+    ...(pos.includes('top')    ? { top: 1 }    : { bottom: 1 }),
+    ...(pos.includes('left')   ? { left: 1 }   : { right: 1 }),
+    borderTop:    pos.includes('top')    ? '1px solid #2a6090' : undefined,
+    borderBottom: pos.includes('bottom') ? '1px solid #2a6090' : undefined,
+    borderLeft:   pos.includes('left')   ? '1px solid #2a6090' : undefined,
+    borderRight:  pos.includes('right')  ? '1px solid #2a6090' : undefined,
+    pointerEvents: 'none',
+    transition:  'border-color 0.15s',
+  })
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+      <motion.button
+        initial={{ opacity: 0, x: -8, scale: 0.92 }}
+        animate={{ opacity: 1, x: 0, scale: 1 }}
+        transition={{ duration: 0.25, ease: 'easeOut' }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouchStart}
+        onClick={handleClick}
+        style={{
+          fontFamily:    "'Courier New', Courier, monospace",
+          fontSize:      '9px',
+          fontWeight:    700,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          padding:       '3px 7px',
+          borderRadius:  '4px',
+          background:    scanline ? '#0a1e30' : '#030d18',
+          border:        '1px solid #1a4060',
+          borderLeft:    '2px solid #2d8ad4',
+          color:         scanline ? '#4ab0f5' : '#2066a0',
+          cursor:        'pointer',
+          whiteSpace:    'nowrap',
+          lineHeight:    1.5,
+          flexShrink:    0,
+          transition:    'color 0.15s, border-color 0.15s, background 0.15s, text-shadow 0.15s, box-shadow 0.15s',
+          boxShadow:     scanline ? 'inset 0 0 8px #0d2d4a, 0 0 4px #1a4a70' : 'inset 0 0 4px #060f1a',
+          position:      'relative',
+          overflow:      'visible',
+        }}
+        whileHover={{
+          color:           '#7dd4fc',
+          borderColor:     '#2d8ad4',
+          borderLeftColor: '#7dd4fc',
+          textShadow:      '0 0 8px #2d8ad4, 0 0 2px #7dd4fc',
+          boxShadow:       'inset 0 0 10px #0d2d4a, 0 0 8px #1a4a7066',
+          background:      '#071525',
+        }}
+      >
+        <span style={cornerStyle('top-left')} />
+        <span style={cornerStyle('top-right')} />
+        <span style={cornerStyle('bottom-left')} />
+        <span style={cornerStyle('bottom-right')} />
+        {label}
+      </motion.button>
+
+      <AnimatePresence>
+        {cardVisible && <SyncHoverCard />}
+      </AnimatePresence>
+    </div>
   )
 }
 
