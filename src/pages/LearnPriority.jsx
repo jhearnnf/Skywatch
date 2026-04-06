@@ -178,7 +178,8 @@ function SyncBadge({ onClick }) {
   const [scanline, setScanline]   = useState(false)
   const [cardVisible, setCardVisible] = useState(false)
   const [touchPhase, setTouchPhase]   = useState('idle')
-  const dismissTimer = useRef(null)
+  const dismissTimer       = useRef(null)
+  const touchJustOpenedRef = useRef(false)
   const isTouchRef   = useRef(
     typeof window !== 'undefined' &&
     ('ontouchstart' in window || navigator.maxTouchPoints > 0)
@@ -211,8 +212,8 @@ function SyncBadge({ onClick }) {
 
   const handleTouchStart = (e) => {
     if (!isTouchRef.current) return
-    e.preventDefault()
     if (touchPhase === 'idle') {
+      touchJustOpenedRef.current = true
       setCardVisible(true)
       setTouchPhase('card-shown')
       clearTimeout(dismissTimer.current)
@@ -226,6 +227,13 @@ function SyncBadge({ onClick }) {
   const handleClick = (e) => {
     e.stopPropagation()
     if (isTouchRef.current) {
+      // React passive touch listeners mean e.preventDefault() can't suppress the
+      // synthesised click. Guard against the click that fires right after the
+      // touchstart that opened the card.
+      if (touchJustOpenedRef.current) {
+        touchJustOpenedRef.current = false
+        return
+      }
       if (touchPhase === 'card-shown') {
         clearTimeout(dismissTimer.current)
         setCardVisible(false)
