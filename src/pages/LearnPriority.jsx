@@ -494,7 +494,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
             milestone={milestone}
             index={i}
             onTap={() => navigate(`/brief/${brief._id}`)}
-            onSyncTap={() => navigate(`/aptitude-sync/${brief._id}`, { state: { briefTitle: brief.title } })}
+            onSyncTap={() => navigate(`/aptitude-sync/${brief._id}`, { state: { briefTitle: brief.title, category: brief.category } })}
             quizPassed={quizPassedSet.has(brief._id)}
             aptitudeSyncEnabled={aptitudeSyncEnabled}
           />

@@ -385,8 +385,9 @@ export default function AptitudeSync() {
   const { user, API, apiFetch, awardAircoins } = useAuth()
   const { settings } = useAppSettings()
 
-  // Brief title — may be passed via navigation state or fetched
-  const [briefTitle, setBriefTitle] = useState(location.state?.briefTitle ?? '')
+  // Brief title / category — may be passed via navigation state or fetched
+  const [briefTitle, setBriefTitle]   = useState(location.state?.briefTitle ?? '')
+  const categoryName                  = location.state?.category ?? ''
 
   // Phase: 'loading' | 'booting' | 'locked' | 'active' | 'complete' | 'error'
   const [phase,     setPhase]     = useState('loading')
@@ -407,6 +408,7 @@ export default function AptitudeSync() {
   const [history,      setHistory]     = useState([])   // [{role,content}] for AI context
   const maxRounds = settings?.aptitudeSyncMaxRounds ?? 3
 
+  const [followUp,       setFollowUp]       = useState('')   // AI's specific follow-up prompt for next round
   const [pulseObjective, setPulseObjective] = useState(false)
   const [textGlitch,     setTextGlitch]     = useState(null) // { x, y, char } | null
 
@@ -563,7 +565,7 @@ export default function AptitudeSync() {
         return
       }
 
-      const { response, aircoins, done, summary, corrections } = data.data ?? {}
+      const { response, aircoins, done, followUp, summary, corrections } = data.data ?? {}
       const roundCoins = aircoins ?? 0
       const newTotal   = Math.min(20, sessionCoins + roundCoins)
       setSessionCoins(newTotal)
@@ -578,6 +580,13 @@ export default function AptitudeSync() {
         { text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', type: 'divider' },
         { text: '', type: 'blank' },
       ]
+
+      if (!done && followUp) {
+        aiLines.push(
+          { text: `> DEBRIEFER: ${followUp}`, type: 'info' },
+          { text: '', type: 'blank' },
+        )
+      }
 
       if (done) {
         if (summary) {
@@ -617,6 +626,7 @@ export default function AptitudeSync() {
         setPhase('complete')
         await triggerAward(newTotal)
       } else {
+        if (followUp) setFollowUp(followUp)
         setRound(r => r + 1)
       }
     } catch {
@@ -719,7 +729,7 @@ export default function AptitudeSync() {
         onClick={handleExit}
         className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-300 mb-3 shrink-0 transition-colors"
       >
-        ← Back to brief
+        ← Back to {categoryName || 'brief'}
       </button>
 
       {/* Terminal container — fills remaining height inside the flex wrapper */}
@@ -837,6 +847,8 @@ export default function AptitudeSync() {
                     <div className={pulseObjective ? 'apt-objective-pulse' : undefined}>
                       {round === 1 ? (
                         <TermLine line={{ text: '> TRANSMIT EVERYTHING YOU KNOW ABOUT THIS SUBJECT.', type: 'info' }} />
+                      ) : followUp ? (
+                        <TermLine line={{ text: `> ${followUp}`, type: 'info' }} />
                       ) : (
                         <TermLine line={{ text: `> ROUND ${round} — ADD TO YOUR DEBRIEF OR ADDRESS THE GAPS ABOVE.`, type: 'info' }} />
                       )}
