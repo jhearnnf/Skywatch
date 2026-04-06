@@ -991,10 +991,12 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
         >
           ↩ Re-read Brief
         </button>
+
       </div>
     </motion.div>
   )
 }
+
 
 // ── Already-read screen ──────────────────────────────────────────────────
 const BOO_CATS = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases']

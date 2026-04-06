@@ -420,18 +420,31 @@ function SoundRowV2({ label, sound, value, onChange, enabled, onToggle }) {
 }
 
 // ── Client-side economy calculation (pure functions) ──────────────────────
-function calcEconomyScenario(sim, rates, difficulty) {
+// Quiz assumes 5 easy + 5 medium questions per brief (default per brief).
+// Login/streak assumes a player logs in every day for the number of days it
+// takes to read all briefs at their daily reading pace.
+function calcEconomyScenario(sim, difficulty) {
+  const rates    = sim.rates ?? {}
   const isNormal = difficulty === 'normal'
+  const n        = sim.totalBriefs ?? 0
   const wtaRate  = (rates.aircoinsWhereAircraftRound1 ?? 5)
                  + (rates.aircoinsWhereAircraftRound2 ?? 10)
                  + (rates.aircoinsWhereAircraftBonus  ?? 5)
-  const reads = (sim.totalBriefs     ?? 0) * (rates.aircoinsPerBriefRead ?? 5)
+  const reads = n * (rates.aircoinsPerBriefRead ?? 5)
+  // 5 questions per brief; every brief earns the 100% bonus (perfect-play sim)
   const quiz  = isNormal
-    ? (sim.totalEasyQ   ?? 0) * (rates.aircoinsPerWinEasy    ?? 10) + (sim.briefsWithEasyQ   ?? 0) * (rates.aircoins100Percent ?? 15)
-    : (sim.totalMediumQ ?? 0) * (rates.aircoinsPerWinMedium  ?? 20) + (sim.briefsWithMediumQ ?? 0) * (rates.aircoins100Percent ?? 15)
-  const boo   = (sim.booEligibleBriefs ?? 0) * (isNormal ? (rates.aircoinsOrderOfBattleEasy ?? 8) : (rates.aircoinsOrderOfBattleMedium ?? 18))
+    ? n * 5 * (rates.aircoinsPerWinEasy   ?? 10) + n * (rates.aircoins100Percent ?? 15)
+    : n * 5 * (rates.aircoinsPerWinMedium ?? 20) + n * (rates.aircoins100Percent ?? 15)
+  const boo   = (sim.booEligibleBriefs ?? 0) * (isNormal
+    ? (rates.aircoinsOrderOfBattleEasy   ?? 8)
+    : (rates.aircoinsOrderOfBattleMedium ?? 18))
   const wta   = (sim.wtaBriefs ?? 0) * wtaRate
-  return { reads, quiz, boo, wta, total: reads + quiz + boo + wta }
+  // Login: every day = firstLogin; days 2+ also earn streakBonus
+  const briefsPerDay = Math.max(1, sim.briefsPerDay ?? 1)
+  const days  = n > 0 ? Math.ceil(n / briefsPerDay) : 0
+  const login = days * (rates.aircoinsFirstLogin ?? 5)
+              + Math.max(0, days - 1) * (rates.aircoinsStreakBonus ?? 2)
+  return { reads, quiz, boo, wta, login, days, total: reads + quiz + boo + wta + login }
 }
 
 function calcEconomyProgression(totalCoins, cycleThreshold, totalRanks, ranks, levels) {
@@ -490,9 +503,23 @@ function CeilingLevelInput({ index, value, onSetLevel }) {
   )
 }
 
+function RateInput({ label, value, onChange }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-medium text-slate-600 mb-0.5">{label}</label>
+      <input
+        type="number" min={0}
+        value={value ?? 0}
+        onChange={e => onChange(e.target.value)}
+        className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-200"
+      />
+    </div>
+  )
+}
+
 function CeilingScenarioColumn({ label, difficulty, sim, meta, simCycleThreshold }) {
   const fmt         = n => (n ?? 0).toLocaleString()
-  const scenario    = calcEconomyScenario(sim, meta.rates, difficulty)
+  const scenario    = calcEconomyScenario(sim, difficulty)
   const progression = calcEconomyProgression(scenario.total, simCycleThreshold, meta.totalRanks, meta.ranks, sim.levels)
   const maxed       = progression.atMaxRank && progression.finalLevel === 10
   return (
@@ -516,6 +543,10 @@ function CeilingScenarioColumn({ label, difficulty, sim, meta, simCycleThreshold
             <td className="py-1 text-slate-500 pr-3">Where's That Aircraft</td>
             <td className="py-1 text-right font-mono font-medium text-slate-700">{fmt(scenario.wta)}</td>
           </tr>
+          <tr className="border-b border-slate-100">
+            <td className="py-1 text-slate-500 pr-3">Login / Streak <span className="text-slate-400 font-normal">({scenario.days}d)</span></td>
+            <td className="py-1 text-right font-mono font-medium text-slate-700">{fmt(scenario.login)}</td>
+          </tr>
           <tr>
             <td className="pt-2 font-bold text-slate-700 pr-3">Total</td>
             <td className="pt-2 text-right font-mono font-bold text-slate-900">{fmt(scenario.total)}</td>
@@ -536,60 +567,50 @@ function CeilingScenarioColumn({ label, difficulty, sim, meta, simCycleThreshold
   )
 }
 
-function AircoinsCeiling({ API }) {
-  const { apiFetch } = useAuth()
-  const [meta,    setMeta]    = useState(null)   // rates, ranks, levels, cycleThreshold, totalRanks
-  const [sim,     setSim]     = useState(null)   // editable content inputs
-  const [dbSim,   setDbSim]   = useState(null)   // last DB snapshot for reset
-  const [busy,    setBusy]    = useState(false)
-  const [error,   setError]   = useState('')
+function AircoinsEconomy({ API, onToast }) {
+  const { apiFetch, awardAircoins } = useAuth()
+  const [meta,            setMeta]           = useState(null)  // { cycleThreshold, totalRanks, ranks }
+  const [sim,             setSim]            = useState(null)  // full editable sim state
+  const [dbSim,           setDbSim]          = useState(null)  // DB snapshot for reset
+  const [busy,       setBusy]       = useState(false)
+  const [error,      setError]      = useState('')
+  const [applyModal, setApplyModal] = useState(false)
+  // Award test coins
+  const [testAmount, setTestAmount] = useState('')
+  const [coinModal,  setCoinModal]  = useState(false)
+  const [coinBusy,   setCoinBusy]   = useState(false)
 
-  const runCheck = async () => {
+  useEffect(() => { runSim() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const runSim = async () => {
     setBusy(true); setError('')
     try {
       const res  = await apiFetch(`${API}/api/admin/economy-viability`, { credentials: 'include' })
       const data = await res.json()
       if (data.status === 'success') {
         const { rates, cycleThreshold, totalRanks, ranks, levels, content } = data.data
-        setMeta({ rates, cycleThreshold, totalRanks, ranks, levels })
+        setMeta({ cycleThreshold, totalRanks, ranks })
         const snapshot = {
           totalBriefs:       content.totalBriefs,
           wtaBriefs:         content.wtaBriefs,
           booEligibleBriefs: content.booEligibleBriefs,
-          briefsWithEasyQ:   content.briefsWithEasyQ,
-          totalEasyQ:        content.totalEasyQ,
-          briefsWithMediumQ: content.briefsWithMediumQ,
-          totalMediumQ:      content.totalMediumQ,
+          briefsPerDay:      1,
+          rates,
           levels:            levels.filter(l => l.aircoinsToNextLevel !== null),
         }
-        setSim(snapshot)
+        // Preserve briefsPerDay across refreshes
+        setSim(prev => prev ? { ...snapshot, briefsPerDay: prev.briefsPerDay } : snapshot)
         setDbSim(snapshot)
       } else {
-        setError(data.message ?? 'Check failed')
+        setError(data.message ?? 'Simulation failed')
       }
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setBusy(false)
-    }
+    } catch (e) { setError(e.message) }
+    finally { setBusy(false) }
   }
 
-  const setField = (key, raw) => {
+  const setRate = (key, raw) => {
     const val = parseInt(raw, 10)
-    const n   = isNaN(val) ? 0 : Math.max(0, val)
-    setSim(p => {
-      const next = { ...p, [key]: n }
-      // Brief-subset fields can't exceed totalBriefs
-      const total = next.totalBriefs
-      next.wtaBriefs         = Math.min(next.wtaBriefs,         total)
-      next.booEligibleBriefs = Math.min(next.booEligibleBriefs, total)
-      next.briefsWithEasyQ   = Math.min(next.briefsWithEasyQ,   total)
-      next.briefsWithMediumQ = Math.min(next.briefsWithMediumQ, total)
-      // Question totals can't exceed briefs × 10 (max 10 questions per brief)
-      next.totalEasyQ   = Math.min(next.totalEasyQ,   next.briefsWithEasyQ   * 10)
-      next.totalMediumQ = Math.min(next.totalMediumQ, next.briefsWithMediumQ * 10)
-      return next
-    })
+    setSim(p => ({ ...p, rates: { ...p.rates, [key]: isNaN(val) ? 0 : Math.max(0, val) } }))
   }
 
   const setLevel = (index, raw) => {
@@ -601,71 +622,209 @@ function AircoinsCeiling({ API }) {
     })
   }
 
-  const simCycleThreshold = sim ? sim.levels.reduce((acc, l) => acc + (l.aircoinsToNextLevel ?? 0), 0) : 0
+  const applyEconomy = async (reason) => {
+    setBusy(true); setError('')
+    try {
+      const res  = await apiFetch(`${API}/api/admin/economy/apply`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rates: sim.rates, levels: sim.levels, reason }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setDbSim(sim)
+        onToast('✓ Economy settings updated live')
+      } else { setError(data.message ?? 'Apply failed') }
+    } catch (e) { setError(e.message) }
+    finally { setBusy(false); setApplyModal(false) }
+  }
 
-  const fmt = n => (n ?? 0).toLocaleString()
+  const awardTest = async (reason) => {
+    const amt = parseInt(testAmount, 10)
+    if (!amt || amt <= 0) return
+    setCoinModal(false); setCoinBusy(true)
+    try {
+      const res  = await apiFetch(`${API}/api/admin/award-coins`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: amt, reason }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        awardAircoins(data.awarded, 'Test Coins', { cycleAfter: data.cycleAircoins, totalAfter: data.totalAircoins, rankPromotion: data.rankPromotion ?? null })
+        onToast(`✓ Awarded ${data.awarded} test coins`)
+        setTestAmount('')
+      }
+    } finally { setCoinBusy(false) }
+  }
+
+  const simCycleThreshold = sim ? sim.levels.reduce((acc, l) => acc + (l.aircoinsToNextLevel ?? 0), 0) : 0
+  const fmt        = n => (n ?? 0).toLocaleString()
+  const derivedDays = sim
+    ? (sim.totalBriefs > 0 ? Math.ceil(sim.totalBriefs / Math.max(1, sim.briefsPerDay ?? 1)) : 0)
+    : 0
 
   return (
-    <Section title="Aircoins Ceiling" collapsible>
+    <Section title="Aircoins Economy Settings" collapsible>
+      {applyModal && (
+        <ConfirmModal
+          title="Update Live Economy Values"
+          body="This will update all aircoin award rates AND level thresholds live. Every user's earning rates and progression requirements will change immediately."
+          confirmLabel="Update Live Economy"
+          onConfirm={applyEconomy}
+          onCancel={() => setApplyModal(false)}
+        />
+      )}
+      {coinModal && (
+        <ConfirmModal
+          title={`Award ${testAmount} Test Coins`}
+          body="Awards aircoins directly to your admin account. Use for testing reward flows."
+          confirmLabel="Award Coins"
+          onConfirm={awardTest}
+          onCancel={() => setCoinModal(false)}
+        />
+      )}
+
       <p className="text-xs text-slate-400 mb-3">
-        Economy viability check — max coins achievable with perfect play.
-        Excludes daily streak bonuses and Flashcard Recall.
+        Design the aircoin economy — set award rates and level thresholds, run a simulation to verify viability, then push live.
+        Simulation assumes perfect play (100% scores, all questions answered, all games completed).
       </p>
-      <div className="flex items-center gap-3 mb-4">
-        <button
-          onClick={runCheck}
-          disabled={busy}
-          className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
-        >
-          {busy ? 'Loading…' : sim ? 'Refresh from DB' : 'Run Check'}
-        </button>
-        {sim && dbSim && (
+
+      {/* Award Test Coins */}
+      <Section title="Award Test Coins" collapsible>
+        <p className="text-xs text-slate-400 mb-3">Awards aircoins to your admin account, logged as "Test Coins".</p>
+        <div className="flex items-center gap-3">
+          <input
+            type="number" min={1} placeholder="Amount…"
+            value={testAmount}
+            onChange={e => setTestAmount(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && parseInt(testAmount, 10) > 0 && setCoinModal(true)}
+            className="w-32 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
+          />
           <button
-            onClick={() => setSim(dbSim)}
-            className="px-3 py-2 text-xs text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+            onClick={() => setCoinModal(true)}
+            disabled={coinBusy || !testAmount || parseInt(testAmount, 10) <= 0}
+            className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
           >
-            Reset to DB values
+            {coinBusy ? 'Awarding…' : '⬡ Award'}
           </button>
-        )}
-      </div>
+        </div>
+      </Section>
+
+      {/* Simulation controls */}
+      {sim && (
+        <div className="flex items-center gap-3 mt-2 mb-4">
+          <button
+            onClick={runSim}
+            disabled={busy}
+            className="px-4 py-2 text-sm font-bold text-slate-600 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-40"
+          >
+            {busy ? 'Loading…' : 'Reset'}
+          </button>
+        </div>
+      )}
       {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+      {!sim && !error && <p className="text-sm text-slate-400 animate-pulse mb-4">Loading economy data…</p>}
+
       {sim && meta && (
         <>
           {/* Simulation inputs */}
-          <div className="bg-slate-50 rounded-xl p-4 mb-5 border border-slate-200 space-y-4">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Simulation inputs</p>
+          <div className="bg-slate-50 rounded-xl p-4 mb-5 border border-slate-200 space-y-5">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Simulation Inputs</p>
 
-            {/* Briefs row */}
+            {/* Content — read-only */}
             <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Briefs</p>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Content (from DB — read only)</p>
               <div className="grid grid-cols-3 gap-3">
-                <CeilingSimInput label="Total"        sub="used for reads"      field="totalBriefs"       sim={sim} onSetField={setField} />
-                <CeilingSimInput label="WTA-enabled"  sub="aircraft with bases" field="wtaBriefs"         sim={sim} onSetField={setField} max={sim.totalBriefs} />
-                <CeilingSimInput label="BOO-eligible" sub="with game data"      field="booEligibleBriefs" sim={sim} onSetField={setField} max={sim.totalBriefs} />
+                <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+                  <p className="text-[11px] text-slate-400 mb-0.5">Total briefs</p>
+                  <p className="text-sm font-mono font-semibold text-slate-700">{fmt(sim.totalBriefs)}</p>
+                  <p className="text-[11px] text-slate-400">5 easy + 5 medium q's each</p>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+                  <p className="text-[11px] text-slate-400 mb-0.5">WTA-enabled</p>
+                  <p className="text-sm font-mono font-semibold text-slate-700">{fmt(sim.wtaBriefs)}</p>
+                  <p className="text-[11px] text-slate-400">aircraft category briefs</p>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-lg px-3 py-2">
+                  <p className="text-[11px] text-slate-400 mb-0.5">BOO-eligible</p>
+                  <p className="text-sm font-mono font-semibold text-slate-700">{fmt(sim.booEligibleBriefs)}</p>
+                  <p className="text-[11px] text-slate-400">BOO category briefs</p>
+                </div>
               </div>
             </div>
 
-            {/* Quiz rows */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Easy Quiz</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <CeilingSimInput label="Briefs" sub="earns 100% bonus" field="briefsWithEasyQ"   sim={sim} onSetField={setField} max={sim.totalBriefs} />
-                  <CeilingSimInput label="Questions"                     field="totalEasyQ"         sim={sim} onSetField={setField} max={sim.briefsWithEasyQ * 10} />
+            {/* Reading pace */}
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Reading Pace</p>
+              <div className="flex items-center gap-6">
+                <div className="w-44">
+                  <label className="block text-xs font-medium text-slate-600 mb-0.5">Briefs read per day</label>
+                  <input
+                    type="number" min={1}
+                    value={sim.briefsPerDay ?? 1}
+                    onChange={e => {
+                      const v = parseInt(e.target.value, 10)
+                      setSim(p => ({ ...p, briefsPerDay: isNaN(v) ? 1 : Math.max(1, v) }))
+                    }}
+                    className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm font-mono outline-none focus:ring-2 focus:ring-brand-200"
+                  />
+                </div>
+                <div className="pt-4">
+                  <p className="text-[11px] text-slate-400 leading-none mb-1">Days to read all briefs</p>
+                  <p className="text-xl font-mono font-bold text-slate-700">{derivedDays.toLocaleString()}</p>
                 </div>
               </div>
-              <div>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Medium Quiz</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <CeilingSimInput label="Briefs" sub="earns 100% bonus" field="briefsWithMediumQ" sim={sim} onSetField={setField} max={sim.totalBriefs} />
-                  <CeilingSimInput label="Questions"                     field="totalMediumQ"       sim={sim} onSetField={setField} max={sim.briefsWithMediumQ * 10} />
+            </div>
+
+            {/* Award rates */}
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Award Rates</p>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-1.5">Brief Read &amp; Login</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <RateInput label="Per brief read"    value={sim.rates.aircoinsPerBriefRead}   onChange={v => setRate('aircoinsPerBriefRead', v)} />
+                    <RateInput label="First daily login" value={sim.rates.aircoinsFirstLogin}      onChange={v => setRate('aircoinsFirstLogin', v)} />
+                    <RateInput label="Streak bonus"      value={sim.rates.aircoinsStreakBonus}     onChange={v => setRate('aircoinsStreakBonus', v)} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-1.5">Quiz</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <RateInput label="Easy — per answer"   value={sim.rates.aircoinsPerWinEasy}    onChange={v => setRate('aircoinsPerWinEasy', v)} />
+                    <RateInput label="Medium — per answer" value={sim.rates.aircoinsPerWinMedium}  onChange={v => setRate('aircoinsPerWinMedium', v)} />
+                    <RateInput label="100% score bonus"    value={sim.rates.aircoins100Percent}    onChange={v => setRate('aircoins100Percent', v)} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-1.5">Battle of Order</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <RateInput label="Easy win"   value={sim.rates.aircoinsOrderOfBattleEasy}   onChange={v => setRate('aircoinsOrderOfBattleEasy', v)} />
+                    <RateInput label="Medium win" value={sim.rates.aircoinsOrderOfBattleMedium} onChange={v => setRate('aircoinsOrderOfBattleMedium', v)} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-1.5">Where's That Aircraft</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <RateInput label="Round 1 correct"    value={sim.rates.aircoinsWhereAircraftRound1} onChange={v => setRate('aircoinsWhereAircraftRound1', v)} />
+                    <RateInput label="Round 2 correct"    value={sim.rates.aircoinsWhereAircraftRound2} onChange={v => setRate('aircoinsWhereAircraftRound2', v)} />
+                    <RateInput label="Full mission bonus" value={sim.rates.aircoinsWhereAircraftBonus}  onChange={v => setRate('aircoinsWhereAircraftBonus', v)} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-1.5">Flashcard Recall</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <RateInput label="Per correct card" value={sim.rates.aircoinsFlashcardPerCard}      onChange={v => setRate('aircoinsFlashcardPerCard', v)} />
+                    <RateInput label="100% bonus"       value={sim.rates.aircoinsFlashcardPerfectBonus} onChange={v => setRate('aircoinsFlashcardPerfectBonus', v)} />
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Level thresholds */}
             <div>
-              <div className="flex items-baseline justify-between mb-2">
+              <div className="flex items-center justify-between mb-2">
                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Level Thresholds</p>
                 <p className="text-[11px] text-slate-400">
                   Cycle: <span className="font-mono font-semibold text-slate-600">{fmt(simCycleThreshold)}</span> coins per rank
@@ -679,14 +838,29 @@ function AircoinsCeiling({ API }) {
             </div>
           </div>
 
-          {/* Results */}
+          {/* Simulation results */}
           <div className="text-xs text-slate-400 mb-4">
-            {meta.totalRanks} total ranks &nbsp;·&nbsp; WTA: {fmt((meta.rates.aircoinsWhereAircraftRound1 ?? 5) + (meta.rates.aircoinsWhereAircraftRound2 ?? 10) + (meta.rates.aircoinsWhereAircraftBonus ?? 5))} coins/brief
+            {meta.totalRanks} total ranks &nbsp;·&nbsp;
+            WTA: {fmt((sim.rates.aircoinsWhereAircraftRound1 ?? 5) + (sim.rates.aircoinsWhereAircraftRound2 ?? 10) + (sim.rates.aircoinsWhereAircraftBonus ?? 5))} coins/brief
           </div>
-          <div className="flex gap-6">
+          <div className="flex gap-6 mb-5">
             <CeilingScenarioColumn label="Normal (Easy)"     difficulty="normal"   sim={sim} meta={meta} simCycleThreshold={simCycleThreshold} />
             <div className="w-px bg-slate-200" />
             <CeilingScenarioColumn label="Advanced (Medium)" difficulty="advanced" sim={sim} meta={meta} simCycleThreshold={simCycleThreshold} />
+          </div>
+
+          {/* Update live */}
+          <div className="pt-3 border-t border-slate-200">
+            <button
+              onClick={() => setApplyModal(true)}
+              disabled={busy}
+              className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
+            >
+              Update Live Economy Values
+            </button>
+            <p className="text-[11px] text-slate-400 mt-1.5">
+              Writes all award rates and level thresholds to the live DB immediately.
+            </p>
           </div>
         </>
       )}
@@ -1018,14 +1192,11 @@ function AiPromptsSection({ API }) {
 }
 
 function SettingsTab({ API }) {
-  const { awardAircoins, apiFetch } = useAuth()
+  const { apiFetch } = useAuth()
   const [settings, setSettings] = useState(null)
   const [draft,    setDraft]    = useState({})
   const [modal,    setModal]    = useState(null)   // { label, fields }
-  const [coinModal, setCoinModal] = useState(false)
   const [toast,    setToast]    = useState('')
-  const [testAmount, setTestAmount] = useState('')
-  const [coinBusy,   setCoinBusy]   = useState(false)
   const [wtaSpawn,   setWtaSpawn]   = useState(null)
 
   const load = useCallback(() => {
@@ -1055,26 +1226,6 @@ function SettingsTab({ API }) {
     invalidateSoundSettings()
     setToast(`✓ ${modal.label} saved`)
     load()
-  }
-
-  const awardTest = async (reason) => {
-    const amt = parseInt(testAmount, 10)
-    if (!amt || amt <= 0) return
-    setCoinModal(false)
-    setCoinBusy(true)
-    try {
-      const res  = await apiFetch(`${API}/api/admin/award-coins`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amt, reason }),
-      })
-      const data = await res.json()
-      if (data.status === 'success') {
-        awardAircoins(data.awarded, 'Test Coins', { cycleAfter: data.cycleAircoins, totalAfter: data.totalAircoins, rankPromotion: data.rankPromotion ?? null })
-        setToast(`✓ Awarded ${data.awarded} test coins`)
-        setTestAmount('')
-      }
-    } finally { setCoinBusy(false) }
   }
 
   const set = (key, val) => setDraft(p => ({ ...p, [key]: val }))
@@ -1213,56 +1364,8 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Aircoins ─────────────────────────────────────────── */}
-      <Section title="Aircoins" collapsible onSave={() => save('Update Aircoin Options', [
-        'aircoinsPerWinEasy', 'aircoinsPerWinMedium', 'aircoinsPerBriefRead',
-        'aircoinsFirstLogin', 'aircoinsStreakBonus', 'aircoins100Percent',
-        'aircoinsOrderOfBattleEasy', 'aircoinsOrderOfBattleMedium',
-        'aircoinsWhereAircraftRound1', 'aircoinsWhereAircraftRound2', 'aircoinsWhereAircraftBonus',
-        'aircoinsFlashcardPerCard', 'aircoinsFlashcardPerfectBonus',
-      ])}>
-        <AircoinsCeiling API={API} />
-        <Section title="Award Test Coins" collapsible>
-          <p className="text-xs text-slate-400 mb-3">Awards aircoins to your admin account, logged as "Test Coins".</p>
-          <div className="flex items-center gap-3">
-            <input
-              type="number" min={1} placeholder="Amount…"
-              value={testAmount}
-              onChange={e => setTestAmount(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && parseInt(testAmount, 10) > 0 && setCoinModal(true)}
-              className="w-32 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200"
-            />
-            <button
-              onClick={() => setCoinModal(true)}
-              disabled={coinBusy || !testAmount || parseInt(testAmount, 10) <= 0}
-              className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40"
-            >
-              {coinBusy ? 'Awarding…' : '⬡ Award'}
-            </button>
-          </div>
-          {coinModal && (
-            <ConfirmModal
-              title={`Award ${testAmount} Test Coins`}
-              body="Awards aircoins directly to your admin account. Use for testing reward flows."
-              confirmLabel="Award Coins"
-              onConfirm={awardTest}
-              onCancel={() => setCoinModal(false)}
-            />
-          )}
-        </Section>
-        <NumInput label="Per correct answer — Easy quiz"   value={draft.aircoinsPerWinEasy}          onChange={v => set('aircoinsPerWinEasy', v)} />
-        <NumInput label="Per correct answer — Medium quiz" value={draft.aircoinsPerWinMedium}        onChange={v => set('aircoinsPerWinMedium', v)} />
-        <NumInput label="100% score bonus"                 value={draft.aircoins100Percent}          onChange={v => set('aircoins100Percent', v)} />
-        <NumInput label="Per brief read (first time)"      value={draft.aircoinsPerBriefRead}        onChange={v => set('aircoinsPerBriefRead', v)} />
-        <NumInput label="First daily login"                value={draft.aircoinsFirstLogin}          onChange={v => set('aircoinsFirstLogin', v)} />
-        <NumInput label="Streak login bonus"               value={draft.aircoinsStreakBonus}         onChange={v => set('aircoinsStreakBonus', v)} />
-        <NumInput label="Battle of Order — Easy win"       value={draft.aircoinsOrderOfBattleEasy}   onChange={v => set('aircoinsOrderOfBattleEasy', v)} />
-        <NumInput label="Battle of Order — Medium win"     value={draft.aircoinsOrderOfBattleMedium} onChange={v => set('aircoinsOrderOfBattleMedium', v)} />
-        <NumInput label="Where's That Aircraft — Round 1 correct"    value={draft.aircoinsWhereAircraftRound1 ?? 5}       onChange={v => set('aircoinsWhereAircraftRound1', v)} />
-        <NumInput label="Where's That Aircraft — Round 2 correct"    value={draft.aircoinsWhereAircraftRound2 ?? 10}      onChange={v => set('aircoinsWhereAircraftRound2', v)} />
-        <NumInput label="Where's That Aircraft — Full mission bonus"  value={draft.aircoinsWhereAircraftBonus ?? 5}        onChange={v => set('aircoinsWhereAircraftBonus', v)} />
-        <NumInput label="Flashcard — per correct answer"              value={draft.aircoinsFlashcardPerCard ?? 2}          onChange={v => set('aircoinsFlashcardPerCard', v)} />
-        <NumInput label="Flashcard — 100% bonus"                     value={draft.aircoinsFlashcardPerfectBonus ?? 5}     onChange={v => set('aircoinsFlashcardPerfectBonus', v)} />
-      </Section>
+      {/* ── Aircoins Economy ─────────────────────────────────── */}
+      <AircoinsEconomy API={API} onToast={setToast} />
 
       {/* ── Game ────────────────────────────────────────────── */}
       <Section title="Game Options" collapsible onSave={() => save('Update Game Options', [
@@ -1318,6 +1421,84 @@ function SettingsTab({ API }) {
           hint="When on, every newly registered account is automatically granted gold subscription"
           checked={draft.betaTesterAutoGold ?? false}
           onChange={v => set('betaTesterAutoGold', v)}
+        />
+      </Section>
+
+      {/* ── APTITUDE_SYNC ────────────────────────────────────── */}
+      <Section
+        title="APTITUDE_SYNC"
+        collapsible
+        onSave={() => save('Update APTITUDE_SYNC Settings', [
+          'aptitudeSyncEnabled',
+          'aptitudeSyncTiers',
+          'aptitudeSyncMaxRounds',
+          'aptitudeSyncDailyLimitFree',
+          'aptitudeSyncDailyLimitSilver',
+          'aptitudeSyncDailyLimitGold',
+        ])}
+      >
+        <Toggle
+          label="Enable APTITUDE_SYNC"
+          hint="Show the APTITUDE_SYNC button on completed intel briefs for qualifying users"
+          checked={draft.aptitudeSyncEnabled ?? false}
+          onChange={v => set('aptitudeSyncEnabled', v)}
+        />
+
+        {/* Tier access */}
+        <div className="py-2.5 border-b border-slate-100">
+          <p className="text-sm font-semibold text-slate-700 mb-1">Tier access</p>
+          <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access regardless of this setting</p>
+          <div className="flex flex-wrap gap-3">
+            {['gold', 'silver', 'free'].map(tier => {
+              const tiers   = draft.aptitudeSyncTiers ?? ['admin']
+              const checked = tiers.includes(tier)
+              return (
+                <label key={tier} className="flex items-center gap-1.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      const next = checked
+                        ? tiers.filter(t => t !== tier)
+                        : [...tiers, tier]
+                      set('aptitudeSyncTiers', next)
+                    }}
+                    className="w-4 h-4 accent-brand-600"
+                  />
+                  <span className="text-sm font-medium text-slate-700 capitalize">{tier}</span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+
+        <NumInput
+          label="Max rounds per session"
+          hint="Number of prompt/response exchanges before the terminal closes (1–5)"
+          value={draft.aptitudeSyncMaxRounds ?? 3}
+          min={1} max={5}
+          onChange={v => set('aptitudeSyncMaxRounds', v)}
+        />
+        <NumInput
+          label="Daily sessions — Free tier"
+          hint="How many APTITUDE_SYNC sessions a free user can play per day"
+          value={draft.aptitudeSyncDailyLimitFree ?? 1}
+          min={0}
+          onChange={v => set('aptitudeSyncDailyLimitFree', v)}
+        />
+        <NumInput
+          label="Daily sessions — Silver / Trial tier"
+          hint="How many APTITUDE_SYNC sessions a silver or active-trial user can play per day"
+          value={draft.aptitudeSyncDailyLimitSilver ?? 3}
+          min={0}
+          onChange={v => set('aptitudeSyncDailyLimitSilver', v)}
+        />
+        <NumInput
+          label="Daily sessions — Gold tier"
+          hint="How many APTITUDE_SYNC sessions a gold user can play per day"
+          value={draft.aptitudeSyncDailyLimitGold ?? 10}
+          min={0}
+          onChange={v => set('aptitudeSyncDailyLimitGold', v)}
         />
       </Section>
 
@@ -1513,13 +1694,14 @@ function UsersTab({ API }) {
             </div>
 
             {/* Stats row */}
-            <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-slate-100 border-b border-slate-100">
+            <div className="grid grid-cols-4 sm:grid-cols-7 divide-x divide-slate-100 border-b border-slate-100">
               {[
                 ['Coins', (u.totalAircoins ?? 0).toLocaleString()],
                 ['Streak', u.loginStreak ?? 0],
                 ['Logins', u.logins?.length ?? 0],
                 ['Briefs Read', u.profileStats?.brifsRead ?? 0],
-                ['Difficulty', u.difficultySetting ?? 'easy'],
+                ['Games', (u.profileStats?.quizzesPlayed ?? 0) + (u.profileStats?.booPlayed ?? 0) + (u.profileStats?.wtaPlayed ?? 0) + (u.profileStats?.wherePlayed ?? 0) + (u.profileStats?.flashcardsPlayed ?? 0)],
+                ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1)],
                 ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })],
               ].map(([l, v]) => (
                 <div key={l} className="px-3 py-2 text-center">
@@ -1562,13 +1744,19 @@ function UsersTab({ API }) {
 
             {/* Reset (testing) */}
             {(() => {
+              const PROGRESS_FIELDS = ['aircoins', 'gameHistory', 'intelBriefsRead', 'streak', 'gameBadges']
+              const progressHasData = (
+                (u.totalAircoins ?? 0) > 0 ||
+                (u.profileStats?.quizzesPlayed ?? 0) > 0 || (u.profileStats?.booPlayed ?? 0) > 0 ||
+                (u.profileStats?.wtaPlayed ?? 0) > 0 || (u.profileStats?.wherePlayed ?? 0) > 0 ||
+                (u.profileStats?.flashcardsPlayed ?? 0) > 0 ||
+                (u.profileStats?.brifsRead ?? 0) > 0 ||
+                (u.loginStreak ?? 0) > 0 ||
+                Object.values(u.gameUnlocks ?? {}).some(g => g?.unlockedAt != null)
+              )
               const RESET_ITEMS = [
-                { key: 'aircoins',        label: 'Aircoins',      defaultOn: true,  hasData: (u.totalAircoins ?? 0) > 0 },
-                { key: 'gameHistory',     label: 'Game History',  defaultOn: true,  hasData: (u.profileStats?.quizzesPlayed ?? 0) > 0 || (u.profileStats?.booPlayed ?? 0) > 0 || (u.profileStats?.wtaPlayed ?? 0) > 0 || (u.profileStats?.wherePlayed ?? 0) > 0 || (u.profileStats?.flashcardsPlayed ?? 0) > 0 },
-                { key: 'intelBriefsRead', label: 'Briefs Read',   defaultOn: true,  hasData: (u.profileStats?.brifsRead ?? 0) > 0 },
-                { key: 'streak',          label: 'Streak',        defaultOn: true,  hasData: (u.loginStreak ?? 0) > 0 },
-                { key: 'gameBadges',      label: 'Game Badges',   defaultOn: true,  hasData: false },
-                { key: 'tutorials',       label: 'Tutorials',     defaultOn: false, hasData: TUTORIAL_KEYS.some(k => u.tutorials?.[k] === 'viewed' || u.tutorials?.[k] === 'skipped') },
+                { key: 'progress',  label: 'Progress',  fields: PROGRESS_FIELDS, defaultOn: true,  hasData: progressHasData },
+                { key: 'tutorials', label: 'Tutorials', fields: ['tutorials'],   defaultOn: false, hasData: TUTORIAL_KEYS.some(k => u.tutorials?.[k] === 'viewed' || u.tutorials?.[k] === 'skipped') },
               ]
               const anyHasData = RESET_ITEMS.some(i => i.defaultOn && i.hasData)
               const isOpen = resetPanel === u._id
@@ -1611,15 +1799,17 @@ function UsersTab({ API }) {
                       ))}
                       <button
                         onClick={() => {
-                          const checked = RESET_ITEMS.filter(i => resetChecks[i.key] ?? i.defaultOn).map(i => i.key)
-                          if (!checked.length) return
+                          const fields = RESET_ITEMS
+                            .filter(i => resetChecks[i.key] ?? i.defaultOn)
+                            .flatMap(i => i.fields)
+                          if (!fields.length) return
                           const labels = RESET_ITEMS.filter(i => resetChecks[i.key] ?? i.defaultOn).map(i => i.label).join(', ')
                           setResetPanel(null)
                           action(
                             `Reset ${labels} — Agent ${u.agentNumber}`,
                             `/api/admin/users/${u._id}/reset-stats`,
                             'POST',
-                            { fields: checked },
+                            { fields },
                           )
                         }}
                         className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors mt-1"

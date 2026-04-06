@@ -20,7 +20,7 @@ const NEEDS_READS_LABELS = {
 const MODE_TO_UNLOCK_KEY = {
   'quiz':               'quiz',
   'flashcard':          'flashcard',
-  'whos-that-aircraft': 'wta',
+  'wheres-that-aircraft': 'wta',
   'battle-order':       'boo',
 }
 // Map unlock key → game mode key (for DOM queries)
@@ -60,7 +60,7 @@ const GAME_MODES = [
     badge: null,
   },
   {
-    key: 'whos-that-aircraft',
+    key: 'wheres-that-aircraft',
     emoji: '✈️',
     title: "Where's that Aircraft?",
     desc: 'Random identification missions that appear as you learn. Spot the aircraft, then locate its home base on the map.',
@@ -113,7 +113,7 @@ export default function Play() {
   const sectionRefs = {
     'quiz':               quizRef,
     'flashcard':          flashcardRef,
-    'whos-that-aircraft': aircraftRef,
+    'wheres-that-aircraft': aircraftRef,
     'battle-order':       battleRef,
   }
 
@@ -178,7 +178,7 @@ export default function Play() {
       case 'quiz':               return quizBriefs.some(b => b.quizState === 'active')
       case 'flashcard':          return flashcardAvail !== null && flashcardAvail >= 5
       case 'battle-order':       return booBriefs.some(b => b.booState === 'active')
-      case 'whos-that-aircraft': return wtaSpawn?.prereqsMet === true || (wtaSpawn === null && isUnlocked('wta'))
+      case 'wheres-that-aircraft': return wtaSpawn?.prereqsMet === true || (wtaSpawn === null && isUnlocked('wta'))
       default:                   return false
     }
   }
@@ -513,7 +513,7 @@ export default function Play() {
           </div>
 
           {/* Where's that Aircraft? */}
-          <div ref={aircraftRef} className={sectionClass('whos-that-aircraft')}>
+          <div ref={aircraftRef} className={sectionClass('wheres-that-aircraft')}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">✈️</span>

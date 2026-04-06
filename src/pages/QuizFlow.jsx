@@ -135,13 +135,13 @@ function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, 
 const UPSELL_PRIORITY = ['Threats', 'Tech', 'Missions', 'Allies', 'Squadrons', 'Bases']
 
 // ── Results screen ────────────────────────────────────────────────────────
-function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack, brief, booAvailable = false, onStartBoo, user, settings, navigate }) {
+function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack, brief, booAvailable = false, onStartBoo, user, settings, levelThresholds, navigate }) {
   const pct     = total > 0 ? Math.round((score / total) * 100) : 0
   const perfect = score === total
 
   // Pick the first priority category that is locked for this user
   const upsellCategory = (won && user && isFreeUser(user))
-    ? UPSELL_PRIORITY.find(c => isCategoryLocked(c, user, settings)) ?? null
+    ? UPSELL_PRIORITY.find(c => isCategoryLocked(c, user, settings, levelThresholds)) ?? null
     : null
 
   return (
@@ -293,7 +293,7 @@ export default function QuizFlow() {
   const { applyUnlocks } = useNewGameUnlock()
   const { start }        = useAppTutorial()
 
-  const { settings }                 = useAppSettings()
+  const { settings, levelThresholds } = useAppSettings()
   const [loading, setLoading]        = useState(true)
   const [error, setError]            = useState(null)
   const [lockedCategory, setLockedCategory] = useState(null)
@@ -573,6 +573,7 @@ export default function QuizFlow() {
           onStartBoo={() => navigate(`/battle-of-order/${briefId}`)}
           user={user}
           settings={settings}
+          levelThresholds={levelThresholds}
         />
       </>
     )

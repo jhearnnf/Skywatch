@@ -20,6 +20,8 @@ const ACTION_TYPES = [
   'change_subscription',
   'reset_leads',
   'change_beta_settings',
+  'update_economy_levels',
+  'update_economy_apply',
 ];
 
 const adminActionSchema = new mongoose.Schema({

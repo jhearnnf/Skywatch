@@ -201,7 +201,7 @@ router.get('/aircoins/history', protect, async (req, res) => {
 const VALID_TUTORIAL_IDS = [
   'welcome', 'intel_brief', 'user', 'load_up',
   'home', 'learn', 'briefReader', 'quiz', 'play', 'profile', 'rankings', 'wheres_aircraft',
-  'learn_priority', 'pathway_swipe',
+  'learn_priority', 'pathway_swipe', 'stat_mnemonic',
 ];
 const TUTORIAL_PRIORITY  = { unseen: 0, skipped: 1, viewed: 2 };
 

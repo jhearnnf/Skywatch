@@ -5,20 +5,25 @@ const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const mongoose = require('mongoose');
 const IntelligenceBrief = require('../../models/IntelligenceBrief');
-const Level   = require('../../models/Level');
-const Rank    = require('../../models/Rank');
+const Level      = require('../../models/Level');
+const Rank       = require('../../models/Rank');
+const AppSettings = require('../../models/AppSettings');
+const AdminAction = require('../../models/AdminAction');
 const { CYCLE_THRESHOLD } = require('../../utils/awardCoins');
 const {
   createAdminUser,
+  createUser,
   createSettings,
   authCookie,
 } = require('../helpers/factories');
 
-const ENDPOINT = '/api/admin/economy-viability';
+const GET_ENDPOINT    = '/api/admin/economy-viability';
+const LEVELS_ENDPOINT = '/api/admin/economy/levels';
+const APPLY_ENDPOINT  = '/api/admin/economy/apply';
 
 // Seed 10 level docs matching the real curve
-async function seedLevels() {
-  const levels = [
+async function seedLevels(overrides = {}) {
+  const defaults = [
     { levelNumber: 1,  aircoinsToNextLevel: 100  },
     { levelNumber: 2,  aircoinsToNextLevel: 250  },
     { levelNumber: 3,  aircoinsToNextLevel: 500  },
@@ -30,6 +35,7 @@ async function seedLevels() {
     { levelNumber: 9,  aircoinsToNextLevel: 4100 },
     { levelNumber: 10, aircoinsToNextLevel: null  },
   ];
+  const levels = defaults.map(l => ({ ...l, ...(overrides[l.levelNumber] ?? {}) }));
   await Level.insertMany(levels);
 }
 
@@ -41,41 +47,44 @@ afterAll(async ()   => db.closeDatabase());
 
 beforeEach(async () => {
   await createSettings({
-    aircoinsPerBriefRead:        5,
-    aircoinsPerWinEasy:          10,
-    aircoinsPerWinMedium:        20,
-    aircoins100Percent:          15,
-    aircoinsOrderOfBattleEasy:   8,
-    aircoinsOrderOfBattleMedium: 18,
-    aircoinsWhereAircraftRound1: 5,
-    aircoinsWhereAircraftRound2: 10,
-    aircoinsWhereAircraftBonus:  5,
+    aircoinsPerBriefRead:          5,
+    aircoinsPerWinEasy:            10,
+    aircoinsPerWinMedium:          20,
+    aircoins100Percent:            15,
+    aircoinsOrderOfBattleEasy:     8,
+    aircoinsOrderOfBattleMedium:   18,
+    aircoinsWhereAircraftRound1:   5,
+    aircoinsWhereAircraftRound2:   10,
+    aircoinsWhereAircraftBonus:    5,
+    aircoinsFlashcardPerCard:      2,
+    aircoinsFlashcardPerfectBonus: 5,
+    aircoinsFirstLogin:            5,
+    aircoinsStreakBonus:           2,
   });
   await seedLevels();
   admin  = await createAdminUser();
   cookie = authCookie(admin._id);
 });
 
-// ── Auth guard ─────────────────────────────────────────────────────────────
+// ── GET auth guard ─────────────────────────────────────────────────────────
 describe('GET /api/admin/economy-viability — auth', () => {
   it('returns 401 when not authenticated', async () => {
-    const res = await request(app).get(ENDPOINT);
+    const res = await request(app).get(GET_ENDPOINT);
     expect(res.status).toBe(401);
   });
 
   it('returns 403 when authenticated as non-admin', async () => {
-    const { createUser } = require('../helpers/factories');
     const user   = await createUser();
     const cookie = authCookie(user._id);
-    const res    = await request(app).get(ENDPOINT).set('Cookie', cookie);
+    const res    = await request(app).get(GET_ENDPOINT).set('Cookie', cookie);
     expect(res.status).toBe(403);
   });
 });
 
-// ── Empty DB ───────────────────────────────────────────────────────────────
+// ── GET no content ─────────────────────────────────────────────────────────
 describe('GET /api/admin/economy-viability — no content', () => {
-  it('returns zeros when no published briefs or ranks exist', async () => {
-    const res = await request(app).get(ENDPOINT).set('Cookie', cookie);
+  it('returns zeros when no briefs or ranks exist', async () => {
+    const res = await request(app).get(GET_ENDPOINT).set('Cookie', cookie);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
 
@@ -88,141 +97,115 @@ describe('GET /api/admin/economy-viability — no content', () => {
   });
 });
 
-// ── Coin arithmetic ────────────────────────────────────────────────────────
-describe('GET /api/admin/economy-viability — arithmetic', () => {
+// ── GET content counts ─────────────────────────────────────────────────────
+describe('GET /api/admin/economy-viability — content counts', () => {
   beforeEach(async () => {
-    const fakeId = () => new mongoose.Types.ObjectId();
-
-    // Brief 1: Aircrafts, BOO-eligible, 3 easy + 2 medium questions
-    await IntelligenceBrief.create({
-      title:               'Eurofighter Typhoon',
-      category:            'Aircrafts',
-      descriptionSections: ['Text.'],
-      gameData:            { topSpeedKph: 1500 },
-      quizQuestionsEasy:   [fakeId(), fakeId(), fakeId()],
-      quizQuestionsMedium: [fakeId(), fakeId()],
-    });
-
-    // Brief 2: News, no BOO, no questions
-    await IntelligenceBrief.create({
-      title:               'RAF News Item',
-      category:            'News',
-      descriptionSections: ['Text.'],
-    });
-
-    // Brief 3: Ranks, BOO-eligible, 1 easy + 4 medium questions
-    await IntelligenceBrief.create({
-      title:               'Flight Lieutenant',
-      category:            'Ranks',
-      descriptionSections: ['Text.'],
-      gameData:            { rankHierarchyOrder: 7 },
-      quizQuestionsEasy:   [fakeId()],
-      quizQuestionsMedium: [fakeId(), fakeId(), fakeId(), fakeId()],
-    });
+    // 2 Aircrafts (WTA + BOO), 1 Ranks (BOO only), 1 News (neither)
+    await IntelligenceBrief.insertMany([
+      { title: 'Typhoon',     category: 'Aircrafts', descriptionSections: ['x'] },
+      { title: 'Tornado',     category: 'Aircrafts', descriptionSections: ['x'] },
+      { title: 'Flt Lt',     category: 'Ranks',     descriptionSections: ['x'] },
+      { title: 'RAF News',   category: 'News',      descriptionSections: ['x'] },
+    ]);
   });
 
-  it('returns correct content summary', async () => {
-    const res = await request(app).get(ENDPOINT).set('Cookie', cookie);
-    const { content } = res.body.data;
-
-    expect(content.totalBriefs).toBe(3);
-    expect(content.booEligibleBriefs).toBe(2); // Aircrafts + Ranks
-    expect(content.totalEasyQ).toBe(4);        // 3 + 0 + 1
-    expect(content.briefsWithEasyQ).toBe(2);
-    expect(content.totalMediumQ).toBe(6);      // 2 + 0 + 4
-    expect(content.briefsWithMediumQ).toBe(2);
-    expect(content.wtaPerBrief).toBe(20);      // 5 + 10 + 5
+  it('counts wtaBriefs as Aircrafts-only', async () => {
+    const res = await request(app).get(GET_ENDPOINT).set('Cookie', cookie);
+    expect(res.body.data.content.totalBriefs).toBe(4);
+    expect(res.body.data.content.wtaBriefs).toBe(2);      // Aircrafts only
   });
 
-  it('calculates correct Normal total', async () => {
-    const res = await request(app).get(ENDPOINT).set('Cookie', cookie);
-    const { normal } = res.body.data;
-
-    // reads: 3 × 5 = 15
-    // quiz:  4 × 10 + 2 × 15 = 40 + 30 = 70
-    // boo:   2 × 8 = 16
-    // wta:   3 × 20 = 60
-    // total: 161
-    expect(normal.reads).toBe(15);
-    expect(normal.quiz).toBe(70);
-    expect(normal.boo).toBe(16);
-    expect(normal.wta).toBe(60);
-    expect(normal.total).toBe(161);
+  it('counts booEligibleBriefs by category regardless of gameData', async () => {
+    const res = await request(app).get(GET_ENDPOINT).set('Cookie', cookie);
+    expect(res.body.data.content.booEligibleBriefs).toBe(3); // Aircrafts + Ranks
   });
 
-  it('calculates correct Advanced total', async () => {
-    const res = await request(app).get(ENDPOINT).set('Cookie', cookie);
-    const { advanced } = res.body.data;
-
-    // reads: 3 × 5 = 15
-    // quiz:  6 × 20 + 2 × 15 = 120 + 30 = 150
-    // boo:   2 × 18 = 36
-    // wta:   3 × 20 = 60
-    // total: 261
-    expect(advanced.reads).toBe(15);
-    expect(advanced.quiz).toBe(150);
-    expect(advanced.boo).toBe(36);
-    expect(advanced.wta).toBe(60);
-    expect(advanced.total).toBe(261);
-  });
-
-  it('reports correct level when coins are below first cycle threshold', async () => {
-    const res = await request(app).get(ENDPOINT).set('Cookie', cookie);
-    const { normal, advanced } = res.body.data;
-
-    // 161 coins: L1 needs 100 to advance → passes L1, L2 needs 250 more → 161 < 350 cumulative → L2
-    expect(normal.finalLevel).toBe(2);
-    expect(normal.completedCycles).toBe(0);
-    expect(normal.finalRank).toBeNull();
-
-    // 261 coins: cumulative to L3 = 350 → 261 < 350 → L2
-    expect(advanced.finalLevel).toBe(2);
-    expect(advanced.completedCycles).toBe(0);
+  it('returns all expected rate fields including login/streak', async () => {
+    const res = await request(app).get(GET_ENDPOINT).set('Cookie', cookie);
+    const { rates } = res.body.data;
+    expect(rates.aircoinsFirstLogin).toBe(5);
+    expect(rates.aircoinsStreakBonus).toBe(2);
+    expect(rates.aircoinsFlashcardPerCard).toBe(2);
+    expect(rates.aircoinsFlashcardPerfectBonus).toBe(5);
   });
 });
 
-// ── Rank promotion logic ───────────────────────────────────────────────────
+// ── GET coin arithmetic ────────────────────────────────────────────────────
+describe('GET /api/admin/economy-viability — arithmetic', () => {
+  beforeEach(async () => {
+    // 3 briefs: 2 Aircrafts (WTA+BOO), 1 Ranks (BOO), 1 News (neither)
+    await IntelligenceBrief.insertMany([
+      { title: 'Aircraft A', category: 'Aircrafts', descriptionSections: ['x'] },
+      { title: 'Aircraft B', category: 'Aircrafts', descriptionSections: ['x'] },
+      { title: 'Rank A',     category: 'Ranks',     descriptionSections: ['x'] },
+      { title: 'News A',     category: 'News',       descriptionSections: ['x'] },
+    ]);
+  });
+
+  it('calculates correct Normal total (4 briefs, 5q each, WTA=aircraft only, BOO=3)', async () => {
+    const res = await request(app).get(GET_ENDPOINT).set('Cookie', cookie);
+    const { normal, content } = res.body.data;
+
+    // reads:   4 × 5  = 20
+    // quiz:    4×5×10 + 4×15 = 200 + 60 = 260
+    // boo:     3 × 8  = 24
+    // wta:     2 × 20 = 40   (aircraft only, WTA rate = 5+10+5)
+    // total:   20 + 260 + 24 + 40 = 344
+    expect(normal.reads).toBe(20);
+    expect(normal.quiz).toBe(260);
+    expect(normal.boo).toBe(24);
+    expect(normal.wta).toBe(40);
+    expect(normal.total).toBe(344);
+    expect(content.wtaBriefs).toBe(2);
+    expect(content.booEligibleBriefs).toBe(3);
+  });
+
+  it('calculates correct Advanced total', async () => {
+    const res = await request(app).get(GET_ENDPOINT).set('Cookie', cookie);
+    const { advanced } = res.body.data;
+
+    // reads:   4 × 5   = 20
+    // quiz:    4×5×20 + 4×15 = 400 + 60 = 460
+    // boo:     3 × 18  = 54
+    // wta:     2 × 20  = 40
+    // total:   20 + 460 + 54 + 40 = 574
+    expect(advanced.reads).toBe(20);
+    expect(advanced.quiz).toBe(460);
+    expect(advanced.boo).toBe(54);
+    expect(advanced.wta).toBe(40);
+    expect(advanced.total).toBe(574);
+  });
+});
+
+// ── GET rank progression ───────────────────────────────────────────────────
 describe('GET /api/admin/economy-viability — rank progression', () => {
   beforeEach(async () => {
     await Rank.insertMany([
-      { rankNumber: 1, rankType: 'enlisted_aviator',      rankName: 'Aircraftman',          rankAbbreviation: 'AC'  },
-      { rankNumber: 2, rankType: 'enlisted_aviator',      rankName: 'Leading Aircraftman',   rankAbbreviation: 'LAC' },
+      { rankNumber: 1, rankType: 'enlisted_aviator',       rankName: 'Aircraftman',        rankAbbreviation: 'AC'  },
+      { rankNumber: 2, rankType: 'enlisted_aviator',       rankName: 'Leading Aircraftman', rankAbbreviation: 'LAC' },
       { rankNumber: 3, rankType: 'non_commissioned_aircrew', rankName: 'Senior Aircraftman', rankAbbreviation: 'SAC' },
     ]);
   });
 
   it('correctly counts rank promotions and identifies final rank + level', async () => {
-    // Build enough content to earn 2 full cycles (29400 coins) in Advanced scenario
-    // CYCLE_THRESHOLD = 14700, so we need total ≥ 29400 advanced coins
-    // Each brief (advanced): 5 (read) + 20×20 (med quiz) + 15 (100% bonus) + 18 (BOO) + 20 (WTA) = 458
-    // Need ≥ 65 briefs. Let's use a simpler approach: create briefs and check arithmetic.
+    // 60 Aircrafts briefs: Advanced per brief = 5 + (5×20+15) + 18 + 20 = 5 + 115 + 18 + 20 = 158
+    // 60 × 158 = 9480 → < CYCLE_THRESHOLD (14700) → 0 completed cycles
+    // Use enough briefs to exceed 1 cycle: need > 14700 / 158 ≈ 93 briefs
+    // 100 Aircrafts briefs: 100 × 158 = 15800 → 1 completed cycle
+    const briefs = Array.from({ length: 100 }, (_, i) => ({
+      title: `Aircraft ${i}`, category: 'Aircrafts', descriptionSections: ['x'],
+    }));
+    await IntelligenceBrief.insertMany(briefs);
 
-    // Use 60 Aircrafts briefs each with 10 medium questions + BOO gameData
-    // Advanced per brief: 5 + (10×20 + 15) + 18 + 20 = 5 + 215 + 18 + 20 = 258
-    // 60 briefs × 258 = 15480 → 1 full cycle (15480 > 14700), completedCycles = 1
-    const fakeId = () => new mongoose.Types.ObjectId();
-    const medQs  = Array.from({ length: 10 }, fakeId);
-    for (let i = 0; i < 60; i++) {
-      await IntelligenceBrief.create({
-        title:               `Aircraft ${i}`,
-        category:            'Aircrafts',
-        descriptionSections: ['Text.'],
-        isPublished:         true,
-        gameData:            { topSpeedKph: (i + 1) * 100 },
-        quizQuestionsMedium: medQs,
-      });
-    }
-
-    const res = await request(app).get(ENDPOINT).set('Cookie', cookie);
+    const res = await request(app).get(GET_ENDPOINT).set('Cookie', cookie);
     expect(res.status).toBe(200);
 
     const { advanced, totalRanks, cycleThreshold } = res.body.data;
     expect(cycleThreshold).toBe(CYCLE_THRESHOLD);
     expect(totalRanks).toBe(3);
 
-    // 60 × 258 = 15480 total advanced coins
-    expect(advanced.total).toBe(60 * (5 + (10 * 20 + 15) + 18 + 20));
-    // 1 completed cycle → rank 1 (Aircraftman)
+    // 100 × (5 + 5×20+15 + 18 + 20) = 100 × 158 = 15800
+    expect(advanced.total).toBe(15800);
     expect(advanced.completedCycles).toBe(1);
     expect(advanced.finalRank.rankName).toBe('Aircraftman');
     expect(advanced.atMaxRank).toBe(false);
@@ -231,27 +214,192 @@ describe('GET /api/admin/economy-viability — rank progression', () => {
 
   it('marks atMaxRank true when coins cover all rank cycles', async () => {
     // Need ≥ 3 × 14700 = 44100 advanced coins
-    // Advanced per brief: 5 + 215 + 18 + 20 = 258
-    // ceil(44100/258) = 171 briefs
-    const fakeId = () => new mongoose.Types.ObjectId();
-    const medQs  = Array.from({ length: 10 }, fakeId);
-    for (let i = 0; i < 175; i++) {
-      await IntelligenceBrief.create({
-        title:               `Aircraft ${i}`,
-        category:            'Aircrafts',
-        descriptionSections: ['Text.'],
-        isPublished:         true,
-        gameData:            { topSpeedKph: (i + 1) * 100 },
-        quizQuestionsMedium: medQs,
-      });
-    }
+    // 44100 / 158 ≈ 280 briefs
+    const briefs = Array.from({ length: 285 }, (_, i) => ({
+      title: `Aircraft ${i}`, category: 'Aircrafts', descriptionSections: ['x'],
+    }));
+    await IntelligenceBrief.insertMany(briefs);
 
-    const res = await request(app).get(ENDPOINT).set('Cookie', cookie);
+    const res = await request(app).get(GET_ENDPOINT).set('Cookie', cookie);
     const { advanced } = res.body.data;
 
-    expect(advanced.completedCycles).toBe(3); // capped at totalRanks
+    expect(advanced.completedCycles).toBe(3);
     expect(advanced.atMaxRank).toBe(true);
     expect(advanced.finalRank.rankName).toBe('Senior Aircraftman');
     expect(advanced.shortfall).toBe(0);
+  });
+});
+
+// ── PATCH /economy/levels auth ─────────────────────────────────────────────
+describe('PATCH /api/admin/economy/levels — auth', () => {
+  it('returns 401 when not authenticated', async () => {
+    const res = await request(app).patch(LEVELS_ENDPOINT)
+      .send({ levels: [{ levelNumber: 1, aircoinsToNextLevel: 200 }], reason: 'test' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+    const res    = await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
+      .send({ levels: [{ levelNumber: 1, aircoinsToNextLevel: 200 }], reason: 'test' });
+    expect(res.status).toBe(403);
+  });
+});
+
+// ── PATCH /economy/levels writes ──────────────────────────────────────────
+describe('PATCH /api/admin/economy/levels — DB writes', () => {
+  it('updates level thresholds in the Level collection', async () => {
+    const res = await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
+      .send({
+        levels: [
+          { levelNumber: 1, aircoinsToNextLevel: 200 },
+          { levelNumber: 2, aircoinsToNextLevel: 400 },
+        ],
+        reason: 'economy rebalance',
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+
+    const l1 = await Level.findOne({ levelNumber: 1 });
+    const l2 = await Level.findOne({ levelNumber: 2 });
+    expect(l1.aircoinsToNextLevel).toBe(200);
+    expect(l2.aircoinsToNextLevel).toBe(400);
+    // Other levels unchanged
+    const l3 = await Level.findOne({ levelNumber: 3 });
+    expect(l3.aircoinsToNextLevel).toBe(500);
+  });
+
+  it('logs an AdminAction', async () => {
+    await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
+      .send({ levels: [{ levelNumber: 1, aircoinsToNextLevel: 300 }], reason: 'test rebalance' });
+
+    const action = await AdminAction.findOne({ actionType: 'update_economy_levels' });
+    expect(action).not.toBeNull();
+    expect(String(action.userId)).toBe(String(admin._id));
+  });
+
+  it('rejects invalid levelNumber', async () => {
+    const res = await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
+      .send({ levels: [{ levelNumber: 99, aircoinsToNextLevel: 100 }], reason: 'test' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects negative aircoinsToNextLevel', async () => {
+    const res = await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
+      .send({ levels: [{ levelNumber: 1, aircoinsToNextLevel: -50 }], reason: 'test' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects missing levels array', async () => {
+    const res = await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
+      .send({ reason: 'test' });
+    expect(res.status).toBe(400);
+  });
+});
+
+// ── POST /economy/apply auth ───────────────────────────────────────────────
+describe('POST /api/admin/economy/apply — auth', () => {
+  const validBody = {
+    rates:  { aircoinsPerWinEasy: 12 },
+    levels: [{ levelNumber: 1, aircoinsToNextLevel: 150 }],
+    reason: 'test',
+  };
+
+  it('returns 401 when not authenticated', async () => {
+    const res = await request(app).post(APPLY_ENDPOINT).send(validBody);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+    const res    = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send(validBody);
+    expect(res.status).toBe(403);
+  });
+});
+
+// ── POST /economy/apply DB writes ─────────────────────────────────────────
+describe('POST /api/admin/economy/apply — DB writes', () => {
+  it('updates AppSettings with provided rates', async () => {
+    const res = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send({
+      rates: {
+        aircoinsPerWinEasy:   15,
+        aircoinsPerWinMedium: 25,
+        aircoinsFirstLogin:   8,
+        aircoinsStreakBonus:  3,
+      },
+      levels: [{ levelNumber: 1, aircoinsToNextLevel: 100 }],
+      reason: 'rate adjustment',
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+
+    const settings = await AppSettings.getSettings();
+    expect(settings.aircoinsPerWinEasy).toBe(15);
+    expect(settings.aircoinsPerWinMedium).toBe(25);
+    expect(settings.aircoinsFirstLogin).toBe(8);
+    expect(settings.aircoinsStreakBonus).toBe(3);
+    // Unmentioned field unchanged
+    expect(settings.aircoinsPerBriefRead).toBe(5);
+  });
+
+  it('updates Level documents', async () => {
+    await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send({
+      rates:  { aircoinsPerWinEasy: 10 },
+      levels: [
+        { levelNumber: 1, aircoinsToNextLevel: 150 },
+        { levelNumber: 3, aircoinsToNextLevel: 600 },
+      ],
+      reason: 'level rebalance',
+    });
+
+    const l1 = await Level.findOne({ levelNumber: 1 });
+    const l3 = await Level.findOne({ levelNumber: 3 });
+    expect(l1.aircoinsToNextLevel).toBe(150);
+    expect(l3.aircoinsToNextLevel).toBe(600);
+  });
+
+  it('logs an AdminAction', async () => {
+    await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send({
+      rates:  { aircoinsPerWinEasy: 10 },
+      levels: [{ levelNumber: 1, aircoinsToNextLevel: 100 }],
+      reason: 'full economy apply',
+    });
+
+    const action = await AdminAction.findOne({ actionType: 'update_economy_apply' });
+    expect(action).not.toBeNull();
+    expect(String(action.userId)).toBe(String(admin._id));
+  });
+
+  it('rejects unknown rate fields', async () => {
+    const res = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send({
+      rates:  { dangerousField: 999 },
+      levels: [{ levelNumber: 1, aircoinsToNextLevel: 100 }],
+      reason: 'test',
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Unknown rate field/);
+  });
+
+  it('rejects negative rate values', async () => {
+    const res = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send({
+      rates:  { aircoinsPerWinEasy: -5 },
+      levels: [{ levelNumber: 1, aircoinsToNextLevel: 100 }],
+      reason: 'test',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects missing rates object', async () => {
+    const res = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie)
+      .send({ levels: [{ levelNumber: 1, aircoinsToNextLevel: 100 }], reason: 'test' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects missing levels array', async () => {
+    const res = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie)
+      .send({ rates: { aircoinsPerWinEasy: 10 }, reason: 'test' });
+    expect(res.status).toBe(400);
   });
 });

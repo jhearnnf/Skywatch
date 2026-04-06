@@ -32,15 +32,31 @@ function canAccessCategory(category, tier, settings) {
   return accessible === null || accessible.includes(category);
 }
 
-// Cumulative totalAircoins needed to reach each level (index 0 = level 1 start)
-const LEVEL_THRESHOLDS = [0, 100, 350, 850, 1700, 3000, 4850, 7350, 10600, 14700];
+// Builds the cumulative-coins-per-level array from Level documents.
+// Accepts either DB format { aircoinsToNextLevel } or API format { cumulativeAircoins }.
+// Returns e.g. [0, 100, 350, 850, ...] — index i is the cumulative coins to reach level i+1.
+function buildCumulativeThresholds(levels) {
+  if (!levels?.length) return [0];
+  if (levels[0].cumulativeAircoins !== undefined) {
+    return levels.map(l => l.cumulativeAircoins);
+  }
+  const result = [];
+  let cumulative = 0;
+  for (const lv of levels) {
+    result.push(cumulative);
+    if (lv.aircoinsToNextLevel) cumulative += lv.aircoinsToNextLevel;
+  }
+  return result;
+}
 
-// Returns the user's current level (1–10) based on total aircoins
-function getUserLevel(totalAircoins) {
-  const coins = totalAircoins ?? 0;
+// Returns the user's current level (1–10) based on total aircoins and live thresholds.
+// levelThresholds: cumulative array built by buildCumulativeThresholds()
+function getUserLevel(totalAircoins, levelThresholds) {
+  const coins      = totalAircoins ?? 0;
+  const thresholds = levelThresholds;
   let level = 1;
-  for (let i = 1; i < LEVEL_THRESHOLDS.length; i++) {
-    if (coins >= LEVEL_THRESHOLDS[i]) level = i + 1;
+  for (let i = 1; i < thresholds.length; i++) {
+    if (coins >= thresholds[i]) level = i + 1;
     else break;
   }
   return level;
@@ -52,11 +68,11 @@ function getUserLevel(totalAircoins) {
 // Rule: if userRank > rankRequired, the level check is bypassed (they've already surpassed
 // the rank at which this category first unlocks, so level resets are irrelevant).
 // If userRank === rankRequired, both level and rank must be met.
-function isPathwayUnlocked(category, user, settings) {
+function isPathwayUnlocked(category, user, settings, levelThresholds) {
   if (!user) return true;
   const unlock = (settings.pathwayUnlocks ?? []).find(p => p.category === category);
   if (!unlock) return true;
-  const userLevel = getUserLevel(user.totalAircoins);
+  const userLevel = getUserLevel(user.totalAircoins, levelThresholds);
   const userRank  = user.rank?.rankNumber ?? 1;
   return userRank > unlock.rankRequired || (userRank >= unlock.rankRequired && userLevel >= unlock.levelRequired);
 }
@@ -64,9 +80,9 @@ function isPathwayUnlocked(category, user, settings) {
 // Returns an array of categories accessible to the user based on pathway requirements.
 // Returns null if the user is a guest (no pathway restriction applies to guests).
 // Useful for building DB query $in filters.
-function getPathwayAccessibleCategories(user, settings) {
+function getPathwayAccessibleCategories(user, settings, levelThresholds) {
   if (!user) return null;
-  const userLevel = getUserLevel(user.totalAircoins);
+  const userLevel = getUserLevel(user.totalAircoins, levelThresholds);
   const userRank  = user.rank?.rankNumber ?? 1;
   return (settings.pathwayUnlocks ?? [])
     .filter(p => userRank > p.rankRequired || (userRank >= p.rankRequired && userLevel >= p.levelRequired))
@@ -77,6 +93,7 @@ module.exports = {
   effectiveTier,
   getAccessibleCategories,
   canAccessCategory,
+  buildCumulativeThresholds,
   getUserLevel,
   isPathwayUnlocked,
   getPathwayAccessibleCategories,

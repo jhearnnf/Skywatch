@@ -93,7 +93,7 @@ export default function Landing() {
                   Sign In
                 </Link>
                 <Link to="/login?tab=register" className="bg-brand-600 hover:bg-brand-700 text-slate-50 text-sm font-bold px-4 py-1.5 rounded-full transition-colors">
-                  Get Started
+                  Enlist
                 </Link>
               </>
             )}
@@ -110,17 +110,16 @@ export default function Landing() {
           {/* Classified badge row */}
           <motion.div variants={fadeUp} custom={0} className="flex items-center justify-center gap-2 mb-8">
             <span className="classified-tag">CLASSIFIED</span>
-            <span className="intel-tag">RAF INTEL BRIEF</span>
-            <span className="intel-tag">APPLICANT ACCESS</span>
+            <span className="intel-tag">FREE TO START</span>
           </motion.div>
 
           <motion.h1 variants={fadeUp} custom={1} className="text-5xl sm:text-6xl font-extrabold text-slate-900 mb-5 leading-tight tracking-tight">
-            Master the{' '}
-            <span className="text-gradient">Royal Air Force</span>
+            Master{' '}
+            <span className="text-gradient">RAF Knowledge</span>
           </motion.h1>
 
           <motion.p variants={fadeUp} custom={2} className="text-lg sm:text-xl text-slate-600 mb-10 max-w-xl mx-auto leading-relaxed">
-            Build the knowledge you need to join the RAF. Short, structured intel briefs on aircraft, bases, roles, operations, and more.
+            Not a Wikipedia article. A structured, gamified path through RAF aircraft, operations, doctrine, and more.
           </motion.p>
 
           <motion.div variants={fadeUp} custom={3} className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -161,7 +160,7 @@ export default function Landing() {
             { value: '15',    label: 'Subject Areas'   },
             { value: '100+',  label: 'Intel Briefs'    },
             { value: '1000+', label: 'Quiz Questions'  },
-            { value: 'Free',  label: 'To Start'        },
+            { value: 'Daily', label: 'Streak System'     },
           ].map(({ value, label }) => (
             <div key={label} className="relative px-4 py-3" style={{ border: '1px solid rgba(91,170,255,0.12)', borderRadius: 8 }}>
               <CornerBrackets size={8} />
@@ -199,6 +198,7 @@ export default function Landing() {
             >
               <Link
                 to="/learn-priority"
+                state={{ category: label }}
                 className="relative flex flex-col items-center gap-2 rounded-2xl p-4 border transition-all card-intel hover:card-intel hover:-translate-y-0.5 group"
               >
                 <CornerBrackets size={10} />
@@ -222,7 +222,7 @@ export default function Landing() {
             <span className="intel-tag">MISSION BRIEFING</span>
           </div>
           <h2 className="text-3xl font-bold text-slate-900 mb-3">How It Works</h2>
-          <p className="text-slate-500">Designed from the ground up for RAF applicants and enthusiasts.</p>
+          <p className="text-slate-500">Every feature built around one goal — deep RAF knowledge.</p>
         </motion.div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -264,9 +264,9 @@ export default function Landing() {
           </div>
 
           <div className="text-5xl mb-4">🎯</div>
-          <h2 className="text-3xl font-extrabold text-slate-50 mb-3">Ready to Begin?</h2>
+          <h2 className="text-3xl font-extrabold text-slate-50 mb-3">Aim Higher.</h2>
           <p className="text-lg mb-8 max-w-md mx-auto" style={{ color: '#a8c4e0' }}>
-            Join RAF applicants already using SkyWatch to prepare for their selection journey.
+            Stop skimming Wikipedia. Start actually knowing the RAF.
           </p>
           {user ? (
             <Link
@@ -274,7 +274,7 @@ export default function Landing() {
               className="inline-block bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-colors"
               style={{ boxShadow: '0 0 20px rgba(91,170,255,0.3)' }}
             >
-              Go to Home →
+              Access the Briefings →
             </Link>
           ) : (
             <button
@@ -282,7 +282,7 @@ export default function Landing() {
               className="inline-block bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-colors"
               style={{ boxShadow: '0 0 20px rgba(91,170,255,0.3)' }}
             >
-              Create Free Account →
+              Access the Briefings →
             </button>
           )}
         </motion.div>
@@ -290,7 +290,7 @@ export default function Landing() {
 
       {/* ── Footer ────────────────────────────────────────── */}
       <footer className="py-8 px-5 border-t border-slate-200 text-center">
-        <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR RAF APPLICANTS & ENTHUSIASTS</p>
+        <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR THOSE WHO TAKE THE RAF SERIOUSLY</p>
       </footer>
 
       {/* ── Onboarding overlay ────────────────────────────── */}

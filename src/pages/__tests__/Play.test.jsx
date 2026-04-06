@@ -117,7 +117,7 @@ describe('Play page — game cards', () => {
 
   it("clicking Where's that Aircraft? card calls window.scrollTo with smooth behaviour", () => {
     renderAsGuest()
-    fireEvent.click(screen.getByTestId('card-whos-that-aircraft'))
+    fireEvent.click(screen.getByTestId('card-wheres-that-aircraft'))
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
   })
 
@@ -173,7 +173,7 @@ describe('Play page — game cards', () => {
   it('available game mode cards do not show "Play now" badge', () => {
     renderAsGuest()
     expect(screen.getByTestId('card-quiz').textContent).not.toMatch(/play now/i)
-    expect(screen.getByTestId('card-whos-that-aircraft').textContent).not.toMatch(/play now/i)
+    expect(screen.getByTestId('card-wheres-that-aircraft').textContent).not.toMatch(/play now/i)
     expect(screen.getByTestId('card-battle-order').textContent).not.toMatch(/play now/i)
   })
 })
@@ -628,7 +628,7 @@ describe('Play page — WTA card padlock', () => {
   it('WTA card padlock is locked (grey) when wta-spawn returns prereqsMet: false', async () => {
     renderWithWtaSpawn({ prereqsMet: false })
     await waitFor(() => screen.getByText(/learn about aircrafts for these random missions to appear/i))
-    const card = screen.getByTestId('card-whos-that-aircraft')
+    const card = screen.getByTestId('card-wheres-that-aircraft')
     // Locked SVG uses grey stroke #94a3b8; unlocked uses green #22c55e
     const svgPaths = card.querySelectorAll('svg [stroke]')
     const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
@@ -638,7 +638,7 @@ describe('Play page — WTA card padlock', () => {
   it('WTA card padlock is unlocked (green) when wta-spawn returns prereqsMet: true', async () => {
     renderWithWtaSpawn({ prereqsMet: true, missions: [] })
     await waitFor(() => {
-      const card = screen.getByTestId('card-whos-that-aircraft')
+      const card = screen.getByTestId('card-wheres-that-aircraft')
       const svgPaths = card.querySelectorAll('svg [stroke]')
       const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
       expect(strokes.every(s => s === '#22c55e')).toBe(true)
@@ -663,7 +663,7 @@ describe('Play page — WTA card padlock', () => {
   it('WTA card padlock is unlocked (green) via isUnlocked("wta") even when wta-spawn is null', async () => {
     renderWithWtaSpawn(null, { isUnlockedFn: (key) => key === 'wta' })
     await waitFor(() => {
-      const card = screen.getByTestId('card-whos-that-aircraft')
+      const card = screen.getByTestId('card-wheres-that-aircraft')
       const svgPaths = card.querySelectorAll('svg [stroke]')
       const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
       expect(strokes.every(s => s === '#22c55e')).toBe(true)
@@ -677,7 +677,7 @@ describe('Play page — WTA card padlock', () => {
     await waitFor(() => screen.getByText(/learn about aircrafts for these random missions to appear/i))
     // Once fetch resolves with prereqsMet: false, wtaSpawn is not null so the isUnlocked fallback
     // no longer applies — padlock must be grey/locked
-    const card = screen.getByTestId('card-whos-that-aircraft')
+    const card = screen.getByTestId('card-wheres-that-aircraft')
     const svgPaths = card.querySelectorAll('svg [stroke]')
     const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
     expect(strokes.every(s => s === '#94a3b8')).toBe(true)

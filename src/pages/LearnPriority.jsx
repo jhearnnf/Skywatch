@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useAnimationControls } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -79,6 +79,61 @@ function getRankName(rankNumber) {
   return MOCK_RANKS.find(r => r.rankNumber === rankNumber)?.rankName ?? `Rank ${rankNumber}`
 }
 
+// ── AptitudeSync badge ────────────────────────────────────────────────────────
+
+const SYNC_GLITCH_CHARS = '!@/\\|<>{}01*%$-~^?#='
+const SYNC_BASE_TEXT    = '[ SYNC ]'
+
+function SyncBadge({ onClick }) {
+  const [label, setLabel] = useState(SYNC_BASE_TEXT)
+
+  useEffect(() => {
+    let tid
+    const fire = () => {
+      // Pick a random index inside the brackets (not the outer [ or ])
+      const idx = 2 + Math.floor(Math.random() * (SYNC_BASE_TEXT.length - 4))
+      const ch  = SYNC_GLITCH_CHARS[Math.floor(Math.random() * SYNC_GLITCH_CHARS.length)]
+      setLabel(SYNC_BASE_TEXT.slice(0, idx) + ch + SYNC_BASE_TEXT.slice(idx + 1))
+      setTimeout(() => setLabel(SYNC_BASE_TEXT), 60 + Math.random() * 80)
+      tid = setTimeout(fire, 1800 + Math.random() * 2600)
+    }
+    tid = setTimeout(fire, 900 + Math.random() * 1600)
+    return () => clearTimeout(tid)
+  }, [])
+
+  return (
+    <motion.button
+      initial={{ opacity: 0, x: -6 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      onClick={e => { e.stopPropagation(); onClick() }}
+      title="APTITUDE_SYNC — knowledge debrief for this brief"
+      style={{
+        fontFamily:  "'Courier New', Courier, monospace",
+        fontSize:    '9px',
+        letterSpacing: '0.04em',
+        padding:     '2px 5px',
+        borderRadius: '3px',
+        background:  '#030d18',
+        border:      '1px solid #1a4a70',
+        color:       '#1a4a70',
+        cursor:      'pointer',
+        whiteSpace:  'nowrap',
+        lineHeight:  1.4,
+        flexShrink:  0,
+        transition:  'color 0.2s, border-color 0.2s, text-shadow 0.2s',
+      }}
+      whileHover={{
+        color:       '#3d8fd9',
+        borderColor: '#3d8fd9',
+        textShadow:  '0 0 6px #3d8fd9',
+      }}
+    >
+      {label}
+    </motion.button>
+  )
+}
+
 // ── Stone component ───────────────────────────────────────────────────────────
 
 function formatEventDate(dateStr) {
@@ -88,7 +143,7 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function Stone({ brief, state, colors, milestone, onTap, index }) {
+function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, aptitudeSyncEnabled, index }) {
   const size         = milestone ? 72 : 60
   const isNext       = state === 'next'
   const isRead       = state === 'read'
@@ -96,7 +151,23 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
   const isLocked     = state.startsWith('locked')
   const isStub       = state === 'stub'
   const isHistoric   = !!brief.historic && !isLocked && !isStub
-  const [hovered, setHovered] = useState(false)
+  const [hovered,  setHovered]  = useState(false)
+  const [inView,   setInView]   = useState(false)
+  const containerRef = useRef(null)
+
+  // Intersection observer — marks stone as in-view once it enters the viewport
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setInView(true) },
+      { threshold: 0.1 }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  const showSync = isRead && quizPassed && aptitudeSyncEnabled && inView
 
   // Amber historic tones — overlaid regardless of pathway colour
   const HISTORIC_BG     = '#1e1200'
@@ -108,6 +179,7 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
 
   return (
     <div
+      ref={containerRef}
       className="flex flex-col items-center"
       style={{ paddingLeft: `calc(50% + ${xOffset}px - ${size / 2}px)`, alignItems: 'flex-start' }}
       onMouseEnter={() => { if (isStub) setHovered(true) }}
@@ -131,6 +203,9 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
           ))}
         </div>
       )}
+
+      {/* Stone circle + optional SYNC badge in a row */}
+      <div className="flex items-center gap-2">
 
       {/* The stone */}
       <button
@@ -251,6 +326,15 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
         )}
       </button>
 
+      {/* AptitudeSync badge — glitches in when stone scrolls into view */}
+      <AnimatePresence>
+        {showSync && (
+          <SyncBadge onClick={onSyncTap} />
+        )}
+      </AnimatePresence>
+
+      </div>{/* end stone-row */}
+
       {/* Title label */}
       <p
         className="text-xs font-semibold mt-1.5 text-center leading-tight relative overflow-hidden"
@@ -320,7 +404,7 @@ function Stone({ brief, state, colors, milestone, onTap, index }) {
 
 // ── Pathway view (vertical list of stones for one category) ──────────────────
 
-function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, onStoneTap, onLockedTap, direction }) {
+function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction }) {
   const navigate = useNavigate()
 
   const variants = {
@@ -409,9 +493,10 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
             colors={colors}
             milestone={milestone}
             index={i}
-            onTap={() => {
-              navigate(`/brief/${brief._id}`)
-            }}
+            onTap={() => navigate(`/brief/${brief._id}`)}
+            onSyncTap={() => navigate(`/aptitude-sync/${brief._id}`, { state: { briefTitle: brief.title } })}
+            quizPassed={quizPassedSet.has(brief._id)}
+            aptitudeSyncEnabled={aptitudeSyncEnabled}
           />
         )
       })}
@@ -585,6 +670,8 @@ export default function LearnPriority() {
   const [direction,      setDirection]      = useState(1)   // 1=forward, -1=backward
   const [unlockModal,    setUnlockModal]    = useState(null) // { unlock, category, colors }
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const [aptSyncSettings, setAptSyncSettings] = useState({ enabled: false, tiers: ['admin'] })
+  const [quizPassedSet,  setQuizPassedSet]  = useState(new Set())
   const dragX        = useMotionValue(0)
   const swipeControls = useAnimationControls()
   const [showSwipeHint, setShowSwipeHint] = useState(false)
@@ -602,6 +689,7 @@ export default function LearnPriority() {
       .then(d => {
         if (d?.pathwayUnlocks?.length) setPathwayUnlocks(d.pathwayUnlocks)
         if (d) setCatSettings({ freeCategories: d.freeCategories ?? [], silverCategories: d.silverCategories ?? [] })
+        if (d) setAptSyncSettings({ enabled: d.aptitudeSyncEnabled ?? false, tiers: d.aptitudeSyncTiers ?? ['admin'] })
         setSettingsLoaded(true)
       })
       .catch(() => { setSettingsLoaded(true) })
@@ -614,6 +702,27 @@ export default function LearnPriority() {
       .then(d => { if (d?.data?.levels?.length) setLevels(d.data.levels) })
       .catch(() => {})
   }, [API])
+
+  // ── Fetch quiz-passed brief IDs (background, after page has loaded) ─────────
+  useEffect(() => {
+    if (!user) { setQuizPassedSet(new Set()); return }
+    fetch(`${API}/api/games/quiz/completed-brief-ids`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.data?.ids) setQuizPassedSet(new Set(d.data.ids))
+      })
+      .catch(() => {})
+  }, [user, API])
+
+  // ── Check if this user can access AptitudeSync ──────────────────────────────
+  const aptitudeSyncEnabled = useMemo(() => {
+    if (!aptSyncSettings.enabled) return false
+    if (!user) return false
+    if (user.isAdmin) return true
+    const tier      = user.subscriptionTier ?? 'free'
+    const checkTier = tier === 'trial' ? 'silver' : tier
+    return aptSyncSettings.tiers.includes(checkTier)
+  }, [aptSyncSettings, user])
 
   // ── Compute user progression ────────────────────────────────────────────────
   const userTier        = user?.subscriptionTier ?? 'free'
@@ -906,6 +1015,8 @@ export default function LearnPriority() {
                 lockReason={getLockReason(activePathway)}
                 readSet={readSet}
                 inProgressSet={inProgressSet}
+                quizPassedSet={quizPassedSet}
+                aptitudeSyncEnabled={aptitudeSyncEnabled}
                 direction={direction}
                 onStoneTap={() => {}}
                 onLockedTap={() => setUnlockModal({

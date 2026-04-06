@@ -9,6 +9,7 @@ const GameSessionWhereAircraftResult    = require('../models/GameSessionWhereAir
 const GameSessionFlashcardRecallResult  = require('../models/GameSessionFlashcardRecallResult');
 const GameQuizQuestion = require('../models/GameQuizQuestion');
 const AppSettings = require('../models/AppSettings');
+const Level = require('../models/Level');
 const User = require('../models/User');
 const AircoinLog = require('../models/AircoinLog');
 const { awardCoins } = require('../utils/awardCoins');
@@ -84,14 +85,15 @@ router.post('/quiz/start', protect, async (req, res) => {
     const { briefId } = req.body;
     if (!briefId) return res.status(400).json({ message: 'briefId required' });
 
-    const { effectiveTier, canAccessCategory, isPathwayUnlocked } = require('../utils/subscription');
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
 
     const brief = await IntelligenceBrief.findById(briefId).select('category title');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
     const user = await User.findById(req.user._id);
     const difficulty  = user.difficultySetting ?? 'easy';
-    const settings    = await AppSettings.getSettings();
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier = effectiveTier(user);
 
     if (!canAccessCategory(brief.category, tier, settings)) {
@@ -100,7 +102,7 @@ router.post('/quiz/start', protect, async (req, res) => {
         category: brief.category,
       });
     }
-    if (!isPathwayUnlocked(brief.category, req.user, settings)) {
+    if (!isPathwayUnlocked(brief.category, req.user, settings, levelThresholds)) {
       const unlock = settings.pathwayUnlocks.find(p => p.category === brief.category);
       return res.status(403).json({
         message: 'This category requires a higher level or rank.',
@@ -378,9 +380,10 @@ router.get('/quiz/briefs', protect, async (req, res) => {
     const limit  = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const search = req.query.search?.trim() || '';
 
-    const { effectiveTier, canAccessCategory, isPathwayUnlocked } = require('../utils/subscription');
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
     const diff     = req.user.difficultySetting ?? 'easy';
-    const settings = await AppSettings.getSettings();
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier     = effectiveTier(req.user);
 
     // Brief IDs that have ≥5 questions at user's difficulty
@@ -433,7 +436,7 @@ router.get('/quiz/briefs', protect, async (req, res) => {
     // Annotate with quizState + apply subscription + pathway filters
     // (completed tab skips the filter — past completions are always visible)
     const annotated = allDocs
-      .filter(b => state === 'completed' || (canAccessCategory(b.category, tier, settings) && isPathwayUnlocked(b.category, req.user, settings)))
+      .filter(b => state === 'completed' || (canAccessCategory(b.category, tier, settings) && isPathwayUnlocked(b.category, req.user, settings, levelThresholds)))
       .map(b => {
         const id = b._id.toString();
         const quizState = passedSet.has(id) ? 'passed' : readSet.has(id) ? 'active' : 'needs-read';
@@ -475,10 +478,11 @@ router.get('/battle-of-order/briefs', protect, async (req, res) => {
     const limit  = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const search = req.query.search?.trim() || '';
 
-    const { effectiveTier, canAccessCategory, isPathwayUnlocked } = require('../utils/subscription');
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
     const diff     = req.user.difficultySetting ?? 'easy';
     const needed   = diff === 'medium' ? 5 : 3;
-    const settings = await AppSettings.getSettings();
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier     = effectiveTier(req.user);
 
     // Which BOO categories have enough game data?
@@ -565,7 +569,7 @@ router.get('/battle-of-order/briefs', protect, async (req, res) => {
 
     // Annotate + subscription + pathway filter
     const annotated = allDocs
-      .filter(b => canAccessCategory(b.category, tier, settings) && isPathwayUnlocked(b.category, req.user, settings))
+      .filter(b => canAccessCategory(b.category, tier, settings) && isPathwayUnlocked(b.category, req.user, settings, levelThresholds))
       .map(b => {
         const id = b._id.toString();
         const hasData = booCategories.has(b.category);
@@ -608,8 +612,9 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
     const user     = await User.findById(req.user._id).lean();
     const diff     = user.difficultySetting ?? 'easy';
     const needed   = diff === 'medium' ? 5 : 3;
-    const settings = await AppSettings.getSettings();
-    const { effectiveTier, canAccessCategory, isPathwayUnlocked } = require('../utils/subscription');
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier = effectiveTier(user);
 
     // Which BOO categories have enough game data?
@@ -630,7 +635,7 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
       .select('_id title category subcategory')
       .sort({ createdAt: -1 })
       .lean();
-    const accessible = allBooBriefs.filter(b => canAccessCategory(b.category, tier, settings) && isPathwayUnlocked(b.category, req.user, settings));
+    const accessible = allBooBriefs.filter(b => canAccessCategory(b.category, tier, settings) && isPathwayUnlocked(b.category, req.user, settings, levelThresholds));
     if (accessible.length === 0) return res.json({ status: 'success', data: { briefs: [] } });
 
     const accessibleIds = accessible.map(b => b._id);
@@ -720,8 +725,9 @@ router.get('/quiz/recommended-briefs', protect, async (req, res) => {
     const limit    = Math.min(parseInt(req.query.limit, 10) || 6, 20);
     const user     = await User.findById(req.user._id).lean();
     const diff     = user.difficultySetting ?? 'easy';
-    const settings = await AppSettings.getSettings();
-    const { effectiveTier, canAccessCategory, isPathwayUnlocked } = require('../utils/subscription');
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier = effectiveTier(user);
 
     // Brief IDs with enough questions for this difficulty
@@ -778,7 +784,7 @@ router.get('/quiz/recommended-briefs', protect, async (req, res) => {
         if (result.length >= limit) break;
         const doc = docMap.get(id.toString());
         if (!doc) continue;
-        if (!canAccessCategory(doc.category, tier, settings) || !isPathwayUnlocked(doc.category, req.user, settings)) continue;
+        if (!canAccessCategory(doc.category, tier, settings) || !isPathwayUnlocked(doc.category, req.user, settings, levelThresholds)) continue;
         result.push({ ...doc, quizState: state });
       }
     };
@@ -1119,8 +1125,8 @@ router.post('/battle-of-order/abandon', protect, async (req, res) => {
   }
 });
 
-// POST /api/games/whos-that-aircraft/result
-router.post('/whos-that-aircraft/result', protect, async (req, res) => {
+// POST /api/games/wheres-that-aircraft/result
+router.post('/wheres-that-aircraft/result', protect, async (req, res) => {
   try {
     const { gameId, userAnswer, isCorrect, timeTakenSeconds, gameSessionId } = req.body;
 
@@ -1133,7 +1139,7 @@ router.post('/whos-that-aircraft/result', protect, async (req, res) => {
 
     let rankPromotion = null;
     if (aircoinsEarned > 0) {
-      const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'whos_at_aircraft', "Where's That Aircraft — correct identification");
+      const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'wheres_that_aircraft', "Where's That Aircraft — correct identification");
       rankPromotion = coinResult.rankPromotion;
     }
 
@@ -1635,7 +1641,7 @@ router.get('/history', protect, async (req, res) => {
       }),
       ...whos.map(r => ({
         _id:             r._id,
-        type:            'whos_at_aircraft',
+        type:            'wheres_that_aircraft',
         gameSessionId:   r.gameSessionId,
         date:            r.createdAt,
         status:          r.isCorrect ? 'correct' : 'incorrect',
@@ -1722,7 +1728,7 @@ router.get('/history', protect, async (req, res) => {
       }),
     ];
 
-    const VALID_TYPES   = ['quiz', 'order_of_battle', 'wheres_aircraft', 'flashcard', 'whos_at_aircraft'];
+    const VALID_TYPES   = ['quiz', 'order_of_battle', 'wheres_aircraft', 'flashcard', 'wheres_that_aircraft'];
     const VALID_RESULTS = ['perfect', 'passed', 'failed', 'abandoned'];
 
     const filtered = sessions.filter(s => {

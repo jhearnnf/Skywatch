@@ -5,15 +5,15 @@ import { useAuth } from '../context/AuthContext'
 
 const TYPE_LABELS = {
   quiz:            'Intel Brief Quiz',
-  whos_at_aircraft:"Where's That Aircraft",
-  wheres_aircraft: "Where's That Aircraft",
+  wheres_that_aircraft: "Where's That Aircraft",
+  wheres_aircraft:      "Where's That Aircraft",
   order_of_battle: 'Battle of Order',
   flashcard:       'Flashcard Recall',
 }
 const TYPE_ICONS = {
   quiz:            '🎯',
-  whos_at_aircraft:'✈️',
-  wheres_aircraft: '✈️',
+  wheres_that_aircraft: '✈️',
+  wheres_aircraft:      '✈️',
   order_of_battle: '📋',
   flashcard:       '🃏',
 }
@@ -325,6 +325,109 @@ function FlashcardDrillDown({ sessionId, API }) {
   )
 }
 
+// ── APTITUDE_SYNC debrief row ─────────────────────────────────────────────────
+function AptitudeSyncRow({ session, index }) {
+  const [expanded, setExpanded] = useState(false)
+  const hasDrillDown = !!(session.finalSummary || session.finalResponse)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.04 }}
+      className="border-b border-slate-100 last:border-0"
+    >
+      <div
+        className={`flex items-center gap-3 px-4 py-3 ${hasDrillDown ? 'cursor-pointer hover:bg-slate-50 transition-colors' : ''}`}
+        onClick={() => hasDrillDown && setExpanded(e => !e)}
+        role={hasDrillDown ? 'button' : undefined}
+        tabIndex={hasDrillDown ? 0 : undefined}
+        onKeyDown={e => hasDrillDown && (e.key === 'Enter' || e.key === ' ') && setExpanded(v => !v)}
+      >
+        <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 text-lg">
+          🧠
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+            <span className="text-sm font-bold text-slate-800">APTITUDE_SYNC</span>
+            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Completed</span>
+            {session.aircoinsEarned != null && session.aircoinsEarned > 0 && (
+              <span className="text-[10px] font-bold text-amber-600">+{session.aircoinsEarned} ⭐</span>
+            )}
+          </div>
+          {session.briefTitle && (
+            <p className="text-xs text-slate-500 truncate">{session.briefTitle}</p>
+          )}
+          <span className="text-[10px] text-slate-400">{formatDate(session.completedAt ?? session.date)}</span>
+        </div>
+        {hasDrillDown && (
+          <span className="text-slate-400 text-xs shrink-0">{expanded ? '▲' : '▼'}</span>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {expanded && hasDrillDown && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 space-y-3">
+              {session.finalSummary && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Debrief Summary</p>
+                  <p className="text-xs text-slate-700 leading-relaxed">{session.finalSummary}</p>
+                </div>
+              )}
+              {session.finalResponse && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Full AI Evaluation</p>
+                  <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{session.finalResponse}</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
+
+function AptitudeSyncSection({ API, apiFetch }) {
+  const [sessions, setSessions] = useState([])
+  const [loading,  setLoading]  = useState(true)
+
+  useEffect(() => {
+    apiFetch(`${API}/api/aptitude-sync/history?limit=10`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d?.data)) setSessions(d.data) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [API, apiFetch])
+
+  if (loading) return (
+    <div className="space-y-2 mb-6">
+      <div className="h-5 w-40 bg-slate-100 rounded animate-pulse mb-2" />
+      {[0, 1].map(i => <div key={i} className="bg-surface rounded-2xl p-4 border border-slate-100 animate-pulse h-16" />)}
+    </div>
+  )
+
+  if (sessions.length === 0) return null
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-extrabold text-slate-700 uppercase tracking-wider mb-2">APTITUDE_SYNC Debriefs</h2>
+      <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+        {sessions.map((s, i) => (
+          <AptitudeSyncRow key={s.id} session={s} index={i} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function SessionRow({ session, API, index }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -409,7 +512,7 @@ function SessionRow({ session, API, index }) {
 
 export default function GameHistory() {
   const { user, API, apiFetch } = useAuth()
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
 
   const [sessions,      setSessions]      = useState([])
   const [total,         setTotal]         = useState(0)
@@ -504,6 +607,8 @@ export default function GameHistory() {
           ))}
         </div>
       </div>
+
+      <AptitudeSyncSection API={API} apiFetch={apiFetch} />
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-2xl mb-4">{error}</div>

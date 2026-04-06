@@ -6,11 +6,12 @@ const AppSettings = require('../models/AppSettings');
 const User = require('../models/User');
 const AircoinLog = require('../models/AircoinLog');
 const { awardCoins } = require('../utils/awardCoins');
-const { effectiveTier, getAccessibleCategories, isPathwayUnlocked, getPathwayAccessibleCategories } = require('../utils/subscription');
+const { effectiveTier, getAccessibleCategories, isPathwayUnlocked, getPathwayAccessibleCategories, buildCumulativeThresholds } = require('../utils/subscription');
 const { enrichWithMatchTerms } = require('../utils/mentionedBriefs');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
 require('../models/GameQuizQuestion');
 const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
+const Level = require('../models/Level');
 
 // Gold ammo sentinel — treated as unlimited throughout
 const AMMO_GOLD = 9999;
@@ -83,7 +84,8 @@ router.get('/', optionalAuth, async (req, res) => {
       IntelligenceBrief.countDocuments(filter),
     ]);
 
-    const settings   = await AppSettings.getSettings();
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier       = req.user ? effectiveTier(req.user) : 'guest';
     const accessible = getAccessibleCategories(tier, settings);
 
@@ -91,7 +93,7 @@ router.get('/', optionalAuth, async (req, res) => {
       ...b,
       isRead:    readSet.has(b._id.toString()),
       isStarted: startedSet.has(b._id.toString()),
-      isLocked:  (accessible !== null && !accessible.includes(b.category)) || !isPathwayUnlocked(b.category, req.user, settings),
+      isLocked:  (accessible !== null && !accessible.includes(b.category)) || !isPathwayUnlocked(b.category, req.user, settings, levelThresholds),
     }));
 
     const totalPages = Math.ceil(total / limitNum);
@@ -160,10 +162,11 @@ router.get('/category-stats', optionalAuth, async (req, res) => {
 router.get('/random-sample', optionalAuth, async (req, res) => {
   try {
     const count    = Math.min(parseInt(req.query.count) || 5, 20);
-    const settings = await AppSettings.getSettings();
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier     = req.user ? effectiveTier(req.user) : 'guest';
     const accessible = getAccessibleCategories(tier, settings);
-    const pathway    = getPathwayAccessibleCategories(req.user, settings);
+    const pathway    = getPathwayAccessibleCategories(req.user, settings, levelThresholds);
 
     // Intersect subscription-accessible and pathway-accessible category lists
     let finalCategories = null;
@@ -195,10 +198,11 @@ router.get('/random-sample', optionalAuth, async (req, res) => {
 
 router.get('/random-unlocked', optionalAuth, async (req, res) => {
   try {
-    const settings   = await AppSettings.getSettings();
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier       = req.user ? effectiveTier(req.user) : 'guest';
     const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
-    const pathway    = getPathwayAccessibleCategories(req.user, settings);
+    const pathway    = getPathwayAccessibleCategories(req.user, settings, levelThresholds);
 
     // Intersect subscription-accessible and pathway-accessible category lists
     let finalCategories = null;
@@ -283,7 +287,8 @@ router.get('/unread-categories', optionalAuth, async (req, res) => {
       { $group: { _id: '$category', total: { $sum: 1 }, briefIds: { $push: '$_id' } } },
     ]);
 
-    const settings   = await AppSettings.getSettings();
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
 
     if (!req.user) {
       // Guests: only guest-tier categories, all treated as unread
@@ -297,7 +302,7 @@ router.get('/unread-categories', optionalAuth, async (req, res) => {
 
     const tier       = effectiveTier(req.user);
     const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
-    const pathway    = getPathwayAccessibleCategories(req.user, settings);
+    const pathway    = getPathwayAccessibleCategories(req.user, settings, levelThresholds);
 
     // Get IDs of briefs this user has already read
     const readRecords = await IntelligenceBriefRead.find({ userId: req.user._id, completed: true })
@@ -383,13 +388,14 @@ router.get('/pathway/:category', optionalAuth, async (req, res) => {
 
     // Enforce both subscription-tier and pathway (level + rank) access
     {
-      const settings = await AppSettings.getSettings();
+      const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+      const levelThresholds = buildCumulativeThresholds(rawLevels);
       const tier = req.user ? effectiveTier(req.user) : 'guest';
       const accessible = getAccessibleCategories(tier, settings);
       if (accessible !== null && !accessible.includes(category)) {
         return res.status(403).json({ message: 'Upgrade your subscription to access this category.', category });
       }
-      if (!isPathwayUnlocked(category, req.user, settings)) {
+      if (!isPathwayUnlocked(category, req.user, settings, levelThresholds)) {
         const unlock = settings.pathwayUnlocks.find(p => p.category === category);
         return res.status(403).json({
           message: 'This category requires a higher level or rank.',
@@ -469,13 +475,14 @@ router.get('/:id', optionalAuth, async (req, res) => {
     let tierAmmo = 0;
 
     // Category access check — subscription tier then pathway (level + rank)
-    const settings = await AppSettings.getSettings();
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier = req.user ? effectiveTier(req.user) : 'guest';
     const accessible = getAccessibleCategories(tier, settings);
     if (accessible !== null && !accessible.includes(brief.category)) {
       return res.status(403).json({ message: 'Upgrade your subscription to access this category.', category: brief.category });
     }
-    if (!isPathwayUnlocked(brief.category, req.user, settings)) {
+    if (!isPathwayUnlocked(brief.category, req.user, settings, levelThresholds)) {
       const unlock = settings.pathwayUnlocks.find(p => p.category === brief.category);
       return res.status(403).json({
         message: 'This category requires a higher level or rank.',
@@ -545,7 +552,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     const filterAccessible = (arr) => (arr ?? []).filter(b =>
       b &&
       (accessible === null || accessible.includes(b.category)) &&
-      isPathwayUnlocked(b.category, req.user, settings)
+      isPathwayUnlocked(b.category, req.user, settings, levelThresholds)
     );
     briefObj.associatedBaseBriefIds     = filterAccessible(briefObj.associatedBaseBriefIds);
     briefObj.associatedSquadronBriefIds = filterAccessible(briefObj.associatedSquadronBriefIds);

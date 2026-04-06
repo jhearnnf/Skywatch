@@ -4,12 +4,13 @@ import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 import { MOCK_LEVELS } from '../../data/mockData'
 import RankBadge from '../RankBadge'
+import { useAppSettings } from '../../context/AppSettingsContext'
 
-function getLevelInfo(coins) {
-  const levels = MOCK_LEVELS
-  const idx    = [...levels].reverse().findIndex(l => coins >= l.cumulativeAircoins)
-  const lvl    = idx >= 0 ? levels[levels.length - 1 - idx] : levels[0]
-  const next   = levels[levels.indexOf(lvl) + 1]
+function getLevelInfo(coins, levels) {
+  const lvlList = levels?.length ? levels : MOCK_LEVELS
+  const idx    = [...lvlList].reverse().findIndex(l => coins >= l.cumulativeAircoins)
+  const lvl    = idx >= 0 ? lvlList[lvlList.length - 1 - idx] : lvlList[0]
+  const next   = lvlList[lvlList.indexOf(lvl) + 1]
   const base   = lvl.cumulativeAircoins
   const cap    = next ? next.cumulativeAircoins - base : 200
   const earned = Math.max(0, coins - base)
@@ -43,7 +44,8 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const { hasAnyNew } = useNewGameUnlock()
   const { unsolvedCount } = useUnsolvedReports()
-  const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
+  const { levels: liveLevels } = useAppSettings()
+  const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0, liveLevels) : null
 
   return (
     <aside className="hidden md:flex flex-col fixed left-0 top-14 bottom-0 w-56 bg-slate-50 border-r border-slate-200 z-30">

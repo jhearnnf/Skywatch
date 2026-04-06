@@ -50,14 +50,31 @@ export function isFreeUser(user) {
   return tier === 'free'
 }
 
-// Cumulative totalAircoins needed to reach each level (mirrors backend LEVEL_THRESHOLDS)
-export const LEVEL_THRESHOLDS = [0, 100, 350, 850, 1700, 3000, 4850, 7350, 10600, 14700]
+// Fallback cumulative thresholds — used when live levels haven't loaded yet.
+// Mirrors the default seed data in MOCK_LEVELS.
+const LEVEL_THRESHOLDS_FALLBACK = [0, 100, 350, 850, 1700, 3000, 4850, 7350, 10600, 14700]
 
-export function getUserLevel(totalAircoins) {
+// Converts a levels array (cumulativeAircoins format from /api/users/levels) to a threshold array.
+export function buildCumulativeThresholds(levels) {
+  if (!levels?.length) return LEVEL_THRESHOLDS_FALLBACK
+  if (levels[0].cumulativeAircoins !== undefined) {
+    return levels.map(l => l.cumulativeAircoins)
+  }
+  const result = []
+  let cumulative = 0
+  for (const lv of levels) {
+    result.push(cumulative)
+    if (lv.aircoinsToNextLevel) cumulative += lv.aircoinsToNextLevel
+  }
+  return result
+}
+
+export function getUserLevel(totalAircoins, levelThresholds) {
   const coins = totalAircoins ?? 0
+  const thresholds = levelThresholds ?? LEVEL_THRESHOLDS_FALLBACK
   let level = 1
-  for (let i = 1; i < LEVEL_THRESHOLDS.length; i++) {
-    if (coins >= LEVEL_THRESHOLDS[i]) level = i + 1
+  for (let i = 1; i < thresholds.length; i++) {
+    if (coins >= thresholds[i]) level = i + 1
     else break
   }
   return level
@@ -66,12 +83,12 @@ export function getUserLevel(totalAircoins) {
 // Returns true if the user meets the pathway (level + rank) requirements for a category.
 // Guests always pass. If userRank > rankRequired, the level check is bypassed —
 // having surpassed the unlock rank means level resets from prior cycles are irrelevant.
-export function isPathwayUnlocked(category, user, settings) {
+export function isPathwayUnlocked(category, user, settings, levelThresholds) {
   if (!user) return true
   if (!settings?.pathwayUnlocks) return true
   const unlock = settings.pathwayUnlocks.find(p => p.category === category)
   if (!unlock) return true
-  const userLevel = getUserLevel(user.totalAircoins)
+  const userLevel = getUserLevel(user.totalAircoins, levelThresholds)
   const userRank  = user.rank?.rankNumber ?? 1
   return userRank > unlock.rankRequired || (userRank >= unlock.rankRequired && userLevel >= unlock.levelRequired)
 }
@@ -82,15 +99,15 @@ export function getPathwayRequirements(category, settings) {
   return settings.pathwayUnlocks.find(p => p.category === category) ?? null
 }
 
-export function isCategoryLocked(category, user, settings) {
+export function isCategoryLocked(category, user, settings, levelThresholds) {
   const accessible = getAccessibleCategories(user, settings)
   if (accessible === null) {
     // Gold subscription — only pathway can lock it
-    return !isPathwayUnlocked(category, user, settings)
+    return !isPathwayUnlocked(category, user, settings, levelThresholds)
   }
   if (accessible.length === 0) return false  // settings not loaded — fail open
   if (!accessible.includes(category)) return true
-  return !isPathwayUnlocked(category, user, settings)
+  return !isPathwayUnlocked(category, user, settings, levelThresholds)
 }
 
 // Returns why a category is locked:
@@ -98,14 +115,14 @@ export function isCategoryLocked(category, user, settings) {
 //   'upgrade' — subscription tier too low
 //   'pathway' — level or rank requirement not met
 //   null      — accessible
-export function lockReason(category, user, settings) {
+export function lockReason(category, user, settings, levelThresholds) {
   const accessible = getAccessibleCategories(user, settings)
   if (accessible === null) {
     // Gold subscription — only pathway can lock it
-    return isPathwayUnlocked(category, user, settings) ? null : 'pathway'
+    return isPathwayUnlocked(category, user, settings, levelThresholds) ? null : 'pathway'
   }
   if (accessible.length === 0) return null  // settings not loaded — fail open
   if (!accessible.includes(category)) return user ? 'upgrade' : 'signin'
   // Subscription OK — check pathway
-  return isPathwayUnlocked(category, user, settings) ? null : 'pathway'
+  return isPathwayUnlocked(category, user, settings, levelThresholds) ? null : 'pathway'
 }

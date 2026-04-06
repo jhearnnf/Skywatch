@@ -46,6 +46,7 @@ import NotFound       from './pages/NotFound'
 
 // v2 admin
 import Admin          from './pages/Admin'
+import AptitudeSync   from './pages/AptitudeSync'
 
 import { playSound } from './utils/sound'
 
@@ -154,6 +155,7 @@ function AppRoutes() {
           <Route path="/learn-priority"    element={<PageWrapper><LearnPriority /></PageWrapper>} />
           <Route path="/brief/:briefId"    element={<PageWrapper><BriefReader /></PageWrapper>} />
           <Route path="/quiz/:briefId"          element={<RequireAuth><PageWrapper><QuizFlow /></PageWrapper></RequireAuth>} />
+          <Route path="/aptitude-sync/:briefId" element={<RequireAuth><AptitudeSync /></RequireAuth>} />
           <Route path="/battle-of-order/:briefId" element={<RequireAuth><PageWrapper><BattleOfOrderFlow /></PageWrapper></RequireAuth>} />
           <Route path="/wheres-that-aircraft/:aircraftBriefId" element={<RequireAuth><PageWrapper><WhereAircraftGame /></PageWrapper></RequireAuth>} />
 

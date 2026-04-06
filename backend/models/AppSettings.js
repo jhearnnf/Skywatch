@@ -121,6 +121,16 @@ const appSettingsSchema = new mongoose.Schema({
   disableLoadingBar:    { type: Boolean, default: false },
   betaTesterAutoGold:   { type: Boolean, default: false },
 
+  // APTITUDE_SYNC feature
+  aptitudeSyncEnabled:          { type: Boolean,  default: false },
+  // Which subscription tiers can access APTITUDE_SYNC (admin always unlimited regardless)
+  aptitudeSyncTiers:            { type: [String], default: ['admin'] },
+  aptitudeSyncMaxRounds:        { type: Number,   default: 3,  min: 1, max: 5 },
+  // Daily session limits per tier (admin = unlimited, enforced in route)
+  aptitudeSyncDailyLimitFree:   { type: Number,   default: 1,  min: 0 },
+  aptitudeSyncDailyLimitSilver: { type: Number,   default: 3,  min: 0 },
+  aptitudeSyncDailyLimitGold:   { type: Number,   default: 10, min: 0 },
+
   // Pathway unlock requirements — each entry gates a category behind level + rank.
   // levelRequired: Agent Level (1–10). rankRequired: RAF Rank number (1–19).
   // Subscription tier is derived from freeCategories/silverCategories — not stored here.

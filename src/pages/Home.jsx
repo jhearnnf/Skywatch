@@ -7,12 +7,13 @@ import TutorialModal from '../components/tutorial/TutorialModal'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import FlashcardGameModal from '../components/FlashcardGameModal'
 import { CATEGORY_ICONS, MOCK_LEVELS } from '../data/mockData'
+import { useAppSettings } from '../context/AppSettingsContext'
 
-function getLevelInfo(coins) {
-  const levels = MOCK_LEVELS
-  const idx    = [...levels].reverse().findIndex(l => coins >= l.cumulativeAircoins)
-  const lvl    = idx >= 0 ? levels[levels.length - 1 - idx] : levels[0]
-  const next   = levels[levels.indexOf(lvl) + 1]
+function getLevelInfo(coins, levels) {
+  const lvlList = levels?.length ? levels : MOCK_LEVELS
+  const idx    = [...lvlList].reverse().findIndex(l => coins >= l.cumulativeAircoins)
+  const lvl    = idx >= 0 ? lvlList[lvlList.length - 1 - idx] : lvlList[0]
+  const next   = lvlList[lvlList.indexOf(lvl) + 1]
   const base   = lvl.cumulativeAircoins
   const cap    = next ? next.cumulativeAircoins - base : 200
   const earned = Math.max(0, coins - base)
@@ -48,6 +49,7 @@ export default function Home() {
   const { user, API, apiFetch }  = useAuth()
   const { start }      = useAppTutorial()
   const navigate       = useNavigate()
+  const { levels: liveLevels } = useAppSettings()
   const [missionDone,       setMissionDone]       = useState(false)
   const [latestBriefs,      setLatestBriefs]      = useState([])
   const [showCROFlow,       setShowCROFlow]       = useState(
@@ -56,7 +58,7 @@ export default function Home() {
   const [missionLoading,    setMissionLoading]    = useState(false)
   const [showFlashcard,     setShowFlashcard]     = useState(false)
   const [jumpBackBrief,     setJumpBackBrief]     = useState(null)
-  const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0) : null
+  const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0, liveLevels) : null
 
   // Mission done if the user completed a brief today (server-authoritative via lastStreakDate)
   useEffect(() => {

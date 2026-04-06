@@ -16,7 +16,7 @@ const gameTypeSchema = new mongoose.Schema({
   // Enforced at application level — seeded values:
   //   quiz              → all categories
   //   order_of_battle   → ['Ranks', 'Squadrons', 'Missions']
-  //   whos_that_aircraft→ ['Aircrafts']
+  //   wheres_that_aircraft→ ['Aircrafts']
   //   flashcard_recall  → all categories
   allowedCategories: {
     type: [String],

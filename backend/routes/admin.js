@@ -3232,53 +3232,40 @@ router.post('/ai/generate-image', async (req, res) => {
   }
 });
 
-// GET /api/admin/economy-viability — Aircoins Ceiling check
-// Calculates max aircoins achievable with perfect play across all published briefs,
-// for both Normal (easy) and Advanced (medium) difficulty scenarios.
+// Economy routes
+// GET  /api/admin/economy-viability — read DB state for simulation
+// PATCH /api/admin/economy/levels   — sync level thresholds only
+// POST  /api/admin/economy/apply    — write all rates + level thresholds live
 const BOO_CATS = new Set(['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']);
+
+// Whitelist of AppSettings fields the economy apply endpoint may write.
+const ECONOMY_RATE_FIELDS = new Set([
+  'aircoinsPerBriefRead',
+  'aircoinsPerWinEasy', 'aircoinsPerWinMedium', 'aircoins100Percent',
+  'aircoinsOrderOfBattleEasy', 'aircoinsOrderOfBattleMedium',
+  'aircoinsWhereAircraftRound1', 'aircoinsWhereAircraftRound2', 'aircoinsWhereAircraftBonus',
+  'aircoinsFlashcardPerCard', 'aircoinsFlashcardPerfectBonus',
+  'aircoinsFirstLogin', 'aircoinsStreakBonus',
+]);
 
 router.get('/economy-viability', async (req, res) => {
   try {
     const [settings, briefs, ranks, levels] = await Promise.all([
       AppSettings.getSettings(),
-      IntelligenceBrief.find({})
-        .select('category gameData quizQuestionsEasy quizQuestionsMedium')
-        .lean(),
+      IntelligenceBrief.find({}).select('category').lean(),
       Rank.find().sort({ rankNumber: 1 }).lean(),
       Level.find().sort({ levelNumber: 1 }).lean(),
     ]);
 
-    // Aggregate content counts
-    let totalEasyQ = 0, briefsWithEasyQ = 0;
-    let totalMediumQ = 0, briefsWithMediumQ = 0;
-    let booEligibleBriefs = 0;
-    for (const b of briefs) {
-      const eq = b.quizQuestionsEasy?.length  ?? 0;
-      const mq = b.quizQuestionsMedium?.length ?? 0;
-      if (eq > 0) { totalEasyQ   += eq; briefsWithEasyQ++;   }
-      if (mq > 0) { totalMediumQ += mq; briefsWithMediumQ++; }
-      if (BOO_CATS.has(b.category) && b.gameData && Object.values(b.gameData).some(v => v != null)) {
-        booEligibleBriefs++;
-      }
-    }
+    const totalBriefs       = briefs.length;
+    // WTA-enabled: only Aircrafts-category briefs (all assumed WTA-capable)
+    const wtaBriefs         = briefs.filter(b => b.category === 'Aircrafts').length;
+    // BOO-eligible: all briefs in BOO categories (assume stats will be present)
+    const booEligibleBriefs = briefs.filter(b => BOO_CATS.has(b.category)).length;
 
-    const totalBriefs = briefs.length;
     const wtaPerBrief = (settings.aircoinsWhereAircraftRound1 ?? 5)
                       + (settings.aircoinsWhereAircraftRound2 ?? 10)
                       + (settings.aircoinsWhereAircraftBonus  ?? 5);
-
-    function scenarioCoins(difficulty) {
-      const isNormal = difficulty === 'normal';
-      const reads = totalBriefs * (settings.aircoinsPerBriefRead ?? 5);
-      const quiz  = isNormal
-        ? totalEasyQ   * (settings.aircoinsPerWinEasy    ?? 10) + briefsWithEasyQ   * (settings.aircoins100Percent ?? 15)
-        : totalMediumQ * (settings.aircoinsPerWinMedium  ?? 20) + briefsWithMediumQ * (settings.aircoins100Percent ?? 15);
-      const boo = booEligibleBriefs * (isNormal
-        ? (settings.aircoinsOrderOfBattleEasy   ?? 8)
-        : (settings.aircoinsOrderOfBattleMedium ?? 18));
-      const wta = totalBriefs * wtaPerBrief;
-      return { reads, quiz, boo, wta, total: reads + quiz + boo + wta };
-    }
 
     function calcProgression(totalCoins) {
       const rankCount       = ranks.length;
@@ -3289,9 +3276,7 @@ router.get('/economy-viability', async (req, res) => {
         ? totalCoins - rankCount * CYCLE_THRESHOLD
         : totalCoins % CYCLE_THRESHOLD;
 
-      // Determine level from cycleCoins
-      let finalLevel = 1;
-      let cumulative = 0;
+      let finalLevel = 1, cumulative = 0;
       for (const lv of levels) {
         if (lv.aircoinsToNextLevel === null) { finalLevel = lv.levelNumber; break; }
         cumulative += lv.aircoinsToNextLevel;
@@ -3305,23 +3290,42 @@ router.get('/economy-viability', async (req, res) => {
       return { completedCycles, atMaxRank, cycleCoins, finalLevel, finalRank, coinsToMaxOut, shortfall };
     }
 
+    // Initial scenario totals (frontend recalculates live as rates are edited)
+    function scenarioCoins(difficulty) {
+      const isNormal = difficulty === 'normal';
+      const n        = totalBriefs;
+      const reads    = n * (settings.aircoinsPerBriefRead ?? 5);
+      const quiz     = isNormal
+        ? n * 5 * (settings.aircoinsPerWinEasy   ?? 10) + n * (settings.aircoins100Percent ?? 15)
+        : n * 5 * (settings.aircoinsPerWinMedium ?? 20) + n * (settings.aircoins100Percent ?? 15);
+      const boo = booEligibleBriefs * (isNormal
+        ? (settings.aircoinsOrderOfBattleEasy   ?? 8)
+        : (settings.aircoinsOrderOfBattleMedium ?? 18));
+      const wta = wtaBriefs * wtaPerBrief;
+      return { reads, quiz, boo, wta, total: reads + quiz + boo + wta };
+    }
+
     const normalCoins   = scenarioCoins('normal');
     const advancedCoins = scenarioCoins('advanced');
 
     res.json({
       status: 'success',
       data: {
-        content: { totalBriefs, wtaBriefs: totalBriefs, booEligibleBriefs, totalEasyQ, briefsWithEasyQ, totalMediumQ, briefsWithMediumQ, wtaPerBrief },
+        content: { totalBriefs, wtaBriefs, booEligibleBriefs, wtaPerBrief },
         rates: {
-          aircoinsPerBriefRead:        settings.aircoinsPerBriefRead        ?? 5,
-          aircoinsPerWinEasy:          settings.aircoinsPerWinEasy          ?? 10,
-          aircoinsPerWinMedium:        settings.aircoinsPerWinMedium        ?? 20,
-          aircoins100Percent:          settings.aircoins100Percent          ?? 15,
-          aircoinsOrderOfBattleEasy:   settings.aircoinsOrderOfBattleEasy   ?? 8,
-          aircoinsOrderOfBattleMedium: settings.aircoinsOrderOfBattleMedium ?? 18,
-          aircoinsWhereAircraftRound1: settings.aircoinsWhereAircraftRound1 ?? 5,
-          aircoinsWhereAircraftRound2: settings.aircoinsWhereAircraftRound2 ?? 10,
-          aircoinsWhereAircraftBonus:  settings.aircoinsWhereAircraftBonus  ?? 5,
+          aircoinsPerBriefRead:          settings.aircoinsPerBriefRead          ?? 5,
+          aircoinsPerWinEasy:            settings.aircoinsPerWinEasy            ?? 10,
+          aircoinsPerWinMedium:          settings.aircoinsPerWinMedium          ?? 20,
+          aircoins100Percent:            settings.aircoins100Percent            ?? 15,
+          aircoinsOrderOfBattleEasy:     settings.aircoinsOrderOfBattleEasy     ?? 8,
+          aircoinsOrderOfBattleMedium:   settings.aircoinsOrderOfBattleMedium   ?? 18,
+          aircoinsWhereAircraftRound1:   settings.aircoinsWhereAircraftRound1   ?? 5,
+          aircoinsWhereAircraftRound2:   settings.aircoinsWhereAircraftRound2   ?? 10,
+          aircoinsWhereAircraftBonus:    settings.aircoinsWhereAircraftBonus    ?? 5,
+          aircoinsFlashcardPerCard:      settings.aircoinsFlashcardPerCard      ?? 2,
+          aircoinsFlashcardPerfectBonus: settings.aircoinsFlashcardPerfectBonus ?? 5,
+          aircoinsFirstLogin:            settings.aircoinsFirstLogin            ?? 5,
+          aircoinsStreakBonus:           settings.aircoinsStreakBonus           ?? 2,
         },
         cycleThreshold: CYCLE_THRESHOLD,
         totalRanks:     ranks.length,
@@ -3331,6 +3335,102 @@ router.get('/economy-viability', async (req, res) => {
         advanced: { ...advancedCoins, ...calcProgression(advancedCoins.total) },
       },
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/admin/economy/levels — sync level thresholds only
+router.patch('/economy/levels', async (req, res) => {
+  try {
+    const { levels, reason } = req.body;
+    if (!Array.isArray(levels) || levels.length === 0) {
+      return res.status(400).json({ message: 'levels array required' });
+    }
+    for (const lv of levels) {
+      if (typeof lv.levelNumber !== 'number' || lv.levelNumber < 1 || lv.levelNumber > 10) {
+        return res.status(400).json({ message: `Invalid levelNumber: ${lv.levelNumber}` });
+      }
+      if (lv.aircoinsToNextLevel !== null &&
+          (typeof lv.aircoinsToNextLevel !== 'number' || lv.aircoinsToNextLevel < 1)) {
+        return res.status(400).json({ message: `Invalid aircoinsToNextLevel for level ${lv.levelNumber}` });
+      }
+    }
+    await Promise.all(
+      levels.map(lv =>
+        Level.findOneAndUpdate(
+          { levelNumber: lv.levelNumber },
+          { aircoinsToNextLevel: lv.aircoinsToNextLevel },
+          { new: true }
+        )
+      )
+    );
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'update_economy_levels',
+      reason:     reason || 'Level thresholds synced',
+    });
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/economy/apply — write all award rates + level thresholds live
+router.post('/economy/apply', async (req, res) => {
+  try {
+    const { rates, levels, reason } = req.body;
+    if (!rates || typeof rates !== 'object') {
+      return res.status(400).json({ message: 'rates object required' });
+    }
+    if (!Array.isArray(levels) || levels.length === 0) {
+      return res.status(400).json({ message: 'levels array required' });
+    }
+
+    // Validate + build safe rates update (whitelist only)
+    const rateUpdates = {};
+    for (const [key, val] of Object.entries(rates)) {
+      if (!ECONOMY_RATE_FIELDS.has(key)) {
+        return res.status(400).json({ message: `Unknown rate field: ${key}` });
+      }
+      if (typeof val !== 'number' || val < 0) {
+        return res.status(400).json({ message: `Invalid value for ${key}: ${val}` });
+      }
+      rateUpdates[key] = val;
+    }
+
+    // Validate levels
+    for (const lv of levels) {
+      if (typeof lv.levelNumber !== 'number' || lv.levelNumber < 1 || lv.levelNumber > 10) {
+        return res.status(400).json({ message: `Invalid levelNumber: ${lv.levelNumber}` });
+      }
+      if (lv.aircoinsToNextLevel !== null &&
+          (typeof lv.aircoinsToNextLevel !== 'number' || lv.aircoinsToNextLevel < 1)) {
+        return res.status(400).json({ message: `Invalid aircoinsToNextLevel for level ${lv.levelNumber}` });
+      }
+    }
+
+    const settings = await AppSettings.getSettings();
+    Object.assign(settings, rateUpdates);
+    await settings.save();
+
+    await Promise.all(
+      levels.map(lv =>
+        Level.findOneAndUpdate(
+          { levelNumber: lv.levelNumber },
+          { aircoinsToNextLevel: lv.aircoinsToNextLevel },
+          { new: true }
+        )
+      )
+    );
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'update_economy_apply',
+      reason:     reason || 'Economy settings applied',
+    });
+
+    res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
