@@ -672,7 +672,11 @@ export default function AptitudeSync() {
   }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleExit() {
-    navigate(`/brief/${briefId}`)
+    if (categoryName) {
+      navigate('/learn-priority', { state: { category: categoryName } })
+    } else {
+      navigate(`/brief/${briefId}`)
+    }
   }
 
   // ── Input keydown ─────────────────────────────────────────────────────────
