@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
+import SEO from '../components/SEO'
 
 const FEATURES = [
   { icon: '✈️', title: 'Learn About the RAF',        body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — written for RAF applicants.' },
@@ -74,6 +75,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen" style={{ background: '#06101e' }}>
+      <SEO description="Prepare for your RAF application with structured intel briefs, quizzes, and interactive games. Master aircraft, bases, ranks, and operations." />
 
       {/* ── Header ─────────────────────────────────────────── */}
       <header className="fixed top-0 inset-x-0 z-40 bg-slate-50/80 backdrop-blur-md border-b border-slate-200/50">

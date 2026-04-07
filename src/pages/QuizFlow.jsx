@@ -9,6 +9,7 @@ import { requiredTier, isFreeUser, isCategoryLocked } from '../utils/subscriptio
 import { CATEGORY_ICONS } from '../data/mockData'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { playSound } from '../utils/sound'
+import SEO from '../components/SEO'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 
 // ── Related briefs strip ─────────────────────────────────────────────────
@@ -661,6 +662,7 @@ export default function QuizFlow() {
 
   return (
     <>
+      <SEO title="Quiz" description="Test your knowledge on this RAF intel brief." noIndex={true} />
       <TutorialModal />
 
       {/* Header */}

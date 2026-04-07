@@ -6,6 +6,7 @@ import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
 import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } from '../utils/sound'
 import RankBadge from '../components/RankBadge'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
+import SEO from '../components/SEO'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -4800,7 +4801,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
               <div className="grid grid-cols-2 gap-3 mb-4">
                 {media.map(m => (
                   <div key={m._id} className="relative group">
-                    <img src={m.mediaUrl} alt="" className="w-full h-32 object-cover rounded-xl border border-slate-200" />
+                    <img src={m.mediaUrl} alt={m.name || 'Brief media'} className="w-full h-32 object-cover rounded-xl border border-slate-200" />
                     <button
                       onClick={() => removeMedia(m._id)}
                       className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -4834,7 +4835,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   {pendingImages.map((img, i) => (
                     <label key={i} className="relative cursor-pointer">
-                      <img src={img.url} alt="" className={`w-full h-32 object-cover rounded-xl border-2 transition-all ${img.selected ? 'border-brand-500' : 'border-slate-200 opacity-50'}`} />
+                      <img src={img.url} alt="Generated image preview" className={`w-full h-32 object-cover rounded-xl border-2 transition-all ${img.selected ? 'border-brand-500' : 'border-slate-200 opacity-50'}`} />
                       <input
                         type="checkbox"
                         checked={img.selected}
@@ -6190,6 +6191,7 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <SEO title="Admin" description="SkyWatch admin dashboard." noIndex={true} />
       <div className="max-w-2xl mx-auto px-4 py-6">
 
         {/* Header */}

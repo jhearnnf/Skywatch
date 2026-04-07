@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import SEO from '../components/SEO'
 
 const CATEGORY_LABELS = {
   aviation:    'Aviation',
@@ -160,6 +161,7 @@ export default function IntelBriefHistory() {
 
   return (
     <div className="max-w-lg mx-auto">
+      <SEO title="Brief History" description="Review the intel briefs you've read." noIndex={true} />
 
       {/* Header */}
       <div className="mb-5">

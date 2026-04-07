@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import SEO from '../components/SEO'
 
 const REASON_LABELS = {
   brief_read:      'Intel Brief Read',
@@ -67,6 +68,7 @@ export default function AircoinHistory() {
 
   return (
     <div className="max-w-lg mx-auto">
+      <SEO title="Aircoin History" description="View your Aircoin earning history." noIndex={true} />
 
       {/* Header */}
       <div className="mb-5">

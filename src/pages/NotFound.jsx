@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import SEO from '../components/SEO'
 
 export default function NotFound() {
   return (
@@ -8,6 +9,7 @@ export default function NotFound() {
       animate={{ opacity: 1, y: 0 }}
       className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4"
     >
+      <SEO title="Page Not Found" description="This page doesn't exist." noIndex={true} />
       <motion.div
         animate={{ rotate: [0, -10, 10, -6, 6, 0] }}
         transition={{ duration: 1.2, delay: 0.3 }}

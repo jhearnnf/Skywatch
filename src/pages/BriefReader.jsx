@@ -15,6 +15,7 @@ import RafBasesMap from '../components/RafBasesMap'
 import { buildImageZones } from '../utils/briefImageZones'
 import RankBadge from '../components/RankBadge'
 import FlashcardDeckNotification from '../components/FlashcardDeckNotification'
+import SEO from '../components/SEO'
 
 // Render **bold** markdown syntax as <strong> spans
 function renderBoldMarkdown(text) {
@@ -426,7 +427,7 @@ function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, se
           )
           if (f.type === 'glitch') return (
             <div key={f.key} className="intel-glitch-box" style={{ left: f.x, top: f.y, width: f.w, height: f.h }} aria-hidden="true">
-              <img src={imageZone.src} draggable={false} style={{ position: 'absolute', width: f.cw, height: f.ch, top: -(f.y + f.dy), left: -(f.x + f.dx), objectFit: 'cover', objectPosition: imageZone.position }} />
+              <img src={imageZone.src} alt="" aria-hidden="true" draggable={false} style={{ position: 'absolute', width: f.cw, height: f.ch, top: -(f.y + f.dy), left: -(f.x + f.dx), objectFit: 'cover', objectPosition: imageZone.position }} />
             </div>
           )
           return (
@@ -2036,6 +2037,7 @@ export default function BriefReader() {
 
   return (
     <>
+      <SEO title={brief?.title} description={brief?.summary || brief?.subtitle || 'Read this RAF intel brief on SkyWatch.'} ogType="article" />
       <TutorialModal />
       <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} navigate={navigate} />
       <StatMnemonicSheet stat={activeStat} onClose={() => setActiveStat(null)} />

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import SEO from '../components/SEO'
 
 const TYPE_LABELS = {
   quiz:            'Intel Brief Quiz',
@@ -511,6 +512,7 @@ export default function GameHistory() {
 
   return (
     <div className="max-w-lg mx-auto">
+      <SEO title="Game History" description="Review your past game results." noIndex={true} />
 
       {/* Header */}
       <div className="mb-4">

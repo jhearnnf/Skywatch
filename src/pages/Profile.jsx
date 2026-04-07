@@ -8,6 +8,7 @@ import { MOCK_LEVELS, MOCK_LEADERBOARD } from '../data/mockData'
 import { getMasterVolume, setMasterVolume } from '../utils/sound'
 import { displayTier, isFreeUser } from '../utils/subscription'
 import RankBadge from '../components/RankBadge'
+import SEO from '../components/SEO'
 
 function getLevelInfo(coins) {
   const levels = MOCK_LEVELS
@@ -135,6 +136,7 @@ export default function Profile() {
 
   return (
     <>
+    <SEO title="Profile" description="View your SkyWatch learning stats, level, and streak." />
     <TutorialModal />
     <div className="max-w-lg mx-auto">
 

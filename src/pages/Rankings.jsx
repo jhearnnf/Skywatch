@@ -7,6 +7,7 @@ import TutorialModal from '../components/tutorial/TutorialModal'
 import LockedCategoryModal from '../components/LockedCategoryModal'
 import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
 import RankBadge from '../components/RankBadge'
+import SEO from '../components/SEO'
 
 // ── Defaults (overridden by /api/settings) ────────────────────────────────────
 
@@ -178,6 +179,7 @@ export default function Rankings() {
 
   return (
     <>
+    <SEO title="Rankings" description="See how you rank against other RAF applicants on the SkyWatch leaderboard." />
     <TutorialModal />
     <div className="max-w-lg mx-auto">
 

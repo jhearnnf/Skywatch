@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import SEO from '../components/SEO'
 
 export default function ReportProblem() {
   const { user, API, apiFetch } = useAuth()
@@ -73,6 +74,7 @@ export default function ReportProblem() {
 
   return (
     <div className="max-w-md mx-auto">
+      <SEO title="Report a Problem" description="Report an issue or bug on SkyWatch." />
 
       <div className="mb-6">
         <button onClick={() => navigate(-1)} className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1">

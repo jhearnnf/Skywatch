@@ -7,6 +7,7 @@ import TutorialModal from '../components/tutorial/TutorialModal'
 import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
 import { pathwayTierRequired, getAccessibleCategories } from '../utils/subscription'
 import { playTypingSound } from '../utils/sound'
+import SEO from '../components/SEO'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1078,6 +1079,7 @@ export default function LearnPriority() {
 
   return (
     <>
+      <SEO title="Learn Priority" description="See your recommended learning path and priority briefs for RAF aptitude preparation." />
       <TutorialModal />
 
       <AnimatePresence>

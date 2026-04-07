@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { CATEGORIES, CATEGORY_ICONS } from '../data/mockData'
+import SEO from '../components/SEO'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
@@ -385,6 +386,7 @@ export default function Subscription() {
 
   return (
     <div className="max-w-lg mx-auto">
+      <SEO title="Subscribe" description="Upgrade your SkyWatch plan for full access to all briefs and games." />
 
       {/* Back */}
       <button

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import SEO from '../components/SEO'
 
 const CONTACT_EMAIL = 'support@skywatch.placeholder'
 
@@ -10,6 +11,7 @@ export default function Contact() {
       animate={{ opacity: 1, y: 0 }}
       className="max-w-lg mx-auto px-4 py-12"
     >
+      <SEO title="Contact" description="Get in touch with the SkyWatch team." />
       <div className="text-center mb-10">
         <div className="text-5xl mb-4">📡</div>
         <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Contact</h1>

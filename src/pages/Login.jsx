@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { consumePendingBrief } from '../utils/pendingBrief'
 import { ONBOARDING_KEY } from '../components/onboarding/WelcomeAgentFlow'
+import SEO from '../components/SEO'
 
 const VIEW = {
   CHOICE:          'choice',
@@ -254,6 +255,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#06101e' }}>
+      <SEO title="Sign In" description="Sign in to SkyWatch to track your RAF learning progress." />
       <div className="w-full max-w-sm">
 
         {/* Brand */}

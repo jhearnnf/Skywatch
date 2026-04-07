@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { playSound } from '../utils/sound'
+import SEO from '../components/SEO'
 
 // ── Order type display metadata ───────────────────────────────────────────
 const ORDER_META = {
@@ -830,12 +831,15 @@ export default function BattleOfOrderFlow() {
 
   // ── Game ─────────────────────────────────────────────────────────────────
   return (
-    <GameScreen
-      orderType={orderType}
-      choices={choices}
-      difficulty={difficulty}
-      onSubmit={handleSubmit}
-      onQuit={handleQuit}
-    />
+    <>
+      <SEO title="Battle of Order" description="Put RAF concepts in the correct order." noIndex={true} />
+      <GameScreen
+        orderType={orderType}
+        choices={choices}
+        difficulty={difficulty}
+        onSubmit={handleSubmit}
+        onQuit={handleQuit}
+      />
+    </>
   )
 }

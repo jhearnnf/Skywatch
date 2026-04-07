@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { playTypingSound } from '../utils/sound'
+import SEO from '../components/SEO'
 
 // ── CRT colour palette — electric blue to match site theme ───────────────────
 const G_BRIGHT  = '#5baaff'   // brand-600 electric blue
@@ -850,6 +851,7 @@ export default function AptitudeSync() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
+      <SEO title="AptitudeSync" description="Flashcard recall training for RAF aptitude." noIndex={true} />
       {/* CRT global styles */}
       <style>{`
         @keyframes crt-flicker {

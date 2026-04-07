@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { HelmetProvider } from 'react-helmet-async'
 import { AnimatePresence, motion, useIsPresent, MotionGlobalConfig } from 'framer-motion'
 
 // Disable all Framer Motion animations on e-ink / e-paper displays (update: slow).
@@ -259,6 +260,7 @@ function ReportNotifBanner() {
 // ── Root ───────────────────────────────────────────────────────────────────
 export default function App() {
   return (
+    <HelmetProvider>
     <BrowserRouter>
       <AuthProvider>
         <AppSettingsProvider>
@@ -277,5 +279,6 @@ export default function App() {
         </AppSettingsProvider>
       </AuthProvider>
     </BrowserRouter>
+    </HelmetProvider>
   )
 }

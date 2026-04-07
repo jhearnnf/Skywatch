@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import SEO from '../components/SEO'
 
 const TABS = ['Available', 'Completed', 'All']
 const TAB_STATE = { Available: 'available', Completed: 'completed', All: 'all' }
@@ -73,6 +74,7 @@ export default function BOOBriefsList() {
 
   return (
     <div>
+      <SEO title="Battle of Order — Choose a Brief" description="Select an intel brief for Battle of Order." noIndex={true} />
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <Link

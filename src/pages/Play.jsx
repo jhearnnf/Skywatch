@@ -6,6 +6,7 @@ import { useAppTutorial } from '../context/AppTutorialContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import FlashcardGameModal from '../components/FlashcardGameModal'
+import SEO from '../components/SEO'
 
 // BOO states that trigger the unlock notification (game is actually playable)
 const BOO_ACCESSIBLE_STATES = ['active']
@@ -250,6 +251,7 @@ export default function Play() {
 
   return (
     <>
+      <SEO title="Play" description="Choose a game mode to test your RAF knowledge — quizzes, flashcards, and more." />
       <TutorialModal />
       {showFlashcard && <FlashcardGameModal onClose={() => setShowFlashcard(false)} />}
 

@@ -8,6 +8,7 @@ import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import FlashcardGameModal from '../components/FlashcardGameModal'
 import { CATEGORY_ICONS, MOCK_LEVELS } from '../data/mockData'
 import { useAppSettings } from '../context/AppSettingsContext'
+import SEO from '../components/SEO'
 
 function getLevelInfo(coins, levels) {
   const lvlList = levels?.length ? levels : MOCK_LEVELS
@@ -102,6 +103,7 @@ export default function Home() {
 
   return (
     <>
+      <SEO title="Home" description="Browse RAF intel briefs by category — aircraft, bases, ranks, squadrons, operations, and more." />
       <TutorialModal />
       {showCROFlow && <WelcomeAgentFlow onClose={() => setShowCROFlow(false)} />}
       {showFlashcard && <FlashcardGameModal onClose={() => setShowFlashcard(false)} />}

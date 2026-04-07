@@ -73,7 +73,7 @@ export default function MissionDetectedModal({ aircraftBriefId, aircraftTitle, m
             transition={{ delay: 0.25 }}
             className="w-full max-w-sm rounded-2xl overflow-hidden border border-slate-700 mb-5 mt-4 aspect-video bg-slate-900"
           >
-            <img src={mediaUrl} alt="" className="w-full h-full object-cover opacity-70" />
+            <img src={mediaUrl} alt="Intel brief cover image" className="w-full h-full object-cover opacity-70" />
           </motion.div>
         )}
 

@@ -15,6 +15,7 @@ import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import { playSound } from '../utils/sound'
 import RafBasesMap from '../components/RafBasesMap'
+import SEO from '../components/SEO'
 
 // ── Phase constants ────────────────────────────────────────────────────────
 const PHASE_LOADING     = 'loading'
@@ -583,6 +584,7 @@ export default function WhereAircraftGame() {
 
   return (
     <>
+      <SEO title="Where's That Aircraft?" description="Identify RAF aircraft locations on the map." noIndex={true} />
       <TutorialModal />
 
       {/* Header — quit button + timer during active play; back button otherwise */}
