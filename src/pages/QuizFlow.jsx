@@ -414,6 +414,21 @@ export default function QuizFlow() {
     } catch {}
   }, [API, apiFetch, attemptId, gameSessionId, current])
 
+  // Pre-fired promise for the last question's /finish call — stored so
+  // handleNext can await the already-in-flight request instead of starting fresh.
+  const finishPromiseRef = useRef(null)
+
+  const fireFinish = useCallback(() => {
+    if (finishedRef.current || !attemptId) return
+    finishedRef.current = true
+    finishPromiseRef.current = apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'completed' }),
+    }).then(res => res.json())
+  }, [API, apiFetch, attemptId])
+
   const handleAnswer = (answerId) => {
     setSelected(answerId)
     setAnswered(true)
@@ -424,22 +439,17 @@ export default function QuizFlow() {
       playSound('quiz_answer_incorrect')
     }
     submitResult(answerId)
+    // Pre-fire the finish call on the last question so it's in-flight
+    // while the user reads their feedback — results screen loads instantly.
+    if (qIdx + 1 >= totalQs) fireFinish()
   }
 
   const handleNext = async () => {
     const nextIdx = qIdx + 1
     if (nextIdx >= totalQs) {
-      // Finish the attempt
-      if (!finishedRef.current && attemptId) {
-        finishedRef.current = true
-        try {
-          const res  = await apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'completed' }),
-          })
-          const data = await res.json()
+      try {
+        const data = await (finishPromiseRef.current ?? Promise.resolve(null))
+        if (data) {
           const earned = data.data?.aircoinsEarned ?? 0
           const didWin = data.data?.won ?? false
           setWon(didWin)
@@ -459,8 +469,8 @@ export default function QuizFlow() {
           if (data.data?.gameUnlocksGranted?.length) {
             applyUnlocks(data.data.gameUnlocksGranted)
           }
-        } catch {}
-      }
+        }
+      } catch {}
       setDone(true)
     } else {
       setQIdx(nextIdx)
@@ -632,7 +642,7 @@ export default function QuizFlow() {
         <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
           <motion.div
             className="h-full bg-brand-500 rounded-full"
-            animate={{ width: `${((qIdx + (answered ? 1 : 0)) / totalQs) * 100}%` }}
+            animate={{ width: `${((qIdx + 1) / totalQs) * 100}%` }}
             transition={{ duration: 0.3 }}
           />
         </div>

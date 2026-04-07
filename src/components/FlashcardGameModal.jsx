@@ -277,7 +277,7 @@ export default function FlashcardGameModal({ onClose }) {
       const earned        = data?.data?.result?.aircoinsEarned ?? 0
       const rankPromotion = data?.data?.rankPromotion  ?? null
       const cycleAfter    = data?.data?.cycleAircoins  ?? null
-      const totalAfter    = data?.data?.totalAircoins  ?? null
+      const totalAfter    = data?.data?.totalAircoins  ?? undefined
 
       if (earned > 0 && awardAircoins) {
         awardAircoins(earned, 'Flashcard Recall', { cycleAfter, totalAfter, rankPromotion })

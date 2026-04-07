@@ -654,8 +654,7 @@ export default function BattleOfOrderFlow() {
 
       if (earned > 0 && awardAircoins) {
         awardAircoins(earned, 'Battle of Order', {
-          cycleAfter:    data.data?.cycleAircoins  ?? null,
-          totalAfter:    null,
+          cycleAfter:    data.data?.cycleAircoins  ?? undefined,
           rankPromotion: data.data?.rankPromotion  ?? null,
         })
       }

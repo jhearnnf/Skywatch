@@ -104,7 +104,7 @@ export function AuthProvider({ children }) {
     setUser(u => {
       if (!u) return u
       const updated = { ...u, cycleAircoins: newCycle }
-      if (totalAfter !== undefined) updated.totalAircoins = totalAfter
+      if (totalAfter != null) updated.totalAircoins = totalAfter
       else updated.totalAircoins = (u.totalAircoins ?? 0) + amount
       if (rankPromotion) updated.rank = rankPromotion.to
       return updated
