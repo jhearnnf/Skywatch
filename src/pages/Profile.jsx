@@ -42,7 +42,7 @@ function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned'
 
 const TUTORIAL_LABELS = [
   { key: 'home',            label: '🏠 Home',                       emoji: '🏠' },
-  { key: 'learn',           label: '📚 Learn',                      emoji: '📚' },
+  { key: 'learn-priority',  label: '📚 Learn',                      emoji: '📚' },
   { key: 'briefReader',     label: '📋 Brief Reader',               emoji: '📋' },
   { key: 'quiz',            label: '🎯 Quiz',                       emoji: '🎯' },
   { key: 'play',            label: '🎮 Play Hub',                   emoji: '🎮' },
@@ -54,15 +54,17 @@ const TUTORIAL_LABELS = [
 export default function Profile() {
   const { user, setUser, API, apiFetch, logout } = useAuth()
   const navigate = useNavigate()
-  const { start, replay } = useAppTutorial()
+  const { start, replay, resetAll, step, visible } = useAppTutorial()
 
   const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0, flashcardsCollected: 0 })
   const [levels,      setLevels]      = useState(MOCK_LEVELS)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
   const [diffBusy,    setDiffBusy]    = useState(false)
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  const isHighlightingDifficulty = visible && !!step?.highlightDifficulty
   const [masterVol,   setMasterVol]   = useState(() => isIOS ? 100 : getMasterVolume())
   const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'tutorials'
+  const [resetDone,   setResetDone]   = useState(false)
 
   // Tutorial on first visit
   useEffect(() => {
@@ -82,10 +84,16 @@ export default function Profile() {
           return fetch(`${API}/api/users/leaderboard`)
             .then(r => r.json())
             .then(lbData => setLeaderboard(lbData?.data?.agents ?? []))
+        } else if (user?.agentNumber) {
+          // Inject current user into mock leaderboard at correct position
+          const mock = MOCK_LEADERBOARD.filter(a => a.agentNumber !== user.agentNumber)
+          mock.push({ agentNumber: user.agentNumber, totalAircoins: user.totalAircoins ?? 0 })
+          mock.sort((a, b) => b.totalAircoins - a.totalAircoins)
+          setLeaderboard(mock)
         }
       })
       .catch(() => {})
-  }, [API])
+  }, [API, user?.agentNumber, user?.totalAircoins])
 
   useEffect(() => {
     if (!user) { setStats({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0 }); return }
@@ -219,7 +227,7 @@ export default function Profile() {
           {user && (
             <>
               {/* Difficulty */}
-              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+              <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${isHighlightingDifficulty ? ' tutorial-grid-highlight' : ''}`}>
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quiz Difficulty</p>
                 <div className="flex gap-2">
                   {/* Standard — always available */}
@@ -333,14 +341,9 @@ export default function Profile() {
               })()}
 
               {/* Links */}
-              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow space-y-2">
+              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
                 <Link to="/rankings" className="flex items-center justify-between py-2 px-1 text-sm font-semibold text-slate-700 hover:text-brand-600 transition-colors">
                   <span>🏅 View Progression & Ranks</span>
-                  <span className="text-slate-400">→</span>
-                </Link>
-                <div className="h-px bg-slate-100" />
-                <Link to="/report" className="flex items-center justify-between py-2 px-1 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
-                  <span>⚠️ Report a Problem</span>
                   <span className="text-slate-400">→</span>
                 </Link>
               </div>
@@ -420,6 +423,18 @@ export default function Profile() {
                 </button>
               </div>
             ))}
+          </div>
+          <button
+            onClick={() => { resetAll(); setResetDone(true); setTimeout(() => setResetDone(false), 2500) }}
+            className="w-full py-2.5 rounded-xl text-sm font-bold transition-all bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300 hover:text-brand-600"
+          >
+            {resetDone ? '✓ Tutorials reset — they\'ll show again as you navigate' : '🔄 Reset All Tutorials'}
+          </button>
+          <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+            <Link to="/report" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
+              <span>⚠️ Report a Problem</span>
+              <span className="text-slate-400">→</span>
+            </Link>
           </div>
         </motion.div>
       )}

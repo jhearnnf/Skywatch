@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useAppTutorial } from '../../context/AppTutorialContext'
 
 export default function TutorialModal() {
-  const { visible, step, current, total, next, skip } = useAppTutorial()
+  const { visible, step, current, total, next, skip, back, canGoBack } = useAppTutorial()
 
   return (
     <AnimatePresence>
@@ -58,12 +58,21 @@ export default function TutorialModal() {
 
               {/* Actions */}
               <div className="flex gap-3">
-                <button
-                  onClick={skip}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-slate-200 transition-colors"
-                >
-                  Skip tour
-                </button>
+                {canGoBack ? (
+                  <button
+                    onClick={back}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-slate-200 transition-colors"
+                  >
+                    ← Back
+                  </button>
+                ) : (
+                  <button
+                    onClick={skip}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-slate-200 transition-colors"
+                  >
+                    Skip tour
+                  </button>
+                )}
                 <button
                   onClick={next}
                   className="flex-2 flex-grow py-2.5 px-5 rounded-xl text-sm font-bold bg-brand-600 hover:bg-brand-700 text-white transition-colors shadow-sm"

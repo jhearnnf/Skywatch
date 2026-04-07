@@ -64,8 +64,8 @@ export const TUTORIAL_STEPS = {
       body: 'The Stats tab shows briefs read, games played, average quiz score, and total Aircoins. Tap any stat to see its history.' },
     { emoji: '🏆', title: 'Leaderboard Tab',
       body: 'Switch to the Leaderboard tab to see how you rank against other RAF applicants by total Aircoins.' },
-    { emoji: '🎯', title: 'Quiz Difficulty',
-      body: 'You can change your preferred quiz difficulty here at any time — Standard for direct recall questions, or Advanced for tougher contextual challenges.' },
+    { emoji: '🎯', title: 'Step Up Your Difficulty',
+      body: 'Find the "Quiz Difficulty" section below — tap Advanced to unlock tougher, interview-level questions and bigger Aircoins rewards. You can switch back to Standard at any time.', highlightDifficulty: true },
   ],
   rankings: [
     { emoji: '🎖️', title: 'Level Progression',
@@ -109,6 +109,12 @@ export const TUTORIAL_STEPS = {
     { emoji: '👆', title: 'Navigate Sections',
       body: 'Swipe left to advance to the next section, or swipe right to go back.' },
   ],
+  // quiz_difficulty_nudge is an inline card — the modal is never triggered for this key.
+  // It lives here solely so the admin reset loop clears its localStorage entry.
+  quiz_difficulty_nudge: [
+    { emoji: '🎚️', title: 'Difficulty Check',
+      body: 'One-time nudge shown after a first-attempt win on easy difficulty — asks if the user wants to step up to Advanced.' },
+  ],
 }
 
 // Derived key list — import this anywhere that needs to know all tutorial names.
@@ -140,7 +146,9 @@ export function AppTutorialProvider({ children }) {
   const [tutorialContent, setTutorialContent] = useState(null)
   const location     = useLocation()
   const { user, loading: authLoading } = useAuth()
-  const pendingRef   = useRef(null) // tutorial name waiting for auth to resolve
+  const pendingRef        = useRef(null) // tutorial name waiting for auth to resolve
+  const pendingNavRef     = useRef(null) // { name, stepIndex } — fires after next route change
+  const tutContentRef     = useRef(null) // mirror of tutorialContent for use in effects
 
   // Keys are user-scoped so tutorials seen on one account don't suppress them on another
   const storageKey = useCallback((name) => {
@@ -169,6 +177,9 @@ export function AppTutorialProvider({ children }) {
     }
   }, [user?._id, user?.tutorialsResetAt])
 
+  // Keep ref in sync so route-change effect can read latest content without a dep
+  useEffect(() => { tutContentRef.current = tutorialContent }, [tutorialContent])
+
   // Load tutorial content overrides from public settings on mount
   const fetchContent = useCallback(() => {
     return fetch(`${API}/api/settings`)
@@ -179,10 +190,20 @@ export function AppTutorialProvider({ children }) {
 
   useEffect(() => { fetchContent() }, [fetchContent])
 
-  // Close tutorial on route change
+  // On route change: fire any pending post-nav tutorial, otherwise clear active
   useEffect(() => {
-    setActive(null)
-  }, [location.pathname])
+    if (pendingNavRef.current) {
+      const { name, stepIndex } = pendingNavRef.current
+      pendingNavRef.current = null
+      const steps = applyOverrides(TUTORIAL_STEPS, tutContentRef.current)[name] ?? null
+      if (steps?.length) {
+        const idx = Math.min(stepIndex, steps.length - 1)
+        setActive({ name, steps, stepIndex: idx })
+      }
+    } else {
+      setActive(null)
+    }
+  }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Returns steps for a named tutorial, with DB overrides applied
   const getSteps = useCallback((name) => {
@@ -238,18 +259,39 @@ export function AppTutorialProvider({ children }) {
     setActive(null)
   }, [active, storageKey, markSeenOnServer])
 
+  const back = useCallback(() => {
+    setActive(prev => {
+      if (!prev || prev.stepIndex === 0) return prev
+      return { ...prev, stepIndex: prev.stepIndex - 1 }
+    })
+  }, [])
+
+  // Queue a tutorial to start after the next route change.
+  // Call this before navigate() — the pending tutorial fires once the new route mounts.
+  const startAfterNav = useCallback((name, stepIndex = 0) => {
+    pendingNavRef.current = { name, stepIndex }
+  }, [])
+
   const replay = useCallback((name) => {
     start(name, true)
   }, [start])
+
+  const resetAll = useCallback(() => {
+    Object.keys(TUTORIAL_STEPS).forEach(name => {
+      localStorage.removeItem(storageKey(name))
+      localStorage.removeItem(`sw_tut_v2_anon_${name}`)
+    })
+  }, [storageKey])
 
   const step        = active ? active.steps[active.stepIndex]  : null
   const total       = active ? active.steps.length             : 0
   const current     = active ? active.stepIndex + 1            : 0
   const visible     = !!step
   const activeName  = active?.name ?? null
+  const canGoBack   = active ? active.stepIndex > 0            : false
 
   return (
-    <Ctx.Provider value={{ start, next, skip, replay, step, total, current, visible, activeName, hasSeen, tutorialContent, refreshContent: fetchContent }}>
+    <Ctx.Provider value={{ start, next, skip, back, canGoBack, startAfterNav, replay, resetAll, step, total, current, visible, activeName, hasSeen, tutorialContent, refreshContent: fetchContent }}>
       {children}
     </Ctx.Provider>
   )

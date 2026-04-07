@@ -17,7 +17,7 @@ const GameFlashcardRecall                 = require('../models/GameFlashcardReca
 const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashcardRecallResult');
 const GameSessionWhereAircraftResult      = require('../models/GameSessionWhereAircraftResult');
 const AircoinLog             = require('../models/AircoinLog');
-const { awardCoins, CYCLE_THRESHOLD } = require('../utils/awardCoins');
+const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const Rank  = require('../models/Rank');
 const Level = require('../models/Level');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
@@ -369,7 +369,7 @@ router.patch('/settings', requireReason, async (req, res) => {
     const updatedKeys = Object.keys(updates);
     const actionType = (() => {
       if (updatedKeys.includes('betaTesterAutoGold')) return 'change_beta_settings';
-      if (updatedKeys.some(k => k.startsWith('volume') || k.startsWith('soundEnabled'))) return 'change_sound_settings';
+      if (updatedKeys.some(k => k.startsWith('volume') || k.startsWith('soundEnabled') || k.startsWith('duration'))) return 'change_sound_settings';
       if (updatedKeys.some(k => k.startsWith('ammo') || k.startsWith('aircoins') || k === 'trialDurationDays')) return 'change_economy_settings';
       if (updatedKeys.some(k => k.startsWith('passThreshold') || k.endsWith('AnswerCount') || k.startsWith('easyAnswer') || k.startsWith('mediumAnswer'))) return 'change_quiz_settings';
       if (updatedKeys.some(k => k === 'tutorialContent')) return 'edit_tutorial_content';
@@ -791,6 +791,25 @@ router.post('/award-coins', async (req, res) => {
     const result = await awardCoins(req.user._id, parsed, 'admin', 'Test Coins');
 
     await AdminAction.create({ userId: req.user._id, actionType: 'award_test_coins', reason: `Awarded ${parsed} test coins to self` });
+    res.json({ status: 'success', awarded: parsed, totalAircoins: result.totalAircoins, cycleAircoins: result.cycleAircoins, rankPromotion: result.rankPromotion });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/users/:id/award-coins — award aircoins to any user
+router.post('/users/:id/award-coins', requireReason, async (req, res) => {
+  try {
+    const { amount, reason } = req.body;
+    const parsed = parseInt(amount, 10);
+    if (!parsed || parsed <= 0) return res.status(400).json({ message: 'Amount must be a positive integer' });
+
+    const target = await User.findById(req.params.id).select('_id agentNumber');
+    if (!target) return res.status(404).json({ message: 'User not found' });
+
+    const result = await awardCoins(target._id, parsed, 'admin', reason || 'Admin Award');
+
+    await AdminAction.create({ userId: req.user._id, actionType: 'award_coins_to_user', reason: `Awarded ${parsed} coins to Agent ${target.agentNumber}: ${reason}`, targetUserId: target._id });
     res.json({ status: 'success', awarded: parsed, totalAircoins: result.totalAircoins, cycleAircoins: result.cycleAircoins, rankPromotion: result.rankPromotion });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -2657,14 +2676,10 @@ router.post('/ai/generate-quiz-missing', async (req, res) => {
 // Regenerates description sections, keywords, and quiz questions for an existing brief.
 // ── Shared helper: generate description, keywords, quiz, gameData, mnemonics ─
 async function generateBriefContent(brief, aiSettings) {
-  // Cap at 8 for reliability — sonar hits its real output token limit with more keywords + descriptions
-  const kwCount = Math.min(aiSettings.aiKeywordsPerBrief ?? 20, 8);
-
   const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: false });
-  let TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    ${dsArray}\n  ],\n  "keywords": [\n    {"keyword": "exact word or phrase that appears verbatim somewhere in the descriptionSections above", "generatedDescription": "1-2 sentences. Explain what this term is and its RAF role or purpose. Include one specific detail: location/aircraft for a base; role/aircraft for a squadron; capabilities for an aircraft; or training significance for a rank/concept. Draw on broader RAF knowledge only — do NOT reference or summarise this intel brief."},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"},\n    {"keyword": "another exact word or phrase from the sections", "generatedDescription": "1-2 sentences covering what it is, its RAF role, and specific contextual detail such as base location and stationed assets, squadron responsibilities, aircraft capabilities, or training pathway relevance — broader RAF knowledge only, not from this brief"}\n  ]\n}\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n2. Write all sections first, then extract keywords — every keyword string must appear verbatim (exact same spelling and capitalisation) somewhere across the sections.\n3. Return exactly 10 keyword objects.\n4. Prefer technical terms, acronyms, aircraft designations, operation names, and proper nouns.`;
-
-  TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace('Return exactly 10 keyword objects', `Return exactly ${kwCount} keyword objects`);
-  TOPIC_JSON_SHAPE += `\n5. Do NOT use the topic title "${brief.title}" or any shortened form of it as a keyword — the title itself must never appear in the keywords array.`;
+  // Keywords are generated separately via multi-pass extraction after we have the description,
+  // so they are NOT included in this combined call — that was the cause of the 8-keyword cap.
+  let TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    ${dsArray}\n  ]\n}\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}`;
   TOPIC_JSON_SHAPE += `\n${LIST_FORMAT_RULE}`;
 
   // Inject subtitle before descriptionSections
@@ -2714,9 +2729,68 @@ async function generateBriefContent(brief, aiSettings) {
 
   const descriptionSections = (Array.isArray(briefGenerated.descriptionSections) ? briefGenerated.descriptionSections : [])
     .map(s => typeof s === 'string' ? s.replace(/[*_`#]/g, '') : s);
-  let keywords = Array.isArray(briefGenerated.keywords) ? briefGenerated.keywords : [];
   const subtitle = typeof briefGenerated.subtitle === 'string' ? briefGenerated.subtitle.trim() : null;
   const sources  = Array.isArray(briefGenerated.sources) ? briefGenerated.sources : [];
+
+  // ── Multi-pass keyword extraction (same 3-pass pipeline as single-brief generation) ──
+  // Runs on the generated description so Sonar can focus each call on keywords only,
+  // removing the token-limit bottleneck that previously forced a hard cap of 8.
+  let keywords = [];
+  if (descriptionSections.length) {
+    const descriptionText = descriptionSections.join('\n\n');
+    const descLower  = descriptionText.toLowerCase();
+    const titleLower = brief.title.toLowerCase();
+    const seen = new Set();
+    const validateKws = (kwArray) => (Array.isArray(kwArray) ? kwArray : []).filter(k => {
+      if (!k.keyword) return false;
+      const kl = k.keyword.toLowerCase();
+      if (!descLower.includes(kl)) return false;
+      if (seen.has(kl)) return false;
+      if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
+      seen.add(kl);
+      return true;
+    });
+
+    const kwSys = [{ role: 'system', content: getPrompt(aiSettings, 'keywords') }];
+    const kwMdl = 'perplexity/sonar';
+    const KW_JSON = '{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition"},...]}';
+
+    // Pass 1 — technical terms, aircraft, operations, systems, roles (10 keywords)
+    let pass1 = [];
+    try {
+      const r1 = await openRouterChat([...kwSys, {
+        role: 'user',
+        content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 10 keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+      }], kwMdl);
+      pass1 = validateKws(JSON.parse(cleanJson(r1.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 10);
+    } catch (e) { console.warn('[generateBriefContent] Keywords pass 1:', e.message); }
+
+    // Pass 2 — proper nouns: squadron names, base names, unit designations (up to 10)
+    let pass2 = [];
+    try {
+      const alreadyList = pass1.length ? `Already extracted (do NOT repeat): ${pass1.map(k => k.keyword).join(', ')}\n\n` : '';
+      const r2 = await openRouterChat([...kwSys, {
+        role: 'user',
+        content: `Description:\n"""${descriptionText}"""\n\n${alreadyList}Extract up to 10 proper noun keywords from the description above. Focus SPECIFICALLY on: RAF squadron names and numbers (e.g. "No. 617 Squadron", "XI Squadron"), RAF base and airfield names (e.g. "RAF Lossiemouth"), named military units, formations, and commands. Every keyword MUST appear verbatim in the description.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+      }], kwMdl);
+      pass2 = validateKws(JSON.parse(cleanJson(r2.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 10);
+    } catch (e) { console.warn('[generateBriefContent] Keywords pass 2:', e.message); }
+
+    // Pass 3 — coverage check: up to 5 important terms missed by passes 1 & 2
+    const combined12 = [...pass1, ...pass2];
+    let pass3 = [];
+    if (combined12.length > 0) {
+      try {
+        const r3 = await openRouterChat([...kwSys, {
+          role: 'user',
+          content: `Description:\n"""${descriptionText}"""\n\nAlready extracted: ${combined12.map(k => k.keyword).join(', ')}\n\nIdentify up to 5 important terms from this description that were NOT already extracted. Look for aircraft designations, operation names, training programme names, squadron names, base names, technical systems, or role titles appearing verbatim in the description but absent from the list above. If nothing important is missing, return {"keywords":[]}.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+        }], kwMdl);
+        pass3 = validateKws(JSON.parse(cleanJson(r3.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 5);
+      } catch (e) { console.warn('[generateBriefContent] Keywords pass 3:', e.message); }
+    }
+
+    keywords = [...combined12, ...pass3];
+  }
 
   // Terms too generic to ever be useful as keywords — the whole app is about the RAF,
   // so highlighting these adds noise rather than value. Units with their own brief
@@ -3393,14 +3467,21 @@ router.get('/economy-viability', async (req, res) => {
                       + (settings.aircoinsWhereAircraftRound2 ?? 10)
                       + (settings.aircoinsWhereAircraftBonus  ?? 5);
 
+    // Compute live cycle threshold from Level docs (same logic as getCycleThreshold)
+    let liveCycleThreshold = 0;
+    for (const lv of levels) {
+      if (lv.aircoinsToNextLevel != null) liveCycleThreshold += lv.aircoinsToNextLevel;
+    }
+    if (!liveCycleThreshold) liveCycleThreshold = CYCLE_THRESHOLD;
+
     function calcProgression(totalCoins) {
       const rankCount       = ranks.length;
-      const fullCycles      = rankCount > 0 ? Math.floor(totalCoins / CYCLE_THRESHOLD) : 0;
+      const fullCycles      = rankCount > 0 ? Math.floor(totalCoins / liveCycleThreshold) : 0;
       const completedCycles = Math.min(fullCycles, rankCount);
       const atMaxRank       = rankCount > 0 && completedCycles >= rankCount;
       const cycleCoins      = atMaxRank
-        ? totalCoins - rankCount * CYCLE_THRESHOLD
-        : totalCoins % CYCLE_THRESHOLD;
+        ? totalCoins - rankCount * liveCycleThreshold
+        : totalCoins % liveCycleThreshold;
 
       let finalLevel = 1, cumulative = 0;
       for (const lv of levels) {
@@ -3411,7 +3492,7 @@ router.get('/economy-viability', async (req, res) => {
       }
 
       const finalRank     = completedCycles > 0 ? ranks[completedCycles - 1] : null;
-      const coinsToMaxOut = rankCount * CYCLE_THRESHOLD;
+      const coinsToMaxOut = rankCount * liveCycleThreshold;
       const shortfall     = Math.max(0, coinsToMaxOut - totalCoins);
       return { completedCycles, atMaxRank, cycleCoins, finalLevel, finalRank, coinsToMaxOut, shortfall };
     }
@@ -3453,7 +3534,7 @@ router.get('/economy-viability', async (req, res) => {
           aircoinsFirstLogin:            settings.aircoinsFirstLogin            ?? 5,
           aircoinsStreakBonus:           settings.aircoinsStreakBonus           ?? 2,
         },
-        cycleThreshold: CYCLE_THRESHOLD,
+        cycleThreshold: liveCycleThreshold,
         totalRanks:     ranks.length,
         ranks:  ranks.map(r => ({ rankNumber: r.rankNumber, rankName: r.rankName })),
         levels: levels.map(l => ({ levelNumber: l.levelNumber, aircoinsToNextLevel: l.aircoinsToNextLevel })),

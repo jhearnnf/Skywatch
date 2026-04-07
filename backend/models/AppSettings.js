@@ -110,6 +110,14 @@ const appSettingsSchema = new mongoose.Schema({
   volumeTypingSound:       { type: Number, default: 30, min: 0, max: 100 },
   soundEnabledTypingSound: { type: Boolean, default: true },
 
+  // Blueprint grid-reveal tones (Intel Brief image cell dissolve)
+  volumeGridReveal:       { type: Number, default: 30, min: 0, max: 100 },
+  soundEnabledGridReveal: { type: Boolean, default: true },
+  durationGridReveal:     { type: Number, default: 12, min: 1, max: 50 },   // milliseconds
+
+  // Synthesised sound durations
+  durationTypingSound:    { type: Number, default: 3,  min: 1, max: 40 },   // milliseconds
+
   // AI content generation
   aiKeywordsPerBrief: { type: Number, default: 20, min: 1 },
 

@@ -1,9 +1,24 @@
 const User       = require('../models/User');
 const AircoinLog = require('../models/AircoinLog');
 const Rank       = require('../models/Rank');
+const Level      = require('../models/Level');
 
-// Cumulative aircoins required to complete level 10 (matches Level.seedLevels)
+// Deprecated — use getCycleThreshold() for the live value from Level docs.
 const CYCLE_THRESHOLD = 14700;
+
+/**
+ * Compute the cycle threshold dynamically from Level documents.
+ * This is the sum of all aircoinsToNextLevel values (levels 1–9).
+ * Falls back to the hardcoded CYCLE_THRESHOLD if no levels are seeded.
+ */
+async function getCycleThreshold() {
+  const levels = await Level.find().sort({ levelNumber: 1 }).lean();
+  let total = 0;
+  for (const lv of levels) {
+    if (lv.aircoinsToNextLevel != null) total += lv.aircoinsToNextLevel;
+  }
+  return total || CYCLE_THRESHOLD;
+}
 
 /**
  * Award aircoins to a user, handling:
@@ -26,11 +41,13 @@ async function awardCoins(userId, amount, reason, label, briefId = null) {
   let newRankId      = user.rank?._id ?? user.rank ?? null;
   let currentRankNum = (user.rank && typeof user.rank === 'object' ? user.rank.rankNumber : null) ?? 0;
 
-  if (finalCycle >= CYCLE_THRESHOLD) {
+  const cycleThreshold = await getCycleThreshold();
+
+  if (finalCycle >= cycleThreshold) {
     const allRanks = await Rank.find().sort({ rankNumber: 1 });
 
-    while (finalCycle >= CYCLE_THRESHOLD) {
-      finalCycle -= CYCLE_THRESHOLD;
+    while (finalCycle >= cycleThreshold) {
+      finalCycle -= cycleThreshold;
 
       const nextRank = allRanks.find(r => r.rankNumber > currentRankNum);
       if (nextRank) {
@@ -55,4 +72,4 @@ async function awardCoins(userId, amount, reason, label, briefId = null) {
   return { totalAircoins: newTotal, cycleAircoins: finalCycle, rankPromotion };
 }
 
-module.exports = { awardCoins, CYCLE_THRESHOLD };
+module.exports = { awardCoins, getCycleThreshold, CYCLE_THRESHOLD };

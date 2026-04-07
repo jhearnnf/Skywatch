@@ -11,9 +11,23 @@ function getTypingAudioCtx() {
   return typingAudioCtx
 }
 
-function _playTypingOscillator(vol) {
+// Returns a promise that resolves with a running AudioContext.
+// Prevents scheduling oscillators while currentTime is frozen (suspended).
+let _resumePromise = null
+function getRunningAudioCtx() {
+  const ctx = getTypingAudioCtx()
+  if (ctx.state === 'running') return Promise.resolve(ctx)
+  if (_resumePromise) return _resumePromise
+  _resumePromise = ctx.resume()
+    .then(() => { _resumePromise = null; return ctx })
+    .catch(() => { _resumePromise = null; return ctx })
+  return _resumePromise
+}
+
+function _playTypingOscillator(vol, durMs = 3) {
   if (vol <= 0) return
   try {
+    const dur  = Math.max(0.001, durMs / 1000)
     const ctx  = getTypingAudioCtx()
     const now  = ctx.currentTime
     const freq = 300 + Math.random() * 500   // 300–800 Hz — random pitch per key
@@ -21,32 +35,75 @@ function _playTypingOscillator(vol) {
     osc.type = 'square'
     osc.frequency.setValueAtTime(freq, now)
     const gain = ctx.createGain()
-    gain.gain.setValueAtTime(vol * 0.3, now)
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.003)
+    const peakGain = vol * 0.3
+    // Hold peak for 40% of duration, then decay over the remaining 60%
+    const holdEnd = now + dur * 0.4
+    const decayEnd = now + dur
+    gain.gain.setValueAtTime(peakGain, now)
+    gain.gain.setValueAtTime(peakGain, holdEnd)
+    gain.gain.exponentialRampToValueAtTime(0.0001, decayEnd)
     osc.connect(gain)
     gain.connect(ctx.destination)
     osc.start(now)
-    osc.stop(now + 0.003)
+    osc.stop(decayEnd)
   } catch {}
 }
 
 // ── Grid reveal tone (Intel Brief image cell dissolve) ────────────────────────
+// Throttle: allow max ~1 tone per 30 ms to prevent additive clipping when
+// dozens of setTimeout callbacks land in the same frame.
+let _lastGridToneTime = 0
+
 export function playGridRevealTone() {
-  try {
-    const ctx  = getTypingAudioCtx()
-    const now  = ctx.currentTime
-    const freq = 600 + Math.random() * 1400  // 600–2000 Hz — high, airy
-    const osc  = ctx.createOscillator()
-    osc.type = 'sine'
-    osc.frequency.setValueAtTime(freq, now)
-    const gain = ctx.createGain()
-    gain.gain.setValueAtTime(0.018, now)
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.012)
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.start(now)
-    osc.stop(now + 0.012)
-  } catch {}
+  const now = performance.now()
+  if (now - _lastGridToneTime < 30) return
+  _lastGridToneTime = now
+
+  const s = cache || {}
+  if (s.soundEnabledGridReveal === false) return
+  const vol = masterVol((s.volumeGridReveal ?? 30) / 100)
+  if (vol <= 0) return
+  const dur = Math.max(0.001, (s.durationGridReveal ?? 12) / 1000)
+
+  getRunningAudioCtx().then(ctx => {
+    try {
+      const t    = ctx.currentTime
+      const freq = 600 + Math.random() * 1400  // 600–2000 Hz — high, airy
+      const osc  = ctx.createOscillator()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, t)
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(vol * 0.018, t)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(t)
+      osc.stop(t + dur)
+    } catch {}
+  })
+}
+
+// For admin preview of grid reveal — fires a single synthesised tone at the given volume
+export function previewGridRevealTone(sliderValue, durationMs) {
+  const vol = Math.min(1, (sliderValue ?? 30) / 100)
+  if (vol <= 0) return
+  const dur = Math.max(0.001, (durationMs ?? 12) / 1000)
+  getRunningAudioCtx().then(ctx => {
+    try {
+      const t    = ctx.currentTime
+      const freq = 600 + Math.random() * 1400
+      const osc  = ctx.createOscillator()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, t)
+      const gain = ctx.createGain()
+      gain.gain.setValueAtTime(vol * 0.018, t)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(t)
+      osc.stop(t + dur)
+    } catch {}
+  })
 }
 
 // Called per typed character — reads from cache synchronously (zero latency)
@@ -54,12 +111,12 @@ export function playTypingSound() {
   const s = cache || {}
   if (s.soundEnabledTypingSound === false) return
   const vol = masterVol((s.volumeTypingSound ?? 30) / 100)
-  _playTypingOscillator(vol)
+  _playTypingOscillator(vol, s.durationTypingSound ?? 3)
 }
 
 // For admin preview — bypasses cache, uses raw slider value directly
-export function previewTypingSound(sliderValue) {
-  _playTypingOscillator(Math.min(1, (sliderValue ?? 30) / 100))
+export function previewTypingSound(sliderValue, durationMs) {
+  _playTypingOscillator(Math.min(1, (sliderValue ?? 30) / 100), durationMs ?? 3)
 }
 
 const OUT_OF_AMMO_VARIANTS = ['out_of_ammo_1.mp3', 'out_of_ammo_2.mp3', 'out_of_ammo_3.mp3']
@@ -103,11 +160,16 @@ function fetchSettings() {
         volumeFlashcardIncorrect: 100, soundEnabledFlashcardIncorrect: true,
         volumeFlashcardCollect: 100,   soundEnabledFlashcardCollect: true,
         volumeTypingSound: 30,         soundEnabledTypingSound: true,
+        volumeGridReveal: 30,          soundEnabledGridReveal: true,
+        durationTypingSound: 3,        durationGridReveal: 12,
         freeCategories: ['News'], silverCategories: [],
       }
     })
   return inflight
 }
+
+// Warm the cache on module load so synchronous readers have data immediately
+fetchSettings()
 
 // ── Master volume (user preference, stored in localStorage) ──────────────────
 const MASTER_VOL_KEY = 'skywatch_master_volume'
@@ -128,6 +190,9 @@ function masterVol(vol) {
 export function invalidateSoundSettings() {
   cache = null
   inflight = null
+  // Re-fetch immediately so synchronous readers (playTypingSound, playGridRevealTone)
+  // pick up fresh values as soon as the new fetch completes
+  fetchSettings()
 }
 
 // Stop the current sound immediately and drain the pending queue

@@ -303,7 +303,7 @@ export default function Rankings() {
                         Level {lvl.levelNumber}{isMax && <span className="ml-1.5" style={{ color: '#fbbf24' }}>⭐ MAX</span>}
                       </p>
                       <p className="text-xs intel-mono" style={{ color: '#3d5a7a' }}>
-                        {lvl.cumulativeAircoins.toLocaleString()} AC required
+                        {lvl.cumulativeAircoins.toLocaleString()} Aircoins required
                       </p>
                     </div>
 

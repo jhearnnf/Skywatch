@@ -134,8 +134,66 @@ function QuestionCard({ question, answers, onAnswer, answered, correctAnswerId, 
 // Priority order for the locked-category upsell teaser
 const UPSELL_PRIORITY = ['Threats', 'Tech', 'Missions', 'Allies', 'Squadrons', 'Bases']
 
+// ── Post-quiz difficulty nudge ────────────────────────────────────────────
+function DifficultyNudge({ user, won, difficulty }) {
+  const navigate                    = useNavigate()
+  const { hasSeen, startAfterNav }  = useAppTutorial()
+  const [nudgeVisible, setVisible]  = useState(false)
+
+  const nudgeKey = `sw_tut_v2_${user?._id ?? 'anon'}_quiz_difficulty_nudge`
+
+  useEffect(() => {
+    if (!user || !won || difficulty !== 'easy') return
+    if (localStorage.getItem(nudgeKey)) return
+    const t = setTimeout(() => setVisible(true), 1200)
+    return () => clearTimeout(t)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!nudgeVisible) return null
+
+  const dismiss = () => {
+    localStorage.setItem(nudgeKey, '1')
+    setVisible(false)
+  }
+
+  const handleStepUp = () => {
+    localStorage.setItem(nudgeKey, '1')
+    // Infinity is clamped to the actual last step inside startAfterNav
+    startAfterNav('profile', hasSeen('profile') ? Infinity : 0)
+    navigate('/profile')
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mt-5 bg-surface rounded-2xl border border-brand-300/40 p-4 text-left"
+    >
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Difficulty Check</p>
+      <p className="text-sm font-bold text-slate-800 mb-1">Was that quiz too easy?</p>
+      <p className="text-xs text-slate-500 leading-relaxed mb-4">
+        Step up to Advanced for tougher questions that mirror real RAF selection boards — and earn bigger Aircoins rewards.
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={dismiss}
+          className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors"
+        >
+          Felt right
+        </button>
+        <button
+          onClick={handleStepUp}
+          className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-brand-600 hover:bg-brand-700 text-white transition-colors"
+        >
+          Show me how →
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Results screen ────────────────────────────────────────────────────────
-function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack, brief, booAvailable = false, onStartBoo, user, settings, levelThresholds, navigate }) {
+function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt = true, won, onRetry, onBack, brief, booAvailable = false, onStartBoo, user, settings, levelThresholds, navigate, difficulty }) {
   const pct     = total > 0 ? Math.round((score / total) * 100) : 0
   const perfect = score === total
 
@@ -254,6 +312,12 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
       </div>
 
       <RelatedBriefs brief={brief} navigate={navigate} />
+
+      <DifficultyNudge
+        user={user}
+        won={won}
+        difficulty={difficulty}
+      />
 
       {/* Locked category upsell — win only, free signed-in users */}
       {upsellCategory && (
@@ -584,6 +648,7 @@ export default function QuizFlow() {
           user={user}
           settings={settings}
           levelThresholds={levelThresholds}
+          difficulty={difficulty}
         />
       </>
     )

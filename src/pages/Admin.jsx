@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
-import { invalidateSoundSettings, previewTypingSound } from '../utils/sound'
+import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } from '../utils/sound'
 import RankBadge from '../components/RankBadge'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 
@@ -31,8 +31,9 @@ function fmtSeconds(s) {
 }
 
 const ALL_CATEGORIES = [
-  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training',
+  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
+  'Heritage',
 ]
 
 // RAF rank names indexed by rank number (1–19)
@@ -311,8 +312,9 @@ const SOUND_GROUPS = [
   {
     title: 'Navigation',
     sounds: [
-      { key: 'volumeIntelBriefOpened',    enabledKey: 'soundEnabledIntelBriefOpened',    label: 'Brief Opened',   sound: 'intel_brief_opened'    },
+      { key: 'volumeIntelBriefOpened',    enabledKey: 'soundEnabledIntelBriefOpened',    label: 'Brief Opened',          sound: 'intel_brief_opened'    },
       { key: 'volumeFirstBriefComplete',  enabledKey: 'soundEnabledFirstBriefComplete',  label: 'Brief Complete (Guest)', sound: 'first_brief_complete' },
+      { key: 'volumeGridReveal',          enabledKey: 'soundEnabledGridReveal',          durationKey: 'durationGridReveal', durationMax: 50, durationDefault: 12, label: 'Image Grid Reveal',      sound: '__grid_reveal__'       },
     ],
   },
   {
@@ -360,12 +362,12 @@ const SOUND_GROUPS = [
   {
     title: 'Aptitude Sync / Terminal',
     sounds: [
-      { key: 'volumeTypingSound', enabledKey: 'soundEnabledTypingSound', label: 'Typing Sound', sound: '__typing__' },
+      { key: 'volumeTypingSound', enabledKey: 'soundEnabledTypingSound', durationKey: 'durationTypingSound', durationMax: 40, durationDefault: 3, label: 'Typing Sound', sound: '__typing__' },
     ],
   },
 ]
 
-const ALL_SOUND_KEYS = SOUND_GROUPS.flatMap(g => g.sounds.flatMap(s => [s.key, s.enabledKey]))
+const ALL_SOUND_KEYS = SOUND_GROUPS.flatMap(g => g.sounds.flatMap(s => [s.key, s.enabledKey, s.durationKey].filter(Boolean)))
 
 function NumInput({ label, value, onChange, min = 0, max = 9999, hint }) {
   return (
@@ -404,11 +406,15 @@ function Toggle({ label, hint, checked, onChange }) {
 
 const OUT_OF_AMMO_VARIANTS = ['out_of_ammo_1', 'out_of_ammo_2', 'out_of_ammo_3']
 
-function SoundRowV2({ label, sound, value, onChange, enabled, onToggle }) {
+function SoundRowV2({ label, sound, value, onChange, enabled, onToggle, durationValue, onDurationChange, durationMax = 50, durationDefault = 12 }) {
   const preview = () => {
     invalidateSoundSettings()
     if (sound === '__typing__') {
-      previewTypingSound(value ?? 30)
+      previewTypingSound(value ?? 30, durationValue)
+      return
+    }
+    if (sound === '__grid_reveal__') {
+      previewGridRevealTone(value ?? 30, durationValue)
       return
     }
     try {
@@ -422,23 +428,38 @@ function SoundRowV2({ label, sound, value, onChange, enabled, onToggle }) {
   }
 
   return (
-    <div className={`flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0 ${!enabled ? 'opacity-50' : ''}`}>
-      <button
-        onClick={onToggle}
-        className={`w-10 h-5 rounded-full flex-shrink-0 transition-colors ${enabled ? 'bg-brand-500' : 'bg-slate-200'}`}
-      >
-        <span className={`block w-4 h-4 bg-surface rounded-full shadow mx-auto transition-transform ${enabled ? '' : ''}`} />
-      </button>
-      <span className="text-sm text-slate-700 flex-1">{label}</span>
-      <button onClick={preview} className="text-slate-400 hover:text-brand-600 text-xs px-2" title="Preview">▶</button>
-      <input
-        type="range" min={0} max={100}
-        value={value ?? 100}
-        onChange={e => onChange(Number(e.target.value))}
-        disabled={!enabled}
-        className="w-24"
-      />
-      <span className="text-xs text-slate-400 w-8 text-right">{value ?? 100}%</span>
+    <div className={`border-b border-slate-100 last:border-0 ${!enabled ? 'opacity-50' : ''}`}>
+      <div className="flex items-center gap-3 py-2.5">
+        <button
+          onClick={onToggle}
+          className={`w-10 h-5 rounded-full flex-shrink-0 transition-colors ${enabled ? 'bg-brand-500' : 'bg-slate-200'}`}
+        >
+          <span className={`block w-4 h-4 bg-surface rounded-full shadow mx-auto transition-transform ${enabled ? '' : ''}`} />
+        </button>
+        <span className="text-sm text-slate-700 flex-1">{label}</span>
+        <button onClick={preview} className="text-slate-400 hover:text-brand-600 text-xs px-2" title="Preview">▶</button>
+        <input
+          type="range" min={0} max={100}
+          value={value ?? 100}
+          onChange={e => onChange(Number(e.target.value))}
+          disabled={!enabled}
+          className="w-24"
+        />
+        <span className="text-xs text-slate-400 w-8 text-right">{value ?? 100}%</span>
+      </div>
+      {onDurationChange && (
+        <div className="flex items-center gap-3 pb-2.5 pl-14">
+          <span className="text-xs text-slate-400 flex-1">Duration</span>
+          <input
+            type="range" min={1} max={durationMax}
+            value={durationValue ?? durationDefault}
+            onChange={e => onDurationChange(Number(e.target.value))}
+            disabled={!enabled}
+            className="w-24"
+          />
+          <span className="text-xs text-slate-400 w-8 text-right">{durationValue ?? durationDefault}ms</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -1541,7 +1562,7 @@ function SettingsTab({ API }) {
         {SOUND_GROUPS.map(group => (
           <div key={group.title} className="mb-4">
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-1 pb-1">{group.title}</p>
-            {group.sounds.map(({ key, enabledKey, label, sound }) => (
+            {group.sounds.map(({ key, enabledKey, durationKey, durationMax, durationDefault, label, sound }) => (
               <SoundRowV2
                 key={key}
                 label={label}
@@ -1550,6 +1571,10 @@ function SettingsTab({ API }) {
                 onChange={v => set(key, v)}
                 enabled={draft[enabledKey] !== false}
                 onToggle={() => set(enabledKey, draft[enabledKey] === false ? true : false)}
+                durationValue={durationKey ? draft[durationKey] : undefined}
+                onDurationChange={durationKey ? v => set(durationKey, v) : undefined}
+                durationMax={durationMax}
+                durationDefault={durationDefault}
               />
             ))}
           </div>
@@ -1608,6 +1633,8 @@ function UsersTab({ API }) {
   const [toast,   setToast]   = useState('')
   const [resetPanel,  setResetPanel]  = useState(null) // user._id of open panel
   const [resetChecks, setResetChecks] = useState({})
+  const [awardPanel,  setAwardPanel]  = useState(null) // user._id of open panel
+  const [awardAmount, setAwardAmount] = useState('')
 
   const loadAll = useCallback(async () => {
     setLoading(true); setSearch(false)
@@ -1771,7 +1798,42 @@ function UsersTab({ API }) {
                 className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors">
                 Delete
               </button>
+              <button onClick={() => { setAwardPanel(awardPanel === u._id ? null : u._id); setAwardAmount('') }}
+                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
+                  awardPanel === u._id
+                    ? 'border-amber-300 text-amber-700 bg-amber-50'
+                    : 'border-amber-200 text-amber-700 hover:bg-amber-50'
+                }`}>
+                ⬡ Award Coins {awardPanel === u._id ? '▲' : '▼'}
+              </button>
             </div>
+
+            {/* Award Coins */}
+            {awardPanel === u._id && (
+              <div className="px-4 py-2.5 border-b border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Award Aircoins</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min={1} placeholder="Amount…"
+                    value={awardAmount}
+                    onChange={e => setAwardAmount(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && parseInt(awardAmount, 10) > 0) {
+                        action(`Award ${awardAmount} coins — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/award-coins`, 'POST', { amount: parseInt(awardAmount, 10) })
+                      }
+                    }}
+                    className="w-28 border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
+                  />
+                  <button
+                    onClick={() => action(`Award ${awardAmount} coins — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/award-coins`, 'POST', { amount: parseInt(awardAmount, 10) })}
+                    disabled={!awardAmount || parseInt(awardAmount, 10) <= 0}
+                    className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold transition-colors disabled:opacity-40"
+                  >
+                    ⬡ Award
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Subscription tier */}
             <SubscriptionTierRow u={u} action={action} />
@@ -2145,15 +2207,16 @@ const CR_DEFAULTS = {
 
 // Tutorial names in display order with friendly labels
 const TUTORIAL_META = [
-  { key: 'home',           label: 'Home Page' },
-  { key: 'learn-priority', label: 'Learn Pathway Page' },
-  { key: 'pathway_swipe',  label: 'Pathway Swipe Hint', inline: true },
-  { key: 'briefReader',    label: 'Brief Reader' },
-  { key: 'quiz',           label: 'Quiz' },
-  { key: 'play',           label: 'Play Hub' },
-  { key: 'wheres_aircraft', label: "Where's That Aircraft" },
-  { key: 'profile',        label: 'Profile Page' },
-  { key: 'rankings',       label: 'Progression Page' },
+  { key: 'home',                  label: 'Home Page' },
+  { key: 'learn-priority',        label: 'Learn Pathway Page' },
+  { key: 'pathway_swipe',         label: 'Pathway Swipe Hint',          inline: true },
+  { key: 'briefReader',           label: 'Brief Reader' },
+  { key: 'quiz',                  label: 'Quiz' },
+  { key: 'play',                  label: 'Play Hub' },
+  { key: 'wheres_aircraft',       label: "Where's That Aircraft" },
+  { key: 'profile',               label: 'Profile Page' },
+  { key: 'rankings',              label: 'Progression Page' },
+  { key: 'quiz_difficulty_nudge', label: 'Post-Quiz Difficulty Nudge',  inline: true },
 ]
 
 function ContentTab({ API }) {
@@ -2545,6 +2608,7 @@ function GenerateSectionLinksButton({ sourceTitle, sourceDescription, sourceCate
 const BRIEF_CATEGORIES = [
   'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
+  'Heritage',
 ]
 
 const BRIEF_SUBCATEGORIES = {
@@ -2562,6 +2626,7 @@ const BRIEF_SUBCATEGORIES = {
   Tech: ['Weapons Systems','Sensors & Avionics','Electronic Warfare','Future Programmes','Command, Control & Comms'],
   Terminology: ['Operational Concepts','Flying & Tactical','Air Traffic & Navigation','Intelligence & Planning','Maintenance & Support'],
   Treaties: ['Founding & Core Alliances','Bilateral Defence Agreements','Arms Control & Non-Proliferation','Operational & Status Agreements'],
+  Heritage: ['Famous Personnel','Traditions & Culture','Memorials & Museums'],
 }
 
 const EMPTY_DRAFT = {

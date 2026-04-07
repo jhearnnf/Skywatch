@@ -1182,6 +1182,9 @@ const LEADS = [
   { title: 'Merlin Crowsnest', nickname: '', subtitle: 'An airborne early warning system using Merlin Mk2 helicopters for fleet air defence.', category: 'Tech', subcategory: 'Sensors & Avionics', section: 'TECH', subsection: 'Sensors & Avionics' },
 
 
+  { title: 'Fast Jet Operations', nickname: '', subtitle: 'Core capability for RAF air power projection using high-speed combat aircraft.', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems' },
+  { title: 'Strike Missions', nickname: '', subtitle: 'Offensive operations using precision-guided munitions to neutralise enemy targets.', category: 'Missions', subcategory: 'Post-War & Cold War', section: 'MISSIONS', subsection: 'Post-War & Cold War' },
+
   // ── AUTO-GENERATED LEADS (seeded from keyword linking — do not edit this line) ──
 ];
 
