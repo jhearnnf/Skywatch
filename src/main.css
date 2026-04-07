@@ -451,3 +451,68 @@ body.play-mode .card-shadow {
   animation-delay: 0.45s;
   animation-fill-mode: both;
 }
+
+/* ── Intel image flash words ─────────────────────────────────────────────── */
+@keyframes intel-flash {
+  0%   { opacity: 0; }
+  10%  { opacity: 0.55; }
+  60%  { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+
+.intel-flash-word {
+  position: absolute;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5baaff;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  animation: intel-flash 350ms ease-out forwards;
+}
+
+.intel-flash-line {
+  position: absolute;
+  height: 1px;
+  background: #5baaff;
+  pointer-events: none;
+  user-select: none;
+  animation: intel-flash 350ms ease-out forwards;
+}
+
+.intel-flash-lines {
+  box-shadow: 0 5px 0 0 #5baaff;
+}
+
+.intel-glitch-box {
+  position: absolute;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  animation: intel-glitch 280ms ease-out forwards;
+}
+
+@keyframes intel-glitch {
+  0%   { opacity: 0; }
+  6%   { opacity: 1; }
+  78%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Blueprint grid reveal ────────────────────────────────────────────────── */
+@keyframes blueprint-reveal {
+  0%   { opacity: 1; background-color: #060f1c; border-color: rgba(91, 170, 255, 0.35); }
+  10%  { opacity: 1; background-color: rgba(30, 100, 220, 0.75); border-color: rgba(130, 200, 255, 0.9); box-shadow: inset 0 0 6px rgba(91, 170, 255, 0.7), 0 0 4px rgba(91, 170, 255, 0.4); }
+  30%  { opacity: 0.85; background-color: rgba(20, 60, 160, 0.4); border-color: rgba(91, 170, 255, 0.55); box-shadow: inset 0 0 3px rgba(91, 170, 255, 0.3); }
+  100% { opacity: 0; background-color: transparent; border-color: transparent; box-shadow: none; }
+}
+
+.blueprint-cell {
+  background-color: #0a1f40;
+  border: 1px solid rgba(91, 170, 255, 0.35);
+  opacity: 1;
+  animation: blueprint-reveal 240ms ease-out forwards;
+}

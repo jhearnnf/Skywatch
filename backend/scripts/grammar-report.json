@@ -1,0 +1,3698 @@
+[
+  {
+    "briefId": "69ce4f7de669298365614cb4",
+    "title": "Aircraftman / Aircraftwoman",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "aircraftwoman",
+        "context": "...e, historically known as aircraftman or aircraftwoman, represents the starting point for all ...",
+        "contextOffset": 43,
+        "contextLength": 13,
+        "suggestions": [
+          "aircraft woman"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Cosford",
+        "context": "... training at various sites, such as RAF Cosford for technical roles. Ground support rol...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Cos ford"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...ircraft readiness across bases like RAF Lossiemouth (Poseidon MRA1) and RAF Coningsby (Typh...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...RAF Lossiemouth (Poseidon MRA1) and RAF Coningsby (Typhoon FGR4 squadrons). Their groundw...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614cbb",
+    "title": "Intelligence Officer",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Highers at",
+        "context": "...Minimum entry requires 2 A2 Levels or 3 Highers at Grade C. Officers oversee Intelligence ...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "Higher sat",
+          "Higher at",
+          "Lifers at"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614cbc",
+    "title": "JTAC",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "Training occurs at RAF Coningsby, where personnel from the Air Land Inte...",
+        "contextOffset": 23,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "... - FOX DEFENDER - No. 12 Squadron - RAF Coningsby",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "..., they enable Typhoon aircraft from RAF Coningsby to provide close air support in diverse...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘maneuvers’ is American English.",
+        "flaggedText": "maneuvers",
+        "context": "...itions, integrating air power with land maneuvers in joint operations. Their expertise is...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "manoeuvres"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614cc0",
+    "title": "Air Traffic Control Officer",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Leeming",
+        "context": "...el serve across RAF bases including RAF Leeming, where they support operations under th...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Seeming",
+          "Deeming",
+          "Teeming"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "JATCC",
+        "context": "...the **Joint Air Traffic Control Course (JATCC)** and holding validated ratings in Ter...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "JA TCC"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "FULL_TIME",
+        "message": "“Full time” is usually hyphenated in this context.",
+        "flaggedText": "Full Time",
+        "context": "...Sergeant to Flight Lieutenant, often on Full Time Reserve Service terms.",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Full-Time"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Leeming",
+        "context": "...assets. They ensure compliance with RAF Leeming Flying Order Book and Controllers Order...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Seeming",
+          "Deeming",
+          "Teeming"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614cc2",
+    "title": "No. 1 Squadron RAF",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "EN_COMPOUNDS_MULTI_ROLE",
+        "message": "This word is normally spelled as one.",
+        "flaggedText": "multi-role",
+        "context": "...r Force's dedicated **F-35B Lightning** multi-role stealth fighter unit, marking it as the...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "multirole"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Marham",
+        "context": "The squadron is stationed at **RAF Marham** in Norfolk, the primary hub for the U...",
+        "contextOffset": 35,
+        "contextLength": 6,
+        "suggestions": [
+          "Markham",
+          "Mariam",
+          "Maryam"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Grob",
+        "context": "...well - **Basic Flying Training** on the Grob Tutor - **Advanced training** via the H...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "Grow",
+          "Grab",
+          "Rob"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Marham",
+        "context": "... **Operational Conversion** to F-35B at Marham",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "Markham",
+          "Mariam",
+          "Maryam"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Honington",
+        "context": "...as No. 1 Squadron RAF Regiment at **RAF Honington**, which provides base defence and patr...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Bonington",
+          "Honing ton"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614cc4",
+    "title": "No. 2 Squadron RAF",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "SECOND_LARGEST_HYPHEN",
+        "message": "It appears that a hyphen is missing.",
+        "flaggedText": "second oldest",
+        "context": "...t based at **RAF Brize Norton**. As the second oldest RAF Regiment squadron, it provides para...",
+        "contextOffset": 43,
+        "contextLength": 13,
+        "suggestions": [
+          "second-oldest"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Globemaster",
+        "context": "...ron** and **No. 30 Squadron** with C-17 Globemaster, A400M Atlas, and C-130J Hercules aircr...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "Globe master"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "warfighting",
+        "context": "...port squadrons, upholding expeditionary warfighting in high-threat environments.",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "war fighting"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614cc6",
+    "title": "No. 3 Squadron RAF",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...n-on-Ouse. The squadron is based at RAF Coningsby, Lincolnshire, home to multiple Typhoon...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "EN_COMPOUNDS_MULTI_ROLE",
+        "message": "This word is normally spelled as one.",
+        "flaggedText": "multi-role",
+        "context": "...oon** since 2006, the squadron delivers multi-role capabilities including air superiority,...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "multirole"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...ole Typhoon operations in 2006 from RAF Coningsby, achieving first frontline status and c...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d04",
+    "title": "Eurofighter Typhoon FGR4",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "EN_COMPOUNDS_MULTI_ROLE",
+        "message": "This word is normally spelled as one.",
+        "flaggedText": "multi-role",
+        "context": "...ghter Typhoon FGR4 is the RAF's primary multi-role combat aircraft, capable of air superio...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "multirole"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...round attack, and Quick Reaction Alert (QRA) missions to protect UK airspace. It en...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...s are based at two main stations: - RAF Coningsby, hosting front-line units including No....",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OCU",
+        "context": "...ron as the Operational Conversion Unit (OCU) for pilot training, and No. 41 Test an...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ICU",
+          "OCT",
+          "ECU"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...st and Evaluation Squadron (TES). - RAF Lossiemouth, supporting additional Typhoon operatio...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OCU",
+        "context": "...oon operations. Pilots progress through OCU training at RAF Coningsby before front-...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ICU",
+          "OCT",
+          "ECU"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...ts progress through OCU training at RAF Coningsby before front-line assignment.",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "supercruise",
+        "context": "Key capabilities include supercruise at Mach 1.1 without afterburners, compa...",
+        "contextOffset": 25,
+        "contextLength": 11,
+        "suggestions": [
+          "super cruise"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Paveway",
+        "context": "...eapons such as Storm Shadow, Brimstone, Paveway IV, and GBU-16 Paveway II bombs. It has...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Pave way"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Paveway",
+        "context": "...adow, Brimstone, Paveway IV, and GBU-16 Paveway II bombs. It has seen combat in Operati...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Pave way"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Ellamy",
+        "context": "... bombs. It has seen combat in Operation Ellamy over Libya, Operation Shader in Iraq an...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "Bellamy",
+          "Ella my"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "warfighting",
+        "context": "...ssets underpin the RAF's high-intensity warfighting and air policing roles.",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "war fighting"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...m equips seven front-line squadrons for QRA from two UK bases, delivers precision s...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OCU",
+        "context": "... bombs, and trains pilots via dedicated OCU, forming the backbone of RAF air combat...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ICU",
+          "OCT",
+          "ECU"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d06",
+    "title": "F-35B Lightning II",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "EN_COMPOUNDS_MULTI_ROLE",
+        "message": "This word is normally spelled as one.",
+        "flaggedText": "multi-role",
+        "context": "...rated by the Royal Air Force, providing multi-role capabilities including air-to-air, air-...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "multirole"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Marham",
+        "context": "RAF Marham in Norfolk serves as the primary base, ...",
+        "contextOffset": 4,
+        "contextLength": 6,
+        "suggestions": [
+          "Markham",
+          "Mariam",
+          "Maryam"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Dambusters",
+        "context": "...training squadrons: - No. 617 Squadron (Dambusters), the first frontline unit, receiving a...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "Dam busters"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OCU",
+        "context": "...adron, the Operational Conversion Unit (OCU) since July 2019. - No. 809 Naval Air S...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ICU",
+          "OCT",
+          "ECU"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OCU",
+        "context": "... fast-jet training pipelines, including OCU phases for type conversion, before fron...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ICU",
+          "OCT",
+          "ECU"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "battlespace",
+        "context": "The aircraft enhances battlespace awareness through advanced sensors, dat...",
+        "contextOffset": 22,
+        "contextLength": 11,
+        "suggestions": [
+          "battle space",
+          "battles pace"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d10",
+    "title": "Airbus A400M Atlas C1",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘refueling’ is American English.",
+        "flaggedText": "refueling",
+        "context": "...tarian aid, troop transport, and aerial refueling. Personnel such as pilots, air loadmast...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "refuelling"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘refueling’ is American English.",
+        "flaggedText": "refueling",
+        "context": "... on short, unprepared airstrips, aerial refueling as both tanker and receiver, paratroop ...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "refuelling"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Ruman",
+        "context": "...has supported operations like Operation Ruman humanitarian airlift, cargo missions to...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "Human",
+          "Roman",
+          "Truman"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘refueling’ is American English.",
+        "flaggedText": "refueling",
+        "context": "... RAF air mobility with unique low-speed refueling for helicopters and high-speed for jets...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "refuelling"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d11",
+    "title": "Boeing C-17A Globemaster III",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Globemaster",
+        "context": "The Boeing C-17A Globemaster III is a large four-engine strategic tr...",
+        "contextOffset": 17,
+        "contextLength": 11,
+        "suggestions": [
+          "Globe master"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “modernizing”? The spelling ‘modernising’ is also correct.",
+        "flaggedText": "modernising",
+        "context": "...sport aircraft has been instrumental in modernising RAF mobility capabilities, enabling the...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "modernizing"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d13",
+    "title": "Boeing Chinook HC6/6A",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “modernized”? The spelling ‘modernised’ is also correct.",
+        "flaggedText": "modernised",
+        "context": "The HC6A represents a modernised standard achieved through systematic up...",
+        "contextOffset": 22,
+        "contextLength": 10,
+        "suggestions": [
+          "modernized"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "DAFCS",
+        "context": "...igital Automatic Flight Control System (DAFCS), enhancing reliability and operational...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "DAFCO",
+          "DA FCS",
+          "DAF CS"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Odiham",
+        "context": "Chinooks are normally based at RAF Odiham in Hampshire and RAF Benson in South Ox...",
+        "contextOffset": 35,
+        "contextLength": 6,
+        "suggestions": [
+          "Oldham",
+          "Oakham",
+          "Ogham"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "EN_SPECIFIC_CASE",
+        "message": "If the term is a proper noun, use initial capitals.",
+        "flaggedText": "British armed forces",
+        "context": "...y evacuation across all branches of the British armed forces. The fleet has seen extensive deploymen...",
+        "contextOffset": 43,
+        "contextLength": 20,
+        "suggestions": [
+          "British Armed Forces"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “revitalize”? The spelling ‘revitalise’ is also correct.",
+        "flaggedText": "revitalise",
+        "context": "...with 14 additional aircraft on order to revitalise ageing airframes.",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "revitalize"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d4a",
+    "title": "RAF Lossiemouth",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "EN_SPECIFIC_CASE",
+        "message": "If the term is a proper noun, use initial capitals.",
+        "flaggedText": "northern Europe",
+        "context": "...ts the most capable military airbase in northern Europe.",
+        "contextOffset": 43,
+        "contextLength": 15,
+        "suggestions": [
+          "Northern Europe"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Wedgetail",
+        "context": "...tional conversion unit for Poseidon and Wedgetail aircraft.",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Wedge tail"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “modernization”? The spelling ‘modernisation’ is also correct.",
+        "flaggedText": "modernisation",
+        "context": "The station has undergone massive modernisation in the 21st century, with the MOD commi...",
+        "contextOffset": 34,
+        "contextLength": 13,
+        "suggestions": [
+          "modernization"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Wedgetail",
+        "context": "...ate the RAF's new fleet of three Boeing Wedgetail AEW1 airborne early warning and control...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Wedge tail"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d4b",
+    "title": "RAF Coningsby",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "RAF Coningsby serves as the Royal Air Force's premier...",
+        "contextOffset": 4,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...These conduct **Quick Reaction Alert** (QRA) for southern UK airspace protection, e...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Avro",
+        "context": "...** preserves historic aircraft like the Avro Lancaster, complementing operational ca...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "Aero",
+          "AVO",
+          "AVR"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "EN_COMPOUNDS_MULTI_ROLE",
+        "message": "This word is normally spelled as one.",
+        "flaggedText": "multi-role",
+        "context": "...s continuous air defence readiness with multi-role fighters, operational training, and tac...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "multirole"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...ritage preservation alongside frontline QRA duties.",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d4c",
+    "title": "RAF Marham",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Marham",
+        "context": "RAF Marham serves as a main operating base (MOB) i...",
+        "contextOffset": 4,
+        "contextLength": 6,
+        "suggestions": [
+          "Markham",
+          "Mariam",
+          "Maryam"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Dambusters",
+        "context": "...ns with dedicated squadrons: - No. 617 (Dambusters) Squadron, operational since June 2018 ...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "Dam busters"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OCU",
+        "context": "...adron, the operational conversion unit (OCU) reformed in August 2019 - No. 6 RAF Po...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ICU",
+          "OCT",
+          "ECU"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d4d",
+    "title": "RAF Brize Norton",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lyneham",
+        "context": "...since 2010 following the closure of RAF Lyneham, it became the sole Air Point of Embark...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Wyndham",
+          "Wykeham",
+          "Langham"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Globemaster",
+        "context": "...n (A400M Atlas) - No. 24 Squadron (C-17 Globemaster III) - No. 101 Squadron (Voyager) Speci...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "Globe master"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "EN_COMPOUNDS_MULTI_ROLE",
+        "message": "This word is normally spelled as one.",
+        "flaggedText": "multi-role",
+        "context": "...s the full fleet of heavy transport and multi-role tanker aircraft for worldwide deploymen...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "multirole"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d4e",
+    "title": "RAF Waddington",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Beechcraft",
+        "context": "... to a fleet of modern ISTAR aircraft: - Beechcraft Shadow R1 - Boeing RC-135W Rivet Joint ...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "Beech craft"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘analyzing’ is American English.",
+        "flaggedText": "analyzing",
+        "context": "...es units responsible for collecting and analyzing intelligence data.",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "analysing"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Avro",
+        "context": "...ng squadrons operating Hampden bombers, Avro Manchester aircraft, and crucially, the...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "Aero",
+          "AVO",
+          "AVR"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Avro",
+        "context": "...Manchester aircraft, and crucially, the Avro Lancaster heavy bomber. No. 44 Squadron...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "Aero",
+          "AVO",
+          "AVR"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d4f",
+    "title": "RAF Odiham",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Odiham",
+        "context": "RAF Odiham, located south of Odiham village in Ham...",
+        "contextOffset": 4,
+        "contextLength": 6,
+        "suggestions": [
+          "Oldham",
+          "Oakham",
+          "Ogham"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Odiham",
+        "context": "RAF Odiham, located south of Odiham village in Hampshire and east of Basing...",
+        "contextOffset": 29,
+        "contextLength": 6,
+        "suggestions": [
+          "Oldham",
+          "Oakham",
+          "Ogham"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Odiham",
+        "context": "...osts the Chinook Display Team, No.1827 (Odiham) Squadron Air Training Corps, the Kestr...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "Oldham",
+          "Oakham",
+          "Ogham"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "JSFAW",
+        "context": "...the Joint Special Forces Aviation Wing (JSFAW), coordinating rotary-wing aviation sup...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "JSF AW"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Odiham",
+        "context": "Odiham supports global UK military operations ...",
+        "contextOffset": 0,
+        "contextLength": 6,
+        "suggestions": [
+          "Oldham",
+          "Oakham",
+          "Ogham"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Moorehead",
+        "context": "...tation commander is Group Captain Sarah Moorehead. The base maintains infrastructure for ...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Morehead",
+          "Moorhead",
+          "Moore head"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d82",
+    "title": "Recruit Training",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘instills’ is American English.",
+        "flaggedText": "instills",
+        "context": "...dless of trade. This foundational phase instills military basics, values, ethics, and es...",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "instils"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "TO_NON_BASE",
+        "message": "The verb after “to” should be in the base form as part of the to-infinitive. A verb can take many forms, but the base form is always used in the to-infinitive.",
+        "flaggedText": "specialized",
+        "context": "...ning. Completion enables progression to specialized flying schools or roles, building versa...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "specialize"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614d83",
+    "title": "Initial Officer Training",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “Militarization”? The spelling ‘Militarisation’ is also correct.",
+        "flaggedText": "Militarisation",
+        "context": "...ses three main modules: - **Module 1**: Militarisation with physical training, drill, fieldcra...",
+        "contextOffset": 43,
+        "contextLength": 14,
+        "suggestions": [
+          "Militarization"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "fieldcraft",
+        "context": "...risation with physical training, drill, fieldcraft, first aid, weapons handling, CBRN trai...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "field craft"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘instills’ is American English.",
+        "flaggedText": "instills",
+        "context": "...ern integrated defence environments. It instills air power strategies, ensuring officers...",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "instils"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614db0",
+    "title": "Russian Aerospace Forces",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Chicksands",
+        "context": "...elligence and Security Centre (DISC)**, Chicksands, integrating VKS order-of-battle data i...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "Chick sands"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘Defense’ is American English.",
+        "flaggedText": "Defense",
+        "context": "...VKS branches—Air Force, Air and Missile Defense, and **Space Forces**—enable long-range...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Defence"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...phoon** and **F-35** squadrons at **RAF Lossiemouth** and **RAF Marham** train to counter V...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Marham",
+        "context": "...adrons at **RAF Lossiemouth** and **RAF Marham** train to counter VKS incursions in NA...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "Markham",
+          "Mariam",
+          "Maryam"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...plication tests **Quick Reaction Alert (QRA)** responses.",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614db1",
+    "title": "Russian Long-Range Aviation",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "LRA",
+        "context": "Russian **Long-Range Aviation** (LRA) forms a key component of Russia's Aero...",
+        "contextOffset": 33,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "LGA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "LRA",
+        "context": "...eats to NATO airspace and UK interests. LRA operates strategic bombers capable of l...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "LGA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "LRA",
+        "context": "...ce analysis and air defence roles study LRA to inform operational planning. Relevan...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "LGA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "... train to intercept such threats at RAF Lossiemouth.",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...near UK airspace. RAF Typhoons from RAF Lossiemouth scramble to intercept, maintaining sove...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "LRA",
+        "context": "... to intercept, maintaining sovereignty. LRA upgrades enhance precision strike capab...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "LGA"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614db2",
+    "title": "Sukhoi Su-27 Flanker family",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Sukhoi",
+        "context": "The **Sukhoi Su-27 Flanker family** represents a lin...",
+        "contextOffset": 6,
+        "contextLength": 6,
+        "suggestions": [
+          "Sushi",
+          "Suzhou",
+          "Khoi"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...oon pilots** from No. 3 Squadron at RAF Coningsby interact with this subject through Quic...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...s subject through Quick Reaction Alert (QRA) intercepts, relating to **Tactical Wea...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "hardpoints",
+        "context": "...tres, and Mach 2+ speeds, armed via ten hardpoints with air-to-air missiles, bombs, and a ...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "hard points"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "supermaneuverability",
+        "context": "...mm cannon. Its key capabilities include supermaneuverability and powerful radar, influencing RAF tac...",
+        "contextOffset": 43,
+        "contextLength": 20,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...r superiority threats, countered by RAF QRA detachments at bases like RAF Lossiemou...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...y RAF QRA detachments at bases like RAF Lossiemouth with multirole fighters equipped for hi...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614dd7",
+    "title": "United States Air Force",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “specialized”? The spelling ‘specialised’ is also correct.",
+        "flaggedText": "specialised",
+        "context": "...stings** with partner air forces follow specialised training pathways, including the **Prof...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "specialized"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "POSSESSIVE_APOSTROPHE",
+        "message": "An apostrophe may be missing.",
+        "flaggedText": "operations",
+        "context": "...ge Cranwell, where officers learn joint operations doctrine. Roles such as **RAF Exchange ...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "operations'",
+          "operation's"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "... participate in cross-training. - **RAF Lossiemouth** hosts joint exercise planning teams.",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Wedgetail",
+        "context": "..., where allied assets enhance RAF **E-7 Wedgetail** surveillance missions.",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Wedge tail"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614de8",
+    "title": "Five Eyes Alliance",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “formalized”? The spelling ‘formalised’ is also correct.",
+        "flaggedText": "formalised",
+        "context": "...ld War II code-breaking cooperation and formalised by the 1946 UKUSA Agreement. Within the...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "formalized"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "UKUSA",
+        "context": "... cooperation and formalised by the 1946 UKUSA Agreement. Within the modern RAF, it en...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "UK USA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "MILINT",
+        "context": "...rship integrates military intelligence (MILINT), human intelligence (HUMINT), and geos...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "MINING",
+          "SILENT",
+          "MILAN"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "GEOINT",
+        "context": "... (HUMINT), and geospatial intelligence (GEOINT) for comprehensive threat assessment.",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “emphasizing”? The spelling ‘emphasising’ is also correct.",
+        "flaggedText": "emphasising",
+        "context": "...cialist Intelligence Officer pipelines, emphasising SIGINT analysis and multi-domain operat...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "emphasizing"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614dea",
+    "title": "AUKUS Pillar 1",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "AUKUS",
+        "context": "AUKUS Pillar 1 is a trilateral security partn...",
+        "contextOffset": 0,
+        "contextLength": 5,
+        "suggestions": [
+          "AUKS",
+          "AUK US"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "SSN-AUKUS",
+        "context": "...stralia's sovereign SSN skills ahead of SSN-AUKUS delivery in the early 2040s. For the mo...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "SSN-AUKS"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "AUKUS-wide",
+        "context": "...ern RAF, it underscores significance in AUKUS-wide tech integration, including quantum and...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "AUKS-wide"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614e13",
+    "title": "Operation SHADER",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "SECOND_LARGEST_HYPHEN",
+        "message": "It appears that a hyphen is missing.",
+        "flaggedText": "second largest",
+        "context": "... been flown, establishing the UK as the second largest contributor behind the US.",
+        "contextOffset": 43,
+        "contextLength": 14,
+        "suggestions": [
+          "second-largest"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Cosford",
+        "context": "...ence Logistics Training pipeline at RAF Cosford.",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Cos ford"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Paveway",
+        "context": "... the 3 January 2026 joint mission using Paveway IV guided bombs on underground faciliti...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Pave way"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “emphasize”? The spelling ‘emphasise’ is also correct.",
+        "flaggedText": "emphasise",
+        "context": "...d facilities near Palmyra. Capabilities emphasise precision targeting in remote areas, su...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "emphasize"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “utilizes”? The spelling ‘utilises’ is also correct.",
+        "flaggedText": "utilises",
+        "context": "...g multinational air campaign since 2014 utilises Typhoons from Cyprus for precision stri...",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "utilizes"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614e16",
+    "title": "NATO Baltic Air Policing",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "EN_SPECIFIC_CASE",
+        "message": "If the term is a proper noun, use initial capitals.",
+        "flaggedText": "Baltic states",
+        "context": "...ick Reaction Alert intercepts since the Baltic states joined the Alliance in 2004. The Royal ...",
+        "contextOffset": 43,
+        "contextLength": 13,
+        "suggestions": [
+          "Baltic States"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Ämari",
+        "context": "...peditionary Air Wing led a mission from Ämari Air Base in Estonia, intercepting 50 Ru...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "Atari",
+          "AMARIG",
+          "Amar"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "Deployments originate from RAF Lossiemouth, home to Typhoon squadrons including: -...",
+        "contextOffset": 31,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "EAW",
+        "context": "...ion courses. Expeditionary roles in 140 EAW require Phase 2 and Phase 3 training fo...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "LAW",
+          "SAW",
+          "EAT"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "NATINADS",
+        "context": "...abilities include 24/7 surveillance via NATINADS, rapid intercepts of non-compliant airc...",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "NATIONALS",
+          "NAIADS",
+          "PATINAS"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "Rotations from RAF Lossiemouth deploy Typhoons to Ämari for QRA interc...",
+        "contextOffset": 19,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Ämari",
+        "context": "...from RAF Lossiemouth deploy Typhoons to Ämari for QRA intercepts of Russian aircraft,...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "Atari",
+          "AMARIG",
+          "Amar"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...ossiemouth deploy Typhoons to Ämari for QRA intercepts of Russian aircraft, exempli...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614e1b",
+    "title": "Operation BILOXI",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Leeming",
+        "context": "...alley and operational conversion at RAF Leeming. Key roles include aircrew from Typhoon...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Seeming",
+          "Deeming",
+          "Teeming"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Kogălniceanu",
+        "context": "...operations. Deployments occur at Mihail Kogălniceanu Air Base in Romania, hosting the tempor...",
+        "contextOffset": 43,
+        "contextLength": 12,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...O's collective defence with RAF Typhoon QRA, integrating 180 personnel and four air...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614e25",
+    "title": "MBDA Meteor BVRAAM",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "MBDA",
+        "context": "The MBDA Meteor BVRAAM is a next-generation acti...",
+        "contextOffset": 4,
+        "contextLength": 4,
+        "suggestions": [
+          "MBA",
+          "BDA",
+          "CBDA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "BVRAAM",
+        "context": "The MBDA Meteor BVRAAM is a next-generation active radar-guide...",
+        "contextOffset": 16,
+        "contextLength": 6,
+        "suggestions": [
+          "BVR AAM"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "MBDA",
+        "context": "...veloped by a European consortium led by MBDA to meet RAF requirements under Staff Re...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "MBA",
+          "BDA",
+          "CBDA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Skyflash",
+        "context": "...r) 1239, replacing earlier systems like Skyflash. It equips RAF fast jet platforms for m...",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "Sky flash"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "maneuverable",
+        "context": "...r multi-shot engagements against highly maneuverable targets, including jets, UAVs, and crui...",
+        "contextOffset": 43,
+        "contextLength": 12,
+        "suggestions": [
+          "manoeuvrable"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...eral locations: - No. 1 Squadron at RAF Lossiemouth - No. 3 Squadron at RAF Coningsby - No....",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...RAF Lossiemouth - No. 3 Squadron at RAF Coningsby - No. 11 Squadron at RAF Coningsby - No...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "... RAF Coningsby - No. 11 Squadron at RAF Coningsby - No. 12 Squadron at RAF Coningsby Ongo...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "... RAF Coningsby - No. 12 Squadron at RAF Coningsby Ongoing integration trials with F-35 Li...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Patuxent",
+        "context": "...el at Edwards AFB and Naval Air Station Patuxent River.",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "Patent",
+          "Patient"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614e26",
+    "title": "ASRAAM / AIM-132",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "MBDA",
+        "context": "...d homing air-to-air missile produced by MBDA UK for the Royal Air Force, replacing t...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "MBA",
+          "BDA",
+          "CBDA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "fuzing",
+        "context": "...ead triggered by laser proximity/impact fuzing. Key capabilities include fire-and-forg...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "fusing",
+          "fuming",
+          "fazing"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "LOAL",
+        "context": "...forget operation, Lock-On After Launch (LOAL), and compatibility with radar, electro...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "LOCAL",
+          "GOAL",
+          "COAL"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...ASRAAM-equipped aircraft include: - RAF Coningsby, home to Typhoon FGR4 squadrons conduct...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...adrons conducting Quick Reaction Alert (QRA) and air policing missions. - RAF Lossi...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "... (QRA) and air policing missions. - RAF Lossiemouth, hosting Typhoon squadrons for maritime...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Marham",
+        "context": "...trike and air defence operations. - RAF Marham, base for F-35B Lightning II squadrons ...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "Markham",
+          "Mariam",
+          "Maryam"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "high-off-boresight",
+        "context": "...his within-visual-range missile enables high-off-boresight firing and pre-merge engagements, allow...",
+        "contextOffset": 43,
+        "contextLength": 18,
+        "suggestions": [
+          "high-off-foresight"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “neutralize”? The spelling ‘neutralise’ is also correct.",
+        "flaggedText": "neutralise",
+        "context": "...e-merge engagements, allowing pilots to neutralise threats rapidly while evading counter-f...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "neutralize"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614e29",
+    "title": "Paveway IV",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Paveway",
+        "context": "The Paveway IV is a 226kg dual-mode precision-guide...",
+        "contextOffset": 4,
+        "contextLength": 7,
+        "suggestions": [
+          "Pave way"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Mk",
+        "context": "...PS/INS and laser guidance on a modified Mk 82 warhead with concrete penetration ca...",
+        "contextOffset": 43,
+        "contextLength": 2,
+        "suggestions": [
+          "MK",
+          "Me",
+          "My"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “minimized”? The spelling ‘minimised’ is also correct.",
+        "flaggedText": "minimised",
+        "context": "...tration capability and smart fusing for minimised collateral damage. Costing approximatel...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "minimized"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Paveway",
+        "context": "Training for Paveway IV employment occurs within RAF fast-je...",
+        "contextOffset": 13,
+        "contextLength": 7,
+        "suggestions": [
+          "Pave way"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QWI",
+        "context": "... fast-jet Qualified Weapons Instructor (QWI) courses and squadron work-up phases, f...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "WWI",
+          "BWI",
+          "DWI"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...craft systems. Key bases include: - RAF Lossiemouth, home to No. 1 Squadron Typhoons that c...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Marham",
+        "context": "...e first live drops at Cape Wrath. - RAF Marham, base for F-35B squadrons undergoing in...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "Markham",
+          "Mariam",
+          "Maryam"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Ellamy",
+        "context": "...ation Herrick in Afghanistan, Operation Ellamy in Libya, and Operation Shader against ...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "Bellamy",
+          "Ella my"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "RPAS",
+        "context": "... is also integrated on Protector RG Mk1 RPAS for armed ISTAR missions, with ongoing ...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "PAS",
+          "RPGs",
+          "SPAS"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614e50",
+    "title": "Air-to-Air Refuelling",
+    "issues": [
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘Refueling’ is American English.",
+        "flaggedText": "Refueling",
+        "context": "...derwing pods plus a centreline Fuselage Refueling Unit for greater capacity and flexibili...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Refuelling"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "EN_COMPOUNDS_MULTI_ROLE",
+        "message": "This word is normally spelled as one.",
+        "flaggedText": "multi-role",
+        "context": "...operates as both a dedicated tanker and multi-role transport, carrying up to 291 personnel...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "multirole"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614e52",
+    "title": "ISTAR",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...rms operate from RAF Waddington and RAF Lossiemouth: - RAF Waddington hosts No. 51 Squadron...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "uncrewed",
+        "context": "... surveillance, and trials for Protector uncrewed aircraft by 31 Squadron. - RAF Lossiemo...",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "unscrewed",
+          "unbrewed",
+          "unchewed"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...uncrewed aircraft by 31 Squadron. - RAF Lossiemouth supports maritime patrol with P-8 Posei...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Wedgetail",
+        "context": "...ritime patrol with P-8 Poseidon and E-7 Wedgetail for airborne early warning. Personnel u...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Wedge tail"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “specialized”? The spelling ‘specialised’ is also correct.",
+        "flaggedText": "specialised",
+        "context": "...rborne early warning. Personnel undergo specialised training, including test and evaluation...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "specialized"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "warfighting",
+        "context": "...ver Eastern Europe. These assets ensure warfighting credibility against state adversaries, ...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "war fighting"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614e8e",
+    "title": "Washington Treaty / North Atlantic Treaty",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lakenheath",
+        "context": "... Training Centre. RAF bases such as RAF Lakenheath and RAF Mildenhall host NATO-linked ope...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Mildenhall",
+        "context": "...AF bases such as RAF Lakenheath and RAF Mildenhall host NATO-linked operations: - USAF squ...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "Linden Hall"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Stratotanker",
+        "context": "...uadrons with F-35 Lightning II - KC-135 Stratotanker refuelling - Intelligence fusion activi...",
+        "contextOffset": 43,
+        "contextLength": 12,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "CYBER_COMPOUNDS",
+        "message": "The word “cyberattacks” is spelled as one.",
+        "flaggedText": "cyber attacks",
+        "context": "... security ties, addressing threats from cyber attacks to territorial aggression, with the RAF...",
+        "contextOffset": 43,
+        "contextLength": 13,
+        "suggestions": [
+          "cyberattacks"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "... Policing rotations from bases like RAF Lossiemouth.",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614e93",
+    "title": "UK-US Defence Cooperation",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Tangmere",
+        "context": "...Robin Olds to **No. 1 Squadron** at RAF Tangmere, where he commanded Gloster Meteor jets...",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "Tang mere"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Gloster",
+        "context": "...n** at RAF Tangmere, where he commanded Gloster Meteor jets. This longstanding partners...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Glister",
+          "Gloater"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OCUs",
+        "context": "...including Operational Conversion Units (OCUs) under **No. 1 Group**. These pathways,...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "Focus",
+          "Locus",
+          "Opus"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...epare crews for **Quick Reaction Alert (QRA)** duties at bases like **RAF Lossiemou...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...lert (QRA)** duties at bases like **RAF Lossiemouth**, where Typhoon operations occur along...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "**RAF Lossiemouth** hosts **No. 1 (Fighter) Squadron** op...",
+        "contextOffset": 6,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "This partnership underpins RAF's **QRA** and ISTAR capabilities, exemplified b...",
+        "contextOffset": 35,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614ea6",
+    "title": "UK Air Defence Region",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "ENGLISH_WORD_REPEAT_RULE",
+        "message": "Possible typo: you repeated a word.",
+        "flaggedText": "fast-jet fast-jet",
+        "context": "...ir defence training pipelines integrate fast-jet fast-jet pilot streams through operational conve...",
+        "contextOffset": 43,
+        "contextLength": 17,
+        "suggestions": [
+          "fast-jet"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...s supporting air defence include: - RAF Coningsby (Typhoon and Lightning operations) - RA...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Marham",
+        "context": "...Typhoon and Lightning operations) - RAF Marham (Lightning main operating base) - RAF L...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "Markham",
+          "Mariam",
+          "Maryam"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...m (Lightning main operating base) - RAF Lossiemouth (Typhoon operations) No. 1 Group contro...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "EN_COMPOUNDS_MULTI_ROLE",
+        "message": "This word is normally spelled as one.",
+        "flaggedText": "multi-role",
+        "context": "...s nine frontline fighter squadrons with multi-role capabilities. Fast-jet platforms includ...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "multirole"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614ea7",
+    "title": "UK QRA North",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "Hosted at RAF Lossiemouth in Moray, Scotland, QRA North is delive...",
+        "contextOffset": 14,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "... at RAF Lossiemouth in Moray, Scotland, QRA North is delivered by three Typhoon squ...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “specialized”? The spelling ‘specialised’ is also correct.",
+        "flaggedText": "specialised",
+        "context": "...9 Squadron Pilots and engineers undergo specialised training pipelines, including advanced ...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "specialized"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...perational conversion to Typhoon at RAF Coningsby, before rotating onto QRA duties for 24...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "... at RAF Coningsby, before rotating onto QRA duties for 24-hour shifts approximately...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "QRA operations integrate with the UK Air Su...",
+        "contextOffset": 0,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Boulmer",
+        "context": "...the Control and Reporting Centre at RAF Boulmer and the NATO Air Operations Centre. RAF...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Boulder"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Lossiemouth",
+        "context": "...and the NATO Air Operations Centre. RAF Lossiemouth personnel focus on Russian military air...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...tary aircraft activities, complementing QRA South at RAF Coningsby. This dual-stati...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...ivities, complementing QRA South at RAF Coningsby. This dual-station posture supports NAT...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614ea8",
+    "title": "UK QRA South",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "...t aircraft approaching UK airspace. RAF Coningsby in Lincolnshire serves as the primary s...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "Typhoon pilots at RAF Coningsby undergo specialised training through th...",
+        "contextOffset": 22,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “specialized”? The spelling ‘specialised’ is also correct.",
+        "flaggedText": "specialised",
+        "context": "...Typhoon pilots at RAF Coningsby undergo specialised training through the Typhoon Operationa...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "specialized"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OCU",
+        "context": "...he Typhoon Operational Conversion Unit (OCU), preparing them for QRA duties after i...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ICU",
+          "OCT",
+          "ECU"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "QRA",
+        "context": "...nversion Unit (OCU), preparing them for QRA duties after initial fast-jet training ...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "ERA",
+          "BRA",
+          "NRA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Boulmer",
+        "context": "...ntrol and Reporting Centre (CRC) at RAF Boulmer, which authorises scrambles following a...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "Boulder"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “authorizes”? The spelling ‘authorises’ is also correct.",
+        "flaggedText": "authorises",
+        "context": "...ting Centre (CRC) at RAF Boulmer, which authorises scrambles following assessment by the N...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "authorizes"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "AIR_COMPOUNDS",
+        "message": "This word is normally spelled as one.",
+        "flaggedText": "Air Space",
+        "context": "...es following assessment by the National Air Space Operations Cell (NASOC). Aircraft launc...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Airspace"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "NASOC",
+        "context": "...the National Air Space Operations Cell (NASOC). Aircraft launch within minutes, flyin...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "NA SOC",
+          "NAS OC"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "NATREP",
+        "context": "...inutes, flying subsonic if needed under NATREP authorisation, to intercept threats whi...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "NAT REP"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “authorization”? The spelling ‘authorisation’ is also correct.",
+        "flaggedText": "authorisation",
+        "context": "... flying subsonic if needed under NATREP authorisation, to intercept threats while integrating...",
+        "contextOffset": 43,
+        "contextLength": 13,
+        "suggestions": [
+          "authorization"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Northolt",
+        "context": "... surges like during the Olympics at RAF Northolt.",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "Northvolt"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614f09",
+    "title": "Officer and Aircrew Selection Centre",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OASC",
+        "context": "...e Officer and Aircrew Selection Centre (OASC) at RAF Cranwell serves as the Royal Ai...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "OAS",
+          "MASC",
+          "ASC"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Adastral",
+        "context": "...nd non-commissioned aircrew. Located at Adastral Hall, it evaluates candidates through a...",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "Cadastral",
+          "Ad astral"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OASC",
+        "context": "OASC forms a critical gateway to RAF trainin...",
+        "contextOffset": 0,
+        "contextLength": 4,
+        "suggestions": [
+          "OAS",
+          "MASC",
+          "ASC"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "HYPHEN_TO_EN",
+        "message": "If specifying a range, consider using an en dash instead of a hyphen.",
+        "flaggedText": "1-4",
+        "context": "...officer candidates. The programme lasts 1-4 days depending on role, featuring: - Gr...",
+        "contextOffset": 43,
+        "contextLength": 3,
+        "suggestions": [
+          "1–4"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "OASC",
+        "context": "RAF Cranwell in Lincolnshire hosts OASC alongside officer training activities, ...",
+        "contextOffset": 35,
+        "contextLength": 4,
+        "suggestions": [
+          "OAS",
+          "MASC",
+          "ASC"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce4f7de669298365614fee",
+    "title": "OCA and DCA",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Counterair",
+        "context": "Counterair operations form the foundation of air s...",
+        "contextOffset": 0,
+        "contextLength": 10,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "counterair",
+        "context": "...two complementary strategies. Offensive counterair (OCA) seeks to dominate enemy airspace ...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘defense’ is American English.",
+        "flaggedText": "defense",
+        "context": "... destroying aircraft, missiles, and air defense systems before they can threaten friend...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "defence"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "counterair",
+        "context": "...can threaten friendly forces. Defensive counterair (DCA) detects, intercepts, and destroys...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘Defenses’ is American English.",
+        "flaggedText": "Defenses",
+        "context": "... and weapons - Suppression of Enemy Air Defenses (SEAD) - Fighter escort for protected a...",
+        "contextOffset": 43,
+        "contextLength": 8,
+        "suggestions": [
+          "Defences"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘defense’ is American English.",
+        "flaggedText": "defense",
+        "context": "... focus on five components including air defense, detection, and interception capabiliti...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "defence"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "counterair",
+        "context": "Modern counterair effectiveness increasingly depends on n...",
+        "contextOffset": 7,
+        "contextLength": 10,
+        "suggestions": [],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce5723e669298365618404",
+    "title": "UK Deploys Most Jets to Middle East in 15 Years",
+    "issues": [
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Marham",
+        "context": "...inforced by six F-35B aircraft from RAF Marham and existing Typhoons - Qatar, with fou...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "Markham",
+          "Mariam",
+          "Maryam"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Coningsby",
+        "context": "... Qatar, with four Typhoon FGR4 from RAF Coningsby joining the UK-Qatar squadron, plus fou...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Comings",
+          "Canings",
+          "Coning"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Crowsnest",
+        "context": "... Martlet counter-drone missiles, Merlin Crowsnest for surveillance, plus radar and air de...",
+        "contextOffset": 43,
+        "contextLength": 9,
+        "suggestions": [
+          "Crows nest"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘defense’ is American English.",
+        "flaggedText": "defense",
+        "context": "...st for surveillance, plus radar and air defense systems. Extra 500 air defense personne...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "defence"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘defense’ is American English.",
+        "flaggedText": "defense",
+        "context": "... and air defense systems. Extra 500 air defense personnel deployed to Cyprus.",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "defence"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "air-defense",
+        "context": "... HMS Dragon integrates into the layered air-defense system in the Eastern Mediterranean. Ar...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "air-defence"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "EN_COMPOUNDS_MULTI_ROLE",
+        "message": "This word is normally spelled as one.",
+        "flaggedText": "multi-role",
+        "context": "...t-jet commitment in 15 years, combining multi-role fighters with support assets for sustai...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "multirole"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 3,
+        "sectionNumber": 4,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake. ‘defense’ is American English.",
+        "flaggedText": "defense",
+        "context": "...ss five countries. Enhances layered air defense and force protection amid escalating th...",
+        "contextOffset": 43,
+        "contextLength": 7,
+        "suggestions": [
+          "defence"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce57bce6692983656189c5",
+    "title": "RAF Regiment Gunners First Drone Aces",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “neutralizing”? The spelling ‘neutralising’ is also correct.",
+        "flaggedText": "neutralising",
+        "context": "...signation to ground-based personnel for neutralising Iranian drones during operations protec...",
+        "contextOffset": 43,
+        "contextLength": 12,
+        "suggestions": [
+          "neutralizing"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Shahed",
+        "context": "...ve single-night defence against Iranian Shahed drones targeting UK bases. Minister Al ...",
+        "contextOffset": 43,
+        "contextLength": 6,
+        "suggestions": [
+          "Shaped",
+          "Shared",
+          "Shaded"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Carns",
+        "context": "... drones targeting UK bases. Minister Al Carns praised their professionalism and coura...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "Carn's",
+          "Carn",
+          "Cars"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69ce5800e669298365618d62",
+    "title": "UK-Turkey Typhoon Training and Support Deal Signed",
+    "issues": [
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Yaşar",
+        "context": "...ohn Healey and Turkish Defence Minister Yaşar Güler. This deal accompanies Turkey's O...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "Year",
+          "NASA",
+          "Laser"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 0,
+        "sectionNumber": 1,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Güler",
+        "context": "...aley and Turkish Defence Minister Yaşar Güler. This deal accompanies Turkey's October...",
+        "contextOffset": 43,
+        "contextLength": 5,
+        "suggestions": [
+          "Ruler",
+          "Euler",
+          "Gulper"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "MBDA",
+        "context": "... include: - BAE Systems - Leonardo UK - MBDA - Rolls-Royce - Martin-Baker Final asse...",
+        "contextOffset": 43,
+        "contextLength": 4,
+        "suggestions": [
+          "MBA",
+          "BDA",
+          "CBDA"
+        ],
+        "approvedFix": ""
+      },
+      {
+        "sectionIndex": 1,
+        "sectionNumber": 2,
+        "ruleId": "MORFOLOGIK_RULE_EN_GB",
+        "message": "Possible spelling mistake found.",
+        "flaggedText": "Samlesbury",
+        "context": "...embly occurs at BAE Systems' Warton and Samlesbury sites, with first deliveries scheduled ...",
+        "contextOffset": 43,
+        "contextLength": 10,
+        "suggestions": [
+          "Salisbury",
+          "Aylesbury",
+          "Amesbury"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  },
+  {
+    "briefId": "69d248be859d520f55ff85ff",
+    "title": "UK's Largest Military Parachute Drop in Over a Decade",
+    "issues": [
+      {
+        "sectionIndex": 2,
+        "sectionNumber": 3,
+        "ruleId": "OXFORD_SPELLING_Z_NOT_S",
+        "message": "Would you like to use the Oxford spelling “revitalized”? The spelling ‘revitalised’ is also correct.",
+        "flaggedText": "revitalised",
+        "context": "... figures noting its strategic value and revitalised air manoeuvre options through Army-RAF ...",
+        "contextOffset": 43,
+        "contextLength": 11,
+        "suggestions": [
+          "revitalized"
+        ],
+        "approvedFix": ""
+      }
+    ]
+  }
+]

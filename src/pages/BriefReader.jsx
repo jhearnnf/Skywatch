@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useTransform, useAnimationControls, LayoutGroup } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -10,7 +10,7 @@ import { requiredTier } from '../utils/subscription'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useFlashcardBadge } from '../context/FlashcardBadgeContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
-import { playSound, stopAllSounds } from '../utils/sound'
+import { playSound, stopAllSounds, playGridRevealTone } from '../utils/sound'
 import RafBasesMap from '../components/RafBasesMap'
 import { buildImageZones } from '../utils/briefImageZones'
 import RankBadge from '../components/RankBadge'
@@ -215,10 +215,122 @@ function FlashCard({ sectionIdx, total, title, category, subcategory, text, keyw
   )
 }
 
+// ── Blueprint grid reveal ─────────────────────────────────────────────────
+const GRID_COLS = 28
+const GRID_ROWS = 18
+const N_CELLS   = GRID_COLS * GRID_ROWS
+
+
+function ImageGridReveal({ src, isFirstSeen, alt, imgClassName, imgStyle }) {
+  const showGrid = isFirstSeen
+
+  // Per-cell delays computed once at mount
+  const [cells] = useState(() =>
+    Array.from({ length: N_CELLS }, (_, i) => {
+      const lum = Math.floor(Math.random() * 36)      // 0–35: black → dark blue
+      const blue = Math.floor(lum * 2.2)               // blue channel scales faster
+      const bg = `rgb(0, ${Math.floor(lum * 0.4)}, ${blue})`
+      return {
+        delay: Math.floor(i / GRID_COLS) * 48 + (i % GRID_COLS) * 15 + Math.floor(Math.random() * 22) + (Math.random() < 0.25 ? 100 + Math.floor(Math.random() * 100) : 0) + (Math.random() < 0.025 ? 400 + Math.floor(Math.random() * 600) : 0) - 900,
+        dur:   160 + Math.floor(Math.random() * 80),
+        bg,
+      }
+    }))
+
+  // Fire a tone for each cell timed to match its animation delay
+  useEffect(() => {
+    if (!showGrid) return
+    const timers = cells
+      .filter(({ delay }) => delay > 0)
+      .map(({ delay }) => setTimeout(playGridRevealTone, delay))
+    return () => timers.forEach(clearTimeout)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="relative w-full h-full">
+      <img
+        src={src}
+        alt={alt}
+        draggable={false}
+        className={imgClassName}
+        style={imgStyle}
+      />
+      {showGrid && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          aria-hidden="true"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
+            gridTemplateRows:    `repeat(${GRID_ROWS}, 1fr)`,
+          }}
+        >
+          {cells.map(({ delay, dur, bg }, i) => (
+            <div
+              key={i}
+              className="blueprint-cell"
+              style={{ animationDelay: `${delay}ms`, animationDuration: `${dur}ms`, backgroundColor: bg }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Section card (image zone + stat + text) ───────────────────────────────
-function SectionCard({ imageZone, rankHierarchyOrder, stat, sectionIdx, total, isLast, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial }) {
+function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, sectionIdx, total, isLast, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial }) {
   const hasBases = (highlightedBaseNames ?? []).length > 0
   const statTapOrigin = useRef(null)
+
+  // ── Intel image flash effect ──────────────────────────────────────────────
+  const imgContainerRef = useRef(null)
+  const flashPausedRef  = useRef(false)
+  const [flashes, setFlashes] = useState([])
+
+  useEffect(() => {
+    if (category === 'Ranks' || !imageZone?.src) return
+
+    const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#@%&$!?/\\|^~<>[]{}+=*'
+
+    let tid
+    function schedule() {
+      tid = setTimeout(() => {
+        const el = imgContainerRef.current
+        if (!flashPausedRef.current && el) {
+          const r = Math.random()
+          const key = Date.now()
+          let item
+          const cw = el.clientWidth, ch = el.clientHeight
+          if (r < 0.30) {
+            const char = CHARS[Math.floor(Math.random() * CHARS.length)]
+            item = { type: 'word', word: char, x: Math.random() * cw, y: Math.random() * ch, key }
+          } else if (r < 0.48) {
+            const w = 20 + Math.random() * 55
+            item = { type: 'line', x: Math.random() * (cw - w), y: Math.random() * ch, width: w, key }
+          } else if (r < 0.60) {
+            const w = 25 + Math.random() * 45
+            item = { type: 'lines', x: Math.random() * (cw - w), y: Math.random() * ch, width: w, key }
+          } else {
+            const gw = cw * (0.06 + Math.random() * 0.10)
+            const gh = ch * (0.05 + Math.random() * 0.08)
+            const gx = Math.random() * (cw - gw)
+            const gy = Math.random() * (ch - gh)
+            // Displace which slice of the image shows through — without this
+            // the fragment is invisible (same pixels on same pixels)
+            const dx = (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 4)
+            const dy = (Math.random() < 0.5 ? -1 : 1) * (1 + Math.random() * 2)
+            item = { type: 'glitch', x: gx, y: gy, w: gw, h: gh, cw, ch, dx, dy, key }
+          }
+          setFlashes(prev => [...prev.slice(-2), item])
+          setTimeout(() => setFlashes(prev => prev.filter(f => f.key !== key)), 300)
+        }
+        schedule()
+      }, 300 + Math.random() * 400)
+    }
+    schedule()
+    return () => clearTimeout(tid)
+  }, [text, imageZone?.src, category])
 
   if (isLast) {
     return (
@@ -240,7 +352,13 @@ function SectionCard({ imageZone, rankHierarchyOrder, stat, sectionIdx, total, i
   return (
     <div className="rounded-2xl overflow-hidden border border-slate-200 bg-surface">
       {/* Image zone */}
-      <div className="relative h-44 bg-slate-900 overflow-hidden">
+      <div
+        ref={imgContainerRef}
+        className="relative h-44 bg-slate-900 overflow-hidden"
+        onPointerDown={() => { flashPausedRef.current = true; setFlashes([]) }}
+        onPointerUp={() => { setTimeout(() => { flashPausedRef.current = false }, 350) }}
+        onPointerCancel={() => { setTimeout(() => { flashPausedRef.current = false }, 350) }}
+      >
         {category === 'Ranks' && rankHierarchyOrder != null ? (() => {
           const rn = 20 - rankHierarchyOrder
           const hasInsignia = rn >= 2 && rn <= 19
@@ -259,12 +377,12 @@ function SectionCard({ imageZone, rankHierarchyOrder, stat, sectionIdx, total, i
             </div>
           )
         })() : (
-          <img
+          <ImageGridReveal
             src={imageZone.src}
+            isFirstSeen={isFirstSeenImage}
             alt={title}
-            draggable={false}
-            className={`w-full h-full object-cover select-none transition-all duration-300 ${hasBases && mapOpen ? 'opacity-20 blur-sm' : ''}`}
-            style={{ objectPosition: imageZone.position }}
+            imgClassName={`w-full h-full object-cover select-none ${hasBases && mapOpen ? 'opacity-20 blur-sm' : ''}`}
+            imgStyle={{ objectPosition: imageZone.position }}
           />
         )}
         {hasBases && mapOpen && (
@@ -291,6 +409,19 @@ function SectionCard({ imageZone, rankHierarchyOrder, stat, sectionIdx, total, i
         >
           <span className="text-xs font-bold text-white">{sectionIdx + 1} / {total}</span>
         </motion.div>
+        {flashes.map(f => {
+          if (f.type === 'word') return (
+            <span key={f.key} className="intel-flash-word" style={{ left: f.x, top: f.y }} aria-hidden="true">{f.word}</span>
+          )
+          if (f.type === 'glitch') return (
+            <div key={f.key} className="intel-glitch-box" style={{ left: f.x, top: f.y, width: f.w, height: f.h }} aria-hidden="true">
+              <img src={imageZone.src} draggable={false} style={{ position: 'absolute', width: f.cw, height: f.ch, top: -(f.y + f.dy), left: -(f.x + f.dx), objectFit: 'cover', objectPosition: imageZone.position }} />
+            </div>
+          )
+          return (
+            <div key={f.key} className={`intel-flash-line${f.type === 'lines' ? ' intel-flash-lines' : ''}`} style={{ left: f.x, top: f.y, width: f.width }} aria-hidden="true" />
+          )
+        })}
       </div>
 
       {/* Stat row */}
@@ -1216,6 +1347,7 @@ export default function BriefReader() {
   const lastTickRef                = useRef(null)
   const prevVisibleRef             = useRef(false)
   const sectionIdxRef              = useRef(0) // mirrors sectionIdx for use inside flushTime without dep-array churn
+  const hasNavigatedRef            = useRef(false) // true after first user-initiated section navigation (suppresses grid after initial load)
 
   // Quiz availability — true when the user's difficulty pool has ≥5 questions
   const MIN_QUIZ_QUESTIONS = 5
@@ -1508,10 +1640,16 @@ export default function BriefReader() {
     setShowStatTutorial(true)
   }, [brief?._id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sections = brief?.descriptionSections?.filter(Boolean) ?? []
-  const total    = sections.length
-  const isLast   = sectionIdx >= total - 1
+  const sections   = brief?.descriptionSections?.filter(Boolean) ?? []
+  const total      = sections.length
+  const isLast     = sectionIdx >= total - 1
   const topOpacity = isLast ? 1 : topFaded ? 0.3 : 1
+
+  // Memoised so prevImageZoneRef effect can reference it outside the render IIFE
+  const imageZonesMemo = useMemo(
+    () => brief ? buildImageZones(brief.media, total) : [],
+    [brief, total] // eslint-disable-line react-hooks/exhaustive-deps
+  )
 
   // Fire reached-flashcard once per brief per user when they first hit section 4
   useEffect(() => {
@@ -1582,6 +1720,7 @@ export default function BriefReader() {
   const handleGoBack = () => {
     if (sectionIdx <= 0) return
     cancelCollectAnimation()
+    hasNavigatedRef.current = true
     setNavDir(-1)
     const prev = sectionIdx - 1
     if (!user) localStorage.setItem(`sw_brief_sec_${briefId}`, String(prev))
@@ -1591,6 +1730,7 @@ export default function BriefReader() {
 
   const handleContinue = () => {
     cancelCollectAnimation()
+    hasNavigatedRef.current = true
     if (isLast) {
       const first = !localStorage.getItem('skywatch_first_brief')
       if (first) localStorage.setItem('skywatch_first_brief', '1')
@@ -2027,7 +2167,8 @@ export default function BriefReader() {
           <LayoutGroup id="brief-layout">
           {/* Swipeable section card */}
           {(() => {
-            const imageZones = buildImageZones(brief.media, total)
+            const imageZones       = imageZonesMemo
+            const isFirstSeenImage = !hasNavigatedRef.current
             const stats      = buildStats(brief)
             // Each associated brief now carries matchTerms[] (all variant forms of its
             // title, e.g. "No. 14 Squadron", "No. 14 Squadron RAF", "No. 14").
@@ -2078,6 +2219,7 @@ export default function BriefReader() {
                 >
                   <SectionCard
                     imageZone={imageZones[sectionIdx]}
+                    isFirstSeenImage={isFirstSeenImage}
                     rankHierarchyOrder={brief.gameData?.rankHierarchyOrder}
                     stat={stats[sectionIdx] ?? null}
                     sectionIdx={sectionIdx}

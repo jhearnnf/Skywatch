@@ -51,8 +51,12 @@ function titleSignalWords(title) {
     .map(w => w.replace(/[^a-zA-Z0-9]/g, ''))
     .filter(w => {
       if (!w) return false;
-      const isAcronym = w === w.toUpperCase() && /[A-Z]/.test(w);
-      if (isAcronym) return w.length >= 3 && !NOISE_ACRONYMS.has(w);
+      const isAcronym   = w === w.toUpperCase() && /[A-Z]/.test(w);
+      const isPureDigit = /^\d+$/.test(w);
+      // Allow 2-char acronyms (catches Roman numerals: IX, XI, II etc. used in squadron names)
+      if (isAcronym)   return w.length >= 2 && !NOISE_ACRONYMS.has(w);
+      // Allow digit strings of 2+ chars (catches squadron numbers: "11", "617" etc.)
+      if (isPureDigit) return w.length >= 2;
       return w.length >= 4 && !STOP_WORDS.has(w.toLowerCase());
     })
     .map(w => w.toLowerCase());

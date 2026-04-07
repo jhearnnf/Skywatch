@@ -1312,12 +1312,14 @@ function SettingsTab({ API }) {
                 <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Subscription Tier</th>
                 <th className="text-left py-2 pr-3 text-xs font-bold text-slate-400 uppercase tracking-wide">Level Required</th>
                 <th className="text-left py-2 text-xs font-bold text-slate-400 uppercase tracking-wide">Rank Required</th>
+                <th className="py-2"></th>
               </tr>
             </thead>
             <tbody>
               {(draft.pathwayUnlocks ?? []).map((unlock, idx) => {
                 const cat  = unlock.category
                 const tier = getCatTier(cat)
+                const showCROWarning = tier === 'free' && ((unlock.rankRequired ?? 1) !== 1 || (unlock.levelRequired ?? 1) !== 1)
                 const TIER_BADGE = { guest: 'bg-slate-100 text-slate-500', free: 'bg-green-100 text-green-700', silver: 'bg-blue-100 text-blue-700', gold: 'bg-amber-100 text-amber-700' }
                 return (
                   <tr
@@ -1364,6 +1366,14 @@ function SettingsTab({ API }) {
                           <option key={r.n} value={r.n}>{r.n}. {r.abbr} — {r.name}</option>
                         ))}
                       </select>
+                    </td>
+                    <td className="py-2.5 pl-3">
+                      {showCROWarning && (
+                        <span className="inline-flex items-start gap-1.5 text-xs text-amber-400 bg-amber-950/40 border border-amber-800 rounded-lg px-2.5 py-1.5 leading-snug max-w-[240px]">
+                          <span className="shrink-0 mt-px">⚠</span>
+                          It is advised that free categories stay rank 1 level 1 to avoid user facing CRO issues.
+                        </span>
+                      )}
                     </td>
                   </tr>
                 )
@@ -3353,7 +3363,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const [dupePanel,          setDupePanel]          = useState(false)
   const [dupeGroups,         setDupeGroups]         = useState(null)
   const [dupesLoading,       setDupesLoading]       = useState(false)
-  const keywordsPerBrief = 8
+  const keywordsPerBrief = 20
 
   // ── Bulk auto-generate state ─────────────────────────────────────────────
   const [bulkOpen,     setBulkOpen]     = useState(false)

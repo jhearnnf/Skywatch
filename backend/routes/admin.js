@@ -35,6 +35,21 @@ const seedLeads = require('../seeds/seedLeads');
 const { scanMentionedBriefIds } = require('../utils/mentionedBriefs');
 const { autoLinkKeywords }     = require('../utils/keywordLinking');
 const SystemLog                = require('../models/SystemLog');
+const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
+
+// ── Shared quiz prompt fragments ──────────────────────────────────────────────
+// Single source of truth for answer format rules and core question rules,
+// embedded in every system prompt and user message that generates quiz content.
+
+const QUIZ_ANSWER_FORMAT_RULES = 'Answer options must never include the attribute being asked about in the question — e.g. if the question asks which squadron operates a specific aircraft, all answer options must be plain squadron names/numbers only, with no aircraft type appended. Do not add parenthetical qualifiers (e.g. "(A400M Atlas)", "(Voyager)") to any answer option. All options must follow the same plain format.';
+
+const QUIZ_QUESTION_RULES = `CRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. The correct answer must be explicitly supported by the description.\n3. Wrong answers must be plausible but clearly incorrect based on the description.\n4. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n5. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each) — never single words, never just a number or acronym alone.\n6. The correct answer must also be a complete sentence or meaningful phrase drawn directly from the description.\n7. ${QUIZ_ANSWER_FORMAT_RULES}`;
+
+function getDifficultyLabel(difficulty) {
+  return difficulty === 'medium'
+    ? 'medium (require understanding of context or relationships between facts in the description)'
+    : 'easy (test direct recall of the most important specific facts: names, dates, locations, aircraft types, unit designations, etc.)';
+}
 
 // ── AI prompt defaults ────────────────────────────────────────────────────────
 // These are the canonical system prompts used throughout the AI generation
@@ -46,10 +61,10 @@ const AI_PROMPT_DEFAULTS = {
   'brief.topic':             'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
   'regenerateBrief':         'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
   // Quiz generation
-  'quiz':                    'You are a quiz question writer for a Royal Air Force training platform. Prioritise the most important and high-value facts from the brief — operational capabilities, training pathways and their phases, aircraft designations and roles, base locations and resident units, command structures, and key distinguishing facts that define this subject. Questions should test knowledge that builds genuine understanding of the RAF, not trivial details. Every question must be directly and fully answerable using only the information in the provided intel brief description — do not rely on external knowledge or anything not stated in the description.',
-  'quizMissing':             'You are a quiz question writer for a Royal Air Force training platform. Prioritise the most important and high-value facts from the brief — operational capabilities, training pathways and their phases, aircraft designations and roles, base locations and resident units, command structures, and key distinguishing facts that define this subject. Questions should test knowledge that builds genuine understanding of the RAF, not trivial details. Every question must be directly and fully answerable using only the information in the provided intel brief description — do not rely on external knowledge or anything not stated in the description. You will be given a list of existing questions — do not repeat or closely paraphrase any of them.',
+  'quiz':                    `You are a quiz question writer for a Royal Air Force training platform. Prioritise the most important and high-value facts from the brief — operational capabilities, training pathways and their phases, aircraft designations and roles, base locations and resident units, command structures, and key distinguishing facts that define this subject. Questions should test knowledge that builds genuine understanding of the RAF, not trivial details. Every question must be directly and fully answerable using only the information in the provided intel brief description — do not rely on external knowledge or anything not stated in the description. ANSWER FORMAT RULES: ${QUIZ_ANSWER_FORMAT_RULES}`,
+  'quizMissing':             `You are a quiz question writer for a Royal Air Force training platform. Prioritise the most important and high-value facts from the brief — operational capabilities, training pathways and their phases, aircraft designations and roles, base locations and resident units, command structures, and key distinguishing facts that define this subject. Questions should test knowledge that builds genuine understanding of the RAF, not trivial details. Every question must be directly and fully answerable using only the information in the provided intel brief description — do not rely on external knowledge or anything not stated in the description. You will be given a list of existing questions — do not repeat or closely paraphrase any of them. ANSWER FORMAT RULES: ${QUIZ_ANSWER_FORMAT_RULES}`,
   // Keywords
-  'keywords':                'You are a keyword extractor for a Royal Air Force training platform. Prioritise terms that build understanding of the modern RAF — training pathways, bases, aircraft, roles, and operational context. You only select terms that appear verbatim in the provided description text. For each keyword you write a general RAF-specific definition of that term — what it is, its role and capabilities — without referencing the specific intel brief it was found in.',
+  'keywords':                'You are a keyword extractor for a Royal Air Force training platform. Prioritise terms that build understanding of the modern RAF — training pathways, bases, aircraft, squadrons, roles, and operational context. You only select terms that appear verbatim in the provided description text. For each keyword you write a general RAF-specific definition of that term — what it is, its role and capabilities — without referencing the specific intel brief it was found in.',
   // Linking — current
   'links.Aircrafts:bases':     'You are an expert on Royal Air Force aircraft and bases. Given an aircraft brief, identify which RAF bases are home/primary operating bases for this aircraft. Only select bases where this aircraft type is permanently stationed.',
   'links.Aircrafts:squadrons': 'You are an expert on Royal Air Force aircraft and squadrons. Given an aircraft brief, identify which RAF squadrons operate this aircraft type as their primary platform.',
@@ -1644,7 +1659,7 @@ async function topUpAnswers(question, description, existingAnswers, systemPrompt
     content: systemPrompt,
   }, {
     role: 'user',
-    content: `Question: "${question}"\n\nIntel Brief Description:\n"""\n${description}\n"""\n\nExisting answer options (do NOT repeat these):\n${existingTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\nProvide exactly ${needed} more WRONG answer options so the total reaches 7. Each must be a plausible but clearly incorrect complete sentence or meaningful phrase (minimum 5 words), answerable from the description context.\n\nReturn ONLY a JSON array of strings, e.g. ["wrong answer 1", "wrong answer 2"]`,
+    content: `Question: "${question}"\n\nIntel Brief Description:\n"""\n${description}\n"""\n\nExisting answer options (do NOT repeat these):\n${existingTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\nProvide exactly ${needed} more WRONG answer options so the total reaches 7. Each must be a plausible but clearly incorrect complete sentence or meaningful phrase (minimum 5 words), answerable from the description context.\n\nANSWER FORMAT RULES: ${QUIZ_ANSWER_FORMAT_RULES} All options must follow the same plain format as the existing answers above.\n\nReturn ONLY a JSON array of strings, e.g. ["wrong answer 1", "wrong answer 2"]`,
   }], 'perplexity/sonar', 1024);
   const raw = data.choices?.[0]?.message?.content ?? '[]';
   let newAnswers;
@@ -1662,15 +1677,12 @@ async function topUpAnswers(question, description, existingAnswers, systemPrompt
 async function topUpQuestions(difficulty, description, briefTitle, existingQuestions, needed, systemPrompt) {
   if (needed <= 0) return [];
   const existingList = existingQuestions.map((q, i) => `${i + 1}. ${q.question}`).join('\n');
-  const diffLabel = difficulty === 'medium'
-    ? 'medium (require understanding of context or relationships between facts in the description)'
-    : 'easy (test direct recall of the most important specific facts: names, dates, locations, aircraft types, unit designations, etc.)';
   const data = await openRouterChat([{
     role: 'system',
     content: systemPrompt,
   }, {
     role: 'user',
-    content: `Intel Brief Title: ${briefTitle}\n\nIntel Brief Description:\n"""\n${description}\n"""\n\nExisting questions already written (do NOT repeat or closely paraphrase any):\n${existingList || '(none yet)'}\n\nWrite exactly ${needed} more ${diffLabel} questions using ONLY the facts in the description above.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text.\n2. The correct answer must be explicitly supported by the description.\n3. Wrong answers must be plausible but clearly incorrect based on the description.\n4. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n5. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each).\n6. The correct answer must also be a complete sentence or meaningful phrase.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"questions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}]}`,
+    content: `Intel Brief Title: ${briefTitle}\n\nIntel Brief Description:\n"""\n${description}\n"""\n\nExisting questions already written (do NOT repeat or closely paraphrase any):\n${existingList || '(none yet)'}\n\nWrite exactly ${needed} more ${getDifficultyLabel(difficulty)} questions using ONLY the facts in the description above.\n\n${QUIZ_QUESTION_RULES}\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"questions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}]}`,
   }], 'perplexity/sonar', 4096);
   const raw = data.choices?.[0]?.message?.content ?? '{}';
   let generated;
@@ -1683,32 +1695,34 @@ async function topUpQuestions(difficulty, description, briefTitle, existingQuest
   return Array.isArray(generated.questions) ? generated.questions : [];
 }
 
+// Retries topUpAnswers until a question has 7 answers or MAX_RETRIES is hit.
+// Returns the question with answers normalized to {title} objects.
+// Appends a warning to the provided array if the target cannot be reached.
+async function fixAnswersWithRetry(q, description, systemPrompt, warnings) {
+  const TARGET_A   = 7;
+  const MAX_RETRIES = 3;
+  let answers  = Array.isArray(q.answers) ? q.answers : [];
+  let attempts = 0;
+  while (answers.length < TARGET_A && attempts < MAX_RETRIES) {
+    attempts++;
+    const topped = await topUpAnswers(q.question, description, answers, systemPrompt);
+    answers = topped.map(a => (typeof a === 'string' ? { title: a } : a));
+  }
+  if (answers.length < TARGET_A) {
+    warnings.push(`Could not reach 7 answers for question after ${MAX_RETRIES} retries: "${q.question?.slice(0, 60)}"`);
+  }
+  return { ...q, answers };
+}
+
 // Ensures both tiers have 7 questions each with 7 answers each.
-// Inner loop tops up answers per question; outer loop tops up question count.
 // Mutates nothing — returns new arrays. Appends warnings to the provided array.
 async function ensureQuizQuality(easyQuestions, mediumQuestions, description, briefTitle, quizSystemPrompt, warnings) {
-  const TARGET_Q = 7;
-  const TARGET_A = 7;
+  const TARGET_Q   = 7;
   const MAX_RETRIES = 3;
-
-  async function fixAnswers(q) {
-    let answers = Array.isArray(q.answers) ? q.answers : [];
-    let attempts = 0;
-    while (answers.length < TARGET_A && attempts < MAX_RETRIES) {
-      attempts++;
-      const topped = await topUpAnswers(q.question, description, answers, quizSystemPrompt);
-      // normalize back to {title} objects
-      answers = topped.map(a => (typeof a === 'string' ? { title: a } : a));
-    }
-    if (answers.length < TARGET_A) {
-      warnings.push(`Could not reach 7 answers for question after ${MAX_RETRIES} retries: "${q.question?.slice(0, 60)}"`);
-    }
-    return { ...q, answers };
-  }
 
   async function fixAllAnswers(questions) {
     const result = [];
-    for (const q of questions) result.push(await fixAnswers(q));
+    for (const q of questions) result.push(await fixAnswersWithRetry(q, description, quizSystemPrompt, warnings));
     return result;
   }
 
@@ -1888,11 +1902,12 @@ router.post('/ai/news-headlines', async (req, res) => {
   try {
     const { date } = req.body; // YYYY-MM-DD string
     const todayStr = new Date().toISOString().slice(0, 10);
-    const isToday  = !date || date === todayStr;
+    const targetDate = (!date || date === todayStr) ? todayStr : date;
+    const isToday    = targetDate === todayStr;
     const aiSettings = await AppSettings.getSettings();
     const userContent = isToday
-      ? `The current date is ${todayStr}. Search the web right now for real UK Royal Air Force (RAF) news stories published in the last 24 hours only. Return ONLY a JSON array of up to 6 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the date the story was published). No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from the last 24 hours, return an empty array []. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`
-      : `The target date is ${date}. Search the web for real UK Royal Air Force (RAF) news stories published on or around ${date}. Return ONLY a JSON array of up to 6 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the actual date the story was published). No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from that date, return an empty array []. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`;
+      ? `The current date is ${todayStr}. Search the web right now for real UK Royal Air Force (RAF) news stories published in the last 24 hours only. Return ONLY a JSON array of up to 6 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the date the story was published — must be ${todayStr} or yesterday). Only include a story if you can confirm its publication date from the source. If you cannot verify the exact date, omit the story. No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from the last 24 hours, return an empty array []. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`
+      : `The target date is ${targetDate}. Search the web for real UK Royal Air Force (RAF) news stories published on ${targetDate} (acceptable range: up to 3 days either side). Return ONLY a JSON array of up to 6 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the actual confirmed publication date of the story). Only include a story if you can verify its publication date from the source. If you cannot verify the date, omit the story entirely — do not guess. No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from around that date, return an empty array []. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`;
     const data = await openRouterChat([{
       role: 'system',
       content: getPrompt(aiSettings, 'newsHeadlines'),
@@ -1900,17 +1915,25 @@ router.post('/ai/news-headlines', async (req, res) => {
       role: 'user',
       content: userContent,
     }], 'perplexity/sonar');
-    const raw    = data.choices?.[0]?.message?.content ?? '[]';
+    const raw = data.choices?.[0]?.message?.content ?? '[]';
     let parsed;
     try {
       parsed = JSON.parse(cleanJson(raw));
     } catch {
       parsed = [];
     }
-    // Normalise: accept plain strings (legacy fallback) and {headline, eventDate} objects
-    const headlines = Array.isArray(parsed)
-      ? parsed.map(h => typeof h === 'string' ? { headline: h, eventDate: todayStr } : h)
-      : [];
+    // Normalise: accept plain strings (legacy fallback) and {headline, eventDate} objects.
+    // Then filter out any item whose eventDate falls more than 3 days outside the target date.
+    const targetMs = new Date(targetDate).getTime();
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+    const headlines = (Array.isArray(parsed) ? parsed : [])
+      .map(h => typeof h === 'string' ? { headline: h, eventDate: targetDate } : h)
+      .filter(h => {
+        if (!h.headline) return false;
+        const d = new Date(h.eventDate);
+        if (isNaN(d.getTime())) return false; // drop unparseable dates
+        return Math.abs(d.getTime() - targetMs) <= THREE_DAYS_MS;
+      });
     res.json({ status: 'success', data: { headlines } });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1934,14 +1957,20 @@ router.post('/ai/news-headlines-month', async (req, res) => {
       content: getPrompt(aiSettings, 'newsHeadlines'),
     }, {
       role: 'user',
-      content: `Search the web for the top 10 most significant real UK Royal Air Force (RAF) news stories published during ${monthName}. Return ONLY a JSON array of up to 10 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the date the story was published within that month). No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If fewer than 10 real RAF stories exist for that month, return what you find. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`,
+      content: `Search the web for the top 10 most significant real UK Royal Air Force (RAF) news stories published during ${monthName}. Return ONLY a JSON array of up to 10 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the confirmed publication date of the story — must fall within ${monthName}). Only include a story if you can verify its publication date from the source. If you cannot confirm the date falls within ${monthName}, omit the story entirely — do not guess. No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If fewer than 10 real RAF stories exist for that month, return what you find. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`,
     }], 'perplexity/sonar');
     const raw = data.choices?.[0]?.message?.content ?? '[]';
     let parsed;
     try { parsed = JSON.parse(cleanJson(raw)); } catch { parsed = []; }
-    const headlines = Array.isArray(parsed)
-      ? parsed.map(h => typeof h === 'string' ? { headline: h, eventDate: `${month}-01` } : h)
-      : [];
+    // Normalise then filter: only keep items whose eventDate falls within the requested month.
+    const fallbackDate = `${month}-15`;
+    const headlines = (Array.isArray(parsed) ? parsed : [])
+      .map(h => typeof h === 'string' ? { headline: h, eventDate: fallbackDate } : h)
+      .filter(h => {
+        if (!h.headline) return false;
+        if (!h.eventDate || typeof h.eventDate !== 'string') return false;
+        return h.eventDate.startsWith(month); // ensures YYYY-MM prefix matches
+      });
     res.json({ status: 'success', data: { headlines } });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1981,6 +2010,11 @@ router.post('/ai/bulk-generate-news-item', async (req, res) => {
       throw new Error(`Content generation failed: ${parseErr.message}`);
     }
 
+    // ── Step 1b: Scrape real source publication dates ──────────────────────────
+    if (briefContent.sources?.length) {
+      briefContent.sources = await enrichSourceDates(briefContent.sources);
+    }
+
     // ── Step 2: Event date clamping ────────────────────────────────────────────
     let resolvedEventDate = eventDate || null;
     if (resolvedEventDate && briefContent.sources?.length) {
@@ -1996,46 +2030,74 @@ router.post('/ai/bulk-generate-news-item', async (req, res) => {
     const descriptionText = (briefContent.descriptionSections ?? []).join('\n\n');
     let keywords = [];
     if (descriptionText) {
+      const descLower  = descriptionText.toLowerCase();
+      const titleLower = (briefContent.title ?? '').toLowerCase();
+
+      // Validates keyword objects against description text and deduplicates
+      const seen3 = new Set();
+      const validateKws3 = (kwArray) => (Array.isArray(kwArray) ? kwArray : []).filter(k => {
+        if (!k.keyword) return false;
+        const kl = k.keyword.toLowerCase();
+        if (!descLower.includes(kl)) return false;
+        if (seen3.has(kl)) return false;
+        if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
+        seen3.add(kl);
+        return true;
+      });
+
+      // Build brief pool once for auto-linking
+      const allBriefs = await IntelligenceBrief.find({}, { _id: 1, title: 1 }).lean();
+      const briefPool = allBriefs.map(b => ({ id: String(b._id), norm: normTitle(b.title) }));
+      const exactMap  = new Map(briefPool.map(b => [b.norm, b.id]));
+      const autoLink3 = (kwArray) => kwArray.map(k => {
+        const normKw = normTitle(k.keyword);
+        let linkedBriefId = exactMap.get(normKw) ?? null;
+        if (!linkedBriefId && normKw.length >= 6) {
+          const cands = briefPool.filter(b => b.norm.includes(normKw));
+          if (cands.length) { cands.sort((a, b) => a.norm.length - b.norm.length); linkedBriefId = cands[0].id; }
+        }
+        return linkedBriefId ? { ...k, linkedBriefId } : k;
+      });
+
+      const kwSys  = [{ role: 'system', content: getPrompt(aiSettings, 'keywords') }];
+      const kwMdl  = 'perplexity/sonar';
+      const KW_JSON = '{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition"},...]}';
+
+      // Pass 1 — technical terms, aircraft, operations, systems, roles (10 keywords)
+      let pass1 = [];
       try {
-        const kwData = await openRouterChat([{
-          role: 'system',
-          content: getPrompt(aiSettings, 'keywords'),
-        }, {
+        const r1 = await openRouterChat([...kwSys, {
           role: 'user',
-          content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 6 keywords from the description above. Every keyword string MUST appear verbatim (same spelling and capitalisation) in the description. Choose technical terms, acronyms, aircraft designations, operation names, and proper nouns — but never the subject/title of the brief itself. Do NOT include RAF base names or RAF squadron names/numbers as keywords.\n\nFor "generatedDescription": write a general RAF-specific definition of the term. Do NOT reference or summarise this intel brief.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition"},{"keyword":"...","generatedDescription":"..."}]}`,
-        }], 'perplexity/sonar');
-        const kwRaw = kwData.choices?.[0]?.message?.content ?? '{}';
-        const kwParsed = JSON.parse(cleanJson(kwRaw));
-        const descLower = descriptionText.toLowerCase();
-        const titleLower = (briefContent.title ?? '').toLowerCase();
-        const filtered = (Array.isArray(kwParsed.keywords) ? kwParsed.keywords : [])
-          .filter(k => {
-            if (!k.keyword) return false;
-            const kl = k.keyword.toLowerCase();
-            if (!descLower.includes(kl)) return false;
-            if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
-            return true;
-          })
-          .slice(0, 6);
-        // Auto-link keywords to existing briefs
-        const allBriefs = await IntelligenceBrief.find({}, { _id: 1, title: 1 }).lean();
-        const briefPool = allBriefs.map(b => ({ id: String(b._id), norm: normTitle(b.title) }));
-        const exactMap = new Map(briefPool.map(b => [b.norm, b.id]));
-        keywords = filtered.map(k => {
-          const normKw = normTitle(k.keyword);
-          let linkedBriefId = exactMap.get(normKw) ?? null;
-          if (!linkedBriefId && normKw.length >= 6) {
-            const candidates = briefPool.filter(b => b.norm.includes(normKw));
-            if (candidates.length > 0) {
-              candidates.sort((a, b) => a.norm.length - b.norm.length);
-              linkedBriefId = candidates[0].id;
-            }
-          }
-          return linkedBriefId ? { ...k, linkedBriefId } : k;
-        });
-      } catch (kwErr) {
-        warnings.push(`Keywords: ${kwErr.message}`);
+          content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 10 keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+        }], kwMdl);
+        pass1 = validateKws3(JSON.parse(cleanJson(r1.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 10);
+      } catch (e) { warnings.push(`Keywords pass 1: ${e.message}`); }
+
+      // Pass 2 — proper nouns: squadron names, base names, unit designations (up to 10)
+      let pass2 = [];
+      try {
+        const alreadyList = pass1.length ? `Already extracted (do NOT repeat): ${pass1.map(k => k.keyword).join(', ')}\n\n` : '';
+        const r2 = await openRouterChat([...kwSys, {
+          role: 'user',
+          content: `Description:\n"""${descriptionText}"""\n\n${alreadyList}Extract up to 10 proper noun keywords from the description above. Focus SPECIFICALLY on: RAF squadron names and numbers (e.g. "No. 617 Squadron", "XI Squadron"), RAF base and airfield names (e.g. "RAF Lossiemouth"), named military units, formations, and commands. Every keyword MUST appear verbatim in the description.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+        }], kwMdl);
+        pass2 = validateKws3(JSON.parse(cleanJson(r2.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 10);
+      } catch (e) { warnings.push(`Keywords pass 2: ${e.message}`); }
+
+      // Pass 3 — coverage check: find up to 5 important terms missed by passes 1 & 2
+      const combined12 = [...pass1, ...pass2];
+      let pass3 = [];
+      if (combined12.length > 0) {
+        try {
+          const r3 = await openRouterChat([...kwSys, {
+            role: 'user',
+            content: `Description:\n"""${descriptionText}"""\n\nAlready extracted: ${combined12.map(k => k.keyword).join(', ')}\n\nIdentify up to 5 important terms from this description that were NOT already extracted. Look for aircraft designations, operation names, training programme names, squadron names, base names, technical systems, or role titles appearing verbatim in the description but absent from the list above. If nothing important is missing, return {"keywords":[]}.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+          }], kwMdl);
+          pass3 = validateKws3(JSON.parse(cleanJson(r3.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 5);
+        } catch (e) { warnings.push(`Keywords pass 3: ${e.message}`); }
       }
+
+      keywords = autoLink3([...combined12, ...pass3]);
     }
 
     // ── Step 4: Image ──────────────────────────────────────────────────────────
@@ -2218,6 +2280,11 @@ router.post('/ai/generate-brief', async (req, res) => {
     // Lock title to the lead topic — AI must not rename the subject
     if (topic) brief.title = topic;
 
+    // Scrape real source publication dates — AI-supplied dates are often inaccurate
+    if (brief.sources?.length) {
+      brief.sources = await enrichSourceDates(brief.sources);
+    }
+
     // For Ranks briefs, apply deterministic hierarchy lookup instead of relying on AI
     if (!headline && category === 'Ranks' && brief.title) {
       const rankOrder = lookupRankHierarchy(brief.title);
@@ -2321,69 +2388,84 @@ function normTitle(s) {
 
 router.post('/ai/generate-keywords', async (req, res) => {
   try {
-    const { description, existingKeywords = [], needed = 10, title = '', briefId = null } = req.body;
+    const { description, existingKeywords = [], needed = 20, title = '', briefId = null } = req.body;
     if (!description) return res.status(400).json({ message: 'description required' });
     if (needed <= 0)  return res.json({ status: 'success', data: { keywords: [] } });
 
+    const kwAiSettings = await AppSettings.getSettings();
+    const desc       = description.toLowerCase();
+    const titleLower = title.toLowerCase();
+    const titleExclusion = title
+      ? `Do NOT use the topic title or name itself as a keyword — "${title}" and any shortened form must not appear as a keyword.\n\n`
+      : '';
+
+    // Shared seen-set seeded from caller's existingKeywords; mutated by each pass
+    const seen = new Set(existingKeywords.map(k => k.toLowerCase()));
+    const validateKws = (kwArray) => (Array.isArray(kwArray) ? kwArray : []).filter(k => {
+      if (!k.keyword) return false;
+      const kl = k.keyword.toLowerCase();
+      if (!desc.includes(kl)) return false;
+      if (seen.has(kl)) return false;
+      if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
+      seen.add(kl);
+      return true;
+    });
+
+    const kwSys  = [{ role: 'system', content: getPrompt(kwAiSettings, 'keywords') }];
+    const kwMdl  = 'perplexity/sonar';
+    const KW_JSON = '{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition of this term"},{"keyword":"...","generatedDescription":"..."}]}';
     const existingList = existingKeywords.length
       ? `Already used (do NOT repeat these): ${existingKeywords.join(', ')}\n\n`
       : '';
-    const titleExclusion = title
-      ? `Do NOT use the topic title or name itself as a keyword — "${title}" and any shortened form of it must not appear as a keyword.\n\n`
-      : '';
 
-    const kwAiSettings = await AppSettings.getSettings();
-    const data = await openRouterChat([{
-      role: 'system',
-      content: getPrompt(kwAiSettings, 'keywords'),
-    }, {
-      role: 'user',
-      content: `Description:\n"""${description}"""\n\n${existingList}${titleExclusion}Extract exactly ${needed} keywords from the description above. Every keyword string MUST appear verbatim (same spelling and capitalisation) in the description. Choose technical terms, acronyms, aircraft designations, operation names, and proper nouns — but never the subject/title of the brief itself.\n\nDo NOT include RAF base names (e.g. "RAF Lossiemouth", "RAF Coningsby") or RAF squadron names/numbers (e.g. "No. 617 Squadron", "IX Squadron", "1 Squadron") as keywords — these are handled separately.\n\nFor "generatedDescription": write a general RAF-specific definition of the term itself (e.g. what that aircraft/system/operation is, its role and capabilities). Do NOT reference or summarise the intel brief — the description should be useful as a standalone glossary entry.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition of this term"},{"keyword":"...","generatedDescription":"..."}]}`,
-    }], 'perplexity/sonar');
+    // Pass 1 — technical terms, aircraft, operations, systems, training programmes (up to 10)
+    let pass1 = [];
+    const pass1Target = Math.min(10, needed);
+    try {
+      const r1 = await openRouterChat([...kwSys, {
+        role: 'user',
+        content: `Description:\n"""${description}"""\n\n${existingList}${titleExclusion}Extract exactly ${pass1Target} keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference or summarise the intel brief.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
+      }], kwMdl);
+      pass1 = validateKws(JSON.parse(cleanJson(r1.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, pass1Target);
+    } catch (e) { /* pass1 stays empty — caller gets whatever passes succeed */ }
 
-    const raw = data.choices?.[0]?.message?.content ?? '{}';
-    const parsed = JSON.parse(cleanJson(raw));
-    const desc = description.toLowerCase();
-    const existing = new Set(existingKeywords.map(k => k.toLowerCase()));
-    const titleLower = title.toLowerCase();
+    // Pass 2 — proper nouns: squadron names, base names, unit designations (up to 10)
+    let pass2 = [];
+    const pass2Target = Math.min(10, needed - pass1.length);
+    if (pass2Target > 0) {
+      try {
+        const alreadyAll  = [...existingKeywords, ...pass1.map(k => k.keyword)];
+        const alreadyList2 = alreadyAll.length ? `Already extracted (do NOT repeat): ${alreadyAll.join(', ')}\n\n` : '';
+        const r2 = await openRouterChat([...kwSys, {
+          role: 'user',
+          content: `Description:\n"""${description}"""\n\n${alreadyList2}${titleExclusion}Extract up to ${pass2Target} proper noun keywords from the description above. Focus SPECIFICALLY on: RAF squadron names and numbers (e.g. "No. 617 Squadron", "XI Squadron"), RAF base and airfield names (e.g. "RAF Lossiemouth"), named military units, formations, and commands. Every keyword MUST appear verbatim in the description.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
+        }], kwMdl);
+        pass2 = validateKws(JSON.parse(cleanJson(r2.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, pass2Target);
+      } catch (e) { /* pass2 stays empty */ }
+    }
 
-    const filtered = (Array.isArray(parsed.keywords) ? parsed.keywords : [])
-      .filter(k => {
-        if (!k.keyword) return false;
-        const kl = k.keyword.toLowerCase();
-        if (!desc.includes(kl)) return false;
-        if (existing.has(kl)) return false;
-        // Exclude if keyword is the title itself or the title contains/is contained by the keyword
-        if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
-        return true;
-      })
-      .slice(0, needed);
+    // Pass 3 — coverage check: find up to 5 important terms missed by passes 1 & 2
+    const combined12 = [...pass1, ...pass2];
+    let pass3 = [];
+    if (combined12.length > 0 && combined12.length + existingKeywords.length < needed) {
+      try {
+        const alreadyAll = [...existingKeywords, ...combined12.map(k => k.keyword)];
+        const r3 = await openRouterChat([...kwSys, {
+          role: 'user',
+          content: `Description:\n"""${description}"""\n\nAlready extracted: ${alreadyAll.join(', ')}\n\nIdentify up to 5 important terms from this description that were NOT already extracted. Look for aircraft designations, operation names, training programme names, squadron names, base names, technical systems, or role titles appearing verbatim in the description but absent from the list above. If nothing important is missing, return {"keywords":[]}.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
+        }], kwMdl);
+        pass3 = validateKws(JSON.parse(cleanJson(r3.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 5);
+      } catch (e) { /* pass3 stays empty */ }
+    }
 
-    // Build normalised brief pool for linking, excluding the current brief
-    const allBriefs = await IntelligenceBrief.find({}, { _id: 1, title: 1 }).lean();
-    const briefPool = allBriefs
-      .filter(b => !briefId || String(b._id) !== String(briefId))
-      .map(b => ({ id: String(b._id), norm: normTitle(b.title) }));
-    const exactMap = new Map(briefPool.map(b => [b.norm, b.id]));
-
-    const keywords = filtered.map(k => {
-      const normKw = normTitle(k.keyword);
-
-      // Level 1: exact normalised match
-      let linkedBriefId = exactMap.get(normKw) ?? null;
-
-      // Level 2: keyword contained in brief title (min 6 chars to avoid noise)
-      if (!linkedBriefId && normKw.length >= 6) {
-        const candidates = briefPool.filter(b => b.norm.includes(normKw));
-        if (candidates.length > 0) {
-          // Pick shortest title — most specific match
-          candidates.sort((a, b) => a.norm.length - b.norm.length);
-          linkedBriefId = candidates[0].id;
-        }
-      }
-
-      return linkedBriefId ? { ...k, linkedBriefId } : k;
-    });
+    // Auto-link keywords using the full 3-stage pipeline (word index → AI disambiguation → stub seeding)
+    const keywords = await autoLinkKeywords(
+      [...combined12, ...pass3],
+      [description],
+      openRouterChat,
+      briefId || null,
+      title || null,
+    );
 
     res.json({ status: 'success', data: { keywords } });
   } catch (err) {
@@ -2486,7 +2568,7 @@ router.post('/ai/generate-quiz', async (req, res) => {
       content: getPrompt(quizAiSettings, 'quiz'),
     }, {
       role: 'user',
-      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 7 easy and 7 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
+      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 7 easy and 7 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n8. ${QUIZ_ANSWER_FORMAT_RULES}\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
     }], 'openai/gpt-4o', 4096);
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     let generated;
@@ -2520,22 +2602,18 @@ router.post('/ai/generate-quiz-missing', async (req, res) => {
     if (!title && !description) return res.status(400).json({ message: 'title or description required' });
     if (needed <= 0) return res.json({ status: 'success', data: { questions: [] } });
 
-    const difficultyLabel = difficulty === 'medium' ? 'medium' : 'easy';
-    const difficultyRule  = difficultyLabel === 'easy'
-      ? 'Easy questions test direct recall of specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).'
-      : 'Medium questions require understanding of context or relationships between facts stated in the description.';
-
     const existingList = existingQuestions.length
       ? `\n\nExisting questions (do NOT repeat or closely paraphrase any of these):\n${existingQuestions.map((q, i) => `${i + 1}. ${q.question}`).join('\n')}`
       : '';
 
     const aiSettings = await AppSettings.getSettings();
+    const quizMissingPrompt = getPrompt(aiSettings, 'quizMissing');
     const data = await openRouterChat([{
       role: 'system',
-      content: getPrompt(aiSettings, 'quizMissing'),
+      content: quizMissingPrompt,
     }, {
       role: 'user',
-      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""${existingList}\n\nUsing ONLY the facts stated in the description above, generate exactly ${needed} NEW ${difficultyLabel} quiz question${needed > 1 ? 's' : ''}.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. ${difficultyRule}\n3. The correct answer must be explicitly supported by the description.\n4. Wrong answers must be plausible but clearly incorrect based on the description.\n5. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n6. Do NOT repeat or closely paraphrase any of the existing questions listed above.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"questions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}]}`,
+      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""${existingList}\n\nUsing ONLY the facts stated in the description above, generate exactly ${needed} NEW ${getDifficultyLabel(difficulty)} quiz question${needed > 1 ? 's' : ''}.\n\n${QUIZ_QUESTION_RULES}\n8. Do NOT repeat or closely paraphrase any of the existing questions listed above.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"questions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}]}`,
     }], 'openai/gpt-4o', 4096);
 
     const raw = data.choices?.[0]?.message?.content ?? '{}';
@@ -2546,18 +2624,11 @@ router.post('/ai/generate-quiz-missing', async (req, res) => {
       console.error('[generate-quiz-missing] JSON parse failed. Raw response:', raw.slice(0, 500));
       throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
     }
-    // Fix answer counts on returned questions (inner loop only — question count is caller-controlled)
-    const MAX_RETRIES = 3;
+    // Fix answer counts on returned questions (question count is caller-controlled)
+    const warnings = [];
     let questions = normalizeQuizAnswers(generated.questions ?? []).slice(0, needed);
     for (let i = 0; i < questions.length; i++) {
-      let answers = questions[i].answers ?? [];
-      let attempts = 0;
-      while (answers.length < 7 && attempts < MAX_RETRIES) {
-        attempts++;
-        const topped = await topUpAnswers(questions[i].question, description ?? '', answers, getPrompt(aiSettings, 'quizMissing'));
-        answers = topped.map(a => (typeof a === 'string' ? { title: a } : a));
-      }
-      questions[i] = { ...questions[i], answers };
+      questions[i] = await fixAnswersWithRetry(questions[i], description ?? '', quizMissingPrompt, warnings);
     }
     res.json({ status: 'success', data: { questions } });
   } catch (err) {
@@ -2579,6 +2650,19 @@ async function generateBriefContent(brief, aiSettings) {
   TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace('Return exactly 10 keyword objects', `Return exactly ${kwCount} keyword objects`);
   TOPIC_JSON_SHAPE += `\n5. Do NOT use the topic title "${brief.title}" or any shortened form of it as a keyword — the title itself must never appear in the keywords array.`;
   TOPIC_JSON_SHAPE += `\n${LIST_FORMAT_RULE}`;
+
+  // Inject subtitle before descriptionSections
+  TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace(
+    '"descriptionSections"',
+    '"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections"'
+  );
+  // Inject sources array before the closing } of the JSON schema
+  const SOURCES_SHAPE = `"sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]`;
+  TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace(
+    '\n}\nCRITICAL RULES:',
+    `,\n  ${SOURCES_SHAPE}\n}\nCRITICAL RULES:`
+  );
+  TOPIC_JSON_SHAPE += `\nFor "sources": list 1–3 real published URLs about this specific RAF topic (e.g. its Wikipedia page, raf.mod.uk, gov.uk). Set "articleDate" to the article's real publish date in YYYY-MM-DD format, or the Wikipedia page's last-modified date.`;
 
   const gdShape = booGameDataShape(brief.category);
   if (gdShape) {
@@ -2615,6 +2699,8 @@ async function generateBriefContent(brief, aiSettings) {
   const descriptionSections = (Array.isArray(briefGenerated.descriptionSections) ? briefGenerated.descriptionSections : [])
     .map(s => typeof s === 'string' ? s.replace(/[*_`#]/g, '') : s);
   let keywords = Array.isArray(briefGenerated.keywords) ? briefGenerated.keywords : [];
+  const subtitle = typeof briefGenerated.subtitle === 'string' ? briefGenerated.subtitle.trim() : null;
+  const sources  = Array.isArray(briefGenerated.sources) ? briefGenerated.sources : [];
 
   // Terms too generic to ever be useful as keywords — the whole app is about the RAF,
   // so highlighting these adds noise rather than value. Units with their own brief
@@ -2670,7 +2756,7 @@ async function generateBriefContent(brief, aiSettings) {
     content: getPrompt(aiSettings, 'quiz'),
   }, {
     role: 'user',
-    content: `Intel Brief Title: ${brief.title}\n\nIntel Brief Description:\n"""\n${freshDescription}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 7 easy and 7 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n8. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each) — never single words, never just a number or acronym alone.\n9. The correct answer must also be a complete sentence or meaningful phrase drawn directly from the description — never a single word or bare number.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
+    content: `Intel Brief Title: ${brief.title}\n\nIntel Brief Description:\n"""\n${freshDescription}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 7 easy and 7 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n8. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each) — never single words, never just a number or acronym alone.\n9. The correct answer must also be a complete sentence or meaningful phrase drawn directly from the description — never a single word or bare number.\n10. ${QUIZ_ANSWER_FORMAT_RULES}\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
   }], 'openai/gpt-4o', 8192);
 
   const quizRaw = quizData.choices?.[0]?.message?.content ?? '{}';
@@ -2716,6 +2802,8 @@ async function generateBriefContent(brief, aiSettings) {
   return {
     descriptionSections,
     keywords,
+    subtitle,
+    sources,
     easyQuestions,
     mediumQuestions,
     gameData,
@@ -2732,12 +2820,22 @@ router.post('/ai/regenerate-brief/:id', async (req, res) => {
     brief = await IntelligenceBrief.findById(req.params.id);
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
     const aiSettings = await AppSettings.getSettings();
-    const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData, mnemonics, _quizWarnings } = await generateBriefContent(brief, aiSettings);
+    const { descriptionSections, keywords, subtitle, sources, easyQuestions, mediumQuestions, gameData, mnemonics, _quizWarnings } = await generateBriefContent(brief, aiSettings);
+    let enrichedSources = sources;
+    if (sources.length) {
+      try {
+        enrichedSources = await enrichSourceDates(sources);
+      } catch (srcErr) {
+        console.error('[regenerate-brief] source date enrichment failed (non-fatal):', srcErr.message);
+      }
+    }
     res.json({
       status: 'success',
       data: {
         descriptionSections,
         keywords,
+        ...(subtitle          ? { subtitle }                  : {}),
+        ...(enrichedSources.length ? { sources: enrichedSources } : {}),
         easyQuestions,
         mediumQuestions,
         ...(gameData  ? { gameData }  : {}),
@@ -2793,11 +2891,21 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
     const aiSettings = await AppSettings.getSettings();
     const generationWarnings = [];
 
-    // ── Part A: description + keywords + quiz + gameData + mnemonics ─────────
-    const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData, mnemonics, _quizWarnings } =
+    // ── Part A: description + keywords + subtitle + sources + quiz + gameData + mnemonics ──
+    const { descriptionSections, keywords, subtitle, sources, easyQuestions, mediumQuestions, gameData, mnemonics, _quizWarnings } =
       await generateBriefContent(brief, aiSettings);
     if (_quizWarnings?.length) {
       for (const w of _quizWarnings) generationWarnings.push(`Quiz: ${w}`);
+    }
+
+    // ── Part A2: Scrape real source publication dates ──────────────────────────
+    let enrichedSources = sources;
+    if (sources.length) {
+      try {
+        enrichedSources = await enrichSourceDates(sources);
+      } catch (srcErr) {
+        console.error('[bulk-generate-stub] source date enrichment failed (non-fatal):', srcErr.message);
+      }
     }
 
     // ── Part B: image (first result only) ────────────────────────────────────
@@ -2980,6 +3088,8 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
     // 3. Update brief fields
     brief.descriptionSections = descriptionSections;
     brief.keywords = keywords;
+    if (subtitle) brief.subtitle = subtitle;
+    if (enrichedSources.length) brief.sources = enrichedSources;
     brief.status = 'published';
     if (gameData) brief.gameData = gameData;
     if (mnemonics) brief.mnemonics = mnemonics;

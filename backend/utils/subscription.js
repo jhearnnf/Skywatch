@@ -22,7 +22,6 @@ function effectiveTier(user) {
 function getAccessibleCategories(tier, settings) {
   if (tier === 'gold') return null;
   if (tier === 'silver' || tier === 'trial') return settings.silverCategories ?? [];
-  if (tier === 'guest') return settings.guestCategories ?? ['News'];
   return settings.freeCategories ?? [];
 }
 

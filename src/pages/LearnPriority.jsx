@@ -176,10 +176,9 @@ function SyncHoverCard() {
   )
 }
 
-function SyncBadge({ onClick }) {
+function SyncBadge({ onClick, isCardOpen, onCardOpen, onCardClose }) {
   const [label, setLabel]         = useState(SYNC_BASE_TEXT)
   const [scanline, setScanline]   = useState(false)
-  const [cardVisible, setCardVisible] = useState(false)
   const [touchPhase, setTouchPhase]   = useState('idle')
   const dismissTimer       = useRef(null)
   const touchJustOpenedRef = useRef(false)
@@ -210,18 +209,18 @@ function SyncBadge({ onClick }) {
   // Dismiss timer cleanup
   useEffect(() => () => clearTimeout(dismissTimer.current), [])
 
-  const handleMouseEnter = () => { if (!isTouchRef.current) setCardVisible(true) }
-  const handleMouseLeave = () => { if (!isTouchRef.current) setCardVisible(false) }
+  const handleMouseEnter = () => { if (!isTouchRef.current) onCardOpen() }
+  const handleMouseLeave = () => { if (!isTouchRef.current) onCardClose() }
 
   const handleTouchStart = (e) => {
     if (!isTouchRef.current) return
     if (touchPhase === 'idle') {
       touchJustOpenedRef.current = true
-      setCardVisible(true)
+      onCardOpen()
       setTouchPhase('card-shown')
       clearTimeout(dismissTimer.current)
       dismissTimer.current = setTimeout(() => {
-        setCardVisible(false)
+        onCardClose()
         setTouchPhase('idle')
       }, 2500)
     }
@@ -239,7 +238,7 @@ function SyncBadge({ onClick }) {
       }
       if (touchPhase === 'card-shown') {
         clearTimeout(dismissTimer.current)
-        setCardVisible(false)
+        onCardClose()
         setTouchPhase('idle')
         onClick()
       }
@@ -310,7 +309,7 @@ function SyncBadge({ onClick }) {
       </motion.button>
 
       <AnimatePresence>
-        {cardVisible && <SyncHoverCard />}
+        {isCardOpen && <SyncHoverCard />}
       </AnimatePresence>
     </div>
   )
@@ -325,7 +324,7 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, aptitudeSyncEnabled, index }) {
+function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, aptitudeSyncEnabled, index, openSyncId, onCardOpen, onCardClose }) {
   const size         = milestone ? 72 : 60
   const isNext       = state === 'next'
   const isRead       = state === 'read'
@@ -511,7 +510,12 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
       {/* AptitudeSync badge — glitches in when stone scrolls into view */}
       <AnimatePresence>
         {showSync && (
-          <SyncBadge onClick={onSyncTap} />
+          <SyncBadge
+            onClick={onSyncTap}
+            isCardOpen={openSyncId === brief._id}
+            onCardOpen={() => onCardOpen(brief._id)}
+            onCardClose={onCardClose}
+          />
         )}
       </AnimatePresence>
 
@@ -588,6 +592,7 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
 
 function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction }) {
   const navigate = useNavigate()
+  const [openSyncId, setOpenSyncId] = useState(null)
 
   const variants = {
     enter:  (d) => ({ opacity: 0, x: d > 0 ? 80 : -80 }),
@@ -679,6 +684,9 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
             onSyncTap={() => navigate(`/aptitude-sync/${brief._id}`, { state: { briefTitle: brief.title, category: brief.category } })}
             quizPassed={quizPassedSet.has(brief._id)}
             aptitudeSyncEnabled={aptitudeSyncEnabled}
+            openSyncId={openSyncId}
+            onCardOpen={setOpenSyncId}
+            onCardClose={() => setOpenSyncId(null)}
           />
         )
       })}

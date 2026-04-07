@@ -22,11 +22,30 @@ function _playTypingOscillator(vol) {
     osc.frequency.setValueAtTime(freq, now)
     const gain = ctx.createGain()
     gain.gain.setValueAtTime(vol * 0.3, now)
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.003)
     osc.connect(gain)
     gain.connect(ctx.destination)
     osc.start(now)
-    osc.stop(now + 0.04)
+    osc.stop(now + 0.003)
+  } catch {}
+}
+
+// ── Grid reveal tone (Intel Brief image cell dissolve) ────────────────────────
+export function playGridRevealTone() {
+  try {
+    const ctx  = getTypingAudioCtx()
+    const now  = ctx.currentTime
+    const freq = 600 + Math.random() * 1400  // 600–2000 Hz — high, airy
+    const osc  = ctx.createOscillator()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(freq, now)
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.018, now)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.012)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(now)
+    osc.stop(now + 0.012)
   } catch {}
 }
 
