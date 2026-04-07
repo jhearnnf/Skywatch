@@ -258,10 +258,10 @@ router.get('/random-unlocked', optionalAuth, async (req, res) => {
 router.get('/random-in-progress', protect, async (req, res) => {
   try {
     const reads = await IntelligenceBriefRead.find({ userId: req.user._id, completed: false })
-      .populate('intelBriefId', 'title category _id')
+      .populate('intelBriefId', 'title category _id status')
       .lean();
 
-    const valid = reads.filter(r => r.intelBriefId);
+    const valid = reads.filter(r => r.intelBriefId && r.intelBriefId.status === 'published');
     if (!valid.length) return res.json({ status: 'success', data: null });
 
     const pick = valid[Math.floor(Math.random() * valid.length)];

@@ -193,7 +193,7 @@ router.get('/stats', async (_req, res) => {
       tutorialAgg,
       aptitudeSyncTotal,
       aptitudeSyncCompleted,
-      aptitudeSyncAbandoned,
+      aptitudeSyncAircoinsAgg,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ subscriptionTier: 'free' }),
@@ -252,10 +252,6 @@ router.get('/stats', async (_req, res) => {
         { $unwind: '$cardResults' },
         { $group: { _id: null, total: { $sum: { $ifNull: ['$cardResults.timeTakenSeconds', 0] } } } },
       ]),
-      // AptitudeSync
-      AptitudeSyncUsage.countDocuments(),
-      AptitudeSyncUsage.countDocuments({ completedAt: { $ne: null } }),
-      AptitudeSyncUsage.countDocuments({ abandoned: true }),
       // Tutorial viewed/skipped counts across all users and all 4 tutorial fields
       User.aggregate([{
         $group: {
@@ -274,7 +270,13 @@ router.get('/stats', async (_req, res) => {
           ]}},
         },
       }]),
+      // AptitudeSync
+      AptitudeSyncUsage.countDocuments(),
+      AptitudeSyncUsage.countDocuments({ completedAt: { $ne: null } }),
+      AptitudeSyncUsage.aggregate([{ $group: { _id: null, total: { $sum: { $ifNull: ['$aircoinsEarned', 0] } } } }]),
     ]);
+
+    const aptitudeSyncAbandoned = aptitudeSyncTotal - aptitudeSyncCompleted;
 
     // Combined login streaks — requires virtual, so fetch all users
     const allUsers      = await User.find({}).select('logins');
@@ -324,9 +326,10 @@ router.get('/stats', async (_req, res) => {
             totalSeconds: Math.round(flashTimeAgg[0]?.total ?? 0),
           },
           aptitudeSync: {
-            total:     aptitudeSyncTotal,
-            completed: aptitudeSyncCompleted,
-            abandoned: aptitudeSyncAbandoned,
+            total:          aptitudeSyncTotal,
+            completed:      aptitudeSyncCompleted,
+            abandoned:      aptitudeSyncAbandoned,
+            aircoinsEarned: aptitudeSyncAircoinsAgg[0]?.total ?? 0,
           },
         },
         briefs: { totalBrifsRead, totalBrifsOpened, totalReadSeconds: readTimeAgg[0]?.total ?? 0 },

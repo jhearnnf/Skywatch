@@ -56,8 +56,9 @@ router.get('/stats', protect, async (req, res) => {
     const flashTotal     = flashSessions.reduce((s, r) => s + (r.cardResults?.length ?? 0), 0);
     const flashRecalled  = flashSessions.reduce((s, r) => s + (r.cardResults?.filter(c => c.recalled).length ?? 0), 0);
 
+    const aptitudeSyncTotal     = await AptitudeSyncUsage.countDocuments({ userId: req.user._id });
     const aptitudeSyncPlayed    = await AptitudeSyncUsage.countDocuments({ userId: req.user._id, completedAt: { $ne: null } });
-    const aptitudeSyncAbandoned = await AptitudeSyncUsage.countDocuments({ userId: req.user._id, abandoned: true });
+    const aptitudeSyncAbandoned = aptitudeSyncTotal - aptitudeSyncPlayed;
 
     const gamesPlayed    = completedQuizAttempts + booPlayed + wtaPlayed + flashPlayed + aptitudeSyncPlayed;
     const abandonedGames = abandonedQuizAttempts + booAbandoned + wtaAbandoned + flashAbandoned + aptitudeSyncAbandoned;

@@ -261,6 +261,20 @@ function StatsTab({ API }) {
         </div>
       </section>
 
+      {/* Aptitude Sync */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Aptitude Sync</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Sessions"  value={fmtNum(games.aptitudeSync?.total)}                                         color="brand" />
+          <StatCard label="Completed" value={pct(games.aptitudeSync?.completed, games.aptitudeSync?.total)}             color="emerald" />
+          <StatCard label="Abandoned" value={pct(games.aptitudeSync?.abandoned, games.aptitudeSync?.total)}             color="red" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="Aircoins Earned" value={fmtNum(games.aptitudeSync?.aircoinsEarned)} color="amber" sub="across all sessions" />
+          <StatCard label="Avg per Session" value={fmtNum(games.aptitudeSync?.completed ? Math.round((games.aptitudeSync?.aircoinsEarned ?? 0) / games.aptitudeSync.completed) : 0)} color="slate" sub="completed sessions" />
+        </div>
+      </section>
+
       {/* Aircoins + Briefs + Tutorials */}
       <section>
         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Economy & Content</h3>
