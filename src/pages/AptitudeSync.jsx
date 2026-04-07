@@ -83,88 +83,89 @@ const SKYWATCH_ASCII_LOGO = [
   '                                                ####                                                ',
 ].join('\n')
 
-// ── CRT loading overlay — shown inside the terminal window during apiFetch ───
-const MATRIX_CHARS = '01アイウエオカキクケコサシスセソタチツテトナニヌネノ!@#$%^&*<>[]{}|\\/'
-const NUM_COLS = 18
+// ── Diagnostic loading overlay — checklist + segmented progress bar ──────────
+const DIAG_STEPS = [
+  'VERIFYING AGENT IDENTITY',
+  'CHECKING CLEARANCE LEVEL',
+  'LOADING APTITUDE PROFILE',
+  'CALIBRATING ASSESSMENT MODULE',
+  'ESTABLISHING SECURE CHANNEL',
+  'SYNCING MISSION DATA',
+]
+const BAR_SEGMENTS = 20
 
 function CrtLoadingOverlay() {
-  const [cols, setCols] = useState(() =>
-    Array.from({ length: NUM_COLS }, (_, i) => ({
-      id:    i,
-      chars: Array.from({ length: 12 }, () => MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)]),
-      delay: (i * 0.19) % 2.1,
-      dur:   1.6 + (i * 0.13) % 1.2,
-      x:     (i / NUM_COLS) * 100,
-    }))
-  )
   const [tick, setTick] = useState(0)
 
-  // Randomly mutate a few chars each frame to give the rain a live feel
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 120)
+    const id = setInterval(() => setTick(t => t + 1), 180)
     return () => clearInterval(id)
   }, [])
 
-  useEffect(() => {
-    setCols(prev => prev.map(col => ({
-      ...col,
-      chars: col.chars.map(ch =>
-        Math.random() < 0.15
-          ? MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)]
-          : ch
-      ),
-    })))
-  }, [tick])
+  // Each step resolves after ~3 ticks; cycle through steps
+  const totalTicks   = DIAG_STEPS.length * 3
+  const loopTick     = tick % totalTicks
+  const resolvedCount = Math.floor(loopTick / 3)           // steps fully [OK]
+  const activeStep    = Math.min(resolvedCount, DIAG_STEPS.length - 1)
+  const activeDots    = loopTick % 3                        // 0,1,2 → ".", "..", "..."
 
-  const STATUS_LINES = ['SYNCING CHANNEL', 'ESTABLISHING LINK', 'AWAITING SIGNAL']
-  const statusIdx = Math.floor(tick / 6) % STATUS_LINES.length
+  // Progress bar: fills proportionally to loopTick
+  const fillCount = Math.round((loopTick / totalTicks) * BAR_SEGMENTS)
 
   return (
     <div
       className="pointer-events-none absolute inset-0 z-[60] rounded-lg overflow-hidden flex flex-col items-center justify-center"
-      style={{ background: 'rgba(3,13,24,0.88)', backdropFilter: 'blur(2px)' }}
+      style={{ background: 'rgba(3,13,24,0.92)', backdropFilter: 'blur(2px)' }}
     >
-      {/* Matrix rain columns */}
-      {cols.map(col => (
-        <div
-          key={col.id}
-          className="absolute top-0 flex flex-col items-center font-mono text-xs select-none"
-          style={{
-            left:      `${col.x}%`,
-            width:     `${100 / NUM_COLS}%`,
-            animation: `apt-matrix-col ${col.dur}s linear ${col.delay}s infinite`,
-            color:     G_DIM,
-            lineHeight: 1.45,
-            textShadow: `0 0 6px ${G_DIM}`,
-          }}
-        >
-          {col.chars.map((ch, i) => (
-            <span
-              key={i}
-              style={{
-                color:      i === col.chars.length - 1 ? G_BRIGHT : i > col.chars.length - 4 ? G_MID : G_DIM,
-                textShadow: i === col.chars.length - 1 ? `0 0 10px ${G_BRIGHT}` : undefined,
-                opacity:    1 - i * 0.06,
-              }}
-            >
-              {ch}
-            </span>
-          ))}
-        </div>
-      ))}
-
-      {/* Status label */}
       <div
-        className="relative z-10 flex flex-col items-center gap-2 px-6 py-4 rounded"
-        style={{ background: 'rgba(3,13,24,0.75)', border: `1px solid ${G_DIM}` }}
+        className="flex flex-col gap-1 px-7 py-5 rounded font-mono text-xs"
+        style={{ border: `1px solid ${G_DIM}`, minWidth: 300, background: 'rgba(6,16,30,0.85)' }}
       >
-        <span
-          className="font-mono text-xs tracking-[0.3em] uppercase"
-          style={{ color: G_BRIGHT, textShadow: `0 0 12px ${G_BRIGHT}` }}
-        >
-          {STATUS_LINES[statusIdx]}
-          <span className="apt-loader-cursor">_</span>
-        </span>
+        {/* Diagnostic checklist */}
+        {DIAG_STEPS.map((label, i) => {
+          const resolved = i < resolvedCount
+          const active   = i === activeStep && !resolved
+          return (
+            <div key={i} className="flex items-center gap-3" style={{ opacity: i > activeStep ? 0.25 : 1 }}>
+              <span style={{
+                color:      resolved ? G_BRIGHT : active ? G_AMBER : G_DIM,
+                textShadow: resolved ? `0 0 8px ${G_BRIGHT}` : active ? `0 0 8px ${G_AMBER}` : 'none',
+                minWidth:   36,
+              }}>
+                {resolved ? '[OK]' : active ? `[${'.'.repeat(activeDots + 1)}]` : '[  ]'}
+              </span>
+              <span style={{ color: resolved ? G_MID : active ? G_WHITE : G_DIM, letterSpacing: '0.08em' }}>
+                {label}
+              </span>
+            </div>
+          )
+        })}
+
+        {/* Divider */}
+        <div style={{ borderTop: `1px solid ${G_DIM}`, margin: '6px 0 4px' }} />
+
+        {/* Segmented progress bar */}
+        <div className="flex flex-col gap-1">
+          <div className="flex gap-[3px]">
+            {Array.from({ length: BAR_SEGMENTS }, (_, i) => (
+              <div
+                key={i}
+                style={{
+                  flex:       1,
+                  height:     8,
+                  background: i < fillCount ? G_BRIGHT : G_DIM,
+                  opacity:    i < fillCount ? 1 : 0.3,
+                  boxShadow:  i < fillCount ? `0 0 4px ${G_BRIGHT}` : 'none',
+                  transition: 'background 0.15s',
+                }}
+              />
+            ))}
+          </div>
+          <div className="flex justify-between" style={{ color: G_DIM, letterSpacing: '0.1em' }}>
+            <span>LOADING</span>
+            <span style={{ color: G_BRIGHT }}>{Math.round((fillCount / BAR_SEGMENTS) * 100)}%</span>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -503,6 +504,13 @@ export default function AptitudeSync() {
 
   const inputRef  = useRef(null)
   const bottomRef = useRef(null)
+
+  // ── Lock page scroll (keyboard on mobile causes unwanted page scroll) ────────
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
 
   // ── Fetch brief title if not passed via state ─────────────────────────────
   useEffect(() => {
@@ -843,17 +851,6 @@ export default function AptitudeSync() {
         .apt-objective-pulse {
           animation: apt-objective-pulse 1.6s ease-in-out infinite;
         }
-        @keyframes apt-matrix-col {
-          0%   { transform: translateY(-100%); opacity: 0; }
-          8%   { opacity: 1; }
-          92%  { opacity: 0.6; }
-          100% { transform: translateY(100%); opacity: 0; }
-        }
-        @keyframes apt-loader-blink {
-          0%,100% { opacity: 1; }
-          50%      { opacity: 0; }
-        }
-        .apt-loader-cursor { animation: apt-loader-blink 0.9s step-end infinite; }
       `}</style>
 
       {/* Page wrapper — flex column that fills exactly the available viewport height.
