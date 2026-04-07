@@ -225,17 +225,28 @@ function ImageGridReveal({ src, isFirstSeen, alt, imgClassName, imgStyle }) {
   const showGrid = isFirstSeen
 
   // Per-cell delays computed once at mount
-  const [cells] = useState(() =>
-    Array.from({ length: N_CELLS }, (_, i) => {
-      const lum = Math.floor(Math.random() * 36)      // 0–35: black → dark blue
-      const blue = Math.floor(lum * 2.2)               // blue channel scales faster
+  const [cells] = useState(() => {
+    // Randomly pick which part of the top row clears last
+    const r = Math.random()
+    const colDelay = r < 0.33
+      ? col => col * 14                                                          // ends top-left
+      : r < 0.66
+      ? col => (GRID_COLS - 1 - col) * 28                                       // ends top-right
+      : col => (Math.floor(GRID_COLS / 2) - Math.abs(col - Math.floor(GRID_COLS / 2))) * 40 // ends top-centre
+
+    return Array.from({ length: N_CELLS }, (_, i) => {
+      const row = Math.floor(i / GRID_COLS)
+      const col = i % GRID_COLS
+      const lum = Math.floor(Math.random() * 36)
+      const blue = Math.floor(lum * 2.2)
       const bg = `rgb(0, ${Math.floor(lum * 0.4)}, ${blue})`
       return {
-        delay: Math.floor(i / GRID_COLS) * 48 + (i % GRID_COLS) * 15 + Math.floor(Math.random() * 22) + (Math.random() < 0.25 ? 100 + Math.floor(Math.random() * 100) : 0) + (Math.random() < 0.025 ? 400 + Math.floor(Math.random() * 600) : 0) - 900,
+        delay: (GRID_ROWS - 1 - row) * 90 + colDelay(col) + Math.floor(Math.random() * 22) + (Math.random() < 0.25 ? 100 + Math.floor(Math.random() * 100) : 0) + (Math.random() < 0.025 ? 400 + Math.floor(Math.random() * 600) : 0) - 1800,
         dur:   160 + Math.floor(Math.random() * 80),
         bg,
       }
-    }))
+    })
+  })
 
   // Fire a tone for each cell timed to match its animation delay
   useEffect(() => {

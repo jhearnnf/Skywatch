@@ -504,15 +504,14 @@ body.play-mode .card-shadow {
 
 /* ── Blueprint grid reveal ────────────────────────────────────────────────── */
 @keyframes blueprint-reveal {
-  0%   { opacity: 1; background-color: #060f1c; border-color: rgba(91, 170, 255, 0.35); }
-  10%  { opacity: 1; background-color: rgba(30, 100, 220, 0.75); border-color: rgba(130, 200, 255, 0.9); box-shadow: inset 0 0 6px rgba(91, 170, 255, 0.7), 0 0 4px rgba(91, 170, 255, 0.4); }
-  30%  { opacity: 0.85; background-color: rgba(20, 60, 160, 0.4); border-color: rgba(91, 170, 255, 0.55); box-shadow: inset 0 0 3px rgba(91, 170, 255, 0.3); }
-  100% { opacity: 0; background-color: transparent; border-color: transparent; box-shadow: none; }
+  0%   { opacity: 1; background-color: #060f1c; }
+  10%  { opacity: 1; background-color: rgba(30, 100, 220, 0.75); box-shadow: inset 0 0 6px rgba(91, 170, 255, 0.7), 0 0 4px rgba(91, 170, 255, 0.4); }
+  30%  { opacity: 0.85; background-color: rgba(20, 60, 160, 0.4); box-shadow: inset 0 0 3px rgba(91, 170, 255, 0.3); }
+  100% { opacity: 0; background-color: transparent; box-shadow: none; }
 }
 
 .blueprint-cell {
   background-color: #0a1f40;
-  border: 1px solid rgba(91, 170, 255, 0.35);
   opacity: 1;
   animation: blueprint-reveal 240ms ease-out forwards;
 }
