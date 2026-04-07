@@ -123,6 +123,7 @@ export default function FlashcardGameModal({ onClose }) {
   const [cardStart,     setCardStart]     = useState(null)
   const [submitting,    setSubmitting]    = useState(false)
   const [resultData,    setResultData]    = useState(null)
+  const [expanded,      setExpanded]      = useState(new Set())
 
   const timerRef      = useRef(null)
   const gameFinished  = useRef(false)  // true once finishGame resolves or game reaches result screen
@@ -200,7 +201,7 @@ export default function FlashcardGameModal({ onClose }) {
     const card = cards[cardIdx]
     if (!card) return
     const elapsed = Math.round((Date.now() - (cardStart ?? Date.now())) / 1000)
-    setFeedback({ correct: false, correctTitle: null })
+    setFeedback({ correct: false, correctTitle: allTitles.find(t => t._id.toString() === card.intelBriefId.toString())?.title ?? '' })
     playSound('flashcard_incorrect')
     setCardResults(prev => [...prev, { intelBriefId: card.intelBriefId, recalled: false, timeTakenSeconds: elapsed }])
     setTimeout(() => advanceCard(), 1200)
@@ -291,8 +292,10 @@ export default function FlashcardGameModal({ onClose }) {
         rankPromotion,
         cardBreakdown:  results.map((r, i) => ({
           ...r,
-          briefTitle: allTitles.find(t => t._id.toString() === r.intelBriefId.toString())?.title ?? 'Unknown',
-          cardCategory: cards[i]?.category ?? '',
+          briefTitle:      allTitles.find(t => t._id.toString() === r.intelBriefId.toString())?.title ?? 'Unknown',
+          cardCategory:    cards[i]?.category ?? '',
+          cardSubcategory: cards[i]?.subcategory ?? '',
+          contentSnippet:  cards[i]?.contentSnippet ?? '',
         })),
       })
       setScreen('result')
@@ -317,6 +320,7 @@ export default function FlashcardGameModal({ onClose }) {
     setCardResults([])
     setFeedback(null)
     setResultData(null)
+    setExpanded(new Set())
   }
 
   const currentCard = cards[cardIdx]
@@ -555,22 +559,78 @@ export default function FlashcardGameModal({ onClose }) {
             </div>
 
             {/* Card breakdown */}
-            <div className="px-4 py-4 max-h-48 overflow-y-auto space-y-1.5" data-testid="flashcard-breakdown">
-              {resultData.cardBreakdown.map((r, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 px-3 py-2 rounded-xl"
-                  style={{ background: r.recalled ? 'rgba(16,185,129,0.07)' : 'rgba(239,68,68,0.07)' }}
-                >
-                  <span className="text-sm shrink-0" style={{ color: r.recalled ? '#10b981' : '#ef4444' }}>
-                    {r.recalled ? '✓' : '✗'}
-                  </span>
-                  <p className="text-xs font-medium truncate" style={{ color: r.recalled ? '#a7f3d0' : '#fca5a5' }}>
-                    {r.briefTitle}
-                  </p>
-                  <span className="text-[10px] shrink-0 ml-auto" style={{ color: '#475569' }}>{r.timeTakenSeconds}s</span>
-                </div>
-              ))}
+            <div className="px-4 py-4 max-h-64 overflow-y-auto space-y-1.5" data-testid="flashcard-breakdown">
+              {resultData.cardBreakdown.map((r, i) => {
+                const isOpen = expanded.has(i)
+                const hasSnippet = !!r.contentSnippet
+                return (
+                  <div
+                    key={i}
+                    className="rounded-xl overflow-hidden"
+                    style={{ background: r.recalled ? 'rgba(16,185,129,0.07)' : 'rgba(239,68,68,0.07)' }}
+                  >
+                    {/* Row header */}
+                    <div
+                      className="flex items-center gap-3 px-3 py-2"
+                      onClick={() => hasSnippet && setExpanded(prev => {
+                        const s = new Set(prev)
+                        s.has(i) ? s.delete(i) : s.add(i)
+                        return s
+                      })}
+                      style={{ cursor: hasSnippet ? 'pointer' : 'default' }}
+                    >
+                      <span className="text-sm shrink-0" style={{ color: r.recalled ? '#10b981' : '#ef4444' }}>
+                        {r.recalled ? '✓' : '✗'}
+                      </span>
+                      <p className="text-xs font-medium truncate flex-1" style={{ color: r.recalled ? '#a7f3d0' : '#fca5a5' }}>
+                        {r.briefTitle}
+                      </p>
+                      <span className="text-[10px] shrink-0" style={{ color: '#475569' }}>{r.timeTakenSeconds}s</span>
+                      {hasSnippet && (
+                        <button
+                          className="shrink-0 w-5 h-5 flex items-center justify-center rounded transition-transform"
+                          style={{
+                            color: '#f59e0b',
+                            transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                            transition: 'transform 0.18s ease',
+                          }}
+                          aria-label={isOpen ? 'Collapse' : 'Expand'}
+                        >
+                          ›
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Expandable snippet */}
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          key="snippet"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: 'easeInOut' }}
+                          style={{ overflow: 'hidden' }}
+                        >
+                          <div
+                            className="px-3 pb-3 pt-1"
+                            style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
+                          >
+                            {(r.cardCategory || r.cardSubcategory) && (
+                              <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: '#f59e0b' }}>
+                                {r.cardCategory}{r.cardSubcategory ? ` · ${r.cardSubcategory}` : ''}
+                              </p>
+                            )}
+                            <p className="text-xs leading-relaxed" style={{ color: '#94a3b8' }}>
+                              {r.contentSnippet}
+                            </p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )
+              })}
             </div>
 
             {/* Actions */}

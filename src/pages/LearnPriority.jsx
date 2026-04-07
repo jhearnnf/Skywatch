@@ -176,9 +176,9 @@ function SyncHoverCard() {
   )
 }
 
-function SyncBadge({ onClick, isCardOpen, onCardOpen, onCardClose }) {
+function SyncBadge({ onClick, isCardOpen, onCardOpen, onCardClose, index = 0 }) {
   const [label, setLabel]         = useState(SYNC_BASE_TEXT)
-  const [scanline, setScanline]   = useState(false)
+  const [scanline, setScanline]   = useState(0) // 0 = off, 0–1 = intensity
   const [touchPhase, setTouchPhase]   = useState('idle')
   const dismissTimer       = useRef(null)
   const touchJustOpenedRef = useRef(false)
@@ -187,7 +187,7 @@ function SyncBadge({ onClick, isCardOpen, onCardOpen, onCardClose }) {
     ('ontouchstart' in window || navigator.maxTouchPoints > 0)
   )
 
-  // Glitch effect
+  // Glitch effect — staggered by index so multiple badges don't all fire at once
   useEffect(() => {
     let tid
     const fire = () => {
@@ -197,14 +197,16 @@ function SyncBadge({ onClick, isCardOpen, onCardOpen, onCardClose }) {
         const idx = Math.floor(Math.random() * SYNC_BASE_TEXT.length)
         chars[idx] = SYNC_GLITCH_CHARS[Math.floor(Math.random() * SYNC_GLITCH_CHARS.length)]
       }
+      const intensity = 0.15 + Math.random() * 0.85  // 0.15 (faint) → 1.0 (full)
       setLabel(chars.join(''))
-      setScanline(true)
-      setTimeout(() => { setLabel(SYNC_BASE_TEXT); setScanline(false) }, 55 + Math.random() * 90)
-      tid = setTimeout(fire, 1600 + Math.random() * 2800)
+      setScanline(intensity)
+      setTimeout(() => { setLabel(SYNC_BASE_TEXT); setScanline(0) }, 55 + Math.random() * 90)
+      tid = setTimeout(fire, 4000 + Math.random() * 5000)
     }
-    tid = setTimeout(fire, 700 + Math.random() * 1400)
+    // Spread initial fires across a 4 s window based on position in the list
+    tid = setTimeout(fire, 800 + (index % 6) * 650 + Math.random() * 600)
     return () => clearTimeout(tid)
-  }, [])
+  }, [index])
 
   // Dismiss timer cleanup
   useEffect(() => () => clearTimeout(dismissTimer.current), [])
@@ -279,16 +281,21 @@ function SyncBadge({ onClick, isCardOpen, onCardOpen, onCardClose }) {
           textTransform: 'uppercase',
           padding:       '3px 7px',
           borderRadius:  '4px',
-          background:    scanline ? '#0a1e30' : '#030d18',
+          background:    scanline ? `rgba(10,30,48,${0.4 + scanline * 0.6})` : '#030d18',
           border:        '1px solid #1a4060',
           borderLeft:    '2px solid #2d8ad4',
-          color:         scanline ? '#4ab0f5' : '#2066a0',
+          color:         scanline
+            ? `rgba(${Math.round(32 + scanline * 42)},${Math.round(102 + scanline * 68)},${Math.round(160 + scanline * 85)},1)`
+            : '#2066a0',
           cursor:        'pointer',
           whiteSpace:    'nowrap',
           lineHeight:    1.5,
           flexShrink:    0,
           transition:    'color 0.15s, border-color 0.15s, background 0.15s, text-shadow 0.15s, box-shadow 0.15s',
-          boxShadow:     scanline ? 'inset 0 0 8px #0d2d4a, 0 0 4px #1a4a70' : 'inset 0 0 4px #060f1a',
+          textShadow:    scanline && scanline > 0.5 ? `0 0 ${Math.round(scanline * 6)}px rgba(45,138,212,${scanline * 0.7})` : 'none',
+          boxShadow:     scanline
+            ? `inset 0 0 ${Math.round(4 + scanline * 6)}px rgba(13,45,74,${scanline}), 0 0 ${Math.round(scanline * 5)}px rgba(26,74,112,${scanline * 0.6})`
+            : 'inset 0 0 4px #060f1a',
           position:      'relative',
           overflow:      'visible',
         }}
@@ -515,6 +522,7 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
             isCardOpen={openSyncId === brief._id}
             onCardOpen={() => onCardOpen(brief._id)}
             onCardClose={onCardClose}
+            index={index}
           />
         )}
       </AnimatePresence>

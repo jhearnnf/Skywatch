@@ -9,6 +9,7 @@ const TYPE_LABELS = {
   wheres_aircraft:      "Where's That Aircraft",
   order_of_battle: 'Battle of Order',
   flashcard:       'Flashcard Recall',
+  aptitude_sync:   'APTITUDE_SYNC',
 }
 const TYPE_ICONS = {
   quiz:            '🎯',
@@ -16,6 +17,7 @@ const TYPE_ICONS = {
   wheres_aircraft:      '✈️',
   order_of_battle: '📋',
   flashcard:       '🃏',
+  aptitude_sync:   '🧠',
 }
 const ORDER_TYPE_META = {
   speed:           { label: 'Top Speed',       direction: 'Slowest → Fastest',    startLabel: 'Slowest',     endLabel: 'Fastest'     },
@@ -61,6 +63,10 @@ function StatusBadge({ session }) {
     if (session.won)                   return <span className={`${cls} bg-amber-100 text-amber-700`}>Full Mission</span>
     if (session.status === 'partial')  return <span className={`${cls} bg-emerald-100 text-emerald-700`}>Round 1 Only</span>
     return <span className={`${cls} bg-red-100 text-red-600`}>Mission Failed</span>
+  }
+  if (session.type === 'aptitude_sync') {
+    if (session.status === 'abandoned') return <span className={`${cls} bg-slate-100 text-slate-500`}>Abandoned</span>
+    return <span className={`${cls} bg-emerald-100 text-emerald-700`}>Completed</span>
   }
   if (session.isCorrect) return <span className={`${cls} bg-emerald-100 text-emerald-700`}>Correct</span>
   return <span className={`${cls} bg-red-100 text-red-600`}>Incorrect</span>
@@ -276,6 +282,51 @@ function BooOrderDrillDown({ sessionId, API }) {
   )
 }
 
+function FlashcardCardRow({ c, index }) {
+  const [open, setOpen] = useState(false)
+  const hasSnippet = !!c.contentSnippet
+
+  return (
+    <div className={`rounded-xl border text-xs ${c.recalled ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+      <div
+        className={`flex items-center gap-2 p-3 ${hasSnippet ? 'cursor-pointer select-none' : ''}`}
+        onClick={() => hasSnippet && setOpen(o => !o)}
+      >
+        <span className="font-semibold text-slate-700 truncate flex-1 pr-1">{c.briefTitle}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          {formatTime(c.timeTakenSeconds) && (
+            <span className="text-slate-400">{formatTime(c.timeTakenSeconds)}</span>
+          )}
+          <span className={c.recalled ? 'text-emerald-700 font-bold' : 'text-red-600 font-bold'}>
+            {c.recalled ? '✓ Recalled' : '✗ Missed'}
+          </span>
+          {hasSnippet && (
+            <span className="text-slate-400 text-[10px]">{open ? '▲' : '▼'}</span>
+          )}
+        </div>
+      </div>
+      <AnimatePresence>
+        {open && hasSnippet && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div
+              className="px-3 pb-3 pt-1 border-t text-[11px] leading-relaxed text-slate-600"
+              style={{ borderColor: c.recalled ? '#a7f3d0' : '#fecaca' }}
+            >
+              {c.contentSnippet}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 function FlashcardDrillDown({ sessionId, API }) {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
@@ -304,130 +355,31 @@ function FlashcardDrillDown({ sessionId, API }) {
         {data.abandoned && <span className="ml-2 text-slate-400 normal-case font-normal">(abandoned)</span>}
       </p>
       {data.cards.map((c, i) => (
-        <div
-          key={i}
-          className={`rounded-xl p-3 border text-xs ${c.recalled ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-slate-700 truncate pr-2">{c.briefTitle}</span>
-            <div className="flex items-center gap-2 shrink-0">
-              {formatTime(c.timeTakenSeconds) && (
-                <span className="text-slate-400">{formatTime(c.timeTakenSeconds)}</span>
-              )}
-              <span className={c.recalled ? 'text-emerald-700 font-bold' : 'text-red-600 font-bold'}>
-                {c.recalled ? '✓ Recalled' : '✗ Missed'}
-              </span>
-            </div>
-          </div>
-        </div>
+        <FlashcardCardRow key={i} c={c} index={i} />
       ))}
     </div>
   )
 }
 
-// ── APTITUDE_SYNC debrief row ─────────────────────────────────────────────────
-function AptitudeSyncRow({ session, index }) {
-  const [expanded, setExpanded] = useState(false)
-  const hasDrillDown = !!(session.finalSummary || session.knowledgeGaps)
-
+function AptitudeSyncDrillDown({ session }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: index * 0.04 }}
-      className="border-b border-slate-100 last:border-0"
-    >
-      <div
-        className={`flex items-center gap-3 px-4 py-3 ${hasDrillDown ? 'cursor-pointer hover:bg-slate-50 transition-colors' : ''}`}
-        onClick={() => hasDrillDown && setExpanded(e => !e)}
-        role={hasDrillDown ? 'button' : undefined}
-        tabIndex={hasDrillDown ? 0 : undefined}
-        onKeyDown={e => hasDrillDown && (e.key === 'Enter' || e.key === ' ') && setExpanded(v => !v)}
-      >
-        <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 text-lg">
-          🧠
+    <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 space-y-3">
+      {session.finalSummary && (
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Debrief Summary</p>
+          <p className="text-xs text-slate-700 leading-relaxed">{session.finalSummary}</p>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-            <span className="text-sm font-bold text-slate-800">APTITUDE_SYNC</span>
-            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Completed</span>
-            {session.aircoinsEarned != null && session.aircoinsEarned > 0 && (
-              <span className="text-[10px] font-bold text-amber-600">+{session.aircoinsEarned} ⭐</span>
-            )}
-          </div>
-          {session.briefTitle && (
-            <p className="text-xs text-slate-500 truncate">{session.briefTitle}</p>
+      )}
+      {session.knowledgeGaps && (
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Knowledge Gaps — Correct Answers</p>
+          {session.knowledgeGaps === 'No significant gaps.' ? (
+            <p className="text-xs text-emerald-600 font-semibold">No significant gaps — outstanding recall.</p>
+          ) : (
+            <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{session.knowledgeGaps}</p>
           )}
-          <span className="text-[10px] text-slate-400">{formatDate(session.completedAt ?? session.date)}</span>
         </div>
-        {hasDrillDown && (
-          <span className="text-slate-400 text-xs shrink-0">{expanded ? '▲' : '▼'}</span>
-        )}
-      </div>
-
-      <AnimatePresence>
-        {expanded && hasDrillDown && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div className="border-t border-slate-100 bg-slate-50 px-4 py-3 space-y-3">
-              {session.finalSummary && (
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Debrief Summary</p>
-                  <p className="text-xs text-slate-700 leading-relaxed">{session.finalSummary}</p>
-                </div>
-              )}
-              {session.knowledgeGaps && (
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Knowledge Gaps — Correct Answers</p>
-                  {session.knowledgeGaps === 'No significant gaps.' ? (
-                    <p className="text-xs text-emerald-600 font-semibold">No significant gaps — outstanding recall.</p>
-                  ) : (
-                    <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{session.knowledgeGaps}</p>
-                  )}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  )
-}
-
-function AptitudeSyncSection({ API, apiFetch }) {
-  const [sessions, setSessions] = useState([])
-  const [loading,  setLoading]  = useState(true)
-
-  useEffect(() => {
-    apiFetch(`${API}/api/aptitude-sync/history?limit=10`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => { if (Array.isArray(d?.data)) setSessions(d.data) })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [API, apiFetch])
-
-  if (loading) return (
-    <div className="space-y-2 mb-6">
-      <div className="h-5 w-40 bg-slate-100 rounded animate-pulse mb-2" />
-      {[0, 1].map(i => <div key={i} className="bg-surface rounded-2xl p-4 border border-slate-100 animate-pulse h-16" />)}
-    </div>
-  )
-
-  if (sessions.length === 0) return null
-
-  return (
-    <div className="mb-6">
-      <h2 className="text-sm font-extrabold text-slate-700 uppercase tracking-wider mb-2">APTITUDE_SYNC Debriefs</h2>
-      <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
-        {sessions.map((s, i) => (
-          <AptitudeSyncRow key={s.id} session={s} index={i} />
-        ))}
-      </div>
+      )}
     </div>
   )
 }
@@ -507,6 +459,7 @@ function SessionRow({ session, API, index }) {
             {session.type === 'order_of_battle' && <BooOrderDrillDown   sessionId={session._id} API={API} />}
             {session.type === 'wheres_aircraft' && <WtaDrillDown        sessionId={session._id} API={API} />}
             {session.type === 'flashcard'       && <FlashcardDrillDown  sessionId={session._id} API={API} />}
+            {session.type === 'aptitude_sync'   && <AptitudeSyncDrillDown session={session} />}
           </motion.div>
         )}
       </AnimatePresence>
@@ -577,6 +530,7 @@ export default function GameHistory() {
             { val: 'order_of_battle', label: '📋 Battle of Order' },
             { val: 'wheres_aircraft', label: "✈️ Where's That Aircraft" },
             { val: 'flashcard',       label: '🃏 Flashcard' },
+            { val: 'aptitude_sync',   label: '🧠 APTITUDE_SYNC' },
           ].map(({ val, label }) => (
             <button
               key={val}
@@ -611,8 +565,6 @@ export default function GameHistory() {
           ))}
         </div>
       </div>
-
-      <AptitudeSyncSection API={API} apiFetch={apiFetch} />
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-2xl mb-4">{error}</div>

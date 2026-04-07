@@ -502,8 +502,25 @@ export default function AptitudeSync() {
   const [pulseObjective, setPulseObjective] = useState(false)
   const [textGlitch,     setTextGlitch]     = useState(null) // { x, y, char } | null
 
-  const inputRef  = useRef(null)
-  const bottomRef = useRef(null)
+  const inputRef          = useRef(null)
+  const bottomRef         = useRef(null)
+  const phaseRef          = useRef('loading')
+  const sessionStartedRef = useRef(false)
+
+  useEffect(() => { phaseRef.current = phase }, [phase])
+
+  // Fire abandon if user leaves mid-session (after first AI response, before completion)
+  useEffect(() => {
+    return () => {
+      if (sessionStartedRef.current && phaseRef.current !== 'complete') {
+        fetch(`${API}/api/aptitude-sync/${briefId}/abandon`, {
+          method: 'POST',
+          credentials: 'include',
+          keepalive: true,
+        }).catch(() => {})
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Lock page scroll (keyboard on mobile causes unwanted page scroll) ────────
   useEffect(() => {
@@ -666,6 +683,7 @@ export default function AptitudeSync() {
       const roundCoins = aircoins ?? 0
       const newTotal   = Math.min(20, sessionCoins + roundCoins)
       setSessionCoins(newTotal)
+      sessionStartedRef.current = true
 
       // Add AI response lines
       const aiLines = [
@@ -673,7 +691,7 @@ export default function AptitudeSync() {
         { text: response ?? '', type: 'ai' },
         { text: '', type: 'blank' },
         { text: `> INTELLIGENCE VALUE THIS ROUND:  +${roundCoins} AIRCOIN${roundCoins !== 1 ? 'S' : ''}`, type: 'coin' },
-        { text: `> RUNNING TOTAL:  ${newTotal}/20 AIRCOINS`, type: 'coin' },
+        { text: `> RUNNING TOTAL:  ${newTotal} AIRCOINS`, type: 'coin' },
         { text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', type: 'divider' },
         { text: '', type: 'blank' },
       ]

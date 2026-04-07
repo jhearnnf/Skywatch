@@ -12,6 +12,7 @@ const aptitudeSyncUsageSchema = new mongoose.Schema({
   knowledgeGaps: { type: String, default: null }, // missed/incorrect facts with correct answers
   aircoinsEarned: { type: Number, default: null }, // total awarded at end of session
   completedAt:   { type: Date,   default: null },
+  abandoned:     { type: Boolean, default: false },
 }, { timestamps: false });
 
 // Enforce uniqueness: one slot per user per brief per day

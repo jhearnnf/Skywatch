@@ -382,6 +382,35 @@ router.post('/:briefId/award', protect, async (req, res) => {
   }
 });
 
+// ── POST /api/aptitude-sync/:briefId/abandon ─────────────────────────────────
+// Called when the user exits mid-session (before the final round completes).
+// Marks the usage record as abandoned so it shows up correctly in stats.
+router.post('/:briefId/abandon', protect, async (req, res) => {
+  try {
+    const { briefId } = req.params;
+    const today       = todayUTC();
+    const session     = await AptitudeSyncUsage.findOne({
+      userId: req.user._id,
+      briefId,
+      date: today,
+      completedAt: null,
+      abandoned: false,
+    });
+    if (!session) {
+      // Already completed, already abandoned, or never started — nothing to do
+      return res.json({ data: { abandoned: false } });
+    }
+    await AptitudeSyncUsage.updateOne(
+      { _id: session._id },
+      { $set: { abandoned: true } },
+    );
+    return res.json({ data: { abandoned: true } });
+  } catch (err) {
+    console.error('APTITUDE_SYNC abandon error:', err);
+    res.status(500).json({ error: 'ABANDON_FAILED' });
+  }
+});
+
 // ── GET /api/aptitude-sync/history ───────────────────────────────────────────
 // Returns completed APTITUDE_SYNC sessions for the current user (most recent first).
 // Only returns sessions that have a finalSummary or finalResponse (i.e. completed).

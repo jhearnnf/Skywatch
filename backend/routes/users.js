@@ -15,6 +15,7 @@ const AppSettings = require('../models/AppSettings');
 const Level = require('../models/Level');
 const Rank = require('../models/Rank');
 const AircoinLog = require('../models/AircoinLog');
+const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 
 // GET /api/users/stats — current user's stats for profile page
 router.get('/stats', protect, async (req, res) => {
@@ -55,8 +56,11 @@ router.get('/stats', protect, async (req, res) => {
     const flashTotal     = flashSessions.reduce((s, r) => s + (r.cardResults?.length ?? 0), 0);
     const flashRecalled  = flashSessions.reduce((s, r) => s + (r.cardResults?.filter(c => c.recalled).length ?? 0), 0);
 
-    const gamesPlayed    = completedQuizAttempts + booPlayed + wtaPlayed + flashPlayed;
-    const abandonedGames = abandonedQuizAttempts + booAbandoned + wtaAbandoned + flashAbandoned;
+    const aptitudeSyncPlayed    = await AptitudeSyncUsage.countDocuments({ userId: req.user._id, completedAt: { $ne: null } });
+    const aptitudeSyncAbandoned = await AptitudeSyncUsage.countDocuments({ userId: req.user._id, abandoned: true });
+
+    const gamesPlayed    = completedQuizAttempts + booPlayed + wtaPlayed + flashPlayed + aptitudeSyncPlayed;
+    const abandonedGames = abandonedQuizAttempts + booAbandoned + wtaAbandoned + flashAbandoned + aptitudeSyncAbandoned;
     const totalDataPoints = quizAnswered + booPlayed + wtaPlayed + flashTotal;
     const winPercent = totalDataPoints > 0 ? Math.round((quizCorrect + booWins + wtaWins + flashRecalled) / totalDataPoints * 100) : 0;
 

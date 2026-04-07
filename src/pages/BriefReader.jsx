@@ -2179,7 +2179,11 @@ export default function BriefReader() {
           {/* Swipeable section card */}
           {(() => {
             const imageZones       = imageZonesMemo
-            const isFirstSeenImage = !hasNavigatedRef.current
+            // For Bases briefs, section 0 shows the map (image hidden) — skip the
+            // grid-reveal effect there. If the user resumes at section 1+, the image
+            // IS visible, so the effect should fire as normal.
+            const isBasesMapSection = brief?.category === 'Bases' && sectionIdx === 0
+            const isFirstSeenImage = !hasNavigatedRef.current && !isBasesMapSection
             const stats      = buildStats(brief)
             // Each associated brief now carries matchTerms[] (all variant forms of its
             // title, e.g. "No. 14 Squadron", "No. 14 Squadron RAF", "No. 14").

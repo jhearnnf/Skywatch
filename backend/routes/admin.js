@@ -35,6 +35,7 @@ const seedLeads = require('../seeds/seedLeads');
 const { scanMentionedBriefIds } = require('../utils/mentionedBriefs');
 const { autoLinkKeywords }     = require('../utils/keywordLinking');
 const SystemLog                = require('../models/SystemLog');
+const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
 
 // ── Shared quiz prompt fragments ──────────────────────────────────────────────
@@ -190,6 +191,9 @@ router.get('/stats', async (_req, res) => {
       wtaTotal, wtaWon, wtaAbandoned, wtaRound1Correct, wtaRound2Correct, wtaTimeAgg,
       flashTotal, flashRecalled, flashSessions, flashAbandoned, flashTimeAgg,
       tutorialAgg,
+      aptitudeSyncTotal,
+      aptitudeSyncCompleted,
+      aptitudeSyncAbandoned,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ subscriptionTier: 'free' }),
@@ -248,6 +252,10 @@ router.get('/stats', async (_req, res) => {
         { $unwind: '$cardResults' },
         { $group: { _id: null, total: { $sum: { $ifNull: ['$cardResults.timeTakenSeconds', 0] } } } },
       ]),
+      // AptitudeSync
+      AptitudeSyncUsage.countDocuments(),
+      AptitudeSyncUsage.countDocuments({ completedAt: { $ne: null } }),
+      AptitudeSyncUsage.countDocuments({ abandoned: true }),
       // Tutorial viewed/skipped counts across all users and all 4 tutorial fields
       User.aggregate([{
         $group: {
@@ -283,12 +291,12 @@ router.get('/stats', async (_req, res) => {
           combinedStreaks,
         },
         games: {
-          totalGamesPlayed,
-          totalGamesCompleted,
+          totalGamesPlayed:    totalGamesPlayed    + aptitudeSyncCompleted + aptitudeSyncAbandoned,
+          totalGamesCompleted: totalGamesCompleted + aptitudeSyncCompleted,
           totalGamesWon,
           totalPerfectScores,
           totalGamesLost:      easyLost + mediumLost,
-          totalGamesAbandoned,
+          totalGamesAbandoned: totalGamesAbandoned + aptitudeSyncAbandoned,
           totalAircoinsEarned: aircoinAgg[0]?.total ?? 0,
           passThresholdEasy,
           passThresholdMedium,
@@ -314,6 +322,11 @@ router.get('/stats', async (_req, res) => {
             recalled:     flashRecalled[0]?.total ?? 0,
             abandoned:    flashAbandoned,
             totalSeconds: Math.round(flashTimeAgg[0]?.total ?? 0),
+          },
+          aptitudeSync: {
+            total:     aptitudeSyncTotal,
+            completed: aptitudeSyncCompleted,
+            abandoned: aptitudeSyncAbandoned,
           },
         },
         briefs: { totalBrifsRead, totalBrifsOpened, totalReadSeconds: readTimeAgg[0]?.total ?? 0 },

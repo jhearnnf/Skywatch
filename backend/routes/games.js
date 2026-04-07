@@ -17,6 +17,7 @@ const IntelligenceBrief     = require('../models/IntelligenceBrief');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const GameOrderOfBattle = require('../models/GameOrderOfBattle');
 const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/GameOrderOfBattle');
+const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -1597,7 +1598,7 @@ router.get('/history', protect, async (req, res) => {
     const typeFilter   = req.query.type   || 'all';
     const resultFilter = req.query.result || 'all';
 
-    const [quizAttempts, whos, oob, flash, whereAircraft] = await Promise.all([
+    const [quizAttempts, whos, oob, flash, whereAircraft, aptitudeSync] = await Promise.all([
       GameSessionQuizAttempt.find({ userId, status: { $in: ['completed', 'abandoned'] } })
         .populate('intelBriefId', 'title')
         .sort({ timeStarted: -1 })
@@ -1608,6 +1609,10 @@ router.get('/history', protect, async (req, res) => {
       GameSessionWhereAircraftResult.find({ userId })
         .populate('aircraftBriefId', 'title')
         .sort({ createdAt: -1 })
+        .lean(),
+      AptitudeSyncUsage.find({ userId, $or: [{ completedAt: { $ne: null } }, { abandoned: true }] })
+        .populate('briefId', 'title')
+        .sort({ _id: -1 })
         .lean(),
     ]);
 
@@ -1692,6 +1697,19 @@ router.get('/history', protect, async (req, res) => {
         canDrillDown:     !r.abandoned,
         resultCategory:   r.abandoned ? 'abandoned' : r.won ? 'passed' : 'failed',
       })),
+      ...aptitudeSync.map(r => ({
+        _id:            r._id,
+        type:           'aptitude_sync',
+        date:           r.completedAt ?? r._id.getTimestamp(),
+        status:         r.abandoned ? 'abandoned' : 'completed',
+        briefTitle:     r.briefId?.title ?? 'Unknown Brief',
+        briefId:        r.briefId?._id ?? r.briefId,
+        aircoinsEarned: r.aircoinsEarned ?? null,
+        finalSummary:   r.finalSummary   ?? null,
+        knowledgeGaps:  r.knowledgeGaps  ?? null,
+        canDrillDown:   !r.abandoned && !!(r.finalSummary || r.knowledgeGaps),
+        resultCategory: r.abandoned ? 'abandoned' : 'passed',
+      })),
       ...flash.map(r => {
         const recalled         = r.cardResults?.filter(c => c.recalled).length ?? 0;
         const total            = r.cardResults?.length ?? 0;
@@ -1728,7 +1746,7 @@ router.get('/history', protect, async (req, res) => {
       }),
     ];
 
-    const VALID_TYPES   = ['quiz', 'order_of_battle', 'wheres_aircraft', 'flashcard', 'wheres_that_aircraft'];
+    const VALID_TYPES   = ['quiz', 'order_of_battle', 'wheres_aircraft', 'flashcard', 'wheres_that_aircraft', 'aptitude_sync'];
     const VALID_RESULTS = ['perfect', 'passed', 'failed', 'abandoned'];
 
     const filtered = sessions.filter(s => {
@@ -1866,13 +1884,15 @@ router.get('/history/flashcard/:sessionId', protect, async (req, res) => {
       _id:    req.params.sessionId,
       userId: req.user._id,
     })
-      .populate('cardResults.intelBriefId', 'title')
+      .populate('cardResults.intelBriefId', 'title descriptionSections')
       .lean();
 
     if (!session) return res.status(404).json({ message: 'Session not found' });
 
     const cards = (session.cardResults ?? []).map(c => ({
+      briefId:          c.intelBriefId?._id ? String(c.intelBriefId._id) : null,
       briefTitle:       c.intelBriefId?.title ?? 'Unknown Brief',
+      contentSnippet:   c.intelBriefId?.descriptionSections?.[3] ?? '',
       recalled:         c.recalled ?? false,
       timeTakenSeconds: c.timeTakenSeconds ?? 0,
     }));
