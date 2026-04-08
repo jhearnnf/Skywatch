@@ -3,8 +3,8 @@ import { useLocation } from 'react-router-dom'
 
 const SITE_NAME = 'SkyWatch'
 const SITE_URL = 'https://skywatch.academy'
-const DEFAULT_DESCRIPTION = 'Prepare for your RAF application with structured intel briefs, quizzes, and interactive learning. Master aircraft, bases, ranks, operations and more.'
-const DEFAULT_OG_IMAGE = `${SITE_URL}/favicon.svg`
+const DEFAULT_DESCRIPTION = 'Master military aviation knowledge with structured intel briefs, quizzes, and interactive learning. Study aircraft, bases, ranks, operations and more.'
+const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`
 
 export default function SEO({
   title,

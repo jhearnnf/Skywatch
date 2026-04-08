@@ -179,7 +179,7 @@ export default function Rankings() {
 
   return (
     <>
-    <SEO title="Rankings" description="See how you rank against other RAF applicants on the SkyWatch leaderboard." />
+    <SEO title="Rankings" description="See how you rank against other learners on the SkyWatch leaderboard." />
     <TutorialModal />
     <div className="max-w-lg mx-auto">
 

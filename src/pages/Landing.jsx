@@ -6,11 +6,11 @@ import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import SEO from '../components/SEO'
 
 const FEATURES = [
-  { icon: '✈️', title: 'Learn About the RAF',        body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — written for RAF applicants.' },
+  { icon: '✈️', title: 'Learn About the RAF',        body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — designed for aspiring aviators.' },
   { icon: '🧠', title: 'Section-by-Section Reading', body: 'Each brief is broken into short, clear sections. Read at your own pace and build genuine knowledge.' },
   { icon: '🎮', title: 'Test Yourself',              body: 'After each brief, take a quiz to reinforce what you\'ve learned and earn Aircoins.' },
   { icon: '🔥', title: 'Daily Streaks',              body: 'Return every day to keep your streak alive. Consistent learning beats last-minute cramming every time.' },
-  { icon: '🏆', title: 'Climb the Rankings',         body: 'Compete with other RAF applicants on the leaderboard as you progress through subjects.' },
+  { icon: '🏆', title: 'Climb the Rankings',         body: 'Compete with other learners on the leaderboard as you progress through subjects.' },
   { icon: '📰', title: 'Live RAF News',              body: 'Stay up to date with real RAF news — automatically sourced and formatted as intel briefs.' },
 ]
 
@@ -75,7 +75,7 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen" style={{ background: '#06101e' }}>
-      <SEO description="Prepare for your RAF application with structured intel briefs, quizzes, and interactive games. Master aircraft, bases, ranks, and operations." />
+      <SEO description="Master military aviation knowledge with structured intel briefs, quizzes, and interactive games. Study aircraft, bases, ranks, and operations." />
 
       {/* ── Header ─────────────────────────────────────────── */}
       <header className="fixed top-0 inset-x-0 z-40 bg-slate-50/80 backdrop-blur-md border-b border-slate-200/50">

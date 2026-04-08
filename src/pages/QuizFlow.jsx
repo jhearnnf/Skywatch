@@ -173,7 +173,7 @@ function DifficultyNudge({ user, won, difficulty }) {
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Difficulty Check</p>
       <p className="text-sm font-bold text-slate-800 mb-1">Was that quiz too easy?</p>
       <p className="text-xs text-slate-500 leading-relaxed mb-4">
-        Step up to Advanced for tougher questions that mirror real RAF selection boards — and earn bigger Aircoins rewards.
+        Step up to Advanced for tougher, deeper questions — and earn bigger Aircoins rewards.
       </p>
       <div className="flex gap-2">
         <button

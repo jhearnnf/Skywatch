@@ -251,7 +251,7 @@ export default function Play() {
 
   return (
     <>
-      <SEO title="Play" description="Choose a game mode to test your RAF knowledge — quizzes, flashcards, and more." />
+      <SEO title="Play" description="Choose a game mode to test your aviation knowledge — quizzes, flashcards, and more." />
       <TutorialModal />
       {showFlashcard && <FlashcardGameModal onClose={() => setShowFlashcard(false)} />}
 
@@ -275,7 +275,7 @@ export default function Play() {
 
       <div className="play-page">
         <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Play</h1>
-        <p className="text-sm text-slate-500 mb-6">Test your RAF knowledge with training games.</p>
+        <p className="text-sm text-slate-500 mb-6">Test your aviation knowledge with training games.</p>
 
         {/* ── Game mode grid ─────────────────────────────────────────── */}
         <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8${isHighlightingGrid ? ' tutorial-grid-highlight' : ''}`}>

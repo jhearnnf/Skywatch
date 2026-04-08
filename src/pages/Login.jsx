@@ -255,7 +255,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#06101e' }}>
-      <SEO title="Sign In" description="Sign in to SkyWatch to track your RAF learning progress." />
+      <SEO title="Sign In" description="Sign in to SkyWatch to track your learning progress." />
       <div className="w-full max-w-sm">
 
         {/* Brand */}
