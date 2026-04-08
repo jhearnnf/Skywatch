@@ -43,6 +43,7 @@ import IntelBriefHistory from './pages/IntelBriefHistory'
 import ReportProblem  from './pages/ReportProblem'
 import Contact        from './pages/Contact'
 import Subscription   from './pages/Subscription'
+import Share          from './pages/Share'
 import NotFound       from './pages/NotFound'
 
 // v2 admin
@@ -171,6 +172,7 @@ function AppRoutes() {
           <Route path="/subscribe"        element={<PageWrapper><Subscription /></PageWrapper>} />
           <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
           <Route path="/contact"          element={<PageWrapper><Contact /></PageWrapper>} />
+          <Route path="/share"            element={<PageWrapper><Share /></PageWrapper>} />
           <Route path="/aircoin-history"       element={<RequireAuth><PageWrapper><AircoinHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"          element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
           <Route path="/intel-brief-history"   element={<RequireAuth><PageWrapper><IntelBriefHistory /></PageWrapper></RequireAuth>} />
