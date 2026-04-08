@@ -16,6 +16,7 @@ import { buildImageZones } from '../utils/briefImageZones'
 import RankBadge from '../components/RankBadge'
 import FlashcardDeckNotification from '../components/FlashcardDeckNotification'
 import SEO from '../components/SEO'
+import { MOCK_RANKS } from '../data/mockData'
 
 // Render **bold** markdown syntax as <strong> spans
 function renderBoldMarkdown(text) {
@@ -1154,9 +1155,9 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
 // ── Already-read screen ──────────────────────────────────────────────────
 const BOO_CATS = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases']
 
-function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, quizAvailable }) {
+function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, quizAvailable, gameStatusLoading }) {
   const showBoo    = BOO_CATS.includes(brief.category)
-  const booVisible = showBoo && booState !== 'unavailable' && booState !== 'no-game-data'
+  const booVisible = showBoo && (gameStatusLoading || (booState !== 'unavailable' && booState !== 'no-game-data'))
 
   return (
     <div>
@@ -1207,7 +1208,7 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, qu
       <div className="space-y-3 mb-6">
 
         {/* Quiz card */}
-        {quizPassed === null ? (
+        {gameStatusLoading ? (
           <div className="h-20 bg-slate-100 rounded-2xl animate-pulse" />
         ) : !quizAvailable ? (
           <div className="flex items-center gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50 opacity-60">
@@ -1247,8 +1248,10 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, qu
         )}
 
         {/* BOO card */}
-        {booVisible && quizPassed !== null && (
-          booState === 'completed' ? (
+        {booVisible && (
+          gameStatusLoading ? (
+            <div className="h-20 bg-slate-100 rounded-2xl animate-pulse" />
+          ) : booState === 'completed' ? (
             <button
               onClick={() => navigate(`/battle-of-order/${brief._id}`)}
               className="w-full text-left flex items-center gap-4 p-4 rounded-2xl border bg-emerald-50 border-emerald-200 hover:border-emerald-300 transition-all group cursor-pointer"
@@ -1333,6 +1336,7 @@ export default function BriefReader() {
   // 'unavailable' | 'no-game-data' | 'locked-aircraft-reads' | 'locked-bases-reads' | 'locked-quiz' | 'available' | 'completed'
   const [booState, setBooState]   = useState('unavailable')
   const [quizPassed, setQuizPassed] = useState(null) // null=loading, true/false once fetched
+  const [gameStatusLoading, setGameStatusLoading] = useState(true) // true until quiz+BOO status resolved
   const [reReadMode, setReReadMode] = useState(false)
   const [missionData,       setMissionData]       = useState(null)  // spawn-check result when spawn: true
   const [spawnCheckPending, setSpawnCheckPending] = useState(false) // true while spawn-check is in-flight
@@ -1571,18 +1575,25 @@ export default function BriefReader() {
   useEffect(() => {
     if (!(done || readRecord?.completed) || !brief || !user) return
     let cancelled = false
+    setGameStatusLoading(true)
     async function check() {
       try {
-        const quizRes  = await apiFetch(`${API}/api/games/quiz/status/${briefId}`, { credentials: 'include' })
-        const quizData = await quizRes.json()
+        // Fetch quiz status and BOO options in parallel
+        const needsBoo = BOO_CATEGORIES.includes(brief.category)
+        const promises = [
+          apiFetch(`${API}/api/games/quiz/status/${briefId}`, { credentials: 'include' }).then(r => r.json()),
+          needsBoo
+            ? apiFetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' }).then(r => r.json())
+            : Promise.resolve(null),
+        ]
+        const [quizData, booData] = await Promise.all(promises)
         if (cancelled) return
-        const passed = quizData.data?.hasCompleted ?? false
+
+        const passed = quizData?.data?.hasCompleted ?? false
         setQuizPassed(passed)
 
-        if (!BOO_CATEGORIES.includes(brief.category)) return
-        const booRes  = await apiFetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' })
-        const booData = await booRes.json()
-        if (cancelled) return
+        if (!needsBoo || !booData) { setGameStatusLoading(false); return }
+
         const booAvail = booData.data?.available ?? false
         if (!booAvail) {
           const reason = booData.data?.reason
@@ -1591,15 +1602,18 @@ export default function BriefReader() {
           else if (reason === 'quiz_not_passed')      setBooState('locked-quiz')
           else if (reason === 'insufficient_briefs')  setBooState('no-game-data')
           else                                        setBooState('unavailable')
+          setGameStatusLoading(false)
           return
         }
-        if (!passed) { setBooState('locked-quiz'); return }
+        if (!passed) { setBooState('locked-quiz'); setGameStatusLoading(false); return }
+
         const statusRes  = await apiFetch(`${API}/api/games/battle-of-order/status/${briefId}`, { credentials: 'include' })
         const statusData = await statusRes.json()
         if (cancelled) return
         const booCompleted = statusData.data?.hasCompleted ?? false
         setBooState(booCompleted ? 'completed' : 'available')
       } catch { /* silently ignore */ }
+      if (!cancelled) setGameStatusLoading(false)
     }
     check()
     return () => { cancelled = true }
@@ -1857,9 +1871,17 @@ export default function BriefReader() {
             <div className="text-4xl mb-3">🔒</div>
             <p className="font-extrabold text-slate-900 text-lg mb-1">{lockedPathway.category}</p>
             <p className="text-sm text-slate-600 mb-4">
-              This category is locked. Reach{' '}
-              <span className="font-bold text-slate-800">Rank {lockedPathway.rankRequired}</span> to bypass the level gate,
-              or reach <span className="font-bold text-slate-800">Level {lockedPathway.levelRequired}</span> at your current rank.
+              {(() => {
+                const userRankNum = user?.rank?.rankNumber ?? 1
+                if (userRankNum < (lockedPathway.rankRequired ?? 1)) {
+                  const rankName = MOCK_RANKS.find(r => r.rankNumber === lockedPathway.rankRequired)?.rankName ?? `Rank ${lockedPathway.rankRequired}`
+                  return <>Unlocks at <span className="font-bold text-slate-800">{rankName}</span></>
+                }
+                if (lockedPathway.levelRequired) {
+                  return <>Reach <span className="font-bold text-slate-800">Agent Level {lockedPathway.levelRequired}</span> to unlock</>
+                }
+                return 'Keep levelling up to unlock'
+              })()}
             </p>
             <button
               onClick={() => navigate('/rankings')}
@@ -2028,6 +2050,7 @@ export default function BriefReader() {
         brief={brief}
         quizPassed={quizPassed}
         booState={booState}
+        gameStatusLoading={gameStatusLoading}
         onReRead={() => { localStorage.removeItem(`sw_brief_sec_${briefId}`); setReReadMode(true); setSection(0); setNavDir(1) }}
         navigate={navigate}
         quizAvailable={quizAvailable}
