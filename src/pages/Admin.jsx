@@ -1601,7 +1601,7 @@ const TIER_COLORS = {
 function SubscriptionTierRow({ u, action }) {
   const current = u.subscriptionTier ?? 'free'
   return (
-    <div className="flex flex-wrap items-center gap-2 px-4 py-2.5 border-b border-slate-100">
+    <div className="flex flex-wrap items-center gap-2">
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1">Tier</p>
       {['free', 'trial', 'silver', 'gold'].map(tier => (
         <button
@@ -1637,6 +1637,7 @@ function UsersTab({ API }) {
   const [resetChecks, setResetChecks] = useState({})
   const [awardPanel,  setAwardPanel]  = useState(null) // user._id of open panel
   const [awardAmount, setAwardAmount] = useState('')
+  const [tierPanel,   setTierPanel]   = useState(null) // user._id of open panel
 
   const loadAll = useCallback(async () => {
     setLoading(true); setSearch(false)
@@ -1724,36 +1725,15 @@ function UsersTab({ API }) {
                 </p>
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>
-              <div className="flex flex-col items-end gap-0.5">
-                {u.subscriptionTier === 'trial' && !u.isTrialActive ? (
-                  <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-red-100 text-red-600">
-                    Trial Expired
+              {(() => {
+                const diff = (u.difficultySetting ?? 'easy')
+                const DIFF_COLORS = { easy: 'bg-green-100 text-green-700', medium: 'bg-amber-100 text-amber-700', hard: 'bg-red-100 text-red-600' }
+                return (
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${DIFF_COLORS[diff] ?? DIFF_COLORS.easy}`}>
+                    {diff.charAt(0).toUpperCase() + diff.slice(1)}
                   </span>
-                ) : (
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${TIER_COLORS[u.subscriptionTier] ?? TIER_COLORS.free}`}>
-                    {u.subscriptionTier === 'trial' ? 'Trial (Silver)' : (u.subscriptionTier ?? 'free')}
-                  </span>
-                )}
-                {u.subscriptionTier === 'trial' && u.isTrialActive && u.trialStartDate && (() => {
-                  const end = new Date(u.trialStartDate)
-                  end.setDate(end.getDate() + (u.trialDurationDays || 5))
-                  const daysLeft = Math.ceil((end - Date.now()) / 86400000)
-                  return (
-                    <span className="text-[10px] text-amber-600 font-semibold">
-                      {daysLeft <= 1 ? '< 1 day left' : `${daysLeft}d left`}
-                    </span>
-                  )
-                })()}
-                {u.subscriptionTier === 'trial' && !u.isTrialActive && u.trialStartDate && (() => {
-                  const end = new Date(u.trialStartDate)
-                  end.setDate(end.getDate() + (u.trialDurationDays || 5))
-                  return (
-                    <span className="text-[10px] text-red-400 font-semibold">
-                      ended {end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                    </span>
-                  )
-                })()}
-              </div>
+                )
+              })()}
             </div>
 
             {/* Stats row */}
@@ -1800,6 +1780,14 @@ function UsersTab({ API }) {
                 className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors">
                 Delete
               </button>
+              <button onClick={() => setTierPanel(tierPanel === u._id ? null : u._id)}
+                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
+                  tierPanel === u._id
+                    ? `${TIER_BTN[u.subscriptionTier ?? 'free']} ring-2 ring-offset-1 ring-slate-400`
+                    : `${TIER_BTN[u.subscriptionTier ?? 'free']} opacity-70 hover:opacity-100`
+                }`}>
+                Tier {tierPanel === u._id ? '▲' : '▼'}
+              </button>
               <button onClick={() => { setAwardPanel(awardPanel === u._id ? null : u._id); setAwardAmount('') }}
                 className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
                   awardPanel === u._id
@@ -1808,9 +1796,54 @@ function UsersTab({ API }) {
                 }`}>
                 ⬡ Award Coins {awardPanel === u._id ? '▲' : '▼'}
               </button>
+              {(() => {
+                const progressHasData = (
+                  (u.totalAircoins ?? 0) > 0 ||
+                  (u.profileStats?.quizzesPlayed ?? 0) > 0 || (u.profileStats?.booPlayed ?? 0) > 0 ||
+                  (u.profileStats?.wtaPlayed ?? 0) > 0 || (u.profileStats?.wherePlayed ?? 0) > 0 ||
+                  (u.profileStats?.flashcardsPlayed ?? 0) > 0 ||
+                  (u.profileStats?.brifsRead ?? 0) > 0 ||
+                  (u.loginStreak ?? 0) > 0 ||
+                  Object.values(u.gameUnlocks ?? {}).some(g => g?.unlockedAt != null)
+                )
+                const anyHasData = progressHasData || TUTORIAL_KEYS.some(k => u.tutorials?.[k] === 'viewed' || u.tutorials?.[k] === 'skipped')
+                const isOpen = resetPanel === u._id
+                return (
+                  <button
+                    onClick={() => {
+                      if (isOpen) { setResetPanel(null); return }
+                      const PROGRESS_FIELDS = ['aircoins', 'gameHistory', 'intelBriefsRead', 'streak', 'gameBadges']
+                      const RESET_ITEMS = [
+                        { key: 'progress',  defaultOn: true },
+                        { key: 'tutorials', defaultOn: false },
+                      ]
+                      const defaults = {}
+                      RESET_ITEMS.forEach(i => { defaults[i.key] = i.defaultOn })
+                      setResetChecks(defaults)
+                      setResetPanel(u._id)
+                    }}
+                    className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
+                      isOpen
+                        ? 'border-slate-300 text-slate-600 bg-slate-50'
+                        : anyHasData
+                          ? 'border-amber-200 text-amber-700 hover:bg-amber-50'
+                          : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                    }`}
+                  >
+                    ↺ Reset {isOpen ? '▲' : '▼'}
+                  </button>
+                )
+              })()}
             </div>
 
-            {/* Award Coins */}
+            {/* Subscription tier panel (expanded) */}
+            {tierPanel === u._id && (
+              <div className="px-4 py-2.5 border-b border-slate-100">
+                <SubscriptionTierRow u={u} action={action} />
+              </div>
+            )}
+
+            {/* Award Coins panel (expanded) */}
             {awardPanel === u._id && (
               <div className="px-4 py-2.5 border-b border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Award Aircoins</p>
@@ -1837,11 +1870,8 @@ function UsersTab({ API }) {
               </div>
             )}
 
-            {/* Subscription tier */}
-            <SubscriptionTierRow u={u} action={action} />
-
-            {/* Reset (testing) */}
-            {(() => {
+            {/* Reset panel (expanded) */}
+            {resetPanel === u._id && (() => {
               const PROGRESS_FIELDS = ['aircoins', 'gameHistory', 'intelBriefsRead', 'streak', 'gameBadges']
               const progressHasData = (
                 (u.totalAircoins ?? 0) > 0 ||
@@ -1856,66 +1886,43 @@ function UsersTab({ API }) {
                 { key: 'progress',  label: 'Progress',  fields: PROGRESS_FIELDS, defaultOn: true,  hasData: progressHasData },
                 { key: 'tutorials', label: 'Tutorials', fields: ['tutorials'],   defaultOn: false, hasData: TUTORIAL_KEYS.some(k => u.tutorials?.[k] === 'viewed' || u.tutorials?.[k] === 'skipped') },
               ]
-              const anyHasData = RESET_ITEMS.some(i => i.defaultOn && i.hasData)
-              const isOpen = resetPanel === u._id
               return (
-                <div className="px-4 py-2.5">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Reset for testing</p>
-                  <button
-                    onClick={() => {
-                      if (isOpen) { setResetPanel(null); return }
-                      const defaults = {}
-                      RESET_ITEMS.forEach(i => { defaults[i.key] = i.defaultOn })
-                      setResetChecks(defaults)
-                      setResetPanel(u._id)
-                    }}
-                    className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
-                      isOpen
-                        ? 'border-slate-300 text-slate-600 bg-slate-50'
-                        : anyHasData
-                          ? 'border-amber-200 text-amber-700 hover:bg-amber-50'
-                          : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                    }`}
-                  >
-                    ↺ Reset {isOpen ? '▲' : '▼'}
-                  </button>
-                  {isOpen && (
-                    <div className="mt-2 p-3 rounded-lg border border-slate-200 bg-slate-50 inline-flex flex-col gap-2.5 min-w-[180px]">
-                      {RESET_ITEMS.map(item => (
-                        <label key={item.key} className="flex items-center gap-2 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={resetChecks[item.key] ?? item.defaultOn}
-                            onChange={e => setResetChecks(prev => ({ ...prev, [item.key]: e.target.checked }))}
-                            className="rounded"
-                          />
-                          <span className="text-xs text-slate-600">{item.label}</span>
-                          {item.hasData && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                          )}
-                        </label>
-                      ))}
-                      <button
-                        onClick={() => {
-                          const fields = RESET_ITEMS
-                            .filter(i => resetChecks[i.key] ?? i.defaultOn)
-                            .flatMap(i => i.fields)
-                          if (!fields.length) return
-                          const labels = RESET_ITEMS.filter(i => resetChecks[i.key] ?? i.defaultOn).map(i => i.label).join(', ')
-                          setResetPanel(null)
-                          action(
-                            `Reset ${labels} — Agent ${u.agentNumber}`,
-                            `/api/admin/users/${u._id}/reset-stats`,
-                            'POST',
-                            { fields },
-                          )
-                        }}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors mt-1"
-                      >
-                        Apply Reset
-                      </button>
-                    </div>
-                  )}
+                <div className="px-4 py-2.5 border-b border-slate-100">
+                  <div className="p-3 rounded-lg border border-slate-200 bg-slate-50 inline-flex flex-col gap-2.5 min-w-[180px]">
+                    {RESET_ITEMS.map(item => (
+                      <label key={item.key} className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={resetChecks[item.key] ?? item.defaultOn}
+                          onChange={e => setResetChecks(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                          className="rounded"
+                        />
+                        <span className="text-xs text-slate-600">{item.label}</span>
+                        {item.hasData && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                        )}
+                      </label>
+                    ))}
+                    <button
+                      onClick={() => {
+                        const fields = RESET_ITEMS
+                          .filter(i => resetChecks[i.key] ?? i.defaultOn)
+                          .flatMap(i => i.fields)
+                        if (!fields.length) return
+                        const labels = RESET_ITEMS.filter(i => resetChecks[i.key] ?? i.defaultOn).map(i => i.label).join(', ')
+                        setResetPanel(null)
+                        action(
+                          `Reset ${labels} — Agent ${u.agentNumber}`,
+                          `/api/admin/users/${u._id}/reset-stats`,
+                          'POST',
+                          { fields },
+                        )
+                      }}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors mt-1"
+                    >
+                      Apply Reset
+                    </button>
+                  </div>
                 </div>
               )
             })()}
@@ -6203,9 +6210,6 @@ export default function Admin() {
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Restricted Access</p>
           <h1 className="text-2xl font-extrabold text-slate-900">Admin Panel</h1>
         </div>
-
-        {/* Subscription emulator */}
-        <SubEmulator user={user} API={API} onTierChange={setUser} />
 
         {/* Tabs */}
         <div className="flex gap-1 bg-surface rounded-2xl border border-slate-200 p-1 mb-6 overflow-x-auto">
