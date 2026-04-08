@@ -10,11 +10,11 @@ const mockUseAuth  = vi.hoisted(() => vi.fn())
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link: ({ children, to }) => <a href={to}>{children}</a>,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
@@ -51,7 +51,7 @@ const MOCK_READS = [
 ]
 
 function setupAuth(user = BASE_USER) {
-  mockUseAuth.mockReturnValue({ user, API: '' })
+  mockUseAuth.mockReturnValue({ user, API: '', apiFetch: (...args) => fetch(...args) })
 }
 
 function makeSuccessFetch(reads = MOCK_READS, total = 2, avgTimeSeconds = 242) {
@@ -74,7 +74,7 @@ describe('IntelBriefHistory', () => {
   })
 
   it('redirects to /login if no user', () => {
-    mockUseAuth.mockReturnValue({ user: null, API: '' })
+    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args) })
     global.fetch = vi.fn()
     render(<IntelBriefHistory />)
     expect(mockNavigate).toHaveBeenCalledWith('/login')

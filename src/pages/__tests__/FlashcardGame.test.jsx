@@ -1,17 +1,17 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import FlashcardGameModal from '../../../components/FlashcardGameModal'
-import { playSound } from '../../../utils/sound'
+import FlashcardGameModal from '../../components/FlashcardGameModal'
+import { playSound } from '../../utils/sound'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
-import { useAuth } from '../../../context/AuthContext'
+import { useAuth } from '../../context/AuthContext'
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: vi.fn(),
 }))
 
-vi.mock('../../../utils/sound', () => ({
+vi.mock('../../utils/sound', () => ({
   playSound: vi.fn(() => Promise.resolve()),
   invalidateSoundSettings: vi.fn(),
   getMasterVolume: vi.fn(() => 100),
@@ -77,7 +77,7 @@ let mockAwardAircoins
 
 function setupAuth() {
   mockAwardAircoins = vi.fn()
-  useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', awardAircoins: mockAwardAircoins })
+  useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: mockAwardAircoins })
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────

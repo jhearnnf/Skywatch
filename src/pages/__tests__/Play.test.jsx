@@ -5,28 +5,30 @@ import Play from '../Play'
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
 vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+  useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link: ({ children, to, className, ...rest }) => (
     <a href={to} className={className}>{children}</a>
   ),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
-  useAuth: vi.fn(() => ({ user: null, API: '' })),
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: vi.fn(() => ({ user: null, API: '', apiFetch: (...args) => fetch(...args) })),
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn(), hasSeen: vi.fn().mockReturnValue(false) }),
 }))
 
-vi.mock('../../../components/tutorial/TutorialModal', () => ({
+vi.mock('../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))
 
-vi.mock('../../../components/FlashcardGameModal', () => ({
+vi.mock('../../components/FlashcardGameModal', () => ({
   default: () => null,
 }))
 
-vi.mock('../../../context/NewGameUnlockContext', () => ({
+vi.mock('../../context/NewGameUnlockContext', () => ({
   useNewGameUnlock: vi.fn(() => ({
     newGames:             new Set(),
     hasAnyNew:            false,
@@ -47,11 +49,11 @@ vi.mock('framer-motion', () => ({
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-import { useAuth } from '../../../context/AuthContext'
-import { useNewGameUnlock } from '../../../context/NewGameUnlockContext'
+import { useAuth } from '../../context/AuthContext'
+import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 
 function renderAsGuest() {
-  useAuth.mockReturnValue({ user: null, API: '' })
+  useAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args) })
   render(<Play />)
 }
 
@@ -62,7 +64,7 @@ function renderAsGuest() {
  * The backend recommended-briefs endpoints are mocked to return them directly.
  */
 function renderAsUser({ quizBriefs = [], booBriefs = [] } = {}) {
-  useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '' })
+  useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })
   global.fetch = vi.fn().mockImplementation((url) => {
     if (url.includes('quiz/recommended-briefs'))
       return Promise.resolve({ json: async () => ({ data: { briefs: quizBriefs } }) })
@@ -614,7 +616,7 @@ describe('Play page — WTA card padlock', () => {
       applyUnlocks: vi.fn(),
       revokeUnlock,
     })
-    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '' })
+    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })
     global.fetch = vi.fn().mockImplementation((url) => {
       if (url.includes('wta-spawn'))
         return Promise.resolve({ json: async () => ({ data: wtaSpawnData }) })

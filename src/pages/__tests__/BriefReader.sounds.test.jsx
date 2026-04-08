@@ -4,33 +4,35 @@ import BriefReader from '../BriefReader'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
-vi.mock('../../../utils/sound', () => ({
+vi.mock('../../utils/sound', () => ({
   playSound: vi.fn(),
+  stopAllSounds: vi.fn(),
+  playGridRevealTone: vi.fn(),
 }))
 
 vi.mock('react-router-dom', () => ({
   useParams: () => ({ briefId: 'brief123' }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => vi.fn(), useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link: ({ children }) => children,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { _id: 'user1' }, API: '' }),
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { _id: 'user1' }, API: '', apiFetch: (...args) => fetch(...args) }),
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn() }),
 }))
 
-vi.mock('../../../context/AppSettingsContext', () => ({
+vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
 }))
 
-vi.mock('../../../components/tutorial/TutorialModal', () => ({
+vi.mock('../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))
 
-vi.mock('../../../components/UpgradePrompt', () => ({
+vi.mock('../../components/UpgradePrompt', () => ({
   default: () => null,
 }))
 
@@ -91,7 +93,7 @@ describe('BriefReader — sound wiring', () => {
   let playSound
 
   beforeEach(async () => {
-    playSound = (await import('../../../utils/sound')).playSound
+    playSound = (await import('../../utils/sound')).playSound
     playSound.mockClear()
     // Clear session storage so sectionIdx starts at 0
     sessionStorage.clear()

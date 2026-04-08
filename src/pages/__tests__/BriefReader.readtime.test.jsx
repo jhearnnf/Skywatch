@@ -8,19 +8,19 @@ const mockUseAuth = vi.hoisted(() => vi.fn())
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
-vi.mock('../../../utils/sound', () => ({ playSound: vi.fn() }))
+vi.mock('../../utils/sound', () => ({ playSound: vi.fn(), stopAllSounds: vi.fn(), playGridRevealTone: vi.fn() }))
 
 vi.mock('react-router-dom', () => ({
   useParams:   () => ({ briefId: 'brief123' }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => vi.fn(), useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link:        ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
-vi.mock('../../../context/AppTutorialContext', () => ({ useAppTutorial: () => ({ start: vi.fn() }) }))
-vi.mock('../../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }) }))
-vi.mock('../../../components/tutorial/TutorialModal', () => ({ default: () => null }))
-vi.mock('../../../components/UpgradePrompt',          () => ({ default: () => null }))
+vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
+vi.mock('../../context/AppTutorialContext', () => ({ useAppTutorial: () => ({ start: vi.fn() }) }))
+vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }) }))
+vi.mock('../../components/tutorial/TutorialModal', () => ({ default: () => null }))
+vi.mock('../../components/UpgradePrompt',          () => ({ default: () => null }))
 
 vi.mock('framer-motion', () => ({
   motion: {
@@ -69,7 +69,7 @@ function makeCompleteResponse() {
 function setupLoggedIn() {
   mockUseAuth.mockReturnValue({
     user:          { _id: 'user1' },
-    API:           '',
+    API: '', apiFetch: (...args) => fetch(...args),
     awardAircoins: vi.fn(),
     setUser:       vi.fn(),
   })
@@ -78,7 +78,7 @@ function setupLoggedIn() {
 function setupGuest() {
   mockUseAuth.mockReturnValue({
     user:          null,
-    API:           '',
+    API: '', apiFetch: (...args) => fetch(...args),
     awardAircoins: vi.fn(),
     setUser:       vi.fn(),
   })

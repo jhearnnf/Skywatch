@@ -5,11 +5,13 @@ import QuizBriefsList from '../QuizBriefsList'
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+  useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
-  useAuth: vi.fn(() => ({ user: { _id: 'u1' }, API: '' })),
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: vi.fn(() => ({ user: { _id: 'u1' }, API: '', apiFetch: (...args) => fetch(...args) })),
 }))
 
 vi.mock('framer-motion', () => ({
@@ -17,7 +19,7 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => <>{children}</>,
 }))
 
-import { useAuth } from '../../../context/AuthContext'
+import { useAuth } from '../../context/AuthContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -36,7 +38,7 @@ function mockEndpoint({ briefs = [], availableMode = null, totalPages = 1 } = {}
 }
 
 function setup(opts = {}) {
-  useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '' })
+  useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch: (...args) => fetch(...args) })
   mockEndpoint(opts)
   render(<QuizBriefsList />)
 }
@@ -113,7 +115,7 @@ describe('QuizBriefsList — Completed tab', () => {
   })
 
   it('shows ✓ Passed badge on passed briefs', async () => {
-    useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '' })
+    useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch: (...args) => fetch(...args) })
     mockEndpoint({
       briefs: [{ _id: 'b1', title: 'Passed Brief', category: 'Aircrafts', quizState: 'passed' }],
     })
@@ -189,7 +191,7 @@ describe('QuizBriefsList — Load More', () => {
 
 describe('QuizBriefsList — empty and unauthenticated states', () => {
   it('shows sign-in prompt when user is null', () => {
-    useAuth.mockReturnValue({ user: null, API: '' })
+    useAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args) })
     global.fetch = vi.fn()
     render(<QuizBriefsList />)
     expect(screen.getAllByText(/sign in/i).length).toBeGreaterThan(0)

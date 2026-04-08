@@ -9,25 +9,45 @@ const mockUseAuth = vi.hoisted(() => vi.fn())
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => vi.fn(), useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 
-vi.mock('../../../utils/sound', () => ({
+vi.mock('../../utils/sound', () => ({
   getMasterVolume: () => 50,
   setMasterVolume: vi.fn(),
   playSound: vi.fn(),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn(), replay: vi.fn() }),
 }))
 
-vi.mock('../../../components/tutorial/TutorialModal', () => ({
+vi.mock('../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({
+    levels: [
+      { levelNumber: 1, cumulativeAircoins: 0, aircoinsToNextLevel: 100 },
+      { levelNumber: 2, cumulativeAircoins: 100, aircoinsToNextLevel: 150 },
+    ],
+    settings: {},
+    loading: false,
+  }),
+}))
+
+vi.mock('../../utils/levelUtils', async () => {
+  const actual = await vi.importActual('../../utils/levelUtils')
+  return actual
+})
+
+vi.mock('../../data/mockData', () => ({
+  MOCK_LEADERBOARD: [],
+}))
+
+vi.mock('../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))
 
@@ -59,7 +79,7 @@ function setupUser(overrides = {}) {
       loginStreak: 0,
       ...overrides,
     },
-    API: '',
+    API: '', apiFetch: (...args) => fetch(...args),
     setUser: vi.fn(),
   })
 }

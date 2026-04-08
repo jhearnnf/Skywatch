@@ -10,25 +10,25 @@ const mockUseAuth  = vi.hoisted(() => vi.fn())
 // ── Mocks ──────────────────────────────────────────────────────────────────
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link: ({ children, to }) => <a href={to}>{children}</a>,
 }))
 
-vi.mock('../../../utils/sound', () => ({
+vi.mock('../../utils/sound', () => ({
   getMasterVolume: () => 1,
   setMasterVolume: vi.fn(),
   playSound: vi.fn(),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn(), replay: vi.fn() }),
 }))
 
-vi.mock('../../../components/tutorial/TutorialModal', () => ({
+vi.mock('../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))
 
@@ -40,7 +40,7 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => <>{children}</>,
 }))
 
-vi.mock('../../../data/mockData', () => ({
+vi.mock('../../data/mockData', () => ({
   MOCK_LEADERBOARD: [],
 }))
 
@@ -50,12 +50,12 @@ const TEST_LEVELS = [
   { levelNumber: 3, cumulativeAircoins: 250,  aircoinsToNextLevel: 250 },
 ]
 
-vi.mock('../../../context/AppSettingsContext', () => ({
+vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({ levels: TEST_LEVELS, settings: {}, loading: false }),
 }))
 
-vi.mock('../../../utils/levelUtils', async () => {
-  const actual = await vi.importActual('../../../utils/levelUtils')
+vi.mock('../../utils/levelUtils', async () => {
+  const actual = await vi.importActual('../../utils/levelUtils')
   return actual
 })
 

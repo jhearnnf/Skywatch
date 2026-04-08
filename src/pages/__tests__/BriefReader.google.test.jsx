@@ -9,29 +9,29 @@ const mockSetUser       = vi.hoisted(() => vi.fn())
 const mockAwardAircoins = vi.hoisted(() => vi.fn())
 const mockUseAuth       = vi.hoisted(() => vi.fn())
 
-vi.mock('../../../utils/sound', () => ({ playSound: vi.fn() }))
+vi.mock('../../utils/sound', () => ({ playSound: vi.fn(), stopAllSounds: vi.fn(), playGridRevealTone: vi.fn() }))
 
 vi.mock('react-router-dom', () => ({
   useParams:   () => ({ briefId: 'brief123' }),
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link:        ({ children, to }) => <a href={to}>{children}</a>,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
-vi.mock('../../../context/AppSettingsContext', () => ({
+vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn() }),
 }))
 
-vi.mock('../../../components/tutorial/TutorialModal',  () => ({ default: () => null }))
-vi.mock('../../../components/LockedCategoryModal',     () => ({ default: () => null }))
-vi.mock('../../../components/MissionDetectedModal',    () => ({ default: () => null }))
+vi.mock('../../components/tutorial/TutorialModal',  () => ({ default: () => null }))
+vi.mock('../../components/LockedCategoryModal',     () => ({ default: () => null }))
+vi.mock('../../components/MissionDetectedModal',    () => ({ default: () => null }))
 
 vi.mock('framer-motion', () => ({
   motion: {
@@ -95,7 +95,7 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
     mockAwardAircoins.mockClear()
     sessionStorage.clear()
 
-    mockUseAuth.mockReturnValue({ user: null, setUser: mockSetUser, API: '', awardAircoins: mockAwardAircoins })
+    mockUseAuth.mockReturnValue({ user: null, setUser: mockSetUser, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: mockAwardAircoins })
 
     vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'test-client-id')
     window.google = {

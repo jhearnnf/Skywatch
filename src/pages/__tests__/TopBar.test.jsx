@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import TopBar from '../../../components/layout/TopBar'
+import TopBar from '../../components/layout/TopBar'
 
 // ── Hoisted mock fns ────────────────────────────────────────────────────────
 
@@ -10,11 +10,11 @@ const mockUseAuth  = vi.hoisted(() => vi.fn())
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
@@ -31,8 +31,10 @@ const BASE_USER = {
 
 function setupAuth(userOverrides) {
   mockUseAuth.mockReturnValue({
-    user:   userOverrides === null ? null : { ...BASE_USER, ...userOverrides },
-    logout: vi.fn(),
+    user:     userOverrides === null ? null : { ...BASE_USER, ...userOverrides },
+    logout:   vi.fn(),
+    API:      '',
+    apiFetch: (...args) => fetch(...args),
   })
 }
 

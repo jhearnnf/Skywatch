@@ -160,7 +160,7 @@ export default function Rankings() {
   const isPreviewing        = selectedRankNum !== userRankNumber
 
   // First locked level that has new pathway unlocks (the carrot)
-  const nextUnlockLevel = [...levels]
+  const nextUnlockLevel = [...(levels ?? [])]
     .sort((a, b) => a.levelNumber - b.levelNumber)
     .find(lvl =>
       lvl.levelNumber > userLevel &&
@@ -229,7 +229,7 @@ export default function Rankings() {
           >
             <div className="flex items-baseline justify-between mb-2">
               <p className="text-sm font-extrabold intel-mono" style={{ color: '#5baaff' }}>
-                LEVEL {currentLvl.levelNumber}
+                LEVEL {userLevel}
               </p>
               <p className="text-xs intel-mono" style={{ color: '#4a6282' }}>
                 {coinsInLevel.toLocaleString()} / {coinsNeeded?.toLocaleString() ?? '—'} AC
@@ -246,7 +246,7 @@ export default function Rankings() {
             </div>
             <p className="text-xs mt-1.5" style={{ color: '#4a6282' }}>
               {coinsNeeded
-                ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} Aircoins to Level ${currentLvl.levelNumber + 1}`
+                ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} Aircoins to Level ${userLevel + 1}`
                 : '⭐ Max level — RAF Rank Promotion on next cycle'
               }
             </p>

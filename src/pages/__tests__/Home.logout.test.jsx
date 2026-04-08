@@ -10,21 +10,21 @@ const mockUseSettings = vi.hoisted(() => vi.fn())
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => vi.fn(), useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
+vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 
-vi.mock('../../../context/AppSettingsContext', () => ({
+vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: mockUseSettings,
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn() }),
 }))
 
-vi.mock('../../../components/tutorial/TutorialModal', () => ({ default: () => null }))
+vi.mock('../../components/tutorial/TutorialModal', () => ({ default: () => null }))
 
 vi.mock('framer-motion', () => ({
   motion: {
@@ -92,7 +92,7 @@ describe('Home — stale brief read-state cleared on logout', () => {
 
   it('shows brief in latest strip when logged in', async () => {
     global.fetch = makeFetch({ briefs: [READ_BRIEF] })
-    mockUseAuth.mockReturnValue({ user: LOGGED_IN_USER, API: '' })
+    mockUseAuth.mockReturnValue({ user: LOGGED_IN_USER, API: '', apiFetch: (...args) => fetch(...args) })
     mockUseSettings.mockReturnValue({ settings: SETTINGS })
 
     render(<Home />)
@@ -103,7 +103,7 @@ describe('Home — stale brief read-state cleared on logout', () => {
   it('re-fetches brief strip after logout so isRead state resets', async () => {
     // Logged-in fetch returns brief with isRead: true
     global.fetch = makeFetch({ briefs: [READ_BRIEF] })
-    mockUseAuth.mockReturnValue({ user: LOGGED_IN_USER, API: '' })
+    mockUseAuth.mockReturnValue({ user: LOGGED_IN_USER, API: '', apiFetch: (...args) => fetch(...args) })
     mockUseSettings.mockReturnValue({ settings: SETTINGS })
 
     const { rerender } = render(<Home />)
@@ -115,7 +115,7 @@ describe('Home — stale brief read-state cleared on logout', () => {
 
     // Simulate logout — guest fetch returns same brief but isRead: false
     global.fetch = makeFetch({ briefs: [UNREAD_BRIEF] })
-    mockUseAuth.mockReturnValue({ user: null, API: '' })
+    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args) })
     rerender(<Home />)
 
     // After re-fetch, brief is still shown but no longer has the read (emerald) styling
@@ -127,7 +127,7 @@ describe('Home — stale brief read-state cleared on logout', () => {
 
   it('brief strip still visible to guests (not hidden on logout)', async () => {
     global.fetch = makeFetch({ briefs: [UNREAD_BRIEF] })
-    mockUseAuth.mockReturnValue({ user: null, API: '' })
+    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args) })
     mockUseSettings.mockReturnValue({ settings: SETTINGS })
 
     render(<Home />)

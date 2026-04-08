@@ -4,18 +4,18 @@ import BattleOfOrderFlow from '../BattleOfOrderFlow'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
-vi.mock('../../../utils/sound', () => ({ playSound: vi.fn() }))
+vi.mock('../../utils/sound', () => ({ playSound: vi.fn() }))
 
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', () => ({
   useParams:   () => ({ briefId: 'brief123' }),
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     user:          { _id: 'user1' },
-    API:           '',
+    API: '', apiFetch: (...args) => fetch(...args),
     awardAircoins: vi.fn(),
   }),
 }))
@@ -110,7 +110,7 @@ describe('BattleOfOrderFlow — roulette screen', () => {
   })
 
   it('plays battle_of_order_selection sound on roulette mount', async () => {
-    const { playSound } = await import('../../../utils/sound')
+    const { playSound } = await import('../../utils/sound')
     global.fetch = setupFetch(OPTIONS_MULTI)
     render(<BattleOfOrderFlow />)
 

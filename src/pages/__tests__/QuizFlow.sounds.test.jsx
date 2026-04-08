@@ -4,37 +4,38 @@ import QuizFlow from '../QuizFlow'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
-vi.mock('../../../utils/sound', () => ({
+vi.mock('../../utils/sound', () => ({
   playSound: vi.fn(),
 }))
 
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', () => ({
   useParams: () => ({ briefId: 'brief123' }),
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     user: { _id: 'user1' },
     API: '',
+    apiFetch: (...args) => fetch(...args),
     awardAircoins: vi.fn(),
   }),
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn() }),
 }))
 
-vi.mock('../../../context/AppSettingsContext', () => ({
+vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
 }))
 
-vi.mock('../../../components/tutorial/TutorialModal', () => ({
+vi.mock('../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))
 
-vi.mock('../../../components/UpgradePrompt', () => ({
+vi.mock('../../components/UpgradePrompt', () => ({
   default: () => null,
 }))
 
@@ -125,7 +126,7 @@ describe('QuizFlow — sound wiring', () => {
   let playSound
 
   beforeEach(async () => {
-    playSound = (await import('../../../utils/sound')).playSound
+    playSound = (await import('../../utils/sound')).playSound
     playSound.mockClear()
     mockNavigate.mockClear()
   })

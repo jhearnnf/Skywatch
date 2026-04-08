@@ -8,31 +8,31 @@ const mockUseAuth     = vi.hoisted(() => vi.fn())
 const mockUseSettings = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => vi.fn(), useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
-vi.mock('../../../context/AppSettingsContext', () => ({
+vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: mockUseSettings,
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn() }),
 }))
 
-vi.mock('../../../components/tutorial/TutorialModal', () => ({
+vi.mock('../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))
 
-vi.mock('../../../components/LockedCategoryModal', () => ({
+vi.mock('../../components/LockedCategoryModal', () => ({
   default: () => null,
 }))
 
-vi.mock('../../../components/onboarding/WelcomeAgentFlow', () => ({
+vi.mock('../../components/onboarding/WelcomeAgentFlow', () => ({
   default: ({ onClose }) => <div data-testid="welcome-agent-flow"><button onClick={onClose}>Close</button></div>,
   ONBOARDING_KEY: 'skywatch_onboarded',
   markOnboarded: vi.fn(),
@@ -49,7 +49,7 @@ vi.mock('framer-motion', () => ({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function setup() {
-  mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Agent', totalAircoins: 0, cycleAircoins: 0 }, API: '' })
+  mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Agent', totalAircoins: 0, cycleAircoins: 0 }, API: '', apiFetch: (...args) => fetch(...args) })
   mockUseSettings.mockReturnValue({ settings: { freeCategories: ['News'], silverCategories: [], goldCategories: [], guestCategories: ['News'] } })
   global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'success', data: { counts: {}, stats: {}, briefs: [] } }) })
 }

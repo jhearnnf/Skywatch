@@ -7,22 +7,32 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => ({ state: null }),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     user: { _id: 'admin1', isAdmin: true, subscriptionTier: 'gold' },
     loading: false,
     API: '',
+    apiFetch: (...args) => fetch(...args),
     awardAircoins: vi.fn(),
     setUser: vi.fn(),
   }),
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
-  TUTORIAL_STEPS: {},
+vi.mock('../../context/UnsolvedReportsContext', () => ({
+  useUnsolvedReports: () => ({ unsolvedCount: 0, unresolvedSystemLogs: 0, refresh: vi.fn() }),
 }))
 
-vi.mock('../../../utils/sound', () => ({
-  invalidateSoundSettings: vi.fn(),
+vi.mock('../../components/RankBadge', () => ({ default: () => null }))
+vi.mock('../../components/SEO', () => ({ default: () => null }))
+
+vi.mock('../../context/AppTutorialContext', () => ({
+  TUTORIAL_STEPS: {},
+  TUTORIAL_KEYS: {},
+  useAppTutorial: () => ({ start: vi.fn(), hasSeen: () => true }),
+}))
+
+vi.mock('../../utils/sound', () => ({
+  invalidateSoundSettings: vi.fn(), previewTypingSound: vi.fn(), previewGridRevealTone: vi.fn(),
 }))
 
 vi.mock('framer-motion', () => ({

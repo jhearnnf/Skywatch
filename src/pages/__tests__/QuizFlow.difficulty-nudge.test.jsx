@@ -13,7 +13,7 @@ vi.mock('../../utils/sound', () => ({ playSound: vi.fn() }))
 
 vi.mock('react-router-dom', () => ({
   useParams:   () => ({ briefId: 'brief123' }),
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
 }))
 
 vi.mock('../../context/AuthContext', () => ({

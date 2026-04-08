@@ -15,7 +15,7 @@ vi.mock('react-router-dom', () => ({
   Link: ({ children, to }) => <a href={to}>{children}</a>,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
@@ -29,7 +29,7 @@ vi.mock('framer-motion', () => ({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function setupAuth() {
-  mockUseAuth.mockReturnValue({ setUser: mockSetUser, awardAircoins: vi.fn(), API: '' })
+  mockUseAuth.mockReturnValue({ setUser: mockSetUser, awardAircoins: vi.fn(), API: '', apiFetch: (...args) => fetch(...args) })
 }
 
 function makePendingResponse(email = 'agent@raf.mod.uk') {

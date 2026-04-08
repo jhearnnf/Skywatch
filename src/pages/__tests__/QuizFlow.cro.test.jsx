@@ -7,21 +7,21 @@ import QuizFlow from '../QuizFlow'
 const mockNavigate = vi.hoisted(() => vi.fn())
 const mockUseAuth  = vi.hoisted(() => vi.fn())
 
-vi.mock('../../../utils/sound', () => ({ playSound: vi.fn() }))
+vi.mock('../../utils/sound', () => ({ playSound: vi.fn() }))
 
 vi.mock('react-router-dom', () => ({
   useParams:   () => ({ briefId: 'brief123' }),
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
+vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn() }),
 }))
 
-vi.mock('../../../components/tutorial/TutorialModal', () => ({ default: () => null }))
-vi.mock('../../../components/UpgradePrompt',          () => ({ default: () => null }))
+vi.mock('../../components/tutorial/TutorialModal', () => ({ default: () => null }))
+vi.mock('../../components/UpgradePrompt',          () => ({ default: () => null }))
 
 vi.mock('framer-motion', () => ({
   motion: {
@@ -101,8 +101,8 @@ describe('QuizFlow — Browse More Briefs button', () => {
   afterEach(() => { vi.restoreAllMocks() })
 
   it('shows "Browse More Briefs" on a win', async () => {
-    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', awardAircoins: vi.fn() })
-    vi.mock('../../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: FREE_SETTINGS }) }))
+    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
+    vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: FREE_SETTINGS }) }))
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
     await completeQuiz(CORRECT_ID)
@@ -110,7 +110,7 @@ describe('QuizFlow — Browse More Briefs button', () => {
   })
 
   it('shows "Browse More Briefs" on a loss', async () => {
-    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', awardAircoins: vi.fn() })
+    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
     global.fetch = setupFetch(false)
     render(<QuizFlow />)
     await completeQuiz(WRONG_ID)
@@ -118,7 +118,7 @@ describe('QuizFlow — Browse More Briefs button', () => {
   })
 
   it('clicking "Browse More Briefs" navigates to /learn-priority', async () => {
-    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', awardAircoins: vi.fn() })
+    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
     await completeQuiz(CORRECT_ID)
@@ -132,8 +132,8 @@ describe('QuizFlow — locked category upsell teaser', () => {
   afterEach(() => { vi.restoreAllMocks() })
 
   it('shows upsell teaser on a WIN for a free signed-in user', async () => {
-    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', awardAircoins: vi.fn() })
-    vi.mock('../../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: FREE_SETTINGS }) }))
+    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
+    vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: FREE_SETTINGS }) }))
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
     await completeQuiz(CORRECT_ID)
@@ -141,7 +141,7 @@ describe('QuizFlow — locked category upsell teaser', () => {
   })
 
   it('does NOT show upsell teaser on a LOSS', async () => {
-    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', awardAircoins: vi.fn() })
+    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
     global.fetch = setupFetch(false)
     render(<QuizFlow />)
     await completeQuiz(WRONG_ID)
@@ -149,8 +149,8 @@ describe('QuizFlow — locked category upsell teaser', () => {
   })
 
   it('does NOT show upsell teaser for a silver user on a win', async () => {
-    mockUseAuth.mockReturnValue({ user: SILVER_USER, API: '', awardAircoins: vi.fn() })
-    vi.mock('../../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: SILVER_SETTINGS }) }))
+    mockUseAuth.mockReturnValue({ user: SILVER_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
+    vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: SILVER_SETTINGS }) }))
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
     await completeQuiz(CORRECT_ID)
@@ -158,7 +158,7 @@ describe('QuizFlow — locked category upsell teaser', () => {
   })
 
   it('does NOT show upsell teaser for a guest (null user) on a win', async () => {
-    mockUseAuth.mockReturnValue({ user: null, API: '', awardAircoins: vi.fn() })
+    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
     await completeQuiz(CORRECT_ID)
@@ -166,8 +166,8 @@ describe('QuizFlow — locked category upsell teaser', () => {
   })
 
   it('upsell teaser shows the highest-priority locked category (Threats first)', async () => {
-    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', awardAircoins: vi.fn() })
-    vi.mock('../../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: FREE_SETTINGS }) }))
+    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
+    vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: FREE_SETTINGS }) }))
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
     await completeQuiz(CORRECT_ID)

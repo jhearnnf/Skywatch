@@ -8,10 +8,10 @@ const mockNavigate = vi.hoisted(() => vi.fn())
 const mockUseAuth  = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
@@ -53,7 +53,7 @@ function makeFetch(sessions = [], total = sessions.length) {
 }
 
 function setup(fetchImpl) {
-  mockUseAuth.mockReturnValue({ user: { ...BASE_USER }, API: '' })
+  mockUseAuth.mockReturnValue({ user: { ...BASE_USER }, API: '', apiFetch: (...args) => fetch(...args) })
   global.fetch = fetchImpl
   mockNavigate.mockClear()
 }

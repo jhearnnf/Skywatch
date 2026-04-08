@@ -5,11 +5,13 @@ import BOOBriefsList from '../BOOBriefsList'
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+  useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
-  useAuth: vi.fn(() => ({ user: { _id: 'u1' }, API: '' })),
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: vi.fn(() => ({ user: { _id: 'u1' }, API: '', apiFetch: (...args) => fetch(...args) })),
 }))
 
 vi.mock('framer-motion', () => ({
@@ -17,7 +19,7 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => <>{children}</>,
 }))
 
-import { useAuth } from '../../../context/AuthContext'
+import { useAuth } from '../../context/AuthContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -26,7 +28,7 @@ import { useAuth } from '../../../context/AuthContext'
  * with booState already set (as the real server does).
  */
 function setup({ briefs = [] } = {}) {
-  useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '' })
+  useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch: (...args) => fetch(...args) })
   global.fetch = vi.fn().mockImplementation((url) => {
     if (url.includes('battle-of-order/briefs'))
       return Promise.resolve({ json: async () => ({ data: { briefs, total: briefs.length, page: 1, totalPages: 1 } }) })

@@ -9,22 +9,23 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => ({ state: null }),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     user: { _id: 'admin1', isAdmin: true, subscriptionTier: 'gold' },
     loading: false,
     API: '',
+    apiFetch: (...args) => fetch(...args),
     awardAircoins: vi.fn(),
     setUser: vi.fn(),
     refreshUser: vi.fn(),
   }),
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   TUTORIAL_STEPS: {},
 }))
 
-vi.mock('../../../utils/sound', () => ({
+vi.mock('../../utils/sound', () => ({
   invalidateSoundSettings: vi.fn(),
 }))
 

@@ -9,28 +9,28 @@ const mockNavigate   = vi.hoisted(() => vi.fn())
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('../../../utils/sound', () => ({ playSound: vi.fn() }))
+vi.mock('../../utils/sound', () => ({ playSound: vi.fn(), stopAllSounds: vi.fn(), playGridRevealTone: vi.fn() }))
 
 vi.mock('react-router-dom', () => ({
   useParams:   () => ({ briefId: 'brief123' }),
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
   Link:        ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
 }))
 
-vi.mock('../../../context/AppSettingsContext', () => ({
+vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
-vi.mock('../../../context/AppTutorialContext', () => ({
+vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn() }),
 }))
 
-vi.mock('../../../components/tutorial/TutorialModal', () => ({ default: () => null }))
-vi.mock('../../../components/UpgradePrompt',          () => ({ default: () => null }))
+vi.mock('../../components/tutorial/TutorialModal', () => ({ default: () => null }))
+vi.mock('../../components/UpgradePrompt',          () => ({ default: () => null }))
 
 vi.mock('framer-motion', () => ({
   motion: {
@@ -75,7 +75,7 @@ function booOptions(available, reason = null, opts = []) {
 function setup(fetchMocks) {
   mockUseAuth.mockReturnValue({
     user:          { _id: 'user1', loginStreak: 0 },
-    API:           '',
+    API: '', apiFetch: (...args) => fetch(...args),
     awardAircoins: vi.fn(),
     setUser:       vi.fn(),
   })

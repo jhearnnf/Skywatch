@@ -4,18 +4,18 @@ import BattleOfOrderFlow from '../BattleOfOrderFlow'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
-vi.mock('../../../utils/sound', () => ({ playSound: vi.fn() }))
+vi.mock('../../utils/sound', () => ({ playSound: vi.fn() }))
 
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', () => ({
   useParams:   () => ({ briefId: 'brief123' }),
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     user:          { _id: 'user1' },
-    API:           '',
+    API: '', apiFetch: (...args) => fetch(...args),
     awardAircoins: vi.fn(),
   }),
 }))
@@ -272,7 +272,7 @@ describe('BattleOfOrderFlow — game screen', () => {
   })
 
   it('does NOT play battle_of_order_selection sound when moving items up or down', async () => {
-    const { playSound } = await import('../../../utils/sound')
+    const { playSound } = await import('../../utils/sound')
 
     await renderAndReachGame(setupFetch())
     // Clear after roulette finishes so the roulette's own sound call doesn't pollute the assertion
@@ -332,7 +332,7 @@ describe('BattleOfOrderFlow — results screen', () => {
   })
 
   it('plays battle_of_order_won sound on win', async () => {
-    const { playSound } = await import('../../../utils/sound')
+    const { playSound } = await import('../../utils/sound')
     await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 8 }))
 
     expect(playSound).toHaveBeenCalledWith('battle_of_order_won')
@@ -340,7 +340,7 @@ describe('BattleOfOrderFlow — results screen', () => {
   })
 
   it('plays battle_of_order_lost sound on loss', async () => {
-    const { playSound } = await import('../../../utils/sound')
+    const { playSound } = await import('../../utils/sound')
     await renderAndReachResults(setupFetch({ won: false, aircoinsEarned: 0 }))
 
     expect(playSound).toHaveBeenCalledWith('battle_of_order_lost')

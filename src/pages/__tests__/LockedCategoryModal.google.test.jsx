@@ -1,6 +1,6 @@
 import { render, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import LockedCategoryModal from '../../../components/LockedCategoryModal'
+import LockedCategoryModal from '../../components/LockedCategoryModal'
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
@@ -10,7 +10,7 @@ const mockUseAuth     = vi.hoisted(() => vi.fn())
 const mockUseSettings = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => mockNavigate,
+  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
 }))
 
 vi.mock('../../context/AuthContext', () => ({
@@ -21,11 +21,11 @@ vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: mockUseSettings,
 }))
 
-vi.mock('../../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
 }))
 
-vi.mock('../../../context/AppSettingsContext', () => ({
+vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: mockUseSettings,
 }))
 
@@ -56,7 +56,7 @@ function setupGoogleMock() {
 }
 
 function setupAuth() {
-  mockUseAuth.mockReturnValue({ setUser: mockSetUser, API: '' })
+  mockUseAuth.mockReturnValue({ setUser: mockSetUser, API: '', apiFetch: (...args) => fetch(...args) })
   mockUseSettings.mockReturnValue({ settings: { freeCategories: ['News'] } })
 }
 

@@ -854,7 +854,7 @@ export default function LearnPriority() {
   const [catSettings,    setCatSettings]    = useState(null) // { freeCategories, silverCategories }
   const [briefsCache,    setBriefsCache]    = useState({}) // { [category]: brief[] }
   const [loading,        setLoading]        = useState(false)
-  const [activeCatIndex, setActiveCatIndex] = useState(1)
+  const [activeCatIndex, setActiveCatIndex] = useState(null)
   const [direction,      setDirection]      = useState(1)   // 1=forward, -1=backward
   const [unlockModal,    setUnlockModal]    = useState(null) // { unlock, category, colors }
   const [settingsLoaded, setSettingsLoaded] = useState(false)
@@ -948,12 +948,15 @@ export default function LearnPriority() {
       if (idx !== -1) setActiveCatIndex(idx)
       return
     }
-    // Guest / free users: snap to their first accessible pathway (e.g. News)
+    // Snap to the user's first accessible pathway (e.g. News for guests/free)
     const accessible = getAccessibleCategories(user, catSettings)
     if (accessible !== null && accessible.length > 0) {
       const idx = pathways.findIndex(p => accessible.includes(p.category))
-      if (idx !== -1) setActiveCatIndex(idx)
+      if (idx !== -1) { setActiveCatIndex(idx); return }
     }
+    // Fallback: first unlocked pathway, or just 0
+    const firstUnlocked = pathways.findIndex(p => p.unlocked)
+    setActiveCatIndex(firstUnlocked !== -1 ? firstUnlocked : 0)
   }, [settingsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Show inline swipe hint after learn-priority tutorial is seen ───────────
@@ -989,7 +992,7 @@ export default function LearnPriority() {
   }, [showSwipeHint]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch briefs for the active pathway ────────────────────────────────────
-  const activePathway = pathways[activeCatIndex] ?? pathways[0]
+  const activePathway = activeCatIndex != null ? pathways[activeCatIndex] : null
 
   useEffect(() => {
     if (!activePathway) return
