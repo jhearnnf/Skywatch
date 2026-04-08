@@ -1787,11 +1787,14 @@ router.get('/history/quiz/:attemptId', protect, async (req, res) => {
       .filter(r => qMap.has(r.questionId.toString())) // skip orphaned results (question was deleted/regenerated)
       .map(r => {
         const q              = qMap.get(r.questionId.toString());
-        const correctAnswer  = q.answers.find(a => a._id.equals(q.correctAnswerId));
-        const selectedAnswer = q.answers.find(a => a._id.equals(r.selectedAnswerId));
+        const correctId      = q.correctAnswerId?.toString();
+        const selectedId     = r.selectedAnswerId?.toString();
+        const displayedSet   = new Set((r.displayedAnswerIds || []).map(id => id.toString()));
+        const correctAnswer  = q.answers.find(a => a._id.toString() === correctId);
+        const selectedAnswer = q.answers.find(a => a._id.toString() === selectedId);
         const displayedAnswers = q.answers
-          .filter(a => r.displayedAnswerIds.some(id => a._id.equals(id)))
-          .map(a => ({ title: a.title, isCorrect: a._id.equals(q.correctAnswerId), isSelected: a._id.equals(r.selectedAnswerId) }));
+          .filter(a => displayedSet.has(a._id.toString()))
+          .map(a => ({ title: a.title, isCorrect: a._id.toString() === correctId, isSelected: a._id.toString() === selectedId }));
         return {
           questionText:       q.question,
           isCorrect:          r.isCorrect,
