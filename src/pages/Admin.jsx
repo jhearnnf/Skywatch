@@ -5158,7 +5158,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
                 disabled={generating === 'keywords' || generating === 'keywords-single' || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
-                {generating === 'keywords' ? '↺ Generating…' : '↺ Generate Keywords'}
+                {generating === 'keywords' ? '↺ Regenerating…' : '↺ Regenerate All Keywords'}
               </button>
               {draft.keywords.length < keywordsPerBrief && (
                 <button
