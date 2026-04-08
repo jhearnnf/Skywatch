@@ -4,22 +4,13 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
-import { MOCK_LEVELS, MOCK_LEADERBOARD } from '../data/mockData'
+import { MOCK_LEADERBOARD } from '../data/mockData'
 import { getMasterVolume, setMasterVolume } from '../utils/sound'
 import { displayTier, isFreeUser } from '../utils/subscription'
+import { getLevelInfo } from '../utils/levelUtils'
+import { useAppSettings } from '../context/AppSettingsContext'
 import RankBadge from '../components/RankBadge'
 import SEO from '../components/SEO'
-
-function getLevelInfo(coins) {
-  const levels = MOCK_LEVELS
-  const idx    = [...levels].reverse().findIndex(l => coins >= l.cumulativeAircoins)
-  const lvl    = idx >= 0 ? levels[levels.length - 1 - idx] : levels[0]
-  const next   = levels[levels.indexOf(lvl) + 1]
-  const base   = lvl.cumulativeAircoins
-  const cap    = next ? next.cumulativeAircoins - base : 200
-  const earned = Math.max(0, coins - base)
-  return { level: lvl.levelNumber, progress: Math.min(100, Math.round((earned / cap) * 100)), current: earned, next: cap }
-}
 
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned' }) {
   const Tag = onClick ? 'button' : 'div'
@@ -57,8 +48,8 @@ export default function Profile() {
   const navigate = useNavigate()
   const { start, replay, resetAll, step, visible } = useAppTutorial()
 
+  const { levels: liveLevels } = useAppSettings()
   const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0, flashcardsCollected: 0 })
-  const [levels,      setLevels]      = useState(MOCK_LEVELS)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
   const [diffBusy,    setDiffBusy]    = useState(false)
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
@@ -74,12 +65,8 @@ export default function Profile() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    Promise.all([
-      apiFetch(`${API}/api/users/levels`).then(r => r.json()),
-      apiFetch(`${API}/api/users/settings`).then(r => r.json()),
-    ])
-      .then(([lvlData, settingsData]) => {
-        if (lvlData?.data?.levels?.length) setLevels(lvlData.data.levels)
+    apiFetch(`${API}/api/users/settings`).then(r => r.json())
+      .then(settingsData => {
         const useLive = settingsData?.data?.useLiveLeaderboard ?? false
         if (useLive) {
           return apiFetch(`${API}/api/users/leaderboard`)
@@ -129,7 +116,7 @@ export default function Profile() {
 
   const cycleCoins = user?.cycleAircoins ?? 0   // drives XP bar (resets per rank cycle)
   const totalCoins = user?.totalAircoins ?? 0   // lifetime total — shown in stats grid
-  const levelInfo  = getLevelInfo(cycleCoins)
+  const levelInfo  = getLevelInfo(cycleCoins, liveLevels)
   const rankDisplay = user?.rank && typeof user.rank === 'object' && user.rank.rankName
     ? `${user.rank.rankName} (${user.rank.rankAbbreviation})`
     : 'Unranked'
@@ -173,7 +160,7 @@ export default function Profile() {
           <div className="mt-4">
             <div className="flex justify-between text-xs text-slate-600 mb-1 intel-mono">
               <span>Level {levelInfo.level}</span>
-              <span>{levelInfo.current} / {levelInfo.next} Aircoins</span>
+              <span>{levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Aircoins</span>
             </div>
             <div className="h-2 bg-brand-200/50 rounded-full overflow-hidden">
               <motion.div

@@ -4,8 +4,9 @@ import { motion, AnimatePresence, useMotionValue, useAnimationControls } from 'f
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
-import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
+import { MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
 import { pathwayTierRequired, getAccessibleCategories } from '../utils/subscription'
+import { getLevelInfo } from '../utils/levelUtils'
 import { playTypingSound } from '../utils/sound'
 import SEO from '../components/SEO'
 
@@ -53,18 +54,6 @@ const ZIGZAG = [-56, -16, 24, -16]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getLevelInfo(coins, levels) {
-  if (!levels?.length) return { current: { levelNumber: 1 }, progress: 0, coinsInLevel: 0, coinsNeeded: 100 }
-  let current = levels[0]
-  for (const lvl of levels) {
-    if (coins >= lvl.cumulativeAircoins) current = lvl
-    else break
-  }
-  const coinsInLevel = coins - current.cumulativeAircoins
-  const coinsNeeded  = current.aircoinsToNextLevel
-  const progress     = coinsNeeded ? Math.min(100, Math.round((coinsInLevel / coinsNeeded) * 100)) : 100
-  return { current, coinsInLevel, coinsNeeded, progress }
-}
 
 function tierRank(tier) {
   return { free: 0, trial: 1, silver: 1, gold: 2 }[tier] ?? 0
@@ -860,7 +849,7 @@ export default function LearnPriority() {
   const location      = useLocation()
   const { start, visible, hasSeen } = useAppTutorial()
 
-  const [levels,         setLevels]         = useState(MOCK_LEVELS)
+  const [levels,         setLevels]         = useState(null)
   const [pathwayUnlocks, setPathwayUnlocks] = useState(DEFAULT_PATHWAY_UNLOCKS)
   const [catSettings,    setCatSettings]    = useState(null) // { freeCategories, silverCategories }
   const [briefsCache,    setBriefsCache]    = useState({}) // { [category]: brief[] }
@@ -925,8 +914,8 @@ export default function LearnPriority() {
 
   // ── Compute user progression ────────────────────────────────────────────────
   const userTier        = user?.subscriptionTier ?? 'free'
-  const { current: lvl } = getLevelInfo(user?.cycleAircoins ?? 0, levels)
-  const userLevel       = lvl.levelNumber ?? 1
+  const lvlInfo         = getLevelInfo(user?.cycleAircoins ?? 0, levels)
+  const userLevel       = lvlInfo?.level ?? 1
   const userRankObj     = user?.rank
   const userRankNumber  = userRankObj?.rankNumber ?? 1
 
@@ -1198,13 +1187,35 @@ export default function LearnPriority() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex flex-col items-center justify-center py-20 gap-3"
+                className="flex flex-col items-center gap-4 py-4"
               >
-                <div
-                  className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-                  style={{ borderColor: `${activePathway.colors.stone}44`, borderTopColor: activePathway.colors.stone }}
-                />
-                <p className="text-sm text-slate-500">Loading {activePathway.category} pathway…</p>
+                {[0,1,2,3].map(i => {
+                  const xOffset = ZIGZAG[i % ZIGZAG.length]
+                  const size = 52
+                  return (
+                    <div key={i} className="flex flex-col items-center" style={{ paddingLeft: `calc(50% + ${xOffset}px - ${size / 2}px)`, alignItems: 'flex-start' }}>
+                      {i > 0 && (
+                        <div className="flex flex-col items-center gap-1.5 mb-1.5" style={{ marginLeft: size / 2 - 3 }}>
+                          {[0,1,2].map(j => (
+                            <div key={j} className="w-1.5 h-1.5 rounded-full" style={{ background: '#243650', opacity: 0.4 }} />
+                          ))}
+                        </div>
+                      )}
+                      <div
+                        className="rounded-full animate-pulse"
+                        style={{
+                          width: size, height: size,
+                          background: activePathway.colors.stone + '18',
+                          border: `2px solid ${activePathway.colors.stone}22`,
+                        }}
+                      />
+                      <div
+                        className="mt-1.5 rounded animate-pulse"
+                        style={{ width: 60 + (i % 2) * 20, height: 10, background: '#172236', marginLeft: 2 }}
+                      />
+                    </div>
+                  )
+                })}
               </motion.div>
             ) : (
               <PathwayView

@@ -51,7 +51,6 @@ export function isFreeUser(user) {
 }
 
 // Fallback cumulative thresholds — used when live levels haven't loaded yet.
-// Mirrors the default seed data in MOCK_LEVELS.
 const LEVEL_THRESHOLDS_FALLBACK = [0, 100, 350, 850, 1700, 3000, 4850, 7350, 10600, 14700]
 
 // Converts a levels array (cumulativeAircoins format from /api/users/levels) to a threshold array.

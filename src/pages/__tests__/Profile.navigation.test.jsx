@@ -41,12 +41,22 @@ vi.mock('framer-motion', () => ({
 }))
 
 vi.mock('../../../data/mockData', () => ({
-  MOCK_LEVELS: [
-    { levelNumber: 1, cumulativeAircoins: 0,   aircoinsToNextLevel: 100 },
-    { levelNumber: 2, cumulativeAircoins: 100,  aircoinsToNextLevel: 150 },
-  ],
   MOCK_LEADERBOARD: [],
 }))
+
+const TEST_LEVELS = [
+  { levelNumber: 1, cumulativeAircoins: 0,   aircoinsToNextLevel: 100 },
+  { levelNumber: 2, cumulativeAircoins: 100,  aircoinsToNextLevel: 150 },
+]
+
+vi.mock('../../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({ levels: TEST_LEVELS, settings: {}, loading: false }),
+}))
+
+vi.mock('../../../utils/levelUtils', async () => {
+  const actual = await vi.importActual('../../../utils/levelUtils')
+  return actual
+})
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -65,9 +75,16 @@ const BASE_USER = {
 
 function setupAuth() {
   mockUseAuth.mockReturnValue({
-    user:    { ...BASE_USER },
-    setUser: vi.fn(),
-    API:     '',
+    user:     { ...BASE_USER },
+    setUser:  vi.fn(),
+    API:      '',
+    apiFetch: vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/users/stats')) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: { brifsRead: 8, gamesPlayed: 4, abandonedGames: 2, winPercent: 75 } }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    }),
+    logout:   vi.fn(),
   })
 }
 

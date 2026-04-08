@@ -19,7 +19,6 @@ import AppShell                            from './components/layout/AppShell'
 import AircoinNotification                 from './components/AircoinNotification'
 import LevelUpNotification                 from './components/LevelUpNotification'
 import RankPromotionNotification           from './components/RankPromotionNotification'
-import LoadingOverlay                      from './components/LoadingOverlay'
 
 // v2 pages
 import Landing        from './pages/Landing'
@@ -273,7 +272,6 @@ export default function App() {
                 <AppRoutes />
                 <NotifLayer />
                 <ReportNotifBanner />
-                <LoadingOverlay />
               </FlashcardBadgeProvider>
               </UnsolvedReportsProvider>
             </NewGameUnlockProvider>

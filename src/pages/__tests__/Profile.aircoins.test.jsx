@@ -41,13 +41,23 @@ vi.mock('framer-motion', () => ({
 }))
 
 vi.mock('../../../data/mockData', () => ({
-  MOCK_LEVELS: [
-    { levelNumber: 1, cumulativeAircoins: 0,   aircoinsToNextLevel: 100 },
-    { levelNumber: 2, cumulativeAircoins: 100,  aircoinsToNextLevel: 150 },
-    { levelNumber: 3, cumulativeAircoins: 250,  aircoinsToNextLevel: 250 },
-  ],
   MOCK_LEADERBOARD: [],
 }))
+
+const TEST_LEVELS = [
+  { levelNumber: 1, cumulativeAircoins: 0,   aircoinsToNextLevel: 100 },
+  { levelNumber: 2, cumulativeAircoins: 100,  aircoinsToNextLevel: 150 },
+  { levelNumber: 3, cumulativeAircoins: 250,  aircoinsToNextLevel: 250 },
+]
+
+vi.mock('../../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({ levels: TEST_LEVELS, settings: {}, loading: false }),
+}))
+
+vi.mock('../../../utils/levelUtils', async () => {
+  const actual = await vi.importActual('../../../utils/levelUtils')
+  return actual
+})
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -66,9 +76,16 @@ const BASE_USER = {
 
 function setupAuth(userOverrides = {}) {
   mockUseAuth.mockReturnValue({
-    user:    userOverrides === null ? null : { ...BASE_USER, ...userOverrides },
-    setUser: vi.fn(),
-    API:     '',
+    user:     userOverrides === null ? null : { ...BASE_USER, ...userOverrides },
+    setUser:  vi.fn(),
+    API:      '',
+    apiFetch: vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/users/stats')) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: { brifsRead: 5, gamesPlayed: 3, abandonedGames: 1, winPercent: 67 } }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    }),
+    logout:   vi.fn(),
   })
 }
 
@@ -110,7 +127,7 @@ describe('Profile — aircoin display', () => {
   })
 
   it('XP bar uses cycleAircoins-based level info', async () => {
-    // cycleAircoins=250, which maps to Level 3 boundary in MOCK_LEVELS
+    // cycleAircoins=250, which maps to Level 3 boundary in TEST_LEVELS
     render(<Profile />)
     await waitFor(() => expect(screen.getByText(/Level \d/)).toBeDefined())
   })

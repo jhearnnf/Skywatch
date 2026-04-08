@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
-import { getLevelAtCoins } from '../data/mockData'
+import { getLevelNumber } from '../utils/levelUtils'
 
 const AuthContext = createContext(null)
 
@@ -12,8 +12,17 @@ export function AuthProvider({ children }) {
   const [isLoading,       setIsLoading]       = useState(false)
   const [loadingStartTime, setLoadingStartTime] = useState(null)
   const loadingCountRef = useRef(0)
-  const userRef = useRef(null)
+  const userRef   = useRef(null)
+  const levelsRef = useRef(null)
   useEffect(() => { userRef.current = user }, [user])
+
+  // Fetch levels once for level-up detection in awardAircoins
+  useEffect(() => {
+    fetch(`${API}/api/users/levels`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.data?.levels?.length) levelsRef.current = d.data.levels })
+      .catch(() => {})
+  }, [])
 
   // apiFetch — wraps fetch for user-triggered calls:
   //   • Shows a loading overlay after 400ms if still in-flight (suppresses flicker on fast responses)
@@ -98,8 +107,8 @@ export function AuthProvider({ children }) {
   const awardAircoins = useCallback((amount, label, { cycleAfter, totalAfter, rankPromotion } = {}) => {
     const oldCycle = userRef.current?.cycleAircoins ?? 0
     const newCycle = cycleAfter ?? (oldCycle + amount)
-    const oldLevel = getLevelAtCoins(oldCycle)
-    const newLevel = getLevelAtCoins(newCycle)
+    const oldLevel = getLevelNumber(oldCycle, levelsRef.current)
+    const newLevel = getLevelNumber(newCycle, levelsRef.current)
 
     setUser(u => {
       if (!u) return u

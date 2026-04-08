@@ -5,7 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import LockedCategoryModal from '../components/LockedCategoryModal'
-import { MOCK_LEVELS, MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
+import { MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
+import { getLevelInfo } from '../utils/levelUtils'
 import RankBadge from '../components/RankBadge'
 import SEO from '../components/SEO'
 
@@ -36,18 +37,6 @@ function tierRankNum(tier) {
   return { free: 0, trial: 1, silver: 1, gold: 2 }[tier] ?? 0
 }
 
-function getLevelInfo(coins, levels) {
-  if (!levels?.length) return { current: { levelNumber: 1, aircoinsToNextLevel: 100, cumulativeAircoins: 0 }, coinsInLevel: 0, coinsNeeded: 100, progress: 0 }
-  let current = levels[0]
-  for (const lvl of levels) {
-    if (coins >= lvl.cumulativeAircoins) current = lvl
-    else break
-  }
-  const coinsInLevel = coins - current.cumulativeAircoins
-  const coinsNeeded  = current.aircoinsToNextLevel
-  const progress     = coinsNeeded ? Math.min(100, Math.round((coinsInLevel / coinsNeeded) * 100)) : 100
-  return { current, coinsInLevel, coinsNeeded, progress }
-}
 
 // ── Pathway badge strip ───────────────────────────────────────────────────────
 
@@ -95,7 +84,7 @@ export default function Rankings() {
   const location      = useLocation()
   const { start }     = useAppTutorial()
 
-  const [levels,         setLevels]         = useState(MOCK_LEVELS)
+  const [levels,         setLevels]         = useState(null)
   const [ranks,          setRanks]          = useState(MOCK_RANKS?.map(r => ({ ...r, rankAbbreviation: r.abbreviation })) ?? [])
   const [pathwayUnlocks, setPathwayUnlocks] = useState(DEFAULT_PATHWAY_UNLOCKS)
   const [upgradeModal,   setUpgradeModal]   = useState(null) // { category, tier }
@@ -131,10 +120,13 @@ export default function Rankings() {
 
   const coins    = user?.cycleAircoins ?? 0
   const userTier = user?.subscriptionTier ?? 'free'
-  const { current: currentLvl, coinsInLevel, coinsNeeded, progress: lvlProgress } = getLevelInfo(coins, levels)
-  const userLevel = currentLvl.levelNumber ?? 1
+  const lvlInfo  = getLevelInfo(coins, levels)
+  const userLevel    = lvlInfo?.level ?? 1
+  const coinsInLevel = lvlInfo?.coinsInLevel ?? 0
+  const coinsNeeded  = lvlInfo?.coinsNeeded ?? 0
+  const lvlProgress  = lvlInfo?.progress ?? 0
 
-  const sortedLevels = [...levels].sort((a, b) => b.levelNumber - a.levelNumber)
+  const sortedLevels = levels ? [...levels].sort((a, b) => b.levelNumber - a.levelNumber) : []
 
   const sortedRanks    = [...ranks].sort((a, b) => b.rankNumber - a.rankNumber)
   const userRankId     = user?.rank?._id ?? user?.rank ?? null

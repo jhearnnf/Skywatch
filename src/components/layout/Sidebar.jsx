@@ -2,20 +2,9 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
-import { MOCK_LEVELS } from '../../data/mockData'
 import RankBadge from '../RankBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
-
-function getLevelInfo(coins, levels) {
-  const lvlList = levels?.length ? levels : MOCK_LEVELS
-  const idx    = [...lvlList].reverse().findIndex(l => coins >= l.cumulativeAircoins)
-  const lvl    = idx >= 0 ? lvlList[lvlList.length - 1 - idx] : lvlList[0]
-  const next   = lvlList[lvlList.indexOf(lvl) + 1]
-  const base   = lvl.cumulativeAircoins
-  const cap    = next ? next.cumulativeAircoins - base : 200
-  const earned = Math.max(0, coins - base)
-  return { level: lvl.levelNumber, progress: Math.min(100, Math.round((earned / cap) * 100)), current: earned, next: cap }
-}
+import { getLevelInfo } from '../../utils/levelUtils'
 
 const NAV_ITEMS = [
   { to: '/home',          emoji: '🏠', label: 'Home'       },
@@ -126,7 +115,7 @@ export default function Sidebar() {
             />
           </div>
           <p className="text-[10px] text-slate-400 mt-1 text-right">
-            {levelInfo.current} / {levelInfo.next} Aircoins
+            {levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Aircoins
           </p>
 
           <button

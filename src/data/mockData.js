@@ -1,26 +1,3 @@
-// Levels 1–10 with cumulative aircoins required to reach each level
-export const MOCK_LEVELS = [
-  { levelNumber: 1,  aircoinsToNextLevel: 100,  cumulativeAircoins: 0     },
-  { levelNumber: 2,  aircoinsToNextLevel: 250,  cumulativeAircoins: 100   },
-  { levelNumber: 3,  aircoinsToNextLevel: 500,  cumulativeAircoins: 350   },
-  { levelNumber: 4,  aircoinsToNextLevel: 850,  cumulativeAircoins: 850   },
-  { levelNumber: 5,  aircoinsToNextLevel: 1300, cumulativeAircoins: 1700  },
-  { levelNumber: 6,  aircoinsToNextLevel: 1850, cumulativeAircoins: 3000  },
-  { levelNumber: 7,  aircoinsToNextLevel: 2500, cumulativeAircoins: 4850  },
-  { levelNumber: 8,  aircoinsToNextLevel: 3250, cumulativeAircoins: 7350  },
-  { levelNumber: 9,  aircoinsToNextLevel: 4100, cumulativeAircoins: 10600 },
-  { levelNumber: 10, aircoinsToNextLevel: null,  cumulativeAircoins: 14700 },
-]
-
-// Returns the level number a user is at for a given total aircoin count
-export function getLevelAtCoins(coins) {
-  let level = 1
-  for (const l of MOCK_LEVELS) {
-    if (coins >= l.cumulativeAircoins) level = l.levelNumber
-  }
-  return level
-}
-
 // Mock leaderboard — top agents by total aircoins
 export const MOCK_LEADERBOARD = [
   { agentNumber: '8832941', totalAircoins: 14820 },

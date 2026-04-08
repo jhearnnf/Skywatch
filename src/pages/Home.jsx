@@ -6,20 +6,10 @@ import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import FlashcardGameModal from '../components/FlashcardGameModal'
-import { CATEGORY_ICONS, MOCK_LEVELS } from '../data/mockData'
+import { CATEGORY_ICONS } from '../data/mockData'
 import { useAppSettings } from '../context/AppSettingsContext'
+import { getLevelInfo } from '../utils/levelUtils'
 import SEO from '../components/SEO'
-
-function getLevelInfo(coins, levels) {
-  const lvlList = levels?.length ? levels : MOCK_LEVELS
-  const idx    = [...lvlList].reverse().findIndex(l => coins >= l.cumulativeAircoins)
-  const lvl    = idx >= 0 ? lvlList[lvlList.length - 1 - idx] : lvlList[0]
-  const next   = lvlList[lvlList.indexOf(lvl) + 1]
-  const base   = lvl.cumulativeAircoins
-  const cap    = next ? next.cumulativeAircoins - base : 200
-  const earned = Math.max(0, coins - base)
-  return { level: lvl.levelNumber, progress: Math.min(100, Math.round((earned / cap) * 100)), current: earned, next: cap }
-}
 
 // XP progress ring
 function XPRing({ pct = 0, level = 1, size = 72 }) {
@@ -59,6 +49,7 @@ export default function Home() {
   const [missionLoading,    setMissionLoading]    = useState(false)
   const [showFlashcard,     setShowFlashcard]     = useState(false)
   const [jumpBackBrief,     setJumpBackBrief]     = useState(null)
+  const [newsLoading,       setNewsLoading]       = useState(true)
   const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0, liveLevels) : null
 
   // Mission done if the user completed a brief today (server-authoritative via lastStreakDate)
@@ -90,10 +81,12 @@ export default function Home() {
 
   // Fetch latest 4 News briefs — re-fetch on user change so isRead/isStarted resets after logout
   useEffect(() => {
+    setNewsLoading(true)
     apiFetch(`${API}/api/briefs?limit=4&status=published&category=News`)
       .then(r => r.json())
       .then(data => setLatestBriefs(data.data?.briefs ?? []))
       .catch(() => {})
+      .finally(() => setNewsLoading(false))
   }, [user, API])
 
   const today   = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -151,7 +144,7 @@ export default function Home() {
                 />
               </div>
               <p className="text-xs text-slate-600 mt-1">
-                {levelInfo.current} / {levelInfo.next} Aircoins to Level {levelInfo.level + 1}
+                {levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Aircoins to Level {levelInfo.level + 1}
               </p>
             </div>
             <div className="text-right shrink-0">
@@ -260,12 +253,28 @@ export default function Home() {
       )}
 
       {/* Latest News */}
-      {latestBriefs.length > 0 && (
+      {(newsLoading || latestBriefs.length > 0) && (
         <div className="mb-6">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-800">Latest News</h2>
             <Link to="/learn-priority" className="text-xs font-semibold text-brand-600 hover:text-brand-700">See all →</Link>
           </div>
+          {newsLoading && latestBriefs.length === 0 ? (
+            <div className="space-y-2">
+              {[0,1,2,3].map(i => (
+                <div
+                  key={i}
+                  className="relative overflow-hidden flex items-center gap-3 pl-5 pr-4 py-3.5 rounded-2xl border border-slate-700/20 bg-surface animate-pulse"
+                >
+                  <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-slate-700/30 rounded" />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="h-3.5 rounded bg-slate-700/30" style={{ width: `${60 + (i % 3) * 15}%` }} />
+                    <div className="h-2.5 rounded bg-slate-700/20" style={{ width: '40%' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
           <div className="space-y-2">
             {latestBriefs.map((brief, i) => {
               const locked = brief.isLocked
@@ -340,6 +349,7 @@ export default function Home() {
               )
             })}
           </div>
+          )}
         </div>
       )}
 
