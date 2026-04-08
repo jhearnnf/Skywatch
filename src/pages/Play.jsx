@@ -79,7 +79,7 @@ const GAME_MODES = [
 ]
 
 export default function Play() {
-  const { user, API } = useAuth()
+  const { user, API, apiFetch } = useAuth()
   const { start, step, visible, next: tutorialNext, hasSeen } = useAppTutorial()
   const { newGames, isUnlocked, markSeen, markUnlockFromServer, revokeUnlock } = useNewGameUnlock()
 
@@ -193,13 +193,13 @@ export default function Play() {
       setWtaSpawn(null)
       return
     }
-    fetch(`${API}/api/games/quiz/recommended-briefs?limit=6`, { credentials: 'include' })
+    apiFetch(`${API}/api/games/quiz/recommended-briefs?limit=6`)
       .then(r => r.json())
       .then(data => {
         setQuizBriefs(data?.data?.briefs ?? [])
       })
       .catch(() => {})
-    fetch(`${API}/api/games/battle-of-order/recommended-briefs?limit=6`, { credentials: 'include' })
+    apiFetch(`${API}/api/games/battle-of-order/recommended-briefs?limit=6`)
       .then(r => r.json())
       .then(data => {
         const briefs = data?.data?.briefs ?? []
@@ -210,13 +210,13 @@ export default function Play() {
         }
       })
       .catch(() => {})
-    fetch(`${API}/api/games/flashcard-recall/available-briefs`, { credentials: 'include' })
+    apiFetch(`${API}/api/games/flashcard-recall/available-briefs`)
       .then(r => r.json())
       .then(data => {
         setFlashcardAvail(data?.data?.count ?? 0)
       })
       .catch(() => setFlashcardAvail(0))
-    fetch(`${API}/api/users/me/wta-spawn`, { credentials: 'include' })
+    apiFetch(`${API}/api/users/me/wta-spawn`)
       .then(r => r.json())
       .then(data => {
         const spawn = data?.data ?? null

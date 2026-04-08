@@ -378,20 +378,21 @@ export default function QuizFlow() {
   const [breakdown, setBreakdown]    = useState([])
   const [isFirstAttempt, setFirstAttempt] = useState(true)
   const [booAvailable,   setBooAvailable] = useState(false)
+  const [finishing,      setFinishing]   = useState(false)
 
   const questionStartRef = useRef(Date.now())
   const finishedRef      = useRef(false)
   const attemptIdRef     = useRef(null)
+  const booPreFetched    = useRef(false)
 
   // Load brief info + start quiz session
   useEffect(() => {
     async function startQuiz() {
       try {
         const [briefRes, startRes] = await Promise.all([
-          fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' }),
-          fetch(`${API}/api/games/quiz/start`, {
+          apiFetch(`${API}/api/briefs/${briefId}`),
+          apiFetch(`${API}/api/games/quiz/start`, {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ briefId }),
           }),
@@ -446,38 +447,51 @@ export default function QuizFlow() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Check BOO availability once quiz is done
+  // ── Abandon on page refresh / tab close ────────────────────────────────
   useEffect(() => {
-    if (!done || !briefId) return
+    function handleUnload() {
+      if (!attemptIdRef.current || finishedRef.current) return
+      finishedRef.current = true
+      navigator.sendBeacon(
+        `${API}/api/games/quiz/attempt/${attemptIdRef.current}/finish`,
+        new Blob([JSON.stringify({ status: 'abandoned' })], { type: 'application/json' }),
+      )
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [API]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pre-fetch BOO availability (optimistic — assumes user will pass)
+  const preFetchBoo = useCallback(() => {
+    if (booPreFetched.current || !briefId) return
+    booPreFetched.current = true
     fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => { if (d.data?.available) setBooAvailable(true) })
       .catch(() => {})
-  }, [done]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [API, briefId])
 
   const current  = questions[qIdx]
   const totalQs  = questions.length
 
-  // Submit per-question result to backend
-  const submitResult = useCallback(async (answerId) => {
-    if (!attemptId || !gameSessionId || !current) return
+  // Submit per-question result to backend (fire-and-forget — no loading overlay)
+  const submitResult = useCallback((answerId) => {
+    if (!attemptId || !gameSessionId || !current) return Promise.resolve()
     const timeTaken = Math.round((Date.now() - questionStartRef.current) / 1000)
-    try {
-      await apiFetch(`${API}/api/games/quiz/result`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          questionId:         current._id,
-          displayedAnswerIds: current.answers.map(a => a._id),
-          selectedAnswerId:   answerId,
-          timeTakenSeconds:   timeTaken,
-          gameSessionId,
-          attemptId,
-        }),
-      })
-    } catch {}
-  }, [API, apiFetch, attemptId, gameSessionId, current])
+    return fetch(`${API}/api/games/quiz/result`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        questionId:         current._id,
+        displayedAnswerIds: current.answers.map(a => a._id),
+        selectedAnswerId:   answerId,
+        timeTakenSeconds:   timeTaken,
+        gameSessionId,
+        attemptId,
+      }),
+    }).catch(() => {})
+  }, [API, attemptId, gameSessionId, current])
 
   // Pre-fired promise for the last question's /finish call — stored so
   // handleNext can await the already-in-flight request instead of starting fresh.
@@ -486,15 +500,15 @@ export default function QuizFlow() {
   const fireFinish = useCallback(() => {
     if (finishedRef.current || !attemptId) return
     finishedRef.current = true
-    finishPromiseRef.current = apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
+    finishPromiseRef.current = fetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'completed' }),
     }).then(res => res.json())
-  }, [API, apiFetch, attemptId])
+  }, [API, attemptId])
 
-  const handleAnswer = (answerId) => {
+  const handleAnswer = async (answerId) => {
     setSelected(answerId)
     setAnswered(true)
     if (String(answerId) === String(current.correctAnswerId)) {
@@ -503,15 +517,21 @@ export default function QuizFlow() {
     } else {
       playSound('quiz_answer_incorrect')
     }
-    submitResult(answerId)
-    // Pre-fire the finish call on the last question so it's in-flight
-    // while the user reads their feedback — results screen loads instantly.
-    if (qIdx + 1 >= totalQs) fireFinish()
+    // Pre-fetch BOO availability in background after first answer
+    preFetchBoo()
+    const resultPromise = submitResult(answerId)
+    if (qIdx + 1 >= totalQs) {
+      // Ensure the last answer is saved before finishing, so /finish
+      // sees all results when computing aircoins.
+      await resultPromise
+      fireFinish()
+    }
   }
 
   const handleNext = async () => {
     const nextIdx = qIdx + 1
     if (nextIdx >= totalQs) {
+      setFinishing(true)
       try {
         const data = await (finishPromiseRef.current ?? Promise.resolve(null))
         if (data) {
@@ -536,6 +556,7 @@ export default function QuizFlow() {
           }
         }
       } catch {}
+      setFinishing(false)
       setDone(true)
     } else {
       setQIdx(nextIdx)
@@ -742,10 +763,23 @@ export default function QuizFlow() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           onClick={handleNext}
-          whileTap={{ scale: 0.97 }}
-          className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200"
+          disabled={finishing}
+          whileTap={!finishing ? { scale: 0.97 } : {}}
+          className={`w-full py-4 font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200
+            ${finishing
+              ? 'bg-brand-500 text-white/80 cursor-wait'
+              : 'bg-brand-600 hover:bg-brand-700 text-white'
+            }`}
         >
-          {qIdx + 1 >= totalQs ? 'See Results →' : 'Next Question →'}
+          {finishing ? (
+            <span className="inline-flex items-center gap-2">
+              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z" />
+              </svg>
+              Loading results…
+            </span>
+          ) : qIdx + 1 >= totalQs ? 'See Results →' : 'Next Question →'}
         </motion.button>
       )}
     </>

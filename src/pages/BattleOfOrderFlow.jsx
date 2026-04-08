@@ -573,8 +573,8 @@ export default function BattleOfOrderFlow() {
       const timeoutId  = setTimeout(() => controller.abort(), 12000)
       try {
         const [briefRes, optRes] = await Promise.all([
-          fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include', signal: controller.signal }),
-          fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include', signal: controller.signal }),
+          apiFetch(`${API}/api/briefs/${briefId}`, { signal: controller.signal }),
+          apiFetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { signal: controller.signal }),
         ])
         clearTimeout(timeoutId)
         const briefData = await briefRes.json()
@@ -625,6 +625,25 @@ export default function BattleOfOrderFlow() {
       }).catch(() => {})
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Abandon on page refresh / tab close ────────────────────────────────
+  useEffect(() => {
+    function handleUnload() {
+      if (!gameIdRef.current || abandonedRef.current) return
+      abandonedRef.current = true
+      navigator.sendBeacon(
+        `${API}/api/games/battle-of-order/abandon`,
+        new Blob([JSON.stringify({
+          gameId: gameIdRef.current,
+          timeTakenSeconds: gameStartTimeRef.current
+            ? Math.round((Date.now() - gameStartTimeRef.current) / 1000)
+            : null,
+        })], { type: 'application/json' }),
+      )
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [API]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRouletteSelect = (selectedOrderType) => {
     generateGame(selectedOrderType)

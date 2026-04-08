@@ -166,11 +166,12 @@ function StatCard({ label, value, sub, color = 'slate' }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function StatsTab({ API }) {
+  const { apiFetch } = useAuth()
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch(`${API}/api/admin/stats`, { credentials: 'include' })
+    apiFetch(`${API}/api/admin/stats`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => { if (d.status === 'success') setStats(d.data); else setError('Failed to load stats') })
       .catch(() => setError('Failed to load stats'))
@@ -1098,7 +1099,7 @@ function AiPromptsSection({ API }) {
   const [dirty,     setDirty]     = useState({})     // keys that have unsaved changes
 
   useEffect(() => {
-    fetch(`${API}/api/admin/ai-prompts`, { credentials: 'include' })
+    apiFetch(`${API}/api/admin/ai-prompts`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         if (d.data) {
@@ -1246,10 +1247,10 @@ function SettingsTab({ API }) {
   const [wtaSpawn,   setWtaSpawn]   = useState(null)
 
   const load = useCallback(() => {
-    fetch(`${API}/api/admin/settings`, { credentials: 'include' })
+    apiFetch(`${API}/api/admin/settings`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => { const s = d.data?.settings; if (s) { setSettings(s); setDraft(s) } })
-    fetch(`${API}/api/users/me/wta-spawn`, { credentials: 'include' })
+    apiFetch(`${API}/api/users/me/wta-spawn`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => { if (d.data) setWtaSpawn(d.data) })
   }, [API])
@@ -1949,7 +1950,7 @@ function ProblemsTab({ API }) {
     setLoading(true)
     const params = new URLSearchParams()
     if (filter !== 'all') params.set('solved', filter === 'solved' ? 'true' : 'false')
-    fetch(`${API}/api/admin/problems?${params}`, { credentials: 'include' })
+    apiFetch(`${API}/api/admin/problems?${params}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => setProblems(d.data?.problems ?? []))
       .finally(() => setLoading(false))
@@ -2231,7 +2232,7 @@ function ContentTab({ API }) {
   const { apiFetch } = useAuth()
 
   const load = useCallback(() => {
-    fetch(`${API}/api/admin/settings`, { credentials: 'include' })
+    apiFetch(`${API}/api/admin/settings`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         if (d.data?.settings) {
@@ -3657,7 +3658,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       }
       const url    = briefId ? `${API}/api/admin/briefs/${briefId}` : `${API}/api/admin/briefs`
       const method = briefId ? 'PATCH' : 'POST'
-      const res    = await fetch(url, {
+      const res    = await apiFetch(url, {
         method, credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -3798,7 +3799,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
     const fetchPool = (cat, current, setter) => {
       if (current.length > 0) return Promise.resolve(current)
-      return fetch(`${API}/api/admin/briefs?category=${cat}&limit=200`, { credentials: 'include' })
+      return apiFetch(`${API}/api/admin/briefs?category=${cat}&limit=200`, { credentials: 'include' })
         .then(r => r.json())
         .then(d => { const briefs = d.data?.briefs ?? []; setter(briefs); return briefs })
         .catch(() => [])
@@ -3806,7 +3807,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
 
     const fetchRelatedPool = () => {
       if (allRelatedPool.length > 0) return Promise.resolve()
-      return fetch(`${API}/api/admin/briefs/related-pool`, { credentials: 'include' })
+      return apiFetch(`${API}/api/admin/briefs/related-pool`, { credentials: 'include' })
         .then(r => r.json()).then(d => { if (d.data?.briefs) setAllRelatedPool(d.data.briefs) }).catch(() => {})
     }
 
@@ -3822,7 +3823,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     // Helper: call generate-links for one type
     const suggestLinks = (linkType, pool) => {
       if (!pool.length) return Promise.resolve(null)
-      return fetch(`${API}/api/admin/ai/generate-links`, {
+      return apiFetch(`${API}/api/admin/ai/generate-links`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -5674,6 +5675,7 @@ function ActionBadge({ type }) {
 }
 
 function LogsTab({ API }) {
+  const { apiFetch } = useAuth()
   const [actions,    setActions]    = useState([])
   const [loading,    setLoading]    = useState(true)
   const [page,       setPage]       = useState(1)
@@ -5685,7 +5687,7 @@ function LogsTab({ API }) {
     setLoading(true)
     const params = new URLSearchParams({ page, limit: 20 })
     if (typeFilter) params.set('type', typeFilter)
-    fetch(`${API}/api/admin/actions?${params}`, { credentials: 'include' })
+    apiFetch(`${API}/api/admin/actions?${params}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         setActions(d.data?.actions ?? [])
@@ -5795,6 +5797,7 @@ function EmailTypeBadge({ type }) {
 }
 
 function EmailLogsTab({ API }) {
+  const { apiFetch } = useAuth()
   const [logs,       setLogs]       = useState([])
   const [loading,    setLoading]    = useState(true)
   const [page,       setPage]       = useState(1)
@@ -5811,7 +5814,7 @@ function EmailLogsTab({ API }) {
     if (typeFilter)   params.set('type',   typeFilter)
     if (statusFilter) params.set('status', statusFilter)
     if (search)       params.set('search', search)
-    fetch(`${API}/api/admin/email-logs?${params}`, { credentials: 'include' })
+    apiFetch(`${API}/api/admin/email-logs?${params}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         setLogs(d.data?.logs ?? [])
@@ -5958,6 +5961,7 @@ const INTEL_SUBTABS = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SystemLogsTab({ API, onResolved }) {
+  const { apiFetch } = useAuth()
   const [logs,       setLogs]       = useState([])
   const [loading,    setLoading]    = useState(true)
   const [page,       setPage]       = useState(1)
@@ -5970,7 +5974,7 @@ function SystemLogsTab({ API, onResolved }) {
     setLoading(true)
     const params = new URLSearchParams({ page, limit: 20 })
     if (!showAll) params.set('resolved', 'false')
-    fetch(`${API}/api/admin/system-logs?${params}`, { credentials: 'include' })
+    apiFetch(`${API}/api/admin/system-logs?${params}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         setLogs(d.data?.logs ?? [])
@@ -5986,7 +5990,7 @@ function SystemLogsTab({ API, onResolved }) {
   const resolve = async (id) => {
     setResolving(id)
     try {
-      await fetch(`${API}/api/admin/system-logs/${id}/resolve`, { method: 'PATCH', credentials: 'include' })
+      await apiFetch(`${API}/api/admin/system-logs/${id}/resolve`, { method: 'PATCH', credentials: 'include' })
       load()
       onResolved?.()
     } catch (_) {}

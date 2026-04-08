@@ -75,14 +75,14 @@ export default function Profile() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/api/users/levels`).then(r => r.json()),
-      fetch(`${API}/api/users/settings`).then(r => r.json()),
+      apiFetch(`${API}/api/users/levels`).then(r => r.json()),
+      apiFetch(`${API}/api/users/settings`).then(r => r.json()),
     ])
       .then(([lvlData, settingsData]) => {
         if (lvlData?.data?.levels?.length) setLevels(lvlData.data.levels)
         const useLive = settingsData?.data?.useLiveLeaderboard ?? false
         if (useLive) {
-          return fetch(`${API}/api/users/leaderboard`)
+          return apiFetch(`${API}/api/users/leaderboard`)
             .then(r => r.json())
             .then(lbData => setLeaderboard(lbData?.data?.agents ?? []))
         } else if (user?.agentNumber) {
@@ -98,7 +98,7 @@ export default function Profile() {
 
   useEffect(() => {
     if (!user) { setStats({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0 }); return }
-    fetch(`${API}/api/users/stats`, { credentials: 'include' })
+    apiFetch(`${API}/api/users/stats`)
       .then(r => r.json())
       .then(data => {
         if (data?.data) setStats({

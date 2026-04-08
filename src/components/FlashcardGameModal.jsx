@@ -132,7 +132,7 @@ export default function FlashcardGameModal({ onClose }) {
 
   // Fetch available brief count on mount
   useEffect(() => {
-    fetch(`${API}/api/games/flashcard-recall/available-briefs`, { credentials: 'include' })
+    apiFetch(`${API}/api/games/flashcard-recall/available-briefs`)
       .then(r => r.json())
       .then(d => {
         const n = d?.data?.count ?? 0

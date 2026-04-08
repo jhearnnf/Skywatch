@@ -1443,7 +1443,7 @@ export default function BriefReader() {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include', signal: controller.signal })
+    apiFetch(`${API}/api/briefs/${briefId}`, { credentials: 'include', signal: controller.signal })
       .then(r => {
         if (r.status === 403) {
           r.json().then(d => {
@@ -1463,7 +1463,7 @@ export default function BriefReader() {
           const b = data.data.brief
           setBrief(b)
           if (b.status === 'stub') {
-            fetch(`${API}/api/briefs/random-sample?count=5&exclude=${b._id}`, { credentials: 'include' })
+            apiFetch(`${API}/api/briefs/random-sample?count=5&exclude=${b._id}`, { credentials: 'include' })
               .then(r => r.json())
               .then(d => { if (d?.data) setRandomBriefs(d.data) })
               .catch(() => {})
@@ -1547,7 +1547,7 @@ export default function BriefReader() {
     const pendingId = localStorage.getItem('sw_pending_brief')
     if (!pendingId || pendingId !== String(brief._id)) return
     localStorage.removeItem('sw_pending_brief')
-    fetch(`${API}/api/briefs/${brief._id}/complete`, { method: 'POST', credentials: 'include' })
+    apiFetch(`${API}/api/briefs/${brief._id}/complete`, { method: 'POST', credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         if (!data?.data) return
@@ -1573,14 +1573,14 @@ export default function BriefReader() {
     let cancelled = false
     async function check() {
       try {
-        const quizRes  = await fetch(`${API}/api/games/quiz/status/${briefId}`, { credentials: 'include' })
+        const quizRes  = await apiFetch(`${API}/api/games/quiz/status/${briefId}`, { credentials: 'include' })
         const quizData = await quizRes.json()
         if (cancelled) return
         const passed = quizData.data?.hasCompleted ?? false
         setQuizPassed(passed)
 
         if (!BOO_CATEGORIES.includes(brief.category)) return
-        const booRes  = await fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' })
+        const booRes  = await apiFetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' })
         const booData = await booRes.json()
         if (cancelled) return
         const booAvail = booData.data?.available ?? false
@@ -1594,7 +1594,7 @@ export default function BriefReader() {
           return
         }
         if (!passed) { setBooState('locked-quiz'); return }
-        const statusRes  = await fetch(`${API}/api/games/battle-of-order/status/${briefId}`, { credentials: 'include' })
+        const statusRes  = await apiFetch(`${API}/api/games/battle-of-order/status/${briefId}`, { credentials: 'include' })
         const statusData = await statusRes.json()
         if (cancelled) return
         const booCompleted = statusData.data?.hasCompleted ?? false

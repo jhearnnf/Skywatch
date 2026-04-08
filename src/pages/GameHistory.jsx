@@ -73,14 +73,15 @@ function StatusBadge({ session }) {
   return <span className={`${cls} bg-red-100 text-red-600`}>Incorrect</span>
 }
 
-function QuizDrillDown({ attemptId, API }) {
+function QuizDrillDown({ attemptId }) {
+  const { apiFetch } = useAuth()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
   useEffect(() => {
     setLoading(true)
-    fetch(`${API}/api/games/history/quiz/${attemptId}`, { credentials: 'include' })
+    apiFetch(`/api/games/history/quiz/${attemptId}`)
       .then(r => r.json())
       .then(json => {
         if (json.status === 'success') setData(json.data)
@@ -88,7 +89,7 @@ function QuizDrillDown({ attemptId, API }) {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [attemptId, API])
+  }, [attemptId, apiFetch])
 
   if (loading) return <div className="px-4 py-3 text-xs text-slate-400 animate-pulse">Loading breakdown…</div>
   if (error)   return <div className="px-4 py-3 text-xs text-red-500">{error}</div>
@@ -136,14 +137,15 @@ function QuizDrillDown({ attemptId, API }) {
   )
 }
 
-function WtaDrillDown({ sessionId, API }) {
+function WtaDrillDown({ sessionId }) {
+  const { apiFetch } = useAuth()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
   useEffect(() => {
     setLoading(true)
-    fetch(`${API}/api/games/history/wheres-aircraft/${sessionId}`, { credentials: 'include' })
+    apiFetch(`/api/games/history/wheres-aircraft/${sessionId}`)
       .then(r => r.json())
       .then(json => {
         if (json.status === 'success') setData(json.data)
@@ -151,7 +153,7 @@ function WtaDrillDown({ sessionId, API }) {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [sessionId, API])
+  }, [sessionId, apiFetch])
 
   if (loading) return <div className="px-4 py-3 text-xs text-slate-400 animate-pulse">Loading mission data…</div>
   if (error)   return <div className="px-4 py-3 text-xs text-red-500">{error}</div>
@@ -213,14 +215,15 @@ function WtaDrillDown({ sessionId, API }) {
   )
 }
 
-function BooOrderDrillDown({ sessionId, API }) {
+function BooOrderDrillDown({ sessionId }) {
+  const { apiFetch } = useAuth()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
   useEffect(() => {
     setLoading(true)
-    fetch(`${API}/api/games/history/battle-of-order/${sessionId}`, { credentials: 'include' })
+    apiFetch(`/api/games/history/battle-of-order/${sessionId}`)
       .then(r => r.json())
       .then(json => {
         if (json.status === 'success') setData(json.data)
@@ -228,7 +231,7 @@ function BooOrderDrillDown({ sessionId, API }) {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [sessionId, API])
+  }, [sessionId, apiFetch])
 
   if (loading) return <div className="px-4 py-3 text-xs text-slate-400 animate-pulse">Loading order data…</div>
   if (error)   return <div className="px-4 py-3 text-xs text-red-500">{error}</div>
@@ -328,14 +331,15 @@ function FlashcardCardRow({ c, index }) {
   )
 }
 
-function FlashcardDrillDown({ sessionId, API }) {
+function FlashcardDrillDown({ sessionId }) {
+  const { apiFetch } = useAuth()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
   useEffect(() => {
     setLoading(true)
-    fetch(`${API}/api/games/history/flashcard/${sessionId}`, { credentials: 'include' })
+    apiFetch(`/api/games/history/flashcard/${sessionId}`)
       .then(r => r.json())
       .then(json => {
         if (json.status === 'success') setData(json.data)
@@ -343,7 +347,7 @@ function FlashcardDrillDown({ sessionId, API }) {
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
-  }, [sessionId, API])
+  }, [sessionId, apiFetch])
 
   if (loading) return <div className="px-4 py-3 text-xs text-slate-400 animate-pulse">Loading card breakdown…</div>
   if (error)   return <div className="px-4 py-3 text-xs text-red-500">{error}</div>
@@ -456,10 +460,10 @@ function SessionRow({ session, API, index }) {
             transition={{ duration: 0.2 }}
             style={{ overflow: 'hidden' }}
           >
-            {session.type === 'quiz'            && <QuizDrillDown        attemptId={session._id}  API={API} />}
-            {session.type === 'order_of_battle' && <BooOrderDrillDown   sessionId={session._id} API={API} />}
-            {session.type === 'wheres_aircraft' && <WtaDrillDown        sessionId={session._id} API={API} />}
-            {session.type === 'flashcard'       && <FlashcardDrillDown  sessionId={session._id} API={API} />}
+            {session.type === 'quiz'            && <QuizDrillDown        attemptId={session._id} />}
+            {session.type === 'order_of_battle' && <BooOrderDrillDown   sessionId={session._id} />}
+            {session.type === 'wheres_aircraft' && <WtaDrillDown        sessionId={session._id} />}
+            {session.type === 'flashcard'       && <FlashcardDrillDown  sessionId={session._id} />}
             {session.type === 'aptitude_sync'   && <AptitudeSyncDrillDown session={session} />}
           </motion.div>
         )}

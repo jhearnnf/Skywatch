@@ -533,7 +533,7 @@ export default function AptitudeSync() {
   // ── Fetch brief title if not passed via state ─────────────────────────────
   useEffect(() => {
     if (briefTitle) return
-    fetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
+    apiFetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => { if (d?.data?.brief?.title) setBriefTitle(d.data.brief.title) })
       .catch(() => {})

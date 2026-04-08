@@ -90,7 +90,7 @@ function UnlockBadges({ unlocks, userLevel, userRankNumber, userTier, onSubscrip
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Rankings() {
-  const { user, API } = useAuth()
+  const { user, API, apiFetch } = useAuth()
   const navigate      = useNavigate()
   const location      = useLocation()
   const { start }     = useAppTutorial()
@@ -115,9 +115,9 @@ export default function Rankings() {
 
   useEffect(() => {
     Promise.all([
-      fetch(`${API}/api/users/levels`).then(r => r.json()),
-      fetch(`${API}/api/users/ranks`).then(r => r.json()),
-      fetch(`${API}/api/settings`).then(r => r.json()),
+      apiFetch(`${API}/api/users/levels`).then(r => r.json()),
+      apiFetch(`${API}/api/users/ranks`).then(r => r.json()),
+      apiFetch(`${API}/api/settings`).then(r => r.json()),
     ])
       .then(([lvlData, rankData, settingsData]) => {
         if (lvlData?.data?.levels?.length)       setLevels(lvlData.data.levels)

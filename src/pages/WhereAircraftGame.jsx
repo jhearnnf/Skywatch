@@ -423,9 +423,8 @@ export default function WhereAircraftGame() {
   useEffect(() => {
     if (!user) { navigate('/login'); return }
 
-    fetch(`${API}/api/games/wheres-aircraft/round1`, {
+    apiFetch(`${API}/api/games/wheres-aircraft/round1`, {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ aircraftBriefId, gameSessionId: gameSessionId.current }),
     })
@@ -465,14 +464,37 @@ export default function WhereAircraftGame() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Abandon on page refresh / tab close ────────────────────────────────
+  useEffect(() => {
+    function handleUnload() {
+      if (abandonedRef.current) return
+      abandonedRef.current = true
+      navigator.sendBeacon(
+        `${API}/api/games/wheres-aircraft/submit`,
+        new Blob([JSON.stringify({
+          aircraftBriefId,
+          gameSessionId:    gameSessionId.current,
+          round1Correct:    round1CorrectRef.current,
+          round2Attempted:  false,
+          round2Correct:    false,
+          selectedBaseIds:  [],
+          correctBaseIds:   [],
+          timeTakenSeconds: Math.round((Date.now() - startTimeRef.current) / 1000),
+          status:           round1CorrectRef.current ? 'round1_only' : 'abandoned',
+        })], { type: 'application/json' }),
+      )
+    }
+    window.addEventListener('beforeunload', handleUnload)
+    return () => window.removeEventListener('beforeunload', handleUnload)
+  }, [API]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleRound1Correct = useCallback((elapsed) => {
     round1CorrectRef.current = true
     round1ElapsedRef.current = elapsed
-    fetch(`${API}/api/games/wheres-aircraft/round2`, {
+    apiFetch(`${API}/api/games/wheres-aircraft/round2`, {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ aircraftBriefId, gameSessionId: gameSessionId.current }),
     })

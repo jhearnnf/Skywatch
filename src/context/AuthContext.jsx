@@ -30,7 +30,7 @@ export function AuthProvider({ children }) {
       }
     }, 400)
     try {
-      return await fetch(url, options)
+      return await fetch(url, { credentials: 'include', ...options })
     } finally {
       clearTimeout(showTimer)
       if (overlayShown) {

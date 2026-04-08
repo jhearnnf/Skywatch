@@ -82,7 +82,7 @@ export default function Home() {
   // Fetch a random in-progress brief for "Jump Back In"
   useEffect(() => {
     if (!user) { setJumpBackBrief(null); return }
-    fetch(`${API}/api/briefs/random-in-progress`, { credentials: 'include' })
+    apiFetch(`${API}/api/briefs/random-in-progress`)
       .then(r => r.json())
       .then(d => setJumpBackBrief(d.data ?? null))
       .catch(() => {})
@@ -90,7 +90,7 @@ export default function Home() {
 
   // Fetch latest 4 News briefs — re-fetch on user change so isRead/isStarted resets after logout
   useEffect(() => {
-    fetch(`${API}/api/briefs?limit=4&status=published&category=News`, { credentials: 'include' })
+    apiFetch(`${API}/api/briefs?limit=4&status=published&category=News`)
       .then(r => r.json())
       .then(data => setLatestBriefs(data.data?.briefs ?? []))
       .catch(() => {})

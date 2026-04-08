@@ -855,7 +855,7 @@ function PathwaySwipeHint({ onDismiss }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LearnPriority() {
-  const { user, API } = useAuth()
+  const { user, API, apiFetch } = useAuth()
   const navigate      = useNavigate()
   const location      = useLocation()
   const { start, visible, hasSeen } = useAppTutorial()
@@ -883,7 +883,7 @@ export default function LearnPriority() {
 
   // ── Fetch settings (pathwayUnlocks + category tier lists) ─────────────────
   useEffect(() => {
-    fetch(`${API}/api/settings`)
+    apiFetch(`${API}/api/settings`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.pathwayUnlocks?.length) setPathwayUnlocks(d.pathwayUnlocks)
@@ -896,7 +896,7 @@ export default function LearnPriority() {
 
   // ── Fetch level thresholds ──────────────────────────────────────────────────
   useEffect(() => {
-    fetch(`${API}/api/users/levels`)
+    apiFetch(`${API}/api/users/levels`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.data?.levels?.length) setLevels(d.data.levels) })
       .catch(() => {})
@@ -905,7 +905,7 @@ export default function LearnPriority() {
   // ── Fetch quiz-passed brief IDs (background, after page has loaded) ─────────
   useEffect(() => {
     if (!user) { setQuizPassedSet(new Set()); return }
-    fetch(`${API}/api/games/quiz/completed-brief-ids`, { credentials: 'include' })
+    apiFetch(`${API}/api/games/quiz/completed-brief-ids`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.data?.ids) setQuizPassedSet(new Set(d.data.ids))
@@ -1007,7 +1007,7 @@ export default function LearnPriority() {
     const cat = activePathway.category
     if (briefsCache[cat]) return // already loaded
     setLoading(true)
-    fetch(`${API}/api/briefs/pathway/${encodeURIComponent(cat)}`, { credentials: 'include' })
+    apiFetch(`${API}/api/briefs/pathway/${encodeURIComponent(cat)}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.data?.briefs) {
