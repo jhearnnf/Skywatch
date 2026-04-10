@@ -106,7 +106,7 @@ router.patch('/me/difficulty', protect, async (req, res) => {
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { difficultySetting: difficulty },
-      { new: true }
+      { returnDocument: 'after' }
     ).populate('rank');
     res.json({ status: 'success', data: { user } });
   } catch (err) {
@@ -223,7 +223,7 @@ router.patch('/me/tutorials', protect, async (req, res) => {
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { [`tutorials.${dbId}`]: status },
-      { new: true }
+      { returnDocument: 'after' }
     );
     res.json({ status: 'success', data: { tutorials: user.tutorials } });
   } catch (err) {

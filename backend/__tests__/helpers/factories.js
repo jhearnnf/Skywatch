@@ -55,7 +55,7 @@ async function createSettings(overrides = {}) {
         ...overrides,
       },
     },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
 }
 
@@ -73,7 +73,7 @@ async function createGameType(overrides = {}) {
         ...overrides,
       },
     },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
 }
 
@@ -316,7 +316,7 @@ async function createPasswordResetToken(email, overrides = {}) {
       expiresAt: overrides.expiresAt ?? new Date(Date.now() + 60 * 60 * 1000),
       usedAt:    overrides.usedAt    ?? null,
     },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
   );
   return { doc, rawToken, tokenHash };
 }

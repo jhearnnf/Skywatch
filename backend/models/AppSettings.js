@@ -253,7 +253,7 @@ appSettingsSchema.statics.getSettings = async function () {
     }
 
     if (Object.keys(updates).length)
-      settings = await this.findByIdAndUpdate(settings._id, updates, { new: true });
+      settings = await this.findByIdAndUpdate(settings._id, updates, { returnDocument: 'after' });
   }
   return settings;
 };

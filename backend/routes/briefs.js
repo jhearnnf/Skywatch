@@ -525,7 +525,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
           readRecord = await IntelligenceBriefRead.findByIdAndUpdate(
             readRecord._id,
             { ammunitionRemaining: tierAmmo, ammoDepletedAt: null },
-            { new: true }
+            { returnDocument: 'after' }
           );
         }
       } else if (readRecord.ammunitionRemaining === 0 && !readRecord.ammoDepletedAt) {
@@ -759,7 +759,7 @@ router.post('/:id/use-ammo', protect, async (req, res) => {
     const updated = await IntelligenceBriefRead.findByIdAndUpdate(
       record._id,
       { $inc: { ammunitionRemaining: -1 }, ...(willDeplete ? { ammoDepletedAt: new Date() } : {}) },
-      { new: true }
+      { returnDocument: 'after' }
     );
     res.json({ status: 'success', data: { ammunitionRemaining: updated.ammunitionRemaining, ammoDepletedAt: updated.ammoDepletedAt ?? null } });
   } catch (err) {

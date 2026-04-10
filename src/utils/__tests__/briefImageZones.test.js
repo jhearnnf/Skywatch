@@ -4,6 +4,7 @@ const makeMedia = (n) =>
   Array.from({ length: n }, (_, i) => ({
     cloudinaryPublicId: `id${i}`,
     mediaUrl: `url${i}`,
+    name: `name${i}`,
   }))
 
 describe('buildImageZones', () => {
@@ -28,23 +29,34 @@ describe('buildImageZones', () => {
     zones.forEach((z, i) => {
       expect(z.src).toBe(`url${i}`)
       expect(z.position).toBe('center center')
+      expect(z.alt).toBe(`name${i}`)
     })
   })
 
   it('1 image, 4 sections → section 0 uses image at center; 1-3 reuse with zoom', () => {
     const zones = buildImageZones(makeMedia(1), 4)
-    expect(zones[0]).toEqual({ src: 'url0', position: 'center center' })
-    expect(zones[1]).toEqual({ src: 'url0', position: ZOOM_POSITIONS[1] })
-    expect(zones[2]).toEqual({ src: 'url0', position: ZOOM_POSITIONS[2] })
-    expect(zones[3]).toEqual({ src: 'url0', position: ZOOM_POSITIONS[3] })
+    expect(zones[0]).toEqual({ src: 'url0', position: 'center center', alt: 'name0' })
+    expect(zones[1]).toEqual({ src: 'url0', position: ZOOM_POSITIONS[1], alt: 'name0' })
+    expect(zones[2]).toEqual({ src: 'url0', position: ZOOM_POSITIONS[2], alt: 'name0' })
+    expect(zones[3]).toEqual({ src: 'url0', position: ZOOM_POSITIONS[3], alt: 'name0' })
   })
 
   it('2 images, 4 sections → sections 0-1 own images; 2-3 reuse last with zoom', () => {
     const zones = buildImageZones(makeMedia(2), 4)
-    expect(zones[0]).toEqual({ src: 'url0', position: 'center center' })
-    expect(zones[1]).toEqual({ src: 'url1', position: 'center center' })
-    expect(zones[2]).toEqual({ src: 'url1', position: ZOOM_POSITIONS[2] })
-    expect(zones[3]).toEqual({ src: 'url1', position: ZOOM_POSITIONS[3] })
+    expect(zones[0]).toEqual({ src: 'url0', position: 'center center', alt: 'name0' })
+    expect(zones[1]).toEqual({ src: 'url1', position: 'center center', alt: 'name1' })
+    expect(zones[2]).toEqual({ src: 'url1', position: ZOOM_POSITIONS[2], alt: 'name1' })
+    expect(zones[3]).toEqual({ src: 'url1', position: ZOOM_POSITIONS[3], alt: 'name1' })
+  })
+
+  it('alt is null when image has no name (placeholder or unnamed media)', () => {
+    const placeholderZones = buildImageZones([], 2)
+    placeholderZones.forEach(z => expect(z.alt).toBeNull())
+
+    const unnamed = [{ cloudinaryPublicId: 'id0', mediaUrl: 'url0' }]
+    const zones = buildImageZones(unnamed, 2)
+    expect(zones[0].alt).toBeNull()
+    expect(zones[1].alt).toBeNull()
   })
 
   it('zoom positions wrap via modulo for > 4 sections', () => {
@@ -54,10 +66,10 @@ describe('buildImageZones', () => {
 
   it('filters out media entries without cloudinaryPublicId', () => {
     const media = [
-      { cloudinaryPublicId: null, mediaUrl: 'bad' },
-      { cloudinaryPublicId: 'id1', mediaUrl: 'url1' },
+      { cloudinaryPublicId: null, mediaUrl: 'bad', name: 'bad' },
+      { cloudinaryPublicId: 'id1', mediaUrl: 'url1', name: 'good' },
     ]
     const zones = buildImageZones(media, 2)
-    expect(zones[0]).toEqual({ src: 'url1', position: 'center center' })
+    expect(zones[0]).toEqual({ src: 'url1', position: 'center center', alt: 'good' })
   })
 })

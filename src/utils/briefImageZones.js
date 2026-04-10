@@ -18,13 +18,14 @@ export const ZOOM_POSITIONS = [
  *
  * @param {Array}  media  brief.media array from the API
  * @param {number} total  number of sections
- * @returns {{ src: string, position: string }[]}
+ * @returns {{ src: string, position: string, alt: string | null }[]}
  */
 export function buildImageZones(media, total) {
   const images = (media ?? []).filter(m => m?.cloudinaryPublicId)
   return Array.from({ length: total }, (_, i) => {
-    if (images[i]) return { src: images[i].mediaUrl, position: 'center center' }
-    const fallback = images.length ? images[images.length - 1].mediaUrl : PLACEHOLDER_IMG
-    return { src: fallback, position: ZOOM_POSITIONS[i % ZOOM_POSITIONS.length] }
+    if (images[i]) return { src: images[i].mediaUrl, position: 'center center', alt: images[i].name ?? null }
+    const last = images.length ? images[images.length - 1] : null
+    const fallback = last ? last.mediaUrl : PLACEHOLDER_IMG
+    return { src: fallback, position: ZOOM_POSITIONS[i % ZOOM_POSITIONS.length], alt: last?.name ?? null }
   })
 }

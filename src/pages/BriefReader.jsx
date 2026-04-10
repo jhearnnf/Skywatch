@@ -393,7 +393,7 @@ function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, se
           <ImageGridReveal
             src={imageZone.src}
             isFirstSeen={isFirstSeenImage}
-            alt={title}
+            alt={imageZone.alt || title}
             imgClassName={`w-full h-full object-cover select-none ${hasBases && mapOpen ? 'opacity-20 blur-sm' : ''}`}
             imgStyle={{ objectPosition: imageZone.position }}
           />

@@ -362,7 +362,7 @@ router.get('/settings', async (_req, res) => {
 router.patch('/settings', requireReason, async (req, res) => {
   try {
     const { reason, ...updates } = req.body;
-    const settings = await AppSettings.findOneAndUpdate({}, updates, { new: true, upsert: true });
+    const settings = await AppSettings.findOneAndUpdate({}, updates, { returnDocument: 'after', upsert: true });
     // Mixed field tutorialContent needs explicit mark after findOneAndUpdate via set,
     // but findOneAndUpdate at the DB level handles it correctly already.
 
@@ -574,7 +574,7 @@ router.post('/users/:id/ban', requireReason, async (req, res) => {
 // POST /api/admin/users/:id/unban
 router.post('/users/:id/unban', requireReason, async (req, res) => {
   try {
-    const updated = await User.findByIdAndUpdate(req.params.id, { isBanned: false }, { new: true });
+    const updated = await User.findByIdAndUpdate(req.params.id, { isBanned: false }, { returnDocument: 'after' });
     if (!updated) return res.status(404).json({ message: 'User not found.' });
     await AdminAction.create({ userId: req.user._id, actionType: 'unban_user', reason: req.body.reason, targetUserId: req.params.id });
     res.json({ status: 'success' });
@@ -651,7 +651,7 @@ router.patch('/users/:id/subscription', requireReason, async (req, res) => {
     }
 
     const [user] = await Promise.all([
-      User.findByIdAndUpdate(req.params.id, tierUpdate, { new: true }).select('-password').populate('rank'),
+      User.findByIdAndUpdate(req.params.id, tierUpdate, { returnDocument: 'after' }).select('-password').populate('rank'),
       IntelligenceBriefRead.updateMany({ userId: req.params.id }, { ammunitionRemaining: ammoMap[tier] }),
     ]);
 
@@ -692,7 +692,7 @@ router.patch('/self/subscription', async (req, res) => {
 
     // Update tier and reset all read record ammo counts for this user
     const [user] = await Promise.all([
-      User.findByIdAndUpdate(req.user._id, tierUpdate, { new: true }).select('-password').populate('rank'),
+      User.findByIdAndUpdate(req.user._id, tierUpdate, { returnDocument: 'after' }).select('-password').populate('rank'),
       IntelligenceBriefRead.updateMany({ userId: req.user._id }, { ammunitionRemaining: ammoMap[tier] }),
     ]);
 
@@ -857,7 +857,7 @@ router.patch('/system-logs/:id/resolve', async (req, res) => {
     const log = await SystemLog.findByIdAndUpdate(
       req.params.id,
       { resolved: true },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!log) return res.status(404).json({ message: 'Log not found' });
     res.json({ status: 'success', data: { log } });
@@ -906,7 +906,7 @@ router.post('/problems/:id/update', async (req, res) => {
     const mongoUpdate = { $push: { updates: updateEntry } };
     if (solved !== undefined) mongoUpdate.$set = { solved };
 
-    const report = await ProblemReport.findByIdAndUpdate(req.params.id, mongoUpdate, { new: true })
+    const report = await ProblemReport.findByIdAndUpdate(req.params.id, mongoUpdate, { returnDocument: 'after' })
       .populate('userId', 'email agentNumber');
 
     if (isUserVisible && report?.userId) {
@@ -1154,7 +1154,7 @@ router.post('/briefs', requireReason, async (req, res) => {
       brief = await IntelligenceBrief.findByIdAndUpdate(
         existing._id,
         upgradedFields,
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
       ).populate('media');
     } else {
       brief = await IntelligenceBrief.create(fields);
@@ -1198,7 +1198,7 @@ router.post('/briefs', requireReason, async (req, res) => {
 router.patch('/briefs/:id', requireReason, async (req, res) => {
   try {
     const { reason, ...fields } = req.body;
-    const brief = await IntelligenceBrief.findByIdAndUpdate(req.params.id, fields, { new: true, runValidators: true }).populate('media');
+    const brief = await IntelligenceBrief.findByIdAndUpdate(req.params.id, fields, { returnDocument: 'after', runValidators: true }).populate('media');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
     // Re-scan mentioned briefs whenever description content changes
@@ -1469,7 +1469,7 @@ router.post('/briefs/:id/media', async (req, res) => {
     const brief = await IntelligenceBrief.findByIdAndUpdate(
       req.params.id,
       { $push: { media: media._id } },
-      { new: true }
+      { returnDocument: 'after' }
     ).populate('media');
     res.json({ status: 'success', data: { brief } });
   } catch (err) {
@@ -1485,7 +1485,7 @@ router.patch('/media/:mediaId', async (req, res) => {
     if (mediaUrl       !== undefined) update.mediaUrl       = mediaUrl.trim();
     if (mediaType      !== undefined) update.mediaType      = mediaType;
     if (showOnSummary  !== undefined) update.showOnSummary  = showOnSummary;
-    const media = await Media.findByIdAndUpdate(req.params.mediaId, update, { new: true, runValidators: true });
+    const media = await Media.findByIdAndUpdate(req.params.mediaId, update, { returnDocument: 'after', runValidators: true });
     if (!media) return res.status(404).json({ message: 'Media not found' });
     res.json({ status: 'success', data: { media } });
   } catch (err) {
@@ -2181,7 +2181,7 @@ router.post('/ai/bulk-generate-news-item', async (req, res) => {
           if (!imgRes.ok) continue;
           const buffer = Buffer.from(await imgRes.arrayBuffer());
           const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}-news-bulk` });
-          newMedia = { url: result.secure_url, publicId: result.public_id };
+          newMedia = { url: result.secure_url, publicId: result.public_id, name: pageTitle || term };
           break;
         } catch { continue; }
       }
@@ -2220,6 +2220,7 @@ router.post('/ai/bulk-generate-news-item', async (req, res) => {
         mediaType:          'picture',
         mediaUrl:           newMedia.url,
         cloudinaryPublicId: newMedia.publicId,
+        name:               newMedia.name,
         showOnSummary:      true,
       });
       brief.media = [mediaDoc._id];
@@ -3060,7 +3061,7 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
 
           const buffer = Buffer.from(await imgRes.arrayBuffer());
           const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}-bulk` });
-          newMedia = { url: result.secure_url, publicId: result.public_id };
+          newMedia = { url: result.secure_url, publicId: result.public_id, name: pageTitle || term };
           break;
         } catch { continue; }
       }
@@ -3186,6 +3187,7 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
         mediaType: 'picture',
         mediaUrl: newMedia.url,
         cloudinaryPublicId: newMedia.publicId,
+        name: newMedia.name,
         showOnSummary: true,
       });
       brief.media = [mediaDoc._id];
@@ -3586,7 +3588,7 @@ router.patch('/economy/levels', async (req, res) => {
         Level.findOneAndUpdate(
           { levelNumber: lv.levelNumber },
           { aircoinsToNextLevel: lv.aircoinsToNextLevel },
-          { new: true }
+          { returnDocument: 'after' }
         )
       )
     );
@@ -3644,7 +3646,7 @@ router.post('/economy/apply', async (req, res) => {
         Level.findOneAndUpdate(
           { levelNumber: lv.levelNumber },
           { aircoinsToNextLevel: lv.aircoinsToNextLevel },
-          { new: true }
+          { returnDocument: 'after' }
         )
       )
     );

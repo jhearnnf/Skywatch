@@ -80,7 +80,7 @@ router.post('/register', async (req, res) => {
     await PendingRegistration.findOneAndUpdate(
       { email: email.toLowerCase() },
       { email: email.toLowerCase(), password, code, expiresAt },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
     );
 
     await sendConfirmationEmail({ email: email.toLowerCase(), code });
@@ -207,7 +207,7 @@ router.post('/forgot-password', async (req, res) => {
       await PasswordResetToken.findOneAndUpdate(
         { email: normEmail },
         { tokenHash, expiresAt: new Date(Date.now() + 60 * 60 * 1000), usedAt: null },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
       );
 
       const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/login?tab=reset-password&token=${rawToken}`;
