@@ -468,14 +468,15 @@ function SoundRowV2({ label, sound, value, onChange, enabled, onToggle, duration
 }
 
 // ── Client-side economy calculation (pure functions) ──────────────────────
-// Quiz question count per difficulty comes from AppSettings.aiQuestionsPerDifficulty.
+// Quiz coin math uses quizQuestionsPerSession (5) — the number actually shown to the
+// user per quiz — not aiQuestionsPerDifficulty (7), which is the AI generation pool size.
 // Login/streak assumes a player logs in every day for the number of days it
 // takes to read all briefs at their daily reading pace.
 function calcEconomyScenario(sim, difficulty) {
   const rates    = sim.rates ?? {}
   const isNormal = difficulty === 'normal'
   const n        = sim.totalBriefs ?? 0
-  const qpd      = sim.aiQuestionsPerDifficulty ?? 7
+  const qpd      = sim.quizQuestionsPerSession ?? 5
   const wtaRate  = (rates.aircoinsWhereAircraftRound1 ?? 5)
                  + (rates.aircoinsWhereAircraftRound2 ?? 10)
                  + (rates.aircoinsWhereAircraftBonus  ?? 5)
@@ -637,7 +638,7 @@ function AircoinsEconomy({ API, onToast }) {
       const res  = await apiFetch(`${API}/api/admin/economy-viability`, { credentials: 'include' })
       const data = await res.json()
       if (data.status === 'success') {
-        const { rates, cycleThreshold, totalRanks, ranks, levels, content, aiQuestionsPerDifficulty } = data.data
+        const { rates, cycleThreshold, totalRanks, ranks, levels, content, aiQuestionsPerDifficulty, quizQuestionsPerSession } = data.data
         setMeta({ cycleThreshold, totalRanks, ranks })
         const snapshot = {
           totalBriefs:              content.totalBriefs,
@@ -646,6 +647,7 @@ function AircoinsEconomy({ API, onToast }) {
           briefsPerDay:             1,
           rates,
           aiQuestionsPerDifficulty: aiQuestionsPerDifficulty ?? 7,
+          quizQuestionsPerSession:  quizQuestionsPerSession  ?? 5,
           levels:                   levels.filter(l => l.aircoinsToNextLevel !== null),
         }
         // Preserve briefsPerDay across refreshes

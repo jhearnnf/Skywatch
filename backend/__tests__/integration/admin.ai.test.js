@@ -60,12 +60,34 @@ function mockOpenRouter(content) {
   });
 }
 
+// Smart fetch mock: dispatches OpenRouter responses by inspecting the outbound
+// request body. The regenerate-brief + generate-brief routes make many internal
+// AI calls (brief generation, keyword passes, quiz generation, mnemonics,
+// autoLinkKeywords) and naive sequential mocks let later calls fall through to
+// real fetch. This helper returns a safe `{}` for anything unrecognised.
+function installAiFetchMock({ brief, quiz, headlines, keywords, mnemonics } = {}) {
+  return jest.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+    if (!String(url).includes('openrouter.ai')) {
+      return mockFetchResponse({});
+    }
+    const bodyStr = typeof opts?.body === 'string' ? opts.body : JSON.stringify(opts?.body ?? '');
+    if (headlines && bodyStr.includes('RAF news stories')) return mockOpenRouter(headlines);
+    if (quiz     && bodyStr.includes('easyQuestions') && bodyStr.includes('mediumQuestions')) return mockOpenRouter(quiz);
+    if (mnemonics && bodyStr.includes('mnemonic'))    return mockOpenRouter(mnemonics);
+    if (keywords && bodyStr.includes('keywords')    && bodyStr.includes('generatedDescription') && !bodyStr.includes('descriptionSections')) return mockOpenRouter(keywords);
+    if (brief    && bodyStr.includes('descriptionSections')) return mockOpenRouter(brief);
+    // Safe default — valid JSON object, lets keyword passes / mnemonics / autoLink gracefully no-op.
+    return mockOpenRouter('{}');
+  });
+}
+
 // ── POST /api/admin/ai/news-headlines ─────────────────────────────────────────
 
 describe('POST /api/admin/ai/news-headlines', () => {
-  it('returns array of headline strings from mocked AI', async () => {
+  it('returns array of headline objects from mocked AI', async () => {
+    const today = new Date().toISOString().slice(0, 10);
     jest.spyOn(global, 'fetch').mockReturnValueOnce(
-      mockOpenRouter('["RAF Typhoons deploy to Estonia","New F-35 squadron declared operational"]')
+      mockOpenRouter(`[{"headline":"RAF Typhoons deploy to Estonia","eventDate":"${today}"},{"headline":"New F-35 squadron declared operational","eventDate":"${today}"}]`)
     );
 
     const admin = await createAdminUser();
@@ -77,7 +99,7 @@ describe('POST /api/admin/ai/news-headlines', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
     expect(Array.isArray(res.body.data.headlines)).toBe(true);
-    expect(res.body.data.headlines).toContain('RAF Typhoons deploy to Estonia');
+    expect(res.body.data.headlines.map(h => h.headline)).toContain('RAF Typhoons deploy to Estonia');
   });
 
   it('returns empty array when AI returns []', async () => {
@@ -577,9 +599,7 @@ describe('POST /api/admin/ai/regenerate-brief/:id', () => {
   });
 
   it('returns descriptionSections, keywords, easyQuestions, mediumQuestions on success', async () => {
-    const mockFetch = jest.spyOn(global, 'fetch');
-    mockFetch.mockResolvedValueOnce(mockOpenRouter(MOCK_BRIEF_JSON)); // generate-brief call
-    mockFetch.mockResolvedValueOnce(mockOpenRouter(MOCK_QUIZ_JSON));  // generate-quiz call
+    installAiFetchMock({ brief: MOCK_BRIEF_JSON, quiz: MOCK_QUIZ_JSON });
 
     const brief = await createBrief({ title: 'Eurofighter Typhoon', category: 'Aircrafts' });
     const admin = await createAdminUser();
@@ -610,7 +630,8 @@ describe('POST /api/admin/ai/regenerate-brief/:id', () => {
   });
 
   it('returns 500 with message when brief-generation AI returns malformed JSON', async () => {
-    jest.spyOn(global, 'fetch').mockResolvedValueOnce(mockOpenRouter('not json at all!!!'));
+    // Dispatcher matches the brief prompt by descriptionSections and returns bad JSON.
+    jest.spyOn(global, 'fetch').mockImplementation(() => mockOpenRouter('not json at all!!!'));
 
     const brief = await createBrief({ title: 'Test Brief' });
     const admin = await createAdminUser();
@@ -623,9 +644,7 @@ describe('POST /api/admin/ai/regenerate-brief/:id', () => {
   });
 
   it('returns 500 with message when quiz-generation AI returns malformed JSON', async () => {
-    const mockFetch = jest.spyOn(global, 'fetch');
-    mockFetch.mockResolvedValueOnce(mockOpenRouter(MOCK_BRIEF_JSON)); // brief step succeeds
-    mockFetch.mockResolvedValueOnce(mockOpenRouter('not json!!!'));   // quiz step fails
+    installAiFetchMock({ brief: MOCK_BRIEF_JSON, quiz: 'not json!!!' });
 
     const brief = await createBrief({ title: 'Test Brief' });
     const admin = await createAdminUser();
@@ -638,17 +657,20 @@ describe('POST /api/admin/ai/regenerate-brief/:id', () => {
   });
 
   it('strips keywords not present verbatim in the fresh descriptionSections', async () => {
-    const briefJsonWithBadKeyword = JSON.stringify({
+    // Keywords are now produced by separate multi-pass calls, so we return them
+    // from the keyword-pass mock. The route must still strip any keyword that
+    // doesn't appear verbatim in the fresh descriptionSections.
+    const briefJson = JSON.stringify({
       descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
+    });
+    const keywordsJson = JSON.stringify({
       keywords: [
         { keyword: 'Typhoon', generatedDescription: 'A fast jet' },
         { keyword: 'completely absent phrase xyz', generatedDescription: 'Should be stripped' },
       ],
     });
 
-    const mockFetch = jest.spyOn(global, 'fetch');
-    mockFetch.mockResolvedValueOnce(mockOpenRouter(briefJsonWithBadKeyword));
-    mockFetch.mockResolvedValueOnce(mockOpenRouter(MOCK_QUIZ_JSON));
+    installAiFetchMock({ brief: briefJson, keywords: keywordsJson, quiz: MOCK_QUIZ_JSON });
 
     const brief = await createBrief({ title: 'Test Brief' });
     const admin = await createAdminUser();

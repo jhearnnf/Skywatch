@@ -22,6 +22,7 @@ const request  = require('supertest');
 const app      = require('../../app');
 const db       = require('../helpers/setupDb');
 const Rank     = require('../../models/Rank');
+const Level    = require('../../models/Level');
 const {
   createSettings,
   createGameType,
@@ -30,6 +31,22 @@ const {
   createQuizQuestions,
   authCookie,
 } = require('../helpers/factories');
+
+// Seed level thresholds matching the real curve — required for pathway level gating.
+async function seedLevels() {
+  await Level.insertMany([
+    { levelNumber: 1,  aircoinsToNextLevel: 100  },
+    { levelNumber: 2,  aircoinsToNextLevel: 250  },
+    { levelNumber: 3,  aircoinsToNextLevel: 500  },
+    { levelNumber: 4,  aircoinsToNextLevel: 850  },
+    { levelNumber: 5,  aircoinsToNextLevel: 1300 },
+    { levelNumber: 6,  aircoinsToNextLevel: 1850 },
+    { levelNumber: 7,  aircoinsToNextLevel: 2500 },
+    { levelNumber: 8,  aircoinsToNextLevel: 3250 },
+    { levelNumber: 9,  aircoinsToNextLevel: 4100 },
+    { levelNumber: 10, aircoinsToNextLevel: null },
+  ]);
+}
 
 // ── Fixture data ──────────────────────────────────────────────────────────────
 
@@ -87,7 +104,10 @@ async function userLevel2WrongRank() {
 
 // ── GET /api/briefs/:id — pathway gate ───────────────────────────────────────
 describe('GET /api/briefs/:id — pathway gating', () => {
-  beforeEach(() => createSettings(S));
+  beforeEach(async () => {
+    await createSettings(S);
+    await seedLevels();
+  });
 
   it('level 1 user cannot open a level-2 category brief → 403', async () => {
     const user  = await userLevel1Rank1();
@@ -149,12 +169,12 @@ describe('GET /api/briefs/:id — pathway gating', () => {
     expect(res.status).toBe(200);
   });
 
-  it('guest bypasses pathway check — subscription gating still applies', async () => {
-    const brief = await createBrief({ category: 'Aircrafts' }); // guestCategories has no Aircrafts
+  it('guest can read any free-tier brief — pathway gating does not apply to guests', async () => {
+    // Guests are treated as free-tier for brief access; the guest gate lives at
+    // game endpoints (quiz start, BOO, etc.), not brief reading.
+    const brief = await createBrief({ category: 'Aircrafts' });
     const res   = await request(app).get(`/api/briefs/${brief._id}`);
-    // Guests: 'Aircrafts' not in guestCategories → 403 (subscription), NOT pathway
-    expect(res.status).toBe(403);
-    expect(res.body.reason).toBeUndefined(); // subscription 403, not pathway
+    expect(res.status).toBe(200);
   });
 });
 
@@ -162,6 +182,7 @@ describe('GET /api/briefs/:id — pathway gating', () => {
 describe('GET /api/briefs — isLocked flag includes pathway lock', () => {
   beforeEach(async () => {
     await createSettings(S);
+    await seedLevels();
     await createBrief({ category: 'News',      title: 'News Brief' });
     await createBrief({ category: 'Aircrafts', title: 'Aircraft Brief' });
     await createBrief({ category: 'Bases',     title: 'Bases Brief' });
@@ -187,20 +208,26 @@ describe('GET /api/briefs — isLocked flag includes pathway lock', () => {
     expect(briefs.find(b => b.category === 'Bases').isLocked).toBe(true);
   });
 
-  it('level-1 rank-2 user: News + Bases unlocked, Aircrafts locked (level gate)', async () => {
+  it('level-1 rank-2 user: all three categories unlocked (rank bypasses level gate)', async () => {
+    // Per isPathwayUnlocked rule: if userRank > unlock.rankRequired the level check
+    // is bypassed — the user has already progressed past the rank at which this
+    // category first unlocked, so level resets during rank progression don't re-lock it.
     const user = await userLevel1Rank2();
     const res  = await request(app).get('/api/briefs').set('Cookie', authCookie(user._id));
     expect(res.status).toBe(200);
     const briefs = res.body.data.briefs;
     expect(briefs.find(b => b.category === 'News').isLocked).toBe(false);
-    expect(briefs.find(b => b.category === 'Aircrafts').isLocked).toBe(true);
+    expect(briefs.find(b => b.category === 'Aircrafts').isLocked).toBe(false);
     expect(briefs.find(b => b.category === 'Bases').isLocked).toBe(false);
   });
 });
 
 // ── GET /api/briefs/random-unlocked — pathway filter ─────────────────────────
 describe('GET /api/briefs/random-unlocked — excludes pathway-locked categories', () => {
-  beforeEach(() => createSettings(S));
+  beforeEach(async () => {
+    await createSettings(S);
+    await seedLevels();
+  });
 
   it('level-1 user never receives an Aircrafts or Bases brief', async () => {
     // Seed many briefs so randomness does not mask failures
@@ -250,7 +277,10 @@ describe('GET /api/briefs/random-unlocked — excludes pathway-locked categories
 
 // ── GET /api/briefs/pathway/:category — pathway gate ─────────────────────────
 describe('GET /api/briefs/pathway/:category — pathway gating', () => {
-  beforeEach(() => createSettings(S));
+  beforeEach(async () => {
+    await createSettings(S);
+    await seedLevels();
+  });
 
   it('level-1 user cannot access /pathway/Aircrafts → 403', async () => {
     const user = await userLevel1Rank1();
@@ -284,6 +314,7 @@ describe('POST /api/games/quiz/start — pathway gating', () => {
   let gameType;
   beforeEach(async () => {
     await createSettings(S);
+    await seedLevels();
     gameType = await createGameType();
   });
 

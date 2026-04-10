@@ -33,27 +33,35 @@ const PERMISSIVE_PATHWAY_UNLOCKS = [
 
 // ── AppSettings ────────────────────────────────────────────────────────────
 async function createSettings(overrides = {}) {
+  // $setOnInsert seeds defaults on first call; $set applies overrides on every
+  // call so tests can tighten settings mid-test (e.g. narrow freeCategories).
+  // Any key present in overrides is excluded from $setOnInsert to avoid Mongo's
+  // "conflict at path" error when the same key appears in both operators.
+  const defaults = {
+    _singleton: true,
+    aircoinsFirstLogin:         5,
+    aircoinsStreakBonus:        2,
+    aircoinsPerWinEasy:         10,
+    aircoinsPerWinMedium:       20,
+    aircoins100Percent:         15,
+    passThresholdEasy:          60,
+    passThresholdMedium:        60,
+    easyAnswerCount:            3,
+    mediumAnswerCount:          5,
+    emailConfirmationEnabled:   false,
+    freeCategories:        ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
+    silverCategories:      ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
+    guestCategories:       ['News'],
+    pathwayUnlocks:        PERMISSIVE_PATHWAY_UNLOCKS,
+  };
+  const setOnInsert = Object.fromEntries(
+    Object.entries(defaults).filter(([k]) => !(k in overrides))
+  );
   return AppSettings.findOneAndUpdate(
     { _singleton: true },
     {
-      $setOnInsert: {
-        _singleton: true,
-        aircoinsFirstLogin:         5,
-        aircoinsStreakBonus:        2,
-        aircoinsPerWinEasy:         10,
-        aircoinsPerWinMedium:       20,
-        aircoins100Percent:         15,
-        passThresholdEasy:          60,
-        passThresholdMedium:        60,
-        easyAnswerCount:            3,
-        mediumAnswerCount:          5,
-        emailConfirmationEnabled:   false,
-        freeCategories:        ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
-        silverCategories:      ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
-        guestCategories:       ['News'],
-        pathwayUnlocks:        PERMISSIVE_PATHWAY_UNLOCKS,
-        ...overrides,
-      },
+      $setOnInsert: setOnInsert,
+      ...(Object.keys(overrides).length ? { $set: overrides } : {}),
     },
     { upsert: true, returnDocument: 'after' }
   );

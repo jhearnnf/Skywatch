@@ -1,12 +1,3 @@
-// Mock Resend before any module that loads email.js is required
-jest.mock('resend', () => ({
-  Resend: jest.fn().mockImplementation(() => ({
-    emails: {
-      send: jest.fn().mockResolvedValue({ data: { id: 'mock-id' }, error: null }),
-    },
-  })),
-}));
-
 process.env.JWT_SECRET = 'test_secret';
 
 const request  = require('supertest');
@@ -57,8 +48,7 @@ describe('POST /api/auth/forgot-password', () => {
   it('returns 200, creates token doc, and sends email for a valid email/password account', async () => {
     await createUser({ email: 'valid@test.com', password: 'Password123' });
 
-    const { Resend } = require('resend');
-    const sendMock = Resend.mock.results[0].value.emails.send;
+    const { __sendMock: sendMock } = require('resend');
     sendMock.mockClear();
 
     const res = await request(app)

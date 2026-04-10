@@ -84,7 +84,9 @@ describe('POST /api/admin/intel-leads/mark-complete — auth guards', () => {
 // ── GET /api/admin/intel-leads ─────────────────────────────────────────────
 
 describe('GET /api/admin/intel-leads', () => {
-  it('returns only unpublished leads', async () => {
+  it('returns all leads — both published and unpublished', async () => {
+    // The admin UI has a "show completed" toggle and displays both counts,
+    // so the API must return everything and let the client filter.
     await createLead({ title: 'Unpublished Lead A', isPublished: false });
     await createLead({ title: 'Published Lead B',   isPublished: true  });
     await createLead({ title: 'Unpublished Lead C', isPublished: false });
@@ -94,11 +96,12 @@ describe('GET /api/admin/intel-leads', () => {
     const res = await request(app).get('/api/admin/intel-leads').set('Cookie', cookie);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.leads).toHaveLength(2);
-    expect(res.body.data.leads.every(l => !l.isPublished)).toBe(true);
+    expect(res.body.data.leads).toHaveLength(3);
+    expect(res.body.data.leads.filter(l => l.isPublished)).toHaveLength(1);
+    expect(res.body.data.leads.filter(l => !l.isPublished)).toHaveLength(2);
   });
 
-  it('returns empty array when all leads are published', async () => {
+  it('returns published leads too — not just unpublished', async () => {
     await createLead({ title: 'Done Lead', isPublished: true });
 
     const user   = await createAdminUser();
@@ -106,7 +109,8 @@ describe('GET /api/admin/intel-leads', () => {
     const res = await request(app).get('/api/admin/intel-leads').set('Cookie', cookie);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.leads).toHaveLength(0);
+    expect(res.body.data.leads).toHaveLength(1);
+    expect(res.body.data.leads[0].isPublished).toBe(true);
   });
 
   it('returns title, nickname, subtitle, section, subsection fields', async () => {

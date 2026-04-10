@@ -1310,17 +1310,19 @@ router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) 
     ]);
 
     // ── Step 2: reverse Aircoins per user ────────────────────────────────
-    // Group all brief-attributed log entries by userId and sum amounts
+    // Group all brief-attributed log entries by userId and sum amounts, then
+    // subtract from each user's balances (floored at 0).
     const coinGroups = await AircoinLog.aggregate([
       { $match: { briefId: new mongoose.Types.ObjectId(briefId) } },
       { $group: { _id: '$userId', total: { $sum: '$amount' } } },
     ]);
-    await Promise.all(coinGroups.map(({ _id: userId, total }) =>
-      User.findByIdAndUpdate(userId, [
-        { $set: { totalAircoins: { $max: [0, { $subtract: ['$totalAircoins', total] }] } } },
-        { $set: { cycleAircoins: { $max: [0, { $subtract: ['$cycleAircoins', total] }] } } },
-      ])
-    ));
+    await Promise.all(coinGroups.map(async ({ _id: userId, total }) => {
+      const user = await User.findById(userId).select('totalAircoins cycleAircoins');
+      if (!user) return;
+      user.totalAircoins = Math.max(0, (user.totalAircoins ?? 0) - total);
+      user.cycleAircoins = Math.max(0, (user.cycleAircoins ?? 0) - total);
+      await user.save();
+    }));
 
     // ── Step 3: delete everything ────────────────────────────────────────
     const regenBrief = await IntelligenceBrief.findById(briefId).select('category').lean();
@@ -3455,6 +3457,8 @@ router.post('/ai/generate-image', async (req, res) => {
 // PATCH /api/admin/economy/levels   — sync level thresholds only
 // POST  /api/admin/economy/apply    — write all rates + level thresholds live
 const BOO_CATS = new Set(['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties']);
+// Number of questions shown to the user in a single quiz session (out of the AI-generated pool).
+const QUIZ_QUESTIONS_PER_SESSION = 5;
 
 // Whitelist of AppSettings fields the economy apply endpoint may write.
 const ECONOMY_RATE_FIELDS = new Set([
@@ -3516,14 +3520,13 @@ router.get('/economy-viability', async (req, res) => {
     }
 
     // Initial scenario totals (frontend recalculates live as rates are edited)
-    const questionsPerDifficulty = settings.aiQuestionsPerDifficulty ?? 7;
     function scenarioCoins(difficulty) {
       const isNormal = difficulty === 'normal';
       const n        = totalBriefs;
       const reads    = n * (settings.aircoinsPerBriefRead ?? 5);
       const quiz     = isNormal
-        ? n * questionsPerDifficulty * (settings.aircoinsPerWinEasy   ?? 10) + n * (settings.aircoins100Percent ?? 15)
-        : n * questionsPerDifficulty * (settings.aircoinsPerWinMedium ?? 20) + n * (settings.aircoins100Percent ?? 15);
+        ? n * QUIZ_QUESTIONS_PER_SESSION * (settings.aircoinsPerWinEasy   ?? 10) + n * (settings.aircoins100Percent ?? 15)
+        : n * QUIZ_QUESTIONS_PER_SESSION * (settings.aircoinsPerWinMedium ?? 20) + n * (settings.aircoins100Percent ?? 15);
       const boo = booEligibleBriefs * (isNormal
         ? (settings.aircoinsOrderOfBattleEasy   ?? 8)
         : (settings.aircoinsOrderOfBattleMedium ?? 18));
@@ -3538,7 +3541,8 @@ router.get('/economy-viability', async (req, res) => {
       status: 'success',
       data: {
         content: { totalBriefs, wtaBriefs, booEligibleBriefs, wtaPerBrief },
-        aiQuestionsPerDifficulty: questionsPerDifficulty,
+        aiQuestionsPerDifficulty: settings.aiQuestionsPerDifficulty ?? 7,
+        quizQuestionsPerSession:  QUIZ_QUESTIONS_PER_SESSION,
         rates: {
           aircoinsPerBriefRead:          settings.aircoinsPerBriefRead          ?? 5,
           aircoinsPerWinEasy:            settings.aircoinsPerWinEasy            ?? 10,

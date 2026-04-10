@@ -312,20 +312,31 @@ describe('GET /api/briefs/category-counts', () => {
   });
 });
 
-// ── Guest category access (GET /api/briefs/:id) ───────────────────────────
-describe('GET /api/briefs/:id — guest category restriction', () => {
+// ── Guest brief access (GET /api/briefs/:id) ──────────────────────────────
+// Guests share the free-tier category list — there is no separate guest gate
+// on brief reading. Guests are blocked at game endpoints (quiz, BOO, etc.)
+// instead.
+describe('GET /api/briefs/:id — guest brief access', () => {
   beforeEach(async () => {
-    // Ensure settings with guestCategories = ['News'] only
-    await createSettings({ guestCategories: ['News'] });
+    await createSettings();
   });
 
-  it('guest can read a brief in an accessible (guest) category', async () => {
+  it('guest can read a brief in a free-tier category', async () => {
     const brief = await createBrief({ category: 'News' });
     const res   = await request(app).get(`/api/briefs/${brief._id}`);
     expect(res.status).toBe(200);
   });
 
-  it('guest is blocked (403) from reading a brief in a locked category', async () => {
+  it('guest can read a brief in any category the free tier allows', async () => {
+    // Aircrafts is in the default freeCategories list, so guests can read it too.
+    const brief = await createBrief({ category: 'Aircrafts' });
+    const res   = await request(app).get(`/api/briefs/${brief._id}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('guest is blocked from a brief in a category NOT in freeCategories', async () => {
+    // Tighten freeCategories to ['News'] only — guests follow the same list.
+    await createSettings({ freeCategories: ['News'] });
     const brief = await createBrief({ category: 'Aircrafts' });
     const res   = await request(app).get(`/api/briefs/${brief._id}`);
     expect(res.status).toBe(403);
@@ -336,19 +347,17 @@ describe('GET /api/briefs/:id — guest category restriction', () => {
     const brief  = await createBrief({ category: 'News' });
     const cookie = authCookie(user._id);
 
-    await createSettings({ freeCategories: ['News'], guestCategories: ['News'] });
+    await createSettings({ freeCategories: ['News'] });
     const res = await request(app).get(`/api/briefs/${brief._id}`).set('Cookie', cookie);
     expect(res.status).toBe(200);
   });
 });
 
 // ── GET /api/briefs — guest isLocked flags ────────────────────────────────
+// isLocked for guests reflects the free-tier category list.
 describe('GET /api/briefs — guest isLocked', () => {
-  beforeEach(async () => {
-    await createSettings({ guestCategories: ['News'] });
-  });
-
-  it('marks isLocked=false for briefs in guest-accessible categories', async () => {
+  it('marks isLocked=false for briefs in free-tier categories', async () => {
+    await createSettings();
     await createBrief({ category: 'News' });
     const res = await request(app).get('/api/briefs');
     expect(res.status).toBe(200);
@@ -356,7 +365,8 @@ describe('GET /api/briefs — guest isLocked', () => {
     expect(brief.isLocked).toBe(false);
   });
 
-  it('marks isLocked=true for briefs in locked categories', async () => {
+  it('marks isLocked=true for briefs in categories outside freeCategories', async () => {
+    await createSettings({ freeCategories: ['News'] });
     await createBrief({ category: 'Aircrafts' });
     const res = await request(app).get('/api/briefs');
     expect(res.status).toBe(200);

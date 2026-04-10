@@ -31,16 +31,23 @@ beforeEach(async () => {
 afterEach(async () => db.clearDatabase());
 afterAll(async () => db.closeDatabase());
 
-// Satisfies all three BOO prerequisites for user+anchor:
+// Satisfies all BOO prerequisites for user+anchor:
 //   1. Read record for the anchor brief
-//   2. Aircraft-reads gate: 3 no-game-data aircraft reads (won't inflate brief count)
-//   3. Passed quiz attempt for the anchor brief
-async function ensureBOOReady(anchorBrief) {
+//   2. Read records for every brief in the pool (BOO only draws from read briefs)
+//   3. Aircraft-reads gate: 3 no-game-data aircraft reads
+//   4. Passed quiz attempt for the anchor brief
+// Pass the full pool array as `pool` so choice briefs land in the user's read
+// set — the route now filters the choice pool to completed reads.
+async function ensureBOOReady(anchorBrief, pool = []) {
   await createReadRecord(user._id, anchorBrief._id);
   await createPassedQuizAttempt(user._id, anchorBrief._id);
+  for (const b of pool) {
+    if (String(b._id) === String(anchorBrief._id)) continue;
+    await createReadRecord(user._id, b._id);
+  }
   for (let i = 0; i < 3; i++) {
     const filler = await IntelligenceBrief.create({
-      title: `Aircraft Gate Filler ${Date.now()}_${i}`, subtitle: '',
+      title: `Aircraft Gate Filler ${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`, subtitle: '',
       category: 'Aircrafts', descriptionSections: ['Section.'],
       keywords: [], sources: [], isPublished: true, gameData: {},
     });
@@ -63,24 +70,25 @@ describe('GET /api/games/battle-of-order/options', () => {
     expect(res.body.data.reason).toBe('ineligible_category');
   });
 
-  it('returns available=false when insufficient briefs with game data', async () => {
-    // Only 2 Aircrafts briefs — easy needs 3
-    const [anchor] = await createBooBriefs(2, 'Aircrafts');
-    await ensureBOOReady(anchor);
+  it('returns available=false when user has not read enough briefs in the pool', async () => {
+    // 5 Aircrafts briefs exist (more than the threshold), but only the anchor is in the user's read set.
+    // BOO now only draws from briefs the user has actually read → insufficient_read_pool.
+    const briefs = await createBooBriefs(5, 'Aircrafts');
+    await ensureBOOReady(briefs[0]); // only anchor marked read
 
     const res = await request(app)
-      .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
+      .get(`/api/games/battle-of-order/options?briefId=${briefs[0]._id}`)
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
     expect(res.body.data.available).toBe(false);
-    expect(res.body.data.reason).toBe('insufficient_briefs');
+    expect(res.body.data.reason).toBe('insufficient_read_pool');
   });
 
   it('returns available=true with options when enough briefs exist', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
     const anchor = briefs[0];
-    await ensureBOOReady(anchor);
+    await ensureBOOReady(anchor, briefs);
 
     const res = await request(app)
       .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
@@ -115,7 +123,7 @@ describe('POST /api/games/battle-of-order/generate', () => {
   it('generates a game with shuffled choices', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
     const anchor = briefs[0];
-    await ensureBOOReady(anchor);
+    await ensureBOOReady(anchor, briefs);
 
     const res = await request(app)
       .post('/api/games/battle-of-order/generate')
@@ -136,7 +144,7 @@ describe('POST /api/games/battle-of-order/generate', () => {
   it('returns 400 for invalid orderType', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
     const anchor = briefs[0];
-    await ensureBOOReady(anchor);
+    await ensureBOOReady(anchor, briefs);
 
     const res = await request(app)
       .post('/api/games/battle-of-order/generate')
@@ -180,7 +188,7 @@ describe('POST /api/games/battle-of-order/submit', () => {
 
   it('returns won=false for any submitted order before we know the correct one', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
-    await ensureBOOReady(briefs[0]);
+    await ensureBOOReady(briefs[0], briefs);
     const game   = await generateGame(briefs[0]._id);
 
     // Submit in the order the server gave us (shuffled — likely wrong)
@@ -202,7 +210,7 @@ describe('POST /api/games/battle-of-order/submit', () => {
 
   it('wins and earns coins when choices match the correct order exactly', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
-    await ensureBOOReady(briefs[0]);
+    await ensureBOOReady(briefs[0], briefs);
     const game   = await generateGame(briefs[0]._id);
 
     // First do a dummy submit to discover correct order — use order 99 to guarantee a loss
@@ -238,7 +246,7 @@ describe('POST /api/games/battle-of-order/submit', () => {
 
   it('does not award coins on a second win (repeat attempt same anchor+orderType)', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
-    await ensureBOOReady(briefs[0]);
+    await ensureBOOReady(briefs[0], briefs);
 
     // First game — get correct order
     const g1 = await generateGame(briefs[0]._id);
@@ -304,7 +312,7 @@ describe('POST /api/games/battle-of-order/submit', () => {
 describe('POST /api/games/battle-of-order/abandon', () => {
   it('records an abandoned session', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
-    await ensureBOOReady(briefs[0]);
+    await ensureBOOReady(briefs[0], briefs);
     const genRes = await request(app)
       .post('/api/games/battle-of-order/generate')
       .set('Cookie', cookie)
@@ -330,7 +338,7 @@ describe('POST /api/games/battle-of-order/abandon', () => {
 
   it('stores abandoned=true, won=false, aircoinsEarned=0 in the DB', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
-    await ensureBOOReady(briefs[0]);
+    await ensureBOOReady(briefs[0], briefs);
     const genRes = await request(app)
       .post('/api/games/battle-of-order/generate')
       .set('Cookie', cookie)
@@ -352,7 +360,7 @@ describe('POST /api/games/battle-of-order/abandon', () => {
 
   it('abandoned games are NOT counted in /api/users/stats gamesPlayed', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
-    await ensureBOOReady(briefs[0]);
+    await ensureBOOReady(briefs[0], briefs);
     const genRes = await request(app)
       .post('/api/games/battle-of-order/generate')
       .set('Cookie', cookie)
@@ -527,11 +535,15 @@ describe('GET /api/games/battle-of-order/recommended-briefs', () => {
 // ── Training BOO order types ───────────────────────────────────────────────
 
 // Set up all BOO prerequisites for a Training brief:
-//  1. User has completed the anchor brief
+//  1. User has completed every brief in the Training pool (BOO draws from read briefs)
 //  2. User has read 3 Aircrafts briefs (gate category for non-Bases)
 //  3. User has passed the quiz for the anchor brief
-async function setupTrainingBooPrereqs(userId, anchorBriefId) {
+async function setupTrainingBooPrereqs(userId, anchorBriefId, pool = []) {
   await createReadRecord(userId, anchorBriefId, { completed: true });
+  for (const b of pool) {
+    if (String(b._id) === String(anchorBriefId)) continue;
+    await createReadRecord(userId, b._id, { completed: true });
+  }
   const aircraftBriefs = await createBooBriefs(3, 'Aircrafts');
   for (const b of aircraftBriefs) {
     await createReadRecord(userId, b._id, { completed: true });
@@ -543,7 +555,7 @@ describe('Training BOO — training_week and training_duration order types', () 
   it('options returns training_week when trainingWeekStart is populated', async () => {
     const briefs = await createTrainingBooBriefs(3);
     const anchor = briefs[0];
-    await setupTrainingBooPrereqs(user._id, anchor._id);
+    await setupTrainingBooPrereqs(user._id, anchor._id, briefs);
 
     const res = await request(app)
       .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
@@ -558,7 +570,7 @@ describe('Training BOO — training_week and training_duration order types', () 
   it('options returns training_duration when weeksOfTraining is populated', async () => {
     const briefs = await createTrainingBooBriefs(3);
     const anchor = briefs[0];
-    await setupTrainingBooPrereqs(user._id, anchor._id);
+    await setupTrainingBooPrereqs(user._id, anchor._id, briefs);
 
     const res = await request(app)
       .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
@@ -573,7 +585,7 @@ describe('Training BOO — training_week and training_duration order types', () 
   it('options returns both Training order types when all fields populated', async () => {
     const briefs = await createTrainingBooBriefs(3);
     const anchor = briefs[0];
-    await setupTrainingBooPrereqs(user._id, anchor._id);
+    await setupTrainingBooPrereqs(user._id, anchor._id, briefs);
 
     const res = await request(app)
       .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
@@ -591,7 +603,7 @@ describe('Training BOO — training_week and training_duration order types', () 
       gameData: { trainingWeekStart: null, trainingWeekEnd: null, weeksOfTraining: 8 },
     });
     const anchor = briefs[0];
-    await setupTrainingBooPrereqs(user._id, anchor._id);
+    await setupTrainingBooPrereqs(user._id, anchor._id, briefs);
 
     const res = await request(app)
       .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
@@ -608,7 +620,7 @@ describe('Training BOO — training_week and training_duration order types', () 
       gameData: { trainingWeekStart: 4, trainingWeekEnd: 6, weeksOfTraining: null },
     });
     const anchor = briefs[0];
-    await setupTrainingBooPrereqs(user._id, anchor._id);
+    await setupTrainingBooPrereqs(user._id, anchor._id, briefs);
 
     const res = await request(app)
       .get(`/api/games/battle-of-order/options?briefId=${anchor._id}`)
@@ -622,7 +634,7 @@ describe('Training BOO — training_week and training_duration order types', () 
   it('generates a training_week game with choices sorted by trainingWeekStart', async () => {
     const briefs = await createTrainingBooBriefs(3);
     const anchor = briefs[0];
-    await setupTrainingBooPrereqs(user._id, anchor._id);
+    await setupTrainingBooPrereqs(user._id, anchor._id, briefs);
 
     const res = await request(app)
       .post('/api/games/battle-of-order/generate')
@@ -637,7 +649,7 @@ describe('Training BOO — training_week and training_duration order types', () 
   it('generates a training_duration game with choices sorted by weeksOfTraining', async () => {
     const briefs = await createTrainingBooBriefs(3);
     const anchor = briefs[0];
-    await setupTrainingBooPrereqs(user._id, anchor._id);
+    await setupTrainingBooPrereqs(user._id, anchor._id, briefs);
 
     const res = await request(app)
       .post('/api/games/battle-of-order/generate')
