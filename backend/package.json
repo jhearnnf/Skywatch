@@ -9,6 +9,7 @@
     "ignore": [
       "seeds/seedLeads.js",
       "**/seeds/seedLeads.js",
+      "seeds/seedLeads.generated.jsonl",
       "node_modules",
       "__tests__",
       "coverage"

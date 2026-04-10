@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 const vm = require('vm');
 const IntelLead = require('../models/IntelLead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
@@ -1269,6 +1270,18 @@ const LEADS = [
   { title: 'Maritime Patrol Aircraft', nickname: '', subtitle: 'RAF aircraft conducting long-range surveillance over oceans for anti-submarine operations.', category: 'Aircrafts', subcategory: 'Maritime Patrol', section: 'AIRCRAFTS', subsection: 'Maritime Patrol' },
   { title: 'Royal Navy', nickname: '', subtitle: 'UK\'s naval force working alongside the RAF for maritime operations.', category: 'Allies', subcategory: 'Bilateral & Framework Partners', section: 'ALLIES', subsection: 'Bilateral & Framework Partners' },
 
+  { title: 'Air Defence', nickname: '', subtitle: 'RAF operations designed to detect and neutralize aerial threats.', category: 'Threats', subcategory: 'State Actor Air', section: 'THREATS', subsection: 'State Actor Air' },
+  { title: 'Maritime Security Operations', nickname: '', subtitle: 'RAF efforts to protect sea lanes through air patrols and surveillance.', category: 'Missions', subcategory: 'Post-War & Cold War', section: 'MISSIONS', subsection: 'Post-War & Cold War' },
+  { title: 'Expeditionary Air Power', nickname: '', subtitle: 'RAF\'s capability to rapidly deploy forces to overseas locations.', category: 'Tech', subcategory: 'Future Programmes', section: 'TECH', subsection: 'Future Programmes' },
+  { title: 'Interception', nickname: '', subtitle: 'RAF tactical role involving fighter aircraft engaging hostile aerial threats.', category: 'Roles', subcategory: 'Fast Jet Pilot', section: 'ROLES', subsection: 'Fast Jet Pilot' },
+  { title: 'Countering Drone and Missile Threats', nickname: '', subtitle: 'RAF strategies to detect and neutralize UAVs and ballistic missiles.', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems' },
+
+  { title: 'HMS Somerset', nickname: '', subtitle: 'Type 23 frigate enhancing integrated maritime security with RAF operations.', category: 'Allies', subcategory: 'Bilateral & Framework Partners', section: 'ALLIES', subsection: 'Bilateral & Framework Partners' },
+  { title: 'HMS Mersey', nickname: '', subtitle: 'Batch 2 River-class vessel supporting RAF air operations in UK waters.', category: 'Allies', subcategory: 'Bilateral & Framework Partners', section: 'ALLIES', subsection: 'Bilateral & Framework Partners' },
+  { title: 'RFA Tideforce', nickname: '', subtitle: 'Logistical support tanker enhancing RAF Poseidon operational endurance at sea.', category: 'Allies', subcategory: 'Bilateral & Framework Partners', section: 'ALLIES', subsection: 'Bilateral & Framework Partners' },
+  { title: 'Wildcat Helicopters', nickname: '', subtitle: 'Multi-role aircraft providing maritime operational support alongside RAF Poseidon.', category: 'Aircrafts', subcategory: 'Rotary Wing', section: 'AIRCRAFTS', subsection: 'Rotary Wing' },
+  { title: 'North Atlantic', nickname: '', subtitle: 'Critical theatre for RAF maritime patrol against submarine threats.', category: 'AOR', subcategory: '', section: 'AOR', subsection: '' },
+
   // ── AUTO-GENERATED LEADS (seeded from keyword linking — do not edit this line) ──
 ];
 
@@ -1300,7 +1313,27 @@ function loadLeadsFromDisk() {
   const terminator = src.indexOf('\n];', literalStart);
   if (terminator === -1) throw new Error('seedLeads: LEADS end marker not found');
   const literal = src.slice(literalStart, terminator + 2); // include `\n]`
-  return vm.runInNewContext(literal);
+  const leads = vm.runInNewContext(literal);
+
+  // Merge in auto-generated leads from the JSONL sidecar. appendToSeedLeads
+  // (utils/keywordLinking.js) writes new entries there instead of mutating
+  // this .js file, so runtime writes don't trigger nodemon restarts.
+  const generatedPath = path.join(__dirname, 'seedLeads.generated.jsonl');
+  if (fs.existsSync(generatedPath)) {
+    const raw  = fs.readFileSync(generatedPath, 'utf8');
+    const seen = new Set(leads.map(l => l.title));
+    for (const line of raw.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const entry = JSON.parse(line);
+        if (entry && entry.title && !seen.has(entry.title)) {
+          leads.push(entry);
+          seen.add(entry.title);
+        }
+      } catch (_) { /* skip malformed line */ }
+    }
+  }
+  return leads;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -7,10 +7,13 @@ const IntelLead            = require('../models/IntelLead');
 const { SCAN_CATEGORIES }  = require('./mentionedBriefs');
 const { reprioritizeCategory } = require('./priorityRanking');
 
-const SEED_LEADS_PATH = path.join(__dirname, '../seeds/seedLeads.js');
-
-// Marker line used as the insertion anchor in seedLeads.js
-const SEED_MARKER = '  // ── AUTO-GENERATED LEADS (seeded from keyword linking — do not edit this line) ──';
+// Auto-generated leads are appended to a JSONL sidecar file — NOT to seedLeads.js
+// directly. Writing to a .js file inside the backend tree would trigger nodemon
+// to restart the dev server mid-request and break brief generation. .jsonl is
+// outside nodemon's watched extension list (js,mjs,cjs,json), so appends are
+// invisible to the watcher. seedLeads.js reads this file on startup and merges
+// the entries into its LEADS array.
+const SEED_LEADS_GENERATED_PATH = path.join(__dirname, '../seeds/seedLeads.generated.jsonl');
 
 // Valid categories the AI may assign to auto-generated leads (excludes News)
 const SEEDABLE_CATEGORIES = [
@@ -63,28 +66,25 @@ function titleSignalWords(title) {
 }
 
 /**
- * Append new lead entries to the AUTO-GENERATED section of seedLeads.js,
- * inserting just before the marker line so the file stays valid on DB reset.
+ * Append new lead entries to the JSONL sidecar file so they survive a DB reset.
+ * One JSON object per line — cheap to append, safe against concurrent writers,
+ * and merged into LEADS by seedLeads.loadLeadsFromDisk() at seed time.
  */
 function appendToSeedLeads(entries) {
   try {
-    let src = fs.readFileSync(SEED_LEADS_PATH, 'utf8');
-
-    if (!src.includes(SEED_MARKER)) {
-      console.error('[appendToSeedLeads] Marker not found in seedLeads.js — skipping file write');
-      return;
-    }
-
-    const entryLines = entries.map(e => {
-      const esc = s => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-      return `  { title: '${esc(e.title)}', nickname: '${esc(e.nickname)}', subtitle: '${esc(e.subtitle)}', category: '${e.category}', subcategory: '${esc(e.subcategory || '')}', section: '${e.category.toUpperCase()}', subsection: '${esc(e.subcategory || '')}' },`;
-    }).join('\n');
-
-    src = src.replace(SEED_MARKER, `${entryLines}\n\n${SEED_MARKER}`);
-    fs.writeFileSync(SEED_LEADS_PATH, src, 'utf8');
-    console.log(`[appendToSeedLeads] Appended ${entries.length} entry(ies) to seedLeads.js`);
+    const lines = entries.map(e => JSON.stringify({
+      title:       e.title,
+      nickname:    e.nickname    || '',
+      subtitle:    e.subtitle    || '',
+      category:    e.category,
+      subcategory: e.subcategory || '',
+      section:     e.category.toUpperCase(),
+      subsection:  e.subcategory || '',
+    })).join('\n') + '\n';
+    fs.appendFileSync(SEED_LEADS_GENERATED_PATH, lines, 'utf8');
+    console.log(`[appendToSeedLeads] Appended ${entries.length} entry(ies) to seedLeads.generated.jsonl`);
   } catch (err) {
-    console.error('[appendToSeedLeads] Failed to write seedLeads.js (non-fatal):', err.message);
+    console.error('[appendToSeedLeads] Failed to write seedLeads.generated.jsonl (non-fatal):', err.message);
   }
 }
 

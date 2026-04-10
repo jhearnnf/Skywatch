@@ -29,6 +29,9 @@ dist-ssr
 # Ableton metadata
 *.asd
 
+# Runtime-generated seed sidecar (auto-generated leads from keyword linking)
+backend/seeds/seedLeads.generated.jsonl
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
