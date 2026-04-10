@@ -89,7 +89,7 @@ const TRAINING_BRIEF = {
 // Same as TRAINING_BRIEF but with enough easy quiz questions for quizAvailable=true
 const QUIZ_BRIEF = {
   ...TRAINING_BRIEF,
-  quizQuestionsEasy: ['q1', 'q2', 'q3', 'q4', 'q5'],
+  quizQuestionsEasy: ['q1', 'q2', 'q3', 'q4', 'q5', 'q6', 'q7'],
 }
 
 const MULTI_SECTION_BRIEF = {

@@ -244,10 +244,10 @@ export default function Rankings() {
                 transition={{ duration: 0.9, ease: 'easeOut' }}
               />
             </div>
-            <p className="text-xs mt-1.5" style={{ color: '#4a6282' }}>
+            <p className="text-xs mt-1.5" style={{ color: coinsNeeded ? '#4a6282' : '#ffffff' }}>
               {coinsNeeded
                 ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} Aircoins to Level ${userLevel + 1}`
-                : '⭐ Max level — RAF Rank Promotion on next cycle'
+                : <><span className="star-silver">⭐</span> Max level — RAF Rank Promotion on next cycle</>
               }
             </p>
             {nextUnlockLevel && (
@@ -294,7 +294,7 @@ export default function Rankings() {
                     {/* Info */}
                     <div className="flex-1">
                       <p className="text-sm font-bold" style={{ color: isCurrent ? '#ddeaf8' : isAbove ? '#3d5a7a' : '#8ba0c0' }}>
-                        Level {lvl.levelNumber}{isMax && <span className="ml-1.5" style={{ color: '#fbbf24' }}>⭐ MAX</span>}
+                        Level {lvl.levelNumber}{isMax && <span className="ml-1.5 text-white"><span className="star-silver">⭐</span> MAX</span>}
                       </p>
                       <p className="text-xs intel-mono" style={{ color: '#3d5a7a' }}>
                         {lvl.cumulativeAircoins.toLocaleString()} Aircoins required
@@ -311,7 +311,7 @@ export default function Rankings() {
                       </span>
                     )}
                     {isMax && !isCurrent && (
-                      <span className="text-xs font-semibold shrink-0" style={{ color: '#fbbf24' }}>Rank Up</span>
+                      <span className="text-xs font-semibold shrink-0 text-white">Rank Up</span>
                     )}
                     {isAbove && !isCurrent && (
                       <span className="text-base shrink-0" style={{ opacity: 0.4 }}>🔒</span>

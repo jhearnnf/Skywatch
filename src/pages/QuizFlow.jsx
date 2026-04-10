@@ -213,7 +213,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{ type: 'spring', damping: 12, delay: 0.1 }}
-        className="text-7xl mb-4"
+        className={`text-7xl mb-4${pct >= 70 && pct < 100 ? ' star-silver' : ''}`}
       >
         {pct === 100 ? '🏆' : pct >= 70 ? '⭐' : pct >= 40 ? '💪' : '📚'}
       </motion.div>
@@ -255,8 +255,8 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
           transition={{ delay: 0.5 }}
           className="mb-6"
         >
-          <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 font-bold px-4 py-2 rounded-full mb-3 text-sm">
-            ⭐ +{xpEarned} Aircoins earned!
+          <div className="inline-flex items-center gap-2 bg-slate-200 border border-slate-300 text-white font-bold px-4 py-2 rounded-full mb-3 text-sm">
+            <span className="star-silver">⭐</span> +{xpEarned} Aircoins earned!
           </div>
           {breakdown.length > 0 && (
             <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 text-left text-sm space-y-1.5 max-w-xs mx-auto">
@@ -722,7 +722,9 @@ export default function QuizFlow() {
               : 'bg-emerald-50 border-emerald-200 text-emerald-600'
             }`}
           >
-            {difficulty === 'medium' ? '🔥 Advanced' : '🌱 Standard'}
+            {difficulty === 'medium'
+              ? <><span className="flame-blue">🔥</span> Advanced</>
+              : '🌱 Standard'}
           </span>
         </div>
 

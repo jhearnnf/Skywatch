@@ -672,24 +672,152 @@ describe('Play page — WTA card padlock', () => {
     })
   })
 
-  it('WTA card re-locks after history reset: prereqsMet false overrides cached isUnlocked', async () => {
-    // Simulate: user had the unlock cached (isUnlocked returns true) but then reset their history
-    // so the server now returns prereqsMet: false
+  it('WTA card stays unlocked when isUnlocked("wta") is cached, even if current spawn prereqsMet: false', async () => {
+    // Once a user has earned the WTA unlock it persists forever — only an
+    // admin progress reset (which $unsets gameUnlocks server-side) can re-lock it.
+    // So even if the current spawn endpoint says prereqs are no longer met,
+    // the cached isUnlocked('wta') keeps the padlock green.
     renderWithWtaSpawn({ prereqsMet: false }, { isUnlockedFn: (key) => key === 'wta' })
     await waitFor(() => screen.getByText(/learn about aircrafts for these random missions to appear/i))
-    // Once fetch resolves with prereqsMet: false, wtaSpawn is not null so the isUnlocked fallback
-    // no longer applies — padlock must be grey/locked
     const card = screen.getByTestId('card-wheres-that-aircraft')
     const svgPaths = card.querySelectorAll('svg [stroke]')
     const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
-    expect(strokes.every(s => s === '#94a3b8')).toBe(true)
+    expect(strokes.every(s => s === '#22c55e')).toBe(true)
   })
 
-  it('calls revokeUnlock("wta") when prereqsMet: false', async () => {
+  it('does NOT call revokeUnlock("wta") when prereqsMet: false (unlocks must persist)', async () => {
     const revokeUnlock = vi.fn()
     renderWithWtaSpawn({ prereqsMet: false }, { isUnlockedFn: (key) => key === 'wta', revokeUnlock })
+    await waitFor(() => screen.getByText(/learn about aircrafts/i))
+    expect(revokeUnlock).not.toHaveBeenCalled()
+  })
+})
+
+describe('Play page — persistent unlock detection', () => {
+  it('calls markUnlockFromServer("quiz") when an active quiz brief is returned', async () => {
+    const markUnlockFromServer = vi.fn()
+    useNewGameUnlock.mockReturnValue({
+      newGames: new Set(),
+      hasAnyNew: false,
+      isUnlocked: () => false,
+      markSeen: vi.fn(),
+      markUnlockFromServer,
+      applyUnlocks: vi.fn(),
+      revokeUnlock: vi.fn(),
+    })
+    const quizBriefs = [{ _id: 'q1', title: 'Quiz Ready', category: 'Aircrafts', quizState: 'active' }]
+    renderAsUser({ quizBriefs })
     await waitFor(() => {
-      expect(revokeUnlock).toHaveBeenCalledWith('wta')
+      expect(markUnlockFromServer).toHaveBeenCalledWith('quiz')
+    })
+  })
+
+  it('calls markUnlockFromServer("flashcard") when count >= 5', async () => {
+    const markUnlockFromServer = vi.fn()
+    useNewGameUnlock.mockReturnValue({
+      newGames: new Set(),
+      hasAnyNew: false,
+      isUnlocked: () => false,
+      markSeen: vi.fn(),
+      markUnlockFromServer,
+      applyUnlocks: vi.fn(),
+      revokeUnlock: vi.fn(),
+    })
+    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('flashcard-recall/available-briefs'))
+        return Promise.resolve({ json: async () => ({ data: { count: 5 } }) })
+      return Promise.resolve({ json: async () => ({ data: { briefs: [] } }) })
+    })
+    render(<Play />)
+    await waitFor(() => {
+      expect(markUnlockFromServer).toHaveBeenCalledWith('flashcard')
+    })
+  })
+
+  it('does NOT call markUnlockFromServer("flashcard") when count < 5', async () => {
+    const markUnlockFromServer = vi.fn()
+    useNewGameUnlock.mockReturnValue({
+      newGames: new Set(),
+      hasAnyNew: false,
+      isUnlocked: () => false,
+      markSeen: vi.fn(),
+      markUnlockFromServer,
+      applyUnlocks: vi.fn(),
+      revokeUnlock: vi.fn(),
+    })
+    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('flashcard-recall/available-briefs'))
+        return Promise.resolve({ json: async () => ({ data: { count: 3 } }) })
+      return Promise.resolve({ json: async () => ({ data: { briefs: [] } }) })
+    })
+    render(<Play />)
+    // Wait a tick for the fetch to resolve
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+    expect(markUnlockFromServer).not.toHaveBeenCalledWith('flashcard')
+  })
+
+  it('cached isUnlocked("flashcard") keeps card green even when count drops below 5', async () => {
+    useNewGameUnlock.mockReturnValue({
+      newGames: new Set(),
+      hasAnyNew: false,
+      isUnlocked: (key) => key === 'flashcard',
+      markSeen: vi.fn(),
+      markUnlockFromServer: vi.fn(),
+      applyUnlocks: vi.fn(),
+      revokeUnlock: vi.fn(),
+    })
+    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('flashcard-recall/available-briefs'))
+        return Promise.resolve({ json: async () => ({ data: { count: 0 } }) })
+      return Promise.resolve({ json: async () => ({ data: { briefs: [] } }) })
+    })
+    render(<Play />)
+    await waitFor(() => {
+      const card = screen.getByTestId('card-flashcard')
+      const svgPaths = card.querySelectorAll('svg [stroke]')
+      const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
+      expect(strokes.every(s => s === '#22c55e')).toBe(true)
+    })
+  })
+
+  it('cached isUnlocked("boo") keeps card green even when no active BOO briefs remain', async () => {
+    useNewGameUnlock.mockReturnValue({
+      newGames: new Set(),
+      hasAnyNew: false,
+      isUnlocked: (key) => key === 'boo',
+      markSeen: vi.fn(),
+      markUnlockFromServer: vi.fn(),
+      applyUnlocks: vi.fn(),
+      revokeUnlock: vi.fn(),
+    })
+    renderAsUser({ booBriefs: [] })
+    await waitFor(() => {
+      const card = screen.getByTestId('card-battle-order')
+      const svgPaths = card.querySelectorAll('svg [stroke]')
+      const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
+      expect(strokes.every(s => s === '#22c55e')).toBe(true)
+    })
+  })
+
+  it('cached isUnlocked("quiz") keeps card green even when no active quiz briefs remain', async () => {
+    useNewGameUnlock.mockReturnValue({
+      newGames: new Set(),
+      hasAnyNew: false,
+      isUnlocked: (key) => key === 'quiz',
+      markSeen: vi.fn(),
+      markUnlockFromServer: vi.fn(),
+      applyUnlocks: vi.fn(),
+      revokeUnlock: vi.fn(),
+    })
+    renderAsUser({ quizBriefs: [] })
+    await waitFor(() => {
+      const card = screen.getByTestId('card-quiz')
+      const svgPaths = card.querySelectorAll('svg [stroke]')
+      const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
+      expect(strokes.every(s => s === '#22c55e')).toBe(true)
     })
   })
 })

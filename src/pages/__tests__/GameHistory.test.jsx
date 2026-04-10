@@ -77,7 +77,7 @@ describe('GameHistory — filter UI', () => {
     setup(makeFetch([makeSession()]))
     render(<GameHistory />)
     await waitFor(() => screen.getByText('All Results'))
-    expect(screen.getByText('⭐ Perfect')).toBeDefined()
+    expect(screen.getByRole('button', { name: '⭐ Perfect' })).toBeDefined()
     expect(screen.getByText('✓ Passed')).toBeDefined()
     expect(screen.getByText('✗ Failed')).toBeDefined()
     expect(screen.getByText('— Abandoned')).toBeDefined()
@@ -101,9 +101,9 @@ describe('GameHistory — filter UI', () => {
     const mockFetch = makeFetch([makeSession()])
     setup(mockFetch)
     render(<GameHistory />)
-    await waitFor(() => screen.getByText('⭐ Perfect'))
+    await waitFor(() => screen.getByRole('button', { name: '⭐ Perfect' }))
 
-    fireEvent.click(screen.getByText('⭐ Perfect'))
+    fireEvent.click(screen.getByRole('button', { name: '⭐ Perfect' }))
 
     await waitFor(() => {
       const calls = mockFetch.mock.calls.map(([url]) => url)

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
 import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
 import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } from '../utils/sound'
 import RankBadge from '../components/RankBadge'
@@ -467,21 +468,22 @@ function SoundRowV2({ label, sound, value, onChange, enabled, onToggle, duration
 }
 
 // ── Client-side economy calculation (pure functions) ──────────────────────
-// Quiz assumes 5 easy + 5 medium questions per brief (default per brief).
+// Quiz question count per difficulty comes from AppSettings.aiQuestionsPerDifficulty.
 // Login/streak assumes a player logs in every day for the number of days it
 // takes to read all briefs at their daily reading pace.
 function calcEconomyScenario(sim, difficulty) {
   const rates    = sim.rates ?? {}
   const isNormal = difficulty === 'normal'
   const n        = sim.totalBriefs ?? 0
+  const qpd      = sim.aiQuestionsPerDifficulty ?? 7
   const wtaRate  = (rates.aircoinsWhereAircraftRound1 ?? 5)
                  + (rates.aircoinsWhereAircraftRound2 ?? 10)
                  + (rates.aircoinsWhereAircraftBonus  ?? 5)
   const reads = n * (rates.aircoinsPerBriefRead ?? 5)
-  // 5 questions per brief; every brief earns the 100% bonus (perfect-play sim)
+  // questions per brief × aircoinsPerWin; every brief earns the 100% bonus (perfect-play sim)
   const quiz  = isNormal
-    ? n * 5 * (rates.aircoinsPerWinEasy   ?? 10) + n * (rates.aircoins100Percent ?? 15)
-    : n * 5 * (rates.aircoinsPerWinMedium ?? 20) + n * (rates.aircoins100Percent ?? 15)
+    ? n * qpd * (rates.aircoinsPerWinEasy   ?? 10) + n * (rates.aircoins100Percent ?? 15)
+    : n * qpd * (rates.aircoinsPerWinMedium ?? 20) + n * (rates.aircoins100Percent ?? 15)
   const boo   = (sim.booEligibleBriefs ?? 0) * (isNormal
     ? (rates.aircoinsOrderOfBattleEasy   ?? 8)
     : (rates.aircoinsOrderOfBattleMedium ?? 18))
@@ -635,15 +637,16 @@ function AircoinsEconomy({ API, onToast }) {
       const res  = await apiFetch(`${API}/api/admin/economy-viability`, { credentials: 'include' })
       const data = await res.json()
       if (data.status === 'success') {
-        const { rates, cycleThreshold, totalRanks, ranks, levels, content } = data.data
+        const { rates, cycleThreshold, totalRanks, ranks, levels, content, aiQuestionsPerDifficulty } = data.data
         setMeta({ cycleThreshold, totalRanks, ranks })
         const snapshot = {
-          totalBriefs:       content.totalBriefs,
-          wtaBriefs:         content.wtaBriefs,
-          booEligibleBriefs: content.booEligibleBriefs,
-          briefsPerDay:      1,
+          totalBriefs:              content.totalBriefs,
+          wtaBriefs:                content.wtaBriefs,
+          booEligibleBriefs:        content.booEligibleBriefs,
+          briefsPerDay:             1,
           rates,
-          levels:            levels.filter(l => l.aircoinsToNextLevel !== null),
+          aiQuestionsPerDifficulty: aiQuestionsPerDifficulty ?? 7,
+          levels:                   levels.filter(l => l.aircoinsToNextLevel !== null),
         }
         // Preserve briefsPerDay across refreshes
         setSim(prev => prev ? { ...snapshot, briefsPerDay: prev.briefsPerDay } : snapshot)
@@ -1428,8 +1431,28 @@ function SettingsTab({ API }) {
       <Section title="Game Options" collapsible onSave={() => save('Update Game Options', [
         'easyAnswerCount', 'mediumAnswerCount',
         'passThresholdEasy', 'passThresholdMedium',
+        'aiQuestionsPerDifficulty',
+        'aiKeywordsPerBrief',
       ])}>
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-1 pb-2">Quiz Answer Count</p>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-1 pb-2">AI Content Targets</p>
+        <NumInput
+          label="Minimum quiz questions per difficulty"
+          hint="Used by admin 'Generate Missing' and the user-facing quiz availability gate"
+          value={draft.aiQuestionsPerDifficulty}
+          min={1}
+          max={20}
+          onChange={v => set('aiQuestionsPerDifficulty', v)}
+        />
+        <NumInput
+          label="Keywords per brief"
+          hint="Target for AI keyword generation and the K-badge completion threshold (pipeline ceiling is 30)"
+          value={draft.aiKeywordsPerBrief}
+          min={1}
+          max={30}
+          onChange={v => set('aiKeywordsPerBrief', v)}
+        />
+
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Quiz Answer Count</p>
         <NumInput label="Answers shown — Easy"   value={draft.easyAnswerCount}   min={2} max={10} onChange={v => set('easyAnswerCount', v)} />
         <NumInput label="Answers shown — Medium" value={draft.mediumAnswerCount} min={2} max={10} onChange={v => set('mediumAnswerCount', v)} />
 
@@ -2434,7 +2457,7 @@ function ContentTab({ API }) {
                       return (
                         <div key={idx} className="bg-slate-100 rounded-xl p-3">
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xl">{override.emoji || defaultStep.emoji}</span>
+                            <span className={`text-xl${(override.emoji || defaultStep.emoji) === '🔥' ? ' flame-blue' : ''}${(override.emoji || defaultStep.emoji) === '⭐' ? ' star-silver' : ''}`}>{override.emoji || defaultStep.emoji}</span>
                             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Step {idx + 1}</span>
                           </div>
                           <div className="space-y-2">
@@ -2698,31 +2721,14 @@ function LeadRow({ lead, picked, busy, onGenerate }) {
   )
 }
 
-function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
+function NewsModal({ API, onClose, onGenerate }) {
   const { apiFetch } = useAuth()
-  const [tab,             setTab]             = useState('leads') // 'leads' | 'news'
-  const [leads,           setLeads]           = useState([])
-  const [search,          setSearch]          = useState(initialSearch)
-  const [picked,          setPicked]          = useState(null)
-  const [busy,            setBusy]            = useState(null)
-  const [openSections,    setOpenSections]    = useState(new Set())
-  const [openSubsections, setOpenSubsections] = useState(new Set())
-  const [resetBusy,       setResetBusy]       = useState(false)
-  const [resetModal,      setResetModal]      = useState(false)
-  const [showCompleted,   setShowCompleted]   = useState(false)
-
-  const toggleSection = (sec) => setOpenSections(prev => {
-    const next = new Set(prev); next.has(sec) ? next.delete(sec) : next.add(sec); return next
-  })
-  const toggleSubsection = (key) => setOpenSubsections(prev => {
-    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next
-  })
-  // News headlines
-  const [headlines,     setHeadlines]     = useState([])
-  const [existingTitles,setExistingTitles]= useState([])
-  const [newsBusy,      setNewsBusy]      = useState(false)
-  const [dupConfirm,    setDupConfirm]    = useState(null) // { headline, eventDate } awaiting confirmation
-  const [newsDate,      setNewsDate]      = useState(() => new Date().toISOString().slice(0, 10))
+  const [headlines,      setHeadlines]      = useState([])
+  const [existingTitles, setExistingTitles] = useState([])
+  const [newsBusy,       setNewsBusy]       = useState(false)
+  const [busy,           setBusy]           = useState(null)
+  const [dupConfirm,     setDupConfirm]     = useState(null) // { headline, eventDate } awaiting confirmation
+  const [newsDate,       setNewsDate]       = useState(() => new Date().toISOString().slice(0, 10))
   // Bulk news generation
   const [bulkNewsOpen,      setBulkNewsOpen]      = useState(false)
   const [bulkNewsMonth,     setBulkNewsMonth]     = useState(() => new Date().toISOString().slice(0, 7))
@@ -2734,15 +2740,6 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
   const bulkNewsLogRef    = useRef(null)
 
   useEffect(() => {
-    // Backfill isPublished on leads that already have a generated brief, then load
-    fetch(`${API}/api/admin/intel-leads/backfill-published`, { method: 'POST', credentials: 'include' })
-      .catch(() => {})
-      .finally(() => {
-        fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
-          .then(r => r.json())
-          .then(d => { if (d.status === 'success') setLeads(d.data.leads) })
-          .catch(() => {})
-      })
     // Pre-load existing titles for duplicate detection
     fetch(`${API}/api/admin/briefs/titles`, { credentials: 'include' })
       .then(r => r.json())
@@ -2750,82 +2747,24 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
       .catch(() => {})
   }, [API])
 
-  const filtered = leads.filter(l => {
-    if (showCompleted && !l.isPublished) return false
-    if (!search) return true
-    return (
-      (l.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
-      (l.nickname ?? '').toLowerCase().includes(search.toLowerCase()) ||
-      (l.section ?? '').toLowerCase().includes(search.toLowerCase())
-    )
-  })
-
-  const publishedCount   = leads.filter(l => l.isPublished).length
-  const unpublishedCount = leads.length - publishedCount
-
-  const pickRandom = () => {
-    const pool = filtered.filter(l => !l.isPublished)
-    if (!pool.length) return
-    const lead = pool[Math.floor(Math.random() * pool.length)]
-    setPicked(lead)
-    // Ensure the section and subsection containing this lead are open
-    const sec = lead.section || 'General'
-    const sub = lead.subsection || ''
-    setOpenSections(prev => { const next = new Set(prev); next.add(sec); return next })
-    if (sub) setOpenSubsections(prev => { const next = new Set(prev); next.add(`${sec}::${sub}`); return next })
-  }
-
-  const generate = async (topicOrHeadline, isHeadline = false, eventDate = null) => {
-    const lead = typeof topicOrHeadline === 'string' ? null : topicOrHeadline
-    const key  = lead ? lead.title : topicOrHeadline
-    setBusy(key)
+  const generate = async (headline, eventDate) => {
+    setBusy(headline)
     try {
       const todayStr = new Date().toISOString().slice(0, 10)
-      const body = isHeadline
-        ? { headline: key, eventDate, isHistoric: !!(eventDate && eventDate !== todayStr) }
-        : { topic: key, category: lead?.category ?? 'News' }
       const res  = await apiFetch(`${API}/api/admin/ai/generate-brief`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ headline, eventDate, isHistoric: !!(eventDate && eventDate !== todayStr) }),
       })
       const data = await res.json()
       if (data.status === 'success') {
-        onGenerate(data.data.brief, isHeadline ? null : lead)
+        onGenerate(data.data.brief, null)
         onClose()
       } else {
         alert(`Generation failed: ${data.message}`)
       }
     } finally {
       setBusy(null)
-    }
-  }
-
-  const resetLeads = async (reason) => {
-    setResetModal(false)
-    setResetBusy(true)
-    try {
-      const res  = await apiFetch(`${API}/api/admin/leads/reset`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
-      })
-      const data = await res.json()
-      if (data.status === 'success') {
-        // Reload the leads list
-        fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
-          .then(r => r.json())
-          .then(d => { if (d.status === 'success') setLeads(d.data.leads) })
-          .catch(() => {})
-        onReset?.()
-        alert(`Reset complete: ${data.data.leadsInserted} leads, ${data.data.stubsCreated} stub briefs`)
-      } else {
-        alert(`Reset failed: ${data.message}`)
-      }
-    } catch (err) {
-      alert(`Reset error: ${err.message}`)
-    } finally {
-      setResetBusy(false)
     }
   }
 
@@ -2853,7 +2792,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
     if (isSimilarTitle(headline, existingTitles)) {
       setDupConfirm({ headline, eventDate })
     } else {
-      generate(headline, true, eventDate)
+      generate(headline, eventDate)
     }
   }
 
@@ -2931,6 +2870,413 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
     setBulkNewsRunning(false)
   }
 
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/70 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-surface rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh] relative" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-bold text-slate-700">📡 News</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-4 py-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-2 flex-1">
+              <label className="text-xs text-slate-500 whitespace-nowrap">Date</label>
+              <input
+                type="date"
+                value={newsDate}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={e => { setNewsDate(e.target.value); setHeadlines([]) }}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-brand-400"
+              />
+              {newsDate !== new Date().toISOString().slice(0, 10) && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Historic</span>
+              )}
+            </div>
+            <button
+              onClick={fetchHeadlines}
+              disabled={newsBusy}
+              className="text-xs px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
+            >
+              {newsBusy ? '⏳ Fetching…' : '🔄 Fetch Headlines'}
+            </button>
+          </div>
+
+          {headlines.length === 0 && !newsBusy && (
+            <p className="text-sm text-slate-400 text-center py-8">Select a date and press "Fetch Headlines".</p>
+          )}
+
+          {newsBusy && (
+            <div className="space-y-2">
+              {[1,2,3].map(i => (
+                <div key={i} className="h-12 bg-slate-100 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {headlines.map((item, i) => {
+              const isDup = isSimilarTitle(item.headline, existingTitles)
+              return (
+                <div
+                  key={i}
+                  className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border transition-all
+                    ${isDup ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200 bg-surface hover:border-brand-300 hover:bg-brand-50/30'}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold leading-snug ${isDup ? 'text-slate-400' : 'text-slate-800'}`}>
+                      {item.headline}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {item.eventDate && (
+                        <span className="text-[10px] text-slate-400 font-medium">{item.eventDate}</span>
+                      )}
+                      {isDup && (
+                        <span className="text-[10px] text-amber-600 font-semibold">⚠️ Possible duplicate brief</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleHeadlineClick(item.headline, item.eventDate)}
+                    disabled={busy === item.headline}
+                    className={`shrink-0 text-xs px-3 py-1.5 rounded-lg font-bold transition-colors whitespace-nowrap
+                      ${isDup
+                        ? 'border border-slate-300 text-slate-500 hover:bg-slate-100'
+                        : 'border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
+                      } disabled:opacity-40`}
+                  >
+                    {busy === item.headline ? '…' : isDup ? 'Create anyway' : 'Generate →'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* ── Bulk Month Generate ─────────────────────────────────────── */}
+          <div className="mt-4 rounded-xl border border-slate-200 overflow-hidden">
+            <button
+              onClick={() => { if (!bulkNewsRunning) setBulkNewsOpen(o => !o) }}
+              className={`w-full flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors ${bulkNewsRunning ? 'cursor-default' : 'hover:bg-slate-50'} text-slate-700`}
+            >
+              <span className="flex items-center gap-2">
+                {bulkNewsRunning
+                  ? <span className="inline-block w-2 h-2 rounded-full bg-brand-600 animate-pulse" />
+                  : '📅'}
+                {bulkNewsRunning
+                  ? `Generating ${bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length + 1} of ${bulkNewsLog.length}…`
+                  : 'Bulk Month Generate'}
+              </span>
+              {!bulkNewsRunning && <span className="text-slate-400 text-xs">{bulkNewsOpen ? '▲' : '▼'}</span>}
+            </button>
+
+            {bulkNewsOpen && (
+              <div className="border-t border-slate-200 px-4 py-4">
+                {/* Controls */}
+                <div className={`transition-opacity duration-200 ${bulkNewsRunning ? 'opacity-40 pointer-events-none' : ''}`}>
+                  <p className="text-xs font-semibold text-slate-500 mb-2">Fetch top 10 RAF headlines for a month:</p>
+                  <div className="flex items-center gap-2 mb-4">
+                    <input
+                      type="month"
+                      value={bulkNewsMonth}
+                      max={new Date().toISOString().slice(0, 7)}
+                      onChange={e => { setBulkNewsMonth(e.target.value); setBulkNewsHeadlines([]); setBulkNewsSelected(new Set()); setBulkNewsLog([]) }}
+                      className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-brand-400"
+                    />
+                    <button
+                      onClick={fetchBulkNewsHeadlines}
+                      disabled={newsBusy}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {newsBusy ? '⏳ Fetching…' : '🔄 Fetch Top 10'}
+                    </button>
+                  </div>
+
+                  {bulkNewsHeadlines.length > 0 && (
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold text-slate-500">
+                          {bulkNewsSelected.size} of {bulkNewsHeadlines.length} selected
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setBulkNewsSelected(new Set(bulkNewsHeadlines.map((_, i) => i)))}
+                            className="text-[10px] text-brand-600 hover:underline"
+                          >All</button>
+                          <button
+                            onClick={() => setBulkNewsSelected(new Set())}
+                            className="text-[10px] text-slate-400 hover:underline"
+                          >None</button>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5 mb-4">
+                        {bulkNewsHeadlines.map((item, i) => {
+                          const isDup = isSimilarTitle(item.headline, existingTitles)
+                          const checked = bulkNewsSelected.has(i)
+                          return (
+                            <label
+                              key={i}
+                              className={`flex items-start gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all
+                                ${isDup ? 'border-slate-200 bg-slate-50 opacity-60' : checked ? 'border-brand-300 bg-brand-50/40' : 'border-slate-200 bg-surface hover:border-slate-300'}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={e => {
+                                  setBulkNewsSelected(prev => {
+                                    const next = new Set(prev)
+                                    e.target.checked ? next.add(i) : next.delete(i)
+                                    return next
+                                  })
+                                }}
+                                className="mt-0.5 accent-brand-600 shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-xs font-semibold leading-snug ${isDup ? 'text-slate-400' : 'text-slate-800'}`}>
+                                  {item.headline}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {item.eventDate && (
+                                    <span className="text-[10px] text-slate-400">{item.eventDate}</span>
+                                  )}
+                                  {isDup && (
+                                    <span className="text-[10px] text-amber-600 font-semibold">⚠️ Possible duplicate</span>
+                                  )}
+                                </div>
+                              </div>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Action button */}
+                {bulkNewsHeadlines.length > 0 && (
+                  <div className="flex items-center gap-3 mb-0">
+                    {!bulkNewsRunning ? (
+                      <button
+                        onClick={handleBulkNewsGenerate}
+                        disabled={bulkNewsSelected.size === 0}
+                        className="text-xs px-4 py-1.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-colors disabled:opacity-40"
+                      >
+                        Generate Selected ({bulkNewsSelected.size})
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { bulkNewsCancelRef.current = true }}
+                        className="text-xs px-4 py-1.5 rounded-lg border border-red-300 text-red-600 font-semibold hover:bg-red-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Terminal log */}
+                {bulkNewsLog.length > 0 && (
+                  <div className="mt-4">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-brand-600 rounded-full transition-all duration-500"
+                          style={{ width: bulkNewsLog.length > 0 ? `${(bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length / bulkNewsLog.length) * 100}%` : '0%' }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-slate-400 tabular-nums shrink-0">
+                        {bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length}/{bulkNewsLog.length}
+                      </span>
+                    </div>
+                    <div
+                      ref={bulkNewsLogRef}
+                      className="bg-slate-900 rounded-xl p-3 font-mono text-[11px] max-h-64 overflow-y-auto space-y-0.5 select-text"
+                    >
+                      {bulkNewsLog.map(entry => {
+                        const ts = entry.startedAt
+                          ? new Date(entry.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                          : '--:--:--'
+                        const dur = (entry.completedAt && entry.startedAt)
+                          ? `(${Math.round((entry.completedAt - entry.startedAt) / 1000)}s)`
+                          : ''
+                        const icon =
+                          entry.status === 'done'    ? '✓' :
+                          entry.status === 'error'   ? '✗' :
+                          entry.status === 'running' ? '⟳' : '○'
+                        const iconCls =
+                          entry.status === 'done'    ? 'text-emerald-400' :
+                          entry.status === 'error'   ? 'text-red-400' :
+                          entry.status === 'running' ? 'text-cyan-400 animate-pulse' :
+                          'text-slate-600'
+                        const titleCls =
+                          entry.status === 'running' ? 'text-slate-100' :
+                          entry.status === 'done'    ? 'text-slate-300' :
+                          entry.status === 'error'   ? 'text-slate-300' :
+                          'text-slate-600'
+                        return (
+                          <div key={entry.idx} className="leading-5">
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-slate-600 shrink-0">[{ts}]</span>
+                              <span className={`shrink-0 ${iconCls}`}>{icon}</span>
+                              <span className={`${titleCls} truncate`}>{entry.headline}</span>
+                              {dur && <span className="text-slate-600 shrink-0">{dur}</span>}
+                            </div>
+                            {entry.status === 'error' && entry.error && (
+                              <div className="text-red-400 italic pl-[7.5rem] leading-4 mt-0.5 whitespace-pre-wrap break-all">{entry.error}</div>
+                            )}
+                            {entry.warnings?.map((w, wi) => (
+                              <div key={wi} className="text-amber-400 pl-[7.5rem] leading-4 mt-0.5 whitespace-pre-wrap break-all">⚠ {w}</div>
+                            ))}
+                          </div>
+                        )
+                      })}
+                      {!bulkNewsRunning && bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length === bulkNewsLog.length && bulkNewsLog.length > 0 && (
+                        <div className="text-slate-500 mt-1 pt-1 border-t border-slate-700">
+                          — {bulkNewsLog.filter(e => e.status === 'done').length} succeeded · {bulkNewsLog.filter(e => e.status === 'error').length} failed
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Duplicate confirmation overlay */}
+        {dupConfirm && (
+          <div className="absolute inset-0 bg-surface/95 rounded-2xl flex flex-col items-center justify-center p-6 text-center z-10">
+            <p className="text-2xl mb-3">⚠️</p>
+            <p className="font-bold text-slate-800 mb-2">Possible Duplicate</p>
+            <p className="text-sm text-slate-500 mb-6 max-w-xs">
+              A brief with a similar title already exists. Generate anyway?
+            </p>
+            <p className="text-xs font-semibold text-slate-700 bg-slate-100 rounded-xl px-3 py-2 mb-6 max-w-xs">
+              "{dupConfirm?.headline}"
+            </p>
+            <div className="flex gap-3 w-full max-w-xs">
+              <button onClick={() => setDupConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50">
+                Cancel
+              </button>
+              <button
+                onClick={() => { const d = dupConfirm; setDupConfirm(null); generate(d.headline, d.eventDate) }}
+                className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm"
+              >
+                Generate Anyway
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
+  const { apiFetch } = useAuth()
+  const [leads,           setLeads]           = useState([])
+  const [search,          setSearch]          = useState(initialSearch)
+  const [picked,          setPicked]          = useState(null)
+  const [busy,            setBusy]            = useState(null)
+  const [openSections,    setOpenSections]    = useState(new Set())
+  const [openSubsections, setOpenSubsections] = useState(new Set())
+  const [resetBusy,       setResetBusy]       = useState(false)
+  const [resetModal,      setResetModal]      = useState(false)
+  const [showCompleted,   setShowCompleted]   = useState(false)
+
+  const toggleSection = (sec) => setOpenSections(prev => {
+    const next = new Set(prev); next.has(sec) ? next.delete(sec) : next.add(sec); return next
+  })
+  const toggleSubsection = (key) => setOpenSubsections(prev => {
+    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next
+  })
+
+  useEffect(() => {
+    // Backfill isPublished on leads that already have a generated brief, then load
+    fetch(`${API}/api/admin/intel-leads/backfill-published`, { method: 'POST', credentials: 'include' })
+      .catch(() => {})
+      .finally(() => {
+        fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
+          .then(r => r.json())
+          .then(d => { if (d.status === 'success') setLeads(d.data.leads) })
+          .catch(() => {})
+      })
+  }, [API])
+
+  const filtered = leads.filter(l => {
+    if (showCompleted && !l.isPublished) return false
+    if (!search) return true
+    return (
+      (l.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (l.nickname ?? '').toLowerCase().includes(search.toLowerCase()) ||
+      (l.section ?? '').toLowerCase().includes(search.toLowerCase())
+    )
+  })
+
+  const publishedCount   = leads.filter(l => l.isPublished).length
+  const unpublishedCount = leads.length - publishedCount
+
+  const pickRandom = () => {
+    const pool = filtered.filter(l => !l.isPublished)
+    if (!pool.length) return
+    const lead = pool[Math.floor(Math.random() * pool.length)]
+    setPicked(lead)
+    // Ensure the section and subsection containing this lead are open
+    const sec = lead.section || 'General'
+    const sub = lead.subsection || ''
+    setOpenSections(prev => { const next = new Set(prev); next.add(sec); return next })
+    if (sub) setOpenSubsections(prev => { const next = new Set(prev); next.add(`${sec}::${sub}`); return next })
+  }
+
+  const generate = async (lead) => {
+    setBusy(lead.title)
+    try {
+      const res  = await apiFetch(`${API}/api/admin/ai/generate-brief`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: lead.title, category: lead.category ?? 'News' }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        onGenerate(data.data.brief, lead)
+        onClose()
+      } else {
+        alert(`Generation failed: ${data.message}`)
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const resetLeads = async (reason) => {
+    setResetModal(false)
+    setResetBusy(true)
+    try {
+      const res  = await apiFetch(`${API}/api/admin/leads/reset`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        // Reload the leads list
+        fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
+          .then(r => r.json())
+          .then(d => { if (d.status === 'success') setLeads(d.data.leads) })
+          .catch(() => {})
+        onReset?.()
+        alert(`Reset complete: ${data.data.leadsInserted} leads, ${data.data.stubsCreated} stub briefs`)
+      } else {
+        alert(`Reset failed: ${data.message}`)
+      }
+    } catch (err) {
+      alert(`Reset error: ${err.message}`)
+    } finally {
+      setResetBusy(false)
+    }
+  }
+
   // Group leads by section → subsection
   const grouped = {}
   for (const l of filtered) {
@@ -2953,24 +3299,11 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
-          <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-            {[{ id: 'leads', label: '📋 Leads' }, { id: 'news', label: '📡 News' }].map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${tab === t.id ? 'bg-surface text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none ml-auto">✕</button>
+          <h3 className="text-sm font-bold text-slate-700">📋 Leads</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
         </div>
 
-        {/* ── Leads tab ── */}
-        {tab === 'leads' && (
-          <>
-            <div className="px-4 pt-3 pb-2 flex gap-2">
+        <div className="px-4 pt-3 pb-2 flex gap-2">
               <input
                 value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search leads…"
@@ -3087,275 +3420,6 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
               })}
               {filtered.length === 0 && <p className="text-sm text-slate-400 text-center py-8">No leads found</p>}
             </div>
-          </>
-        )}
-
-        {/* ── News tab ── */}
-        {tab === 'news' && (
-          <div className="overflow-y-auto flex-1 px-4 py-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex items-center gap-2 flex-1">
-                <label className="text-xs text-slate-500 whitespace-nowrap">Date</label>
-                <input
-                  type="date"
-                  value={newsDate}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={e => { setNewsDate(e.target.value); setHeadlines([]) }}
-                  className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-brand-400"
-                />
-                {newsDate !== new Date().toISOString().slice(0, 10) && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Historic</span>
-                )}
-              </div>
-              <button
-                onClick={fetchHeadlines}
-                disabled={newsBusy}
-                className="text-xs px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
-              >
-                {newsBusy ? '⏳ Fetching…' : '🔄 Fetch Headlines'}
-              </button>
-            </div>
-
-            {headlines.length === 0 && !newsBusy && (
-              <p className="text-sm text-slate-400 text-center py-8">Select a date and press "Fetch Headlines".</p>
-            )}
-
-            {newsBusy && (
-              <div className="space-y-2">
-                {[1,2,3].map(i => (
-                  <div key={i} className="h-12 bg-slate-100 rounded-xl animate-pulse" />
-                ))}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {headlines.map((item, i) => {
-                const isDup = isSimilarTitle(item.headline, existingTitles)
-                return (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border transition-all
-                      ${isDup ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200 bg-surface hover:border-brand-300 hover:bg-brand-50/30'}`}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-semibold leading-snug ${isDup ? 'text-slate-400' : 'text-slate-800'}`}>
-                        {item.headline}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {item.eventDate && (
-                          <span className="text-[10px] text-slate-400 font-medium">{item.eventDate}</span>
-                        )}
-                        {isDup && (
-                          <span className="text-[10px] text-amber-600 font-semibold">⚠️ Possible duplicate brief</span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleHeadlineClick(item.headline, item.eventDate)}
-                      disabled={busy === item.headline}
-                      className={`shrink-0 text-xs px-3 py-1.5 rounded-lg font-bold transition-colors whitespace-nowrap
-                        ${isDup
-                          ? 'border border-slate-300 text-slate-500 hover:bg-slate-100'
-                          : 'border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
-                        } disabled:opacity-40`}
-                    >
-                      {busy === item.headline ? '…' : isDup ? 'Create anyway' : 'Generate →'}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* ── Bulk Month Generate ─────────────────────────────────────── */}
-            <div className="mt-4 rounded-xl border border-slate-200 overflow-hidden">
-              <button
-                onClick={() => { if (!bulkNewsRunning) setBulkNewsOpen(o => !o) }}
-                className={`w-full flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors ${bulkNewsRunning ? 'cursor-default' : 'hover:bg-slate-50'} text-slate-700`}
-              >
-                <span className="flex items-center gap-2">
-                  {bulkNewsRunning
-                    ? <span className="inline-block w-2 h-2 rounded-full bg-brand-600 animate-pulse" />
-                    : '📅'}
-                  {bulkNewsRunning
-                    ? `Generating ${bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length + 1} of ${bulkNewsLog.length}…`
-                    : 'Bulk Month Generate'}
-                </span>
-                {!bulkNewsRunning && <span className="text-slate-400 text-xs">{bulkNewsOpen ? '▲' : '▼'}</span>}
-              </button>
-
-              {bulkNewsOpen && (
-                <div className="border-t border-slate-200 px-4 py-4">
-                  {/* Controls */}
-                  <div className={`transition-opacity duration-200 ${bulkNewsRunning ? 'opacity-40 pointer-events-none' : ''}`}>
-                    <p className="text-xs font-semibold text-slate-500 mb-2">Fetch top 10 RAF headlines for a month:</p>
-                    <div className="flex items-center gap-2 mb-4">
-                      <input
-                        type="month"
-                        value={bulkNewsMonth}
-                        max={new Date().toISOString().slice(0, 7)}
-                        onChange={e => { setBulkNewsMonth(e.target.value); setBulkNewsHeadlines([]); setBulkNewsSelected(new Set()); setBulkNewsLog([]) }}
-                        className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-brand-400"
-                      />
-                      <button
-                        onClick={fetchBulkNewsHeadlines}
-                        disabled={newsBusy}
-                        className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
-                      >
-                        {newsBusy ? '⏳ Fetching…' : '🔄 Fetch Top 10'}
-                      </button>
-                    </div>
-
-                    {bulkNewsHeadlines.length > 0 && (
-                      <>
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs font-semibold text-slate-500">
-                            {bulkNewsSelected.size} of {bulkNewsHeadlines.length} selected
-                          </p>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setBulkNewsSelected(new Set(bulkNewsHeadlines.map((_, i) => i)))}
-                              className="text-[10px] text-brand-600 hover:underline"
-                            >All</button>
-                            <button
-                              onClick={() => setBulkNewsSelected(new Set())}
-                              className="text-[10px] text-slate-400 hover:underline"
-                            >None</button>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5 mb-4">
-                          {bulkNewsHeadlines.map((item, i) => {
-                            const isDup = isSimilarTitle(item.headline, existingTitles)
-                            const checked = bulkNewsSelected.has(i)
-                            return (
-                              <label
-                                key={i}
-                                className={`flex items-start gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all
-                                  ${isDup ? 'border-slate-200 bg-slate-50 opacity-60' : checked ? 'border-brand-300 bg-brand-50/40' : 'border-slate-200 bg-surface hover:border-slate-300'}`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={e => {
-                                    setBulkNewsSelected(prev => {
-                                      const next = new Set(prev)
-                                      e.target.checked ? next.add(i) : next.delete(i)
-                                      return next
-                                    })
-                                  }}
-                                  className="mt-0.5 accent-brand-600 shrink-0"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <p className={`text-xs font-semibold leading-snug ${isDup ? 'text-slate-400' : 'text-slate-800'}`}>
-                                    {item.headline}
-                                  </p>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    {item.eventDate && (
-                                      <span className="text-[10px] text-slate-400">{item.eventDate}</span>
-                                    )}
-                                    {isDup && (
-                                      <span className="text-[10px] text-amber-600 font-semibold">⚠️ Possible duplicate</span>
-                                    )}
-                                  </div>
-                                </div>
-                              </label>
-                            )
-                          })}
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Action button */}
-                  {bulkNewsHeadlines.length > 0 && (
-                    <div className="flex items-center gap-3 mb-0">
-                      {!bulkNewsRunning ? (
-                        <button
-                          onClick={handleBulkNewsGenerate}
-                          disabled={bulkNewsSelected.size === 0}
-                          className="text-xs px-4 py-1.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-colors disabled:opacity-40"
-                        >
-                          Generate Selected ({bulkNewsSelected.size})
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => { bulkNewsCancelRef.current = true }}
-                          className="text-xs px-4 py-1.5 rounded-lg border border-red-300 text-red-600 font-semibold hover:bg-red-50 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Terminal log */}
-                  {bulkNewsLog.length > 0 && (
-                    <div className="mt-4">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-brand-600 rounded-full transition-all duration-500"
-                            style={{ width: bulkNewsLog.length > 0 ? `${(bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length / bulkNewsLog.length) * 100}%` : '0%' }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-slate-400 tabular-nums shrink-0">
-                          {bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length}/{bulkNewsLog.length}
-                        </span>
-                      </div>
-                      <div
-                        ref={bulkNewsLogRef}
-                        className="bg-slate-900 rounded-xl p-3 font-mono text-[11px] max-h-64 overflow-y-auto space-y-0.5 select-text"
-                      >
-                        {bulkNewsLog.map(entry => {
-                          const ts = entry.startedAt
-                            ? new Date(entry.startedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                            : '--:--:--'
-                          const dur = (entry.completedAt && entry.startedAt)
-                            ? `(${Math.round((entry.completedAt - entry.startedAt) / 1000)}s)`
-                            : ''
-                          const icon =
-                            entry.status === 'done'    ? '✓' :
-                            entry.status === 'error'   ? '✗' :
-                            entry.status === 'running' ? '⟳' : '○'
-                          const iconCls =
-                            entry.status === 'done'    ? 'text-emerald-400' :
-                            entry.status === 'error'   ? 'text-red-400' :
-                            entry.status === 'running' ? 'text-cyan-400 animate-pulse' :
-                            'text-slate-600'
-                          const titleCls =
-                            entry.status === 'running' ? 'text-slate-100' :
-                            entry.status === 'done'    ? 'text-slate-300' :
-                            entry.status === 'error'   ? 'text-slate-300' :
-                            'text-slate-600'
-                          return (
-                            <div key={entry.idx} className="leading-5">
-                              <div className="flex items-baseline gap-2">
-                                <span className="text-slate-600 shrink-0">[{ts}]</span>
-                                <span className={`shrink-0 ${iconCls}`}>{icon}</span>
-                                <span className={`${titleCls} truncate`}>{entry.headline}</span>
-                                {dur && <span className="text-slate-600 shrink-0">{dur}</span>}
-                              </div>
-                              {entry.status === 'error' && entry.error && (
-                                <div className="text-red-400 italic pl-[7.5rem] leading-4 mt-0.5 whitespace-pre-wrap break-all">{entry.error}</div>
-                              )}
-                              {entry.warnings?.map((w, wi) => (
-                                <div key={wi} className="text-amber-400 pl-[7.5rem] leading-4 mt-0.5 whitespace-pre-wrap break-all">⚠ {w}</div>
-                              ))}
-                            </div>
-                          )
-                        })}
-                        {!bulkNewsRunning && bulkNewsLog.filter(e => e.status === 'done' || e.status === 'error').length === bulkNewsLog.length && bulkNewsLog.length > 0 && (
-                          <div className="text-slate-500 mt-1 pt-1 border-t border-slate-700">
-                            — {bulkNewsLog.filter(e => e.status === 'done').length} succeeded · {bulkNewsLog.filter(e => e.status === 'error').length} failed
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {resetModal && (
           <ConfirmModal
@@ -3366,31 +3430,6 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
             onConfirm={resetLeads}
             onCancel={() => setResetModal(false)}
           />
-        )}
-
-        {/* Duplicate confirmation overlay */}
-        {dupConfirm && (
-          <div className="absolute inset-0 bg-surface/95 rounded-2xl flex flex-col items-center justify-center p-6 text-center z-10">
-            <p className="text-2xl mb-3">⚠️</p>
-            <p className="font-bold text-slate-800 mb-2">Possible Duplicate</p>
-            <p className="text-sm text-slate-500 mb-6 max-w-xs">
-              A brief with a similar title already exists. Generate anyway?
-            </p>
-            <p className="text-xs font-semibold text-slate-700 bg-slate-100 rounded-xl px-3 py-2 mb-6 max-w-xs">
-              "{dupConfirm?.headline}"
-            </p>
-            <div className="flex gap-3 w-full max-w-xs">
-              <button onClick={() => setDupConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50">
-                Cancel
-              </button>
-              <button
-                onClick={() => { const d = dupConfirm; setDupConfirm(null); generate(d.headline, true, d.eventDate) }}
-                className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm"
-              >
-                Generate Anyway
-              </button>
-            </div>
-          </div>
         )}
       </div>
     </div>
@@ -3408,6 +3447,8 @@ function GeneratingOverlay({ label = 'AI Generation Underway' }) {
 
 function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapConsumed }) {
   const { apiFetch } = useAuth()
+  const { settings: appSettings } = useAppSettings() ?? {}
+  const questionsPerDifficulty = appSettings?.aiQuestionsPerDifficulty ?? 7
   const [view,          setView]          = useState('list')
   // List state
   const [briefs,        setBriefs]        = useState([])
@@ -3416,8 +3457,11 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const [page,          setPage]          = useState(1)
   const [search,        setSearch]        = useState('')
   const [category,      setCategory]      = useState('')
+  const [sort,          setSort]          = useState('newest')
+  const [hideStubs,     setHideStubs]     = useState(true)
   const [toast,         setToast]         = useState('')
   const [showLeads,     setShowLeads]     = useState(false)
+  const [showNews,      setShowNews]      = useState(false)
 
   useEffect(() => {
     if (openLeads) setShowLeads(true)
@@ -3451,7 +3495,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const [dupePanel,          setDupePanel]          = useState(false)
   const [dupeGroups,         setDupeGroups]         = useState(null)
   const [dupesLoading,       setDupesLoading]       = useState(false)
-  const keywordsPerBrief = 20
+  const keywordsPerBrief = appSettings?.aiKeywordsPerBrief ?? 20
 
   // ── Bulk auto-generate state ─────────────────────────────────────────────
   const [bulkOpen,     setBulkOpen]     = useState(false)
@@ -3551,6 +3595,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       const params = new URLSearchParams({ page, limit: 20 })
       if (search)   params.set('search', search)
       if (category) params.set('category', category)
+      if (sort && sort !== 'default') params.set('sort', sort)
+      if (hideStubs) params.set('hideStubs', 'true')
       const res  = await apiFetch(`${API}/api/admin/briefs?${params}`, { credentials: 'include' })
       const data = await res.json()
       if (data.status === 'success') {
@@ -3560,7 +3606,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     } finally {
       setLoading(false)
     }
-  }, [API, page, search, category])
+  }, [API, page, search, category, sort, hideStubs])
 
   useEffect(() => {
     if (view === 'list') loadList()
@@ -3958,7 +4004,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   // ── AI: Generate missing (fill gap) questions ────────────────────────────
   const generateSingleQuestion = async () => {
     const currentQs = qTab === 'easy' ? easyQuestions : mediumQuestions
-    const missing = 10 - currentQs.length
+    const missing = questionsPerDifficulty - currentQs.length
     if (missing <= 0) return
     setGenerating('questions-single')
     try {
@@ -4099,8 +4145,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   // ── Status badge helper ───────────────────────────────────────────────────
   function BriefStatusPills({ brief }) {
     const hasKeywords    = (brief.keywords?.length ?? 0) >= keywordsPerBrief
-    const hasEasy        = (brief.quizQuestionsEasy?.length ?? 0) >= 7
-    const hasMedium      = (brief.quizQuestionsMedium?.length ?? 0) >= 7
+    const hasEasy        = (brief.quizQuestionsEasy?.length ?? 0) >= questionsPerDifficulty
+    const hasMedium      = (brief.quizQuestionsMedium?.length ?? 0) >= questionsPerDifficulty
     const hasQuiz        = hasEasy && hasMedium
     const hasMedia       = (brief.media ?? []).some(m => m.cloudinaryPublicId)
     const hasDescription = (brief.descriptionSections ?? []).filter(s => s?.trim()).length >= 4
@@ -4138,6 +4184,13 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
             initialSearch={initialSearch}
           />
         )}
+        {showNews && (
+          <NewsModal
+            API={API}
+            onClose={() => setShowNews(false)}
+            onGenerate={handleLeadGenerate}
+          />
+        )}
 
         {/* Top bar */}
         <div className="flex flex-wrap gap-2 mb-4">
@@ -4155,6 +4208,24 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
             <option value="">All Categories</option>
             {BRIEF_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          <select
+            value={sort}
+            onChange={e => { setSort(e.target.value); setPage(1) }}
+            className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 bg-surface text-text"
+          >
+            <option value="default">Sort: Default</option>
+            <option value="newest">Sort: Recently modified</option>
+            <option value="oldest">Sort: Oldest modified</option>
+          </select>
+          <label className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl bg-surface cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={hideStubs}
+              onChange={e => { setHideStubs(e.target.checked); setPage(1) }}
+              className="accent-brand-600"
+            />
+            Hide stubs
+          </label>
           <button
             onClick={newBrief}
             className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-colors"
@@ -4166,6 +4237,12 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
             className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
           >
             Leads
+          </button>
+          <button
+            onClick={() => setShowNews(true)}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+          >
+            News
           </button>
           <button
             onClick={findDuplicates}
@@ -5183,7 +5260,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         >
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-slate-800">Quiz Questions</h3>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${easyQuestions.length >= 7 && mediumQuestions.length >= 7 ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-raised text-text-muted'}`}>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${easyQuestions.length >= questionsPerDifficulty && mediumQuestions.length >= questionsPerDifficulty ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-raised text-text-muted'}`}>
               {easyQuestions.length + mediumQuestions.length} / 14
             </span>
           </div>
@@ -5256,16 +5333,16 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
               >
                 {generating === 'questions' || autoGenerating ? '↺ Generating…' : '↺ Generate Questions'}
               </button>
-              {currentQuestions.length < 5 && (
+              {currentQuestions.length < questionsPerDifficulty && (
                 <button
                   onClick={generateSingleQuestion}
                   disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}
                   className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
                 >
-                  {generating === 'questions-single' ? '↺ Generating…' : `↺ Generate Missing (${5 - currentQuestions.length})`}
+                  {generating === 'questions-single' ? '↺ Generating…' : `↺ Generate Missing (${questionsPerDifficulty - currentQuestions.length})`}
                 </button>
               )}
-              {currentQuestions.length < 5 && (
+              {currentQuestions.length < questionsPerDifficulty && (
                 <button
                   onClick={addBlankQuestion}
                   disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}

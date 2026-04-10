@@ -1,5 +1,6 @@
-const IntelLead = require('../models/IntelLead');
-const SystemLog = require('../models/SystemLog');
+const IntelLead         = require('../models/IntelLead');
+const IntelligenceBrief = require('../models/IntelligenceBrief');
+const SystemLog         = require('../models/SystemLog');
 
 const MAX_ATTEMPTS = 3;
 
@@ -66,7 +67,10 @@ function validateRankings(rankings, suppliedTitles) {
  * with full context so the admin can review and fix manually.
  *
  * @param {string}   category
- * @param {Array}    newStubs          - [{ title, briefId }] that triggered this
+ * @param {Array}    newStubs          - [{ title, briefId }] that triggered this.
+ *                                       May be empty/null — when so, any leads
+ *                                       with priorityNumber == null are treated
+ *                                       as the "new" entries needing placement.
  * @param {*}        sourceBriefId     - the brief whose keywords seeded the stubs
  * @param {string}   sourceBriefTitle
  * @param {Function} openRouterChat
@@ -91,11 +95,20 @@ async function reprioritizeCategory(category, newStubs, sourceBriefId, sourceBri
   const N = leads.length;
   const suppliedTitles = leads.map(l => l.title);
 
-  const newTitles = newStubs.map(s => s.title);
+  // If the caller didn't pass specific new stubs, treat every unranked lead as "new".
+  const newTitles = (newStubs && newStubs.length > 0)
+    ? newStubs.map(s => s.title)
+    : leads.filter(l => l.priorityNumber == null).map(l => l.title);
+
+  // Nothing new, nothing null — category is already fully ranked. Skip the AI call.
+  if (newTitles.length === 0) {
+    console.log(`[reprioritizeCategory] "${category}" already fully ranked — skipping`);
+    return;
+  }
 
   const prompt = `You are ordering a list of RAF intel brief topics by recommended learning priority within the "${category}" category.
 
-The list currently has ${N} entries. ${newTitles.length} new topic(s) have just been added and need to be placed in the correct learning order: ${newTitles.map(t => `"${t}"`).join(', ')}.
+The list currently has ${N} entries. ${newTitles.length} topic(s) need to be placed in the correct learning order: ${newTitles.map(t => `"${t}"`).join(', ')}.
 
 Current list (title — one-line description, ordered by existing priority where known):
 ${leads.map((l, i) => `${l.priorityNumber != null ? l.priorityNumber : '?'}. "${l.title}"${l.subtitle ? ` — ${l.subtitle}` : ''}`).join('\n')}
@@ -137,15 +150,25 @@ Return ONLY valid JSON — no markdown, no extra text:
     );
 
     // Bulk update all leads in this category
-    const ops = leads.map(l => ({
+    const leadOps = leads.map(l => ({
       updateOne: {
         filter: { _id: l._id },
         update: { $set: { priorityNumber: priorityMap.get(l.title.toLowerCase().trim()) } },
       },
     }));
-    await IntelLead.bulkWrite(ops);
+    await IntelLead.bulkWrite(leadOps);
 
-    console.log(`[reprioritizeCategory] "${category}" re-ranked (${N} leads) on attempt ${attempt}`);
+    // Mirror the new priorities onto matching IntelligenceBrief documents
+    // (match by category + title so both stub and published briefs are kept in sync).
+    const briefOps = leads.map(l => ({
+      updateMany: {
+        filter: { category, title: l.title },
+        update: { $set: { priorityNumber: priorityMap.get(l.title.toLowerCase().trim()) } },
+      },
+    }));
+    await IntelligenceBrief.bulkWrite(briefOps);
+
+    console.log(`[reprioritizeCategory] "${category}" re-ranked (${N} leads + matching briefs) on attempt ${attempt}`);
     return; // success
   }
 

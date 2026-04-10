@@ -109,19 +109,18 @@ describe('Home — stale brief read-state cleared on logout', () => {
     const { rerender } = render(<Home />)
     await waitFor(() => expect(screen.getByText('Eurofighter Typhoon')).toBeDefined())
 
-    // Confirm the card carries the emerald (read) class
-    const card = screen.getByText('Eurofighter Typhoon').closest('[class]')
-    expect(card?.className ?? '').toMatch(/emerald/i)
+    // Read state surfaces as a "· Read" suffix on the category line
+    expect(screen.getByText(/Aircrafts · Read/i)).toBeDefined()
 
     // Simulate logout — guest fetch returns same brief but isRead: false
     global.fetch = makeFetch({ briefs: [UNREAD_BRIEF] })
     mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args) })
     rerender(<Home />)
 
-    // After re-fetch, brief is still shown but no longer has the read (emerald) styling
+    // After re-fetch, brief is still shown but no longer carries the read marker
     await waitFor(() => {
-      const updatedCard = screen.getByText('Eurofighter Typhoon').closest('[class]')
-      expect(updatedCard?.className ?? '').not.toMatch(/emerald/i)
+      expect(screen.queryByText(/· Read/i)).toBeNull()
+      expect(screen.getByText('Eurofighter Typhoon')).toBeDefined()
     })
   })
 

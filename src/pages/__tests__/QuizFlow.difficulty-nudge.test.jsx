@@ -78,7 +78,8 @@ function makeStartResponse(difficulty = 'easy') {
   }
 }
 
-// QuizFlow uses apiFetch for /result and /finish; global.fetch for everything else.
+// QuizFlow splits its calls: apiFetch loads brief + quiz/start, raw fetch handles
+// /result, /finish, /abandon, and battle-of-order/options.
 function setupFetch({ difficulty = 'easy', won = true, isFirstAttempt = true, aircoinsEarned = 10 } = {}) {
   const finishPayload = {
     data: {
@@ -87,19 +88,15 @@ function setupFetch({ difficulty = 'easy', won = true, isFirstAttempt = true, ai
     },
   }
 
-  // apiFetch handles /result and /finish calls
   mockApiFetch.mockImplementation((url) => {
-    if (url.includes('/finish')) {
-      return Promise.resolve({ ok: true, status: 200, json: async () => finishPayload })
-    }
+    if (url.includes('/api/briefs/'))          return Promise.resolve({ ok: true, status: 200, json: async () => BRIEF_RESPONSE })
+    if (url.includes('/api/games/quiz/start')) return Promise.resolve({ ok: true, status: 200, json: async () => makeStartResponse(difficulty) })
     return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
   })
 
-  // global.fetch handles brief info, quiz start, and BOO check
   return vi.fn().mockImplementation((url) => {
-    if (url.includes('/api/briefs/'))          return Promise.resolve({ ok: true, status: 200, json: async () => BRIEF_RESPONSE })
-    if (url.includes('/api/games/quiz/start')) return Promise.resolve({ ok: true, status: 200, json: async () => makeStartResponse(difficulty) })
-    if (url.includes('battle-of-order'))       return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { available: false } }) })
+    if (url.includes('/finish'))         return Promise.resolve({ ok: true, status: 200, json: async () => finishPayload })
+    if (url.includes('battle-of-order')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { available: false } }) })
     return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
   })
 }
@@ -143,7 +140,7 @@ describe('QuizFlow — post-quiz difficulty nudge', () => {
     render(<QuizFlow />)
     await completeQuiz()
 
-    act(() => vi.advanceTimersByTime(1200))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200) })
 
     await waitFor(() => expect(screen.getByText('Was that quiz too easy?')).toBeDefined())
   })
@@ -176,7 +173,7 @@ describe('QuizFlow — post-quiz difficulty nudge', () => {
 
     expect(screen.queryByText('Was that quiz too easy?')).toBeNull()
 
-    act(() => vi.advanceTimersByTime(1200))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200) })
 
     await waitFor(() => expect(screen.getByText('Was that quiz too easy?')).toBeDefined())
     expect(screen.getByRole('button', { name: /felt right/i })).toBeDefined()
@@ -188,7 +185,7 @@ describe('QuizFlow — post-quiz difficulty nudge', () => {
     render(<QuizFlow />)
     await completeQuiz()
 
-    act(() => vi.advanceTimersByTime(1200))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200) })
     await waitFor(() => screen.getByRole('button', { name: /felt right/i }))
 
     fireEvent.click(screen.getByRole('button', { name: /felt right/i }))
@@ -203,7 +200,7 @@ describe('QuizFlow — post-quiz difficulty nudge', () => {
     render(<QuizFlow />)
     await completeQuiz()
 
-    act(() => vi.advanceTimersByTime(1200))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200) })
     await waitFor(() => screen.getByRole('button', { name: /show me how/i }))
     fireEvent.click(screen.getByRole('button', { name: /show me how/i }))
 
@@ -217,7 +214,7 @@ describe('QuizFlow — post-quiz difficulty nudge', () => {
     render(<QuizFlow />)
     await completeQuiz()
 
-    act(() => vi.advanceTimersByTime(1200))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200) })
     await waitFor(() => screen.getByRole('button', { name: /show me how/i }))
     fireEvent.click(screen.getByRole('button', { name: /show me how/i }))
 
@@ -230,7 +227,7 @@ describe('QuizFlow — post-quiz difficulty nudge', () => {
     render(<QuizFlow />)
     await completeQuiz()
 
-    act(() => vi.advanceTimersByTime(1200))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1200) })
     await waitFor(() => screen.getByRole('button', { name: /show me how/i }))
     fireEvent.click(screen.getByRole('button', { name: /show me how/i }))
 

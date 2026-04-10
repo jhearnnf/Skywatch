@@ -119,7 +119,8 @@ const appSettingsSchema = new mongoose.Schema({
   durationTypingSound:    { type: Number, default: 3,  min: 1, max: 40 },   // milliseconds
 
   // AI content generation
-  aiKeywordsPerBrief: { type: Number, default: 20, min: 1 },
+  aiKeywordsPerBrief:       { type: Number, default: 20, min: 1 },
+  aiQuestionsPerDifficulty: { type: Number, default: 7,  min: 1 },
 
   // AI prompt overrides — keys match AI_PROMPT_DEFAULTS in backend/routes/admin.js
   // Absent or empty string falls back to the hardcoded default.

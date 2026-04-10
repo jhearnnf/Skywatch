@@ -88,6 +88,40 @@ const MOCK_SETTINGS = {
   volumeBattleOfOrderSelection: 100, soundEnabledBattleOfOrderSelection: true,
   volumeBattleOfOrderWon: 100,   soundEnabledBattleOfOrderWon: true,
   volumeBattleOfOrderLost: 100,  soundEnabledBattleOfOrderLost: true,
+  // Pathway unlock rows (rendered by the Pathway Access section)
+  pathwayUnlocks: [
+    { category: 'Bases',     levelRequired: 1, rankRequired: 1 },
+    { category: 'Aircrafts', levelRequired: 2, rankRequired: 1 },
+    { category: 'Ranks',     levelRequired: 2, rankRequired: 1 },
+  ],
+}
+
+// Mock returned by /api/admin/economy-viability — drives the AircoinsEconomy section
+const MOCK_ECONOMY = {
+  status: 'success',
+  data: {
+    rates: {
+      aircoinsPerBriefRead:           5,
+      aircoinsFirstLogin:             5,
+      aircoinsStreakBonus:            2,
+      aircoinsPerWinEasy:             5,
+      aircoinsPerWinMedium:           10,
+      aircoins100Percent:             10,
+      aircoinsOrderOfBattleEasy:      10,
+      aircoinsOrderOfBattleMedium:    20,
+      aircoinsWhereAircraftRound1:    5,
+      aircoinsWhereAircraftRound2:    10,
+      aircoinsWhereAircraftBonus:     5,
+      aircoinsFlashcardPerCard:       3,
+      aircoinsFlashcardPerfectBonus:  6,
+    },
+    cycleThreshold:           100,
+    totalRanks:                19,
+    ranks:                    [],
+    levels:                   [{ levelNumber: 1, aircoinsToNextLevel: 100 }],
+    content:                  { totalBriefs: 0, wtaBriefs: 0, booEligibleBriefs: 0 },
+    aiQuestionsPerDifficulty: 7,
+  },
 }
 
 const MOCK_STATS = {
@@ -104,6 +138,12 @@ function setupFetch({ patchStatus = 'success' } = {}) {
     }
     if (url.includes('/api/admin/problems/count')) {
       return Promise.resolve({ ok: true, json: async () => ({ data: { unsolvedCount: 0 } }) })
+    }
+    if (url.includes('/api/admin/economy-viability')) {
+      return Promise.resolve({ ok: true, json: async () => MOCK_ECONOMY })
+    }
+    if (url.includes('/api/users/me/wta-spawn')) {
+      return Promise.resolve({ ok: true, json: async () => ({ data: null }) })
     }
     if (url.includes('/api/admin/settings') && (!opts?.method || opts.method === 'GET')) {
       return Promise.resolve({ ok: true, json: async () => ({ data: { settings: MOCK_SETTINGS } }) })
@@ -244,7 +284,8 @@ describe('Admin — Settings tab: Sound Effects', () => {
   it('sound row becomes dimmed when its toggle is clicked off', async () => {
     await renderAndOpenSettings()
 
-    const row = screen.getByText('Brief Opened').closest('div')
+    // SoundRowV2 wraps an inner flex row in an outer div that carries the opacity-50 class
+    const row = screen.getByText('Brief Opened').closest('div').parentElement
 
     // Initially enabled — no opacity-50 class on the row
     expect(row.className).not.toContain('opacity-50')
@@ -259,7 +300,7 @@ describe('Admin — Settings tab: Sound Effects', () => {
   it('sound row can be re-enabled after toggling off', async () => {
     await renderAndOpenSettings()
 
-    const row = screen.getByText('Brief Opened').closest('div')
+    const row = screen.getByText('Brief Opened').closest('div').parentElement
     const toggle = within(row).getAllByRole('button')[0]
 
     // Toggle off then back on
@@ -332,7 +373,7 @@ describe('Admin — Settings tab: Sound Effects', () => {
   })
 })
 
-describe('Admin — Settings tab: Subscription', () => {
+describe('Admin — Settings tab: Pathway Access (trial duration + tier access)', () => {
   beforeEach(() => {
     global.Audio = MockAudio
     audioInstances = []
@@ -342,63 +383,52 @@ describe('Admin — Settings tab: Subscription', () => {
     vi.restoreAllMocks()
   })
 
+  async function openPathwaySection() {
+    global.fetch = setupFetch()
+    render(<Admin />)
+    const settingsTab = await screen.findByRole('button', { name: /settings/i })
+    fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Pathway Access & Unlock Requirements'))
+    fireEvent.click(screen.getByText('Pathway Access & Unlock Requirements'))
+    await waitFor(() => screen.getByText('Aircrafts'))
+  }
+
   it('shows trial duration from settings', async () => {
-    global.fetch = setupFetch()
-    render(<Admin />)
+    await openPathwaySection()
+    expect(screen.getByDisplayValue('7')).toBeDefined()
+  })
 
-    const settingsTab = await screen.findByRole('button', { name: /settings/i })
-    fireEvent.click(settingsTab)
-    await waitFor(() => screen.getByText('Subscription'))
-    fireEvent.click(screen.getByText('Subscription'))
+  it('changing a category tier select to "free" updates the row', async () => {
+    await openPathwaySection()
+
+    // Aircrafts is not in any tier list — defaults to 'gold'
+    const row  = screen.getByText('Aircrafts').closest('tr')
+    const tier = row.querySelector('select') // first <select> is the tier select
+    expect(tier.value).toBe('gold')
+
+    fireEvent.change(tier, { target: { value: 'free' } })
 
     await waitFor(() => {
-      const input = screen.getByDisplayValue('7')
-      expect(input).toBeDefined()
+      const updatedTier = screen.getByText('Aircrafts').closest('tr').querySelector('select')
+      expect(updatedTier.value).toBe('free')
     })
   })
 
-  it('clicking a free-tier category adds it', async () => {
-    global.fetch = setupFetch()
-    render(<Admin />)
+  it('changing a category tier select back to "gold" updates the row', async () => {
+    await openPathwaySection()
 
-    const settingsTab = await screen.findByRole('button', { name: /settings/i })
-    fireEvent.click(settingsTab)
-    await waitFor(() => screen.getByText('Subscription'))
-    fireEvent.click(screen.getByText('Subscription'))
-    await waitFor(() => screen.getByText('Free tier categories'))
+    const row  = screen.getByText('Bases').closest('tr')
+    const tier = row.querySelector('select')
 
-    // "Aircrafts" is not in freeCategories initially
-    const aircraftsBtns = screen.getAllByRole('button', { name: 'Aircrafts' })
-    // The first occurrence in the Free tier CategoryGrid
-    fireEvent.click(aircraftsBtns[0])
-
-    // After clicking, the button should become active (bg-brand-600)
+    // First switch to free, then back to gold to confirm both transitions
+    fireEvent.change(tier, { target: { value: 'free' } })
     await waitFor(() => {
-      const btns = screen.getAllByRole('button', { name: 'Aircrafts' })
-      expect(btns[0].className).toContain('bg-brand-600')
+      expect(screen.getByText('Bases').closest('tr').querySelector('select').value).toBe('free')
     })
-  })
 
-  it('clicking "News" in free-tier categories removes it (was pre-selected)', async () => {
-    global.fetch = setupFetch()
-    render(<Admin />)
-
-    const settingsTab = await screen.findByRole('button', { name: /settings/i })
-    fireEvent.click(settingsTab)
-    await waitFor(() => screen.getByText('Subscription'))
-    fireEvent.click(screen.getByText('Subscription'))
-    await waitFor(() => screen.getByText('Free tier categories'))
-
-    // "News" is in freeCategories — it should be active initially
-    const newsBtns = screen.getAllByRole('button', { name: 'News' })
-    expect(newsBtns[0].className).toContain('bg-brand-600')
-
-    // Click to remove
-    fireEvent.click(newsBtns[0])
-
+    fireEvent.change(screen.getByText('Bases').closest('tr').querySelector('select'), { target: { value: 'gold' } })
     await waitFor(() => {
-      const btns = screen.getAllByRole('button', { name: 'News' })
-      expect(btns[0].className).not.toContain('bg-brand-600')
+      expect(screen.getByText('Bases').closest('tr').querySelector('select').value).toBe('gold')
     })
   })
 })
@@ -448,7 +478,7 @@ describe('Admin — Settings tab: Feature Flags', () => {
   })
 })
 
-describe('Admin — Settings tab: Aircoins & Game options', () => {
+describe('Admin — Settings tab: Aircoins Economy & Game options', () => {
   beforeEach(() => {
     global.Audio = MockAudio
     audioInstances = []
@@ -458,35 +488,30 @@ describe('Admin — Settings tab: Aircoins & Game options', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows correct aircoins streak bonus value from settings', async () => {
+  async function openAircoinsEconomy() {
     global.fetch = setupFetch()
     render(<Admin />)
-
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
-    await waitFor(() => screen.getByText('Aircoins'))
-    fireEvent.click(screen.getByText('Aircoins'))
+    await waitFor(() => screen.getByText('Aircoins Economy Settings'))
+    fireEvent.click(screen.getByText('Aircoins Economy Settings'))
+    // Wait for the simulation panel to render once economy-viability resolves
+    await waitFor(() => screen.getByText('Streak bonus'))
+  }
 
-    // aircoinsStreakBonus = 2 (unique value in MOCK_SETTINGS)
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('2')).toBeDefined()
-    })
+  it('shows correct aircoins streak bonus value from settings', async () => {
+    await openAircoinsEconomy()
+    // aircoinsStreakBonus = 2 (unique rate value in MOCK_ECONOMY)
+    expect(screen.getByDisplayValue('2')).toBeDefined()
   })
 
-  it('changing an aircoin value updates the input', async () => {
-    global.fetch = setupFetch()
-    render(<Admin />)
+  it('changing an aircoin rate input updates the value', async () => {
+    await openAircoinsEconomy()
 
-    const settingsTab = await screen.findByRole('button', { name: /settings/i })
-    fireEvent.click(settingsTab)
-    await waitFor(() => screen.getByText('Aircoins'))
-    fireEvent.click(screen.getByText('Aircoins'))
-    await waitFor(() => screen.getByDisplayValue('2'))
-
-    // aircoinsStreakBonus = 2 — unique value, only one input has it
+    // aircoinsStreakBonus = 2 is unique among the rate inputs
     const input = screen.getByDisplayValue('2')
     fireEvent.change(input, { target: { value: '5' } })
 
-    await waitFor(() => expect(screen.getAllByDisplayValue('5').length).toBeGreaterThan(0))
+    await waitFor(() => expect(input.value).toBe('5'))
   })
 })

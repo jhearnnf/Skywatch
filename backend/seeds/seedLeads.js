@@ -1,3 +1,5 @@
+const fs = require('fs');
+const vm = require('vm');
 const IntelLead = require('../models/IntelLead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
@@ -1185,6 +1187,88 @@ const LEADS = [
   { title: 'Fast Jet Operations', nickname: '', subtitle: 'Core capability for RAF air power projection using high-speed combat aircraft.', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems' },
   { title: 'Strike Missions', nickname: '', subtitle: 'Offensive operations using precision-guided munitions to neutralise enemy targets.', category: 'Missions', subcategory: 'Post-War & Cold War', section: 'MISSIONS', subsection: 'Post-War & Cold War' },
 
+  { title: 'RAF Hereford', nickname: '', subtitle: 'Former training base for apprentice programmes in technical and administrative skills.', category: 'Bases', subcategory: 'UK Former', section: 'BASES', subsection: 'UK Former' },
+
+  { title: 'Air and Space Operations', nickname: '', subtitle: 'Core RAF domain integrating airpower and space surveillance for operational missions.', category: 'Roles', subcategory: 'Fast Jet Pilot', section: 'ROLES', subsection: 'Fast Jet Pilot' },
+  { title: 'Search and Rescue Operations', nickname: '', subtitle: 'Specialised operations for locating and extracting distressed personnel in emergencies.', category: 'Missions', subcategory: 'Post-War & Cold War', section: 'MISSIONS', subsection: 'Post-War & Cold War' },
+  { title: 'Reconnaissance Missions', nickname: '', subtitle: 'Missions using aircraft to gather intelligence and provide situational awareness.', category: 'Missions', subcategory: 'Post-War & Cold War', section: 'MISSIONS', subsection: 'Post-War & Cold War' },
+
+  { title: 'Weapons Systems Officers', nickname: '', subtitle: 'RAF aircrew managing advanced sensors and mission systems during combat.', category: 'Roles', subcategory: 'Weapons Systems Operator', section: 'ROLES', subsection: 'Weapons Systems Operator' },
+
+  { title: 'Combat Sorties', nickname: '', subtitle: 'Missions flown to engage targets and provide support in contested environments.', category: 'Missions', subcategory: 'Post-War & Cold War', section: 'MISSIONS', subsection: 'Post-War & Cold War' },
+  { title: 'Contested Airspace', nickname: '', subtitle: 'Airspace challenged by hostile threats affecting operation success.', category: 'Threats', subcategory: 'State Actor Air', section: 'THREATS', subsection: 'State Actor Air' },
+
+  { title: 'Intercept Missions', nickname: '', subtitle: 'RAF operations to identify and engage hostile aircraft in UK airspace.', category: 'Missions', subcategory: 'Post-Cold War', section: 'MISSIONS', subsection: 'Post-Cold War' },
+
+  { title: 'Operations Support Branch', nickname: '', subtitle: 'Specialist officers coordinating essential planning and support functions for air operations.', category: 'Roles', subcategory: '', section: 'ROLES', subsection: '' },
+  { title: 'Officer Training School', nickname: 'OTS', subtitle: 'Pathway for commissioning officers, focusing on leadership and foundational military skills.', category: 'Training', subcategory: 'Initial Training', section: 'TRAINING', subsection: 'Initial Training' },
+  { title: 'RAF Academy', nickname: 'AFA', subtitle: 'Primary institution for developing RAF officers with leadership and military instruction.', category: 'Training', subcategory: 'Initial Training', section: 'TRAINING', subsection: 'Initial Training' },
+  { title: 'Electronic Warfare', nickname: '', subtitle: 'Using electromagnetic spectrum to disrupt enemy operations while protecting friendly forces.', category: 'Threats', subcategory: 'Electronic & Cyber', section: 'THREATS', subsection: 'Electronic & Cyber' },
+
+  // ── ROLES EXPANSION — Full trade / branch coverage ──────────────────────
+  // Intelligence branch (other ranks + linguist specialism)
+  { title: 'Intelligence Analyst (Linguist)', nickname: 'Int An (Ling)', subtitle: 'SIGINT linguist trade — trained in Russian, Mandarin, Arabic, Farsi and other priority languages; works at JSSU Digby in partnership with GCHQ on signals intelligence collection and analysis', category: 'Roles', subcategory: 'Intelligence Officer', section: 'ROLES', subsection: 'Intelligence Officer' },
+  { title: 'Intelligence Analyst', nickname: 'Int An', subtitle: 'All-source intelligence analyst trade — produces assessments from SIGINT, IMINT, HUMINT and OSINT for operations and targeting; serves at RAF Wyton, Waddington, deployed HQs and Air Intelligence Wing', category: 'Roles', subcategory: 'Intelligence Officer', section: 'ROLES', subsection: 'Intelligence Officer' },
+  { title: 'Imagery Analyst', nickname: 'IA', subtitle: 'Specialist in imagery exploitation from satellites, Reaper, Protector and recce pods — produces target folders, battle damage assessments and mission imagery reports at the National Centre for Geospatial Intelligence, RAF Wyton', category: 'Roles', subcategory: 'Intelligence Officer', section: 'ROLES', subsection: 'Intelligence Officer' },
+  { title: 'Geospatial Intelligence Specialist', nickname: 'GEOINT', subtitle: 'Produces mapping, terrain analysis and geospatial products supporting mission planning, targeting and force protection — integrates imagery, elevation data and open-source mapping', category: 'Roles', subcategory: 'Intelligence Officer', section: 'ROLES', subsection: 'Intelligence Officer' },
+
+  // Engineering trades — the other-ranks workforce that keeps RAF aircraft flying
+  { title: 'Aircraft Technician (Mechanical)', nickname: 'AT(M)', subtitle: 'RAF engineering trade responsible for airframes, engines, flight controls, hydraulics, fuel systems and undercarriage — trained at DCAE Cosford; serves on every RAF aircraft fleet from Typhoon to A400M', category: 'Roles', subcategory: 'Engineer Officer', section: 'ROLES', subsection: 'Engineer Officer' },
+  { title: 'Aircraft Technician (Avionics)', nickname: 'AT(Av)', subtitle: 'RAF engineering trade responsible for aircraft electrical, instrument, radio, radar and mission systems — maintains sensors, datalinks, flight computers and self-defence suites; trained at DCAE Cosford', category: 'Roles', subcategory: 'Engineer Officer', section: 'ROLES', subsection: 'Engineer Officer' },
+  { title: 'Weapons Technician', nickname: 'WTech / Armourer', subtitle: 'RAF trade responsible for loading, maintaining and preparing aircraft guns, bombs, missiles, countermeasures and ejection-seat cartridges — works on the flightline under tight turnaround pressure during generation', category: 'Roles', subcategory: 'Engineer Officer', section: 'ROLES', subsection: 'Engineer Officer' },
+  { title: 'Aerial Erector', nickname: '', subtitle: 'Unique small RAF trade — climbs, constructs and maintains communications masts, radar antennas and aerials up to 400ft at RAF stations and remote sites; the only trade qualified to work at height on RAF antenna infrastructure', category: 'Roles', subcategory: 'Engineer Officer', section: 'ROLES', subsection: 'Engineer Officer' },
+  { title: 'General Technician (Workshops)', nickname: 'GT(Wks)', subtitle: 'RAF engineering trade providing machining, welding, fabrication, composite repair and ground equipment servicing — supports aircraft maintenance and station infrastructure from workshops at every RAF base', category: 'Roles', subcategory: 'Engineer Officer', section: 'ROLES', subsection: 'Engineer Officer' },
+  { title: 'Non-Destructive Testing Technician', nickname: 'NDT', subtitle: 'Specialist engineering trade using ultrasonic, radiographic, eddy current, dye penetrant and magnetic particle inspection to detect cracks and defects in aircraft components without damaging them', category: 'Roles', subcategory: 'Engineer Officer', section: 'ROLES', subsection: 'Engineer Officer' },
+  { title: 'Aerosystems Engineer Officer', nickname: '', subtitle: 'RAF Engineer Branch specialisation covering mechanical airframe, propulsion and armament engineering — leads engineering squadrons on fast jet, transport and rotary fleets and manages airworthiness through the Air Safety system', category: 'Roles', subcategory: 'Engineer Officer', section: 'ROLES', subsection: 'Engineer Officer' },
+  { title: 'Communications-Electronics Engineer Officer', nickname: 'CE Eng O', subtitle: 'RAF Engineer Branch specialisation covering avionics, radar, communications and mission systems engineering — leads avionics workshops, ground C4ISR facilities and cyber-enabled platform systems', category: 'Roles', subcategory: 'Engineer Officer', section: 'ROLES', subsection: 'Engineer Officer' },
+
+  // Force Protection — the trades that defend RAF bases and personnel
+  { title: 'RAF Regiment Gunner', nickname: 'Gunner', subtitle: 'Baseline RAF Regiment trade — light role infantry trained at RAF Honington for airfield defence, force protection, ground combat and CBRN operations; the backbone of the Regiment field squadrons', category: 'Roles', subcategory: 'RAF Regiment', section: 'ROLES', subsection: 'RAF Regiment' },
+  { title: 'RAF Regiment Officer', nickname: 'Regt Offr', subtitle: 'Commissioned officer commanding RAF Regiment field squadrons and flights — delivers ground-based air defence, force protection of airheads, CBRN response and close air support direction', category: 'Roles', subcategory: 'RAF Regiment', section: 'ROLES', subsection: 'RAF Regiment' },
+  { title: 'Military Working Dog Handler', nickname: 'MWD Handler', subtitle: 'RAF Police trade handling protection, tracking and specialist search dogs for explosive and drug detection — deployed on operations and at every RAF station for base security and force protection', category: 'Roles', subcategory: 'RAF Regiment', section: 'ROLES', subsection: 'RAF Regiment' },
+  { title: 'CBRN Defence Specialist', nickname: 'CBRN', subtitle: 'RAF Regiment specialists in Chemical, Biological, Radiological and Nuclear defence — maintain detection, decontamination and collective protection capability for RAF airheads and deployed operations', category: 'Roles', subcategory: 'RAF Regiment', section: 'ROLES', subsection: 'RAF Regiment' },
+  { title: 'RAF Firefighter', nickname: '', subtitle: 'RAF Fire & Rescue Service trade — provides aircraft rescue and firefighting (ARFF), structural firefighting and domestic response at every operational RAF station; the first responders to any aircraft crash or fire on base', category: 'Roles', subcategory: 'RAF Regiment', section: 'ROLES', subsection: 'RAF Regiment' },
+
+  // Logistics — the movement of people, cargo and supplies
+  { title: 'Logistics Officer', nickname: 'Logs O', subtitle: 'Commissioned officer in the RAF Logistics Branch — leads supply, movements, catering and transport squadrons; manages aircraft spares provisioning, deployed logistics and air transport lift planning', category: 'Roles', subcategory: 'Logistics & Supply', section: 'ROLES', subsection: 'Logistics & Supply' },
+  { title: 'Mover (Air Movements)', nickname: 'Mover / UKMAMS', subtitle: 'RAF logistics trade at UK Mobile Air Movements Squadron, RAF Brize Norton — loads and dispatches cargo, vehicles and passengers on transport aircraft; deploys worldwide to operate airheads on ops and exercises', category: 'Roles', subcategory: 'Logistics & Supply', section: 'ROLES', subsection: 'Logistics & Supply' },
+  { title: 'Driver (Mechanical Transport)', nickname: 'MT Driver', subtitle: 'RAF logistics trade operating coaches, HGVs, fuel bowsers, recovery vehicles, ambulances and specialist ground equipment across every RAF station and deployed operation', category: 'Roles', subcategory: 'Logistics & Supply', section: 'ROLES', subsection: 'Logistics & Supply' },
+
+  // Medical Branch — beyond nursing and AvMed
+  { title: 'RAF Medical Officer', nickname: 'MO', subtitle: 'General Duties Medical Officer — provides primary healthcare to RAF personnel and families on station; qualifies as a GP and deploys on operations as part of the Defence Medical Services', category: 'Roles', subcategory: 'Medical & Nursing', section: 'ROLES', subsection: 'Medical & Nursing' },
+  { title: 'RAF Paramedic', nickname: '', subtitle: 'Pre-hospital emergency care trade within the RAF Medical branch — provides advanced life support on station medical centres, flight-line response and on deployed tactical medicine teams', category: 'Roles', subcategory: 'Medical & Nursing', section: 'ROLES', subsection: 'Medical & Nursing' },
+  { title: 'Pharmacist Officer', nickname: '', subtitle: 'Qualified pharmacist commissioned into the RAF Medical Branch — manages station pharmacies, deployed medical supply chains and aviation medicine pharmaceuticals including aircrew-approved drug lists', category: 'Roles', subcategory: 'Medical & Nursing', section: 'ROLES', subsection: 'Medical & Nursing' },
+  { title: 'Physiotherapy Officer', nickname: '', subtitle: 'Chartered physiotherapist in the Defence Medical Services — treats musculoskeletal injuries in aircrew and ground personnel; supports return-to-flying assessments and deploys on operations', category: 'Roles', subcategory: 'Medical & Nursing', section: 'ROLES', subsection: 'Medical & Nursing' },
+  { title: 'Radiographer', nickname: '', subtitle: 'Diagnostic imaging professional in the Defence Medical Services — provides X-ray, ultrasound and CT imaging at RAF medical centres and deployed hospitals such as the UK Role 2 field hospital', category: 'Roles', subcategory: 'Medical & Nursing', section: 'ROLES', subsection: 'Medical & Nursing' },
+  { title: 'Biomedical Scientist', nickname: 'BMS', subtitle: 'Laboratory scientist in the Defence Medical Services — performs haematology, biochemistry, microbiology and blood transfusion services supporting garrison and deployed medical care', category: 'Roles', subcategory: 'Medical & Nursing', section: 'ROLES', subsection: 'Medical & Nursing' },
+  { title: 'Environmental Health Practitioner', nickname: 'EHP', subtitle: 'RAF specialist in food safety, water quality, occupational health, vector control and hygiene — protects personnel on station and in austere deployed environments from preventable disease', category: 'Roles', subcategory: 'Medical & Nursing', section: 'ROLES', subsection: 'Medical & Nursing' },
+  { title: 'Mental Health Nursing Officer', nickname: 'MH Nurse', subtitle: 'Commissioned mental health nurse in the Defence Medical Services — delivers clinical mental healthcare through the Departments of Community Mental Health, supports operational stress trauma pathways', category: 'Roles', subcategory: 'Medical & Nursing', section: 'ROLES', subsection: 'Medical & Nursing' },
+  { title: 'Dental Nurse', nickname: '', subtitle: 'Clinical dental support trade in the RAF Dental Branch — supports RAF Dental Officers in delivering operational dental fitness across all RAF stations and deployed dental teams', category: 'Roles', subcategory: 'Medical & Nursing', section: 'ROLES', subsection: 'Medical & Nursing' },
+
+  // Cyber, Comms & Electronic Warfare trades
+  { title: 'Cyberspace Communications Specialist', nickname: 'CCS', subtitle: 'Consolidated RAF trade for ICT, networks, satellite communications and cyber defence — operates and defends RAF digital infrastructure from fixed stations to deployed command posts', category: 'Roles', subcategory: 'Cyber & Information', section: 'ROLES', subsection: 'Cyber & Information' },
+  { title: 'Electronic Warfare Operator', nickname: 'EW Op', subtitle: 'Specialist operator analysing radar, communications and infrared threat emissions — supports mission data file production, threat library maintenance and aircraft self-protection at 54 Squadron RAF Waddington', category: 'Roles', subcategory: 'Cyber & Information', section: 'ROLES', subsection: 'Cyber & Information' },
+
+  // Battlespace Management & Control — other ranks
+  { title: 'Weapons Controller', nickname: 'WC', subtitle: 'Trade operating ground-based air surveillance radars and fighter control systems — guides interceptors onto hostile contacts from Control and Reporting Centres such as RAF Boulmer and RAF Scampton', category: 'Roles', subcategory: 'Fighter Controller', section: 'ROLES', subsection: 'Fighter Controller' },
+  { title: 'Aerospace Systems Operator', nickname: 'ASOp', subtitle: 'RAF trade operating Link 16, air defence radar systems and the Recognised Air Picture — serves in Control and Reporting Centres, E-7 Wedgetail and deployed Air Operations Centres', category: 'Roles', subcategory: 'Fighter Controller', section: 'ROLES', subsection: 'Fighter Controller' },
+
+  // Space Command — other ranks
+  { title: 'Space Operator', nickname: 'Space Op', subtitle: 'RAF trade supporting UK Space Command at the National Space Operations Centre, RAF High Wycombe — operates space surveillance sensors, SATCOM payloads and PNT systems', category: 'Roles', subcategory: 'Space Operations', section: 'ROLES', subsection: 'Space Operations' },
+
+  // Operations Support & Specialist Officers
+  { title: 'Flight Operations Assistant', nickname: 'FOA', subtitle: 'Operations support trade — runs squadron and station flight ops desks, flight planning, authorisation sheets, NOTAM management and coordination with ATC and air movements', category: 'Roles', subcategory: 'Support & Administration', section: 'ROLES', subsection: 'Support & Administration' },
+  { title: 'Personnel Support Administrator', nickname: 'PSF', subtitle: 'RAF human resources administration trade — manages pay, postings, leave, records and welfare casework at station Personnel Support Flights; the everyday HR interface for all RAF personnel', category: 'Roles', subcategory: 'Support & Administration', section: 'ROLES', subsection: 'Support & Administration' },
+  { title: 'Mobile Meteorological Unit', nickname: 'MMU', subtitle: 'Deployable meteorological support to RAF operations — Met Office personnel embedded with the RAF provide forecasts for flying and targeting from fixed stations and deployed locations worldwide', category: 'Roles', subcategory: 'Support & Administration', section: 'ROLES', subsection: 'Support & Administration' },
+  { title: 'Media Operations Officer', nickname: 'Media Ops', subtitle: 'RAF officer managing press, social media and strategic communications — embeds with operations to handle media engagement, crisis communications and command narrative at Air Command', category: 'Roles', subcategory: 'Support & Administration', section: 'ROLES', subsection: 'Support & Administration' },
+  { title: 'Test Pilot', nickname: 'TP', subtitle: 'Elite pilot graduate of the Empire Test Pilots\' School at MoD Boscombe Down — flies prototype, trials and development aircraft to evaluate new capability before fleet release; a pinnacle flying role', category: 'Roles', subcategory: 'Fast Jet Pilot', section: 'ROLES', subsection: 'Fast Jet Pilot' },
+  { title: 'Display Pilot', nickname: '', subtitle: 'Selected from active RAF pilots to fly public display routines — Red Arrows (Hawk), RAF Typhoon Display Team, Chinook Display Team and Battle of Britain Memorial Flight; ambassadorial flying role', category: 'Roles', subcategory: 'Fast Jet Pilot', section: 'ROLES', subsection: 'Fast Jet Pilot' },
+
+  { title: 'Akula-class Submarine', nickname: '', subtitle: 'Russian nuclear-powered submarines monitored by RAF maritime patrol aircraft.', category: 'Threats', subcategory: 'Asymmetric & Non-State', section: 'THREATS', subsection: 'Asymmetric & Non-State' },
+  { title: 'Atlantic Bastion', nickname: '', subtitle: 'UK initiative to enhance capabilities for submarine detection in the Atlantic.', category: 'Tech', subcategory: 'Future Programmes', section: 'TECH', subsection: 'Future Programmes' },
+  { title: 'Maritime Patrol Aircraft', nickname: '', subtitle: 'RAF aircraft conducting long-range surveillance over oceans for anti-submarine operations.', category: 'Aircrafts', subcategory: 'Maritime Patrol', section: 'AIRCRAFTS', subsection: 'Maritime Patrol' },
+  { title: 'Royal Navy', nickname: '', subtitle: 'UK\'s naval force working alongside the RAF for maritime operations.', category: 'Allies', subcategory: 'Bilateral & Framework Partners', section: 'ALLIES', subsection: 'Bilateral & Framework Partners' },
+
   // ── AUTO-GENERATED LEADS (seeded from keyword linking — do not edit this line) ──
 ];
 
@@ -1201,13 +1285,41 @@ function isHistoricLead(category, subcategory) {
   return false;
 }
 
+// Re-reads the LEADS array fresh from disk by extracting the array literal
+// and evaluating it in a sandboxed vm context. This is required because
+// appendToSeedLeads (in utils/keywordLinking.js) appends entries to this file
+// at runtime, and the module-level LEADS constant is a stale snapshot from
+// require time. Uses vm instead of require.cache to sidestep Jest's module
+// registry.
+function loadLeadsFromDisk() {
+  const src = fs.readFileSync(__filename, 'utf8');
+  const anchor = 'const LEADS = ';
+  const startIdx = src.indexOf(anchor);
+  if (startIdx === -1) throw new Error('seedLeads: LEADS declaration not found');
+  const literalStart = startIdx + anchor.length;
+  const terminator = src.indexOf('\n];', literalStart);
+  if (terminator === -1) throw new Error('seedLeads: LEADS end marker not found');
+  const literal = src.slice(literalStart, terminator + 2); // include `\n]`
+  return vm.runInNewContext(literal);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // seedLeads — drops all leads and briefs, re-inserts from LEADS array,
 //             then creates one stub IntelligenceBrief per lead.
 // Called on server startup (first run) and via POST /api/admin/leads/reset.
+//
+// When an `openRouterChat` function is supplied, any category that ends up with
+// one or more null-priority leads after the seed (i.e. brand new entries with
+// no prior DB priority and no hardcoded number) will be re-ranked via the AI
+// priority flow. The resulting priorities are written back to both IntelLead
+// and IntelligenceBrief, so new leads land in a clean {1..N} order without
+// manual intervention. Pass no argument from tests / scripts to skip rerank.
 // ─────────────────────────────────────────────────────────────────────────────
-module.exports = async function seedLeads() {
+const { reprioritizeCategory } = require('../utils/priorityRanking');
+
+module.exports = async function seedLeads(openRouterChat) {
   try {
+    const LEADS = loadLeadsFromDisk();
     // 0 — capture any priority numbers already assigned before wiping
     const existingLeads = await IntelLead.find({}, 'title priorityNumber').lean();
     const priorityMap = {};
@@ -1268,6 +1380,25 @@ module.exports = async function seedLeads() {
     await IntelligenceBrief.insertMany(stubs);
 
     console.log(`seedLeads: ${LEADS.length} leads inserted, ${stubs.length} stub briefs created`);
+
+    // 5 — AI re-rank any category containing null-priority leads. This keeps
+    //     hardcoded priority hints in LEADS purely advisory: the AI is the
+    //     source of truth, and priorities are mirrored to briefs inside
+    //     reprioritizeCategory. Skipped if no chat fn passed (tests, scripts)
+    //     and unconditionally skipped under NODE_ENV=test so integration tests
+    //     don't hit the real OpenRouter API.
+    if (typeof openRouterChat === 'function' && process.env.NODE_ENV !== 'test') {
+      const unranked = await IntelLead.find({ priorityNumber: null }, 'category').lean();
+      const categoriesNeedingRerank = [...new Set(unranked.map(l => l.category))];
+
+      if (categoriesNeedingRerank.length) {
+        console.log(`seedLeads: re-ranking ${categoriesNeedingRerank.length} categor(y/ies) with unranked leads: ${categoriesNeedingRerank.join(', ')}`);
+        for (const cat of categoriesNeedingRerank) {
+          await reprioritizeCategory(cat, [], null, 'seedLeads', openRouterChat)
+            .catch(err => console.error(`seedLeads: reprioritize failed for "${cat}" (non-fatal):`, err.message));
+        }
+      }
+    }
   } catch (err) {
     console.error('seedLeads error:', err.message);
   }

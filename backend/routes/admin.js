@@ -375,7 +375,7 @@ router.patch('/settings', requireReason, async (req, res) => {
       if (updatedKeys.some(k => k === 'tutorialContent')) return 'edit_tutorial_content';
       if (updatedKeys.some(k => k.startsWith('pathway') || k.endsWith('Categories'))) return 'change_pathway_settings';
       if (updatedKeys.some(k => k.startsWith('email') || k.startsWith('welcome') || k.startsWith('combatReadiness'))) return 'change_content_settings';
-      if (updatedKeys.some(k => k.startsWith('aiKeywords') || k.startsWith('aiPrompts'))) return 'change_ai_settings';
+      if (updatedKeys.some(k => k.startsWith('aiKeywords') || k.startsWith('aiQuestions') || k.startsWith('aiPrompts'))) return 'change_ai_settings';
       return 'change_app_settings';
     })();
 
@@ -948,14 +948,19 @@ router.post('/problems/:id/update', async (req, res) => {
 // GET /api/admin/briefs
 router.get('/briefs', async (req, res) => {
   try {
-    const { search, category, page = 1, limit = 20 } = req.query;
+    const { search, category, page = 1, limit = 20, sort = 'default', hideStubs } = req.query;
     const filter = {};
     if (category) filter.category = category;
+    if (hideStubs === 'true' || hideStubs === '1') filter.status = { $ne: 'stub' };
     if (search) filter.$or = [
       { title: new RegExp(search, 'i') },
       { subtitle: new RegExp(search, 'i') },
     ];
     const skip = (Number(page) - 1) * Number(limit);
+    const sortStage =
+      sort === 'newest' ? { updatedAt: -1 }
+      : sort === 'oldest' ? { updatedAt:  1 }
+      : { _sortOrder: 1, dateAdded: -1 };
 
     // Pre-compute which brief IDs have at least one media doc with a real cloudinaryPublicId.
     // This avoids relying on $lookup + field-existence checks inside the aggregation pipeline,
@@ -968,6 +973,10 @@ router.get('/briefs', async (req, res) => {
       ? await IntelligenceBrief.find({ media: { $in: validMediaIds } }).distinct('_id')
       : [];
 
+    const settings = await AppSettings.getSettings();
+    const minQuestions = settings.aiQuestionsPerDifficulty;
+    const minKeywords  = settings.aiKeywordsPerBrief;
+
     const [briefs, total] = await Promise.all([
       IntelligenceBrief.aggregate([
         { $match: filter },
@@ -977,10 +986,10 @@ router.get('/briefs', async (req, res) => {
           _sortOrder: {
             $let: {
               vars: {
-                hasK: { $cond: [{ $gte: [{ $size: { $ifNull: ['$keywords', []] } }, 10] }, 1, 0] },
+                hasK: { $cond: [{ $gte: [{ $size: { $ifNull: ['$keywords', []] } }, minKeywords] }, 1, 0] },
                 hasQ: { $cond: [{ $and: [
-                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsEasy', []] } }, 7] },
-                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsMedium', []] } }, 7] },
+                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsEasy', []] } }, minQuestions] },
+                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsMedium', []] } }, minQuestions] },
                 ]}, 1, 0] },
                 hasM: { $cond: [{ $in: ['$_id', briefIdsWithMedia] }, 1, 0] },
               },
@@ -993,7 +1002,7 @@ router.get('/briefs', async (req, res) => {
             },
           },
         }},
-        { $sort: { _sortOrder: 1, dateAdded: -1 } },
+        { $sort: sortStage },
         { $skip: skip },
         { $limit: Number(limit) },
       ]),
@@ -1749,10 +1758,10 @@ async function fixAnswersWithRetry(q, description, systemPrompt, warnings) {
   return { ...q, answers };
 }
 
-// Ensures both tiers have 7 questions each with 7 answers each.
+// Ensures both tiers have `targetQ` questions each with 7 answers each.
 // Mutates nothing — returns new arrays. Appends warnings to the provided array.
-async function ensureQuizQuality(easyQuestions, mediumQuestions, description, briefTitle, quizSystemPrompt, warnings) {
-  const TARGET_Q   = 7;
+async function ensureQuizQuality(easyQuestions, mediumQuestions, description, briefTitle, quizSystemPrompt, warnings, targetQ = 7) {
+  const TARGET_Q   = targetQ;
   const MAX_RETRIES = 3;
 
   async function fixAllAnswers(questions) {
@@ -2400,7 +2409,7 @@ router.post('/intel-leads/backfill-published', async (req, res) => {
 // POST /api/admin/leads/reset — wipe all leads + briefs, re-seed leads, create stub briefs
 router.post('/leads/reset', requireReason, async (req, res) => {
   try {
-    await seedLeads();
+    await seedLeads(openRouterChat);
 
     const [leadCount, briefCount] = await Promise.all([
       IntelLead.countDocuments(),
@@ -2423,11 +2432,12 @@ function normTitle(s) {
 
 router.post('/ai/generate-keywords', async (req, res) => {
   try {
-    const { description, existingKeywords = [], needed = 20, title = '', briefId = null } = req.body;
+    const { description, existingKeywords = [], needed: bodyNeeded, title = '', briefId = null } = req.body;
     if (!description) return res.status(400).json({ message: 'description required' });
-    if (needed <= 0)  return res.json({ status: 'success', data: { keywords: [] } });
 
     const kwAiSettings = await AppSettings.getSettings();
+    const needed = bodyNeeded ?? kwAiSettings.aiKeywordsPerBrief ?? 20;
+    if (needed <= 0)  return res.json({ status: 'success', data: { keywords: [] } });
     const desc       = description.toLowerCase();
     const titleLower = title.toLowerCase();
     const titleExclusion = title
@@ -2479,17 +2489,18 @@ router.post('/ai/generate-keywords', async (req, res) => {
       } catch (e) { /* pass2 stays empty */ }
     }
 
-    // Pass 3 — coverage check: find up to 5 important terms missed by passes 1 & 2
+    // Pass 3 — coverage check: fills the gap left by passes 1 & 2, capped at 10
     const combined12 = [...pass1, ...pass2];
+    const pass3Target = Math.min(10, needed - combined12.length);
     let pass3 = [];
-    if (combined12.length > 0 && combined12.length + existingKeywords.length < needed) {
+    if (pass3Target > 0 && combined12.length > 0 && combined12.length + existingKeywords.length < needed) {
       try {
         const alreadyAll = [...existingKeywords, ...combined12.map(k => k.keyword)];
         const r3 = await openRouterChat([...kwSys, {
           role: 'user',
-          content: `Description:\n"""${description}"""\n\nAlready extracted: ${alreadyAll.join(', ')}\n\nIdentify up to 5 important terms from this description that were NOT already extracted. Look for aircraft designations, operation names, training programme names, squadron names, base names, technical systems, or role titles appearing verbatim in the description but absent from the list above. If nothing important is missing, return {"keywords":[]}.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
+          content: `Description:\n"""${description}"""\n\nAlready extracted: ${alreadyAll.join(', ')}\n\nIdentify up to ${pass3Target} important terms from this description that were NOT already extracted. Look for aircraft designations, operation names, training programme names, squadron names, base names, technical systems, or role titles appearing verbatim in the description but absent from the list above. If nothing important is missing, return {"keywords":[]}.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
         }], kwMdl);
-        pass3 = validateKws(JSON.parse(cleanJson(r3.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 5);
+        pass3 = validateKws(JSON.parse(cleanJson(r3.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, pass3Target);
       } catch (e) { /* pass3 stays empty */ }
     }
 
@@ -2598,12 +2609,13 @@ router.post('/ai/generate-quiz', async (req, res) => {
     const { title, description } = req.body;
     if (!title && !description) return res.status(400).json({ message: 'title or description required' });
     const quizAiSettings = await AppSettings.getSettings();
+    const targetQ = quizAiSettings.aiQuestionsPerDifficulty ?? 7;
     const data = await openRouterChat([{
       role: 'system',
       content: getPrompt(quizAiSettings, 'quiz'),
     }, {
       role: 'user',
-      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 7 easy and 7 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n8. ${QUIZ_ANSWER_FORMAT_RULES}\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
+      content: `Intel Brief Title: ${title}\n\nIntel Brief Description:\n"""\n${description ?? ''}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly ${targetQ} easy and ${targetQ} medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n8. ${QUIZ_ANSWER_FORMAT_RULES}\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
     }], 'openai/gpt-4o', 4096);
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     let generated;
@@ -2621,6 +2633,7 @@ router.post('/ai/generate-quiz', async (req, res) => {
       title ?? '',
       getPrompt(quizAiSettings, 'quiz'),
       warnings,
+      targetQ,
     );
     res.json({ status: 'success', data: { easyQuestions, mediumQuestions, warnings } });
   } catch (err) {
@@ -2841,12 +2854,13 @@ async function generateBriefContent(brief, aiSettings) {
   }
 
   const freshDescription = descriptionSections.join('\n\n');
+  const targetQ = aiSettings.aiQuestionsPerDifficulty ?? 7;
   const quizData = await openRouterChat([{
     role: 'system',
     content: getPrompt(aiSettings, 'quiz'),
   }, {
     role: 'user',
-    content: `Intel Brief Title: ${brief.title}\n\nIntel Brief Description:\n"""\n${freshDescription}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly 7 easy and 7 medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n8. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each) — never single words, never just a number or acronym alone.\n9. The correct answer must also be a complete sentence or meaningful phrase drawn directly from the description — never a single word or bare number.\n10. ${QUIZ_ANSWER_FORMAT_RULES}\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
+    content: `Intel Brief Title: ${brief.title}\n\nIntel Brief Description:\n"""\n${freshDescription}\n"""\n\nUsing ONLY the facts stated in the description above, generate exactly ${targetQ} easy and ${targetQ} medium quiz questions.\n\nCRITICAL RULES:\n1. Every question must be directly answerable from the description text — if the answer cannot be found in the description, do not include the question.\n2. Prioritise the most important, high-value facts: operational roles, training phases, aircraft designations, base locations, unit names, and key distinguishing details.\n3. Easy questions test direct recall of the most important specific facts stated in the description (names, dates, locations, aircraft types, unit designations, etc.).\n4. Medium questions require understanding of context or relationships between facts stated in the description.\n5. The correct answer must be explicitly supported by the description.\n6. Wrong answers must be plausible but clearly incorrect based on the description.\n7. Exactly 7 answer options per question. correctAnswerIndex is the 0-based index of the correct answer.\n8. Wrong answers must be complete sentences or meaningful phrases (minimum 5 words each) — never single words, never just a number or acronym alone.\n9. The correct answer must also be a complete sentence or meaningful phrase drawn directly from the description — never a single word or bare number.\n10. ${QUIZ_ANSWER_FORMAT_RULES}\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n{"easyQuestions":[{"question":"...","answers":["answer option 1","answer option 2","answer option 3","answer option 4","answer option 5","answer option 6","answer option 7"],"correctAnswerIndex":0}],"mediumQuestions":[...]}`,
   }], 'openai/gpt-4o', 8192);
 
   const quizRaw = quizData.choices?.[0]?.message?.content ?? '{}';
@@ -2887,6 +2901,7 @@ async function generateBriefContent(brief, aiSettings) {
     brief.title,
     getPrompt(aiSettings, 'quiz'),
     quizWarnings,
+    targetQ,
   );
 
   return {
@@ -2973,8 +2988,9 @@ const BULK_LINK_CONFIG = {
 };
 
 router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
+  let brief;
   try {
-    const brief = await IntelligenceBrief.findById(req.params.id);
+    brief = await IntelligenceBrief.findById(req.params.id);
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
     if (brief.status !== 'stub') return res.status(400).json({ message: 'Brief is not a stub' });
 
@@ -3498,13 +3514,14 @@ router.get('/economy-viability', async (req, res) => {
     }
 
     // Initial scenario totals (frontend recalculates live as rates are edited)
+    const questionsPerDifficulty = settings.aiQuestionsPerDifficulty ?? 7;
     function scenarioCoins(difficulty) {
       const isNormal = difficulty === 'normal';
       const n        = totalBriefs;
       const reads    = n * (settings.aircoinsPerBriefRead ?? 5);
       const quiz     = isNormal
-        ? n * 5 * (settings.aircoinsPerWinEasy   ?? 10) + n * (settings.aircoins100Percent ?? 15)
-        : n * 5 * (settings.aircoinsPerWinMedium ?? 20) + n * (settings.aircoins100Percent ?? 15);
+        ? n * questionsPerDifficulty * (settings.aircoinsPerWinEasy   ?? 10) + n * (settings.aircoins100Percent ?? 15)
+        : n * questionsPerDifficulty * (settings.aircoinsPerWinMedium ?? 20) + n * (settings.aircoins100Percent ?? 15);
       const boo = booEligibleBriefs * (isNormal
         ? (settings.aircoinsOrderOfBattleEasy   ?? 8)
         : (settings.aircoinsOrderOfBattleMedium ?? 18));
@@ -3519,6 +3536,7 @@ router.get('/economy-viability', async (req, res) => {
       status: 'success',
       data: {
         content: { totalBriefs, wtaBriefs, booEligibleBriefs, wtaPerBrief },
+        aiQuestionsPerDifficulty: questionsPerDifficulty,
         rates: {
           aircoinsPerBriefRead:          settings.aircoinsPerBriefRead          ?? 5,
           aircoinsPerWinEasy:            settings.aircoinsPerWinEasy            ?? 10,

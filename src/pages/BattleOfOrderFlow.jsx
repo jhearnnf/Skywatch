@@ -85,7 +85,9 @@ function RouletteScreen({ options, briefTitle, difficulty, onDone }) {
           : 'bg-emerald-50 border-emerald-200 text-emerald-600'
         }`}
       >
-        {difficulty === 'medium' ? '🔥 Advanced — 5 items' : '🌱 Standard — 3 items'}
+        {difficulty === 'medium'
+          ? <><span className="flame-blue">🔥</span> Advanced — 5 items</>
+          : '🌱 Standard — 3 items'}
       </span>
 
       {/* Slot machine card */}
@@ -226,7 +228,9 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
             : 'bg-emerald-50 border-emerald-200 text-emerald-600'
           }`}
         >
-          {difficulty === 'medium' ? '🔥 Advanced' : '🌱 Standard'}
+          {difficulty === 'medium'
+            ? <><span className="flame-blue">🔥</span> Advanced</>
+            : '🌱 Standard'}
         </span>
       </div>
 
@@ -397,9 +401,9 @@ function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, u
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 font-bold px-4 py-2 rounded-full mb-5 text-sm"
+          className="inline-flex items-center gap-2 bg-slate-200 border border-slate-300 text-white font-bold px-4 py-2 rounded-full mb-5 text-sm"
         >
-          ⭐ +{aircoinsEarned} Aircoins earned!
+          <span className="star-silver">⭐</span> +{aircoinsEarned} Aircoins earned!
         </motion.div>
       )}
 

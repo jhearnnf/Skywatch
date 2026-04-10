@@ -82,7 +82,7 @@ export default function AircoinHistory() {
       {/* Balance card */}
       <div className="bg-gradient-to-r from-amber-500 to-amber-400 rounded-2xl p-4 mb-5 text-white card-shadow">
         <p className="text-xs font-bold text-amber-100 uppercase tracking-wider mb-1">Total Balance</p>
-        <p className="text-3xl font-extrabold">⭐ {(user?.totalAircoins ?? 0).toLocaleString()}</p>
+        <p className="text-3xl font-extrabold"><span className="star-silver">⭐</span> {(user?.totalAircoins ?? 0).toLocaleString()}</p>
         <p className="text-amber-100 text-xs mt-1">{total} award{total !== 1 ? 's' : ''} on record</p>
       </div>
 
@@ -99,7 +99,7 @@ export default function AircoinHistory() {
         </div>
       ) : logs.length === 0 ? (
         <div className="text-center py-16 text-slate-400">
-          <div className="text-4xl mb-3">⭐</div>
+          <div className="text-4xl mb-3 star-silver">⭐</div>
           <p className="font-semibold">No awards on record yet.</p>
           <p className="text-sm mt-1">Read intel briefs and complete quizzes to earn Aircoins.</p>
         </div>
@@ -113,7 +113,7 @@ export default function AircoinHistory() {
               transition={{ delay: i * 0.025 }}
               className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 last:border-0"
             >
-              <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0 text-lg">
+              <div className={`w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0 text-lg${!REASON_ICONS[log.reason] ? ' star-silver' : ''}`}>
                 {REASON_ICONS[log.reason] ?? '⭐'}
               </div>
               <div className="flex-1 min-w-0">
@@ -123,8 +123,8 @@ export default function AircoinHistory() {
                 {log.label && <p className="text-xs text-slate-400 truncate">{log.label}</p>}
                 <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(log.createdAt)}</p>
               </div>
-              <span className="text-sm font-extrabold text-amber-600 shrink-0">
-                +{log.amount.toLocaleString()} ⭐
+              <span className="text-sm font-extrabold text-white shrink-0">
+                +{log.amount.toLocaleString()} <span className="star-silver">⭐</span>
               </span>
             </motion.div>
           ))}

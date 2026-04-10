@@ -3,6 +3,17 @@
   "version": "1.0.0",
   "description": "SkyWatch API server",
   "main": "server.js",
+  "nodemonConfig": {
+    "watch": ["."],
+    "ext": "js,mjs,cjs,json",
+    "ignore": [
+      "seeds/seedLeads.js",
+      "**/seeds/seedLeads.js",
+      "node_modules",
+      "__tests__",
+      "coverage"
+    ]
+  },
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",

@@ -25,7 +25,7 @@ function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned'
           {badge} {badgeLabel}
         </span>
       )}
-      <span className="text-xl">{icon}</span>
+      <span className={`text-xl${icon === '⭐' ? ' star-silver' : ''}`}>{icon}</span>
       <span className="text-lg font-extrabold text-slate-900">{value}</span>
       <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
     </Tag>
@@ -151,8 +151,8 @@ export default function Profile() {
             </div>
             <div className="text-right shrink-0">
               <p className="text-xs text-slate-500 intel-mono">Streak</p>
-              <p className="text-2xl font-extrabold text-amber-700">{user.loginStreak ?? 0}</p>
-              <p className="text-lg">🔥</p>
+              <p className="text-2xl font-extrabold text-brand-700">{user.loginStreak ?? 0}</p>
+              <p className="text-lg flame-blue">🔥</p>
             </div>
           </div>
 
@@ -251,7 +251,7 @@ export default function Profile() {
                           : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
                         }`}
                     >
-                      🔥 Advanced
+                      <span className="flame-blue">🔥</span> Advanced
                     </button>
                   )}
                 </div>
@@ -363,7 +363,7 @@ export default function Profile() {
                   <span className={`flex-1 text-sm font-semibold ${isCurrent ? 'text-brand-700' : 'text-slate-800'}`}>
                     Agent {agent.agentNumber} {isCurrent && <span className="text-xs text-brand-500">(You)</span>}
                   </span>
-                  <span className="text-sm font-bold text-amber-600">⭐ {agent.totalAircoins.toLocaleString()}</span>
+                  <span className="text-sm font-bold text-white"><span className="star-silver">⭐</span> {agent.totalAircoins.toLocaleString()}</span>
                 </li>
               )
             })}
@@ -384,7 +384,7 @@ export default function Profile() {
                   <span className="flex-1 text-sm font-semibold text-brand-700">
                     Agent {user.agentNumber} <span className="text-xs text-brand-500">(You)</span>
                   </span>
-                  <span className="text-sm font-bold text-amber-600">⭐ {(user.totalAircoins ?? 0).toLocaleString()}</span>
+                  <span className="text-sm font-bold text-white"><span className="star-silver">⭐</span> {(user.totalAircoins ?? 0).toLocaleString()}</span>
                 </li>
               </>
             )}

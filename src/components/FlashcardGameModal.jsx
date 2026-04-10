@@ -551,9 +551,9 @@ export default function FlashcardGameModal({ onClose }) {
                 {Math.round((resultData.correct / resultData.total) * 100)}% recalled
               </p>
               {resultData.aircoinsEarned > 0 && (
-                <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)' }}>
-                  <span style={{ color: '#f59e0b' }}>⭐</span>
-                  <span className="text-sm font-bold" style={{ color: '#f59e0b' }}>+{resultData.aircoinsEarned} Aircoins</span>
+                <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full" style={{ background: 'rgba(148,163,184,0.18)', border: '1px solid rgba(148,163,184,0.35)' }}>
+                  <span className="star-silver">⭐</span>
+                  <span className="text-sm font-bold text-white">+{resultData.aircoinsEarned} Aircoins</span>
                 </div>
               )}
             </div>

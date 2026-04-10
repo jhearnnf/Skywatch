@@ -148,8 +148,8 @@ export default function Home() {
               </p>
             </div>
             <div className="text-right shrink-0">
-              <div className="text-2xl">🔥</div>
-              <div className="text-lg font-bold text-amber-700">{user.loginStreak ?? 0}</div>
+              <div className="text-2xl flame-blue">🔥</div>
+              <div className="text-lg font-bold text-brand-700">{user.loginStreak ?? 0}</div>
               <div className="text-xs text-slate-600 intel-mono">streak</div>
             </div>
           </div>
@@ -185,7 +185,7 @@ export default function Home() {
               : 'bg-amber-50 border-amber-200 cursor-pointer hover:border-amber-400 hover:-translate-y-0.5 card-shadow hover:card-shadow-hover'
           }`}
       >
-        <span className="text-2xl">{missionDone ? '✅' : missionLoading ? '…' : '⭐'}</span>
+        <span className={`text-2xl${!missionDone && !missionLoading ? ' star-silver' : ''}`}>{missionDone ? '✅' : missionLoading ? '…' : '⭐'}</span>
         <div className="flex-1 min-w-0">
           {missionDone ? (
             <>

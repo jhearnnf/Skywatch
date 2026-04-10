@@ -855,3 +855,61 @@ describe('POST /api/admin/ai/generate-rank-data/:id — hierarchy lookup', () =>
     expect(res.body.data.rankHierarchyOrder).toBe(4);
   });
 });
+
+// ── POST /api/admin/ai/bulk-generate-stub/:id ─────────────────────────────────
+
+describe('POST /api/admin/ai/bulk-generate-stub/:id', () => {
+  it('returns 404 when brief does not exist', async () => {
+    const { Types } = require('mongoose');
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/bulk-generate-stub/${new Types.ObjectId()}`)
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(404);
+    expect(res.body.message).toMatch(/brief not found/i);
+  });
+
+  it('returns 400 when brief is not a stub', async () => {
+    const brief = await createBrief({ title: 'Not a stub', status: 'published' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/bulk-generate-stub/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/not a stub/i);
+  });
+
+  // Regression: the catch block used to reference `brief` declared inside the try block,
+  // which threw ReferenceError and crashed the Node process on unhandled rejection.
+  // The handler must now return a clean 500 JSON response instead.
+  it('returns 500 JSON (not a ReferenceError crash) when AI pipeline throws', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce(mockOpenRouter('not json at all!!!'));
+
+    const brief = await createBrief({ title: 'Test Stub', status: 'stub' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/bulk-generate-stub/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(500);
+    expect(typeof res.body.message).toBe('string');
+    expect(res.body.message.length).toBeGreaterThan(0);
+    expect(res.body.message).not.toMatch(/brief is not defined/i);
+  });
+
+  it('returns 401 for unauthenticated request', async () => {
+    const brief = await createBrief({ status: 'stub' });
+    const res   = await request(app)
+      .post(`/api/admin/ai/bulk-generate-stub/${brief._id}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin user', async () => {
+    const brief = await createBrief({ status: 'stub' });
+    const user  = await createUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/bulk-generate-stub/${brief._id}`)
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(403);
+  });
+});

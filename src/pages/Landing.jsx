@@ -238,7 +238,7 @@ export default function Landing() {
               className="relative card-intel rounded-2xl p-5"
             >
               <CornerBrackets size={12} />
-              <span className="text-3xl">{icon}</span>
+              <span className={`text-3xl${icon === '🔥' ? ' flame-blue' : ''}`}>{icon}</span>
               <h3 className="font-bold text-slate-900 mt-3 mb-1.5">{title}</h3>
               <p className="text-sm text-slate-500 leading-relaxed">{body}</p>
             </motion.div>

@@ -97,8 +97,10 @@ function baseHandlers(logsResponse) {
 
 async function navigateToLogsTab() {
   render(<Admin />)
-  const logsTab = await screen.findByRole('button', { name: /logs/i })
-  fireEvent.click(logsTab)
+  const intelTab = await screen.findByRole('button', { name: /intel/i })
+  fireEvent.click(intelTab)
+  const actionLogsBtn = await screen.findByRole('button', { name: /^action logs$/i })
+  fireEvent.click(actionLogsBtn)
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -107,10 +109,12 @@ describe('Admin Logs — tab navigation', () => {
   beforeEach(() => { global.Audio = class { play = vi.fn().mockResolvedValue(undefined) } })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('renders a Logs tab button', async () => {
+  it('renders an Intel tab containing an Action Logs sub-tab', async () => {
     global.fetch = vi.fn().mockImplementation(baseHandlers(makeLogsResponse()))
     render(<Admin />)
-    expect(await screen.findByRole('button', { name: /logs/i })).toBeDefined()
+    const intelTab = await screen.findByRole('button', { name: /intel/i })
+    fireEvent.click(intelTab)
+    expect(await screen.findByRole('button', { name: /^action logs$/i })).toBeDefined()
   })
 
   it('shows the logs panel when Logs tab is clicked', async () => {

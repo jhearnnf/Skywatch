@@ -20,7 +20,7 @@ export default function LevelUpNotification({ level, onDone }) {
         <motion.span
           animate={{ rotate: [0, -15, 15, -10, 10, 0], scale: [1, 1.3, 1.3, 1.1, 1] }}
           transition={{ duration: 0.7, delay: 0.1 }}
-          className="text-2xl"
+          className="text-2xl star-silver"
         >
           ⭐
         </motion.span>

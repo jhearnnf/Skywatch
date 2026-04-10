@@ -339,7 +339,7 @@ function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, se
           setTimeout(() => setFlashes(prev => prev.filter(f => f.key !== key)), 300)
         }
         schedule()
-      }, 300 + Math.random() * 400)
+      }, 450 + Math.random() * 550)
     }
     schedule()
     return () => clearTimeout(tid)
@@ -1077,11 +1077,11 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
         ) : (
           <>
             {/* Coin hook */}
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-left flex items-center gap-3 coin-hook-pulse">
-              <span className="text-xl shrink-0">⭐</span>
+            <div className="bg-slate-200 border border-slate-300 rounded-2xl p-3.5 text-left flex items-center gap-3 coin-hook-pulse">
+              <span className="text-xl shrink-0 star-silver">⭐</span>
               <div>
-                <p className="text-sm font-bold text-amber-800">{coinReward} Aircoins waiting to be claimed</p>
-                <p className="text-xs text-amber-700">Create a free account to collect your reward and track your streak</p>
+                <p className="text-sm font-bold text-white">{coinReward} Aircoins waiting to be claimed</p>
+                <p className="text-xs text-slate-600">Create a free account to collect your reward and track your streak</p>
               </div>
             </div>
 
@@ -1365,8 +1365,8 @@ export default function BriefReader() {
   const sectionIdxRef              = useRef(0) // mirrors sectionIdx for use inside flushTime without dep-array churn
   const hasNavigatedRef            = useRef(false) // true after first user-initiated section navigation (suppresses grid after initial load)
 
-  // Quiz availability — true when the user's difficulty pool has ≥5 questions
-  const MIN_QUIZ_QUESTIONS = 5
+  // Quiz availability — true when the user's difficulty pool has enough questions
+  const MIN_QUIZ_QUESTIONS = settings?.aiQuestionsPerDifficulty ?? 7
   const quizAvailable = brief
     ? (user?.difficultySetting === 'medium'
         ? (brief.quizQuestionsMedium?.length ?? 0) >= MIN_QUIZ_QUESTIONS

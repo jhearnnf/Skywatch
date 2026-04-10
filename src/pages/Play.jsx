@@ -81,7 +81,7 @@ const GAME_MODES = [
 export default function Play() {
   const { user, API, apiFetch } = useAuth()
   const { start, step, visible, next: tutorialNext, hasSeen } = useAppTutorial()
-  const { newGames, isUnlocked, markSeen, markUnlockFromServer, revokeUnlock } = useNewGameUnlock()
+  const { newGames, isUnlocked, markSeen, markUnlockFromServer } = useNewGameUnlock()
 
   const isHighlightingGrid = visible && !!step?.highlightGrid
 
@@ -173,13 +173,20 @@ export default function Play() {
     }, 1500)
   }
 
+  // Once a user has earned an unlock it stays unlocked forever — only an
+  // admin "reset progress" wipe (which $unsets gameUnlocks server-side) can
+  // re-lock a card. The dynamic content checks remain only as a first-time
+  // fallback so the green padlock can flip on the same render that detection
+  // happens, before the persist round-trip completes.
   function isCardUnlocked(modeKey) {
     if (!user) return false
+    const unlockKey = MODE_TO_UNLOCK_KEY[modeKey]
+    if (isUnlocked(unlockKey)) return true
     switch (modeKey) {
-      case 'quiz':               return isUnlocked('quiz') || quizBriefs.some(b => b.quizState === 'active')
+      case 'quiz':               return quizBriefs.some(b => b.quizState === 'active')
       case 'flashcard':          return flashcardAvail !== null && flashcardAvail >= 5
-      case 'battle-order':       return booBriefs.some(b => b.booState === 'active')
-      case 'wheres-that-aircraft': return wtaSpawn?.prereqsMet === true || (wtaSpawn === null && isUnlocked('wta'))
+      case 'battle-order':       return booBriefs.some(b => BOO_ACCESSIBLE_STATES.includes(b.booState))
+      case 'wheres-that-aircraft': return wtaSpawn?.prereqsMet === true
       default:                   return false
     }
   }
@@ -196,7 +203,9 @@ export default function Play() {
     apiFetch(`${API}/api/games/quiz/recommended-briefs?limit=6`)
       .then(r => r.json())
       .then(data => {
-        setQuizBriefs(data?.data?.briefs ?? [])
+        const briefs = data?.data?.briefs ?? []
+        setQuizBriefs(briefs)
+        if (briefs.some(b => b.quizState === 'active')) markUnlockFromServer('quiz')
       })
       .catch(() => {})
     apiFetch(`${API}/api/games/battle-of-order/recommended-briefs?limit=6`)
@@ -204,7 +213,6 @@ export default function Play() {
       .then(data => {
         const briefs = data?.data?.briefs ?? []
         setBooBriefs(briefs)
-        // Client-side BOO unlock detection
         if (briefs.some(b => BOO_ACCESSIBLE_STATES.includes(b.booState))) {
           markUnlockFromServer('boo')
         }
@@ -213,7 +221,9 @@ export default function Play() {
     apiFetch(`${API}/api/games/flashcard-recall/available-briefs`)
       .then(r => r.json())
       .then(data => {
-        setFlashcardAvail(data?.data?.count ?? 0)
+        const count = data?.data?.count ?? 0
+        setFlashcardAvail(count)
+        if (count >= 5) markUnlockFromServer('flashcard')
       })
       .catch(() => setFlashcardAvail(0))
     apiFetch(`${API}/api/users/me/wta-spawn`)
@@ -222,7 +232,6 @@ export default function Play() {
         const spawn = data?.data ?? null
         setWtaSpawn(spawn)
         if (spawn?.prereqsMet === true) markUnlockFromServer('wta')
-        else revokeUnlock('wta')
       })
       .catch(() => {})
   }, [user, API]) // eslint-disable-line react-hooks/exhaustive-deps

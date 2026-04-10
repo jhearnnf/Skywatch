@@ -39,21 +39,21 @@ export default function TopBar() {
               {/* Streak */}
               <button
                 onClick={() => navigate('/profile')}
-                className="flex items-center gap-1 bg-amber-50 rounded-full px-3 py-1 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-colors outline-none focus:outline-none"
+                className="flex items-center gap-1 bg-brand-50 rounded-full px-3 py-1 border border-brand-200 hover:bg-brand-100 hover:border-brand-300 transition-colors outline-none focus:outline-none"
                 aria-label="View profile"
               >
-                <span className="text-base">🔥</span>
-                <span className="text-sm font-bold text-amber-700">{user.loginStreak ?? 0}</span>
+                <span className="text-base flame-blue">🔥</span>
+                <span className="text-sm font-bold text-brand-700">{user.loginStreak ?? 0}</span>
               </button>
 
               {/* Aircoins */}
               <button
                 onClick={() => navigate('/rankings')}
-                className="flex items-center gap-1 bg-sky-50 rounded-full px-3 py-1 border border-sky-200 hover:bg-sky-100 hover:border-sky-300 transition-colors outline-none focus:outline-none"
+                className="flex items-center gap-1 bg-slate-200 rounded-full px-3 py-1 border border-slate-300 hover:bg-slate-300 hover:border-slate-400 transition-colors outline-none focus:outline-none"
                 aria-label="View agent levels"
               >
-                <span className="text-base">⭐</span>
-                <span className="text-sm font-bold text-sky-700">{user.totalAircoins ?? 0}</span>
+                <span className="text-base star-silver">⭐</span>
+                <span className="text-sm font-bold text-white">{user.totalAircoins ?? 0}</span>
               </button>
 
               {/* Avatar / Rank */}

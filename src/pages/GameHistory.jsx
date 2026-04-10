@@ -74,14 +74,14 @@ function StatusBadge({ session }) {
 }
 
 function QuizDrillDown({ attemptId }) {
-  const { apiFetch } = useAuth()
+  const { apiFetch, API } = useAuth()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
   useEffect(() => {
     setLoading(true)
-    apiFetch(`/api/games/history/quiz/${attemptId}`)
+    apiFetch(`${API}/api/games/history/quiz/${attemptId}`)
       .then(r => r.json())
       .then(json => {
         if (json.status === 'success') setData(json.data)
@@ -138,14 +138,14 @@ function QuizDrillDown({ attemptId }) {
 }
 
 function WtaDrillDown({ sessionId }) {
-  const { apiFetch } = useAuth()
+  const { apiFetch, API } = useAuth()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
   useEffect(() => {
     setLoading(true)
-    apiFetch(`/api/games/history/wheres-aircraft/${sessionId}`)
+    apiFetch(`${API}/api/games/history/wheres-aircraft/${sessionId}`)
       .then(r => r.json())
       .then(json => {
         if (json.status === 'success') setData(json.data)
@@ -216,14 +216,14 @@ function WtaDrillDown({ sessionId }) {
 }
 
 function BooOrderDrillDown({ sessionId }) {
-  const { apiFetch } = useAuth()
+  const { apiFetch, API } = useAuth()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
   useEffect(() => {
     setLoading(true)
-    apiFetch(`/api/games/history/battle-of-order/${sessionId}`)
+    apiFetch(`${API}/api/games/history/battle-of-order/${sessionId}`)
       .then(r => r.json())
       .then(json => {
         if (json.status === 'success') setData(json.data)
@@ -332,14 +332,14 @@ function FlashcardCardRow({ c, index }) {
 }
 
 function FlashcardDrillDown({ sessionId }) {
-  const { apiFetch } = useAuth()
+  const { apiFetch, API } = useAuth()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
   useEffect(() => {
     setLoading(true)
-    apiFetch(`/api/games/history/flashcard/${sessionId}`)
+    apiFetch(`${API}/api/games/history/flashcard/${sessionId}`)
       .then(r => r.json())
       .then(json => {
         if (json.status === 'success') setData(json.data)
@@ -429,7 +429,7 @@ function SessionRow({ session, API, index }) {
             )}
             <StatusBadge session={session} />
             {session.aircoinsEarned > 0 && (
-              <span className="text-[10px] font-bold text-amber-600">+{session.aircoinsEarned} ⭐</span>
+              <span className="text-[10px] font-bold text-white">+{session.aircoinsEarned} <span className="star-silver">⭐</span></span>
             )}
           </div>
 
@@ -566,7 +566,9 @@ export default function GameHistory() {
                   ? 'bg-brand-600 text-white'
                   : 'bg-surface border border-slate-200 text-slate-500 hover:border-brand-300'}`}
             >
-              {label}
+              {label.startsWith('⭐ ')
+                ? <><span className="star-silver">⭐</span>{label.slice(1)}</>
+                : label}
             </button>
           ))}
         </div>

@@ -112,8 +112,8 @@ async function renderAndOpenPathwaySection() {
   fireEvent.click(settingsTab)
 
   // Expand the Pathway Unlock Requirements section
-  await waitFor(() => screen.getByText('Pathway Unlock Requirements'))
-  fireEvent.click(screen.getByText('Pathway Unlock Requirements'))
+  await waitFor(() => screen.getByText('Pathway Access & Unlock Requirements'))
+  fireEvent.click(screen.getByText('Pathway Access & Unlock Requirements'))
 
   await waitFor(() => screen.getByText('Bases'))
 }
@@ -140,13 +140,15 @@ describe('Admin — Pathway Unlock Requirements', () => {
     expect(screen.queryByText(/tier required/i)).toBeNull()
   })
 
-  it('each row has exactly one rank select (no tier select)', async () => {
+  it('each row has a tier select and a rank select', async () => {
     await renderAndOpenPathwaySection()
 
     const basesCell = screen.getByText('Bases')
     const row = basesCell.closest('tr')
     const selects = row.querySelectorAll('select')
-    expect(selects).toHaveLength(1) // only rank select
+    expect(selects).toHaveLength(2) // tier select + rank select
+    // First select is tier (guest/free/silver/gold)
+    expect(['guest', 'free', 'silver', 'gold']).toContain(selects[0].value)
   })
 
   it('shows the correct level for Treaties (8)', async () => {

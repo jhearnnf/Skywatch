@@ -40,7 +40,7 @@ export default function TutorialModal() {
             <div className="p-6">
               {/* Emoji + step count */}
               <div className="flex items-start justify-between mb-3">
-                <span className="text-4xl">{step.emoji}</span>
+                <span className={`text-4xl${step.emoji === '🔥' ? ' flame-blue' : ''}${step.emoji === '⭐' ? ' star-silver' : ''}`}>{step.emoji}</span>
                 <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
                   {current} / {total}
                 </span>

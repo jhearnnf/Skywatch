@@ -431,7 +431,7 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
         )}
 
         <span className="text-xl leading-none select-none" style={{ opacity: (isLocked || isStub) ? 0.5 : (isRead || isHistoric) ? 0.45 : isInProgress ? 0.75 : 1 }}>
-          {isLocked ? '🔒' : isStub ? '📡' : milestone ? '⭐' : CATEGORY_ICONS[brief.category] ?? '📄'}
+          {isLocked ? '🔒' : isStub ? '📡' : CATEGORY_ICONS[brief.category] ?? '📄'}
         </span>
 
         {/* Diagonal "cleared" line for read stones */}
