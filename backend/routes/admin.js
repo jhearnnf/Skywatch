@@ -1411,8 +1411,31 @@ router.post('/briefs/:id/questions', async (req, res) => {
     const gameType = await GameType.findOne({ gameTitle: 'quiz' });
     if (!gameType) return res.status(500).json({ message: 'Quiz game type not seeded — restart the server' });
 
-    // Delete existing questions for this brief
-    await GameQuizQuestion.deleteMany({ intelBriefId: req.params.id });
+    // Cascade: regenerating quiz questions invalidates all past quiz sessions
+    // for this brief, so delete session history and reverse any quiz coins
+    // that were awarded from those sessions. Brief-read coins are left intact
+    // because the brief itself is not being regenerated.
+    const briefObjectId = new mongoose.Types.ObjectId(req.params.id);
+    const oldQuestionIds = await GameQuizQuestion.distinct('_id', { intelBriefId: briefObjectId });
+
+    const quizCoinGroups = await AircoinLog.aggregate([
+      { $match: { briefId: briefObjectId, reason: 'quiz' } },
+      { $group: { _id: '$userId', total: { $sum: '$amount' } } },
+    ]);
+    await Promise.all(quizCoinGroups.map(async ({ _id: userId, total }) => {
+      const user = await User.findById(userId).select('totalAircoins cycleAircoins');
+      if (!user) return;
+      user.totalAircoins = Math.max(0, (user.totalAircoins ?? 0) - total);
+      user.cycleAircoins = Math.max(0, (user.cycleAircoins ?? 0) - total);
+      await user.save();
+    }));
+
+    await Promise.all([
+      GameSessionQuizResult.deleteMany({ questionId: { $in: oldQuestionIds } }),
+      GameSessionQuizAttempt.deleteMany({ intelBriefId: briefObjectId }),
+      AircoinLog.deleteMany({ briefId: briefObjectId, reason: 'quiz' }),
+      GameQuizQuestion.deleteMany({ intelBriefId: briefObjectId }),
+    ]);
 
     const createQuestions = async (questions, difficulty) => {
       const ids = [];

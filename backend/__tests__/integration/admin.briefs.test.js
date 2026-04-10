@@ -21,12 +21,17 @@ const db       = require('../helpers/setupDb');
 const {
   createUser, createAdminUser, createBrief, createQuizQuestions,
   createGameType, createSettings, authCookie, createTrainingBooBriefs, createWonBooResult,
+  createPassedQuizAttempt, createQuizResult, createAircoinLog,
 } = require('../helpers/factories');
 const IntelligenceBrief               = require('../../models/IntelligenceBrief');
 const IntelligenceBriefRead           = require('../../models/IntelligenceBriefRead');
 const GameQuizQuestion                = require('../../models/GameQuizQuestion');
+const GameSessionQuizAttempt          = require('../../models/GameSessionQuizAttempt');
+const GameSessionQuizResult           = require('../../models/GameSessionQuizResult');
 const GameOrderOfBattle               = require('../../models/GameOrderOfBattle');
 const GameSessionOrderOfBattleResult  = require('../../models/GameSessionOrderOfBattleResult');
+const AircoinLog                      = require('../../models/AircoinLog');
+const User                            = require('../../models/User');
 const Media                           = require('../../models/Media');
 const mongoose                        = require('mongoose');
 
@@ -410,6 +415,79 @@ describe('POST /api/admin/briefs/:id/questions', () => {
       .send({ easyQuestions: makeQuestions(1), mediumQuestions: [] });
 
     expect(res.status).toBe(404);
+  });
+
+  it('cascade-deletes prior quiz sessions and reverses quiz coins, leaving brief-read coins intact', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser({ totalAircoins: 100, cycleAircoins: 100 });
+    const brief = await createBrief({ category: 'News' });
+    const GameType = require('../../models/GameType');
+    const gameType = await GameType.findOne({ gameTitle: 'quiz' });
+
+    // Seed prior quiz state: questions, an attempt, per-question results, and coin logs
+    const oldQs = await createQuizQuestions(brief._id, gameType._id, 3, 'easy');
+    await createPassedQuizAttempt(user._id, brief._id);
+    for (const q of oldQs) {
+      await createQuizResult(user._id, q._id);
+    }
+    await createAircoinLog(user._id, brief._id, { amount: 30, reason: 'quiz', label: 'Quiz won' });
+    await createAircoinLog(user._id, brief._id, { amount: 10, reason: 'brief_read', label: 'Read brief' });
+
+    // Unrelated brief's data must be untouched
+    const otherBrief = await createBrief({ category: 'News', title: 'Other' });
+    const otherQs    = await createQuizQuestions(otherBrief._id, gameType._id, 2, 'easy');
+    await createPassedQuizAttempt(user._id, otherBrief._id);
+    await createQuizResult(user._id, otherQs[0]._id);
+    await createAircoinLog(user._id, otherBrief._id, { amount: 20, reason: 'quiz', label: 'Quiz won' });
+
+    // Regenerate questions
+    const res = await request(app)
+      .post(`/api/admin/briefs/${brief._id}/questions`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ easyQuestions: makeQuestions(4), mediumQuestions: makeQuestions(4) });
+
+    expect(res.status).toBe(200);
+
+    // Old quiz sessions for this brief are gone
+    const oldQIds = oldQs.map(q => q._id);
+    expect(await GameSessionQuizAttempt.countDocuments({ intelBriefId: brief._id })).toBe(0);
+    expect(await GameSessionQuizResult.countDocuments({ questionId: { $in: oldQIds } })).toBe(0);
+
+    // Quiz coins for this brief are reversed; brief-read coins remain
+    expect(await AircoinLog.countDocuments({ briefId: brief._id, reason: 'quiz' })).toBe(0);
+    expect(await AircoinLog.countDocuments({ briefId: brief._id, reason: 'brief_read' })).toBe(1);
+
+    // User balance: 100 - 30 (quiz reversed) = 70; brief_read coins were never in the balance seed
+    const refreshed = await User.findById(user._id).select('totalAircoins cycleAircoins');
+    expect(refreshed.totalAircoins).toBe(70);
+    expect(refreshed.cycleAircoins).toBe(70);
+
+    // Unrelated brief untouched
+    expect(await GameSessionQuizAttempt.countDocuments({ intelBriefId: otherBrief._id })).toBe(1);
+    expect(await GameSessionQuizResult.countDocuments({ questionId: otherQs[0]._id })).toBe(1);
+    expect(await AircoinLog.countDocuments({ briefId: otherBrief._id, reason: 'quiz' })).toBe(1);
+    expect(await GameQuizQuestion.countDocuments({ intelBriefId: otherBrief._id })).toBe(2);
+  });
+
+  it('floors user balance at 0 when reversed quiz coins exceed current balance', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser({ totalAircoins: 10, cycleAircoins: 10 });
+    const brief = await createBrief({ category: 'News' });
+    const GameType = require('../../models/GameType');
+    const gameType = await GameType.findOne({ gameTitle: 'quiz' });
+
+    await createQuizQuestions(brief._id, gameType._id, 1, 'easy');
+    await createAircoinLog(user._id, brief._id, { amount: 50, reason: 'quiz', label: 'Quiz won' });
+
+    const res = await request(app)
+      .post(`/api/admin/briefs/${brief._id}/questions`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ easyQuestions: makeQuestions(2), mediumQuestions: [] });
+
+    expect(res.status).toBe(200);
+    const refreshed = await User.findById(user._id).select('totalAircoins cycleAircoins');
+    expect(refreshed.totalAircoins).toBe(0);
+    expect(refreshed.cycleAircoins).toBe(0);
   });
 
   it('works without a GameType (returns 500 with helpful message)', async () => {
