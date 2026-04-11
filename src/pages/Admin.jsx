@@ -3732,13 +3732,15 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
         })
       }
 
-      // Add any selected pending images
+      // Add any selected pending images (reuse existing Media doc by mediaId)
       const selected = pendingImages.filter(img => img.selected)
       for (const img of selected) {
         await apiFetch(`${API}/api/admin/briefs/${id}/media`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId, name: img.wikiPage || img.term }),
+          body: JSON.stringify(img.mediaId
+            ? { mediaId: img.mediaId }
+            : { mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId, name: img.wikiPage || img.term }),
         })
       }
 
@@ -4125,7 +4127,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       await apiFetch(`${API}/api/admin/briefs/${briefId}/media`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId, name: img.wikiPage || img.term }),
+        body: JSON.stringify(img.mediaId
+          ? { mediaId: img.mediaId }
+          : { mediaType: 'picture', mediaUrl: img.url, cloudinaryPublicId: img.publicId, name: img.wikiPage || img.term }),
       })
     }
     // Reload media

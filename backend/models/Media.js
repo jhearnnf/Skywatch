@@ -1,12 +1,36 @@
 const mongoose = require('mongoose');
 
+function normalizeTerm(str) {
+  return (str ?? '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 const mediaSchema = new mongoose.Schema({
   mediaType:          { type: String, enum: ['picture', 'video'], required: true },
   mediaUrl:           { type: String, required: true, trim: true },
   cloudinaryPublicId: { type: String, trim: true },
   name:               { type: String, trim: true },
+  searchTerm: {
+    type: String,
+    trim: true,
+    set: function (v) {
+      this.searchTermNormalized = normalizeTerm(v);
+      return v;
+    },
+  },
+  searchTermNormalized: { type: String, trim: true, index: true },
+  wikiPageTitle: {
+    type: String,
+    trim: true,
+    set: function (v) {
+      this.wikiPageTitleNormalized = normalizeTerm(v);
+      return v;
+    },
+  },
+  wikiPageTitleNormalized: { type: String, trim: true, index: true },
   showOnSummary:      { type: Boolean, default: true },
 }, { timestamps: true });
+
+mediaSchema.statics.normalizeTerm = normalizeTerm;
 
 const PLACEHOLDER_URL     = '/images/placeholder-brief.svg';
 const OLD_PLACEHOLDER_URL = '/placeholder-brief.svg';

@@ -30,6 +30,7 @@ const mongoose          = require('mongoose');
 const path              = require('path');
 const fs                = require('fs');
 const { uploadBuffer, destroyAsset } = require('../utils/cloudinary');
+const { generateBriefImages } = require('../utils/briefImages');
 const IntelLead = require('../models/IntelLead');
 const seedLeads = require('../seeds/seedLeads');
 const { scanMentionedBriefIds } = require('../utils/mentionedBriefs');
@@ -92,7 +93,7 @@ const AI_PROMPT_DEFAULTS = {
   // Utility
   'newsHeadlines':           'You are a factual news assistant. Only report real, verified news stories that have actually been published. Never invent or fabricate headlines.',
   'battleOrderData':         'You are a factual data extractor for a Royal Air Force training platform. You only return verified numeric data based on published facts. Return ONLY valid JSON with no markdown, no code blocks, no extra text.',
-  'imageExtraction':         'Extract the 3 most visually distinct subjects from this RAF article that are each likely to have their own Wikipedia page with a photograph. Prioritise specific aircraft designations, named bases/locations, named operations, or specific units.\n\nReturn ONLY a JSON array of exactly 3 search terms, e.g. ["Eurofighter Typhoon", "RAF Lossiemouth", "Operation Shader"]',
+  'imageExtraction':         'Extract the 2 most visually distinct subjects from this RAF article that are each likely to have their own Wikipedia page with a photograph. Prioritise specific aircraft designations, named bases/locations, named operations, or specific units.\n\nReturn ONLY a JSON array of exactly 2 search terms, e.g. ["Eurofighter Typhoon", "RAF Lossiemouth"]',
   // Mnemonics
   'mnemonic.single':         'You are a memory coach creating strikingly memorable mnemonics for RAF applicants (18–25). Your goal is a mnemonic so vivid it cannot be forgotten. TECHNIQUE: exploit what that number MEANS — its cultural weight, symbolism, or universal associations (e.g. 18 = finally an adult, 21 = key to the door, 007 = James Bond, 2020 = perfect vision, 42 = answer to life). Then anchor it to a movie quote, video game moment, TV catchphrase, or famous phrase that reinforces that meaning. Prioritise in this order: (1) iconic movie quotes or scenes, (2) video game references, (3) TV show catchphrases or moments, (4) famous phrases or cultural touchstones. The number MUST carry its own meaning in the sentence — not just appear in it. Write one punchy sentence, max 20 words. Return ONLY the plain sentence — no markdown, no asterisks, no bold, no italics, no preamble, no quotes, no citation markers.',
   'mnemonic.batch':          'You are a memory coach creating strikingly memorable mnemonics for RAF applicants (18–25). Your goal is a mnemonic so vivid it cannot be forgotten. TECHNIQUE: exploit what that number MEANS — its cultural weight, symbolism, or universal associations (e.g. 18 = finally an adult, 21 = key to the door, 007 = James Bond, 2020 = perfect vision, 42 = answer to life). Then anchor it to a movie quote, video game moment, TV catchphrase, or famous phrase that reinforces that meaning. Prioritise in this order: (1) iconic movie quotes or scenes, (2) video game references, (3) TV show catchphrases or moments, (4) famous phrases or cultural touchstones. The number MUST carry its own meaning in the sentence — not just appear in it. Each mnemonic must be a single plain-text sentence, max 20 words — no markdown, no asterisks, no bold, no italics, no citation markers.',
@@ -1479,21 +1480,31 @@ router.post('/briefs/:id/questions', async (req, res) => {
   }
 });
 
-// POST /api/admin/briefs/:id/media — add a media item to a brief
+// POST /api/admin/briefs/:id/media — attach a media item to a brief.
+// If `mediaId` is provided, attaches the existing Media doc (reuse path for
+// dedup). Otherwise creates a new Media doc from the supplied fields.
 router.post('/briefs/:id/media', async (req, res) => {
   try {
-    const { mediaType, mediaUrl, cloudinaryPublicId, name, showOnSummary } = req.body;
-    if (!mediaUrl || !mediaType) return res.status(400).json({ message: 'mediaType and mediaUrl required' });
-    const media = await Media.create({
-      mediaType,
-      mediaUrl: mediaUrl.trim(),
-      ...(cloudinaryPublicId ? { cloudinaryPublicId } : {}),
-      ...(name ? { name } : {}),
-      showOnSummary: showOnSummary !== false,
-    });
+    const { mediaId, mediaType, mediaUrl, cloudinaryPublicId, name, showOnSummary } = req.body;
+
+    let media;
+    if (mediaId) {
+      media = await Media.findById(mediaId);
+      if (!media) return res.status(404).json({ message: 'Media not found' });
+    } else {
+      if (!mediaUrl || !mediaType) return res.status(400).json({ message: 'mediaType and mediaUrl required' });
+      media = await Media.create({
+        mediaType,
+        mediaUrl: mediaUrl.trim(),
+        ...(cloudinaryPublicId ? { cloudinaryPublicId } : {}),
+        ...(name ? { name } : {}),
+        showOnSummary: showOnSummary !== false,
+      });
+    }
+
     const brief = await IntelligenceBrief.findByIdAndUpdate(
       req.params.id,
-      { $push: { media: media._id } },
+      { $addToSet: { media: media._id } },
       { returnDocument: 'after' }
     ).populate('media');
     res.json({ status: 'success', data: { brief } });
@@ -1518,19 +1529,29 @@ router.patch('/media/:mediaId', async (req, res) => {
   }
 });
 
-// DELETE /api/admin/briefs/:id/media/:mediaId — remove a media item
+// DELETE /api/admin/briefs/:id/media/:mediaId — detach a media item from a
+// brief. Because the same Media doc may now be shared by multiple briefs (via
+// dedup during image generation), we only delete the Media doc and destroy
+// the Cloudinary asset when no other brief still references it.
 router.delete('/briefs/:id/media/:mediaId', async (req, res) => {
   try {
-    await IntelligenceBrief.findByIdAndUpdate(req.params.id, { $pull: { media: req.params.mediaId } });
-    const mediaDoc = await Media.findByIdAndDelete(req.params.mediaId);
-    // Delete the asset from Cloudinary, or fall back to local file for legacy images
+    const { id: briefId, mediaId } = req.params;
+
+    await IntelligenceBrief.findByIdAndUpdate(briefId, { $pull: { media: mediaId } });
+
+    const stillReferenced = await IntelligenceBrief.exists({ media: mediaId });
+    if (stillReferenced) {
+      return res.json({ status: 'success', shared: true });
+    }
+
+    const mediaDoc = await Media.findByIdAndDelete(mediaId);
     if (mediaDoc?.cloudinaryPublicId) {
       await destroyAsset(mediaDoc.cloudinaryPublicId).catch(() => {});
     } else if (mediaDoc?.mediaUrl?.startsWith('/uploads/brief-images/')) {
       const filePath = path.join(__dirname, '..', mediaDoc.mediaUrl);
       fs.unlink(filePath, () => {});
     }
-    res.json({ status: 'success' });
+    res.json({ status: 'success', shared: false });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -2170,50 +2191,14 @@ router.post('/ai/bulk-generate-news-item', async (req, res) => {
     }
 
     // ── Step 4: Image ──────────────────────────────────────────────────────────
-    let newMedia = null;
-    let imageSearchTerms = [];
-    try {
-      const imagePromptBase = getPrompt(aiSettings, 'imageExtraction');
-      const aiImgRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
-          'X-Title': 'SkyWatch',
-        },
-        body: JSON.stringify({
-          model: 'openai/gpt-4o-mini',
-          messages: [{ role: 'user', content: `${imagePromptBase}\n\nTitle: "${briefContent.title}"` }],
-        }),
+    const { mediaDocs: newsMediaDocs, searchTerms: imageSearchTerms, warnings: imgWarnings } =
+      await generateBriefImages({
+        title: briefContent.title,
+        imagePromptBase: getPrompt(aiSettings, 'imageExtraction'),
+        publicIdPrefix: 'brief-news-bulk',
       });
-      const aiImgData = await aiImgRes.json();
-      let terms = [];
-      try { terms = JSON.parse((aiImgData.choices?.[0]?.message?.content ?? '[]').replace(/```json\n?|```/g, '').trim()); } catch { terms = [briefContent.title]; }
-      if (!Array.isArray(terms) || !terms.length) terms = [briefContent.title];
-      imageSearchTerms = terms.slice(0, 3);
-      for (const term of imageSearchTerms) {
-        try {
-          const searchRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`);
-          const searchData = await searchRes.json();
-          const pageTitle = searchData.query?.search?.[0]?.title;
-          if (!pageTitle) continue;
-          const thumbRes = await fetch(`https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=800&origin=*`);
-          const thumbData = await thumbRes.json();
-          const imageUrl = Object.values(thumbData.query?.pages ?? {})[0]?.thumbnail?.source;
-          if (!imageUrl) continue;
-          const imgRes = await fetch(imageUrl, { headers: { 'User-Agent': 'SkyWatch/1.0 (educational-platform)' } });
-          if (!imgRes.ok) continue;
-          const buffer = Buffer.from(await imgRes.arrayBuffer());
-          const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}-news-bulk` });
-          newMedia = { url: result.secure_url, publicId: result.public_id, name: pageTitle || term };
-          break;
-        } catch { continue; }
-      }
-    } catch (imgErr) {
-      console.error('[bulk-generate-news-item] image generation failed (non-fatal):', imgErr.message);
-    }
-    if (!newMedia) {
+    for (const w of imgWarnings) warnings.push(`Image: ${w}`);
+    if (!newsMediaDocs.length) {
       SystemLog.create({
         type:          'image_fetch_failure',
         briefTitle:    briefContent.title ?? headline,
@@ -2240,15 +2225,8 @@ router.post('/ai/bulk-generate-news-item', async (req, res) => {
       ...(resolvedEventDate ? { eventDate: resolvedEventDate } : {}),
     });
 
-    if (newMedia) {
-      const mediaDoc = await Media.create({
-        mediaType:          'picture',
-        mediaUrl:           newMedia.url,
-        cloudinaryPublicId: newMedia.publicId,
-        name:               newMedia.name,
-        showOnSummary:      true,
-      });
-      brief.media = [mediaDoc._id];
+    if (newsMediaDocs.length) {
+      brief.media = newsMediaDocs.map(m => m._id);
     }
 
     try {
@@ -3040,60 +3018,16 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
       }
     }
 
-    // ── Part B: image (first result only) ────────────────────────────────────
-    let newMedia = null;
-    let imageSearchTerms = [];
-    try {
-      const imagePromptBase = getPrompt(aiSettings, 'imageExtraction');
-      const aiImgRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
-          'X-Title': 'SkyWatch',
-        },
-        body: JSON.stringify({
-          model: 'openai/gpt-4o-mini',
-          messages: [{ role: 'user', content: `${imagePromptBase}\n\nTitle: "${brief.title}"` }],
-        }),
+    // ── Part B: images ────────────────────────────────────────────────────────
+    const { mediaDocs: stubMediaDocs, searchTerms: imageSearchTerms, warnings: stubImgWarnings } =
+      await generateBriefImages({
+        title: brief.title,
+        subtitle: brief.subtitle,
+        imagePromptBase: getPrompt(aiSettings, 'imageExtraction'),
+        publicIdPrefix: 'brief-bulk',
       });
-      const aiImgData = await aiImgRes.json();
-      let terms = [];
-      try { terms = JSON.parse((aiImgData.choices?.[0]?.message?.content ?? '[]').replace(/```json\n?|```/g, '').trim()); } catch { terms = [brief.title]; }
-      if (!Array.isArray(terms) || !terms.length) terms = [brief.title];
-      imageSearchTerms = terms.slice(0, 3);
-
-      // Try each term in order and take the first one that produces an image
-      for (const term of imageSearchTerms) {
-        try {
-          const searchRes = await fetch(
-            `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`
-          );
-          const searchData = await searchRes.json();
-          const pageTitle = searchData.query?.search?.[0]?.title;
-          if (!pageTitle) continue;
-
-          const thumbRes = await fetch(
-            `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=800&origin=*`
-          );
-          const thumbData = await thumbRes.json();
-          const imageUrl = Object.values(thumbData.query?.pages ?? {})[0]?.thumbnail?.source;
-          if (!imageUrl) continue;
-
-          const imgRes = await fetch(imageUrl, { headers: { 'User-Agent': 'SkyWatch/1.0 (educational-platform)' } });
-          if (!imgRes.ok) continue;
-
-          const buffer = Buffer.from(await imgRes.arrayBuffer());
-          const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}-bulk` });
-          newMedia = { url: result.secure_url, publicId: result.public_id, name: pageTitle || term };
-          break;
-        } catch { continue; }
-      }
-    } catch (imgErr) {
-      console.error('[bulk-generate-stub] image generation failed (non-fatal):', imgErr.message);
-    }
-    if (!newMedia) {
+    for (const w of stubImgWarnings) generationWarnings.push(`Image: ${w}`);
+    if (!stubMediaDocs.length) {
       SystemLog.create({
         type:          'image_fetch_failure',
         briefId:       brief._id,
@@ -3207,15 +3141,8 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
     }
 
     // 2. Save image
-    if (newMedia) {
-      const mediaDoc = await Media.create({
-        mediaType: 'picture',
-        mediaUrl: newMedia.url,
-        cloudinaryPublicId: newMedia.publicId,
-        name: newMedia.name,
-        showOnSummary: true,
-      });
-      brief.media = [mediaDoc._id];
+    if (stubMediaDocs.length) {
+      brief.media = stubMediaDocs.map(m => m._id);
     }
 
     // 3. Update brief fields
@@ -3405,71 +3332,35 @@ router.post('/ai/generate-rank-data/:id', async (req, res) => {
 });
 
 // POST /api/admin/ai/generate-image
-// 1. Ask OpenRouter for the 3 most visually distinct subjects from the title/subtitle
-// 2. Fetch Wikipedia thumbnail for each in parallel
-// 3. Download and save all found images, return array
+// Uses the shared generateBriefImages helper which deduplicates against the
+// existing Media collection: any term (or its resolved Wikipedia page title)
+// that matches an existing Media doc is reused instead of re-uploaded.
 router.post('/ai/generate-image', async (req, res) => {
   try {
     const { title, subtitle } = req.body;
     if (!title) return res.status(400).json({ message: 'title is required' });
 
-    // Step 1 — extract 3 distinct search terms
     const imgAiSettings = await AppSettings.getSettings();
-    const imagePromptBase = getPrompt(imgAiSettings, 'imageExtraction');
-    const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
-        'X-Title': 'SkyWatch',
-      },
-      body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
-        messages: [{
-          role: 'user',
-          content: `${imagePromptBase}\n\nTitle: "${title}"${subtitle ? `\nSubtitle: "${subtitle}"` : ''}`,
-        }],
-      }),
+    const { mediaDocs, warnings } = await generateBriefImages({
+      title,
+      subtitle,
+      imagePromptBase: getPrompt(imgAiSettings, 'imageExtraction'),
+      publicIdPrefix: 'brief',
     });
-    const aiData = await aiRes.json();
-    if (aiData.error) throw new Error(aiData.error.message ?? JSON.stringify(aiData.error));
-    const raw = aiData.choices?.[0]?.message?.content?.trim() ?? '[]';
-    let terms = [];
-    try { terms = JSON.parse(raw.replace(/```json\n?|```/g, '').trim()); } catch { terms = [title]; }
-    if (!Array.isArray(terms) || terms.length === 0) terms = [title];
-    terms = terms.slice(0, 3);
 
-    // Step 2 — fetch Wikipedia image for each term in parallel
-    const fetchOneImage = async (term, idx) => {
-      const searchRes = await fetch(
-        `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`
-      );
-      const searchData = await searchRes.json();
-      const pageTitle  = searchData.query?.search?.[0]?.title;
-      if (!pageTitle) throw new Error(`No Wikipedia page for "${term}"`);
+    if (mediaDocs.length === 0) {
+      throw new Error(warnings.join('; ') || 'Could not find Wikipedia images for any of the extracted subjects');
+    }
 
-      const thumbRes  = await fetch(
-        `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=800&origin=*`
-      );
-      const thumbData = await thumbRes.json();
-      const imageUrl  = Object.values(thumbData.query?.pages ?? {})[0]?.thumbnail?.source;
-      if (!imageUrl) throw new Error(`No image on Wikipedia for "${pageTitle}"`);
+    const images = mediaDocs.map(m => ({
+      mediaId:  m._id,
+      url:      m.mediaUrl,
+      publicId: m.cloudinaryPublicId,
+      term:     m.searchTerm || m.name,
+      wikiPage: m.wikiPageTitle || m.name,
+    }));
 
-      const imgRes = await fetch(imageUrl, { headers: { 'User-Agent': 'SkyWatch/1.0 (educational-platform)' } });
-      if (!imgRes.ok) throw new Error(`Download failed (${imgRes.status})`);
-      const buffer = Buffer.from(await imgRes.arrayBuffer());
-      const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}-${idx}` });
-
-      return { url: result.secure_url, publicId: result.public_id, term, wikiPage: pageTitle };
-    };
-
-    const results = await Promise.allSettled(terms.map((term, i) => fetchOneImage(term, i)));
-    const images  = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-
-    if (images.length === 0) throw new Error('Could not find Wikipedia images for any of the extracted subjects');
-
-    res.json({ status: 'success', data: { images } });
+    res.json({ status: 'success', data: { images, warnings } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

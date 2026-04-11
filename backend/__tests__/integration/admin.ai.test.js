@@ -569,6 +569,99 @@ describe('POST /api/admin/ai/generate-image', () => {
       .send({ title: 'Typhoon' });
     expect(res.status).toBe(401);
   });
+
+  it('reuses an existing Media doc when the AI search term matches a previous one', async () => {
+    const Media = require('../../models/Media');
+    const { uploadBuffer } = require('../../utils/cloudinary');
+    uploadBuffer.mockClear();
+
+    // Seed: a Media doc that was previously generated for "Eurofighter Typhoon"
+    const existing = await Media.create({
+      mediaType: 'picture',
+      mediaUrl: 'https://res.cloudinary.com/test/image/upload/existing.jpg',
+      cloudinaryPublicId: 'brief-images/existing',
+      name: 'Eurofighter Typhoon',
+      searchTerm: 'Eurofighter Typhoon',
+      wikiPageTitle: 'Eurofighter Typhoon',
+    });
+
+    const mockFetch = jest.spyOn(global, 'fetch');
+    // Only the OpenRouter call should happen — Wikipedia + download must NOT
+    // fire because the DB lookup short-circuits on the normalized search term.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        choices: [{ message: { content: '["eurofighter typhoon"]' } }],
+      }),
+    });
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-image')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'RAF Typhoon' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.images).toHaveLength(1);
+    expect(String(res.body.data.images[0].mediaId)).toBe(String(existing._id));
+    expect(res.body.data.images[0].url).toBe(existing.mediaUrl);
+
+    // No new Cloudinary upload and no extra Media doc should have been created
+    expect(uploadBuffer).not.toHaveBeenCalled();
+    const mediaCount = await Media.countDocuments({});
+    expect(mediaCount).toBe(1);
+
+    // Only the OpenRouter call — Wikipedia fetches were skipped entirely
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses an existing Media doc when the resolved Wikipedia page matches a previous one', async () => {
+    const Media = require('../../models/Media');
+    const { uploadBuffer } = require('../../utils/cloudinary');
+    uploadBuffer.mockClear();
+
+    // Seed: previously saved under the canonical wiki page title only. A new
+    // request whose AI term is different but resolves to the same page should
+    // still reuse this record.
+    const existing = await Media.create({
+      mediaType: 'picture',
+      mediaUrl: 'https://res.cloudinary.com/test/image/upload/existing.jpg',
+      cloudinaryPublicId: 'brief-images/existing',
+      name: 'Eurofighter Typhoon',
+      searchTerm: 'some earlier term',
+      wikiPageTitle: 'Eurofighter Typhoon',
+    });
+
+    const mockFetch = jest.spyOn(global, 'fetch');
+    // 1. OpenRouter → returns a different-wording search term
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        choices: [{ message: { content: '["RAF Typhoon fighter"]' } }],
+      }),
+    });
+    // 2. Wikipedia search → resolves to the canonical page
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        query: { search: [{ title: 'Eurofighter Typhoon' }] },
+      }),
+    });
+    // (No thumbnail or download calls — helper should short-circuit after
+    // the DB lookup on the resolved page title)
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-image')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Typhoon' });
+
+    expect(res.status).toBe(200);
+    expect(String(res.body.data.images[0].mediaId)).toBe(String(existing._id));
+    expect(uploadBuffer).not.toHaveBeenCalled();
+    const mediaCount = await Media.countDocuments({});
+    expect(mediaCount).toBe(1);
+  });
 });
 
 // ── POST /api/admin/ai/regenerate-brief/:id ────────────────────────────────────
