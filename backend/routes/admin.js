@@ -963,46 +963,23 @@ router.get('/briefs', async (req, res) => {
     const sortStage =
       sort === 'newest' ? { updatedAt: -1 }
       : sort === 'oldest' ? { updatedAt:  1 }
-      : { _sortOrder: 1, dateAdded: -1 };
-
-    // Pre-compute which brief IDs have at least one media doc with a real cloudinaryPublicId.
-    // This avoids relying on $lookup + field-existence checks inside the aggregation pipeline,
-    // which behave inconsistently when the field is absent vs null.
-    const validMediaIds = await Media.find({
-      cloudinaryPublicId: { $exists: true, $ne: '' },
-    }).distinct('_id');
-
-    const briefIdsWithMedia = validMediaIds.length
-      ? await IntelligenceBrief.find({ media: { $in: validMediaIds } }).distinct('_id')
-      : [];
-
-    const settings = await AppSettings.getSettings();
-    const minQuestions = settings.aiQuestionsPerDifficulty;
-    const minKeywords  = settings.aiKeywordsPerBrief;
+      : { _effectivePublishedAt: -1, _id: -1 };
 
     const [briefs, total] = await Promise.all([
       IntelligenceBrief.aggregate([
         { $match: filter },
         { $lookup: { from: Media.collection.name, localField: 'media', foreignField: '_id', as: 'media' } },
         { $addFields: {
-          // 1 badge=1 (first), 2 badges=2, 3 badges=3, 0 badges=4 (last)
-          _sortOrder: {
-            $let: {
-              vars: {
-                hasK: { $cond: [{ $gte: [{ $size: { $ifNull: ['$keywords', []] } }, minKeywords] }, 1, 0] },
-                hasQ: { $cond: [{ $and: [
-                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsEasy', []] } }, minQuestions] },
-                  { $gte: [{ $size: { $ifNull: ['$quizQuestionsMedium', []] } }, minQuestions] },
-                ]}, 1, 0] },
-                hasM: { $cond: [{ $in: ['$_id', briefIdsWithMedia] }, 1, 0] },
-              },
-              in: {
-                $let: {
-                  vars: { bc: { $add: ['$$hasK', '$$hasQ', '$$hasM'] } },
-                  in: { $cond: [{ $eq: ['$$bc', 0] }, 4, '$$bc'] },
-                },
-              },
-            },
+          // Default sort uses publishedAt desc, so briefs appear in the order
+          // they were marked published. Stubs have no publishedAt and fall to
+          // the bottom (null sorts last in desc order). For published briefs
+          // predating this field, fall back to updatedAt so they still sort.
+          _effectivePublishedAt: {
+            $cond: [
+              { $eq: ['$status', 'published'] },
+              { $ifNull: ['$publishedAt', '$updatedAt'] },
+              null,
+            ],
           },
         }},
         { $sort: sortStage },
@@ -1146,6 +1123,7 @@ router.post('/briefs', requireReason, async (req, res) => {
       const upgradedFields = {
         ...fields,
         status: 'published',
+        publishedAt: existing.publishedAt ?? new Date(),
         associatedBaseBriefIds:     mergeIds(existing.associatedBaseBriefIds,     fields.associatedBaseBriefIds),
         associatedSquadronBriefIds: mergeIds(existing.associatedSquadronBriefIds, fields.associatedSquadronBriefIds),
         associatedAircraftBriefIds: mergeIds(existing.associatedAircraftBriefIds, fields.associatedAircraftBriefIds),
@@ -1160,7 +1138,11 @@ router.post('/briefs', requireReason, async (req, res) => {
         { returnDocument: 'after', runValidators: true }
       ).populate('media');
     } else {
-      brief = await IntelligenceBrief.create(fields);
+      const createFields = { ...fields };
+      if ((createFields.status ?? 'published') === 'published' && !createFields.publishedAt) {
+        createFields.publishedAt = new Date();
+      }
+      brief = await IntelligenceBrief.create(createFields);
     }
     // If the saved brief is historic, push its _id into relatedHistoric on all linked target briefs
     if (brief.historic) {
@@ -1201,6 +1183,10 @@ router.post('/briefs', requireReason, async (req, res) => {
 router.patch('/briefs/:id', requireReason, async (req, res) => {
   try {
     const { reason, ...fields } = req.body;
+    if (fields.status === 'published') {
+      const existing = await IntelligenceBrief.findById(req.params.id).select('publishedAt').lean();
+      if (existing && !existing.publishedAt) fields.publishedAt = new Date();
+    }
     const brief = await IntelligenceBrief.findByIdAndUpdate(req.params.id, fields, { returnDocument: 'after', runValidators: true }).populate('media');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
@@ -2358,6 +2344,7 @@ router.post('/ai/bulk-generate-news-item', async (req, res) => {
       sources:             briefContent.sources ?? [],
       keywords,
       status:              'published',
+      publishedAt:         new Date(),
       historic:            isHistoric,
       ...(resolvedEventDate ? { eventDate: resolvedEventDate } : {}),
     });
@@ -3288,6 +3275,7 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
     if (subtitle) brief.subtitle = subtitle;
     if (enrichedSources.length) brief.sources = enrichedSources;
     brief.status = 'published';
+    if (!brief.publishedAt) brief.publishedAt = new Date();
     if (gameData) brief.gameData = gameData;
     if (mnemonics) brief.mnemonics = mnemonics;
     for (const [field, ids] of Object.entries(linkUpdates)) {

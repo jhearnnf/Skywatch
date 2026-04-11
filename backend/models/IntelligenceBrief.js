@@ -220,6 +220,10 @@ const intelligenceBriefSchema = new mongoose.Schema(
     // 'stub' = title/category only, no content yet. 'published' = full brief.
     status: { type: String, enum: ['stub', 'published'], default: 'published' },
 
+    // Set the first time a brief transitions to status='published'. Used to
+    // sort the admin brief list so newly-published briefs appear first.
+    publishedAt: { type: Date, default: null },
+
     // 10 questions per difficulty — references to GameQuizQuestion
     quizQuestionsEasy: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'GameQuizQuestion' }],
@@ -233,6 +237,7 @@ const intelligenceBriefSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+intelligenceBriefSchema.index({ publishedAt: -1 });
 intelligenceBriefSchema.index({ category: 1, subcategory: 1, dateAdded: -1 });
 intelligenceBriefSchema.index({ historic: 1 });
 intelligenceBriefSchema.index({ title: 'text', nickname: 'text', subtitle: 'text' });

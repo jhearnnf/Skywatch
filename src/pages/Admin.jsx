@@ -3459,7 +3459,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [page,          setPage]          = useState(1)
   const [search,        setSearch]        = useState('')
   const [category,      setCategory]      = useState('')
-  const [sort,          setSort]          = useState('newest')
+  const [sort,          setSort]          = useState('default')
   const [hideStubs,     setHideStubs]     = useState(true)
   const [toast,         setToast]         = useState('')
   const [showLeads,     setShowLeads]     = useState(false)
@@ -4265,7 +4265,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
             onChange={e => { setSort(e.target.value); setPage(1) }}
             className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 bg-surface text-text"
           >
-            <option value="default">Sort: Default</option>
+            <option value="default">Sort: Published (newest)</option>
             <option value="newest">Sort: Recently modified</option>
             <option value="oldest">Sort: Oldest modified</option>
           </select>
