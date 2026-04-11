@@ -7,7 +7,6 @@ import TutorialModal from '../components/tutorial/TutorialModal'
 import { MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
 import { pathwayTierRequired, getAccessibleCategories } from '../utils/subscription'
 import { getLevelInfo } from '../utils/levelUtils'
-import { playTypingSound } from '../utils/sound'
 import SEO from '../components/SEO'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -92,7 +91,6 @@ function SyncHoverCard() {
       if (cancelled) return
       if (i < CARD_LINE1.length) {
         setLine1(CARD_LINE1.slice(0, i + 1))
-        playTypingSound()
         i++
         setTimeout(typeL1, 12)
       } else {
@@ -102,7 +100,6 @@ function SyncHoverCard() {
             if (cancelled) return
             if (j < CARD_LINE2.length) {
               setLine2(CARD_LINE2.slice(0, j + 1))
-              playTypingSound()
               j++
               setTimeout(typeL2, 16)
             }
