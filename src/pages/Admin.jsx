@@ -3768,6 +3768,18 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         const br = reloadData.data.brief
         setMedia(br.media ?? [])
         setPendingImages([])
+        setDraft(p => ({
+          ...p,
+          keywords: (br.keywords ?? []).map(k => {
+            const linked = k.linkedBriefId
+            const linkedId = linked?._id ?? linked ?? null
+            return {
+              ...k,
+              linkedBriefId: linkedId ? String(linkedId) : null,
+              linkedBriefTitle: linked?.title ?? null,
+            }
+          }),
+        }))
       }
 
       // Mark lead complete if applicable

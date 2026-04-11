@@ -2634,13 +2634,24 @@ router.post('/ai/generate-keywords', async (req, res) => {
     }
 
     // Auto-link keywords using the full 3-stage pipeline (word index → AI disambiguation → stub seeding)
-    const keywords = await autoLinkKeywords(
+    const linked = await autoLinkKeywords(
       [...combined12, ...pass3],
       [description],
       openRouterChat,
       briefId || null,
       title || null,
     );
+
+    // Attach linkedBriefTitle so the admin UI can show it on hover without a reload
+    const linkedIds = [...new Set(linked.map(k => k.linkedBriefId).filter(Boolean).map(String))];
+    const titleMap = new Map();
+    if (linkedIds.length) {
+      const docs = await IntelligenceBrief.find({ _id: { $in: linkedIds } }).select('title').lean();
+      docs.forEach(d => titleMap.set(String(d._id), d.title));
+    }
+    const keywords = linked.map(k => k.linkedBriefId
+      ? { ...k, linkedBriefTitle: titleMap.get(String(k.linkedBriefId)) ?? null }
+      : k);
 
     res.json({ status: 'success', data: { keywords } });
   } catch (err) {
