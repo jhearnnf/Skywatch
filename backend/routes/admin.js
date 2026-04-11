@@ -1081,7 +1081,8 @@ router.get('/briefs/:id', async (req, res) => {
     const brief = await IntelligenceBrief.findById(req.params.id)
       .populate('media')
       .populate('quizQuestionsEasy')
-      .populate('quizQuestionsMedium');
+      .populate('quizQuestionsMedium')
+      .populate({ path: 'keywords.linkedBriefId', select: 'title' });
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
     res.json({ status: 'success', data: { brief } });
   } catch (err) {

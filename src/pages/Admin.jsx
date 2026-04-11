@@ -3632,7 +3632,15 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       eventDate:           br.eventDate ? new Date(br.eventDate).toISOString().slice(0, 10) : null,
       priorityNumber:      br.priorityNumber ?? null,
       descriptionSections: br.descriptionSections?.length ? br.descriptionSections : ['','',''],
-      keywords:            br.keywords ?? [],
+      keywords:            (br.keywords ?? []).map(k => {
+        const linked = k.linkedBriefId
+        const linkedId = linked?._id ?? linked ?? null
+        return {
+          ...k,
+          linkedBriefId: linkedId ? String(linkedId) : null,
+          linkedBriefTitle: linked?.title ?? null,
+        }
+      }),
       sources:             br.sources ?? [],
       gameData:            br.gameData ?? {},
       mnemonics:           br.mnemonics ?? {},
@@ -5292,7 +5300,10 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                   <div className="flex items-center gap-1.5">
                     <label className="text-xs font-semibold text-slate-500">Keyword {idx + 1}</label>
                     {kw.linkedBriefId && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-100 text-brand-700 border border-brand-200">→ Brief</span>
+                      <span
+                        title={kw.linkedBriefTitle || 'Linked brief'}
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-100 text-brand-700 border border-brand-200 cursor-help"
+                      >→ Brief</span>
                     )}
                   </div>
                   <button
