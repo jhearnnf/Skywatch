@@ -73,6 +73,131 @@ describe('chromaKeyToAlpha', () => {
     expect(data[centreIdx + 2]).toBeGreaterThan(80);  // blue channel preserved
   });
 
+  it('despills residual background tint from feathered rim pixels', async () => {
+    // Pure-magenta border surrounding an interior strip whose pixels sit in
+    // the feather band (RGB distance ~80 from magenta). Without despill the
+    // strip would stay magenta-tinted and form a pink halo; with despill the
+    // suppressed channel (G) gets lifted toward the dominant channels (R, B)
+    // because the formula recovers the implied subject colour.
+    const width = 20, height = 20;
+    const pixels = Buffer.alloc(width * height * 3);
+    for (let i = 0; i < pixels.length; i += 3) {
+      pixels[i] = 255; pixels[i + 1] = 0; pixels[i + 2] = 255;
+    }
+    for (let y = 9; y <= 10; y++) {
+      for (let x = 5; x <= 14; x++) {
+        const idx = (y * width + x) * 3;
+        pixels[idx] = 255; pixels[idx + 1] = 80; pixels[idx + 2] = 255;
+      }
+    }
+    const input = await sharp(pixels, { raw: { width, height, channels: 3 } }).png().toBuffer();
+    const result = await chromaKeyToAlpha(input);
+    const { data, info } = await decodeRaw(result);
+
+    const idx = (9 * info.width + 9) * 4;
+    const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+
+    // Strip pixel landed in the feather band — partly transparent.
+    expect(a).toBeGreaterThan(0);
+    expect(a).toBeLessThan(255);
+
+    // Despill lifts the suppressed channel well above its raw value of 80.
+    expect(g).toBeGreaterThan(120);
+
+    // Dominant background channels stay at the top of the range — despill
+    // never inflates a channel, only recovers the subject's true value.
+    expect(r).toBeGreaterThan(200);
+    expect(b).toBeGreaterThan(200);
+  });
+
+  it('clamps opaque rim pixels that survive the alpha key', async () => {
+    // The pink-halo case: pixels at distance ~140 from magenta sit *outside*
+    // the feather band so they keep alpha=255, but they still carry a magenta
+    // cast that reads as a pink rim. The despill-only stage clamps the bg's
+    // dominant channels (R, B) down toward the pixel's low channel (G).
+    const width = 20, height = 20;
+    const pixels = Buffer.alloc(width * height * 3);
+    for (let i = 0; i < pixels.length; i += 3) {
+      pixels[i] = 255; pixels[i + 1] = 0; pixels[i + 2] = 255;
+    }
+    for (let y = 9; y <= 10; y++) {
+      for (let x = 5; x <= 14; x++) {
+        const idx = (y * width + x) * 3;
+        pixels[idx] = 255; pixels[idx + 1] = 140; pixels[idx + 2] = 255;
+      }
+    }
+    const input = await sharp(pixels, { raw: { width, height, channels: 3 } }).png().toBuffer();
+    const result = await chromaKeyToAlpha(input);
+    const { data, info } = await decodeRaw(result);
+
+    const idx = (9 * info.width + 9) * 4;
+    const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+
+    // Outside the feather band — alpha is fully opaque.
+    expect(a).toBe(255);
+    // Dominant channels are pulled down toward the floor (G=140) — they
+    // were 255 before, now well below 220.
+    expect(r).toBeLessThan(220);
+    expect(b).toBeLessThan(220);
+    // The floor (G) is preserved.
+    expect(g).toBe(140);
+  });
+
+  it('does not blow up the suppressed channel for feather-band pixels', async () => {
+    // Regression: an earlier version decoupled the despill ramp from the
+    // alpha ramp, which meant feather-band pixels with a moderate cast got
+    // their suppressed channel divided by a tiny number — saturating G to
+    // 255 and turning the entire subject green.
+    const width = 20, height = 20;
+    const pixels = Buffer.alloc(width * height * 3);
+    for (let i = 0; i < pixels.length; i += 3) {
+      pixels[i] = 255; pixels[i + 1] = 0; pixels[i + 2] = 255;
+    }
+    for (let y = 9; y <= 10; y++) {
+      for (let x = 5; x <= 14; x++) {
+        const idx = (y * width + x) * 3;
+        pixels[idx] = 240; pixels[idx + 1] = 100; pixels[idx + 2] = 240;
+      }
+    }
+    const input = await sharp(pixels, { raw: { width, height, channels: 3 } }).png().toBuffer();
+    const result = await chromaKeyToAlpha(input);
+    const { data, info } = await decodeRaw(result);
+
+    const idx = (9 * info.width + 9) * 4;
+    const g = data[idx + 1];
+
+    // Despill should lift G modestly, not saturate it to ~255 (the bug).
+    expect(g).toBeGreaterThan(100);
+    expect(g).toBeLessThan(200);
+  });
+
+  it('leaves a genuinely red subject pixel intact on a magenta background', async () => {
+    // Red Arrows scenario — bright red livery on a magenta-keyed background.
+    // The pixel sits "near" magenta in distance terms but its B channel is
+    // low (matching the bg's low G), so the elevated-channel guard rejects
+    // it and the despill-only stage leaves it alone.
+    const width = 20, height = 20;
+    const pixels = Buffer.alloc(width * height * 3);
+    for (let i = 0; i < pixels.length; i += 3) {
+      pixels[i] = 255; pixels[i + 1] = 0; pixels[i + 2] = 255;
+    }
+    for (let y = 9; y <= 10; y++) {
+      for (let x = 5; x <= 14; x++) {
+        const idx = (y * width + x) * 3;
+        pixels[idx] = 220; pixels[idx + 1] = 40; pixels[idx + 2] = 40;
+      }
+    }
+    const input = await sharp(pixels, { raw: { width, height, channels: 3 } }).png().toBuffer();
+    const result = await chromaKeyToAlpha(input);
+    const { data, info } = await decodeRaw(result);
+
+    const idx = (9 * info.width + 9) * 4;
+    expect(data[idx]).toBeGreaterThan(200);     // R preserved
+    expect(data[idx + 1]).toBeLessThan(60);     // G untouched
+    expect(data[idx + 2]).toBeLessThan(60);     // B untouched (would have been clamped if guard fired)
+    expect(data[idx + 3]).toBe(255);            // fully opaque
+  });
+
   it('letterboxes the cutout to a requested target size with transparent padding', async () => {
     // Square input, wider target → expect the output to match the target
     // dimensions exactly, with transparent bars on the left/right.

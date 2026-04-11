@@ -7,11 +7,25 @@ const MODEL = 'google/gemini-2.5-flash-image';
 // Gemini is *asked* for pure magenta, but it sometimes returns a different
 // uniform colour (grey, off-white, sky blue, etc). Instead of trusting the
 // prompt, we detect whatever colour actually landed on the border and key
-// that out. Tolerance is a Euclidean-RGB distance: pixels inside SOLID_DIST
-// go fully transparent, pixels inside EDGE_DIST get feathered alpha so the
-// anti-aliased rim doesn't leave a hard halo.
-const SOLID_DIST = 55;
-const EDGE_DIST  = 110;
+// that out. Tolerance is a Euclidean-RGB distance:
+//   - pixels within SOLID_DIST go fully transparent
+//   - pixels within EDGE_DIST get feathered alpha + tied-t unpremul despill,
+//     which is mathematically correct for true rim mixes
+//   - pixels within DESPILL_DIST stay fully opaque but get a conditional
+//     channel clamp: the bg's high channels are pulled down toward the
+//     pixel's low channels, but only when the pixel actually "looks" bg-cast
+//     (all of bg's high channels are elevated above its low channels in the
+//     pixel). This kills the residual halo without destroying genuine red
+//     livery, navigation lights, etc., that happen to be distance-near to
+//     the bg colour.
+const SOLID_DIST   = 55;
+const EDGE_DIST    = 110;
+const DESPILL_DIST = 180;
+// A bg channel counts as "high" if it sits at least this far above the
+// lowest bg channel. For magenta (255,0,255) → R and B are high; for green
+// (0,255,0) → G is high; for a neutral grey/white bg → no channel is high
+// and the channel-clamp despill stage is skipped entirely.
+const BG_HIGH_THRESHOLD = 80;
 
 const EXTRACT_PROMPT = [
   'Return ONLY the main aircraft from this image.',
@@ -110,16 +124,65 @@ async function chromaKeyToAlpha(rawBuffer, targetSize = null) {
 
   const { r: br, g: bg, b: bb } = detectBackgroundColor(data, info);
 
+  // Identify which background channels are "high" (the keyed colour's
+  // dominant channels). Only these get pulled down by the channel-clamp
+  // stage, and the stage is skipped entirely for neutral backgrounds.
+  const bgArr  = [br, bg, bb];
+  const bgMin  = Math.min(br, bg, bb);
+  const isHigh = bgArr.map(v => v - bgMin >= BG_HIGH_THRESHOLD);
+  const hasHighChannels = isHigh.some(Boolean);
+
   for (let i = 0; i < data.length; i += 4) {
     const dr = data[i] - br;
     const dg = data[i + 1] - bg;
     const db = data[i + 2] - bb;
     const dist = Math.sqrt(dr * dr + dg * dg + db * db);
+
     if (dist <= SOLID_DIST) {
       data[i + 3] = 0;
-    } else if (dist < EDGE_DIST) {
-      const t = (dist - SOLID_DIST) / (EDGE_DIST - SOLID_DIST);
+      continue;
+    }
+
+    if (dist < EDGE_DIST) {
+      // Feather band: alpha ramp + tied-t unpremul despill. Solving
+      // `pixel = t·subject + (1-t)·bg` for subject is exact for true rim
+      // mixes, and the bounded `inv = 1/t` (max ~18) keeps the recovered
+      // values from blowing up on imperfect inputs.
+      const t   = (dist - SOLID_DIST) / (EDGE_DIST - SOLID_DIST);
+      const inv = 1 / t;
       data[i + 3] = Math.round(data[i + 3] * t);
+      data[i]     = Math.max(0, Math.min(255, (data[i]     - (1 - t) * br) * inv));
+      data[i + 1] = Math.max(0, Math.min(255, (data[i + 1] - (1 - t) * bg) * inv));
+      data[i + 2] = Math.max(0, Math.min(255, (data[i + 2] - (1 - t) * bb) * inv));
+      continue;
+    }
+
+    // Despill-only band: alpha stays 255. Channel-clamp the bg's high
+    // channels toward the pixel's low channels, but only when the pixel's
+    // colour shape matches the bg (every high channel is actually elevated
+    // above the floor). A genuine red pixel on a magenta bg has B≈G≈low,
+    // so the elevated-channel guard fails and the pixel is left alone.
+    if (dist < DESPILL_DIST && hasHighChannels) {
+      let floor = -1;
+      for (let c = 0; c < 3; c++) {
+        if (!isHigh[c] && data[i + c] > floor) floor = data[i + c];
+      }
+      if (floor < 0) continue;
+
+      let allElevated = true;
+      for (let c = 0; c < 3; c++) {
+        if (isHigh[c] && data[i + c] <= floor) { allElevated = false; break; }
+      }
+      if (!allElevated) continue;
+
+      // Tolerance ramps from 0 at EDGE_DIST to BG_HIGH_THRESHOLD at
+      // DESPILL_DIST so the clamp is strongest right next to the rim and
+      // fades to a no-op at the outer edge of the band.
+      const tol     = ((dist - EDGE_DIST) / (DESPILL_DIST - EDGE_DIST)) * BG_HIGH_THRESHOLD;
+      const ceiling = floor + tol;
+      for (let c = 0; c < 3; c++) {
+        if (isHigh[c] && data[i + c] > ceiling) data[i + c] = ceiling;
+      }
     }
   }
 
