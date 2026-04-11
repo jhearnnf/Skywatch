@@ -16,6 +16,7 @@ import { buildImageZones } from '../utils/briefImageZones'
 import RankBadge from '../components/RankBadge'
 import FlashcardDeckNotification from '../components/FlashcardDeckNotification'
 import SEO from '../components/SEO'
+import CategoryHeader from '../components/CategoryHeader'
 import { MOCK_RANKS } from '../data/mockData'
 
 // Render **bold** markdown syntax as <strong> spans
@@ -389,7 +390,29 @@ function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, se
               )}
             </div>
           )
-        })() : (
+        })() : (category === 'Aircrafts' && imageZone.cutoutSrc) ? (
+          // Aircraft briefs with an extracted subject cutout: the original
+          // image is blurred into the background, and the transparent-PNG
+          // cutout sits on top with a subtle sway animation. The grid-reveal
+          // effect still runs on the backdrop layer.
+          <div className="brief-hero-3d">
+            <ImageGridReveal
+              src={imageZone.src}
+              isFirstSeen={isFirstSeenImage}
+              alt={imageZone.alt || title}
+              imgClassName={`brief-hero-3d__bg w-full h-full object-cover select-none ${hasBases && mapOpen ? 'opacity-10 blur-sm' : ''}`}
+              imgStyle={{ objectPosition: imageZone.position }}
+            />
+            <img
+              src={imageZone.cutoutSrc}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              className="brief-hero-3d__cutout"
+              style={{ objectPosition: imageZone.position }}
+            />
+          </div>
+        ) : (
           <ImageGridReveal
             src={imageZone.src}
             isFirstSeen={isFirstSeenImage}
@@ -1171,14 +1194,12 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, qu
 
       {/* Brief header */}
       <div className="mb-5">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-bold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full border border-brand-200">
-            {brief.category}
-          </span>
-          {brief.subcategory && (
-            <span className="text-xs text-slate-400 font-medium">{brief.subcategory}</span>
-          )}
-        </div>
+        <CategoryHeader
+          category={brief.category}
+          subcategory={brief.subcategory}
+          briefId={brief._id}
+          className="mb-2"
+        />
         <h1 className="text-2xl font-extrabold text-slate-900 leading-tight">{brief.title}</h1>
         {brief.nickname && (
           <p className="text-sm text-slate-400 italic mt-0.5">"{brief.nickname}"</p>
@@ -1937,14 +1958,12 @@ export default function BriefReader() {
         >
           ← {brief.category}
         </button>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-xs font-bold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full border border-brand-200">
-            {brief.category}
-          </span>
-          {brief.subcategory && (
-            <span className="text-xs text-slate-400 font-medium">{brief.subcategory}</span>
-          )}
-        </div>
+        <CategoryHeader
+          category={brief.category}
+          subcategory={brief.subcategory}
+          briefId={brief._id}
+          className="mb-4"
+        />
         <h1 className="text-2xl font-extrabold text-slate-900 leading-tight mb-6">{brief.title}</h1>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -1993,14 +2012,12 @@ export default function BriefReader() {
         >
           ← {brief.category}
         </button>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-xs font-bold bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full border border-brand-200">
-            {brief.category}
-          </span>
-          {brief.subcategory && (
-            <span className="text-xs text-slate-400 font-medium">{brief.subcategory}</span>
-          )}
-        </div>
+        <CategoryHeader
+          category={brief.category}
+          subcategory={brief.subcategory}
+          briefId={brief._id}
+          className="mb-4"
+        />
         <h1 className="text-2xl font-extrabold text-slate-900 leading-tight mb-6">{brief.title}</h1>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -2130,9 +2147,13 @@ export default function BriefReader() {
                 transition={{ duration: 0.3, ease: 'easeInOut' }}
                 style={{ overflow: 'hidden' }}
               >
-                <p className="text-xs font-semibold text-brand-500 mb-1.5">
-                  {brief.category}{brief.subcategory ? ` · ${brief.subcategory}` : ''}
-                </p>
+                <CategoryHeader
+                  variant="dark"
+                  category={brief.category}
+                  subcategory={brief.subcategory}
+                  briefId={brief._id}
+                  className="mb-1.5"
+                />
                 {brief.category === 'News' && brief.eventDate && (
                   <p className="text-xs tracking-widest uppercase text-slate-400 font-mono mb-2">
                     {new Date(brief.eventDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}

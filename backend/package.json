@@ -4,7 +4,9 @@
   "description": "SkyWatch API server",
   "main": "server.js",
   "nodemonConfig": {
-    "watch": ["."],
+    "watch": [
+      "."
+    ],
     "ext": "js,mjs,cjs,json",
     "ignore": [
       "seeds/seedLeads.js",
@@ -21,7 +23,14 @@
     "test": "jest --runInBand",
     "test:watch": "jest --watch --runInBand",
     "link-aircraft-bases": "node scripts/linkAircraftBases.js",
-    "link-aircraft-bases:apply": "node scripts/linkAircraftBases.js --apply"
+    "link-aircraft-bases:apply": "node scripts/linkAircraftBases.js --apply",
+    "dedupe-media": "node scripts/dedupeMedia.js",
+    "dedupe-media:apply": "node scripts/dedupeMedia.js --apply",
+    "dedupe-media:apply-cloudinary": "node scripts/dedupeMedia.js --apply --cloudinary",
+    "dedupe-media:orphans": "node scripts/dedupeMedia.js --orphans",
+    "dedupe-media:orphans:apply": "node scripts/dedupeMedia.js --orphans --apply --cloudinary",
+    "backfill-media-hashes": "node scripts/backfillMediaHashes.js",
+    "backfill-media-hashes:apply": "node scripts/backfillMediaHashes.js --apply"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -34,6 +43,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^9.3.1",
     "resend": "^6.9.4",
+    "sharp": "^0.34.5",
     "stripe": "^16.3.0"
   },
   "devDependencies": {

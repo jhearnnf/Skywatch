@@ -8,6 +8,11 @@ const mediaSchema = new mongoose.Schema({
   mediaType:          { type: String, enum: ['picture', 'video'], required: true },
   mediaUrl:           { type: String, required: true, trim: true },
   cloudinaryPublicId: { type: String, trim: true },
+  // MD5 hex digest of the uploaded bytes. Used as the primary dedupe key to
+  // prevent the same file being uploaded twice under different public_ids.
+  // Matches Cloudinary's etag format, so legacy Media docs can be backfilled
+  // from the Admin API without re-downloading.
+  contentHash:        { type: String, trim: true, index: true, sparse: true },
   name:               { type: String, trim: true },
   searchTerm: {
     type: String,
@@ -28,6 +33,10 @@ const mediaSchema = new mongoose.Schema({
   },
   wikiPageTitleNormalized: { type: String, trim: true, index: true },
   showOnSummary:      { type: Boolean, default: true },
+  // Transparent-background "cutout" produced by the admin extract-subject flow
+  // (currently only displayed on Aircrafts-category briefs). Null until generated.
+  cutoutUrl:          { type: String, trim: true, default: null },
+  cutoutPublicId:     { type: String, trim: true, default: null },
 }, { timestamps: true });
 
 mediaSchema.statics.normalizeTerm = normalizeTerm;

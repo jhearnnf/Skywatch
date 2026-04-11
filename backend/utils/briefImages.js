@@ -1,5 +1,10 @@
+const crypto = require('crypto');
 const Media = require('../models/Media');
 const { uploadBuffer } = require('./cloudinary');
+
+function md5Hex(buffer) {
+  return crypto.createHash('md5').update(buffer).digest('hex');
+}
 
 const MAX_IMAGES = 2;
 
@@ -85,8 +90,16 @@ async function getOrCreateMediaForTerm(term, { publicIdPrefix }) {
     if (existing) return { media: existing, reused: true };
   }
 
-  // Step 4 — new image: download, upload, persist
+  // Step 4 — download the image, then hash-check before uploading. This
+  // catches cases where a completely different term/page resolves to the
+  // same underlying file bytes (e.g. two Wikipedia pages sharing a photo).
   const buffer = await downloadImage(resolved.imageUrl);
+  const contentHash = md5Hex(buffer);
+
+  const existingByHash = await Media.findOne({ contentHash });
+  if (existingByHash) return { media: existingByHash, reused: true };
+
+  // Step 5 — new image: upload + persist
   const upload = await uploadBuffer(buffer, {
     public_id: `${publicIdPrefix}-${Date.now()}`,
   });
@@ -94,6 +107,7 @@ async function getOrCreateMediaForTerm(term, { publicIdPrefix }) {
     mediaType: 'picture',
     mediaUrl: upload.secure_url,
     cloudinaryPublicId: upload.public_id,
+    contentHash,
     name: resolved.pageTitle || term,
     searchTerm: term,
     wikiPageTitle: resolved.pageTitle,

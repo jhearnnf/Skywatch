@@ -337,7 +337,7 @@ router.get('/history', protect, async (req, res) => {
       ? { userId: req.user._id, reachedFlashcard: true }
       : { userId: req.user._id, completed: true };
 
-    const populateFields = flashcard ? 'title category descriptionSections' : 'title category';
+    const populateFields = flashcard ? 'title category subcategory descriptionSections' : 'title category subcategory';
 
     const [records, total, avgResult] = await Promise.all([
       IntelligenceBriefRead.find(baseMatch)
@@ -361,6 +361,7 @@ router.get('/history', protect, async (req, res) => {
         briefId:          r.intelBriefId?._id ?? null,
         title:            r.intelBriefId?.title    ?? 'Unknown Brief',
         category:         r.intelBriefId?.category ?? '',
+        subcategory:      r.intelBriefId?.subcategory ?? '',
         timeSpentSeconds: r.timeSpentSeconds,
         firstReadAt:      r.firstReadAt,
         lastReadAt:       r.lastReadAt,

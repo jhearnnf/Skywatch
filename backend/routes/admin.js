@@ -29,8 +29,10 @@ const Media             = require('../models/Media');
 const mongoose          = require('mongoose');
 const path              = require('path');
 const fs                = require('fs');
+const crypto            = require('crypto');
 const { uploadBuffer, destroyAsset } = require('../utils/cloudinary');
 const { generateBriefImages } = require('../utils/briefImages');
+const { extractSubjectToCloudinary } = require('../utils/extractCutout');
 const IntelLead = require('../models/IntelLead');
 const seedLeads = require('../seeds/seedLeads');
 const { scanMentionedBriefIds } = require('../utils/mentionedBriefs');
@@ -1238,8 +1240,11 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
   try {
     const briefId = req.params.id;
 
-    // Fetch brief before deletion to get title + category
-    const brief = await IntelligenceBrief.findById(briefId).select('title category');
+    // Fetch brief before deletion to get title + category + media list. The
+    // media ids are captured *before* the brief is deleted so the cleanup
+    // helpers can apply share-guards against a coherent state.
+    const brief = await IntelligenceBrief.findById(briefId).select('title category media');
+    const mediaIds = (brief?.media ?? []).map(m => String(m));
 
     // Collect dependent IDs before deleting so we can cascade their results
     const [questionIds, booGameIds, flashGameIds, waaGameIds] = await Promise.all([
@@ -1276,6 +1281,15 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
         relatedHistoric:            new mongoose.Types.ObjectId(briefId),
       } }),
     ]);
+
+    // Media cleanup — runs after the brief itself is gone so the share-guard
+    // checks see the updated reference count. Cutouts apply an Aircraft-only
+    // share-check; originals apply a category-agnostic one. Both helpers are
+    // idempotent and safe to run sequentially.
+    for (const mediaId of mediaIds) {
+      await cleanupOrphanedCutout(mediaId);
+      await cleanupOrphanedMedia(mediaId);
+    }
 
     await AdminAction.create({ userId: req.user._id, actionType: 'delete_brief', reason: req.body.reason });
 
@@ -1485,7 +1499,7 @@ router.post('/briefs/:id/questions', async (req, res) => {
 // dedup). Otherwise creates a new Media doc from the supplied fields.
 router.post('/briefs/:id/media', async (req, res) => {
   try {
-    const { mediaId, mediaType, mediaUrl, cloudinaryPublicId, name, showOnSummary } = req.body;
+    const { mediaId, mediaType, mediaUrl, cloudinaryPublicId, contentHash, name, showOnSummary } = req.body;
 
     let media;
     if (mediaId) {
@@ -1493,13 +1507,26 @@ router.post('/briefs/:id/media', async (req, res) => {
       if (!media) return res.status(404).json({ message: 'Media not found' });
     } else {
       if (!mediaUrl || !mediaType) return res.status(400).json({ message: 'mediaType and mediaUrl required' });
-      media = await Media.create({
-        mediaType,
-        mediaUrl: mediaUrl.trim(),
-        ...(cloudinaryPublicId ? { cloudinaryPublicId } : {}),
-        ...(name ? { name } : {}),
-        showOnSummary: showOnSummary !== false,
-      });
+
+      // Dedupe: if an existing Media doc already points at this Cloudinary
+      // asset (by publicId or contentHash), reuse it instead of creating a
+      // second doc against the same file.
+      if (contentHash) {
+        media = await Media.findOne({ contentHash });
+      }
+      if (!media && cloudinaryPublicId) {
+        media = await Media.findOne({ cloudinaryPublicId });
+      }
+      if (!media) {
+        media = await Media.create({
+          mediaType,
+          mediaUrl: mediaUrl.trim(),
+          ...(cloudinaryPublicId ? { cloudinaryPublicId } : {}),
+          ...(contentHash ? { contentHash } : {}),
+          ...(name ? { name } : {}),
+          showOnSummary: showOnSummary !== false,
+        });
+      }
     }
 
     const brief = await IntelligenceBrief.findByIdAndUpdate(
@@ -1529,15 +1556,82 @@ router.patch('/media/:mediaId', async (req, res) => {
   }
 });
 
+// POST /api/admin/briefs/:id/media/:mediaId/extract-subject
+// Runs the source image through OpenRouter's Gemini Flash Image model with a
+// background-removal instruction, chroma-keys the result to a transparent PNG
+// via sharp, uploads the cutout to Cloudinary, and stores cutoutUrl +
+// cutoutPublicId on the Media doc. The endpoint is safe to re-run — any
+// previous cutout for this Media is destroyed and replaced.
+router.post('/briefs/:id/media/:mediaId/extract-subject', async (req, res) => {
+  try {
+    const { id: briefId, mediaId } = req.params;
+
+    // Guard: the cutout-display flow is only surfaced for Aircraft briefs, so
+    // there's no reason to let the extraction run on other categories.
+    const brief = await IntelligenceBrief.findById(briefId).select('category media').lean();
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    if (brief.category !== 'Aircrafts') {
+      return res.status(400).json({ message: 'Subject extraction is only available for Aircraft briefs' });
+    }
+    if (!(brief.media ?? []).some(m => String(m) === String(mediaId))) {
+      return res.status(404).json({ message: 'Media is not attached to this brief' });
+    }
+
+    const media = await Media.findById(mediaId);
+    if (!media) return res.status(404).json({ message: 'Media not found' });
+    if (media.mediaType !== 'picture') {
+      return res.status(400).json({ message: 'Only picture media can be extracted' });
+    }
+    if (!media.mediaUrl) return res.status(400).json({ message: 'Media has no source URL' });
+
+    // Destroy any previous cutout before overwriting so we don't leak assets
+    // on re-runs. Ignore failures — stale asset cleanup is best-effort.
+    const previousPublicId = media.cutoutPublicId;
+    if (previousPublicId) {
+      await destroyAsset(previousPublicId).catch(() => {});
+    }
+
+    const uploaded = await extractSubjectToCloudinary(media.mediaUrl, media.cloudinaryPublicId);
+
+    media.cutoutUrl      = uploaded.secure_url;
+    media.cutoutPublicId = uploaded.public_id;
+    await media.save();
+
+    res.json({
+      status: 'success',
+      data: {
+        media: {
+          _id:            media._id,
+          mediaUrl:       media.mediaUrl,
+          cutoutUrl:      media.cutoutUrl,
+          cutoutPublicId: media.cutoutPublicId,
+          name:           media.name,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[extract-subject] failed:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // DELETE /api/admin/briefs/:id/media/:mediaId — detach a media item from a
 // brief. Because the same Media doc may now be shared by multiple briefs (via
 // dedup during image generation), we only delete the Media doc and destroy
-// the Cloudinary asset when no other brief still references it.
+// the Cloudinary asset when no other brief still references it. The
+// Aircraft-only cutout (if any) follows its own share-check: it's destroyed
+// when no other Aircraft brief still references this Media.
 router.delete('/briefs/:id/media/:mediaId', async (req, res) => {
   try {
     const { id: briefId, mediaId } = req.params;
 
     await IntelligenceBrief.findByIdAndUpdate(briefId, { $pull: { media: mediaId } });
+
+    // Cutout share-check: the cutout is only displayed on Aircrafts-category
+    // briefs today, so ask "does any OTHER Aircraft brief still use this
+    // Media?" — if not, the cutout is dead weight and should be destroyed
+    // regardless of whether the underlying Media doc itself survives.
+    await cleanupOrphanedCutout(mediaId);
 
     const stillReferenced = await IntelligenceBrief.exists({ media: mediaId });
     if (stillReferenced) {
@@ -1556,6 +1650,49 @@ router.delete('/briefs/:id/media/:mediaId', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// Shared helper — used by both the single-media detach endpoint and the full
+// brief-delete cascade. Checks whether any Aircraft brief still references
+// this Media doc; if not, destroys the Cloudinary cutout asset and nulls the
+// cutout fields on the Media so it's never served again. Safe to call when
+// there is no cutout.
+async function cleanupOrphanedCutout(mediaId) {
+  const media = await Media.findById(mediaId).select('cutoutPublicId').lean();
+  if (!media?.cutoutPublicId) return;
+
+  const stillUsedByAircraft = await IntelligenceBrief.exists({
+    media:    mediaId,
+    category: 'Aircrafts',
+  });
+  if (stillUsedByAircraft) return;
+
+  await destroyAsset(media.cutoutPublicId).catch(() => {});
+  await Media.findByIdAndUpdate(mediaId, {
+    $set: { cutoutUrl: null, cutoutPublicId: null },
+  });
+}
+
+// Shared helper — used by the full brief-delete cascade. Applies the same
+// share-guard as the single-media detach endpoint: if no other brief
+// references this Media at all, destroy the Media doc + its Cloudinary
+// asset(s) (original + any cutout).
+async function cleanupOrphanedMedia(mediaId) {
+  const stillReferenced = await IntelligenceBrief.exists({ media: mediaId });
+  if (stillReferenced) return;
+
+  const mediaDoc = await Media.findByIdAndDelete(mediaId);
+  if (!mediaDoc) return;
+
+  if (mediaDoc.cloudinaryPublicId) {
+    await destroyAsset(mediaDoc.cloudinaryPublicId).catch(() => {});
+  } else if (mediaDoc.mediaUrl?.startsWith('/uploads/brief-images/')) {
+    const filePath = path.join(__dirname, '..', mediaDoc.mediaUrl);
+    fs.unlink(filePath, () => {});
+  }
+  if (mediaDoc.cutoutPublicId) {
+    await destroyAsset(mediaDoc.cutoutPublicId).catch(() => {});
+  }
+}
 
 // POST /api/admin/briefs/:id/questions/bulk — replace all quiz questions for a brief
 router.post('/briefs/:id/questions/bulk', requireReason, async (req, res) => {
@@ -3669,9 +3806,35 @@ router.post('/save-generated-image', async (req, res) => {
     if (!imageBase64) return res.status(400).json({ message: 'imageBase64 required' });
 
     const buffer = Buffer.from(imageBase64, 'base64');
+    const contentHash = crypto.createHash('md5').update(buffer).digest('hex');
+
+    // Hash check before upload — if the same bytes already exist in Cloudinary
+    // via another Media doc, reuse that asset and return an existing mediaId so
+    // the admin frontend can attach without creating a new Media doc.
+    const existing = await Media.findOne({ contentHash });
+    if (existing) {
+      return res.json({
+        status: 'success',
+        data: {
+          url: existing.mediaUrl,
+          publicId: existing.cloudinaryPublicId,
+          mediaId: existing._id,
+          reused: true,
+        },
+      });
+    }
+
     const result = await uploadBuffer(buffer, { public_id: `brief-${Date.now()}`, format: 'png' });
 
-    res.json({ status: 'success', data: { url: result.secure_url, publicId: result.public_id } });
+    res.json({
+      status: 'success',
+      data: {
+        url: result.secure_url,
+        publicId: result.public_id,
+        contentHash,
+        reused: false,
+      },
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

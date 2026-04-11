@@ -3447,7 +3447,7 @@ function GeneratingOverlay({ label = 'AI Generation Underway' }) {
   )
 }
 
-function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapConsumed }) {
+function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMount = null, onBootstrapConsumed }) {
   const { apiFetch } = useAuth()
   const { settings: appSettings } = useAppSettings() ?? {}
   const questionsPerDifficulty = appSettings?.aiQuestionsPerDifficulty ?? 7
@@ -3474,6 +3474,8 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
   const [mediumQuestions,setMediumQuestions] = useState([])
   const [media,         setMedia]         = useState([])
   const [pendingImages, setPendingImages] = useState([])
+  const [extractingMediaId, setExtractingMediaId] = useState(null) // mediaId currently running subject extraction
+  const [originalPreviewIds, setOriginalPreviewIds] = useState(() => new Set()) // per-row toggle: user explicitly chose to view the original instead of the cutout
   const [qTab,          setQTab]          = useState('easy')
   const [generating,    setGenerating]    = useState(null)
   const [autoGenerating,  setAutoGenerating]  = useState(false)
@@ -3687,6 +3689,13 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
     setRelatedSearch('')
     setView('editor')
   }
+
+  useEffect(() => {
+    if (!editBriefIdOnMount) return
+    openBrief({ _id: editBriefIdOnMount }).finally(() => {
+      onBootstrapConsumed?.()
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const newBrief = () => {
     setDraft({ ...EMPTY_DRAFT, descriptionSections: ['','',''] })
@@ -4146,6 +4155,43 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
       method: 'DELETE', credentials: 'include',
     })
     setMedia(p => p.filter(m => String(m._id) !== String(mediaId)))
+  }
+
+  // ── Extract aircraft subject (background removal via OpenRouter Gemini) ───
+  // Aircraft briefs only. Overwrites any previous cutout for this media.
+  const extractSubject = async (mediaId) => {
+    if (!briefId) return
+    setExtractingMediaId(mediaId)
+    try {
+      const res  = await apiFetch(`${API}/api/admin/briefs/${briefId}/media/${mediaId}/extract-subject`, {
+        method: 'POST', credentials: 'include',
+      })
+      const data = await res.json()
+      if (data.status !== 'success') throw new Error(data.message ?? 'Extraction failed')
+      setMedia(p => p.map(m => String(m._id) === String(mediaId)
+        ? { ...m, cutoutUrl: data.data.media.cutoutUrl, cutoutPublicId: data.data.media.cutoutPublicId }
+        : m
+      ))
+      // Clear any prior "show original" override so the freshly generated cutout is visible
+      setOriginalPreviewIds(prev => {
+        if (!prev.has(String(mediaId))) return prev
+        const next = new Set(prev); next.delete(String(mediaId)); return next
+      })
+      setToast('Aircraft extracted')
+    } catch (err) {
+      setToast(`Extract failed: ${err.message}`)
+    } finally {
+      setExtractingMediaId(null)
+    }
+  }
+
+  const toggleCutoutPreview = (mediaId) => {
+    setOriginalPreviewIds(prev => {
+      const next = new Set(prev)
+      const key  = String(mediaId)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
   }
 
   // ── Status badge helper ───────────────────────────────────────────────────
@@ -4890,22 +4936,69 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, onBootstrapCons
             {/* Existing media */}
             {media.length > 0 && (
               <div className="grid grid-cols-2 gap-3 mb-4">
-                {media.map(m => (
-                  <div key={m._id} className="relative group">
-                    <img src={m.mediaUrl} alt={m.name || 'Brief media'} className="w-full h-32 object-cover rounded-xl border border-slate-200" />
-                    <button
-                      onClick={() => removeMedia(m._id)}
-                      className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      ✕
-                    </button>
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 rounded-b-xl px-2 py-1 pointer-events-none">
-                      <p className="text-[10px] text-white truncate">
-                        {m.name ?? m.cloudinaryPublicId ?? m.mediaUrl.split('/').pop().replace(/\.[^.]+$/, '')}
-                      </p>
+                {media.map(m => {
+                  const isExtracting = String(extractingMediaId) === String(m._id)
+                  const showCutout   = Boolean(m.cutoutUrl) && !originalPreviewIds.has(String(m._id))
+                  const canExtract   = draft.category === 'Aircrafts' && m.mediaType !== 'video'
+                  const displaySrc   = showCutout ? m.cutoutUrl : m.mediaUrl
+                  const displayBg    = showCutout
+                    ? { backgroundImage: 'repeating-conic-gradient(#1e293b 0 25%, #0f172a 0 50%)', backgroundSize: '12px 12px' }
+                    : undefined
+                  return (
+                    <div key={m._id} className="flex flex-col gap-1.5">
+                      {/* Thumbnail */}
+                      <div className="relative group">
+                        <img
+                          src={displaySrc}
+                          alt={m.name || 'Brief media'}
+                          style={displayBg}
+                          className={`w-full h-32 rounded-xl border border-slate-200 ${showCutout ? 'object-contain' : 'object-cover'}`}
+                        />
+                        <button
+                          onClick={() => removeMedia(m._id)}
+                          className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          ✕
+                        </button>
+                        {isExtracting && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-xl">
+                            <span className="text-[11px] text-white font-semibold animate-pulse">Extracting aircraft…</span>
+                          </div>
+                        )}
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 rounded-b-xl px-2 py-1 pointer-events-none">
+                          <p className="text-[10px] text-white truncate">
+                            {m.name ?? m.cloudinaryPublicId ?? m.mediaUrl.split('/').pop().replace(/\.[^.]+$/, '')}
+                            {m.cutoutUrl && <span className="ml-1 text-emerald-300">● cutout</span>}
+                          </p>
+                        </div>
+                      </div>
+                      {/* Always-visible action row — Aircraft briefs only */}
+                      {canExtract && (
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => extractSubject(m._id)}
+                            disabled={isExtracting}
+                            title={m.cutoutUrl ? 'Re-run extraction (overwrites current cutout)' : 'Extract aircraft from background via AI'}
+                            className="flex-1 text-[11px] px-2 py-1 rounded-lg bg-brand-600 text-white font-semibold hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isExtracting
+                              ? 'Extracting…'
+                              : (m.cutoutUrl ? '↻ Re-extract aircraft' : '✂ Extract aircraft')}
+                          </button>
+                          {m.cutoutUrl && (
+                            <button
+                              onClick={() => toggleCutoutPreview(m._id)}
+                              title="Toggle original / cutout preview"
+                              className={`text-[11px] px-2 py-1 rounded-lg font-semibold transition-colors ${showCutout ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-700 text-slate-100 hover:bg-slate-600'}`}
+                            >
+                              {showCutout ? 'Show Original' : 'Show Cutout'}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
             {media.length === 0 && <p className="text-sm text-slate-400 mb-4">No images yet</p>}
@@ -6271,9 +6364,17 @@ export default function Admin() {
   const { unsolvedCount, unresolvedSystemLogs, refresh: refreshUnsolvedCount } = useUnsolvedReports()
   const navigate = useNavigate()
   const location = useLocation()
-  const [tab, setTab] = useState(() => location.state?.openLeads ? 'briefs' : 'stats')
+  const [tab, setTab] = useState(() => (location.state?.openLeads || location.state?.editBriefId) ? 'briefs' : 'stats')
   const [leadsInitialSearch, setLeadsInitialSearch] = useState(() => location.state?.leadsSearch ?? '')
   const [openLeadsOnMount,   setOpenLeadsOnMount]   = useState(() => !!location.state?.openLeads)
+  const [editBriefIdOnMount, setEditBriefIdOnMount] = useState(() => location.state?.editBriefId ?? null)
+
+  useEffect(() => {
+    if (location.state?.editBriefId || location.state?.openLeads) {
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => { refreshUnsolvedCount() }, [])
 
@@ -6328,7 +6429,7 @@ export default function Admin() {
             {tab === 'settings' && <SettingsTab API={API} />}
             {tab === 'users'    && <UsersTab    API={API} />}
             {tab === 'content'  && <ContentTab  API={API} />}
-            {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false) }} />}
+            {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} editBriefIdOnMount={editBriefIdOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false); setEditBriefIdOnMount(null) }} />}
             {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} />}
           </motion.div>
         </AnimatePresence>

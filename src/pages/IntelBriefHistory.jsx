@@ -3,15 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
-
-const CATEGORY_LABELS = {
-  aviation:    'Aviation',
-  weapons:     'Weapons',
-  geopolitics: 'Geopolitics',
-  cyber:       'Cyber',
-  space:       'Space',
-  naval:       'Naval',
-}
+import CategoryHeader from '../components/CategoryHeader'
 
 function formatDate(iso) {
   const d = new Date(iso)
@@ -51,14 +43,13 @@ function FlashcardRow({ read, index }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-slate-800 truncate">{read.title}</p>
-          <div className="flex items-center gap-2 mt-0.5">
-            {read.category && (
-              <span className="text-[10px] font-bold uppercase tracking-wide text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded-full">
-                {CATEGORY_LABELS[read.category] ?? read.category}
-              </span>
-            )}
-            <p className="text-[10px] text-slate-400">{formatDate(read.firstReadAt)}</p>
-          </div>
+          <CategoryHeader
+            category={read.category}
+            subcategory={read.subcategory}
+            briefId={read.briefId}
+            className="mt-0.5"
+          />
+          <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(read.firstReadAt)}</p>
         </div>
         <span className="text-slate-400 text-xs shrink-0">{expanded ? '▲' : '▼'}</span>
       </div>
@@ -231,14 +222,13 @@ export default function IntelBriefHistory() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-800 truncate">{read.title}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {read.category && (
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded-full">
-                          {CATEGORY_LABELS[read.category] ?? read.category}
-                        </span>
-                      )}
-                      <p className="text-[10px] text-slate-400">{formatDate(read.firstReadAt)}</p>
-                    </div>
+                    <CategoryHeader
+                      category={read.category}
+                      subcategory={read.subcategory}
+                      briefId={read.briefId}
+                      className="mt-0.5"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(read.firstReadAt)}</p>
                   </div>
                   <span className="text-sm font-bold text-slate-500 shrink-0 intel-mono">
                     {formatTime(read.timeSpentSeconds)}

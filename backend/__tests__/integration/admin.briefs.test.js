@@ -508,6 +508,86 @@ describe('POST /api/admin/briefs/:id/questions', () => {
   });
 });
 
+// ── POST /api/admin/briefs/:id/media (dedupe) ────────────────────────────────
+
+describe('POST /api/admin/briefs/:id/media — dedupe', () => {
+  it('reuses an existing Media doc by contentHash instead of creating a new one', async () => {
+    const admin = await createAdminUser();
+    const brief = await createBrief();
+
+    const existing = await Media.create({
+      mediaType: 'picture',
+      mediaUrl: 'https://res.cloudinary.com/x/image/upload/existing.jpg',
+      cloudinaryPublicId: 'brief-images/existing',
+      contentHash: 'abc123md5',
+    });
+
+    const res = await request(app)
+      .post(`/api/admin/briefs/${brief._id}/media`)
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        mediaType: 'picture',
+        mediaUrl: 'https://res.cloudinary.com/x/image/upload/new.jpg',
+        cloudinaryPublicId: 'brief-images/new',
+        contentHash: 'abc123md5',
+      });
+
+    expect(res.status).toBe(200);
+
+    const allMedia = await Media.find({});
+    expect(allMedia).toHaveLength(1);
+    expect(String(allMedia[0]._id)).toBe(String(existing._id));
+
+    const updated = await IntelligenceBrief.findById(brief._id);
+    expect(updated.media.map(String)).toContain(String(existing._id));
+  });
+
+  it('reuses an existing Media doc by cloudinaryPublicId when contentHash is absent', async () => {
+    const admin = await createAdminUser();
+    const brief = await createBrief();
+
+    const existing = await Media.create({
+      mediaType: 'picture',
+      mediaUrl: 'https://res.cloudinary.com/x/image/upload/shared.jpg',
+      cloudinaryPublicId: 'brief-images/shared',
+    });
+
+    const res = await request(app)
+      .post(`/api/admin/briefs/${brief._id}/media`)
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        mediaType: 'picture',
+        mediaUrl: 'https://res.cloudinary.com/x/image/upload/shared.jpg',
+        cloudinaryPublicId: 'brief-images/shared',
+      });
+
+    expect(res.status).toBe(200);
+    const allMedia = await Media.find({});
+    expect(allMedia).toHaveLength(1);
+    expect(String(allMedia[0]._id)).toBe(String(existing._id));
+  });
+
+  it('creates a new Media doc when no dedupe key matches', async () => {
+    const admin = await createAdminUser();
+    const brief = await createBrief();
+
+    const res = await request(app)
+      .post(`/api/admin/briefs/${brief._id}/media`)
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        mediaType: 'picture',
+        mediaUrl: 'https://res.cloudinary.com/x/image/upload/fresh.jpg',
+        cloudinaryPublicId: 'brief-images/fresh',
+        contentHash: 'freshhash',
+      });
+
+    expect(res.status).toBe(200);
+    const all = await Media.find({});
+    expect(all).toHaveLength(1);
+    expect(all[0].contentHash).toBe('freshhash');
+  });
+});
+
 // ── DELETE /api/admin/briefs/:id/media/:mediaId ───────────────────────────────
 
 describe('DELETE /api/admin/briefs/:id/media/:mediaId', () => {
