@@ -574,6 +574,17 @@ body.play-mode .card-shadow {
     drop-shadow(0 0 1px rgba(220, 230, 255, 0.55));
 }
 
+/* ── Amber target — warms the 🎯 emoji to match amber-toned mission cards. */
+.target-amber {
+  display: inline-block;
+  filter:
+    sepia(1)
+    saturate(2)
+    brightness(1.1)
+    hue-rotate(-10deg)
+    drop-shadow(0 0 2px rgba(245, 158, 11, 0.4));
+}
+
 /* ── Blueprint grid reveal ────────────────────────────────────────────────── */
 @keyframes blueprint-reveal {
   0%   { opacity: 1; background-color: #060f1c; }

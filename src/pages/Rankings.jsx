@@ -1,82 +1,150 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import LockedCategoryModal from '../components/LockedCategoryModal'
-import { MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
+import UnlockBadges from '../components/UnlockBadges'
+import { MOCK_RANKS } from '../data/mockData'
+import { DEFAULT_PATHWAY_UNLOCKS } from '../data/pathways'
 import { getLevelInfo } from '../utils/levelUtils'
 import RankBadge from '../components/RankBadge'
 import SEO from '../components/SEO'
 
-// ── Defaults (overridden by /api/settings) ────────────────────────────────────
+// ── Theme colors ─────────────────────────────────────────────────────────────
 
-const DEFAULT_PATHWAY_UNLOCKS = [
-  { category: 'Bases',     levelRequired: 1, rankRequired: 1, tierRequired: 'free'   },
-  { category: 'Aircrafts', levelRequired: 2, rankRequired: 1, tierRequired: 'free'   },
-  { category: 'Ranks',     levelRequired: 2, rankRequired: 1, tierRequired: 'silver' },
-  { category: 'Squadrons', levelRequired: 3, rankRequired: 2, tierRequired: 'silver' },
-  { category: 'Training',  levelRequired: 4, rankRequired: 2, tierRequired: 'silver' },
-  { category: 'Roles',     levelRequired: 5, rankRequired: 3, tierRequired: 'silver' },
-  { category: 'Threats',   levelRequired: 6, rankRequired: 3, tierRequired: 'gold'   },
-  { category: 'Missions',  levelRequired: 7, rankRequired: 4, tierRequired: 'gold'   },
-]
-
-const PATHWAY_COLORS = {
-  News:        '#a16207', Bases:       '#2563eb', Aircrafts:   '#64748b',
-  Ranks:       '#d97706', Squadrons:   '#7c3aed', Training:    '#059669',
-  Roles:       '#ea580c', Threats:     '#dc2626', Missions:    '#0891b2',
-  Terminology: '#4f46e5', Heritage:    '#b45309', Allies:      '#16a34a',
-  AOR:         '#0d9488', Tech:        '#0284c7', Treaties:    '#db2777',
+const C = {
+  brand:   '#5baaff',
+  text:    '#ddeaf8',
+  dim:     '#3d5a7a',
+  muted:   '#4a6282',
+  subtle:  '#8ba0c0',
+  border:  '#1a3060',
+  deep:    '#06101e',
+  surface: '#0f2245',
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Shared small components ──────────────────────────────────────────────────
 
-function tierRankNum(tier) {
-  return { free: 0, trial: 1, silver: 1, gold: 2 }[tier] ?? 0
-}
+const VALID_TABS = ['levels', 'ranks']
 
-
-// ── Pathway badge strip ───────────────────────────────────────────────────────
-
-function UnlockBadges({ unlocks, userLevel, userRankNumber, userTier, onSubscriptionLocked }) {
-  if (!unlocks.length) return null
+function NumberCircle({ number, isCurrent, isAbove, isSelected, children }) {
+  const bg    = isCurrent ? C.brand  : isSelected ? C.border : isAbove ? C.deep : C.surface
+  const color = isCurrent ? C.deep   : isSelected ? C.brand  : isAbove ? C.dim  : C.brand
+  const bdr   = isCurrent ? C.brand  : isSelected ? 'rgba(91,170,255,0.4)' : C.border
+  const glow  = isCurrent ? '0 0 14px rgba(91,170,255,0.5)' : 'none'
   return (
-    <div className="flex flex-wrap gap-1 mt-2">
-      {unlocks.map(u => {
-        const color       = PATHWAY_COLORS[u.category] ?? '#475569'
-        const icon        = CATEGORY_ICONS?.[u.category] ?? '📄'
-        const tier        = u.tierRequired ?? 'free'
-        const pathwayMet = userRankNumber > (u.rankRequired ?? 1) || (userRankNumber >= (u.rankRequired ?? 1) && userLevel >= (u.levelRequired ?? 1))
-        const tierMet    = tierRankNum(userTier) >= tierRankNum(tier)
-        const unlocked   = pathwayMet && tierMet
-        const subLocked  = !tierMet
-        return (
-          <span
-            key={u.category}
-            className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full${subLocked ? ' cursor-pointer' : ''}`}
-            style={{
-              background: unlocked ? `${color}28` : '#0c1829',
-              color:      unlocked ? color         : '#3d5a7a',
-              border:    `1px solid ${unlocked ? `${color}55` : subLocked ? (tier === 'gold' ? '#92400e' : '#1a3a6b') : '#1a3060'}`,
-            }}
-            onClick={subLocked ? () => onSubscriptionLocked(u.category, tier) : undefined}
-          >
-            <span style={{ fontSize: 11, lineHeight: 1 }}>{icon}</span>
-            {u.category}
-            {tier === 'gold'   && <span style={{ color: unlocked ? '#fbbf24' : subLocked ? '#92400e' : '#3d5a7a' }}>★</span>}
-            {tier === 'silver' && <span style={{ color: unlocked ? '#7eb8e8' : subLocked ? '#1a3a6b' : '#3d5a7a' }}>◆</span>}
-            {unlocked  && <span style={{ opacity: 0.7 }}>🔓</span>}
-            {!unlocked && <span style={{ opacity: subLocked ? 0.8 : 0.5 }}>🔒</span>}
-          </span>
-        )
-      })}
-    </div>
+    <span
+      className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-extrabold intel-mono shrink-0"
+      style={{ background: bg, color, border: `1.5px solid ${bdr}`, boxShadow: glow }}
+    >
+      {children ?? number}
+    </span>
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+function YouBadge() {
+  return (
+    <span
+      className="text-xs font-bold px-2 py-0.5 rounded-full shrink-0 intel-mono"
+      style={{ background: 'rgba(91,170,255,0.15)', color: C.brand, border: '1px solid rgba(91,170,255,0.3)' }}
+    >
+      YOU
+    </span>
+  )
+}
+
+// ── Level row ────────────────────────────────────────────────────────────────
+
+function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathwayUnlocks, onSubscriptionLocked }) {
+  const isCurrent  = lvl.levelNumber === userLevel
+  const isAbove    = lvl.levelNumber > userLevel
+  const isMax      = lvl.levelNumber === 10
+  const lvlUnlocks = pathwayUnlocks.filter(u => u.levelRequired === lvl.levelNumber && (u.rankRequired ?? 1) === userRankNumber)
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: i * 0.04 }}
+      className="px-4 py-3"
+      style={{
+        background:   isCurrent ? 'rgba(91,170,255,0.07)' : 'transparent',
+        borderBottom: isLast ? 'none' : `1px solid ${C.border}`,
+        opacity:      isAbove ? 0.45 : 1,
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <NumberCircle number={lvl.levelNumber} isCurrent={isCurrent} isAbove={isAbove} />
+        <div className="flex-1">
+          <p className="text-sm font-bold" style={{ color: isCurrent ? C.text : isAbove ? C.dim : C.subtle }}>
+            Level {lvl.levelNumber}{isMax && <span className="ml-1.5 text-white"><span className="star-silver">⭐</span> MAX</span>}
+          </p>
+          <p className="text-xs intel-mono" style={{ color: C.dim }}>
+            {lvl.cumulativeAircoins.toLocaleString()} Aircoins required
+          </p>
+        </div>
+        {isCurrent && <YouBadge />}
+        {isMax && !isCurrent && <span className="text-xs font-semibold shrink-0 text-white">Rank Up</span>}
+        {isAbove && !isCurrent && <span className="text-base shrink-0" style={{ opacity: 0.4 }}>🔒</span>}
+      </div>
+      {lvlUnlocks.length > 0 && (
+        <div className="ml-11">
+          <UnlockBadges
+            unlocks={lvlUnlocks}
+            userLevel={userLevel}
+            userRankNumber={userRankNumber}
+            userTier={userTier}
+            onSubscriptionLocked={onSubscriptionLocked}
+          />
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
+// ── Rank row ─────────────────────────────────────────────────────────────────
+
+function RankRow({ rank, i, isLast, isUser, isAbove, isSelected, onClick, rowRef }) {
+  return (
+    <motion.div
+      ref={rowRef}
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: i * 0.025 }}
+      onClick={onClick}
+      className="px-4 py-3 flex items-center gap-3 cursor-pointer transition-all"
+      style={{
+        background:   isSelected ? 'rgba(91,170,255,0.09)' : 'transparent',
+        borderBottom: isLast ? 'none' : `1px solid ${C.border}`,
+        borderLeft:   isSelected ? '2px solid rgba(91,170,255,0.5)' : '2px solid transparent',
+        opacity:      isAbove && !isSelected ? 0.45 : 1,
+      }}
+    >
+      <NumberCircle number={rank.rankNumber} isCurrent={isUser} isAbove={isAbove} isSelected={isSelected}>
+        {rank.rankNumber > 1
+          ? <RankBadge rankNumber={rank.rankNumber} size={18} color={isUser ? C.deep : C.brand} />
+          : (rank.rankAbbreviation ?? 'AC')}
+      </NumberCircle>
+      <div className="flex-1 min-w-0">
+        <p
+          className="text-sm font-bold truncate"
+          style={{ color: isUser || isSelected ? C.text : isAbove ? C.dim : C.subtle }}
+        >
+          {rank.rankAbbreviation ?? rank.abbreviation}
+        </p>
+        <p className="text-xs truncate" style={{ color: C.dim }}>
+          {rank.rankName} · {rank.rankType?.replace(/_/g, ' ')}
+        </p>
+      </div>
+      {isUser && <YouBadge />}
+      {isAbove && !isUser && <span className="text-base shrink-0" style={{ opacity: 0.3 }}>🔒</span>}
+      {isSelected && !isUser && <span className="text-xs shrink-0" style={{ color: 'rgba(91,170,255,0.5)' }}>▶</span>}
+    </motion.div>
+  )
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Rankings() {
   const { user, API, apiFetch } = useAuth()
@@ -87,14 +155,12 @@ export default function Rankings() {
   const [levels,         setLevels]         = useState(null)
   const [ranks,          setRanks]          = useState(MOCK_RANKS?.map(r => ({ ...r, rankAbbreviation: r.abbreviation })) ?? [])
   const [pathwayUnlocks, setPathwayUnlocks] = useState(DEFAULT_PATHWAY_UNLOCKS)
-  const [upgradeModal,   setUpgradeModal]   = useState(null) // { category, tier }
+  const [upgradeModal,   setUpgradeModal]   = useState(null)
 
-  const validTabs = ['levels', 'ranks']
-  const [tab, setTab] = useState(validTabs.includes(location.state?.tab) ? location.state.tab : 'levels')
+  const [tab, setTab] = useState(VALID_TABS.includes(location.state?.tab) ? location.state.tab : 'levels')
 
-  // Re-sync tab on navigation
   useEffect(() => {
-    setTab(validTabs.includes(location.state?.tab) ? location.state.tab : 'levels')
+    setTab(VALID_TABS.includes(location.state?.tab) ? location.state.tab : 'levels')
   }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -113,15 +179,15 @@ export default function Rankings() {
         if (rankData?.data?.ranks?.length)        setRanks(rankData.data.ranks)
         if (settingsData?.pathwayUnlocks?.length) setPathwayUnlocks(settingsData.pathwayUnlocks)
       })
-      .catch(() => {})
+      .catch(err => console.warn('Rankings: failed to load data', err))
   }, [API])
 
-  // ── Derived values ──────────────────────────────────────────────────────────
+  // ── Derived values ─────────────────────────────────────────────────────────
 
   const coins    = user?.cycleAircoins ?? 0
   const userTier = user?.subscriptionTier ?? 'free'
   const lvlInfo  = getLevelInfo(coins, levels)
-  const userLevel    = lvlInfo?.level ?? 1
+  const userLevel    = user ? (lvlInfo?.level ?? 1) : null
   const coinsInLevel = lvlInfo?.coinsInLevel ?? 0
   const coinsNeeded  = lvlInfo?.coinsNeeded ?? 0
   const lvlProgress  = lvlInfo?.progress ?? 0
@@ -133,33 +199,41 @@ export default function Rankings() {
   const userRank       = userRankId
     ? (user.rank?.rankNumber != null ? user.rank : ranks.find(r => r._id?.toString() === userRankId?.toString()))
     : null
-  const userRankNumber = userRank?.rankNumber ?? 1
+  const userRankNumber = user ? (userRank?.rankNumber ?? 1) : null
 
   const userRankRowRef    = useRef(null)
   const rankListScrollRef = useRef(null)
+  const levelsListRef     = useRef(null)
+  const [levelsListH, setLevelsListH] = useState(null)
 
-  // Rank preview selection — defaults to user's current rank
-  const [selectedRankNum, setSelectedRankNum] = useState(userRankNumber)
-  // Keep default in sync when ranks load
+  // Measure levels list height so ranks container can match
   useEffect(() => {
-    setSelectedRankNum(userRankNumber)
-  }, [userRankNumber])
+    if (tab === 'levels' && levelsListRef.current) {
+      setLevelsListH(levelsListRef.current.offsetHeight)
+    }
+  }, [tab, sortedLevels])
 
-  // Scroll user's rank to centre of windowed list
+  const [selectedRankNum, setSelectedRankNum] = useState(userRankNumber)
+  useEffect(() => { setSelectedRankNum(userRankNumber) }, [userRankNumber])
+
   useEffect(() => {
     const container = rankListScrollRef.current
-    const row       = userRankRowRef.current
-    if (!container || !row) return
-    const containerH = container.clientHeight
-    const rowH       = row.offsetHeight
-    container.scrollTop = row.offsetTop - containerH / 2 + rowH / 2
+    if (!container) return
+    const row = userRankRowRef.current
+    if (row) {
+      const containerH = container.clientHeight
+      const rowH       = row.offsetHeight
+      container.scrollTop = row.offsetTop - containerH / 2 + rowH / 2
+    } else {
+      // No user — scroll to bottom (lowest ranks, where newcomers start)
+      container.scrollTop = container.scrollHeight
+    }
   }, [ranks, userRankNumber, tab])
 
   const selectedRank        = ranks.find(r => r.rankNumber === selectedRankNum) ?? null
   const previewRankUnlocks  = pathwayUnlocks.filter(u => (u.rankRequired ?? 1) === selectedRankNum)
   const isPreviewing        = selectedRankNum !== userRankNumber
 
-  // First locked level that has new pathway unlocks (the carrot)
   const nextUnlockLevel = [...(levels ?? [])]
     .sort((a, b) => a.levelNumber - b.levelNumber)
     .find(lvl =>
@@ -167,7 +241,18 @@ export default function Rankings() {
       pathwayUnlocks.some(u => u.levelRequired === lvl.levelNumber && (u.rankRequired ?? 1) === userRankNumber)
     )
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const handleSubscriptionLocked = (cat, t) => setUpgradeModal({ category: cat, tier: t })
+
+  // Measure badge content height for smooth card resize
+  const badgeContentRef = useRef(null)
+  const [badgeHeight, setBadgeHeight] = useState('auto')
+  useEffect(() => {
+    if (badgeContentRef.current) {
+      setBadgeHeight(badgeContentRef.current.scrollHeight)
+    }
+  }, [selectedRankNum, previewRankUnlocks])
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -180,21 +265,21 @@ export default function Rankings() {
         <button
           onClick={() => navigate('/profile')}
           className="text-sm font-medium flex items-center gap-1 mb-3 transition-colors"
-          style={{ color: '#4a6282' }}
-          onMouseEnter={e => e.currentTarget.style.color = '#8ba0c0'}
-          onMouseLeave={e => e.currentTarget.style.color = '#4a6282'}
+          style={{ color: C.muted }}
+          onMouseEnter={e => e.currentTarget.style.color = C.subtle}
+          onMouseLeave={e => e.currentTarget.style.color = C.muted}
         >
           ← Back
         </button>
-        <p className="text-xs uppercase tracking-widest font-bold mb-1" style={{ color: '#4a6282' }}>RAF Skywatch</p>
-        <h1 className="text-2xl font-extrabold" style={{ color: '#ddeaf8' }}>Progression</h1>
-        <p className="text-sm mt-0.5" style={{ color: '#4a6282' }}>Level up and earn RAF Ranks to unlock new pathways.</p>
+        <p className="text-xs uppercase tracking-widest font-bold mb-1" style={{ color: C.muted }}>RAF Skywatch</p>
+        <h1 className="text-2xl font-extrabold" style={{ color: C.text }}>Progression</h1>
+        <p className="text-sm mt-0.5" style={{ color: C.muted }}>Level up and earn RAF Ranks to unlock new pathways.</p>
       </div>
 
       {/* Segmented selector */}
       <div
         className="grid grid-cols-2 mb-5 p-1 rounded-2xl"
-        style={{ background: '#06101e', border: '1px solid #1a3060' }}
+        style={{ background: C.deep, border: `1px solid ${C.border}` }}
       >
         {[
           { key: 'levels', label: '🎖 Agent Levels' },
@@ -205,8 +290,8 @@ export default function Rankings() {
             onClick={() => setTab(t.key)}
             className="py-2.5 rounded-xl text-sm font-bold transition-all duration-200"
             style={{
-              background: tab === t.key ? '#1a3060' : 'transparent',
-              color:      tab === t.key ? '#5baaff'  : '#4a6282',
+              background: tab === t.key ? C.border : 'transparent',
+              color:      tab === t.key ? C.brand  : C.muted,
               boxShadow:  tab === t.key ? '0 0 14px rgba(91,170,255,0.12)' : 'none',
             }}
           >
@@ -215,129 +300,70 @@ export default function Rankings() {
         ))}
       </div>
 
-      {/* ── LEVELS TAB ─────────────────────────────────────────────────────── */}
+      {/* ── LEVELS TAB ────────────────────────────────────────────────────── */}
       {tab === 'levels' && (
         <motion.div key="levels" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
 
-          {/* XP card */}
-          <div
-            className="rounded-2xl p-4"
-            style={{
-              background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)',
-              border: '1px solid rgba(91,170,255,0.2)',
-            }}
-          >
-            <div className="flex items-baseline justify-between mb-2">
-              <p className="text-sm font-extrabold intel-mono" style={{ color: '#5baaff' }}>
-                LEVEL {userLevel}
+          {/* XP card — only for signed-in users */}
+          {user && (
+            <div
+              className="rounded-2xl p-4"
+              style={{
+                background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)',
+                border: '1px solid rgba(91,170,255,0.2)',
+              }}
+            >
+              <div className="flex items-baseline justify-between mb-2">
+                <p className="text-sm font-extrabold intel-mono" style={{ color: C.brand }}>
+                  LEVEL {userLevel}
+                </p>
+                <p className="text-xs intel-mono" style={{ color: C.muted }}>
+                  {coinsInLevel.toLocaleString()} / {coinsNeeded?.toLocaleString() ?? '—'} AC
+                </p>
+              </div>
+              <div className="h-2 rounded-full overflow-hidden" style={{ background: C.border }}>
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: C.brand }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${lvlProgress}%` }}
+                  transition={{ duration: 0.9, ease: 'easeOut' }}
+                />
+              </div>
+              <p className="text-xs mt-1.5" style={{ color: coinsNeeded ? C.muted : '#ffffff' }}>
+                {coinsNeeded
+                  ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} Aircoins to Level ${userLevel + 1}`
+                  : <><span className="star-silver">⭐</span> Max level — RAF Rank Promotion on next cycle</>
+                }
               </p>
-              <p className="text-xs intel-mono" style={{ color: '#4a6282' }}>
-                {coinsInLevel.toLocaleString()} / {coinsNeeded?.toLocaleString() ?? '—'} AC
-              </p>
+              {nextUnlockLevel && (
+                <p className="text-xs mt-1.5 font-semibold" style={{ color: 'rgba(91,170,255,0.7)' }}>
+                  ↓ Next pathway unlock at Level {nextUnlockLevel.levelNumber}
+                </p>
+              )}
             </div>
-            <div className="h-2 rounded-full overflow-hidden" style={{ background: '#1a3060' }}>
-              <motion.div
-                className="h-full rounded-full"
-                style={{ background: '#5baaff' }}
-                initial={{ width: 0 }}
-                animate={{ width: `${lvlProgress}%` }}
-                transition={{ duration: 0.9, ease: 'easeOut' }}
-              />
-            </div>
-            <p className="text-xs mt-1.5" style={{ color: coinsNeeded ? '#4a6282' : '#ffffff' }}>
-              {coinsNeeded
-                ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} Aircoins to Level ${userLevel + 1}`
-                : <><span className="star-silver">⭐</span> Max level — RAF Rank Promotion on next cycle</>
-              }
-            </p>
-            {nextUnlockLevel && (
-              <p className="text-xs mt-1.5 font-semibold" style={{ color: 'rgba(91,170,255,0.7)' }}>
-                ↓ Next pathway unlock at Level {nextUnlockLevel.levelNumber}
-              </p>
-            )}
-          </div>
+          )}
 
           {/* Level list */}
-          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #1a3060' }}>
-            {sortedLevels.map((lvl, i) => {
-              const isCurrent  = lvl.levelNumber === userLevel
-              const isAbove    = lvl.levelNumber > userLevel
-              const isMax      = lvl.levelNumber === 10
-              const lvlUnlocks = pathwayUnlocks.filter(u => u.levelRequired === lvl.levelNumber && (u.rankRequired ?? 1) === userRankNumber)
-              return (
-                <motion.div
-                  key={lvl.levelNumber}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                  className="px-4 py-3"
-                  style={{
-                    background:   isCurrent ? 'rgba(91,170,255,0.07)' : 'transparent',
-                    borderBottom: '1px solid #1a3060',
-                    opacity:      isAbove ? 0.45 : 1,
-                  }}
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Level number */}
-                    <span
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-extrabold intel-mono shrink-0"
-                      style={{
-                        background: isCurrent ? '#5baaff'  : isAbove ? '#06101e' : '#0f2245',
-                        color:      isCurrent ? '#06101e'  : isAbove ? '#3d5a7a' : '#5baaff',
-                        border:    `1.5px solid ${isCurrent ? '#5baaff' : isAbove ? '#1a3060' : '#1a3060'}`,
-                        boxShadow:  isCurrent ? '0 0 14px rgba(91,170,255,0.5)' : 'none',
-                      }}
-                    >
-                      {lvl.levelNumber}
-                    </span>
-
-                    {/* Info */}
-                    <div className="flex-1">
-                      <p className="text-sm font-bold" style={{ color: isCurrent ? '#ddeaf8' : isAbove ? '#3d5a7a' : '#8ba0c0' }}>
-                        Level {lvl.levelNumber}{isMax && <span className="ml-1.5 text-white"><span className="star-silver">⭐</span> MAX</span>}
-                      </p>
-                      <p className="text-xs intel-mono" style={{ color: '#3d5a7a' }}>
-                        {lvl.cumulativeAircoins.toLocaleString()} Aircoins required
-                      </p>
-                    </div>
-
-                    {/* Badges */}
-                    {isCurrent && (
-                      <span
-                        className="text-xs font-bold px-2 py-0.5 rounded-full shrink-0 intel-mono"
-                        style={{ background: 'rgba(91,170,255,0.15)', color: '#5baaff', border: '1px solid rgba(91,170,255,0.3)' }}
-                      >
-                        YOU
-                      </span>
-                    )}
-                    {isMax && !isCurrent && (
-                      <span className="text-xs font-semibold shrink-0 text-white">Rank Up</span>
-                    )}
-                    {isAbove && !isCurrent && (
-                      <span className="text-base shrink-0" style={{ opacity: 0.4 }}>🔒</span>
-                    )}
-                  </div>
-
-                  {/* Inline pathway unlock badges */}
-                  {lvlUnlocks.length > 0 && (
-                    <div className="ml-11">
-                      <UnlockBadges
-                        unlocks={lvlUnlocks}
-                        userLevel={userLevel}
-                        userRankNumber={userRankNumber}
-                        userTier={userTier}
-                        onSubscriptionLocked={(cat, t) => setUpgradeModal({ category: cat, tier: t })}
-                      />
-                    </div>
-                  )}
-                </motion.div>
-              )
-            })}
+          <div ref={levelsListRef} className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+            {sortedLevels.map((lvl, i) => (
+              <LevelRow
+                key={lvl.levelNumber}
+                lvl={lvl}
+                i={i}
+                isLast={i === sortedLevels.length - 1}
+                userLevel={userLevel}
+                userRankNumber={userRankNumber}
+                userTier={userTier}
+                pathwayUnlocks={pathwayUnlocks}
+                onSubscriptionLocked={handleSubscriptionLocked}
+              />
+            ))}
           </div>
         </motion.div>
       )}
 
-      {/* ── RANKS TAB ──────────────────────────────────────────────────────── */}
+      {/* ── RANKS TAB ─────────────────────────────────────────────────────── */}
       {tab === 'ranks' && (
         <motion.div key="ranks" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
 
@@ -349,149 +375,85 @@ export default function Rankings() {
               border: `1px solid ${isPreviewing ? 'rgba(91,170,255,0.35)' : 'rgba(91,170,255,0.2)'}`,
             }}
           >
-            {/* Card header */}
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-widest font-bold" style={{ color: '#4a6282' }}>
-                {isPreviewing ? '— PREVIEWING —' : '— YOUR RANK —'}
-              </p>
-              {isPreviewing && (
-                <button
-                  onClick={() => setSelectedRankNum(userRankNumber)}
-                  className="text-xs font-semibold transition-colors"
-                  style={{ color: '#4a6282' }}
-                  onMouseEnter={e => e.currentTarget.style.color = '#8ba0c0'}
-                  onMouseLeave={e => e.currentTarget.style.color = '#4a6282'}
-                >
-                  Reset ×
-                </button>
-              )}
-            </div>
-
             {/* Rank identity */}
-            <div className="flex items-center gap-3">
-              {/* Badge */}
+            <div className="flex items-center gap-3 mb-3">
               <div
-                className="w-14 h-14 rounded-xl flex items-center justify-center shrink-0"
-                style={{ background: '#06101e', border: '1.5px solid rgba(91,170,255,0.2)' }}
+                className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: C.deep, border: '1.5px solid rgba(91,170,255,0.2)' }}
               >
                 {selectedRank && selectedRank.rankNumber > 1
-                  ? <RankBadge rankNumber={selectedRank.rankNumber} size={40} />
-                  : <span className="text-base font-extrabold intel-mono" style={{ color: '#5baaff' }}>
+                  ? <RankBadge rankNumber={selectedRank.rankNumber} size={32} />
+                  : <span className="text-sm font-extrabold intel-mono" style={{ color: C.brand }}>
                       {selectedRank?.rankAbbreviation ?? '—'}
                     </span>
                 }
               </div>
-
-              {/* Name + meta */}
-              <div>
-                <p className="text-lg font-extrabold leading-tight" style={{ color: '#ddeaf8' }}>
-                  {selectedRank?.rankName ?? (isPreviewing ? 'Unknown Rank' : 'Unranked')}
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-extrabold truncate leading-tight" style={{ color: C.text }}>
+                  {selectedRank?.rankName ?? 'Unranked'}
                 </p>
-                {selectedRank && (
-                  <p className="text-sm mt-0.5" style={{ color: '#5baaff' }}>
-                    {selectedRank.rankAbbreviation ?? selectedRank.abbreviation ?? ''}
-                    {selectedRank.rankType ? ` · ${selectedRank.rankType.replace(/_/g, ' ')}` : ''}
-                  </p>
-                )}
+                <p className="text-xs mt-0.5" style={{ color: C.muted }}>
+                  {isPreviewing ? 'Previewing' : 'Your Rank'}
+                  {selectedRank?.rankAbbreviation ? ` · ${selectedRank.rankAbbreviation}` : ''}
+                  {selectedRank?.rankType ? ` · ${selectedRank.rankType.replace(/_/g, ' ')}` : ''}
+                </p>
               </div>
             </div>
 
-            {/* Pathway unlocks for this rank */}
-            <div className="mt-3 pt-3" style={{ borderTop: '1px solid #1a3060' }}>
-              <p className="text-xs uppercase tracking-widest font-bold mb-1.5" style={{ color: '#4a6282' }}>
+            {/* Pathway unlocks — animated on rank change */}
+            <div className="pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+              <p className="text-xs uppercase tracking-widest font-bold mb-1.5" style={{ color: C.muted }}>
                 Pathway Unlocks
               </p>
-              {previewRankUnlocks.length > 0 ? (
-                <UnlockBadges
-                  unlocks={previewRankUnlocks}
-                  userLevel={userLevel}
-                  userRankNumber={userRankNumber}
-                  userTier={userTier}
-                  onSubscriptionLocked={(cat, t) => setUpgradeModal({ category: cat, tier: t })}
-                />
-              ) : (
-                <p className="text-xs" style={{ color: '#3d5a7a' }}>No pathway unlocks at this rank.</p>
-              )}
+              <motion.div
+                animate={{ height: badgeHeight }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                style={{ overflow: 'hidden' }}
+              >
+                <div ref={badgeContentRef} className="flex flex-wrap gap-1">
+                  {previewRankUnlocks.length > 0 ? (
+                    <UnlockBadges
+                      unlocks={previewRankUnlocks}
+                      bare
+                      userLevel={userLevel}
+                      userRankNumber={userRankNumber}
+                      userTier={userTier}
+                      onSubscriptionLocked={handleSubscriptionLocked}
+                    />
+                  ) : (
+                    <p className="text-xs" style={{ color: C.dim }}>
+                      No pathway unlocks at this rank.
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+              <p className="text-xs mt-2" style={{ color: C.dim }}>
+                Tap a rank below to preview its unlocks
+              </p>
             </div>
           </div>
 
-          {/* Hint */}
-          <p className="text-xs text-center" style={{ color: '#3d5a7a' }}>
-            Tap a rank to preview its pathway unlocks
-          </p>
-
           {/* Rank list */}
-          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid #1a3060' }}>
-            <div ref={rankListScrollRef} style={{ height: 372, overflowY: 'auto', scrollbarWidth: 'none' }}>
-            {sortedRanks.map((rank, i) => {
-              const isUser     = rank.rankNumber === userRankNumber
-              const isAbove    = rank.rankNumber > userRankNumber
-              const isSelected = rank.rankNumber === selectedRankNum
-              return (
-                <motion.div
+          <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+            <div ref={rankListScrollRef} style={{ height: levelsListH ?? 540, overflowY: 'auto', scrollbarWidth: 'none' }}>
+              {sortedRanks.map((rank, i) => (
+                <RankRow
                   key={rank.rankNumber}
-                  ref={isUser ? userRankRowRef : undefined}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.025 }}
+                  rank={rank}
+                  i={i}
+                  isLast={i === sortedRanks.length - 1}
+                  isUser={rank.rankNumber === userRankNumber}
+                  isAbove={rank.rankNumber > userRankNumber}
+                  isSelected={rank.rankNumber === selectedRankNum}
                   onClick={() => setSelectedRankNum(rank.rankNumber)}
-                  className="px-4 py-3 flex items-center gap-3 cursor-pointer transition-all"
-                  style={{
-                    background:   isSelected ? 'rgba(91,170,255,0.09)' : 'transparent',
-                    borderBottom: '1px solid #1a3060',
-                    borderLeft:   isSelected ? '2px solid rgba(91,170,255,0.5)' : '2px solid transparent',
-                    opacity:      isAbove && !isSelected ? 0.45 : 1,
-                  }}
-                >
-                  {/* Rank badge / number */}
-                  <span
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold intel-mono shrink-0"
-                    style={{
-                      background: isUser ? '#5baaff' : isSelected ? '#1a3060' : isAbove ? '#06101e' : '#0f2245',
-                      color:      isUser ? '#06101e' : isSelected ? '#5baaff' : isAbove ? '#3d5a7a' : '#5baaff',
-                      border:    `1.5px solid ${isUser ? '#5baaff' : isSelected ? 'rgba(91,170,255,0.4)' : '#1a3060'}`,
-                      boxShadow:  isUser ? '0 0 14px rgba(91,170,255,0.5)' : 'none',
-                    }}
-                  >
-                    {rank.rankNumber > 1
-                      ? <RankBadge rankNumber={rank.rankNumber} size={18} color={isUser ? '#06101e' : '#5baaff'} />
-                      : (rank.rankAbbreviation ?? 'AC')}
-                  </span>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className="text-sm font-bold truncate"
-                      style={{ color: isUser || isSelected ? '#ddeaf8' : isAbove ? '#3d5a7a' : '#8ba0c0' }}
-                    >
-                      {rank.rankAbbreviation ?? rank.abbreviation}
-                    </p>
-                    <p className="text-xs truncate" style={{ color: '#3d5a7a' }}>
-                      {rank.rankName} · {rank.rankType?.replace(/_/g, ' ')}
-                    </p>
-                  </div>
-
-                  {/* Status */}
-                  {isUser && (
-                    <span
-                      className="text-xs font-bold px-2 py-0.5 rounded-full shrink-0 intel-mono"
-                      style={{ background: 'rgba(91,170,255,0.15)', color: '#5baaff', border: '1px solid rgba(91,170,255,0.3)' }}
-                    >
-                      YOU
-                    </span>
-                  )}
-                  {isAbove && !isUser && <span className="text-base shrink-0" style={{ opacity: 0.3 }}>🔒</span>}
-                  {isSelected && !isUser && (
-                    <span className="text-xs shrink-0" style={{ color: 'rgba(91,170,255,0.5)' }}>▶</span>
-                  )}
-                </motion.div>
-              )
-            })}
-            {sortedRanks.length === 0 && (
-              <div className="px-4 py-6 text-center text-sm" style={{ color: '#3d5a7a' }}>
-                No rank data available.
-              </div>
-            )}
+                  rowRef={rank.rankNumber === userRankNumber ? userRankRowRef : undefined}
+                />
+              ))}
+              {sortedRanks.length === 0 && (
+                <div className="px-4 py-6 text-center text-sm" style={{ color: C.dim }}>
+                  No rank data available.
+                </div>
+              )}
             </div>
           </div>
         </motion.div>

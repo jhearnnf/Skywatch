@@ -328,6 +328,15 @@ describe('Admin Briefs — Generate Description button', () => {
   beforeEach(() => { global.Audio = class { play = vi.fn().mockResolvedValue(undefined) } })
   afterEach(() => { vi.restoreAllMocks() })
 
+  /** Click "Generate Description", type a reason, and click "Confirm & Regenerate". */
+  async function confirmDescModal() {
+    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await screen.findByText(/confirm & regenerate/i)
+    const textarea = screen.getByPlaceholderText(/briefly describe why/i)
+    fireEvent.change(textarea, { target: { value: 'Test reason' } })
+    fireEvent.click(screen.getByRole('button', { name: /confirm & regenerate/i }))
+  }
+
   it('shows "Generate Description" button inside the Description Sections panel when a brief is open', async () => {
     global.fetch = vi.fn().mockImplementation(baseHandlers())
     render(<Admin />)
@@ -344,7 +353,28 @@ describe('Admin Briefs — Generate Description button', () => {
     expect(screen.queryByRole('button', { name: /generate description/i })).toBeNull()
   })
 
-  it('clicking does NOT open the cascade confirmation modal', async () => {
+  it('opens a cascade confirmation modal when clicked', async () => {
+    global.fetch = vi.fn().mockImplementation(baseHandlers())
+    render(<Admin />)
+    await openBriefEditor()
+    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await screen.findByText(/delete all read history/i)
+    await screen.findByText(/confirm & regenerate/i)
+  })
+
+  it('cancelling the modal hides it and makes no API calls', async () => {
+    global.fetch = vi.fn().mockImplementation(baseHandlers())
+    render(<Admin />)
+    await openBriefEditor()
+    const callsBefore = global.fetch.mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await screen.findByText(/confirm & regenerate/i)
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
+    expect(screen.queryByText(/confirm & regenerate/i)).toBeNull()
+    expect(global.fetch.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('sends reason in request body after confirming', async () => {
     global.fetch = vi.fn().mockImplementation((url, opts) => {
       if (url.includes('regenerate-description'))
         return Promise.resolve({ ok: true, json: async () => DESC_RESPONSE })
@@ -352,11 +382,12 @@ describe('Admin Briefs — Generate Description button', () => {
     })
     render(<Admin />)
     await openBriefEditor()
-    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
-    // Modal text must NOT appear
-    await waitFor(() => {}, { timeout: 300 }).catch(() => {})
-    expect(screen.queryByText(/confirm & regenerate/i)).toBeNull()
-    expect(screen.queryByText(/delete all read history/i)).toBeNull()
+    await confirmDescModal()
+    await waitFor(() => screen.getByText(/description generated/i))
+    const descCall = global.fetch.mock.calls.find(c => c[0].includes('regenerate-description'))
+    expect(descCall).toBeDefined()
+    const body = JSON.parse(descCall[1].body)
+    expect(body.reason).toBe('Test reason')
   })
 
   it('shows "Generating…" label while request is in flight', async () => {
@@ -368,7 +399,7 @@ describe('Admin Briefs — Generate Description button', () => {
     })
     render(<Admin />)
     await openBriefEditor()
-    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await confirmDescModal()
     await waitFor(() => screen.getByText(/↺ generating…/i))
     resolveDesc({ ok: true, json: async () => DESC_RESPONSE })
   })
@@ -381,7 +412,7 @@ describe('Admin Briefs — Generate Description button', () => {
     })
     render(<Admin />)
     await openBriefEditor()
-    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await confirmDescModal()
     await waitFor(() => screen.getByDisplayValue('Brand new section alpha.'))
     expect(screen.getByDisplayValue('Brand new section beta.')).toBeDefined()
   })
@@ -394,7 +425,7 @@ describe('Admin Briefs — Generate Description button', () => {
     })
     render(<Admin />)
     await openBriefEditor()
-    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await confirmDescModal()
     await waitFor(() => screen.getByDisplayValue('Brand new section alpha.'))
     // Keywords section is collapsed by default — expand it to see the keyword inputs
     fireEvent.click(screen.getByText('Keywords'))
@@ -410,7 +441,7 @@ describe('Admin Briefs — Generate Description button', () => {
     })
     render(<Admin />)
     await openBriefEditor()
-    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await confirmDescModal()
     await waitFor(() => screen.getByText(/description generated — review and save/i))
   })
 
@@ -422,7 +453,7 @@ describe('Admin Briefs — Generate Description button', () => {
     })
     render(<Admin />)
     await openBriefEditor()
-    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await confirmDescModal()
     await waitFor(() => screen.getByText(/generate description failed/i))
   })
 
@@ -453,7 +484,7 @@ describe('Admin Briefs — Generate Description button', () => {
     })
     render(<Admin />)
     await openBriefEditor()
-    fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
+    await confirmDescModal()
     await waitFor(() => screen.getByText(/description generated/i))
     const calls = global.fetch.mock.calls.map(c => [c[0], c[1]])
     const saveCalls = calls.filter(([url, opts]) =>

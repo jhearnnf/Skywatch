@@ -1296,6 +1296,92 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
 // Cascade-deletes all user game data and awarded coins tied to this brief,
 // then returns deletion counts. The admin has already confirmed a warning modal.
 // Must be called before POSTing to /ai/regenerate-brief/:id.
+// ── Shared cascade: wipe all user data tied to a brief ───────────────────
+async function cascadeDeleteBriefData(briefId) {
+  // Step 1: collect IDs before any deletion
+  const [questionIds, booGameIds, flashGameIds, waaGameIds] = await Promise.all([
+    GameQuizQuestion.distinct('_id', { intelBriefId: briefId }),
+    GameOrderOfBattle.distinct('_id', { anchorBriefId: briefId }),
+    GameFlashcardRecall.distinct('_id', { 'cards.intelBriefId': briefId }),
+    GameWheresThatAircraft.distinct('_id', { intelBriefId: briefId }),
+  ]);
+
+  // Step 2: reverse Aircoins per user
+  const coinGroups = await AircoinLog.aggregate([
+    { $match: { briefId: new mongoose.Types.ObjectId(briefId) } },
+    { $group: { _id: '$userId', total: { $sum: '$amount' } } },
+  ]);
+  await Promise.all(coinGroups.map(async ({ _id: userId, total }) => {
+    const user = await User.findById(userId).select('totalAircoins cycleAircoins');
+    if (!user) return;
+    user.totalAircoins = Math.max(0, (user.totalAircoins ?? 0) - total);
+    user.cycleAircoins = Math.max(0, (user.cycleAircoins ?? 0) - total);
+    await user.save();
+  }));
+
+  // Step 3: delete everything
+  const [
+    briefReadResult,
+    quizQResult,
+    quizAttemptResult,
+    quizResultResult,
+    aircoinResult,
+    booResultResult,
+    booGameResult,
+    flashResultResult,
+    flashGameResult,
+    waaResultResult,
+    waaGameResult,
+    whereAircraftResult,
+  ] = await Promise.all([
+    IntelligenceBriefRead.deleteMany({ intelBriefId: briefId }),
+    GameQuizQuestion.deleteMany({ intelBriefId: briefId }),
+    GameSessionQuizAttempt.deleteMany({ intelBriefId: briefId }),
+    GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
+    AircoinLog.deleteMany({ briefId: new mongoose.Types.ObjectId(briefId) }),
+    GameSessionOrderOfBattleResult.deleteMany({ gameId: { $in: booGameIds } }),
+    GameOrderOfBattle.deleteMany({ anchorBriefId: briefId }),
+    GameSessionFlashcardRecallResult.deleteMany({ gameId: { $in: flashGameIds } }),
+    GameFlashcardRecall.deleteMany({ 'cards.intelBriefId': briefId }),
+    GameSessionWheresThatAircraftResult.deleteMany({ gameId: { $in: waaGameIds } }),
+    GameWheresThatAircraft.deleteMany({ intelBriefId: briefId }),
+    GameSessionWhereAircraftResult.deleteMany({ aircraftBriefId: briefId }),
+    IntelligenceBrief.findByIdAndUpdate(briefId, { $set: {
+      quizQuestionsEasy:          [],
+      quizQuestionsMedium:        [],
+      associatedBaseBriefIds:     [],
+      associatedSquadronBriefIds: [],
+      associatedAircraftBriefIds: [],
+      relatedBriefIds:            [],
+    } }),
+  ]);
+
+  // Remove from all other briefs' relationship arrays
+  await IntelligenceBrief.updateMany({}, { $pull: {
+    associatedBaseBriefIds:     new mongoose.Types.ObjectId(briefId),
+    associatedSquadronBriefIds: new mongoose.Types.ObjectId(briefId),
+    associatedAircraftBriefIds: new mongoose.Types.ObjectId(briefId),
+    relatedBriefIds:            new mongoose.Types.ObjectId(briefId),
+  } });
+
+  return {
+    coinsReversed:          coinGroups.reduce((s, g) => s + g.total, 0),
+    usersAffected:          coinGroups.length,
+    briefReadsDeleted:      briefReadResult.deletedCount,
+    quizQuestionsDeleted:   quizQResult.deletedCount,
+    quizAttemptsDeleted:    quizAttemptResult.deletedCount,
+    quizResultsDeleted:     quizResultResult.deletedCount,
+    aircoinLogsDeleted:     aircoinResult.deletedCount,
+    booResultsDeleted:      booResultResult.deletedCount,
+    booGamesDeleted:        booGameResult.deletedCount,
+    flashResultsDeleted:    flashResultResult.deletedCount,
+    flashGamesDeleted:      flashGameResult.deletedCount,
+    waaResultsDeleted:          waaResultResult.deletedCount,
+    waaGamesDeleted:            waaGameResult.deletedCount,
+    whereAircraftResultsDeleted: whereAircraftResult.deletedCount,
+  };
+}
+
 router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) => {
   try {
     const briefId = req.params.id;
@@ -1303,75 +1389,7 @@ router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) 
       return res.status(404).json({ message: 'Brief not found' });
     }
 
-    // ── Step 1: collect IDs before any deletion ──────────────────────────
-    const [questionIds, booGameIds, flashGameIds, waaGameIds] = await Promise.all([
-      GameQuizQuestion.distinct('_id', { intelBriefId: briefId }),
-      GameOrderOfBattle.distinct('_id', { anchorBriefId: briefId }),
-      GameFlashcardRecall.distinct('_id', { 'cards.intelBriefId': briefId }),
-      GameWheresThatAircraft.distinct('_id', { intelBriefId: briefId }),
-    ]);
-
-    // ── Step 2: reverse Aircoins per user ────────────────────────────────
-    // Group all brief-attributed log entries by userId and sum amounts, then
-    // subtract from each user's balances (floored at 0).
-    const coinGroups = await AircoinLog.aggregate([
-      { $match: { briefId: new mongoose.Types.ObjectId(briefId) } },
-      { $group: { _id: '$userId', total: { $sum: '$amount' } } },
-    ]);
-    await Promise.all(coinGroups.map(async ({ _id: userId, total }) => {
-      const user = await User.findById(userId).select('totalAircoins cycleAircoins');
-      if (!user) return;
-      user.totalAircoins = Math.max(0, (user.totalAircoins ?? 0) - total);
-      user.cycleAircoins = Math.max(0, (user.cycleAircoins ?? 0) - total);
-      await user.save();
-    }));
-
-    // ── Step 3: delete everything ────────────────────────────────────────
-    const regenBrief = await IntelligenceBrief.findById(briefId).select('category').lean();
-
-    const [
-      briefReadResult,
-      quizQResult,
-      quizAttemptResult,
-      quizResultResult,
-      aircoinResult,
-      booResultResult,
-      booGameResult,
-      flashResultResult,
-      flashGameResult,
-      waaResultResult,
-      waaGameResult,
-      whereAircraftResult,
-    ] = await Promise.all([
-      IntelligenceBriefRead.deleteMany({ intelBriefId: briefId }),
-      GameQuizQuestion.deleteMany({ intelBriefId: briefId }),
-      GameSessionQuizAttempt.deleteMany({ intelBriefId: briefId }),
-      GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
-      AircoinLog.deleteMany({ briefId: new mongoose.Types.ObjectId(briefId) }),
-      GameSessionOrderOfBattleResult.deleteMany({ gameId: { $in: booGameIds } }),
-      GameOrderOfBattle.deleteMany({ anchorBriefId: briefId }),
-      GameSessionFlashcardRecallResult.deleteMany({ gameId: { $in: flashGameIds } }),
-      GameFlashcardRecall.deleteMany({ 'cards.intelBriefId': briefId }),
-      GameSessionWheresThatAircraftResult.deleteMany({ gameId: { $in: waaGameIds } }),
-      GameWheresThatAircraft.deleteMany({ intelBriefId: briefId }),
-      GameSessionWhereAircraftResult.deleteMany({ aircraftBriefId: briefId }),
-      IntelligenceBrief.findByIdAndUpdate(briefId, { $set: {
-        quizQuestionsEasy:          [],
-        quizQuestionsMedium:        [],
-        associatedBaseBriefIds:     [],
-        associatedSquadronBriefIds: [],
-        associatedAircraftBriefIds: [],
-        relatedBriefIds:            [],
-      } }),
-    ]);
-
-    // Remove from all other briefs' relationship arrays
-    await IntelligenceBrief.updateMany({}, { $pull: {
-      associatedBaseBriefIds:     new mongoose.Types.ObjectId(briefId),
-      associatedSquadronBriefIds: new mongoose.Types.ObjectId(briefId),
-      associatedAircraftBriefIds: new mongoose.Types.ObjectId(briefId),
-      relatedBriefIds:            new mongoose.Types.ObjectId(briefId),
-    } });
+    const cascadeStats = await cascadeDeleteBriefData(briefId);
 
     await AdminAction.create({
       userId:     req.user._id,
@@ -1379,25 +1397,7 @@ router.post('/briefs/:id/confirm-regeneration', requireReason, async (req, res) 
       reason:     req.body.reason,
     });
 
-    res.json({
-      status: 'success',
-      data: {
-        coinsReversed:          coinGroups.reduce((s, g) => s + g.total, 0),
-        usersAffected:          coinGroups.length,
-        briefReadsDeleted:      briefReadResult.deletedCount,
-        quizQuestionsDeleted:   quizQResult.deletedCount,
-        quizAttemptsDeleted:    quizAttemptResult.deletedCount,
-        quizResultsDeleted:     quizResultResult.deletedCount,
-        aircoinLogsDeleted:     aircoinResult.deletedCount,
-        booResultsDeleted:      booResultResult.deletedCount,
-        booGamesDeleted:        booGameResult.deletedCount,
-        flashResultsDeleted:    flashResultResult.deletedCount,
-        flashGamesDeleted:      flashGameResult.deletedCount,
-        waaResultsDeleted:          waaResultResult.deletedCount,
-        waaGamesDeleted:            waaGameResult.deletedCount,
-        whereAircraftResultsDeleted: whereAircraftResult.deletedCount,
-      },
-    });
+    res.json({ status: 'success', data: cascadeStats });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -3336,12 +3336,21 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
 });
 
 // POST /api/admin/ai/regenerate-description/:id
-// Regenerates ONLY the description sections for an existing brief (no keywords, no questions).
-// Does not cascade-delete any user data — purely a generation endpoint.
-router.post('/ai/regenerate-description/:id', async (req, res) => {
+// Regenerates the description sections for an existing brief.
+// Cascade-deletes all user data first (reads, games, questions, aircoins) because
+// questions/answers derived from the old description become stale.
+router.post('/ai/regenerate-description/:id', requireReason, async (req, res) => {
   try {
     const brief = await IntelligenceBrief.findById(req.params.id).select('title category');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
+
+    const cascadeStats = await cascadeDeleteBriefData(req.params.id);
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'regenerate_description_cascade',
+      reason:     req.body.reason,
+    });
 
     const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: false });
     const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text:\n{\n  "descriptionSections": [\n    ${dsArray}\n  ]\n}\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n${LIST_FORMAT_RULE}`;
@@ -3366,7 +3375,7 @@ router.post('/ai/regenerate-description/:id', async (req, res) => {
 
     const descriptionSections = (Array.isArray(generated.descriptionSections) ? generated.descriptionSections : [])
       .map(s => typeof s === 'string' ? s.replace(/[*_`#]/g, '') : s);
-    res.json({ status: 'success', data: { descriptionSections } });
+    res.json({ status: 'success', data: { descriptionSections, cascade: cascadeStats } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

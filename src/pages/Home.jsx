@@ -185,7 +185,7 @@ export default function Home() {
               : 'bg-amber-50 border-amber-200 cursor-pointer hover:border-amber-400 hover:-translate-y-0.5 card-shadow hover:card-shadow-hover'
           }`}
       >
-        <span className={`text-2xl${!missionDone && !missionLoading ? ' star-silver' : ''}`}>{missionDone ? '✅' : missionLoading ? '…' : '⭐'}</span>
+        <span className={`text-2xl${!missionDone && !missionLoading ? ' target-amber' : ''}`}>{missionDone ? '✅' : missionLoading ? '…' : '🎯'}</span>
         <div className="flex-1 min-w-0">
           {missionDone ? (
             <>
@@ -255,6 +255,7 @@ export default function Home() {
       {/* Latest News */}
       {(newsLoading || latestBriefs.length > 0) && (
         <div className="mb-6">
+
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-800">Latest News</h2>
             <Link to="/learn-priority" className="text-xs font-semibold text-brand-600 hover:text-brand-700">See all →</Link>

@@ -16,6 +16,7 @@ const ACTION_TYPES = [
   'edit_brief',
   'delete_brief',
   'regenerate_brief_cascade',
+  'regenerate_description_cascade',
   'award_test_coins',
   'change_subscription',
   'reset_leads',

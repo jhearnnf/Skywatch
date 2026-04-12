@@ -804,6 +804,8 @@ describe('POST /api/admin/ai/regenerate-description/:id', () => {
     ],
   });
 
+  const REASON = 'Test regeneration';
+
   it('returns descriptionSections array on success', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValueOnce(mockOpenRouter(MOCK_DESC_JSON));
 
@@ -811,13 +813,30 @@ describe('POST /api/admin/ai/regenerate-description/:id', () => {
     const admin = await createAdminUser();
     const res   = await request(app)
       .post(`/api/admin/ai/regenerate-description/${brief._id}`)
-      .set('Cookie', authCookie(admin._id));
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: REASON });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
     expect(Array.isArray(res.body.data.descriptionSections)).toBe(true);
     expect(res.body.data.descriptionSections.length).toBeGreaterThan(0);
     expect(res.body.data.descriptionSections[0]).toContain('Typhoon');
+  });
+
+  it('returns cascade stats alongside descriptionSections', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce(mockOpenRouter(MOCK_DESC_JSON));
+
+    const brief = await createBrief({ title: 'Eurofighter Typhoon' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: REASON });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.cascade).toBeDefined();
+    expect(typeof res.body.data.cascade.coinsReversed).toBe('number');
+    expect(typeof res.body.data.cascade.briefReadsDeleted).toBe('number');
   });
 
   it('response does NOT include keywords, easyQuestions, or mediumQuestions', async () => {
@@ -827,7 +846,8 @@ describe('POST /api/admin/ai/regenerate-description/:id', () => {
     const admin = await createAdminUser();
     const res   = await request(app)
       .post(`/api/admin/ai/regenerate-description/${brief._id}`)
-      .set('Cookie', authCookie(admin._id));
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: REASON });
 
     expect(res.status).toBe(200);
     expect(res.body.data.keywords).toBeUndefined();
@@ -835,12 +855,24 @@ describe('POST /api/admin/ai/regenerate-description/:id', () => {
     expect(res.body.data.mediumQuestions).toBeUndefined();
   });
 
+  it('returns 400 when reason is missing', async () => {
+    const brief = await createBrief();
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({});
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/reason/i);
+  });
+
   it('returns 404 when brief does not exist', async () => {
     const { Types } = require('mongoose');
     const admin = await createAdminUser();
     const res   = await request(app)
       .post(`/api/admin/ai/regenerate-description/${new Types.ObjectId()}`)
-      .set('Cookie', authCookie(admin._id));
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: REASON });
 
     expect(res.status).toBe(404);
     expect(res.body.message).toMatch(/brief not found/i);
@@ -853,7 +885,8 @@ describe('POST /api/admin/ai/regenerate-description/:id', () => {
     const admin = await createAdminUser();
     const res   = await request(app)
       .post(`/api/admin/ai/regenerate-description/${brief._id}`)
-      .set('Cookie', authCookie(admin._id));
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: REASON });
 
     expect(res.status).toBe(500);
     expect(res.body.message).toMatch(/not valid json/i);
@@ -862,7 +895,8 @@ describe('POST /api/admin/ai/regenerate-description/:id', () => {
   it('returns 401 for unauthenticated request', async () => {
     const brief = await createBrief();
     const res   = await request(app)
-      .post(`/api/admin/ai/regenerate-description/${brief._id}`);
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`)
+      .send({ reason: REASON });
     expect(res.status).toBe(401);
   });
 
@@ -871,7 +905,8 @@ describe('POST /api/admin/ai/regenerate-description/:id', () => {
     const user  = await createUser();
     const res   = await request(app)
       .post(`/api/admin/ai/regenerate-description/${brief._id}`)
-      .set('Cookie', authCookie(user._id));
+      .set('Cookie', authCookie(user._id))
+      .send({ reason: REASON });
     expect(res.status).toBe(403);
   });
 });

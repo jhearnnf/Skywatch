@@ -3485,6 +3485,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [pendingLead,   setPendingLead]   = useState(null)
   const [confirmDelete,     setConfirmDelete]     = useState(false)
   const [confirmRegen,      setConfirmRegen]      = useState(false)
+  const [confirmDescRegen,  setConfirmDescRegen]  = useState(false)
   const [staleSourceWarning,    setStaleSourceWarning]    = useState(false)
   const [missingGameDataWarning, setMissingGameDataWarning] = useState(false)
   // Section open/close
@@ -4129,13 +4130,20 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     }
   }
 
-  // ── Generate description sections only (no cascade, no keywords/questions) ─
-  const generateDescription = async () => {
+  // ── Generate description sections (cascades all user data first) ────────
+  const generateDescription = () => {
     if (!briefId) return
+    setConfirmDescRegen(true)
+  }
+
+  const handleConfirmDescRegen = async (reason) => {
+    setConfirmDescRegen(false)
     setGenerating('description')
     try {
       const res  = await apiFetch(`${API}/api/admin/ai/regenerate-description/${briefId}`, {
         method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
       })
       const data = await res.json()
       if (data.status !== 'success') throw new Error(data.message ?? 'Generation failed')
@@ -4601,6 +4609,16 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
           danger
           onConfirm={handleConfirmRegen}
           onCancel={() => setConfirmRegen(false)}
+        />
+      )}
+      {confirmDescRegen && (
+        <ConfirmModal
+          title="Regenerate Description"
+          body="This will delete all read history, quiz game stats, Battle of Order stats, Where's That Aircraft stats, Flashcard stats, and all Aircoins awarded for this brief — for every user. This cannot be undone."
+          confirmLabel="Confirm & Regenerate"
+          danger
+          onConfirm={handleConfirmDescRegen}
+          onCancel={() => setConfirmDescRegen(false)}
         />
       )}
 

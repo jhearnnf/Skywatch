@@ -6,6 +6,8 @@ vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, className, 'aria-live': ariaLive, ...rest }) =>
            <div className={className} aria-live={ariaLive}>{children}</div>,
+    span: ({ children, className, ...rest }) =>
+           <span className={className}>{children}</span>,
   },
   AnimatePresence: ({ children }) => <>{children}</>,
 }))
