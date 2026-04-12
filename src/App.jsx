@@ -37,6 +37,8 @@ import LoginPage      from './pages/Login'
 import Profile        from './pages/Profile'
 import Rankings       from './pages/Rankings'
 import Play           from './pages/Play'
+import Cbat           from './pages/Cbat'
+import CbatPlaneTurn  from './pages/CbatPlaneTurn'
 import AircoinHistory from './pages/AircoinHistory'
 import GameHistory        from './pages/GameHistory'
 import IntelBriefHistory from './pages/IntelBriefHistory'
@@ -184,6 +186,8 @@ function AppRoutes() {
           <Route path="/play"                   element={<PageWrapper><Play /></PageWrapper>} />
           <Route path="/play/quiz"              element={<RequireAuth><PageWrapper><QuizBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/play/battle-of-order"   element={<RequireAuth><PageWrapper><BOOBriefsList /></PageWrapper></RequireAuth>} />
+          <Route path="/cbat"                   element={<PageWrapper><Cbat /></PageWrapper>} />
+          <Route path="/cbat/plane-turn"        element={<RequireAuth><PageWrapper><CbatPlaneTurn /></PageWrapper></RequireAuth>} />
 
           {/* v2 protected pages */}
           <Route path="/subscribe"        element={<PageWrapper><Subscription /></PageWrapper>} />

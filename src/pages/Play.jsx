@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
@@ -80,6 +81,7 @@ const GAME_MODES = [
 
 export default function Play() {
   const { user, API, apiFetch } = useAuth()
+  const { settings } = useAppSettings()
   const { start, step, visible, next: tutorialNext, hasSeen } = useAppTutorial()
   const { newGames, isUnlocked, markSeen, markUnlockFromServer } = useNewGameUnlock()
 
@@ -283,7 +285,12 @@ export default function Play() {
       </AnimatePresence>
 
       <div className="play-page">
-        <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Play</h1>
+        <div className="flex items-center justify-between mb-1">
+          <h1 className="text-2xl font-extrabold text-slate-900">Play</h1>
+          {settings?.cbatEnabled && (
+            <Link to="/cbat" className="text-[10px] font-semibold tracking-wide uppercase text-slate-500 border border-slate-700 rounded px-1.5 py-0.5 hover:text-brand-400 hover:border-brand-500 transition-colors">Play CBAT</Link>
+          )}
+        </div>
         <p className="text-sm text-slate-500 mb-6">Test your aviation knowledge with training games.</p>
 
         {/* ── Game mode grid ─────────────────────────────────────────── */}

@@ -79,7 +79,7 @@ async function reprioritizeCategory(category, newStubs, sourceBriefId, sourceBri
   // Fetch all leads in this category, sorted by current priority (nulls last)
   const leads = await IntelLead.find(
     { category },
-    'title subtitle priorityNumber'
+    'title subtitle priorityNumber isHistoric'
   ).lean();
 
   if (leads.length === 0) return;
@@ -111,9 +111,9 @@ async function reprioritizeCategory(category, newStubs, sourceBriefId, sourceBri
 The list currently has ${N} entries. ${newTitles.length} topic(s) need to be placed in the correct learning order: ${newTitles.map(t => `"${t}"`).join(', ')}.
 
 Current list (title — one-line description, ordered by existing priority where known):
-${leads.map((l, i) => `${l.priorityNumber != null ? l.priorityNumber : '?'}. "${l.title}"${l.subtitle ? ` — ${l.subtitle}` : ''}`).join('\n')}
+${leads.map((l, i) => `${l.priorityNumber != null ? l.priorityNumber : '?'}. "${l.title}"${l.subtitle ? ` — ${l.subtitle}` : ''}${l.isHistoric ? ' [HISTORIC]' : ''}`).join('\n')}
 
-Assign a priority number from 1 to ${N} to every entry. Priority 1 = most foundational / essential for a new RAF learner. Preserve the existing relative ordering of already-numbered entries unless a new entry clearly belongs between them. Every number from 1 to ${N} must be used exactly once.
+Assign a priority number from 1 to ${N} to every entry. Priority 1 = most foundational / essential for a new RAF learner. Entries marked [HISTORIC] are retired, concluded, or no longer current — they should generally rank lower than current/active topics, as a potential RAF applicant needs to understand today's RAF first. Preserve the existing relative ordering of already-numbered entries unless a new entry clearly belongs between them. Every number from 1 to ${N} must be used exactly once.
 
 Return ONLY valid JSON — no markdown, no extra text:
 {

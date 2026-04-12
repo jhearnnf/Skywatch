@@ -133,6 +133,7 @@ const appSettingsSchema = new mongoose.Schema({
   useLiveLeaderboard:   { type: Boolean, default: false },
   disableLoadingBar:    { type: Boolean, default: false },
   betaTesterAutoGold:   { type: Boolean, default: false },
+  cbatEnabled:          { type: Boolean, default: false },
 
   // APTITUDE_SYNC feature
   aptitudeSyncEnabled:          { type: Boolean,  default: false },

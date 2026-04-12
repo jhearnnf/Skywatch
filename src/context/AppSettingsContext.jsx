@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { buildCumulativeThresholds } from '../utils/subscription'
 
 const Ctx = createContext(null)
@@ -10,8 +10,8 @@ export function AppSettingsProvider({ children }) {
   const [levelThresholds, setLevelThresholds] = useState(null)
   const [loading, setLoading]                 = useState(true)
 
-  useEffect(() => {
-    Promise.all([
+  const fetchSettings = useCallback(() => {
+    return Promise.all([
       fetch(`${API}/api/settings`).then(r => r.ok ? r.json() : null),
       fetch(`${API}/api/users/levels`).then(r => r.ok ? r.json() : null),
     ])
@@ -29,7 +29,9 @@ export function AppSettingsProvider({ children }) {
       .finally(() => setLoading(false))
   }, [])
 
-  return <Ctx.Provider value={{ settings, levels, levelThresholds, loading }}>{children}</Ctx.Provider>
+  useEffect(() => { fetchSettings() }, [fetchSettings])
+
+  return <Ctx.Provider value={{ settings, levels, levelThresholds, loading, refreshSettings: fetchSettings }}>{children}</Ctx.Provider>
 }
 
 export const useAppSettings = () => useContext(Ctx)

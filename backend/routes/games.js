@@ -1906,4 +1906,30 @@ router.get('/history/flashcard/:sessionId', protect, async (req, res) => {
   }
 });
 
+// ── CBAT — Plane Turn: aircraft cutouts for character selection ────────────
+// Returns published Aircraft briefs that have a cutout image.
+router.get('/cbat/aircraft-cutouts', protect, async (_req, res) => {
+  try {
+    const Media = require('../models/Media');
+    const briefs = await IntelligenceBrief.find({
+      category: 'Aircrafts',
+      status: 'published',
+    })
+      .select('title media')
+      .populate('media')
+      .lean();
+
+    const results = briefs
+      .map(b => {
+        const img = (b.media || []).find(m => m.cutoutUrl);
+        return img ? { briefId: b._id, title: b.title, cutoutUrl: img.cutoutUrl } : null;
+      })
+      .filter(Boolean);
+
+    res.json({ status: 'success', data: results });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

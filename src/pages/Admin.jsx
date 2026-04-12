@@ -1245,6 +1245,7 @@ function AiPromptsSection({ API }) {
 
 function SettingsTab({ API }) {
   const { apiFetch } = useAuth()
+  const { refreshSettings } = useAppSettings()
   const [settings, setSettings] = useState(null)
   const [draft,    setDraft]    = useState({})
   const [modal,    setModal]    = useState(null)   // { label, fields }
@@ -1276,6 +1277,7 @@ function SettingsTab({ API }) {
     })
     setModal(null)
     invalidateSoundSettings()
+    refreshSettings()
     setToast(`✓ ${modal.label} saved`)
     load()
   }
@@ -1491,7 +1493,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'betaTesterAutoGold'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'betaTesterAutoGold', 'cbatEnabled'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -1503,6 +1505,12 @@ function SettingsTab({ API }) {
           hint="When on, every newly registered account is automatically granted gold subscription"
           checked={draft.betaTesterAutoGold ?? false}
           onChange={v => set('betaTesterAutoGold', v)}
+        />
+        <Toggle
+          label="CBAT Games"
+          hint="Show the Play CBAT button on the Play page"
+          checked={draft.cbatEnabled ?? false}
+          onChange={v => set('cbatEnabled', v)}
         />
       </Section>
 
