@@ -8,9 +8,15 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest",
+    "postinstall": "node scripts/fix-google-auth-gradle.cjs"
   },
   "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@tailwindcss/vite": "^4.2.1",
     "@testing-library/dom": "^10.4.1",
     "framer-motion": "^12.38.0",
@@ -37,6 +43,8 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "jsdom": "^29.0.0",
+    "sharp": "^0.34.5",
+    "typescript": "^6.0.2",
     "vite": "^7.3.1",
     "vitest": "^4.1.0"
   }

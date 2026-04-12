@@ -34,7 +34,8 @@ const sendToken = (user, statusCode, res, extras = {}) => {
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
   user.password = undefined;
-  res.status(statusCode).json({ status: 'success', data: { user, ...extras } });
+  // Token included in body so native apps (Capacitor) can store it for Bearer auth
+  res.status(statusCode).json({ status: 'success', data: { user, token, ...extras } });
 };
 
 // Records a login timestamp. Coins are no longer awarded at login —

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SkyWatch</string>
+    <string name="title_activity_main">SkyWatch</string>
+    <string name="package_name">academy.skywatch.app</string>
+    <string name="custom_url_scheme">academy.skywatch.app</string>
+</resources>

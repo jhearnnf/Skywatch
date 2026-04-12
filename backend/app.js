@@ -13,6 +13,8 @@ const allowedOrigins = [
   process.env.CLIENT_URL,
   'http://localhost:5173',
   'http://localhost:4173',
+  'https://localhost',       // Capacitor Android WebView
+  'capacitor://localhost',   // Capacitor Android scheme
 ].filter(Boolean)
 
 console.log('CORS allowed origins:', allowedOrigins)

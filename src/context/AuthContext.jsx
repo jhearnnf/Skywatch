@@ -1,9 +1,23 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
+import { Capacitor } from '@capacitor/core'
 import { getLevelNumber } from '../utils/levelUtils'
 
 const AuthContext = createContext(null)
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const isNative = Capacitor.isNativePlatform()
+
+// On native, store/retrieve the JWT so we can send it as a Bearer header
+const TOKEN_KEY = 'sw_auth_token'
+const getStoredToken = () => localStorage.getItem(TOKEN_KEY)
+const storeToken = (token) => { if (token) localStorage.setItem(TOKEN_KEY, token); }
+const clearToken = () => localStorage.removeItem(TOKEN_KEY)
+
+// Inject Bearer header for native requests
+const nativeHeaders = () => {
+  const token = getStoredToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
 
 export function AuthProvider({ children }) {
   const [user,       setUser]       = useState(null)
@@ -18,7 +32,7 @@ export function AuthProvider({ children }) {
 
   // Fetch levels once for level-up detection in awardAircoins
   useEffect(() => {
-    fetch(`${API}/api/users/levels`, { credentials: 'include' })
+    fetch(`${API}/api/users/levels`, { headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }) })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.data?.levels?.length) levelsRef.current = d.data.levels })
       .catch(() => {})
@@ -39,7 +53,10 @@ export function AuthProvider({ children }) {
       }
     }, 400)
     try {
-      return await fetch(url, { credentials: 'include', ...options })
+      const opts = isNative
+        ? { ...options, headers: { ...nativeHeaders(), ...options?.headers } }
+        : { credentials: 'include', ...options }
+      return await fetch(url, opts)
     } finally {
       clearTimeout(showTimer)
       if (overlayShown) {
@@ -49,8 +66,8 @@ export function AuthProvider({ children }) {
       // Fire-and-forget: report duration for admin stats (uses raw fetch to avoid recursion)
       fetch(`${API}/api/admin/loading-time`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...nativeHeaders() },
+        ...(isNative ? {} : { credentials: 'include' }),
         body: JSON.stringify({ durationMs: Date.now() - t0 }),
       }).catch(() => {})
     }
@@ -61,7 +78,7 @@ export function AuthProvider({ children }) {
     const controller = new AbortController()
     const timeoutId  = setTimeout(() => controller.abort(), 8000)
     console.log('[auth] checking session...')
-    fetch(`${API}/api/auth/me`, { credentials: 'include', signal: controller.signal })
+    fetch(`${API}/api/auth/me`, { headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }), signal: controller.signal })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         const u = data?.data?.user ?? null
@@ -85,12 +102,13 @@ export function AuthProvider({ children }) {
   }, [])
 
   const logout = async () => {
-    await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include' })
+    await fetch(`${API}/api/auth/logout`, { method: 'POST', headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }) })
+    if (isNative) clearToken()
     setUser(null)
   }
 
   const refreshUser = useCallback(async () => {
-    const data = await fetch(`${API}/api/auth/me`, { credentials: 'include' })
+    const data = await fetch(`${API}/api/auth/me`, { headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }) })
       .then(r => r.ok ? r.json() : null)
       .catch(() => null)
     setUser(data?.data?.user ?? null)
@@ -142,3 +160,6 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthContext)
+
+// Exposed so Login.jsx can save the token from auth responses on native
+export const storeNativeToken = (token) => { if (isNative && token) storeToken(token) }

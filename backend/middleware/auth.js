@@ -1,9 +1,16 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+// Extract JWT from Authorization header (Bearer) or fall back to cookie
+const extractToken = (req) => {
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith('Bearer ')) return auth.slice(7);
+  return req.cookies.jwt;
+};
+
 const protect = async (req, res, next) => {
   try {
-    const token = req.cookies.jwt;
+    const token = extractToken(req);
     if (!token) return res.status(401).json({ message: 'Not authenticated' });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -28,7 +35,7 @@ const adminOnly = (req, res, next) => {
 // Like protect, but doesn't reject — sets req.user if a valid token is present, otherwise continues unauthenticated
 const optionalAuth = async (req, res, next) => {
   try {
-    const token = req.cookies.jwt;
+    const token = extractToken(req);
     if (token) {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const user = await User.findById(decoded.id).select('-password').populate('rank');

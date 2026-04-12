@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
 import { HelmetProvider } from 'react-helmet-async'
 import { AnimatePresence, motion, useIsPresent, MotionGlobalConfig } from 'framer-motion'
 
@@ -139,6 +140,23 @@ function LoginRoute() {
 function AppRoutes() {
   const { loading } = useAuth()
   const location    = useLocation()
+  const navigate    = useNavigate()
+
+  // Android hardware back button — navigate back or exit on home
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    let listener
+    import('@capacitor/app').then(({ App }) => {
+      listener = App.addListener('backButton', ({ canGoBack }) => {
+        if (canGoBack) {
+          window.history.back()
+        } else {
+          App.exitApp()
+        }
+      })
+    })
+    return () => { listener?.then(l => l.remove()) }
+  }, [])
 
   if (loading) return <LoadingScreen />
 

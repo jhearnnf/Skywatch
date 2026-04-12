@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Capacitor } from '@capacitor/core'
+import { storeNativeToken } from '../context/AuthContext'
 import { useAuth } from '../context/AuthContext'
 import { consumePendingBrief } from '../utils/pendingBrief'
 import { ONBOARDING_KEY } from '../components/onboarding/WelcomeAgentFlow'
@@ -70,9 +72,12 @@ export default function LoginPage() {
     if (pendingBriefParam) localStorage.setItem('sw_pending_brief', pendingBriefParam)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const isNative = Capacitor.isNativePlatform()
+
   useEffect(() => {
+    if (isNative || view !== VIEW.CHOICE) return
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-    if (!clientId || !window.google || view !== VIEW.CHOICE) return
+    if (!clientId || !window.google) return
     window.google.accounts.id.initialize({ client_id: clientId, callback: handleGoogleCredential })
     if (googleBtnRef.current) {
       window.google.accounts.id.renderButton(googleBtnRef.current, {
@@ -80,6 +85,18 @@ export default function LoginPage() {
       })
     }
   }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleNativeGoogleSignIn = async () => {
+    setBusy(true); setError('')
+    try {
+      const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth')
+      const result = await GoogleAuth.signIn()
+      await handleGoogleCredential({ credential: result.authentication.idToken })
+    } catch {
+      setError('Google sign-in failed. Please try again.')
+      setBusy(false)
+    }
+  }
 
   // New users always start on Standard difficulty — set it silently, no screen shown.
   // JWT cookie is set by the auth response before this runs, so all fetches work.
@@ -115,6 +132,7 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
+      storeNativeToken(data.data?.token)
       if (data.data.isNew) { await finishNewUser(data.data.user); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief({ API, setUser, navigate })
@@ -154,6 +172,7 @@ export default function LoginPage() {
         setView(VIEW.VERIFY)
         return
       }
+      storeNativeToken(data.data?.token)
       if (data.data.isNew) { await finishNewUser(data.data.user); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief({ API, setUser, navigate })
@@ -177,6 +196,7 @@ export default function LoginPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
+      storeNativeToken(data.data?.token)
       await finishNewUser(data.data.user)
     } catch {
       setError('Connection failed. Is the server running?')
@@ -299,9 +319,27 @@ export default function LoginPage() {
                 <div className="flex-1 h-px bg-slate-100" />
               </div>
 
-              <div ref={googleBtnRef} className="flex justify-center" />
-              {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
-                <p className="text-xs text-slate-400 text-center">Google sign-in requires VITE_GOOGLE_CLIENT_ID</p>
+              {isNative ? (
+                <button
+                  onClick={handleNativeGoogleSignIn}
+                  disabled={busy}
+                  className="w-full py-3.5 border-2 border-slate-200 hover:border-brand-300 hover:bg-brand-50 text-slate-700 font-bold rounded-2xl transition-all text-sm flex items-center justify-center gap-2"
+                >
+                  <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                    <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                    <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
+                    <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                    <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+                  </svg>
+                  Continue with Google
+                </button>
+              ) : (
+                <>
+                  <div ref={googleBtnRef} className="flex justify-center" />
+                  {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+                    <p className="text-xs text-slate-400 text-center">Google sign-in requires VITE_GOOGLE_CLIENT_ID</p>
+                  )}
+                </>
               )}
             </motion.div>
           )}
