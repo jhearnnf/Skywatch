@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
+import { getModelUrl } from '../data/aircraftModels'
+
+const PlaneModel3D = lazy(() => import('../components/PlaneModel3D'))
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const GRID = 10
@@ -170,6 +173,7 @@ export default function CbatPlaneTurn() {
   const [level, setLevel] = useState(1)
   const [won, setWon] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [use3D, setUse3D] = useState(true)
 
   // Totals across all levels
   const [totalRotations, setTotalRotations] = useState(0)
@@ -284,7 +288,9 @@ export default function CbatPlaneTurn() {
 
   // Handlers
   const handleSelect = (a) => {
-    setSelected(a)
+    const modelUrl = getModelUrl(a.briefId, a.title)
+    setSelected({ ...a, modelUrl })
+    setUse3D(true)
     setTotalRotations(0)
     setTotalTime(0)
     startGame(1)
@@ -314,6 +320,15 @@ export default function CbatPlaneTurn() {
   const handleMenu = () => {
     setSelected(null)
     setPhase('select')
+  }
+
+  const cycleAircraft = (dir) => {
+    if (!aircraft.length || !selected) return
+    const idx = aircraft.findIndex(a => a.briefId === selected.briefId)
+    const next = aircraft[(idx + dir + aircraft.length) % aircraft.length]
+    const modelUrl = getModelUrl(next.briefId, next.title)
+    setSelected({ ...next, modelUrl })
+    setUse3D(true)
   }
 
   const handlePlayAgain = () => {
@@ -423,7 +438,14 @@ export default function CbatPlaneTurn() {
               <HUD collected={collected} rotations={rotations} elapsed={elapsed} level={level} />
 
               {/* Grid container */}
-              <div className="relative bg-[#060e1a] border-2 border-[#1a3a5c] rounded-xl overflow-hidden shadow-[0_0_30px_rgba(91,170,255,0.08)]">
+              <div className="relative bg-[#060e1a] border-2 border-[#1a3a5c] rounded-xl overflow-visible shadow-[0_0_30px_rgba(91,170,255,0.08)]">
+                {/* Aircraft name with cycle arrows */}
+                <div className="absolute top-1 left-1 z-30 flex items-center gap-1">
+                  <button onClick={() => cycleAircraft(-1)} className="text-[10px] text-slate-500 hover:text-brand-300 transition-colors px-0.5 cursor-pointer">&larr;</button>
+                  <span className="text-[10px] text-slate-500 font-mono">{selected.title}</span>
+                  <button onClick={() => cycleAircraft(1)} className="text-[10px] text-slate-500 hover:text-brand-300 transition-colors px-0.5 cursor-pointer">&rarr;</button>
+                </div>
+
                 {/* Radar sweep overlay */}
                 <div className="absolute inset-0 pointer-events-none z-10 opacity-[0.03]"
                   style={{
@@ -464,8 +486,8 @@ export default function CbatPlaneTurn() {
                           </motion.div>
                         )}
 
-                        {/* Plane */}
-                        {isPlane && (
+                        {/* Plane (2D fallback only — 3D is rendered as overlay outside grid) */}
+                        {isPlane && !(use3D && selected.modelUrl) && (
                           <div className="absolute inset-0 flex items-center justify-center z-20">
                             <img
                               src={selected.cutoutUrl}
@@ -476,37 +498,71 @@ export default function CbatPlaneTurn() {
                                 transition: 'transform 0.15s ease-out',
                               }}
                             />
-                            {/* Direction indicator triangle */}
-                            <div
-                              className="absolute z-10"
-                              style={{
-                                ...(plane.dir === 0 ? { top: 0, left: '50%', transform: 'translateX(-50%)' } :
-                                   plane.dir === 1 ? { right: 0, top: '50%', transform: 'translateY(-50%)' } :
-                                   plane.dir === 2 ? { bottom: 0, left: '50%', transform: 'translateX(-50%)' } :
-                                                     { left: 0, top: '50%', transform: 'translateY(-50%)' }),
-                              }}
-                            >
-                              <div
-                                style={{
-                                  width: 0,
-                                  height: 0,
-                                  borderLeft: plane.dir === 0 || plane.dir === 2 ? '4px solid transparent' : undefined,
-                                  borderRight: plane.dir === 0 || plane.dir === 2 ? '4px solid transparent' : undefined,
-                                  borderTop: plane.dir === 0 || plane.dir === 2 ? undefined : '4px solid transparent',
-                                  borderBottom: plane.dir === 0 || plane.dir === 2 ? undefined : '4px solid transparent',
-                                  ...(plane.dir === 0 ? { borderBottom: '6px solid rgba(74,222,128,0.7)' } :
-                                     plane.dir === 1 ? { borderLeft: '6px solid rgba(74,222,128,0.7)' } :
-                                     plane.dir === 2 ? { borderTop: '6px solid rgba(74,222,128,0.7)' } :
-                                                       { borderRight: '6px solid rgba(74,222,128,0.7)' }),
-                                }}
-                              />
-                            </div>
                           </div>
                         )}
                       </div>
                     )
                   })}
                 </div>
+
+                {/* 3D plane overlay — persistent Canvas positioned over grid */}
+                {use3D && selected.modelUrl && (
+                  <div
+                    className="absolute z-30 pointer-events-none"
+                    style={{
+                      width: `${100 / GRID * 3}%`,
+                      height: `${100 / GRID * 3}%`,
+                      left: `${(plane.c / GRID) * 100 - (100 / GRID)}%`,
+                      top: `${(plane.r / GRID) * 100 - (100 / GRID)}%`,
+                      transition: 'left 0.15s ease-out, top 0.15s ease-out',
+                    }}
+                  >
+                    <Suspense fallback={null}>
+                      <PlaneModel3D
+                        modelUrl={selected.modelUrl}
+                        angle={plane.angle}
+                        onError={() => setUse3D(false)}
+                      />
+                    </Suspense>
+                  </div>
+                )}
+
+                {/* Direction chevrons in next cell */}
+                {(() => {
+                  const { dr, dc } = DIR[plane.dir]
+                  const nextR = plane.r + dr
+                  const nextC = plane.c + dc
+                  if (nextR < 0 || nextR >= GRID || nextC < 0 || nextC >= GRID) return null
+                  const isVert = plane.dir === 0 || plane.dir === 2
+                  const rotation = DIR_DEG[plane.dir]
+                  return (
+                    <div
+                      className="absolute z-25 pointer-events-none"
+                      style={{
+                        width: `${100 / GRID}%`,
+                        height: `${100 / GRID}%`,
+                        left: `${(nextC / GRID) * 100}%`,
+                        top: `${(nextR / GRID) * 100}%`,
+                        transition: 'left 0.15s ease-out, top 0.15s ease-out',
+                      }}
+                    >
+                      <div className="w-full h-full flex items-center justify-center"
+                        style={{ transform: `rotate(${rotation}deg)` }}
+                      >
+                        <div className="flex flex-col items-center gap-[1px]">
+                          {[0.2, 0.3, 0.45].map((opacity, i) => (
+                            <div key={i} style={{
+                              width: 0, height: 0,
+                              borderLeft: '5px solid transparent',
+                              borderRight: '5px solid transparent',
+                              borderBottom: `6px solid rgba(74,222,128,${opacity})`,
+                            }} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Grid crosshair lines */}
                 <div className="absolute inset-0 pointer-events-none z-10">
