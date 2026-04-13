@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
-import { getModelUrl } from '../data/aircraftModels'
+import { getModelUrl, has3DModel } from '../data/aircraftModels'
 
 const PlaneModel3D = lazy(() => import('../components/PlaneModel3D'))
 
@@ -73,8 +73,13 @@ function AircraftSelect({ aircraft, onSelect, loading }) {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: i * 0.04 }}
             onClick={() => onSelect(a)}
-            className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-[#1a3a5c] bg-[#0a1628] hover:border-[#5baaff] hover:bg-[#0f2240] transition-all group cursor-pointer"
+            className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-[#1a3a5c] bg-[#0a1628] hover:border-[#5baaff] hover:bg-[#0f2240] transition-all group cursor-pointer"
           >
+            {has3DModel(a.briefId, a.title) && (
+              <span className="absolute top-1 right-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-brand-600/80 text-white leading-none">
+                3D
+              </span>
+            )}
             <img
               src={a.cutoutUrl}
               alt={a.title}
