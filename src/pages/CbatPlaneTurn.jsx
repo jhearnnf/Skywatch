@@ -533,14 +533,16 @@ export default function CbatPlaneTurn() {
               <div className="flex gap-4 justify-center mt-4">
                 <button
                   onPointerDown={() => handleRotate('left')}
-                  className="w-16 h-16 rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-2xl text-slate-400 active:text-brand-300 select-none"
+                  className="rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-5xl text-slate-400 active:text-brand-300 select-none"
+                  style={{ width: '192px', height: 'calc(min(100vw - 2rem, 28rem) * 0.35)' }}
                   aria-label="Rotate left"
                 >
                   &#8592;
                 </button>
                 <button
                   onPointerDown={() => handleRotate('right')}
-                  className="w-16 h-16 rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-2xl text-slate-400 active:text-brand-300 select-none"
+                  className="rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-5xl text-slate-400 active:text-brand-300 select-none"
+                  style={{ width: '192px', height: 'calc(min(100vw - 2rem, 28rem) * 0.35)' }}
                   aria-label="Rotate right"
                 >
                   &#8594;
