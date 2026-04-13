@@ -124,7 +124,7 @@ function GameOverOverlay({ won, score, level, maxLevel, onRestart, onMenu }) {
           </button>
           <button
             onClick={onMenu}
-            className="px-4 py-2 bg-[#1a3a5c] hover:bg-[#254a6e] text-slate-300 text-sm font-bold rounded-lg transition-colors"
+            className="px-4 py-2 bg-[#1a3a5c] hover:bg-[#254a6e] text-white text-sm font-bold rounded-lg transition-colors"
           >
             Change Aircraft
           </button>
@@ -403,7 +403,7 @@ export default function CbatPlaneTurn() {
                 </button>
                 <button
                   onClick={handleMenu}
-                  className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-slate-300 text-sm font-bold rounded-lg transition-colors"
+                  className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-white text-sm font-bold rounded-lg transition-colors"
                 >
                   Change Aircraft
                 </button>
@@ -534,7 +534,7 @@ export default function CbatPlaneTurn() {
                 <button
                   onPointerDown={() => handleRotate('left')}
                   className="rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-5xl text-slate-400 active:text-brand-300 select-none"
-                  style={{ width: '192px', height: 'calc(min(100vw - 2rem, 28rem) * 0.35)' }}
+                  style={{ width: 'calc(min(100vw - 2rem, 28rem) * 0.45)', height: 'calc(min(100vw - 2rem, 28rem) * 0.35)' }}
                   aria-label="Rotate left"
                 >
                   &#8592;
@@ -542,7 +542,7 @@ export default function CbatPlaneTurn() {
                 <button
                   onPointerDown={() => handleRotate('right')}
                   className="rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-5xl text-slate-400 active:text-brand-300 select-none"
-                  style={{ width: '192px', height: 'calc(min(100vw - 2rem, 28rem) * 0.35)' }}
+                  style={{ width: 'calc(min(100vw - 2rem, 28rem) * 0.45)', height: 'calc(min(100vw - 2rem, 28rem) * 0.35)' }}
                   aria-label="Rotate right"
                 >
                   &#8594;

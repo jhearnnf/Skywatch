@@ -5,10 +5,10 @@ import SEO from '../components/SEO'
 
 const CBAT_GAMES = [
   { key: 'target',          emoji: '🎯', title: 'Target',           desc: 'Lock on to the correct answer under pressure.',        path: null },
-  { key: 'sdt',             emoji: '📡', title: 'SDT',              desc: 'Signal detection — spot the real from the noise.',      path: null },
+  { key: 'sdt',             emoji: '📡', title: 'SDT',              desc: 'Speed Distance Time — coming soon.',      path: null },
   { key: 'symbols',         emoji: '🔣', title: 'Symbols',          desc: 'Match and memorise symbol patterns at speed.',          path: null },
   { key: 'code-duplicates', emoji: '🧩', title: 'Code Duplicates',  desc: 'Find the matching pair hidden in the grid.',            path: null },
-  { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: null },
+  { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: '/cbat/angles' },
   { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: null },
   { key: 'plane-turn',      emoji: '🗺️', title: 'Plane Turn',       desc: 'Plan your turn and heading with precision.',            path: '/cbat/plane-turn' },
   { key: 'audio-interrupt',  emoji: '🎧', title: 'Audio Interrupt',  desc: 'Respond to audio cues while multitasking.',             path: null },
