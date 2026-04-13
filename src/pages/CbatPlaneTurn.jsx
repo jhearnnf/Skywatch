@@ -154,7 +154,7 @@ function HUD({ collected, rotations, elapsed, level }) {
 
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CbatPlaneTurn() {
-  const { user, apiFetch } = useAuth()
+  const { user, apiFetch, API } = useAuth()
 
   // Aircraft selection
   const [aircraft, setAircraft] = useState([])
@@ -163,7 +163,7 @@ export default function CbatPlaneTurn() {
 
   // Game state
   const [phase, setPhase] = useState('select') // select | playing | over | finished
-  const [plane, setPlane] = useState({ r: 5, c: 5, dir: 0 })
+  const [plane, setPlane] = useState({ r: 5, c: 5, dir: 0, angle: 0 })
   const [pkg, setPkg] = useState({ r: 0, c: 0 })
   const [collected, setCollected] = useState(0)
   const [rotations, setRotations] = useState(0)
@@ -183,7 +183,7 @@ export default function CbatPlaneTurn() {
   // Fetch aircraft on mount
   useEffect(() => {
     if (!user) return
-    apiFetch('/api/games/cbat/aircraft-cutouts')
+    apiFetch(`${API}/api/games/cbat/aircraft-cutouts`)
       .then(res => res.json())
       .then(d => setAircraft(d.data || []))
       .catch(() => {})
@@ -199,7 +199,7 @@ export default function CbatPlaneTurn() {
     const start = randomSafePos()
     const dir = randomDir()
     const p = randomPackagePos(start.r, start.c)
-    setPlane({ r: start.r, c: start.c, dir })
+    setPlane({ r: start.r, c: start.c, dir, angle: DIR_DEG[dir] })
     setPkg(p)
     setCollected(0)
     setRotations(0)
@@ -269,11 +269,11 @@ export default function CbatPlaneTurn() {
     function handleKey(e) {
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
-        setPlane(prev => ({ ...prev, dir: (prev.dir + 3) % 4 }))
+        setPlane(prev => ({ ...prev, dir: (prev.dir + 3) % 4, angle: prev.angle - 90 }))
         setRotations(r => r + 1)
       } else if (e.key === 'ArrowRight') {
         e.preventDefault()
-        setPlane(prev => ({ ...prev, dir: (prev.dir + 1) % 4 }))
+        setPlane(prev => ({ ...prev, dir: (prev.dir + 1) % 4, angle: prev.angle + 90 }))
         setRotations(r => r + 1)
       }
     }
@@ -327,6 +327,7 @@ export default function CbatPlaneTurn() {
     setPlane(prev => ({
       ...prev,
       dir: direction === 'left' ? (prev.dir + 3) % 4 : (prev.dir + 1) % 4,
+      angle: prev.angle + (direction === 'left' ? -90 : 90),
     }))
     setRotations(r => r + 1)
   }
@@ -471,7 +472,7 @@ export default function CbatPlaneTurn() {
                               alt={selected.title}
                               className="w-[80%] h-[80%] object-contain drop-shadow-[0_0_6px_rgba(91,170,255,0.6)]"
                               style={{
-                                transform: `rotate(${DIR_DEG[plane.dir]}deg)`,
+                                transform: `rotate(${plane.angle}deg)`,
                                 transition: 'transform 0.15s ease-out',
                               }}
                             />
