@@ -21,6 +21,21 @@ const SEEDABLE_CATEGORIES = [
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties', 'Heritage',
 ];
 
+/**
+ * Normalise a title for fuzzy duplicate detection.
+ * Strips common prefixes (RAF, HMS, RNAS), punctuation, and collapses whitespace
+ * so that "RAF College Cranwell" and "RAF Cranwell" both become "college cranwell" / "cranwell"
+ * and the substring check catches them.
+ */
+function normForDupe(title) {
+  return title
+    .toLowerCase()
+    .replace(/\b(raf|hms|rnas|royal|air|force|college|station)\b/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Common English words that are too generic to use as title-matching signals
 const STOP_WORDS = new Set([
   // Short common words (would match everywhere)
@@ -102,6 +117,10 @@ async function seedUnmatchedKeywords(keywords, openRouterChat, sourceBriefId, so
   const unmatched = keywords.filter(k => !k.linkedBriefId && k.keyword);
   if (!unmatched.length) return keywords;
 
+  // Fetch all existing lead titles so the AI can avoid near-duplicates
+  const existingLeads = await IntelLead.find({}, 'title category').lean();
+  const existingTitleList = existingLeads.map(l => `- "${l.title}" [${l.category}]`).join('\n');
+
   const subcategoryGuide = SEEDABLE_CATEGORIES
     .map(cat => {
       const subs = SUBCATEGORIES[cat];
@@ -116,6 +135,7 @@ A keyword earns a YES only if ALL of the following are true:
 1. It names a distinct, specific subject (a named aircraft, base, unit, rank, treaty, weapon system, doctrine, etc.) — not a feature, sub-component, spec, or detail of something else.
 2. An RAF applicant would benefit significantly from reading a full multi-section brief and answering quiz questions specifically about this topic — beyond what a passing mention in another brief already covers.
 3. It fits one of the valid subcategories listed below without stretching. If no subcategory is a reasonable fit, the answer is NO — do not force a poor match.
+4. It is NOT a duplicate or near-duplicate of an existing brief listed below. Different names for the same thing count as duplicates (e.g. "RAF College Cranwell" is a duplicate of "RAF Cranwell", "Eurofighter" is a duplicate of "Eurofighter Typhoon"). If a keyword refers to the same subject as an existing brief under a slightly different name, answer NO.
 
 Answer NO for:
 - Aircraft or vehicle sub-components / features (e.g. thrust reversers, blown flaps, cargo capacity figures)
@@ -123,6 +143,10 @@ Answer NO for:
 - Generic infrastructure or ancillary details (e.g. hardened shelters, specific runways, named training centres whose content belongs inside a base brief)
 - Named exercises unless they are a well-known, recurring, strategically significant exercise (not a one-off leadership event)
 - Roles or service types that are NCO trades or administrative categories rather than distinct commissioned career streams
+- Keywords that refer to the same subject as an existing brief (see list below) under a different name — these are duplicates, not new topics
+
+Existing briefs (do NOT create duplicates of these):
+${existingTitleList}
 
 Valid subcategories per category (if no listed subcategory fits the keyword reasonably, answer NO):
 ${subcategoryGuide}
@@ -162,6 +186,9 @@ Only include keywords where the answer is YES. If none qualify, return { "leads"
   const newSeedEntries   = [];
   const createdStubs     = []; // { title, category, briefId } — for reprioritize pass
 
+  // Build a normalised set of existing titles for fuzzy duplicate detection
+  const normExisting = new Set(existingLeads.map(l => normForDupe(l.title)));
+
   for (const lead of leads) {
     const { keyword, title, category, nickname, subtitle } = lead;
     if (!title || !category || !SEEDABLE_CATEGORIES.includes(category)) continue;
@@ -169,6 +196,14 @@ Only include keywords where the answer is YES. If none qualify, return { "leads"
     // Validate subcategory against the model's enum; fall back to '' rather than storing junk
     const validSubs = SUBCATEGORIES[category] ?? [];
     const subcategory = validSubs.includes(lead.subcategory) ? lead.subcategory : '';
+
+    // Fuzzy duplicate check: if normalised title is a substring of (or contains) an existing title, skip
+    const normNew = normForDupe(title);
+    const isFuzzyDupe = [...normExisting].some(ex => ex.includes(normNew) || normNew.includes(ex));
+    if (isFuzzyDupe) {
+      console.log(`[seedUnmatchedKeywords] Skipped near-duplicate "${title}" (fuzzy match with existing lead)`);
+      continue;
+    }
 
     // Check for existing IntelLead (case-insensitive)
     const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -232,6 +267,9 @@ Only include keywords where the answer is YES. If none qualify, return { "leads"
     if (idx !== -1) {
       updatedKeywords[idx] = { ...updatedKeywords[idx], linkedBriefId: newBrief._id };
     }
+
+    // Track the new title so subsequent loop iterations catch duplicates within the same batch
+    normExisting.add(normNew);
 
     newSeedEntries.push({ title, category, subcategory: subcategory || '', nickname: nickname || '', subtitle: subtitle || '' });
     createdStubs.push({ title, category, briefId: newBrief._id });

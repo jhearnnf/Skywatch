@@ -115,10 +115,15 @@ ${leads.map((l, i) => `${l.priorityNumber != null ? l.priorityNumber : '?'}. "${
 
 Assign a priority number from 1 to ${N} to every entry. Priority 1 = most foundational / essential for a new RAF learner. Entries marked [HISTORIC] are retired, concluded, or no longer current — they should generally rank lower than current/active topics, as a potential RAF applicant needs to understand today's RAF first. Preserve the existing relative ordering of already-numbered entries unless a new entry clearly belongs between them. Every number from 1 to ${N} must be used exactly once.
 
+IMPORTANT — also check for duplicates: if any entries in the list refer to the same real-world subject under different names (e.g. "RAF College Cranwell" and "RAF Cranwell", or "Eurofighter" and "Eurofighter Typhoon"), list them in a "duplicates" array. Each entry should name both titles so they can be merged.
+
 Return ONLY valid JSON — no markdown, no extra text:
 {
   "rankings": [
     { "title": "exact title", "priority": 1 }
+  ],
+  "duplicates": [
+    { "keep": "preferred title", "remove": "duplicate title", "reason": "short explanation" }
   ]
 }`;
 
@@ -126,11 +131,14 @@ Return ONLY valid JSON — no markdown, no extra text:
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let rankings = [];
+    let duplicates = [];
     try {
       const raw     = await openRouterChat([{ role: 'user', content: prompt }], 'openai/gpt-4o-mini', 2048);
       const content = raw.choices?.[0]?.message?.content ?? '{}';
       const cleaned = content.replace(/```json\n?|```/g, '').trim();
-      rankings = JSON.parse(cleaned).rankings ?? [];
+      const parsed  = JSON.parse(cleaned);
+      rankings   = parsed.rankings ?? [];
+      duplicates = parsed.duplicates ?? [];
     } catch (err) {
       lastFailureReason = `Attempt ${attempt}: JSON parse error — ${err.message}`;
       console.warn(`[reprioritizeCategory] ${lastFailureReason}`);
@@ -167,6 +175,25 @@ Return ONLY valid JSON — no markdown, no extra text:
       },
     }));
     await IntelligenceBrief.bulkWrite(briefOps);
+
+    // Log any duplicates the AI detected for admin review
+    if (duplicates.length) {
+      console.warn(`[reprioritizeCategory] "${category}" — AI detected ${duplicates.length} potential duplicate(s):`);
+      for (const d of duplicates) {
+        console.warn(`  ⚠ DUPLICATE: keep "${d.keep}", remove "${d.remove}" — ${d.reason}`);
+      }
+      try {
+        await SystemLog.create({
+          type:             'duplicate_leads_detected',
+          category,
+          duplicates,
+          sourceBriefId:    sourceBriefId ?? null,
+          sourceBriefTitle: sourceBriefTitle ?? '',
+        });
+      } catch (logErr) {
+        console.error('[reprioritizeCategory] Failed to write duplicate SystemLog:', logErr.message);
+      }
+    }
 
     console.log(`[reprioritizeCategory] "${category}" re-ranked (${N} leads + matching briefs) on attempt ${attempt}`);
     return; // success
