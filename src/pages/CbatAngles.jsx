@@ -166,7 +166,7 @@ function AngleDiagram({ angle, size = CANVAS_SIZE }) {
 }
 
 // ── Results screen ───────────────────────────────────────────────────────────
-function ResultsScreen({ answers, totalTime, onPlayAgain, onMenu }) {
+function ResultsScreen({ answers, totalTime, onPlayAgain, onMenu, scoreSaved }) {
   const correct = answers.filter(a => a.correct).length
   const pct = Math.round((correct / TOTAL_QUESTIONS) * 100)
   const r1 = answers.filter(a => a.round === 1)
@@ -231,7 +231,11 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, onMenu }) {
         </div>
       </div>
 
-      <div className="flex gap-3 justify-center">
+      {scoreSaved && (
+        <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
+      )}
+
+      <div className="flex flex-wrap gap-3 justify-center">
         <button
           onClick={onPlayAgain}
           className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
@@ -239,10 +243,10 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, onMenu }) {
           Play Again
         </button>
         <Link
-          to="/cbat"
+          to="/cbat/angles/leaderboard"
           className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
         >
-          Back to CBAT
+          🏆 Leaderboard
         </Link>
       </div>
     </motion.div>
@@ -251,7 +255,7 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, onMenu }) {
 
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CbatAngles() {
-  const { user } = useAuth()
+  const { user, apiFetch, API } = useAuth()
 
   const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
   const [questions, setQuestions] = useState([])
@@ -262,6 +266,48 @@ export default function CbatAngles() {
   const [elapsed, setElapsed] = useState(0)
   const timerRef = useRef(null)
   const startTimeRef = useRef(null)
+  const [personalBest, setPersonalBest] = useState(null)
+  const [scoreSaved, setScoreSaved] = useState(false)
+
+  // Fetch personal best
+  useEffect(() => {
+    if (!user) return
+    apiFetch(`${API}/api/games/cbat/angles/personal-best`)
+      .then(r => r.json())
+      .then(d => { if (d.data) setPersonalBest(d.data) })
+      .catch(() => {})
+  }, [user])
+
+  // Submit score to backend
+  const submitScore = useCallback((finalAnswers, finalTime) => {
+    const correct = finalAnswers.filter(a => a.correct).length
+    const pct = Math.round((correct / TOTAL_QUESTIONS) * 100)
+    const r1Correct = finalAnswers.filter(a => a.round === 1 && a.correct).length
+    const r2Correct = finalAnswers.filter(a => a.round === 2 && a.correct).length
+    const grade = pct >= 90 ? 'Outstanding' : pct >= 70 ? 'Good' : pct >= 50 ? 'Needs Work' : 'Failed'
+
+    setScoreSaved(false)
+    apiFetch(`${API}/api/games/cbat/angles/result`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        correctCount: correct,
+        round1Correct: r1Correct,
+        round2Correct: r2Correct,
+        totalTime: finalTime,
+        grade,
+      }),
+    })
+      .then(r => r.json())
+      .then(() => {
+        setScoreSaved(true)
+        apiFetch(`${API}/api/games/cbat/angles/personal-best`)
+          .then(r => r.json())
+          .then(d => { if (d.data) setPersonalBest(d.data) })
+          .catch(() => {})
+      })
+      .catch(() => {})
+  }, [apiFetch, API])
 
   const currentQuestion = questions[currentIdx] || null
   const currentRound = currentQuestion ? currentQuestion.round : 1
@@ -310,6 +356,7 @@ export default function CbatAngles() {
   const handleNext = () => {
     const nextIdx = currentIdx + 1
     if (nextIdx >= TOTAL_QUESTIONS) {
+      submitScore(answers, elapsed)
       setPhase('results')
       return
     }
@@ -373,11 +420,29 @@ export default function CbatAngles() {
                 </div>
               </div>
 
+              {personalBest && (
+                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
+                  <p className="text-lg font-mono font-bold text-brand-300">
+                    {personalBest.bestScore}/{TOTAL_QUESTIONS} ({Math.round((personalBest.bestScore / TOTAL_QUESTIONS) * 100)}%)
+                    <span className="text-slate-500 mx-1">·</span>
+                    {personalBest.bestTime.toFixed(1)}s
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
+                </div>
+              )}
+
+              <div className="text-center mb-4">
+                <Link to="/cbat/angles/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                  View Leaderboard →
+                </Link>
+              </div>
+
               <button
                 onClick={startGame}
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
               >
-                Begin Assessment
+                Start
               </button>
             </motion.div>
           )}
@@ -524,7 +589,8 @@ export default function CbatAngles() {
             <ResultsScreen
               answers={answers}
               totalTime={elapsed}
-              onPlayAgain={startGame}
+              onPlayAgain={() => { setScoreSaved(false); startGame() }}
+              scoreSaved={scoreSaved}
             />
           )}
         </div>

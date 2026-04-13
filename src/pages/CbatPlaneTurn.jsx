@@ -41,7 +41,7 @@ function randomPackagePos(planeR, planeC) {
 }
 
 // ── Aircraft Selection Screen ────────────────────────────────────────────────
-function AircraftSelect({ aircraft, onSelect, loading }) {
+function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -64,7 +64,31 @@ function AircraftSelect({ aircraft, onSelect, loading }) {
   return (
     <div>
       <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Choose Your Aircraft</h2>
-      <p className="text-xs text-slate-400 text-center mb-5">This will be your character in the game.</p>
+      <p className="text-xs text-slate-400 text-center mb-3">Select an aircraft, then navigate through 5 levels.</p>
+
+      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
+        <div className="flex items-start gap-2"><span className="text-brand-300 shrink-0">📦</span><span>Collect all care packages on each level to advance</span></div>
+        <div className="flex items-start gap-2"><span className="text-brand-300 shrink-0">🎮</span><span>Arrow keys (desktop) or tap buttons (mobile) to rotate</span></div>
+        <div className="flex items-start gap-2"><span className="text-brand-300 shrink-0">🏆</span><span>Fewer rotations = better score. Time is also tracked.</span></div>
+        <div className="flex items-start gap-2"><span className="text-brand-300 shrink-0">⚡</span><span>Speed increases each level — 5 levels total</span></div>
+      </div>
+
+      {personalBest && (
+        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-w-md mx-auto mb-2 text-center">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
+          <p className="text-lg font-mono font-bold text-brand-300">
+            {personalBest.bestScore} rotations <span className="text-slate-500 mx-1">·</span> {personalBest.bestTime.toFixed(1)}s
+          </p>
+          <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
+        </div>
+      )}
+
+      <div className="text-center mb-4">
+        <Link to="/cbat/plane-turn/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+          View Leaderboard →
+        </Link>
+      </div>
+
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-w-md mx-auto">
         {aircraft.map((a, i) => (
           <motion.button
@@ -114,7 +138,7 @@ function GameOverOverlay({ won, score, level, maxLevel, onRestart, onMenu }) {
           {won ? 'Mission Complete' : 'Crashed'}
         </p>
         {won ? (
-          <div className="text-sm text-slate-300 mb-4">
+          <div className="text-sm text-[#ddeaf8] mb-4">
             <p>Level {level} cleared</p>
             <p className="font-mono text-brand-300 text-lg mt-1">
               {score.rotations} rotations &middot; {score.time}s
@@ -184,6 +208,10 @@ export default function CbatPlaneTurn() {
   const [totalRotations, setTotalRotations] = useState(0)
   const [totalTime, setTotalTime] = useState(0)
 
+  // Personal best & score saving
+  const [personalBest, setPersonalBest] = useState(null)
+  const [scoreSaved, setScoreSaved] = useState(false)
+
   // Refs for game loop
   const gameRef = useRef({})
   const timerRef = useRef(null)
@@ -198,6 +226,39 @@ export default function CbatPlaneTurn() {
       .catch(() => {})
       .finally(() => setLoadingAircraft(false))
   }, [user])
+
+  // Fetch personal best
+  useEffect(() => {
+    if (!user) return
+    apiFetch(`${API}/api/games/cbat/plane-turn/personal-best`)
+      .then(r => r.json())
+      .then(d => { if (d.data) setPersonalBest(d.data) })
+      .catch(() => {})
+  }, [user])
+
+  // Submit score to backend
+  const submitScore = useCallback((finalRotations, finalTime, aircraftTitle) => {
+    setScoreSaved(false)
+    apiFetch(`${API}/api/games/cbat/plane-turn/result`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        totalRotations: finalRotations,
+        totalTime: finalTime,
+        levelsCompleted: MAX_LEVEL,
+        aircraftUsed: aircraftTitle,
+      }),
+    })
+      .then(r => r.json())
+      .then(() => {
+        setScoreSaved(true)
+        apiFetch(`${API}/api/games/cbat/plane-turn/personal-best`)
+          .then(r => r.json())
+          .then(d => { if (d.data) setPersonalBest(d.data) })
+          .catch(() => {})
+      })
+      .catch(() => {})
+  }, [apiFetch, API])
 
   // Keep gameRef in sync
   useEffect(() => {
@@ -314,6 +375,7 @@ export default function CbatPlaneTurn() {
         setTotalRotations(newTotalRot)
         setTotalTime(newTotalTime)
         setPhase('finished')
+        submitScore(newTotalRot, newTotalTime, selected?.title)
         return
       }
       startGame(level + 1)
@@ -339,8 +401,16 @@ export default function CbatPlaneTurn() {
   const handlePlayAgain = () => {
     setTotalRotations(0)
     setTotalTime(0)
+    setScoreSaved(false)
     startGame(1)
   }
+
+  // Auto-advance to finished screen when final level is won
+  useEffect(() => {
+    if (phase === 'over' && won && level >= MAX_LEVEL) {
+      handleRestart()
+    }
+  }, [phase, won, level])
 
   const handleRotate = (direction) => {
     if (phase !== 'playing') return
@@ -384,7 +454,7 @@ export default function CbatPlaneTurn() {
           {/* Aircraft selection */}
           {phase === 'select' && (
             <div className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5">
-              <AircraftSelect aircraft={aircraft} onSelect={handleSelect} loading={loadingAircraft} />
+              <AircraftSelect aircraft={aircraft} onSelect={handleSelect} loading={loadingAircraft} personalBest={personalBest} />
             </div>
           )}
 
@@ -414,25 +484,29 @@ export default function CbatPlaneTurn() {
                 </div>
               </div>
 
-              <div className="flex gap-3 justify-center">
+              {scoreSaved && (
+                <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
+              )}
+
+              <div className="flex flex-wrap gap-3 justify-center">
                 <button
                   onClick={handlePlayAgain}
                   className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
                 >
                   Play Again
                 </button>
+                <Link
+                  to="/cbat/plane-turn/leaderboard"
+                  className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
+                >
+                  🏆 Leaderboard
+                </Link>
                 <button
                   onClick={handleMenu}
-                  className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-white text-sm font-bold rounded-lg transition-colors"
+                  className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors"
                 >
                   Change Aircraft
                 </button>
-                <Link
-                  to="/cbat"
-                  className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-slate-300 text-sm font-bold rounded-lg transition-colors no-underline"
-                >
-                  Back to CBAT
-                </Link>
               </div>
             </motion.div>
           )}

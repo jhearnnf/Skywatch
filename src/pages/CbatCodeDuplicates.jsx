@@ -29,7 +29,7 @@ function countOccurrences(sequence, digit) {
 }
 
 // ── Results screen ──────────────────────────────────────────────────────────
-function ResultsScreen({ rounds, totalTime, onPlayAgain }) {
+function ResultsScreen({ rounds, totalTime, onPlayAgain, scoreSaved }) {
   const correct = rounds.filter(r => r.correct).length
   const pct = Math.round((correct / TOTAL_ROUNDS) * 100)
 
@@ -96,7 +96,11 @@ function ResultsScreen({ rounds, totalTime, onPlayAgain }) {
         </div>
       </div>
 
-      <div className="flex gap-3 justify-center">
+      {scoreSaved && (
+        <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
+      )}
+
+      <div className="flex flex-wrap gap-3 justify-center">
         <button
           onClick={onPlayAgain}
           className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
@@ -104,10 +108,10 @@ function ResultsScreen({ rounds, totalTime, onPlayAgain }) {
           Play Again
         </button>
         <Link
-          to="/cbat"
+          to="/cbat/code-duplicates/leaderboard"
           className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
         >
-          Back to CBAT
+          🏆 Leaderboard
         </Link>
       </div>
     </motion.div>
@@ -116,7 +120,7 @@ function ResultsScreen({ rounds, totalTime, onPlayAgain }) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 export default function CbatCodeDuplicates() {
-  const { user } = useAuth()
+  const { user, apiFetch, API } = useAuth()
 
   // phase: intro | displaying | answering | feedback | results
   const [phase, setPhase] = useState('intro')
@@ -134,8 +138,52 @@ export default function CbatCodeDuplicates() {
   const displayTimerRef = useRef(null)
   const countdownRef = useRef(null)
   const inputRef = useRef(null)
+  const [personalBest, setPersonalBest] = useState(null)
+  const [scoreSaved, setScoreSaved] = useState(false)
 
   const tierLabel = round <= 5 ? 'Easy' : round <= 10 ? 'Medium' : 'Hard'
+
+  // Fetch personal best
+  useEffect(() => {
+    if (!user) return
+    apiFetch(`${API}/api/games/cbat/code-duplicates/personal-best`)
+      .then(r => r.json())
+      .then(d => { if (d.data) setPersonalBest(d.data) })
+      .catch(() => {})
+  }, [user])
+
+  // Submit score to backend
+  const submitScore = useCallback((finalRounds, finalTime) => {
+    const correct = finalRounds.filter(r => r.correct).length
+    const pct = Math.round((correct / TOTAL_ROUNDS) * 100)
+    const easyCorrect = finalRounds.slice(0, 5).filter(r => r.correct).length
+    const mediumCorrect = finalRounds.slice(5, 10).filter(r => r.correct).length
+    const hardCorrect = finalRounds.slice(10, 15).filter(r => r.correct).length
+    const grade = pct >= 90 ? 'Outstanding' : pct >= 70 ? 'Good' : pct >= 50 ? 'Needs Work' : 'Failed'
+
+    setScoreSaved(false)
+    apiFetch(`${API}/api/games/cbat/code-duplicates/result`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        correctCount: correct,
+        easyCorrect,
+        mediumCorrect,
+        hardCorrect,
+        totalTime: finalTime,
+        grade,
+      }),
+    })
+      .then(r => r.json())
+      .then(() => {
+        setScoreSaved(true)
+        apiFetch(`${API}/api/games/cbat/code-duplicates/personal-best`)
+          .then(r => r.json())
+          .then(d => { if (d.data) setPersonalBest(d.data) })
+          .catch(() => {})
+      })
+      .catch(() => {})
+  }, [apiFetch, API])
 
   // Timer — runs during displaying, answering, feedback phases
   useEffect(() => {
@@ -227,6 +275,7 @@ export default function CbatCodeDuplicates() {
   const handleNext = () => {
     const nextRound = round + 1
     if (nextRound > TOTAL_ROUNDS) {
+      submitScore(roundResults, elapsed)
       setPhase('results')
       return
     }
@@ -295,6 +344,24 @@ export default function CbatCodeDuplicates() {
                   <span className="shrink-0">⏱</span>
                   <span>Each sequence is shown for 5 seconds</span>
                 </div>
+              </div>
+
+              {personalBest && (
+                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
+                  <p className="text-lg font-mono font-bold text-brand-300">
+                    {personalBest.bestScore}/{TOTAL_ROUNDS} ({Math.round((personalBest.bestScore / TOTAL_ROUNDS) * 100)}%)
+                    <span className="text-slate-500 mx-1">·</span>
+                    {personalBest.bestTime.toFixed(1)}s
+                  </p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
+                </div>
+              )}
+
+              <div className="text-center mb-4">
+                <Link to="/cbat/code-duplicates/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                  View Leaderboard →
+                </Link>
               </div>
 
               <button
@@ -492,7 +559,8 @@ export default function CbatCodeDuplicates() {
             <ResultsScreen
               rounds={roundResults}
               totalTime={elapsed}
-              onPlayAgain={startGame}
+              onPlayAgain={() => { setScoreSaved(false); startGame() }}
+              scoreSaved={scoreSaved}
             />
           )}
         </div>

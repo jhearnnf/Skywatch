@@ -18,6 +18,9 @@ const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const GameOrderOfBattle = require('../models/GameOrderOfBattle');
 const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/GameOrderOfBattle');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
+const GameSessionCbatPlaneTurnResult     = require('../models/GameSessionCbatPlaneTurnResult');
+const GameSessionCbatAnglesResult        = require('../models/GameSessionCbatAnglesResult');
+const GameSessionCbatCodeDuplicatesResult = require('../models/GameSessionCbatCodeDuplicatesResult');
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -1931,5 +1934,220 @@ router.get('/cbat/aircraft-cutouts', protect, async (_req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// ── CBAT — Score submission, leaderboards & personal bests ──────────────────
+// Config map keeps each CBAT game's specifics in one place so adding a new game
+// is a single entry.  Keys: Model, primary sort field, sort direction, max field.
+const CBAT_GAMES = {
+  'plane-turn': {
+    Model: GameSessionCbatPlaneTurnResult,
+    primaryField: 'totalRotations',
+    sortDir: 1,            // lower is better
+    bestOp: '$min',
+    label: 'Plane Turn',
+  },
+  'angles': {
+    Model: GameSessionCbatAnglesResult,
+    primaryField: 'correctCount',
+    sortDir: -1,           // higher is better
+    bestOp: '$max',
+    label: 'Angles',
+  },
+  'code-duplicates': {
+    Model: GameSessionCbatCodeDuplicatesResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Code Duplicates',
+  },
+};
+
+// POST /api/games/cbat/plane-turn/result
+router.post('/cbat/plane-turn/result', protect, async (req, res) => {
+  try {
+    const { totalRotations, totalTime, levelsCompleted, aircraftUsed } = req.body;
+    const result = await GameSessionCbatPlaneTurnResult.create({
+      userId: req.user._id,
+      totalRotations,
+      totalTime,
+      levelsCompleted: levelsCompleted ?? 5,
+      aircraftUsed,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/cbat/angles/result
+router.post('/cbat/angles/result', protect, async (req, res) => {
+  try {
+    const { correctCount, round1Correct, round2Correct, totalTime, grade } = req.body;
+    const result = await GameSessionCbatAnglesResult.create({
+      userId: req.user._id,
+      correctCount,
+      round1Correct,
+      round2Correct,
+      totalTime,
+      grade,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/cbat/code-duplicates/result
+router.post('/cbat/code-duplicates/result', protect, async (req, res) => {
+  try {
+    const { correctCount, easyCorrect, mediumCorrect, hardCorrect, totalTime, grade } = req.body;
+    const result = await GameSessionCbatCodeDuplicatesResult.create({
+      userId: req.user._id,
+      correctCount,
+      easyCorrect,
+      mediumCorrect,
+      hardCorrect,
+      totalTime,
+      grade,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Generic CBAT leaderboard handler — reused by all games
+async function cbatLeaderboard(req, res, gameKey) {
+  const cfg = CBAT_GAMES[gameKey];
+  if (!cfg) return res.status(400).json({ message: 'Unknown game' });
+
+  try {
+    const pipeline = [
+      {
+        $group: {
+          _id: '$userId',
+          bestScore: { [cfg.bestOp]: `$${cfg.primaryField}` },
+          bestTime: { $min: '$totalTime' },
+        },
+      },
+      { $sort: { bestScore: cfg.sortDir, bestTime: 1 } },
+      { $limit: 20 },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'user',
+        },
+      },
+      { $unwind: '$user' },
+      {
+        $project: {
+          _id: 0,
+          userId: '$_id',
+          agentNumber: '$user.agentNumber',
+          bestScore: 1,
+          bestTime: 1,
+        },
+      },
+    ];
+
+    const leaderboard = await cfg.Model.aggregate(pipeline);
+
+    // Add rank
+    leaderboard.forEach((entry, i) => { entry.rank = i + 1; });
+
+    // Current user's personal best + rank (may be outside top 20)
+    let myBest = null;
+    if (req.user) {
+      const myEntry = leaderboard.find(e => e.userId.toString() === req.user._id.toString());
+      if (myEntry) {
+        myBest = myEntry;
+      } else {
+        // User not in top 20 — compute their best + rank
+        const userBest = await cfg.Model.aggregate([
+          { $match: { userId: req.user._id } },
+          {
+            $group: {
+              _id: null,
+              bestScore: { [cfg.bestOp]: `$${cfg.primaryField}` },
+              bestTime: { $min: '$totalTime' },
+            },
+          },
+        ]);
+        if (userBest.length) {
+          const countBetter = await cfg.Model.aggregate([
+            {
+              $group: {
+                _id: '$userId',
+                bestScore: { [cfg.bestOp]: `$${cfg.primaryField}` },
+                bestTime: { $min: '$totalTime' },
+              },
+            },
+            {
+              $match: cfg.sortDir === 1
+                ? {
+                    $or: [
+                      { bestScore: { $lt: userBest[0].bestScore } },
+                      { bestScore: userBest[0].bestScore, bestTime: { $lt: userBest[0].bestTime } },
+                    ],
+                  }
+                : {
+                    $or: [
+                      { bestScore: { $gt: userBest[0].bestScore } },
+                      { bestScore: userBest[0].bestScore, bestTime: { $lt: userBest[0].bestTime } },
+                    ],
+                  },
+            },
+            { $count: 'n' },
+          ]);
+          const rank = (countBetter[0]?.n ?? 0) + 1;
+          myBest = {
+            userId: req.user._id,
+            agentNumber: req.user.agentNumber,
+            bestScore: userBest[0].bestScore,
+            bestTime: userBest[0].bestTime,
+            rank,
+          };
+        }
+      }
+    }
+
+    res.json({ status: 'success', data: { leaderboard, myBest } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+
+router.get('/cbat/plane-turn/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'plane-turn'));
+router.get('/cbat/angles/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'angles'));
+router.get('/cbat/code-duplicates/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'code-duplicates'));
+
+// Generic CBAT personal-best handler
+async function cbatPersonalBest(req, res, gameKey) {
+  const cfg = CBAT_GAMES[gameKey];
+  if (!cfg) return res.status(400).json({ message: 'Unknown game' });
+
+  try {
+    const result = await cfg.Model.aggregate([
+      { $match: { userId: req.user._id } },
+      {
+        $group: {
+          _id: null,
+          bestScore: { [cfg.bestOp]: `$${cfg.primaryField}` },
+          bestTime: { $min: '$totalTime' },
+          attempts: { $sum: 1 },
+        },
+      },
+    ]);
+    res.json({ status: 'success', data: result[0] || null });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+
+router.get('/cbat/plane-turn/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'plane-turn'));
+router.get('/cbat/angles/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'angles'));
+router.get('/cbat/code-duplicates/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'code-duplicates'));
 
 module.exports = router;
