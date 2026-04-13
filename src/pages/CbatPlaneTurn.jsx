@@ -449,7 +449,7 @@ export default function CbatPlaneTurn() {
                     return (
                       <div
                         key={i}
-                        className="relative border border-[#0f2440]/60"
+                        className="relative border border-[#0f2440]/60 overflow-visible"
                         style={{ aspectRatio: '1' }}
                       >
                         {/* Care package */}
@@ -470,12 +470,37 @@ export default function CbatPlaneTurn() {
                             <img
                               src={selected.cutoutUrl}
                               alt={selected.title}
-                              className="w-[80%] h-[80%] object-contain drop-shadow-[0_0_6px_rgba(91,170,255,0.6)]"
+                              className="w-full h-full object-contain drop-shadow-[0_0_6px_rgba(91,170,255,0.6)]"
                               style={{
-                                transform: `rotate(${plane.angle}deg)`,
+                                transform: `scale(1.5) rotate(${plane.angle}deg)`,
                                 transition: 'transform 0.15s ease-out',
                               }}
                             />
+                            {/* Direction indicator triangle */}
+                            <div
+                              className="absolute z-10"
+                              style={{
+                                ...(plane.dir === 0 ? { top: 0, left: '50%', transform: 'translateX(-50%)' } :
+                                   plane.dir === 1 ? { right: 0, top: '50%', transform: 'translateY(-50%)' } :
+                                   plane.dir === 2 ? { bottom: 0, left: '50%', transform: 'translateX(-50%)' } :
+                                                     { left: 0, top: '50%', transform: 'translateY(-50%)' }),
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: 0,
+                                  height: 0,
+                                  borderLeft: plane.dir === 0 || plane.dir === 2 ? '4px solid transparent' : undefined,
+                                  borderRight: plane.dir === 0 || plane.dir === 2 ? '4px solid transparent' : undefined,
+                                  borderTop: plane.dir === 0 || plane.dir === 2 ? undefined : '4px solid transparent',
+                                  borderBottom: plane.dir === 0 || plane.dir === 2 ? undefined : '4px solid transparent',
+                                  ...(plane.dir === 0 ? { borderBottom: '6px solid rgba(74,222,128,0.7)' } :
+                                     plane.dir === 1 ? { borderLeft: '6px solid rgba(74,222,128,0.7)' } :
+                                     plane.dir === 2 ? { borderTop: '6px solid rgba(74,222,128,0.7)' } :
+                                                       { borderRight: '6px solid rgba(74,222,128,0.7)' }),
+                                }}
+                              />
+                            </div>
                           </div>
                         )}
                       </div>
