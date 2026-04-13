@@ -126,6 +126,7 @@ async function createBrief(overrides = {}) {
     keywords:            overrides.keywords ?? [],
     sources:             overrides.sources ?? [],
     isPublished:         overrides.isPublished !== undefined ? overrides.isPublished : true,
+    status:              overrides.status ?? 'published',
     ...overrides,
   });
 }

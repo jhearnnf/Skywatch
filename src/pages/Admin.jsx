@@ -3849,6 +3849,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       subcategory,
       historic:            briefData.historic ?? false,
       eventDate:           briefData.eventDate ?? null,
+      priorityNumber:      lead?.priorityNumber ?? null,
       descriptionSections: Array.isArray(briefData.descriptionSections) && briefData.descriptionSections.length
         ? briefData.descriptionSections
         : ['','',''],
@@ -4830,14 +4831,35 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               <label className="block text-xs font-semibold text-slate-500 mb-1">
                 Pathway Priority <span className="font-normal text-slate-400">(optional — sets order in Learn Pathway; leave blank to exclude from pathway)</span>
               </label>
-              <input
-                type="number"
-                min={1}
-                value={draft.priorityNumber ?? ''}
-                onChange={e => setDraft(p => ({ ...p, priorityNumber: e.target.value === '' ? null : parseInt(e.target.value) || null }))}
-                placeholder="e.g. 1 (first), 2 (second)…"
-                className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  value={draft.priorityNumber ?? ''}
+                  onChange={e => setDraft(p => ({ ...p, priorityNumber: e.target.value === '' ? null : parseInt(e.target.value) || null }))}
+                  placeholder="e.g. 1 (first), 2 (second)…"
+                  className="flex-1 border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!draft.title) return
+                    try {
+                      const r = await apiFetch(`${API}/api/admin/intel-leads/priority?title=${encodeURIComponent(draft.title)}`, { credentials: 'include' })
+                      const d = await r.json()
+                      if (d.status === 'success' && d.data.priorityNumber != null) {
+                        setDraft(p => ({ ...p, priorityNumber: d.data.priorityNumber }))
+                        addToast('Loaded priority ' + d.data.priorityNumber + ' from lead', 'success')
+                      } else {
+                        addToast('No priority found for this lead', 'warning')
+                      }
+                    } catch { addToast('Failed to load priority from lead', 'error') }
+                  }}
+                  className="px-3 py-2 text-xs font-semibold rounded-xl border border-brand-600 bg-brand-600 text-white hover:bg-brand-700 transition-colors whitespace-nowrap"
+                >
+                  Load from Lead
+                </button>
+              </div>
             </div>
           </div>
         )}

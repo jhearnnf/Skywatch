@@ -2488,10 +2488,25 @@ router.post('/ai/generate-brief', async (req, res) => {
 router.get('/intel-leads', async (req, res) => {
   try {
     const leads = await IntelLead.find()
-      .select('title nickname subtitle category subcategory section subsection isPublished')
+      .select('title nickname subtitle category subcategory section subsection isPublished priorityNumber')
       .sort({ section: 1, subsection: 1, title: 1 })
       .lean();
     res.json({ status: 'success', data: { leads } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/intel-leads/priority?title=... — look up a lead's priorityNumber by title
+router.get('/intel-leads/priority', async (req, res) => {
+  try {
+    const { title } = req.query;
+    if (!title) return res.status(400).json({ message: 'title required' });
+    const norm = normaliseLeadTitle(title);
+    const leads = await IntelLead.find().select('title priorityNumber').lean();
+    const match = leads.find(l => normaliseLeadTitle(l.title) === norm);
+    if (!match) return res.status(404).json({ message: 'No matching lead found' });
+    res.json({ status: 'success', data: { priorityNumber: match.priorityNumber ?? null } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

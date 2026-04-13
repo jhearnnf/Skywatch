@@ -41,7 +41,9 @@
       "WebFetch(domain:en.wikipedia.org)",
       "WebFetch(domain:rafcbat.wordpress.com)",
       "WebFetch(domain:www.militaryaptitudetests.org)",
-      "WebFetch(domain:flightschoolwingman.com)"
+      "WebFetch(domain:flightschoolwingman.com)",
+      "WebFetch(domain:www.reddit.com)",
+      "WebFetch(domain:old.reddit.com)"
     ]
   }
 }

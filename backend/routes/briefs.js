@@ -214,7 +214,7 @@ router.get('/random-unlocked', optionalAuth, async (req, res) => {
       finalCategories = pathway;
     }
 
-    const baseFilter = { status: 'published' };
+    const baseFilter = { status: 'published', 'descriptionSections.0': { $exists: true } };
     if (finalCategories !== null) baseFilter.category = { $in: finalCategories };
 
     // Build a set of brief IDs the user has already completed

@@ -275,6 +275,83 @@ describe('GET /api/briefs/random-unlocked — excludes pathway-locked categories
   });
 });
 
+// ── GET /api/briefs/random-unlocked — excludes contentless briefs ────────────
+describe('GET /api/briefs/random-unlocked — excludes briefs without descriptionSections', () => {
+  beforeEach(async () => {
+    await createSettings(S);
+    await seedLevels();
+  });
+
+  it('never returns a published brief with empty descriptionSections', async () => {
+    // Create a published brief with no content (the bug scenario)
+    await createBrief({
+      category: 'News',
+      title: 'Empty Published Brief',
+      status: 'published',
+      descriptionSections: [],
+    });
+    // Create a properly published brief with content
+    await createBrief({
+      category: 'News',
+      title: 'Full Brief',
+      status: 'published',
+      descriptionSections: ['Section one.', 'Section two.'],
+    });
+
+    const user = await userLevel1Rank1();
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const res = await request(app)
+        .get('/api/briefs/random-unlocked')
+        .set('Cookie', authCookie(user._id));
+      expect(res.status).toBe(200);
+      const brief = await require('../../models/IntelligenceBrief').findById(res.body.data.briefId).lean();
+      expect(brief.title).toBe('Full Brief');
+      expect(brief.descriptionSections.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('returns 404 when only contentless published briefs exist', async () => {
+    await createBrief({
+      category: 'News',
+      title: 'Empty Brief Only',
+      status: 'published',
+      descriptionSections: [],
+    });
+
+    const user = await userLevel1Rank1();
+    const res = await request(app)
+      .get('/api/briefs/random-unlocked')
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(404);
+  });
+
+  it('never returns a stub brief', async () => {
+    await createBrief({
+      category: 'News',
+      title: 'Stub Brief',
+      status: 'stub',
+      descriptionSections: [],
+    });
+    await createBrief({
+      category: 'News',
+      title: 'Published Brief',
+      status: 'published',
+      descriptionSections: ['Content here.'],
+    });
+
+    const user = await userLevel1Rank1();
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const res = await request(app)
+        .get('/api/briefs/random-unlocked')
+        .set('Cookie', authCookie(user._id));
+      expect(res.status).toBe(200);
+      const brief = await require('../../models/IntelligenceBrief').findById(res.body.data.briefId).lean();
+      expect(brief.status).toBe('published');
+      expect(brief.title).toBe('Published Brief');
+    }
+  });
+});
+
 // ── GET /api/briefs/pathway/:category — pathway gate ─────────────────────────
 describe('GET /api/briefs/pathway/:category — pathway gating', () => {
   beforeEach(async () => {

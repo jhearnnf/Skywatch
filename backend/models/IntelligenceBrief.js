@@ -218,7 +218,7 @@ const intelligenceBriefSchema = new mongoose.Schema(
     priorityNumber: { type: Number, default: null },
 
     // 'stub' = title/category only, no content yet. 'published' = full brief.
-    status: { type: String, enum: ['stub', 'published'], default: 'published' },
+    status: { type: String, enum: ['stub', 'published'], default: 'stub' },
 
     // Set the first time a brief transitions to status='published'. Used to
     // sort the admin brief list so newly-published briefs appear first.
