@@ -81,7 +81,7 @@ function mockAiFetch() {
 // ── Cascade deletion per collection ─────────────────────────────────────────
 
 describe('POST /api/admin/ai/regenerate-description/:id — cascade deletions', () => {
-  it('deletes IntelligenceBriefRead records for the brief', async () => {
+  it('marks IntelligenceBriefRead records as deleted for the brief', async () => {
     mockAiFetch();
     const brief = await createBrief();
     const user  = await createUser();
@@ -93,10 +93,14 @@ describe('POST /api/admin/ai/regenerate-description/:id — cascade deletions', 
       .set('Cookie', authCookie(admin._id))
       .send({ reason: REASON });
 
-    expect(await IntelligenceBriefRead.countDocuments({ intelBriefId: brief._id })).toBe(0);
+    const record = await IntelligenceBriefRead.findOne({ intelBriefId: brief._id });
+    expect(record).not.toBeNull();
+    expect(record.briefDeletedNote).toBe('Brief deleted or re-created');
+    expect(record.completed).toBe(false);
+    expect(record.coinsAwarded).toBe(false);
   });
 
-  it('deletes IntelligenceBriefRead records with reachedFlashcard: true', async () => {
+  it('marks IntelligenceBriefRead records with reachedFlashcard: true', async () => {
     mockAiFetch();
     const brief = await createBrief();
     const user  = await createUser();
@@ -108,7 +112,10 @@ describe('POST /api/admin/ai/regenerate-description/:id — cascade deletions', 
       .set('Cookie', authCookie(admin._id))
       .send({ reason: REASON });
 
-    expect(await IntelligenceBriefRead.countDocuments({ intelBriefId: brief._id })).toBe(0);
+    const record = await IntelligenceBriefRead.findOne({ intelBriefId: brief._id });
+    expect(record).not.toBeNull();
+    expect(record.briefDeletedNote).toBe('Brief deleted or re-created');
+    expect(record.completed).toBe(false);
   });
 
   it('deletes GameQuizQuestion records for the brief', async () => {
@@ -442,7 +449,7 @@ describe('POST /api/admin/ai/regenerate-description/:id — audit and response',
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
     const c = res.body.data.cascade;
-    expect(c.briefReadsDeleted).toBe(1);
+    expect(c.briefReadsMarked).toBe(1);
     expect(c.quizQuestionsDeleted).toBe(3);
     expect(c.quizAttemptsDeleted).toBe(1);
     expect(c.aircoinLogsDeleted).toBe(1);

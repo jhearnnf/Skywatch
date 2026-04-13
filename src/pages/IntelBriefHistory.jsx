@@ -49,7 +49,7 @@ function FlashcardRow({ read, index }) {
             briefId={read.briefId}
             className="mt-0.5"
           />
-          <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(read.firstReadAt)}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(read.completedAt || read.lastReadAt)}</p>
         </div>
         <span className="text-slate-400 text-xs shrink-0">{expanded ? '▲' : '▼'}</span>
       </div>
@@ -228,7 +228,7 @@ export default function IntelBriefHistory() {
                       briefId={read.briefId}
                       className="mt-0.5"
                     />
-                    <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(read.firstReadAt)}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{formatDate(read.completedAt || read.lastReadAt)}</p>
                   </div>
                   <span className="text-sm font-bold text-slate-500 shrink-0 intel-mono">
                     {formatTime(read.timeSpentSeconds)}

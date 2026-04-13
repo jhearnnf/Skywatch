@@ -55,7 +55,7 @@ const MOCK_BRIEF = {
   quizQuestionsMedium: [],
 }
 
-const CASCADE_SUCCESS = { status: 'success', data: { coinsReversed: 30, usersAffected: 2, quizQuestionsDeleted: 5, briefReadsDeleted: 2, booGamesDeleted: 1, aircoinLogsDeleted: 3 } }
+const CASCADE_SUCCESS = { status: 'success', data: { coinsReversed: 30, usersAffected: 2, quizQuestionsDeleted: 5, briefReadsMarked: 2, booGamesDeleted: 1, aircoinLogsDeleted: 3 } }
 const REGEN_RESPONSE  = {
   status: 'success',
   data: {

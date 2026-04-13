@@ -836,7 +836,7 @@ describe('POST /api/admin/ai/regenerate-description/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.cascade).toBeDefined();
     expect(typeof res.body.data.cascade.coinsReversed).toBe('number');
-    expect(typeof res.body.data.cascade.briefReadsDeleted).toBe('number');
+    expect(typeof res.body.data.cascade.briefReadsMarked).toBe('number');
   });
 
   it('response does NOT include keywords, easyQuestions, or mediumQuestions', async () => {

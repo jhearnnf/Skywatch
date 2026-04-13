@@ -13,8 +13,11 @@ const intelligenceBriefReadSchema = new mongoose.Schema({
   reachedFlashcard: { type: Boolean, default: false }, // true once user reaches section 4 (flashcard)
   currentSection:   { type: Number,  default: 0 },    // last section the user was reading (for cross-device resume)
 
-  firstReadAt: { type: Date, default: Date.now },
-  lastReadAt:  { type: Date, default: Date.now },
+  briefDeletedNote: { type: String, default: null }, // set when the linked brief is deleted or re-created
+
+  firstReadAt:  { type: Date, default: Date.now },
+  lastReadAt:   { type: Date, default: Date.now },
+  completedAt:  { type: Date, default: null },
 
   // Stat keys where this user has opened the mnemonic sheet for this brief
   mnemonicsViewed: { type: [String], default: [] },

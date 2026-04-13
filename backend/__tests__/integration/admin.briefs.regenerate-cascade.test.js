@@ -93,7 +93,7 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — auth guards', () =
 // ── Cascade deletion per collection ───────────────────────────────────────
 
 describe('POST /api/admin/briefs/:id/confirm-regeneration — cascade deletions', () => {
-  it('deletes IntelligenceBriefRead records for the brief', async () => {
+  it('marks IntelligenceBriefRead records as deleted for the brief', async () => {
     const brief = await createBrief();
     const user  = await createUser();
     const admin = await createAdminUser();
@@ -104,7 +104,11 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — cascade deletions'
       .set('Cookie', authCookie(admin._id))
       .send({ reason: REASON });
 
-    expect(await IntelligenceBriefRead.countDocuments({ intelBriefId: brief._id })).toBe(0);
+    const record = await IntelligenceBriefRead.findOne({ intelBriefId: brief._id });
+    expect(record).not.toBeNull();
+    expect(record.briefDeletedNote).toBe('Brief deleted or re-created');
+    expect(record.completed).toBe(false);
+    expect(record.coinsAwarded).toBe(false);
   });
 
   it('deletes GameQuizQuestion records for the brief', async () => {
@@ -443,7 +447,7 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — audit and response
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
     const d = res.body.data;
-    expect(d.briefReadsDeleted).toBe(1);
+    expect(d.briefReadsMarked).toBe(1);
     expect(d.quizQuestionsDeleted).toBe(3);
     expect(d.quizAttemptsDeleted).toBe(1);
     expect(d.booGamesDeleted).toBe(1);

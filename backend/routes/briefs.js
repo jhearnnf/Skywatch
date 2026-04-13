@@ -341,7 +341,7 @@ router.get('/history', protect, async (req, res) => {
 
     const [records, total, avgResult] = await Promise.all([
       IntelligenceBriefRead.find(baseMatch)
-        .sort({ lastReadAt: -1 })
+        .sort({ completedAt: -1, lastReadAt: -1 })
         .skip(skip)
         .limit(limit)
         .populate('intelBriefId', populateFields)
@@ -363,6 +363,7 @@ router.get('/history', protect, async (req, res) => {
         category:         r.intelBriefId?.category ?? '',
         subcategory:      r.intelBriefId?.subcategory ?? '',
         timeSpentSeconds: r.timeSpentSeconds,
+        completedAt:      r.completedAt,
         firstReadAt:      r.firstReadAt,
         lastReadAt:       r.lastReadAt,
       };
@@ -672,7 +673,7 @@ router.post('/:id/complete', protect, async (req, res) => {
     }
 
     // Always mark completed and reset section position (handles re-reads where coins were already awarded)
-    await IntelligenceBriefRead.findByIdAndUpdate(readRecord._id, { completed: true, currentSection: 0 });
+    await IntelligenceBriefRead.findByIdAndUpdate(readRecord._id, { completed: true, currentSection: 0, completedAt: new Date() });
 
     // ── Game unlock detection (only on first completion) ─────────────────────
     const gameUnlocksGranted = [];

@@ -1241,9 +1241,27 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
       GameWheresThatAircraft.distinct('_id', { intelBriefId: briefId }),
     ]);
 
+    // ── Reverse aircoins per user (excluding daily_brief coins) ──────
+    const coinGroups = await AircoinLog.aggregate([
+      { $match: { briefId: new mongoose.Types.ObjectId(briefId) } },
+      { $group: { _id: '$userId', total: { $sum: '$amount' } } },
+    ]);
+    await Promise.all(coinGroups.map(async ({ _id: userId, total }) => {
+      const u = await User.findById(userId).select('totalAircoins cycleAircoins');
+      if (!u) return;
+      u.totalAircoins = Math.max(0, (u.totalAircoins ?? 0) - total);
+      u.cycleAircoins = Math.max(0, (u.cycleAircoins ?? 0) - total);
+      await u.save();
+    }));
+
     await Promise.all([
       IntelligenceBrief.findByIdAndDelete(briefId),
-      IntelligenceBriefRead.deleteMany({ intelBriefId: briefId }),
+      // Preserve read history but mark the brief as deleted and reset completion
+      IntelligenceBriefRead.updateMany({ intelBriefId: briefId }, { $set: {
+        briefDeletedNote: 'Brief deleted or re-created',
+        completed:        false,
+        coinsAwarded:     false,
+      } }),
       GameQuizQuestion.deleteMany({ intelBriefId: briefId }),
       GameSessionQuizAttempt.deleteMany({ intelBriefId: briefId }),
       GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
@@ -1334,7 +1352,12 @@ async function cascadeDeleteBriefData(briefId) {
     waaGameResult,
     whereAircraftResult,
   ] = await Promise.all([
-    IntelligenceBriefRead.deleteMany({ intelBriefId: briefId }),
+    // Preserve read history but mark the brief as deleted and reset completion
+    IntelligenceBriefRead.updateMany({ intelBriefId: briefId }, { $set: {
+      briefDeletedNote: 'Brief deleted or re-created',
+      completed:        false,
+      coinsAwarded:     false,
+    } }),
     GameQuizQuestion.deleteMany({ intelBriefId: briefId }),
     GameSessionQuizAttempt.deleteMany({ intelBriefId: briefId }),
     GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
@@ -1367,7 +1390,7 @@ async function cascadeDeleteBriefData(briefId) {
   return {
     coinsReversed:          coinGroups.reduce((s, g) => s + g.total, 0),
     usersAffected:          coinGroups.length,
-    briefReadsDeleted:      briefReadResult.deletedCount,
+    briefReadsMarked:       briefReadResult.modifiedCount,
     quizQuestionsDeleted:   quizQResult.deletedCount,
     quizAttemptsDeleted:    quizAttemptResult.deletedCount,
     quizResultsDeleted:     quizResultResult.deletedCount,

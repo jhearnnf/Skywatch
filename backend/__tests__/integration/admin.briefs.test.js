@@ -738,24 +738,25 @@ describe('GET /api/admin/briefs/titles', () => {
 // ── DELETE /api/admin/briefs/:id — cascade completeness ───────────────────────
 
 describe('DELETE /api/admin/briefs/:id — cascade completeness', () => {
-  it('cascades: deletes associated IntelligenceBriefRead records', async () => {
+  it('cascades: marks associated IntelligenceBriefRead records as deleted', async () => {
     const admin = await createAdminUser();
     const user  = await createUser();
     const brief = await createBrief({ category: 'News' });
 
-    // Simulate the user having read the brief
-    await IntelligenceBriefRead.create({ userId: user._id, intelBriefId: brief._id });
-
-    const before = await IntelligenceBriefRead.countDocuments({ intelBriefId: brief._id });
-    expect(before).toBe(1);
+    // Simulate the user having read and completed the brief
+    await IntelligenceBriefRead.create({ userId: user._id, intelBriefId: brief._id, completed: true, coinsAwarded: true });
 
     await request(app)
       .delete(`/api/admin/briefs/${brief._id}`)
       .set('Cookie', authCookie(admin._id))
       .send({ reason: 'Cascade test' });
 
-    const after = await IntelligenceBriefRead.countDocuments({ intelBriefId: brief._id });
-    expect(after).toBe(0);
+    // Record should still exist but be marked as deleted with completion/coins reset
+    const record = await IntelligenceBriefRead.findOne({ intelBriefId: brief._id });
+    expect(record).not.toBeNull();
+    expect(record.briefDeletedNote).toBe('Brief deleted or re-created');
+    expect(record.completed).toBe(false);
+    expect(record.coinsAwarded).toBe(false);
   });
 
   it('cascades: deletes GameOrderOfBattle and GameSessionOrderOfBattleResult records', async () => {
