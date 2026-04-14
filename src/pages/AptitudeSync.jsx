@@ -12,20 +12,22 @@ const G_DIM     = '#1a4a70'   // dim blue
 const G_ERROR   = '#ff5555'
 const G_AMBER   = '#ffcc44'   // coin / aircoin highlight
 const G_WHITE   = '#c8e6ff'   // near-white blue tint for user text
+const G_DEBRIEFER = '#9fd6ff' // pale cyan-white — the debriefer's speaking voice
 
 // ── Terminal line types → colour mapping ─────────────────────────────────────
 const LINE_COLORS = {
-  cmd:     G_MID,
-  system:  G_DIM,
-  info:    G_BRIGHT,
-  logo:    G_MID,
-  user:    G_WHITE,
-  ai:      G_BRIGHT,
-  coin:    G_AMBER,
-  error:   G_ERROR,
-  summary: G_BRIGHT,
-  divider: G_DIM,
-  blank:   'transparent',
+  cmd:       G_MID,
+  system:    G_DIM,
+  info:      G_BRIGHT,
+  logo:      G_MID,
+  user:      G_WHITE,
+  ai:        G_DEBRIEFER,
+  debriefer: G_DEBRIEFER,
+  coin:      G_AMBER,
+  error:     G_ERROR,
+  summary:   G_DEBRIEFER,
+  divider:   G_DIM,
+  blank:     'transparent',
 }
 
 // ── Skywatch ASCII logo (crosshair) ──────────────────────────────────────────
@@ -458,12 +460,22 @@ function TermLine({ line }) {
   const glow  = line.type !== 'blank' && line.type !== 'system' && line.type !== 'divider'
     ? `0 0 6px ${color}`
     : 'none'
+
+  const alignRight = line.type === 'user'
+  const alignLeft  = line.type === 'debriefer' || line.type === 'ai' || line.type === 'summary'
+
+  const wrapperClass = alignRight ? 'flex justify-end' : alignLeft ? 'flex justify-start' : ''
+  const bubbleClass  = (alignRight || alignLeft) ? 'max-w-[82%]' : ''
+  const textAlign    = alignRight ? 'text-right' : ''
+
   return (
-    <div
-      className="font-mono text-sm leading-relaxed whitespace-pre-wrap break-words"
-      style={{ color, textShadow: glow, minHeight: '1.4em' }}
-    >
-      {line.text || '\u00A0'}
+    <div className={wrapperClass}>
+      <div
+        className={`font-mono text-sm leading-relaxed whitespace-pre-wrap break-words ${bubbleClass} ${textAlign}`}
+        style={{ color, textShadow: glow, minHeight: '1.4em' }}
+      >
+        {line.text || '\u00A0'}
+      </div>
     </div>
   )
 }
@@ -767,10 +779,9 @@ export default function AptitudeSync() {
     setInputValue('')
     setSubmitting(true)
 
-    // Echo user input to terminal
+    // Echo user input to terminal (right-aligned via TermLine)
     setOutputLines(prev => [
       ...prev,
-      { text: `> [AGENT — ROUND ${round}/${maxRounds}]`, type: 'system' },
       { text: text, type: 'user' },
       { text: '', type: 'blank' },
     ])
@@ -816,7 +827,7 @@ export default function AptitudeSync() {
 
       if (!done && followUp) {
         aiLines.push(
-          { text: `> DEBRIEFER: ${followUp}`, type: 'info' },
+          { text: `> DEBRIEFER: ${followUp}`, type: 'debriefer' },
           { text: '', type: 'blank' },
         )
       }
@@ -1152,9 +1163,9 @@ export default function AptitudeSync() {
                 {phase === 'active' && (
                   <div className="mt-2 mb-3">
                     <TermLine line={{ text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', type: 'divider' }} />
-                    <TermLine line={{ text: `> ROUND ${round}/${maxRounds} — KNOWLEDGE DEBRIEF`, type: 'info' }} />
+                    <TermLine line={{ text: `> ROUND ${round}/${maxRounds} — KNOWLEDGE DEBRIEF`, type: 'cmd' }} />
                     {briefTitle && (
-                      <TermLine line={{ text: `> SUBJECT: ${briefTitle.toUpperCase()}`, type: 'info' }} />
+                      <TermLine line={{ text: `> SUBJECT: ${briefTitle.toUpperCase()}`, type: 'cmd' }} />
                     )}
                     <div className={pulseObjective ? 'apt-objective-pulse' : undefined}>
                       {round === 1 ? (
@@ -1163,13 +1174,13 @@ export default function AptitudeSync() {
                             text: briefTitle
                               ? `> DEBRIEFER: Welcome, agent. To kick things off — tell me what you know about ${briefTitle}.`
                               : '> DEBRIEFER: Welcome, agent. To kick things off — tell me what you know about this subject.',
-                            type: 'info',
+                            type: 'debriefer',
                           }}
                         />
                       ) : followUp ? (
-                        <TermLine line={{ text: `> ${followUp}`, type: 'info' }} />
+                        <TermLine line={{ text: `> ${followUp}`, type: 'debriefer' }} />
                       ) : (
-                        <TermLine line={{ text: `> ROUND ${round} — ADD TO YOUR DEBRIEF OR ADDRESS THE GAPS ABOVE.`, type: 'info' }} />
+                        <TermLine line={{ text: `> ROUND ${round} — ADD TO YOUR DEBRIEF OR ADDRESS THE GAPS ABOVE.`, type: 'debriefer' }} />
                       )}
                     </div>
                     <TermLine line={{ text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', type: 'divider' }} />
