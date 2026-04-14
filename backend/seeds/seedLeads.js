@@ -379,6 +379,7 @@ const LEADS = [
   { title: 'Houthi movement', nickname: '', subtitle: 'Yemen-based group using ballistic missiles, cruise missiles and drones', category: 'Threats', subcategory: 'Asymmetric & Non-State', section: 'THREATS', subsection: 'Asymmetric & Non-State', priorityNumber: 8 },
   { title: 'Iranian Shahed-136 loitering munition', nickname: 'Shahed-136', subtitle: 'Iranian kamikaze drone used extensively in Ukraine and by Houthi forces', category: 'Threats', subcategory: 'Asymmetric & Non-State', section: 'THREATS', subsection: 'Asymmetric & Non-State', priorityNumber: 9 },
   { title: 'Hezbollah', nickname: '', subtitle: 'Lebanese militia with significant drone and precision missile capability', category: 'Threats', subcategory: 'Asymmetric & Non-State', section: 'THREATS', subsection: 'Asymmetric & Non-State', priorityNumber: 46 },
+  { title: 'Hamas', nickname: '', subtitle: 'Palestinian militant group in Gaza employing rockets, drones and tunnels — context for Levant airspace and regional threat picture', category: 'Threats', subcategory: 'Asymmetric & Non-State', section: 'THREATS', subsection: 'Asymmetric & Non-State', priorityNumber: 12 },
   { title: 'Small Commercial UAS threat', nickname: '', subtitle: 'Commercial drones weaponised or used for ISR by non-state actors', category: 'Threats', subcategory: 'Asymmetric & Non-State', section: 'THREATS', subsection: 'Asymmetric & Non-State', priorityNumber: 26 },
   { title: 'Wagner Group / Russian PMC', nickname: 'Wagner', subtitle: 'Russian private military company operating in Africa and Ukraine', category: 'Threats', subcategory: 'Asymmetric & Non-State', section: 'THREATS', subsection: 'Asymmetric & Non-State', priorityNumber: 45 },
 
@@ -683,6 +684,7 @@ const LEADS = [
   { title: 'Qatar AOR', nickname: '', subtitle: 'Al Udeid Air Base — RAF forward element in the Gulf', category: 'AOR', subcategory: 'Middle East & CENTCOM', section: 'AOR', subsection: 'Middle East & CENTCOM', priorityNumber: 23 },
   { title: 'Iran', nickname: '', subtitle: 'Threat monitoring of IRGC drone and missile activity in the Gulf region', category: 'AOR', subcategory: 'Middle East & CENTCOM', section: 'AOR', subsection: 'Middle East & CENTCOM', priorityNumber: 41 },
   { title: 'Strait of Hormuz', nickname: '', subtitle: 'Critical maritime chokepoint where 20% of global oil transits', category: 'AOR', subcategory: 'Middle East & CENTCOM', section: 'AOR', subsection: 'Middle East & CENTCOM', priorityNumber: 28 },
+  { title: 'Gaza Strip', nickname: '', subtitle: 'Contested airspace and humanitarian corridor affecting UK basing at RAF Akrotiri and regional ISR tasking', category: 'AOR', subcategory: 'Middle East & CENTCOM', section: 'AOR', subsection: 'Middle East & CENTCOM', priorityNumber: 8 },
 
   // ── AOR — Atlantic & GIUK Gap ─────────────────────────────────────────────
   { title: 'Norwegian Sea AOR', nickname: '', subtitle: 'P-8A Poseidon maritime patrol area in the high north', category: 'AOR', subcategory: 'Atlantic & GIUK Gap', section: 'AOR', subsection: 'Atlantic & GIUK Gap', priorityNumber: 29 },

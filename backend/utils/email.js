@@ -19,7 +19,7 @@ const DEFAULTS = {
   heading: 'Welcome to SkyWatch',
   body:    'Your intelligence briefings are ready. Study RAF aircraft, ranks, bases, squadrons, and doctrine. Test your recall through gamified knowledge checks and earn Aircoins to climb the Intelligence Corps rank ladder.',
   cta:     'Begin Mission',
-  footer:  'SkyWatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>If you didn&apos;t create this account, you can safely ignore this email.',
+  footer:  'SkyWatch — Intelligence Study Platform for RAF Knowledge &amp; Aptitude.<br>If you didn&apos;t create this account, you can safely ignore this email.',
 };
 
 // Send a welcome email to a newly registered agent.
@@ -152,7 +152,7 @@ async function sendConfirmationEmail({ email, code, userId = null }) {
           </a>
 
           <p style="font-size:11px;color:#94a3b8;margin:36px 0 0;padding-top:24px;border-top:1px solid #e2e8f0;line-height:1.6;">
-            SkyWatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>
+            SkyWatch — Intelligence Study Platform for RAF Knowledge &amp; Aptitude.<br>
             If you didn&apos;t request this code, you can safely ignore this email.
           </p>
 
@@ -217,7 +217,7 @@ async function sendPasswordResetEmail({ email, resetUrl, userId = null }) {
           </a>
 
           <p style="font-size:11px;color:#94a3b8;margin:36px 0 0;padding-top:24px;border-top:1px solid #e2e8f0;line-height:1.6;">
-            SkyWatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>
+            SkyWatch — Intelligence Study Platform for RAF Knowledge &amp; Aptitude.<br>
             If you didn&apos;t request this reset, you can safely ignore this email.
           </p>
 
@@ -286,7 +286,7 @@ async function sendReportReplyEmail({ email, agentNumber, pageReported, replyMes
           </a>
 
           <p style="font-size:11px;color:#94a3b8;margin:36px 0 0;padding-top:24px;border-top:1px solid #e2e8f0;line-height:1.6;">
-            SkyWatch — Intelligence Study Platform for RAF Applicants &amp; Enthusiasts.<br>
+            SkyWatch — Intelligence Study Platform for RAF Knowledge &amp; Aptitude.<br>
             This is an update to a problem report you submitted.
           </p>
 

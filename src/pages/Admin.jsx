@@ -2702,8 +2702,9 @@ function isSimilarTitle(headline, existingTitles) {
   })
 }
 
-function LeadRow({ lead, picked, busy, onGenerate }) {
+function LeadRow({ lead, picked, busy, stubBusy, onGenerate, onCreateStub }) {
   const isPublished = lead.isPublished ?? false
+  const hasBrief    = lead.hasBrief    ?? false
   return (
     <div className={`flex items-start justify-between gap-3 py-2 px-3 rounded-xl mb-1 transition-colors ${
       isPublished ? 'opacity-50' : picked?.title === lead.title ? 'bg-amber-50 border border-amber-200' : 'hover:bg-slate-50'
@@ -2720,13 +2721,25 @@ function LeadRow({ lead, picked, busy, onGenerate }) {
           <p className="text-[11px] text-slate-400 mt-0.5 truncate">{lead.subtitle}</p>
         )}
       </div>
-      <button
-        onClick={() => onGenerate(lead)}
-        disabled={busy === lead.title || isPublished}
-        className="text-xs px-3 py-1 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold whitespace-nowrap hover:bg-brand-100 disabled:opacity-40 disabled:cursor-not-allowed"
-      >
-        {busy === lead.title ? '…' : 'Generate →'}
-      </button>
+      <div className="flex items-center gap-2 shrink-0">
+        {!hasBrief && (
+          <button
+            onClick={() => onCreateStub(lead)}
+            disabled={stubBusy === lead.title}
+            title="Create an empty stub brief for this lead (no AI generation)"
+            className="text-xs px-3 py-1 rounded-lg border border-slate-300 bg-white text-slate-600 font-semibold whitespace-nowrap hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {stubBusy === lead.title ? '…' : '+ Stub'}
+          </button>
+        )}
+        <button
+          onClick={() => onGenerate(lead)}
+          disabled={busy === lead.title || isPublished}
+          className="text-xs px-3 py-1 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold whitespace-nowrap hover:bg-brand-100 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {busy === lead.title ? '…' : 'Generate →'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -3194,6 +3207,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
   const [resetBusy,       setResetBusy]       = useState(false)
   const [resetModal,      setResetModal]      = useState(false)
   const [showCompleted,   setShowCompleted]   = useState(false)
+  const [stubBusy,        setStubBusy]        = useState(null)
 
   const toggleSection = (sec) => setOpenSections(prev => {
     const next = new Set(prev); next.has(sec) ? next.delete(sec) : next.add(sec); return next
@@ -3256,6 +3270,28 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
       }
     } finally {
       setBusy(null)
+    }
+  }
+
+  const createStub = async (lead) => {
+    setStubBusy(lead.title)
+    try {
+      const res  = await apiFetch(`${API}/api/admin/intel-leads/${lead._id}/create-stub`, {
+        method: 'POST', credentials: 'include',
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        // Reload leads so hasBrief flips and the button disappears
+        const r = await fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
+        const d = await r.json()
+        if (d.status === 'success') setLeads(d.data.leads)
+      } else {
+        alert(`Stub creation failed: ${data.message}`)
+      }
+    } catch (err) {
+      alert(`Stub creation error: ${err.message}`)
+    } finally {
+      setStubBusy(null)
     }
   }
 
@@ -3405,7 +3441,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
                                           className="overflow-hidden"
                                         >
                                           {items.map((lead, i) => (
-                                            <LeadRow key={i} lead={lead} picked={picked} busy={busy} onGenerate={generate} />
+                                            <LeadRow key={i} lead={lead} picked={picked} busy={busy} stubBusy={stubBusy} onGenerate={generate} onCreateStub={createStub} />
                                           ))}
                                         </motion.div>
                                       )}
@@ -3418,7 +3454,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
                             // Single group: render items directly
                             <div className="pb-2">
                               {subsections[''].map((lead, i) => (
-                                <LeadRow key={i} lead={lead} picked={picked} busy={busy} onGenerate={generate} />
+                                <LeadRow key={i} lead={lead} picked={picked} busy={busy} stubBusy={stubBusy} onGenerate={generate} onCreateStub={createStub} />
                               ))}
                             </div>
                           )}
@@ -4222,6 +4258,29 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     }
   }
 
+  const removeCutout = async (mediaId) => {
+    if (!briefId) return
+    if (!window.confirm('Remove this cutout? The original image stays, but the transparent cutout will be permanently deleted.')) return
+    try {
+      const res  = await apiFetch(`${API}/api/admin/briefs/${briefId}/media/${mediaId}/cutout`, {
+        method: 'DELETE', credentials: 'include',
+      })
+      const data = await res.json()
+      if (data.status !== 'success') throw new Error(data.message ?? 'Remove failed')
+      setMedia(p => p.map(m => String(m._id) === String(mediaId)
+        ? { ...m, cutoutUrl: null, cutoutPublicId: null }
+        : m
+      ))
+      setOriginalPreviewIds(prev => {
+        if (!prev.has(String(mediaId))) return prev
+        const next = new Set(prev); next.delete(String(mediaId)); return next
+      })
+      setToast('Cutout removed')
+    } catch (err) {
+      setToast(`Remove failed: ${err.message}`)
+    }
+  }
+
   const toggleCutoutPreview = (mediaId) => {
     setOriginalPreviewIds(prev => {
       const next = new Set(prev)
@@ -4312,6 +4371,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
             <option value="newest">Sort: Recently modified</option>
             <option value="oldest">Sort: Oldest modified</option>
             <option value="no-priority">Sort: No priority first</option>
+            <option value="uncompleted-keywords">Sort: Uncompleted keywords</option>
+            <option value="uncompleted-questions">Sort: Uncompleted questions</option>
+            <option value="uncompleted-description">Sort: Uncompleted description</option>
           </select>
           <label className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl bg-surface cursor-pointer select-none">
             <input
@@ -5067,6 +5129,15 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                               className={`text-[11px] px-2 py-1 rounded-lg font-semibold transition-colors ${showCutout ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-slate-700 text-slate-100 hover:bg-slate-600'}`}
                             >
                               {showCutout ? 'Show Original' : 'Show Cutout'}
+                            </button>
+                          )}
+                          {m.cutoutUrl && (
+                            <button
+                              onClick={() => removeCutout(m._id)}
+                              title="Permanently remove the cutout (original image stays)"
+                              className="text-[11px] px-2 py-1 rounded-lg font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors"
+                            >
+                              ✕ Remove Cutout
                             </button>
                           )}
                         </div>

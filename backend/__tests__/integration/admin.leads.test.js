@@ -13,7 +13,7 @@ process.env.JWT_SECRET = 'test_secret';
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
-const { createSettings, createAdminUser, authCookie, createLead } = require('../helpers/factories');
+const { createSettings, createAdminUser, authCookie, createLead, createBrief } = require('../helpers/factories');
 const IntelLead         = require('../../models/IntelLead');
 const IntelligenceBrief = require('../../models/IntelligenceBrief');
 const seedLeads         = require('../../seeds/seedLeads');
@@ -145,6 +145,115 @@ describe('GET /api/admin/intel-leads', () => {
     expect(lead.title).toBe('Plain Lead');
     expect(lead.nickname).toBe('');
     expect(lead.subtitle).toBe('');
+  });
+});
+
+describe('GET /api/admin/intel-leads — hasBrief flag', () => {
+  it('sets hasBrief=false when no brief exists for the lead', async () => {
+    await createLead({ title: 'Lonely Lead', category: 'News' });
+    const user   = await createAdminUser();
+    const cookie = authCookie(user._id);
+
+    const res = await request(app).get('/api/admin/intel-leads').set('Cookie', cookie);
+    expect(res.body.data.leads[0].hasBrief).toBe(false);
+  });
+
+  it('sets hasBrief=true when a stub brief exists for the lead', async () => {
+    await createLead({ title: 'Has Stub', category: 'News' });
+    await createBrief({ title: 'Has Stub', category: 'News', status: 'stub' });
+    const user   = await createAdminUser();
+    const cookie = authCookie(user._id);
+
+    const res = await request(app).get('/api/admin/intel-leads').set('Cookie', cookie);
+    expect(res.body.data.leads[0].hasBrief).toBe(true);
+  });
+
+  it('sets hasBrief=true when a published brief exists for the lead', async () => {
+    await createLead({ title: 'Has Published', category: 'News' });
+    await createBrief({ title: 'Has Published', category: 'News', status: 'published' });
+    const user   = await createAdminUser();
+    const cookie = authCookie(user._id);
+
+    const res = await request(app).get('/api/admin/intel-leads').set('Cookie', cookie);
+    expect(res.body.data.leads[0].hasBrief).toBe(true);
+  });
+});
+
+// ── POST /api/admin/intel-leads/:id/create-stub ────────────────────────────
+
+describe('POST /api/admin/intel-leads/:id/create-stub', () => {
+  it('creates a minimal stub brief carrying lead metadata', async () => {
+    const lead = await createLead({
+      title:       'Air Specialist (Class 1)',
+      subtitle:    'Modern enlisted rank above AS2',
+      category:    'Ranks',
+      subcategory: 'Non-Commissioned',
+    });
+    const admin  = await createAdminUser();
+    const cookie = authCookie(admin._id);
+
+    const res = await request(app)
+      .post(`/api/admin/intel-leads/${lead._id}/create-stub`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(201);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.brief.title).toBe('Air Specialist (Class 1)');
+    expect(res.body.data.brief.status).toBe('stub');
+    expect(res.body.data.brief.subtitle).toBe('Modern enlisted rank above AS2');
+    expect(res.body.data.brief.category).toBe('Ranks');
+    expect(res.body.data.brief.subcategory).toBe('Non-Commissioned');
+    expect(res.body.data.brief.descriptionSections).toEqual([]);
+
+    const saved = await IntelligenceBrief.findOne({ title: 'Air Specialist (Class 1)' });
+    expect(saved.status).toBe('stub');
+  });
+
+  it('returns 409 when a stub brief already exists for the lead', async () => {
+    const lead = await createLead({ title: 'Duplicate Target', category: 'News' });
+    await createBrief({ title: 'Duplicate Target', category: 'News', status: 'stub' });
+
+    const admin  = await createAdminUser();
+    const cookie = authCookie(admin._id);
+
+    const res = await request(app)
+      .post(`/api/admin/intel-leads/${lead._id}/create-stub`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 409 when a published brief already exists for the lead', async () => {
+    const lead = await createLead({ title: 'Already Published', category: 'News' });
+    await createBrief({ title: 'Already Published', category: 'News', status: 'published' });
+
+    const admin  = await createAdminUser();
+    const cookie = authCookie(admin._id);
+
+    const res = await request(app)
+      .post(`/api/admin/intel-leads/${lead._id}/create-stub`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 404 when the lead does not exist', async () => {
+    const admin  = await createAdminUser();
+    const cookie = authCookie(admin._id);
+    const fakeId = '507f1f77bcf86cd799439011';
+
+    const res = await request(app)
+      .post(`/api/admin/intel-leads/${fakeId}/create-stub`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 401 for unauthenticated requests', async () => {
+    const lead = await createLead({ title: 'Guard Lead', category: 'News' });
+    const res = await request(app)
+      .post(`/api/admin/intel-leads/${lead._id}/create-stub`);
+    expect(res.status).toBe(401);
   });
 });
 

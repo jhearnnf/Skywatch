@@ -221,6 +221,114 @@ describe('GET /api/admin/briefs — default sort by publishedAt desc', () => {
   });
 });
 
+describe('GET /api/admin/briefs — uncompleted-* sort orders', () => {
+  // Thresholds mirror AppSettings defaults and the K/Q/D pill checks in Admin.jsx.
+  const KEYWORDS_PER_BRIEF       = 20;
+  const QUESTIONS_PER_DIFFICULTY = 7;
+  const makeKeywords = n => Array.from({ length: n }, (_, i) => ({ keyword: `kw${i}` }));
+  const makeIds      = n => Array.from({ length: n }, () => new (require('mongoose').Types.ObjectId)());
+
+  it('sort=uncompleted-keywords places briefs with fewer than aiKeywordsPerBrief keywords first', async () => {
+    const admin = await createAdminUser();
+
+    const full = await createBrief({
+      title: 'Full keywords',
+      category: 'Aircrafts',
+      keywords: makeKeywords(KEYWORDS_PER_BRIEF),
+    });
+    const short1 = await createBrief({ title: 'Short A', category: 'Aircrafts', keywords: makeKeywords(5) });
+    const short2 = await createBrief({ title: 'Short B', category: 'Aircrafts', keywords: [] });
+    await IntelligenceBrief.findByIdAndUpdate(full._id,   { updatedAt: new Date('2025-12-01') }, { timestamps: false });
+    await IntelligenceBrief.findByIdAndUpdate(short1._id, { updatedAt: new Date('2025-06-01') }, { timestamps: false });
+    await IntelligenceBrief.findByIdAndUpdate(short2._id, { updatedAt: new Date('2025-11-01') }, { timestamps: false });
+
+    const res = await request(app)
+      .get('/api/admin/briefs?sort=uncompleted-keywords')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const titles = res.body.data.briefs.map(b => b.title);
+    // Incomplete briefs come first (updatedAt desc within group), then complete ones
+    expect(titles).toEqual(['Short B', 'Short A', 'Full keywords']);
+  });
+
+  it('sort=uncompleted-description places briefs with fewer than 4 filled sections first', async () => {
+    const admin = await createAdminUser();
+
+    const full = await createBrief({
+      title: 'Full description',
+      category: 'Aircrafts',
+      descriptionSections: ['One.', 'Two.', 'Three.', 'Four.'],
+    });
+    const short1 = await createBrief({
+      title: 'Short desc A',
+      category: 'Aircrafts',
+      descriptionSections: ['One.', 'Two.'],
+    });
+    const blanks = await createBrief({
+      title: 'Blank sections',
+      category: 'Aircrafts',
+      descriptionSections: ['One.', 'Two.', '   ', 'Four.'], // one blank → only 3 filled
+    });
+    await IntelligenceBrief.findByIdAndUpdate(full._id,   { updatedAt: new Date('2025-12-01') }, { timestamps: false });
+    await IntelligenceBrief.findByIdAndUpdate(short1._id, { updatedAt: new Date('2025-06-01') }, { timestamps: false });
+    await IntelligenceBrief.findByIdAndUpdate(blanks._id, { updatedAt: new Date('2025-11-01') }, { timestamps: false });
+
+    const res = await request(app)
+      .get('/api/admin/briefs?sort=uncompleted-description')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const titles = res.body.data.briefs.map(b => b.title);
+    expect(titles).toEqual(['Blank sections', 'Short desc A', 'Full description']);
+  });
+
+  it('sort=uncompleted-questions places briefs with <aiQuestionsPerDifficulty in either difficulty first', async () => {
+    const admin = await createAdminUser();
+
+    const complete = await createBrief({ title: 'Complete questions', category: 'Aircrafts' });
+    await IntelligenceBrief.findByIdAndUpdate(
+      complete._id,
+      {
+        quizQuestionsEasy:   makeIds(QUESTIONS_PER_DIFFICULTY),
+        quizQuestionsMedium: makeIds(QUESTIONS_PER_DIFFICULTY),
+        updatedAt: new Date('2025-12-01'),
+      },
+      { timestamps: false },
+    );
+
+    const shortEasy = await createBrief({ title: 'Short easy', category: 'Aircrafts' });
+    await IntelligenceBrief.findByIdAndUpdate(
+      shortEasy._id,
+      {
+        quizQuestionsEasy:   makeIds(QUESTIONS_PER_DIFFICULTY - 1),
+        quizQuestionsMedium: makeIds(QUESTIONS_PER_DIFFICULTY),
+        updatedAt: new Date('2025-06-01'),
+      },
+      { timestamps: false },
+    );
+
+    const shortMedium = await createBrief({ title: 'Short medium', category: 'Aircrafts' });
+    await IntelligenceBrief.findByIdAndUpdate(
+      shortMedium._id,
+      {
+        quizQuestionsEasy:   makeIds(QUESTIONS_PER_DIFFICULTY),
+        quizQuestionsMedium: makeIds(QUESTIONS_PER_DIFFICULTY - 1),
+        updatedAt: new Date('2025-11-01'),
+      },
+      { timestamps: false },
+    );
+
+    const res = await request(app)
+      .get('/api/admin/briefs?sort=uncompleted-questions')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const titles = res.body.data.briefs.map(b => b.title);
+    expect(titles).toEqual(['Short medium', 'Short easy', 'Complete questions']);
+  });
+});
+
 describe('POST /api/admin/briefs — publishedAt stamp', () => {
   it('stamps publishedAt when a new published brief is created', async () => {
     const admin = await createAdminUser();

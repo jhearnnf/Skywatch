@@ -146,6 +146,87 @@ describe('POST /api/admin/briefs/:id/media/:mediaId/extract-subject', () => {
   });
 });
 
+// ── DELETE /api/admin/briefs/:id/media/:mediaId/cutout — clear cutout only ──
+
+describe('DELETE /api/admin/briefs/:id/media/:mediaId/cutout', () => {
+  it('clears the cutout fields and destroys the Cloudinary asset', async () => {
+    const admin = await createAdminUser();
+    const { brief, media } = await createBriefWithMedia('Aircrafts', {
+      cutoutUrl:      'https://res.cloudinary.com/test/cutout.png',
+      cutoutPublicId: 'brief-images/cutouts/cut-remove-me',
+    });
+
+    const res = await request(app)
+      .delete(`/api/admin/briefs/${brief._id}/media/${media._id}/cutout`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.media.cutoutUrl).toBeNull();
+    expect(destroyAsset).toHaveBeenCalledWith('brief-images/cutouts/cut-remove-me');
+
+    const reloaded = await Media.findById(media._id);
+    expect(reloaded.cutoutUrl).toBeNull();
+    expect(reloaded.cutoutPublicId).toBeNull();
+    // Original image survives
+    expect(reloaded.mediaUrl).toBe('https://example.com/typhoon.jpg');
+    expect(reloaded.cloudinaryPublicId).toBe('brief-images/typhoon');
+  });
+
+  it('is idempotent when the media has no cutout', async () => {
+    const admin = await createAdminUser();
+    const { brief, media } = await createBriefWithMedia('Aircrafts');
+
+    const res = await request(app)
+      .delete(`/api/admin/briefs/${brief._id}/media/${media._id}/cutout`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(destroyAsset).not.toHaveBeenCalled();
+  });
+
+  it('keeps the media attached to the brief', async () => {
+    const admin = await createAdminUser();
+    const { brief, media } = await createBriefWithMedia('Aircrafts', {
+      cutoutUrl:      'https://res.cloudinary.com/test/cutout.png',
+      cutoutPublicId: 'brief-images/cutouts/cut-attached',
+    });
+
+    await request(app)
+      .delete(`/api/admin/briefs/${brief._id}/media/${media._id}/cutout`)
+      .set('Cookie', authCookie(admin._id));
+
+    const reloadedBrief = await IntelligenceBrief.findById(brief._id).lean();
+    expect(reloadedBrief.media.map(String)).toContain(String(media._id));
+  });
+
+  it('rejects media not attached to the brief with 404', async () => {
+    const admin = await createAdminUser();
+    const { brief } = await createBriefWithMedia('Aircrafts');
+    const orphanMedia = await Media.create({
+      mediaType:      'picture',
+      mediaUrl:       'https://example.com/other.jpg',
+      cutoutUrl:      'https://res.cloudinary.com/test/orphan.png',
+      cutoutPublicId: 'brief-images/cutouts/orphan',
+    });
+
+    const res = await request(app)
+      .delete(`/api/admin/briefs/${brief._id}/media/${orphanMedia._id}/cutout`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(404);
+    expect(destroyAsset).not.toHaveBeenCalled();
+  });
+
+  it('requires admin auth', async () => {
+    const { brief, media } = await createBriefWithMedia('Aircrafts');
+    const res = await request(app)
+      .delete(`/api/admin/briefs/${brief._id}/media/${media._id}/cutout`);
+    expect(res.status).toBe(401);
+  });
+});
+
 // ── DELETE /api/admin/briefs/:id/media/:mediaId — cutout cleanup ─────────────
 
 describe('DELETE /api/admin/briefs/:id/media/:mediaId — cutout cleanup', () => {

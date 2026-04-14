@@ -23,15 +23,22 @@ const {
   createBrief,
   createGameType,
   createQuizQuestions,
+  createFlashcardGame,
+  createFlashcardResult,
+  createWonBooResult,
   authCookie,
 } = require('../helpers/factories');
 
-const User                   = require('../../models/User');
-const IntelligenceBriefRead  = require('../../models/IntelligenceBriefRead');
-const AircoinLog             = require('../../models/AircoinLog');
-const GameSessionQuizAttempt = require('../../models/GameSessionQuizAttempt');
-const GameSessionQuizResult  = require('../../models/GameSessionQuizResult');
-const AptitudeSyncUsage      = require('../../models/AptitudeSyncUsage');
+const User                           = require('../../models/User');
+const IntelligenceBriefRead          = require('../../models/IntelligenceBriefRead');
+const AircoinLog                     = require('../../models/AircoinLog');
+const GameSessionQuizAttempt         = require('../../models/GameSessionQuizAttempt');
+const GameSessionQuizResult          = require('../../models/GameSessionQuizResult');
+const AptitudeSyncUsage              = require('../../models/AptitudeSyncUsage');
+const GameFlashcardRecall            = require('../../models/GameFlashcardRecall');
+const GameSessionFlashcardRecallResult = require('../../models/GameSessionFlashcardRecallResult');
+const GameOrderOfBattle              = require('../../models/GameOrderOfBattle');
+const GameSessionOrderOfBattleResult = require('../../models/GameSessionOrderOfBattleResult');
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => { await createSettings(); });
@@ -209,6 +216,48 @@ describe('Admin reset-stats endpoint', () => {
 
     const count = await GameSessionQuizAttempt.countDocuments({ userId: target._id });
     expect(count).toBe(0);
+  });
+
+  it('resets game history — deletes orphaned GameFlashcardRecall decks the user generated', async () => {
+    const brief    = await createBrief();
+    const gameType = await createGameType('flashcardRecall');
+    const deck     = await createFlashcardGame(brief._id, gameType._id);
+    await createFlashcardResult(target._id, deck._id);
+
+    const res = await reset(['gameHistory']);
+    expect(res.status).toBe(200);
+
+    // Both the session result and the deck itself are gone — no orphan left behind
+    expect(await GameSessionFlashcardRecallResult.countDocuments({ userId: target._id })).toBe(0);
+    expect(await GameFlashcardRecall.findById(deck._id)).toBeNull();
+  });
+
+  it('resets game history — preserves decks that another user still has sessions for', async () => {
+    const otherUser = await createUser({ email: 'other@test.com' });
+    const brief    = await createBrief();
+    const gameType = await createGameType('flashcardRecall');
+    const deck     = await createFlashcardGame(brief._id, gameType._id);
+    await createFlashcardResult(target._id, deck._id);
+    await createFlashcardResult(otherUser._id, deck._id);
+
+    const res = await reset(['gameHistory']);
+    expect(res.status).toBe(200);
+
+    // Target's sessions gone; other user's session + shared deck still present
+    expect(await GameSessionFlashcardRecallResult.countDocuments({ userId: target._id })).toBe(0);
+    expect(await GameSessionFlashcardRecallResult.countDocuments({ userId: otherUser._id })).toBe(1);
+    expect(await GameFlashcardRecall.findById(deck._id)).not.toBeNull();
+  });
+
+  it('resets game history — deletes orphaned GameOrderOfBattle games the user generated', async () => {
+    const brief = await createBrief({ category: 'Aircrafts' });
+    const { game } = await createWonBooResult(target._id, brief._id);
+
+    const res = await reset(['gameHistory']);
+    expect(res.status).toBe(200);
+
+    expect(await GameSessionOrderOfBattleResult.countDocuments({ userId: target._id })).toBe(0);
+    expect(await GameOrderOfBattle.findById(game._id)).toBeNull();
   });
 
   it('resets game history — deletes aptitude_sync sessions', async () => {

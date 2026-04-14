@@ -468,6 +468,101 @@ function TermLine({ line }) {
   )
 }
 
+// Downscale Cloudinary-hosted image URLs to a tiny source so `image-rendering: pixelated`
+// renders chunky pixels when the element is scaled up. Leaves non-Cloudinary URLs alone.
+function lowResUrl(url) {
+  if (!url || typeof url !== 'string')             return url
+  if (!/\/image\/upload\//.test(url))              return url
+  if (/\/image\/upload\/[^/]*w_\d+/.test(url))     return url
+  return url.replace('/image/upload/', '/image/upload/w_120,q_35,f_auto/')
+}
+
+// ── Incoming-signal image feed — low-bandwidth transmission aesthetic ─────────
+function SignalFeed({ images, index, className = '', style = {}, variant = 'desktop' }) {
+  if (!images || images.length === 0) return null
+  const isMobile = variant === 'mobile'
+  // Desktop variant sits behind the terminal text — dim the image so overlaid
+  // terminal lines remain readable on top. Mobile strip has no text over it so
+  // can run at full opacity.
+  const activeOpacity = isMobile ? 1 : 0.55
+  return (
+    <div
+      className={`pointer-events-none overflow-hidden ${className}`}
+      style={{
+        border:     `1px solid ${G_DIM}`,
+        background: '#020810',
+        boxShadow:  '0 0 12px rgba(91,170,255,0.15), inset 0 0 18px rgba(0,0,0,0.6)',
+        ...style,
+      }}
+    >
+      {/* Image crossfade stack — flicker wrapper runs continuously; inner img crossfades */}
+      <div
+        className="absolute inset-0"
+        style={{ animation: 'apt-signal-flicker 2.3s ease-in-out infinite' }}
+      >
+        {images.map((url, i) => (
+          <img
+            key={url + i}
+            src={lowResUrl(url)}
+            alt=""
+            draggable={false}
+            style={{
+              position:        'absolute',
+              inset:           0,
+              width:           '100%',
+              height:          '100%',
+              objectFit:       'cover',
+              imageRendering:  'pixelated',
+              filter:          'blur(0.6px) contrast(1.15) saturate(0.55) hue-rotate(190deg) brightness(0.85)',
+              opacity:         i === index ? activeOpacity : 0,
+              transition:      'opacity 300ms ease-in-out',
+            }}
+          />
+        ))}
+      </div>
+      {/* Scanline overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.35) 2px, rgba(0,0,0,0.35) 3px)',
+          mixBlendMode: 'multiply',
+        }}
+      />
+      {/* Vignette */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: 'radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.7) 100%)',
+        }}
+      />
+      {/* Signal label */}
+      <div
+        className="absolute flex items-center gap-1.5 font-mono tracking-widest"
+        style={{
+          top:        isMobile ? 4 : 4,
+          left:       isMobile ? 6 : 6,
+          color:      G_BRIGHT,
+          fontSize:   isMobile ? 9 : 10,
+          textShadow: `0 0 4px ${G_BRIGHT}`,
+        }}
+      >
+        <span
+          style={{
+            display:      'inline-block',
+            width:        6,
+            height:       6,
+            borderRadius: '50%',
+            background:   G_ERROR,
+            boxShadow:    `0 0 6px ${G_ERROR}`,
+            animation:    'apt-signal-dot 1.2s ease-in-out infinite',
+          }}
+        />
+        INCOMING SIGNAL
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AptitudeSync() {
   const { briefId }  = useParams()
@@ -479,6 +574,10 @@ export default function AptitudeSync() {
   // Brief title / category — may be passed via navigation state or fetched
   const [briefTitle, setBriefTitle]   = useState(location.state?.briefTitle ?? '')
   const categoryName                  = location.state?.category ?? ''
+
+  // Low-bandwidth "incoming signal" image feed (top-right overlay / mobile strip)
+  const [briefImages, setBriefImages] = useState([])
+  const [imageIndex,  setImageIndex]  = useState(0)
 
   // Phase: 'loading' | 'booting' | 'locked' | 'active' | 'complete' | 'error'
   const [phase,     setPhase]     = useState('loading')
@@ -530,14 +629,32 @@ export default function AptitudeSync() {
     return () => { document.body.style.overflow = prev }
   }, [])
 
-  // ── Fetch brief title if not passed via state ─────────────────────────────
+  // ── Fetch brief (title + images for the signal feed) ──────────────────────
   useEffect(() => {
-    if (briefTitle) return
     apiFetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
       .then(r => r.json())
-      .then(d => { if (d?.data?.brief?.title) setBriefTitle(d.data.brief.title) })
+      .then(d => {
+        const brief = d?.data?.brief
+        if (!brief) return
+        if (brief.title && !briefTitle) setBriefTitle(brief.title)
+        const imgs = Array.isArray(brief.media)
+          ? brief.media
+              .filter(m => m && m.mediaType === 'picture' && m.mediaUrl)
+              .map(m => m.mediaUrl)
+          : []
+        if (imgs.length > 0) setBriefImages(imgs)
+      })
       .catch(() => {})
-  }, [briefId, API, briefTitle])
+  }, [briefId, API]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Rotate signal feed every 4s when more than one image is available
+  useEffect(() => {
+    if (briefImages.length <= 1) return
+    const t = setInterval(() => {
+      setImageIndex(i => (i + 1) % briefImages.length)
+    }, 4000)
+    return () => clearInterval(t)
+  }, [briefImages])
 
   // ── Status check ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -871,6 +988,20 @@ export default function AptitudeSync() {
         .apt-objective-pulse {
           animation: apt-objective-pulse 1.6s ease-in-out infinite;
         }
+
+        @keyframes apt-signal-dot {
+          0%,100% { opacity: 1;   transform: scale(1);    }
+          50%     { opacity: 0.3; transform: scale(0.85); }
+        }
+        @keyframes apt-signal-flicker {
+          0%,100%   { opacity: 0.85; }
+          42%       { opacity: 0.85; }
+          44%       { opacity: 0.55; }
+          46%       { opacity: 0.85; }
+          78%       { opacity: 0.85; }
+          80%       { opacity: 0.65; }
+          82%       { opacity: 0.85; }
+        }
       `}</style>
 
       {/* Page wrapper — flex column that fills exactly the available viewport height.
@@ -936,6 +1067,18 @@ export default function AptitudeSync() {
           <AsciiLogo maxHeightPx={99999} />
         </div>
 
+        {/* Signal feed — desktop floating overlay (hidden on mobile).
+            Sits BELOW the terminal content z-20 so text renders on top of the image. */}
+        {briefImages.length > 0 && (
+          <SignalFeed
+            images={briefImages}
+            index={imageIndex}
+            variant="desktop"
+            className="hidden sm:block absolute rounded"
+            style={{ top: 48, right: 12, width: 180, height: 120, zIndex: 15 }}
+          />
+        )}
+
         {/* Terminal content */}
         <div className="relative z-20 h-full flex flex-col overflow-hidden">
           {/* Random glitch character flash overlay */}
@@ -968,6 +1111,18 @@ export default function AptitudeSync() {
               [EXIT]
             </button>
           </div>
+
+          {/* Signal feed — mobile strip between header and output (hidden on sm+).
+              Desktop variant is rendered as a sibling of this wrapper above. */}
+          {briefImages.length > 0 && (
+            <SignalFeed
+              images={briefImages}
+              index={imageIndex}
+              variant="mobile"
+              className="sm:hidden relative shrink-0"
+              style={{ height: 56, width: '100%' }}
+            />
+          )}
 
           {/* Scrollable output */}
           <div className="flex-1 overflow-y-auto px-4 pt-4 pb-2" style={{ scrollbarWidth: 'none' }}>
@@ -1003,7 +1158,14 @@ export default function AptitudeSync() {
                     )}
                     <div className={pulseObjective ? 'apt-objective-pulse' : undefined}>
                       {round === 1 ? (
-                        <TermLine line={{ text: '> TRANSMIT EVERYTHING YOU KNOW ABOUT THIS SUBJECT.', type: 'info' }} />
+                        <TermLine
+                          line={{
+                            text: briefTitle
+                              ? `> DEBRIEFER: Welcome, agent. To kick things off — tell me what you know about ${briefTitle}.`
+                              : '> DEBRIEFER: Welcome, agent. To kick things off — tell me what you know about this subject.',
+                            type: 'info',
+                          }}
+                        />
                       ) : followUp ? (
                         <TermLine line={{ text: `> ${followUp}`, type: 'info' }} />
                       ) : (

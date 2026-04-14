@@ -731,6 +731,46 @@ router.post('/users/:id/remove-admin', requireReason, async (req, res) => {
   }
 });
 
+// Reset gameHistory: deletes the user's session records AND the
+// per-session game-definition docs they created (flashcard decks, BOO games),
+// so reset actually wipes everything. GameWheresThatAircraft is content
+// (seeded), not user-generated, so it's left alone. A game-definition doc
+// is only deleted if no other user's sessions still reference it.
+async function cleanupUserGameHistory(userId) {
+  const [flashGameIds, booGameIds] = await Promise.all([
+    GameSessionFlashcardRecallResult.distinct('gameId', { userId }),
+    GameSessionOrderOfBattleResult.distinct('gameId', { userId }),
+  ]);
+
+  await Promise.all([
+    GameSessionQuizResult.deleteMany({ userId }),
+    GameSessionQuizAttempt.deleteMany({ userId }),
+    GameSessionOrderOfBattleResult.deleteMany({ userId }),
+    GameSessionWheresThatAircraftResult.deleteMany({ userId }),
+    GameSessionWhereAircraftResult.deleteMany({ userId }),
+    GameSessionFlashcardRecallResult.deleteMany({ userId }),
+    AptitudeSyncUsage.deleteMany({ userId }),
+  ]);
+
+  const [flashStillReferenced, booStillReferenced] = await Promise.all([
+    flashGameIds.length
+      ? GameSessionFlashcardRecallResult.distinct('gameId', { gameId: { $in: flashGameIds } })
+      : [],
+    booGameIds.length
+      ? GameSessionOrderOfBattleResult.distinct('gameId', { gameId: { $in: booGameIds } })
+      : [],
+  ]);
+  const flashRefSet = new Set(flashStillReferenced.map(String));
+  const booRefSet   = new Set(booStillReferenced.map(String));
+  const flashOrphans = flashGameIds.filter(id => !flashRefSet.has(String(id)));
+  const booOrphans   = booGameIds.filter(id => !booRefSet.has(String(id)));
+
+  await Promise.all([
+    flashOrphans.length ? GameFlashcardRecall.deleteMany({ _id: { $in: flashOrphans } }) : Promise.resolve(),
+    booOrphans.length   ? GameOrderOfBattle.deleteMany({ _id: { $in: booOrphans } })     : Promise.resolve(),
+  ]);
+}
+
 // POST /api/admin/users/:id/reset-stats
 router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
   try {
@@ -745,7 +785,10 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
       userUpdates.rank = acRank?._id ?? null;
       ops.push(AircoinLog.deleteMany({ userId: req.params.id }));
     }
-    if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWheresThatAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWhereAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionFlashcardRecallResult.deleteMany({ userId: req.params.id })); ops.push(AptitudeSyncUsage.deleteMany({ userId: req.params.id })); }
+    if (fields.includes('gameHistory')) {
+      userUpdates.gameTypesSeen = [];
+      await cleanupUserGameHistory(req.params.id);
+    }
     if (fields.includes('streak'))          { userUpdates.loginStreak = 0; userUpdates.lastStreakDate = null; }
     if (fields.includes('intelBriefsRead')) {
       userUpdates.loginStreak    = 0;
@@ -1001,10 +1044,21 @@ router.get('/briefs', async (req, res) => {
       { subtitle: new RegExp(search, 'i') },
     ];
     const skip = (Number(page) - 1) * Number(limit);
+
+    // Thresholds for "uncompleted-*" sorts mirror the K/Q/D status pills in
+    // Admin.jsx: a brief is "complete" only when its counts meet these limits.
+    const settings = await AppSettings.getSettings();
+    const keywordsPerBrief       = settings?.aiKeywordsPerBrief ?? 20;
+    const questionsPerDifficulty = settings?.aiQuestionsPerDifficulty ?? 7;
+    const descriptionSectionMin  = 4;
+
     const sortStage =
       sort === 'newest' ? { updatedAt: -1 }
       : sort === 'oldest' ? { updatedAt:  1 }
       : sort === 'no-priority' ? { _isNews: 1, _hasPriority: 1, updatedAt: -1 }
+      : sort === 'uncompleted-keywords'    ? { _incompleteKeywords: -1, updatedAt: -1 }
+      : sort === 'uncompleted-questions'   ? { _incompleteQuestions: -1, updatedAt: -1 }
+      : sort === 'uncompleted-description' ? { _incompleteDescription: -1, updatedAt: -1 }
       : { _effectivePublishedAt: -1, _id: -1 };
 
     const [briefs, total] = await Promise.all([
@@ -1027,6 +1081,50 @@ router.get('/briefs', async (req, res) => {
             $cond: [{ $ne: [{ $ifNull: ['$priorityNumber', null] }, null] }, 1, 0],
           },
           _isNews: { $cond: [{ $eq: ['$category', 'News'] }, 1, 0] },
+          _incompleteKeywords: {
+            $cond: [
+              { $lt: [{ $size: { $ifNull: ['$keywords', []] } }, keywordsPerBrief] },
+              1,
+              0,
+            ],
+          },
+          _incompleteDescription: {
+            $cond: [
+              {
+                $lt: [
+                  {
+                    $size: {
+                      $filter: {
+                        input: { $ifNull: ['$descriptionSections', []] },
+                        as: 's',
+                        cond: {
+                          $gt: [
+                            { $strLenCP: { $ifNull: [{ $trim: { input: '$$s' } }, ''] } },
+                            0,
+                          ],
+                        },
+                      },
+                    },
+                  },
+                  descriptionSectionMin,
+                ],
+              },
+              1,
+              0,
+            ],
+          },
+          _incompleteQuestions: {
+            $cond: [
+              {
+                $or: [
+                  { $lt: [{ $size: { $ifNull: ['$quizQuestionsEasy', []] } }, questionsPerDifficulty] },
+                  { $lt: [{ $size: { $ifNull: ['$quizQuestionsMedium', []] } }, questionsPerDifficulty] },
+                ],
+              },
+              1,
+              0,
+            ],
+          },
         }},
         { $sort: sortStage },
         { $skip: skip },
@@ -1667,6 +1765,44 @@ router.post('/briefs/:id/media/:mediaId/extract-subject', async (req, res) => {
     });
   } catch (err) {
     console.error('[extract-subject] failed:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/admin/briefs/:id/media/:mediaId/cutout — clear only the cutout
+// on a media item while leaving the original image and brief attachment
+// intact. Idempotent: calling it on a media with no cutout returns success.
+router.delete('/briefs/:id/media/:mediaId/cutout', async (req, res) => {
+  try {
+    const { id: briefId, mediaId } = req.params;
+
+    const brief = await IntelligenceBrief.findById(briefId).select('media').lean();
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    if (!(brief.media ?? []).some(m => String(m) === String(mediaId))) {
+      return res.status(404).json({ message: 'Media is not attached to this brief' });
+    }
+
+    const media = await Media.findById(mediaId);
+    if (!media) return res.status(404).json({ message: 'Media not found' });
+
+    if (media.cutoutPublicId) {
+      await destroyAsset(media.cutoutPublicId).catch(() => {});
+    }
+    media.cutoutUrl      = null;
+    media.cutoutPublicId = null;
+    await media.save();
+
+    res.json({
+      status: 'success',
+      data: {
+        media: {
+          _id:            media._id,
+          cutoutUrl:      null,
+          cutoutPublicId: null,
+        },
+      },
+    });
+  } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
@@ -2553,14 +2689,29 @@ router.post('/ai/generate-brief', async (req, res) => {
   }
 });
 
-// GET /api/admin/intel-leads — return all leads from DB
+// GET /api/admin/intel-leads — return all leads from DB.
+// Each lead includes a `hasBrief` flag (true if any brief exists for that
+// title+category, whether stub or published) so the admin UI can offer a
+// stub-only create action when no brief exists yet.
 router.get('/intel-leads', async (req, res) => {
   try {
-    const leads = await IntelLead.find()
-      .select('title nickname subtitle category subcategory section subsection isPublished priorityNumber')
-      .sort({ section: 1, subsection: 1, title: 1 })
-      .lean();
-    res.json({ status: 'success', data: { leads } });
+    const [leads, briefs] = await Promise.all([
+      IntelLead.find()
+        .select('title nickname subtitle category subcategory section subsection isPublished priorityNumber')
+        .sort({ section: 1, subsection: 1, title: 1 })
+        .lean(),
+      IntelligenceBrief.find().select('title category').lean(),
+    ]);
+
+    const briefKey = (t, c) => `${normaliseLeadTitle(t)}::${c}`;
+    const briefSet = new Set(briefs.map(b => briefKey(b.title, b.category)));
+
+    const enriched = leads.map(l => ({
+      ...l,
+      hasBrief: briefSet.has(briefKey(l.title, l.category)),
+    }));
+
+    res.json({ status: 'success', data: { leads: enriched } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -2594,6 +2745,43 @@ router.post('/intel-leads/mark-complete', async (req, res) => {
 
     await IntelLead.updateOne({ _id: match._id }, { isPublished: true });
     res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/intel-leads/:id/create-stub — create a minimal status='stub'
+// brief for a lead that doesn't yet have one. Lets the admin pre-seed an empty
+// stub (so it shows up in lists and can be enriched later) without running the
+// full AI generation flow. Rejects if any brief (stub or published) already
+// exists for this lead's title+category.
+router.post('/intel-leads/:id/create-stub', async (req, res) => {
+  try {
+    const lead = await IntelLead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+    const existing = await IntelligenceBrief.findOne({
+      title:    { $regex: new RegExp(`^${lead.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      category: lead.category,
+    });
+    if (existing) {
+      return res.status(409).json({ message: `A brief already exists for "${lead.title}"` });
+    }
+
+    const stub = await IntelligenceBrief.create({
+      title:               lead.title,
+      subtitle:            lead.subtitle || '',
+      category:            lead.category,
+      subcategory:         lead.subcategory || '',
+      status:              'stub',
+      historic:            lead.isHistoric ?? false,
+      priorityNumber:      lead.priorityNumber ?? null,
+      descriptionSections: [],
+      keywords:            [],
+      sources:             [],
+    });
+
+    res.status(201).json({ status: 'success', data: { brief: stub } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
