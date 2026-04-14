@@ -510,7 +510,7 @@ function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, u
 export default function BattleOfOrderFlow() {
   const { briefId }              = useParams()
   const navigate                 = useNavigate()
-  const { API, apiFetch, awardAircoins }   = useAuth()
+  const { API, apiFetch, awardAircoins, refreshUser } = useAuth()
 
   // 'loading' | 'roulette' | 'generating' | 'game' | 'results' | 'unavailable'
   const [screen, setScreen]          = useState('loading')
@@ -615,9 +615,8 @@ export default function BattleOfOrderFlow() {
     return () => {
       if (!gameIdRef.current || abandonedRef.current) return
       abandonedRef.current = true
-      fetch(`${API}/api/games/battle-of-order/abandon`, {
+      apiFetch(`${API}/api/games/battle-of-order/abandon`, {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         keepalive: true,
         body: JSON.stringify({
@@ -679,12 +678,16 @@ export default function BattleOfOrderFlow() {
       if (earned > 0 && awardAircoins) {
         awardAircoins(earned, 'Battle of Order', {
           cycleAfter:    data.data?.cycleAircoins  ?? undefined,
+          totalAfter:    data.data?.totalAircoins  ?? undefined,
           rankPromotion: data.data?.rankPromotion  ?? null,
         })
       }
 
       setScreen('results')
-    } catch {}
+    } catch (err) {
+      console.error('[BOO submit] failed:', err)
+      if (refreshUser) refreshUser().catch(() => {})
+    }
   }
 
   const handleQuit = async () => {

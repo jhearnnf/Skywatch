@@ -8,6 +8,7 @@ const { createUser, createSettings, authCookie } = require('../helpers/factories
 const GameSessionCbatPlaneTurnResult      = require('../../models/GameSessionCbatPlaneTurnResult');
 const GameSessionCbatAnglesResult         = require('../../models/GameSessionCbatAnglesResult');
 const GameSessionCbatCodeDuplicatesResult = require('../../models/GameSessionCbatCodeDuplicatesResult');
+const GameSessionCbatSymbolsResult        = require('../../models/GameSessionCbatSymbolsResult');
 
 let user, cookie, user2, cookie2;
 
@@ -96,7 +97,7 @@ describe('CBAT Plane Turn', () => {
   });
 
   describe('GET /leaderboard', () => {
-    it('returns leaderboard sorted by fewest rotations', async () => {
+    it('returns leaderboard sorted by fewest rotations, one row per session', async () => {
       await request(app).post(RESULT_URL).set('Cookie', cookie)
         .send({ totalRotations: 50, totalTime: 40 });
       await request(app).post(RESULT_URL).set('Cookie', cookie)
@@ -111,17 +112,21 @@ describe('CBAT Plane Turn', () => {
       expect(res.status).toBe(200);
       const { leaderboard, myBest } = res.body.data;
 
-      expect(leaderboard).toHaveLength(2);
-      // pilot2 should be #1 (fewer rotations)
+      expect(leaderboard).toHaveLength(3);
+      // pilot2 #1 — fewest rotations
       expect(leaderboard[0].agentNumber).toBe('1000002');
       expect(leaderboard[0].bestScore).toBe(20);
       expect(leaderboard[0].rank).toBe(1);
-      // pilot1 should be #2 (best is 30)
+      // pilot1's 30-rotation run is #2
       expect(leaderboard[1].agentNumber).toBe('1000001');
       expect(leaderboard[1].bestScore).toBe(30);
       expect(leaderboard[1].rank).toBe(2);
+      // pilot1's 50-rotation run is #3 — both sessions appear
+      expect(leaderboard[2].agentNumber).toBe('1000001');
+      expect(leaderboard[2].bestScore).toBe(50);
+      expect(leaderboard[2].rank).toBe(3);
 
-      // myBest should match pilot1's entry
+      // myBest is pilot1's best (first) entry in the board
       expect(myBest.rank).toBe(2);
       expect(myBest.bestScore).toBe(30);
     });
@@ -136,7 +141,7 @@ describe('CBAT Plane Turn', () => {
       expect(res.body.data.myBest).toBeNull();
     });
 
-    it('shows one entry per user (personal best only)', async () => {
+    it('includes every qualifying session from the same user', async () => {
       await request(app).post(RESULT_URL).set('Cookie', cookie)
         .send({ totalRotations: 100, totalTime: 60 });
       await request(app).post(RESULT_URL).set('Cookie', cookie)
@@ -146,8 +151,10 @@ describe('CBAT Plane Turn', () => {
         .get(LEADERBOARD_URL)
         .set('Cookie', cookie);
 
-      expect(res.body.data.leaderboard).toHaveLength(1);
+      expect(res.body.data.leaderboard).toHaveLength(2);
       expect(res.body.data.leaderboard[0].bestScore).toBe(40);
+      expect(res.body.data.leaderboard[1].bestScore).toBe(100);
+      expect(res.body.data.leaderboard[0].userId).toBe(res.body.data.leaderboard[1].userId);
     });
   });
 });
@@ -317,6 +324,93 @@ describe('CBAT Code Duplicates', () => {
       expect(myBest).not.toBeNull();
       expect(myBest.bestScore).toBe(5);
       expect(myBest.rank).toBe(22);
+    });
+  });
+});
+
+// ── Symbols ──────────────────────────────────────────────────────────────────
+describe('CBAT Symbols', () => {
+  const RESULT_URL = '/api/games/cbat/symbols/result';
+  const LEADERBOARD_URL = '/api/games/cbat/symbols/leaderboard';
+  const PB_URL = '/api/games/cbat/symbols/personal-best';
+
+  describe('POST /result', () => {
+    it('saves a result and returns 201', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({ correctCount: 13, tier1Correct: 5, tier2Correct: 5, tier3Correct: 3, totalTime: 32.4, grade: 'Outstanding' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe('success');
+      expect(res.body.data.correctCount).toBe(13);
+      expect(res.body.data.tier1Correct).toBe(5);
+      expect(res.body.data.tier3Correct).toBe(3);
+      expect(res.body.data.grade).toBe('Outstanding');
+
+      const count = await GameSessionCbatSymbolsResult.countDocuments();
+      expect(count).toBe(1);
+    });
+
+    it('returns 401 without auth', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .send({ correctCount: 10, totalTime: 40 });
+
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /personal-best', () => {
+    it('returns null when user has no results', async () => {
+      const res = await request(app)
+        .get(PB_URL)
+        .set('Cookie', cookie);
+
+      expect(res.body.data).toBeNull();
+    });
+
+    it('returns best score (most correct) across attempts', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ correctCount: 9, tier1Correct: 5, tier2Correct: 3, tier3Correct: 1, totalTime: 50, grade: 'Needs Work' });
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ correctCount: 14, tier1Correct: 5, tier2Correct: 5, tier3Correct: 4, totalTime: 38, grade: 'Outstanding' });
+
+      const res = await request(app)
+        .get(PB_URL)
+        .set('Cookie', cookie);
+
+      expect(res.body.data.bestScore).toBe(14);
+      expect(res.body.data.bestTime).toBe(38);
+      expect(res.body.data.attempts).toBe(2);
+    });
+  });
+
+  describe('GET /leaderboard', () => {
+    it('returns leaderboard sorted by most correct, then fastest time', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ correctCount: 12, tier1Correct: 5, tier2Correct: 4, tier3Correct: 3, totalTime: 45, grade: 'Good' });
+      await request(app).post(RESULT_URL).set('Cookie', cookie2)
+        .send({ correctCount: 12, tier1Correct: 5, tier2Correct: 4, tier3Correct: 3, totalTime: 36, grade: 'Good' });
+
+      const res = await request(app)
+        .get(LEADERBOARD_URL)
+        .set('Cookie', cookie);
+
+      const { leaderboard } = res.body.data;
+      expect(leaderboard).toHaveLength(2);
+      // Same correctCount — pilot2 wins on time
+      expect(leaderboard[0].agentNumber).toBe('1000002');
+      expect(leaderboard[1].agentNumber).toBe('1000001');
+    });
+
+    it('returns empty leaderboard when no results exist', async () => {
+      const res = await request(app)
+        .get(LEADERBOARD_URL)
+        .set('Cookie', cookie);
+
+      expect(res.body.data.leaderboard).toHaveLength(0);
+      expect(res.body.data.myBest).toBeNull();
     });
   });
 });

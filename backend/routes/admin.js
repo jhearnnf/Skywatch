@@ -744,7 +744,7 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
       userUpdates.rank = acRank?._id ?? null;
       ops.push(AircoinLog.deleteMany({ userId: req.params.id }));
     }
-    if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWheresThatAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWhereAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionFlashcardRecallResult.deleteMany({ userId: req.params.id })); }
+    if (fields.includes('gameHistory'))     { userUpdates.gameTypesSeen = []; ops.push(GameSessionQuizResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionQuizAttempt.deleteMany({ userId: req.params.id })); ops.push(GameSessionOrderOfBattleResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWheresThatAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionWhereAircraftResult.deleteMany({ userId: req.params.id })); ops.push(GameSessionFlashcardRecallResult.deleteMany({ userId: req.params.id })); ops.push(AptitudeSyncUsage.deleteMany({ userId: req.params.id })); }
     if (fields.includes('streak'))          { userUpdates.loginStreak = 0; userUpdates.lastStreakDate = null; }
     if (fields.includes('intelBriefsRead')) {
       userUpdates.loginStreak    = 0;

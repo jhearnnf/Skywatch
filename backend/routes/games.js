@@ -21,6 +21,7 @@ const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const GameSessionCbatPlaneTurnResult     = require('../models/GameSessionCbatPlaneTurnResult');
 const GameSessionCbatAnglesResult        = require('../models/GameSessionCbatAnglesResult');
 const GameSessionCbatCodeDuplicatesResult = require('../models/GameSessionCbatCodeDuplicatesResult');
+const GameSessionCbatSymbolsResult        = require('../models/GameSessionCbatSymbolsResult');
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -227,6 +228,7 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
 
     // Award coins only on first win
     let aircoinsEarned = 0;
+    let coinResult     = null;
     const breakdown = [];
     if (won && attempt.isFirstAttempt) {
       const coinRate   = attempt.difficulty === 'medium'
@@ -244,7 +246,7 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
         breakdown.push({ label: 'Perfect score bonus', amount: bonus });
       }
       if (aircoinsEarned > 0) {
-        const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'quiz', `Quiz (${attempt.difficulty}): ${brief?.title ?? 'Unknown Brief'} — ${correct}/${total} correct`, attempt.intelBriefId);
+        coinResult = await awardCoins(req.user._id, aircoinsEarned, 'quiz', `Quiz (${attempt.difficulty}): ${brief?.title ?? 'Unknown Brief'} — ${correct}/${total} correct`, attempt.intelBriefId);
         attempt.rankPromotion = coinResult.rankPromotion;
         attempt.cycleAircoins = coinResult.cycleAircoins;
       }
@@ -294,7 +296,7 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
       }
     }
 
-    res.json({ status: 'success', data: { attempt, won, aircoinsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAircoins: attempt.cycleAircoins ?? null, gameUnlocksGranted } });
+    res.json({ status: 'success', data: { attempt, won, aircoinsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAircoins: attempt.cycleAircoins ?? null, totalAircoins: coinResult?.totalAircoins ?? null, gameUnlocksGranted } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1066,6 +1068,7 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
     let aircoinsEarned    = 0;
     let rankPromotion     = null;
     let cycleAircoins     = null;
+    let totalAircoins     = null;
 
     if (won) {
       // Only award coins on first win for this brief + orderType + difficulty combination
@@ -1091,6 +1094,7 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
           `Battle of Order - Mini Game (${game.difficulty}): ${brief?.title ?? 'Unknown'} — ${game.orderType}`, game.anchorBriefId);
         rankPromotion = coinResult.rankPromotion;
         cycleAircoins = coinResult.cycleAircoins;
+        totalAircoins = coinResult.totalAircoins;
       }
     }
 
@@ -1110,7 +1114,7 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
         displayValue:  getDisplayValue(game.orderType, c.briefId?.gameData),
       }));
 
-    res.json({ status: 'success', data: { won, aircoinsEarned, rankPromotion, cycleAircoins, correctReveal, alreadyCompleted: won && aircoinsEarned === 0 } });
+    res.json({ status: 'success', data: { won, aircoinsEarned, rankPromotion, cycleAircoins, totalAircoins, correctReveal, alreadyCompleted: won && aircoinsEarned === 0 } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1142,12 +1146,16 @@ router.post('/wheres-that-aircraft/result', protect, async (req, res) => {
     });
 
     let rankPromotion = null;
+    let cycleAircoins = null;
+    let totalAircoins = null;
     if (aircoinsEarned > 0) {
       const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'wheres_that_aircraft', "Where's That Aircraft — correct identification");
       rankPromotion = coinResult.rankPromotion;
+      cycleAircoins = coinResult.cycleAircoins;
+      totalAircoins = coinResult.totalAircoins;
     }
 
-    res.status(201).json({ status: 'success', data: { result, rankPromotion } });
+    res.status(201).json({ status: 'success', data: { result, rankPromotion, cycleAircoins, totalAircoins, aircoinsEarned } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1577,6 +1585,8 @@ router.post('/wheres-aircraft/submit', protect, async (req, res) => {
     });
 
     let rankPromotion = null;
+    let cycleAircoins = null;
+    let totalAircoins = null;
     if (aircoinsEarned > 0) {
       const coinResult = await awardCoins(
         req.user._id, aircoinsEarned, 'wheres_aircraft',
@@ -1584,9 +1594,11 @@ router.post('/wheres-aircraft/submit', protect, async (req, res) => {
         aircraftBriefId
       );
       rankPromotion = coinResult.rankPromotion;
+      cycleAircoins = coinResult.cycleAircoins;
+      totalAircoins = coinResult.totalAircoins;
     }
 
-    res.status(201).json({ status: 'success', data: { won, aircoinsEarned, rankPromotion } });
+    res.status(201).json({ status: 'success', data: { won, aircoinsEarned, rankPromotion, cycleAircoins, totalAircoins } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1960,6 +1972,13 @@ const CBAT_GAMES = {
     bestOp: '$max',
     label: 'Code Duplicates',
   },
+  'symbols': {
+    Model: GameSessionCbatSymbolsResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Symbols',
+  },
 };
 
 // POST /api/games/cbat/plane-turn/result
@@ -2016,26 +2035,40 @@ router.post('/cbat/code-duplicates/result', protect, async (req, res) => {
   }
 });
 
-// Generic CBAT leaderboard handler — reused by all games
+// POST /api/games/cbat/symbols/result
+router.post('/cbat/symbols/result', protect, async (req, res) => {
+  try {
+    const { correctCount, tier1Correct, tier2Correct, tier3Correct, totalTime, grade } = req.body;
+    const result = await GameSessionCbatSymbolsResult.create({
+      userId: req.user._id,
+      correctCount,
+      tier1Correct,
+      tier2Correct,
+      tier3Correct,
+      totalTime,
+      grade,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Generic CBAT leaderboard handler — reused by all games.
+// Every session is a standalone entry — a user can occupy multiple rows if
+// several of their runs land in the top 20.
 async function cbatLeaderboard(req, res, gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return res.status(400).json({ message: 'Unknown game' });
 
   try {
     const pipeline = [
-      {
-        $group: {
-          _id: '$userId',
-          bestScore: { [cfg.bestOp]: `$${cfg.primaryField}` },
-          bestTime: { $min: '$totalTime' },
-        },
-      },
-      { $sort: { bestScore: cfg.sortDir, bestTime: 1 } },
+      { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
       { $limit: 20 },
       {
         $lookup: {
           from: 'users',
-          localField: '_id',
+          localField: 'userId',
           foreignField: '_id',
           as: 'user',
         },
@@ -2043,11 +2076,11 @@ async function cbatLeaderboard(req, res, gameKey) {
       { $unwind: '$user' },
       {
         $project: {
-          _id: 0,
-          userId: '$_id',
+          _id: 1,
+          userId: 1,
           agentNumber: '$user.agentNumber',
-          bestScore: 1,
-          bestTime: 1,
+          bestScore: `$${cfg.primaryField}`,
+          bestTime: '$totalTime',
         },
       },
     ];
@@ -2057,57 +2090,42 @@ async function cbatLeaderboard(req, res, gameKey) {
     // Add rank
     leaderboard.forEach((entry, i) => { entry.rank = i + 1; });
 
-    // Current user's personal best + rank (may be outside top 20)
+    // If current user has no session in the top 20, surface their best run + rank.
     let myBest = null;
     if (req.user) {
       const myEntry = leaderboard.find(e => e.userId.toString() === req.user._id.toString());
       if (myEntry) {
         myBest = myEntry;
       } else {
-        // User not in top 20 — compute their best + rank
-        const userBest = await cfg.Model.aggregate([
-          { $match: { userId: req.user._id } },
-          {
-            $group: {
-              _id: null,
-              bestScore: { [cfg.bestOp]: `$${cfg.primaryField}` },
-              bestTime: { $min: '$totalTime' },
-            },
-          },
-        ]);
-        if (userBest.length) {
-          const countBetter = await cfg.Model.aggregate([
-            {
-              $group: {
-                _id: '$userId',
-                bestScore: { [cfg.bestOp]: `$${cfg.primaryField}` },
-                bestTime: { $min: '$totalTime' },
-              },
-            },
-            {
-              $match: cfg.sortDir === 1
-                ? {
-                    $or: [
-                      { bestScore: { $lt: userBest[0].bestScore } },
-                      { bestScore: userBest[0].bestScore, bestTime: { $lt: userBest[0].bestTime } },
-                    ],
-                  }
-                : {
-                    $or: [
-                      { bestScore: { $gt: userBest[0].bestScore } },
-                      { bestScore: userBest[0].bestScore, bestTime: { $lt: userBest[0].bestTime } },
-                    ],
-                  },
-            },
-            { $count: 'n' },
-          ]);
-          const rank = (countBetter[0]?.n ?? 0) + 1;
+        const [best] = await cfg.Model.find({ userId: req.user._id })
+          .sort({ [cfg.primaryField]: cfg.sortDir, totalTime: 1 })
+          .limit(1)
+          .lean();
+        if (best) {
+          const scoreVal = best[cfg.primaryField];
+          const timeVal = best.totalTime;
+          const countBetter = await cfg.Model.countDocuments(
+            cfg.sortDir === 1
+              ? {
+                  $or: [
+                    { [cfg.primaryField]: { $lt: scoreVal } },
+                    { [cfg.primaryField]: scoreVal, totalTime: { $lt: timeVal } },
+                  ],
+                }
+              : {
+                  $or: [
+                    { [cfg.primaryField]: { $gt: scoreVal } },
+                    { [cfg.primaryField]: scoreVal, totalTime: { $lt: timeVal } },
+                  ],
+                }
+          );
           myBest = {
+            _id: best._id,
             userId: req.user._id,
             agentNumber: req.user.agentNumber,
-            bestScore: userBest[0].bestScore,
-            bestTime: userBest[0].bestTime,
-            rank,
+            bestScore: scoreVal,
+            bestTime: timeVal,
+            rank: countBetter + 1,
           };
         }
       }
@@ -2122,6 +2140,7 @@ async function cbatLeaderboard(req, res, gameKey) {
 router.get('/cbat/plane-turn/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'plane-turn'));
 router.get('/cbat/angles/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'angles'));
 router.get('/cbat/code-duplicates/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'code-duplicates'));
+router.get('/cbat/symbols/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'symbols'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -2149,5 +2168,6 @@ async function cbatPersonalBest(req, res, gameKey) {
 router.get('/cbat/plane-turn/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'plane-turn'));
 router.get('/cbat/angles/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'angles'));
 router.get('/cbat/code-duplicates/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'code-duplicates'));
+router.get('/cbat/symbols/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'symbols'));
 
 module.exports = router;

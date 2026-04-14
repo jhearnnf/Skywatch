@@ -41,10 +41,10 @@ export function NewGameUnlockProvider({ children }) {
         },
       }
     })
-    fetch(`${API}/api/users/me/game-unlocks/${key}/seen`, {
-      method: 'PATCH', credentials: 'include',
+    apiFetch(`${API}/api/users/me/game-unlocks/${key}/seen`, {
+      method: 'PATCH',
     }).catch(() => {})
-  }, [user?._id, setUser, API])
+  }, [user?._id, setUser, API, apiFetch])
 
   // Called by BriefReader/QuizFlow when a server response includes gameUnlocksGranted
   const applyUnlocks = useCallback((keys) => {
@@ -73,10 +73,10 @@ export function NewGameUnlockProvider({ children }) {
       updated[key] = {}
       return { ...prev, gameUnlocks: updated }
     })
-    fetch(`${API}/api/users/me/game-unlocks/${key}/unlock`, {
-      method: 'DELETE', credentials: 'include',
+    apiFetch(`${API}/api/users/me/game-unlocks/${key}/unlock`, {
+      method: 'DELETE',
     }).catch(() => {})
-  }, [user?._id, gameUnlocks, setUser, API])
+  }, [user?._id, gameUnlocks, setUser, API, apiFetch])
 
   // Called by Play page to persist client-detected unlocks (e.g. BOO)
   const markUnlockFromServer = useCallback(async (key) => {

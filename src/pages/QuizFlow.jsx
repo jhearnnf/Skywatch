@@ -354,7 +354,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
 export default function QuizFlow() {
   const { briefId }      = useParams()
   const navigate         = useNavigate()
-  const { user, API, apiFetch, awardAircoins } = useAuth()
+  const { user, API, apiFetch, awardAircoins, refreshUser } = useAuth()
   const { applyUnlocks } = useNewGameUnlock()
   const { start }        = useAppTutorial()
 
@@ -437,9 +437,8 @@ export default function QuizFlow() {
     return () => {
       if (!attemptIdRef.current || finishedRef.current) return
       finishedRef.current = true
-      fetch(`${API}/api/games/quiz/attempt/${attemptIdRef.current}/finish`, {
+      apiFetch(`${API}/api/games/quiz/attempt/${attemptIdRef.current}/finish`, {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         keepalive: true,
         body: JSON.stringify({ status: 'abandoned' }),
@@ -465,11 +464,11 @@ export default function QuizFlow() {
   const preFetchBoo = useCallback(() => {
     if (booPreFetched.current || !briefId) return
     booPreFetched.current = true
-    fetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`, { credentials: 'include' })
+    apiFetch(`${API}/api/games/battle-of-order/options?briefId=${briefId}`)
       .then(r => r.json())
       .then(d => { if (d.data?.available) setBooAvailable(true) })
       .catch(() => {})
-  }, [API, briefId])
+  }, [API, briefId, apiFetch])
 
   const current  = questions[qIdx]
   const totalQs  = questions.length
@@ -478,9 +477,8 @@ export default function QuizFlow() {
   const submitResult = useCallback((answerId) => {
     if (!attemptId || !gameSessionId || !current) return Promise.resolve()
     const timeTaken = Math.round((Date.now() - questionStartRef.current) / 1000)
-    return fetch(`${API}/api/games/quiz/result`, {
+    return apiFetch(`${API}/api/games/quiz/result`, {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         questionId:         current._id,
@@ -491,7 +489,7 @@ export default function QuizFlow() {
         attemptId,
       }),
     }).catch(() => {})
-  }, [API, attemptId, gameSessionId, current])
+  }, [API, attemptId, gameSessionId, current, apiFetch])
 
   // Pre-fired promise for the last question's /finish call — stored so
   // handleNext can await the already-in-flight request instead of starting fresh.
@@ -500,13 +498,12 @@ export default function QuizFlow() {
   const fireFinish = useCallback(() => {
     if (finishedRef.current || !attemptId) return
     finishedRef.current = true
-    finishPromiseRef.current = fetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
+    finishPromiseRef.current = apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
       method: 'POST',
-      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'completed' }),
-    }).then(res => res.json())
-  }, [API, attemptId])
+    }).then(res => (res.ok ? res.json() : Promise.reject(new Error(`finish failed: ${res.status}`))))
+  }, [API, attemptId, apiFetch])
 
   const handleAnswer = async (answerId) => {
     setSelected(answerId)
@@ -532,9 +529,11 @@ export default function QuizFlow() {
     const nextIdx = qIdx + 1
     if (nextIdx >= totalQs) {
       setFinishing(true)
+      let gotResponse = false
       try {
         const data = await (finishPromiseRef.current ?? Promise.resolve(null))
         if (data) {
+          gotResponse = true
           const earned = data.data?.aircoinsEarned ?? 0
           const didWin = data.data?.won ?? false
           setWon(didWin)
@@ -546,7 +545,7 @@ export default function QuizFlow() {
             if (awardAircoins) {
               awardAircoins(earned, 'Quiz complete', {
                 cycleAfter:    data.data?.cycleAircoins,
-                totalAfter:    data.data?.attempt?.totalAircoins,
+                totalAfter:    data.data?.totalAircoins,
                 rankPromotion: data.data?.rankPromotion ?? null,
               })
             }
@@ -555,7 +554,15 @@ export default function QuizFlow() {
             applyUnlocks(data.data.gameUnlocksGranted)
           }
         }
-      } catch {}
+      } catch (err) {
+        console.error('[quiz] finish failed:', err)
+      }
+      // Fallback: if the /finish response was lost (network blip, backgrounded tab),
+      // re-sync the user from the server so the Navbar reflects any coins the
+      // server already awarded. Avoids the "no coins until full refresh" bug.
+      if (!gotResponse && refreshUser) {
+        refreshUser().catch(() => {})
+      }
       setFinishing(false)
       setDone(true)
     } else {

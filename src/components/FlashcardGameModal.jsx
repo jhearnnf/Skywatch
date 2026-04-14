@@ -101,7 +101,7 @@ function TitleSearch({ allTitles, onSelect, disabled }) {
 
 // ── Main modal ──────────────────────────────────────────────────────────────
 export default function FlashcardGameModal({ onClose }) {
-  const { API, apiFetch, awardAircoins } = useAuth()
+  const { API, apiFetch, awardAircoins, refreshUser } = useAuth()
   const { clearBadge } = useFlashcardBadge()
 
   // screen: 'pick' | 'game' | 'result'
@@ -149,9 +149,9 @@ export default function FlashcardGameModal({ onClose }) {
     if (abandonSent.current || gameFinished.current || !gameId || !gameSessionId) return
     abandonSent.current = true
     clearBadge()
-    fetch(`${API}/api/games/flashcard-recall/abandon`, {
+    apiFetch(`${API}/api/games/flashcard-recall/abandon`, {
       method: 'POST',
-      credentials: 'include',
+      keepalive: true,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gameId, cardResults: currentCardResults, gameSessionId }),
     }).catch(() => {})
@@ -299,7 +299,9 @@ export default function FlashcardGameModal({ onClose }) {
         })),
       })
       setScreen('result')
-    } catch {
+    } catch (err) {
+      console.error('[flashcard finish] failed:', err)
+      if (refreshUser) refreshUser().catch(() => {})
       setScreen('result')
     } finally {
       setSubmitting(false)

@@ -6,7 +6,7 @@ import SEO from '../components/SEO'
 const CBAT_GAMES = [
   { key: 'target',          emoji: '🎯', title: 'Target',           desc: 'Lock on to the correct answer under pressure.',        path: null },
   { key: 'sdt',             emoji: '📡', title: 'SDT',              desc: 'Speed Distance Time — coming soon.',      path: null },
-  { key: 'symbols',         emoji: '🔣', title: 'Symbols',          desc: 'Match and memorise symbol patterns at speed.',          path: null },
+  { key: 'symbols',         emoji: '🔣', title: 'Symbols',          desc: 'Spot the target symbol in a growing grid, round by round.', path: '/cbat/symbols' },
   { key: 'code-duplicates', emoji: '🧩', title: 'Code Duplicates',  desc: 'Memorise a sequence of digits, then count how many times one appeared.', path: '/cbat/code-duplicates' },
   { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: '/cbat/angles' },
   { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: null },

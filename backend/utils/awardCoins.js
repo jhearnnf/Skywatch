@@ -31,15 +31,20 @@ async function getCycleThreshold() {
  *   rankPromotion: null | { from: RankDoc|null, to: RankDoc } (the final promotion)
  */
 async function awardCoins(userId, amount, reason, label, briefId = null) {
-  const user = await User.findById(userId).populate('rank');
-  if (!user) throw new Error('User not found');
+  // Atomic increment first — this cannot be lost to a concurrent awardCoins call.
+  const incremented = await User.findByIdAndUpdate(
+    userId,
+    { $inc: { totalAircoins: amount, cycleAircoins: amount } },
+    { new: true },
+  ).populate('rank');
+  if (!incremented) throw new Error('User not found');
 
-  const newTotal = (user.totalAircoins ?? 0) + amount;
-  let   finalCycle = (user.cycleAircoins ?? 0) + amount;
-
-  let rankPromotion  = null;
-  let newRankId      = user.rank?._id ?? user.rank ?? null;
-  let currentRankNum = (user.rank && typeof user.rank === 'object' ? user.rank.rankNumber : null) ?? 0;
+  const newTotal = incremented.totalAircoins;
+  let   finalCycle      = incremented.cycleAircoins;
+  let   rankPromotion   = null;
+  let   newRankId       = incremented.rank?._id ?? incremented.rank ?? null;
+  let   currentRankNum  = incremented.rank?.rankNumber ?? 0;
+  const startingRankDoc = (incremented.rank && typeof incremented.rank === 'object') ? incremented.rank : null;
 
   const cycleThreshold = await getCycleThreshold();
 
@@ -51,21 +56,25 @@ async function awardCoins(userId, amount, reason, label, briefId = null) {
 
       const nextRank = allRanks.find(r => r.rankNumber > currentRankNum);
       if (nextRank) {
-        rankPromotion  = { from: rankPromotion?.to ?? (user.rank && typeof user.rank === 'object' ? user.rank : null), to: nextRank };
+        rankPromotion  = { from: rankPromotion?.to ?? startingRankDoc, to: nextRank };
         newRankId      = nextRank._id;
         currentRankNum = nextRank.rankNumber;
       } else {
-        // Already at max rank — stop cycling, keep remaining coins in current cycle
+        // Already at max rank — stop cycling, keep remainder as current cycle
         break;
       }
     }
-  }
 
-  await User.findByIdAndUpdate(userId, {
-    totalAircoins: newTotal,
-    cycleAircoins: finalCycle,
-    ...(rankPromotion ? { rank: newRankId } : {}),
-  });
+    // Apply the cycle correction + rank change in one write. Guarded by the rank id
+    // we observed so a concurrent promotion can't silently overwrite our update.
+    await User.findOneAndUpdate(
+      { _id: userId, rank: incremented.rank?._id ?? null },
+      {
+        $inc: { cycleAircoins: finalCycle - incremented.cycleAircoins },
+        ...(rankPromotion ? { $set: { rank: newRankId } } : {}),
+      },
+    );
+  }
 
   AircoinLog.create({ userId, amount, reason, label, briefId }).catch(() => {});
 

@@ -1,13 +1,7 @@
-// Auto-discover .glb files in public/models/ at build time
-const glbFiles = import.meta.glob('/public/models/*.glb', { eager: true, query: '?url' })
+import glbFilenames from 'virtual:public-models'
 
-// Build a set of available model slugs from discovered files
 const AVAILABLE_MODELS = new Set(
-  Object.keys(glbFiles).map(path => {
-    // path looks like "/public/models/f-35b lightning ii.glb"
-    const filename = path.split('/').pop().replace(/\.glb$/, '')
-    return filename.toLowerCase()
-  })
+  glbFilenames.map(f => f.replace(/\.glb$/i, '').toLowerCase())
 )
 
 // Maps briefId -> filename in public/models/

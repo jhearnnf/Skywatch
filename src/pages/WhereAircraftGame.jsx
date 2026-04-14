@@ -386,7 +386,7 @@ function RoundRow({ label, correct }) {
 export default function WhereAircraftGame() {
   const { aircraftBriefId } = useParams()
   const navigate = useNavigate()
-  const { user, API, apiFetch, awardAircoins } = useAuth()
+  const { user, API, apiFetch, awardAircoins, refreshUser } = useAuth()
   const { start } = useAppTutorial()
   const gameSessionId  = useRef(crypto.randomUUID())
   const startTimeRef   = useRef(Date.now())
@@ -444,9 +444,8 @@ export default function WhereAircraftGame() {
       if (abandonedRef.current) return
       abandonedRef.current = true
       // keepalive ensures the request survives the component unmounting
-      fetch(`${API}/api/games/wheres-aircraft/submit`, {
+      apiFetch(`${API}/api/games/wheres-aircraft/submit`, {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         keepalive: true,
         body: JSON.stringify({
@@ -504,11 +503,17 @@ export default function WhereAircraftGame() {
         setRound2Data(data.data)
         const coins = data.data.round1Aircoins ?? 0
         setRound1Coins(coins)
-        if (coins > 0) awardAircoins(coins, 'Round 1 — Aircraft ID')
+        if (coins > 0) {
+          awardAircoins(coins, 'Round 1 — Aircraft ID', {
+            cycleAfter:    data.data.cycleAircoins ?? undefined,
+            totalAfter:    data.data.totalAircoins ?? undefined,
+            rankPromotion: data.data.rankPromotion ?? null,
+          })
+        }
         setPhase(PHASE_R1_COMPLETE)
       })
       .catch(() => setError('Failed to load round 2.'))
-  }, [aircraftBriefId, API, awardAircoins])
+  }, [aircraftBriefId, API, awardAircoins, apiFetch])
 
   const handleRound1Wrong = useCallback(() => {
     round1CorrectRef.current = false
@@ -575,15 +580,22 @@ export default function WhereAircraftGame() {
       })
       const data = await res.json()
       if (data?.data) {
-        const { won, aircoinsEarned, rankPromotion } = data.data
+        const { won, aircoinsEarned, rankPromotion, cycleAircoins, totalAircoins } = data.data
         if (aircoinsEarned > 0) {
-          awardAircoins(aircoinsEarned, "Where's That Aircraft", { rankPromotion: rankPromotion ?? null })
+          awardAircoins(aircoinsEarned, "Where's That Aircraft", {
+            cycleAfter:    cycleAircoins ?? undefined,
+            totalAfter:    totalAircoins ?? undefined,
+            rankPromotion: rankPromotion ?? null,
+          })
         }
         setResult({ won, aircoinsEarned, round1Correct, round2Correct: round2Correct ?? false })
         if (!round2Attempted) return
         setPhase(PHASE_RESULT)
       }
-    } catch { /* result screen shows nothing earned */ }
+    } catch (err) {
+      console.error("[wheres-aircraft submit] failed:", err)
+      if (refreshUser) refreshUser().catch(() => {})
+    }
   }
 
   function handleDone() {

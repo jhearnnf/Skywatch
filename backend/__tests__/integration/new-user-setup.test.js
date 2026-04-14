@@ -31,6 +31,7 @@ const IntelligenceBriefRead  = require('../../models/IntelligenceBriefRead');
 const AircoinLog             = require('../../models/AircoinLog');
 const GameSessionQuizAttempt = require('../../models/GameSessionQuizAttempt');
 const GameSessionQuizResult  = require('../../models/GameSessionQuizResult');
+const AptitudeSyncUsage      = require('../../models/AptitudeSyncUsage');
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => { await createSettings(); });
@@ -207,6 +208,34 @@ describe('Admin reset-stats endpoint', () => {
     expect(res.status).toBe(200);
 
     const count = await GameSessionQuizAttempt.countDocuments({ userId: target._id });
+    expect(count).toBe(0);
+  });
+
+  it('resets game history — deletes aptitude_sync sessions', async () => {
+    const brief = await createBrief();
+    await AptitudeSyncUsage.create({
+      userId:         target._id,
+      briefId:        brief._id,
+      date:           '2026-04-14',
+      aircoinsEarned: 120,
+      completedAt:    new Date(),
+    });
+
+    const res = await reset(['gameHistory']);
+    expect(res.status).toBe(200);
+
+    const count = await AptitudeSyncUsage.countDocuments({ userId: target._id });
+    expect(count).toBe(0);
+  });
+
+  it('resets aircoins — deletes aptitude_sync aircoin log entries', async () => {
+    await User.findByIdAndUpdate(target._id, { totalAircoins: 120, cycleAircoins: 120 });
+    await AircoinLog.create({ userId: target._id, amount: 120, reason: 'aptitude_sync', label: 'APTITUDE_SYNC' });
+
+    const res = await reset(['aircoins']);
+    expect(res.status).toBe(200);
+
+    const count = await AircoinLog.countDocuments({ userId: target._id, reason: 'aptitude_sync' });
     expect(count).toBe(0);
   });
 

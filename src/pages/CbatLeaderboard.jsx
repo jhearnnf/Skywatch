@@ -30,6 +30,14 @@ const GAME_CONFIG = {
     formatScore: (s) => `${s}/15`,
     backPath: '/cbat/code-duplicates',
   },
+  'symbols': {
+    title: 'Symbols',
+    emoji: '\u{1F523}',
+    scoreLabel: 'Correct',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}/15`,
+    backPath: '/cbat/symbols',
+  },
 }
 
 export default function CbatLeaderboard() {
@@ -114,7 +122,7 @@ export default function CbatLeaderboard() {
                   const isMe = user && entry.userId === user._id
                   return (
                     <div
-                      key={entry.userId}
+                      key={entry._id}
                       className={`grid grid-cols-[3rem_1fr_5rem_4.5rem] gap-2 px-4 py-2.5 text-sm ${
                         isMe ? 'bg-brand-600/10 border-l-2 border-l-brand-400' : ''
                       }`}

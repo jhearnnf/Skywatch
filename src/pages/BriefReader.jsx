@@ -1818,9 +1818,8 @@ export default function BriefReader() {
             if (brief?.category !== 'Aircrafts') return
             const willSpawn = wtaSpawn?.prereqsMet && wtaSpawn?.remaining === 1
             if (willSpawn) setSpawnCheckPending(true)
-            fetch(`${API}/api/games/wheres-aircraft/spawn-check`, {
+            apiFetch(`${API}/api/games/wheres-aircraft/spawn-check`, {
               method: 'POST',
-              credentials: 'include',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ briefId }),
             })
