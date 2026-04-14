@@ -5,6 +5,7 @@ const LOG_TYPES = [
   'brief_generation_failure',
   'image_fetch_failure',
   'bulk_generation_warnings',
+  'duplicate_leads_detected',
 ];
 
 const systemLogSchema = new mongoose.Schema({
@@ -33,6 +34,14 @@ const systemLogSchema = new mongoose.Schema({
   // ── bulk_generation_warnings + brief_generation_failure ───────────────────
   // warnings: non-fatal issues collected during generation
   warnings: [{ type: String }],
+
+  // ── duplicate_leads_detected ──────────────────────────────────────────────
+  // AI-detected potential duplicate leads that the admin should review/merge
+  duplicates: [{
+    keep:   { type: String, default: '' },
+    remove: { type: String, default: '' },
+    reason: { type: String, default: '' },
+  }],
 
   // ── common error detail ────────────────────────────────────────────────────
   failureReason: { type: String, default: '' },

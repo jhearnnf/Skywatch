@@ -4239,8 +4239,14 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     const hasQuiz        = hasEasy && hasMedium
     const hasMedia       = (brief.media ?? []).some(m => m.cloudinaryPublicId)
     const hasDescription = (brief.descriptionSections ?? []).filter(s => s?.trim()).length >= 4
+    const hasPriority    = brief.priorityNumber != null
+    const priorityNA     = brief.category === 'News'
     return (
       <span className="flex gap-1 items-center">
+        <span
+          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${priorityNA ? 'bg-slate-100 text-slate-400 line-through decoration-red-500 decoration-2' : hasPriority ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}
+          title={priorityNA ? 'Priority not applicable for News briefs' : undefined}
+        >P</span>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasDescription ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>D</span>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasKeywords ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>K</span>
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasQuiz ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>Q</span>
@@ -4305,6 +4311,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
             <option value="default">Sort: Published (newest)</option>
             <option value="newest">Sort: Recently modified</option>
             <option value="oldest">Sort: Oldest modified</option>
+            <option value="no-priority">Sort: No priority first</option>
           </select>
           <label className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl bg-surface cursor-pointer select-none">
             <input
@@ -6223,6 +6230,8 @@ function SystemLogsTab({ API, onResolved }) {
   const [total,      setTotal]      = useState(0)
   const [showAll,    setShowAll]    = useState(false)
   const [resolving,  setResolving]  = useState(null)
+  const [retrying,   setRetrying]   = useState(null)
+  const [retryMsg,   setRetryMsg]   = useState(null)  // { id, text, ok }
 
   const load = useCallback(() => {
     setLoading(true)
@@ -6251,11 +6260,33 @@ function SystemLogsTab({ API, onResolved }) {
     setResolving(null)
   }
 
+  const retry = async (id) => {
+    setRetrying(id)
+    setRetryMsg(null)
+    try {
+      const r = await apiFetch(`${API}/api/admin/system-logs/${id}/retry`, { method: 'POST', credentials: 'include' })
+      const d = await r.json()
+      if (!r.ok) {
+        setRetryMsg({ id, text: d.message || 'Retry failed', ok: false })
+      } else if (d.data?.resolved) {
+        setRetryMsg({ id, text: 'Re-ranked successfully', ok: true })
+        load()
+        onResolved?.()
+      } else {
+        setRetryMsg({ id, text: `Partial: ${d.data?.stillUnranked ?? '?'} lead(s) still unranked`, ok: false })
+      }
+    } catch (e) {
+      setRetryMsg({ id, text: e.message || 'Retry failed', ok: false })
+    }
+    setRetrying(null)
+  }
+
   const TYPE_LABELS = {
     priority_ranking_failure:  { label: 'Priority Ranking Failed',  color: 'bg-red-900/40 text-red-300'    },
     brief_generation_failure:  { label: 'Generation Failed',        color: 'bg-orange-900/40 text-orange-300' },
     image_fetch_failure:       { label: 'Image Fetch Failed',       color: 'bg-amber-900/40 text-amber-300' },
     bulk_generation_warnings:  { label: 'Generation Warnings',      color: 'bg-yellow-900/40 text-yellow-300' },
+    duplicate_leads_detected:  { label: 'Duplicate Leads Detected', color: 'bg-purple-900/40 text-purple-300' },
   }
 
   return (
@@ -6348,6 +6379,15 @@ function SystemLogsTab({ API, onResolved }) {
                   <span className="text-[10px] text-slate-400 whitespace-nowrap">
                     {new Date(log.time).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </span>
+                  {!log.resolved && log.type === 'priority_ranking_failure' && (
+                    <button
+                      onClick={() => retry(log._id)}
+                      disabled={retrying === log._id}
+                      className="text-[10px] px-2 py-1 rounded-lg border border-brand-600 text-brand-600 font-semibold hover:bg-surface-raised transition-colors disabled:opacity-40"
+                    >
+                      {retrying === log._id ? 'Retrying…' : 'Retry Rerank'}
+                    </button>
+                  )}
                   {!log.resolved && (
                     <button
                       onClick={() => resolve(log._id)}
@@ -6356,6 +6396,11 @@ function SystemLogsTab({ API, onResolved }) {
                     >
                       {resolving === log._id ? '…' : 'Resolve'}
                     </button>
+                  )}
+                  {retryMsg?.id === log._id && (
+                    <span className={`text-[10px] font-mono ${retryMsg.ok ? 'text-green-400' : 'text-amber-400'}`}>
+                      {retryMsg.text}
+                    </span>
                   )}
                 </div>
               </div>

@@ -12,22 +12,37 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import RankBadge from '../components/RankBadge'
 import SEO from '../components/SEO'
 
-function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned' }) {
-  const Tag = onClick ? 'button' : 'div'
+function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
+  const Tag = onClick && !loading ? 'button' : 'div'
   return (
     <Tag
-      onClick={onClick}
+      onClick={loading ? undefined : onClick}
+      aria-busy={loading || undefined}
       className={`relative flex flex-col items-center gap-1 bg-surface rounded-2xl p-3 border border-slate-200 card-shadow text-center
-        ${onClick ? 'hover:border-brand-300 hover:bg-brand-50 transition-all cursor-pointer' : ''}`}
+        ${onClick && !loading ? 'hover:border-brand-300 hover:bg-brand-50 transition-all cursor-pointer' : ''}`}
     >
-      {badge != null && badge > 0 && (
-        <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold text-slate-400 bg-slate-100 rounded-full px-1.5 py-0.5 leading-none pointer-events-none">
-          {badge} {badgeLabel}
-        </span>
+      {loading ? (
+        <>
+          {/* Radar sweep shimmer across the card */}
+          <span className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+            <span className="absolute -inset-y-2 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-brand-600/20 to-transparent stat-skeleton-sweep" />
+          </span>
+          <span className={`text-xl opacity-50 animate-pulse${icon === '⭐' ? ' star-silver' : ''}`}>{icon}</span>
+          <span className="text-lg font-extrabold text-transparent bg-slate-700/30 rounded animate-pulse">0000</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-transparent bg-slate-700/20 rounded animate-pulse">loading</span>
+        </>
+      ) : (
+        <>
+          {badge != null && badge > 0 && (
+            <span className="absolute top-1.5 right-1.5 text-[9px] font-semibold text-slate-400 bg-slate-100 rounded-full px-1.5 py-0.5 leading-none pointer-events-none">
+              {badge} {badgeLabel}
+            </span>
+          )}
+          <span className={`text-xl${icon === '⭐' ? ' star-silver' : ''}`}>{icon}</span>
+          <span className="text-lg font-extrabold text-slate-900">{value}</span>
+          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
+        </>
       )}
-      <span className={`text-xl${icon === '⭐' ? ' star-silver' : ''}`}>{icon}</span>
-      <span className="text-lg font-extrabold text-slate-900">{value}</span>
-      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
     </Tag>
   )
 }
@@ -50,6 +65,7 @@ export default function Profile() {
 
   const { levels: liveLevels } = useAppSettings()
   const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0, flashcardsCollected: 0 })
+  const [statsLoading, setStatsLoading] = useState(!!user)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
   const [diffBusy,    setDiffBusy]    = useState(false)
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
@@ -84,7 +100,8 @@ export default function Profile() {
   }, [API, user?.agentNumber, user?.totalAircoins])
 
   useEffect(() => {
-    if (!user) { setStats({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0 }); return }
+    if (!user) { setStats({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0 }); setStatsLoading(false); return }
+    setStatsLoading(true)
     apiFetch(`${API}/api/users/stats`)
       .then(r => r.json())
       .then(data => {
@@ -97,6 +114,7 @@ export default function Profile() {
         })
       })
       .catch(() => {})
+      .finally(() => setStatsLoading(false))
   }, [API, user])
 
   const changeDifficulty = async (d) => {
@@ -157,20 +175,22 @@ export default function Profile() {
           </div>
 
           {/* XP bar */}
-          <div className="mt-4">
-            <div className="flex justify-between text-xs text-slate-600 mb-1 intel-mono">
-              <span>Level {levelInfo.level}</span>
-              <span>{levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Aircoins</span>
+          {levelInfo && (
+            <div className="mt-4">
+              <div className="flex justify-between text-xs text-slate-600 mb-1 intel-mono">
+                <span>Level {levelInfo.level}</span>
+                <span>{levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Aircoins</span>
+              </div>
+              <div className="h-2 bg-brand-200/50 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-brand-600 rounded-full"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${levelInfo.progress}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }}
+                />
+              </div>
             </div>
-            <div className="h-2 bg-brand-200/50 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-brand-600 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${levelInfo.progress}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
-              />
-            </div>
-          </div>
+          )}
         </motion.div>
       ) : (
         <div className="bg-surface rounded-2xl border border-slate-200 p-6 mb-5 text-center card-shadow">
@@ -207,10 +227,10 @@ export default function Profile() {
 
           {/* Stats grid */}
           <div className={`grid grid-cols-2 gap-3 ${!user ? 'opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
-            <StatCard label="Briefs Read"  value={stats.brifsRead}           icon="📋" onClick={user ? () => navigate('/intel-brief-history') : undefined} badge={stats.flashcardsCollected} badgeLabel="flashcards" />
-            <StatCard label="Games Played" value={stats.gamesPlayed} icon="🎯" badge={stats.abandonedGames} onClick={user ? () => navigate('/game-history') : undefined} />
-            <StatCard label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />
-            <StatCard label="Aircoins"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/aircoin-history') : undefined} />
+            <StatCard loading={user && statsLoading} label="Briefs Read"  value={stats.brifsRead}           icon="📋" onClick={user ? () => navigate('/intel-brief-history') : undefined} badge={stats.flashcardsCollected} badgeLabel="flashcards" />
+            <StatCard loading={user && statsLoading} label="Games Played" value={stats.gamesPlayed} icon="🎯" badge={stats.abandonedGames} onClick={user ? () => navigate('/game-history') : undefined} />
+            <StatCard loading={user && statsLoading} label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />
+            <StatCard loading={user && statsLoading} label="Aircoins"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/aircoin-history') : undefined} />
           </div>
 
           {user && (

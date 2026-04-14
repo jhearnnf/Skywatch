@@ -494,16 +494,20 @@ export default function QuizFlow() {
   // Pre-fired promise for the last question's /finish call — stored so
   // handleNext can await the already-in-flight request instead of starting fresh.
   const finishPromiseRef = useRef(null)
+  // Snapshot of totalAircoins at the moment /finish is fired, so the fallback
+  // path can detect coins awarded server-side even when the response is lost.
+  const preFinishTotalRef = useRef(0)
 
   const fireFinish = useCallback(() => {
     if (finishedRef.current || !attemptId) return
     finishedRef.current = true
+    preFinishTotalRef.current = user?.totalAircoins ?? 0
     finishPromiseRef.current = apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'completed' }),
     }).then(res => (res.ok ? res.json() : Promise.reject(new Error(`finish failed: ${res.status}`))))
-  }, [API, attemptId, apiFetch])
+  }, [API, attemptId, apiFetch, user?.totalAircoins])
 
   const handleAnswer = async (answerId) => {
     setSelected(answerId)
@@ -557,11 +561,21 @@ export default function QuizFlow() {
       } catch (err) {
         console.error('[quiz] finish failed:', err)
       }
-      // Fallback: if the /finish response was lost (network blip, backgrounded tab),
-      // re-sync the user from the server so the Navbar reflects any coins the
-      // server already awarded. Avoids the "no coins until full refresh" bug.
+      // Fallback: if the /finish response was lost (network blip, backgrounded tab,
+      // or a post-award throw on the server), re-sync the user and, if coins were
+      // actually awarded server-side, fire the aircoin notification based on the
+      // delta so the UI doesn't silently stay out of sync with the ledger.
       if (!gotResponse && refreshUser) {
-        refreshUser().catch(() => {})
+        try {
+          const fresh = await refreshUser()
+          const delta = (fresh?.totalAircoins ?? 0) - (preFinishTotalRef.current ?? 0)
+          if (delta > 0 && awardAircoins) {
+            awardAircoins(delta, 'Quiz complete', {
+              totalAfter: fresh.totalAircoins,
+              cycleAfter: fresh.cycleAircoins,
+            })
+          }
+        } catch { /* swallow — best-effort resync */ }
       }
       setFinishing(false)
       setDone(true)

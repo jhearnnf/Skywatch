@@ -160,6 +160,45 @@ describe('GET /api/admin/briefs — default sort by publishedAt desc', () => {
     expect(titles).toEqual(['Oldest brief', 'Middle brief', 'Newest brief']);
   });
 
+  it('sort=no-priority places briefs without priorityNumber first', async () => {
+    const admin = await createAdminUser();
+
+    const withPriority = await createBrief({ title: 'Has priority', category: 'Aircrafts', priorityNumber: 5 });
+    const noPriority1 = await createBrief({ title: 'No priority A', category: 'Aircrafts', priorityNumber: null });
+    const noPriority2 = await createBrief({ title: 'No priority B', category: 'Aircrafts', priorityNumber: null });
+    await IntelligenceBrief.findByIdAndUpdate(withPriority._id, { updatedAt: new Date('2025-12-01') }, { timestamps: false });
+    await IntelligenceBrief.findByIdAndUpdate(noPriority1._id,  { updatedAt: new Date('2025-06-01') }, { timestamps: false });
+    await IntelligenceBrief.findByIdAndUpdate(noPriority2._id,  { updatedAt: new Date('2025-11-01') }, { timestamps: false });
+
+    const res = await request(app)
+      .get('/api/admin/briefs?sort=no-priority')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const titles = res.body.data.briefs.map(b => b.title);
+    expect(titles.slice(0, 2).sort()).toEqual(['No priority A', 'No priority B']);
+    expect(titles[titles.length - 1]).toBe('Has priority');
+  });
+
+  it('sort=no-priority places News-category briefs after all non-News briefs', async () => {
+    const admin = await createAdminUser();
+
+    const newsNoPri  = await createBrief({ title: 'News no pri',  category: 'News',      priorityNumber: null });
+    const newsPri    = await createBrief({ title: 'News with pri',category: 'News',      priorityNumber: 3 });
+    const acNoPri    = await createBrief({ title: 'AC no pri',    category: 'Aircrafts', priorityNumber: null });
+    const acPri      = await createBrief({ title: 'AC with pri',  category: 'Aircrafts', priorityNumber: 7 });
+
+    const res = await request(app)
+      .get('/api/admin/briefs?sort=no-priority')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const titles = res.body.data.briefs.map(b => b.title);
+
+    // Non-News first (no-priority before with-priority), News last
+    expect(titles).toEqual(['AC no pri', 'AC with pri', 'News no pri', 'News with pri']);
+  });
+
   it('hideStubs=true excludes stub briefs from results', async () => {
     const admin = await createAdminUser();
 

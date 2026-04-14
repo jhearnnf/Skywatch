@@ -98,6 +98,15 @@
   100% { transform: scale(1.6);  opacity: 0; }
 }
 
+/* Horizontal radar sweep — used for stat-card skeleton shimmer */
+@keyframes stat-skeleton-sweep {
+  0%   { transform: translateX(-120%) skewX(12deg); }
+  100% { transform: translateX(320%)  skewX(12deg); }
+}
+.stat-skeleton-sweep {
+  animation: stat-skeleton-sweep 1.8s ease-in-out infinite;
+}
+
 /* ── Base ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 

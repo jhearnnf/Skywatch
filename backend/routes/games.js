@@ -258,42 +258,54 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
     attempt.correctAnswers    = correct;
     attempt.percentageCorrect = percentageCorrect;
     attempt.aircoinsEarned    = aircoinsEarned;
-    await attempt.save();
+    // Non-fatal: coins are already in the ledger; a persistence blip on the
+    // attempt record must not 500 the response and hide the award from the UI.
+    try {
+      await attempt.save();
+    } catch (saveErr) {
+      console.error('[quiz/finish] attempt.save failed after coin award:', saveErr);
+    }
 
     // ── BOO unlock detection (server-driven, fires on first qualifying win) ──
+    // Non-fatal: coins are already awarded above, so any failure here must not
+    // 500 the response (that would suppress the client-side award notification).
     const gameUnlocksGranted = [];
-    if (won && brief && BATTLE_CATEGORIES.includes(brief.category)) {
-      const freshUser = await User.findById(req.user._id).select('gameUnlocks difficultySetting').lean();
-      if (!freshUser?.gameUnlocks?.boo?.unlockedAt) {
-        const diff   = freshUser?.difficultySetting ?? 'easy';
-        const needed = diff === 'medium' ? 5 : 3;
+    try {
+      if (won && brief && BATTLE_CATEGORIES.includes(brief.category)) {
+        const freshUser = await User.findById(req.user._id).select('gameUnlocks difficultySetting').lean();
+        if (!freshUser?.gameUnlocks?.boo?.unlockedAt) {
+          const diff   = freshUser?.difficultySetting ?? 'easy';
+          const needed = diff === 'medium' ? 5 : 3;
 
-        // Check category has enough BOO game data
-        let hasBooData = false;
-        for (const orderType of (ORDER_TYPES[brief.category] ?? [])) {
-          const fieldKey = REQUIRED_FIELD[orderType];
-          const count = await IntelligenceBrief.countDocuments({
-            category: brief.category,
-            [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
-          });
-          if (count >= needed) { hasBooData = true; break; }
-        }
+          // Check category has enough BOO game data
+          let hasBooData = false;
+          for (const orderType of (ORDER_TYPES[brief.category] ?? [])) {
+            const fieldKey = REQUIRED_FIELD[orderType];
+            const count = await IntelligenceBrief.countDocuments({
+              category: brief.category,
+              [`gameData.${fieldKey}`]: { $ne: null, $exists: true },
+            });
+            if (count >= needed) { hasBooData = true; break; }
+          }
 
-        if (hasBooData) {
-          // Check user meets the read gate for this category
-          const categoryBriefIds = await IntelligenceBrief.distinct('_id', {
-            category: brief.category, status: 'published',
-          });
-          const readsCount = await IntelligenceBriefRead.countDocuments({
-            userId: req.user._id, completed: true, intelBriefId: { $in: categoryBriefIds },
-          });
+          if (hasBooData) {
+            // Check user meets the read gate for this category
+            const categoryBriefIds = await IntelligenceBrief.distinct('_id', {
+              category: brief.category, status: 'published',
+            });
+            const readsCount = await IntelligenceBriefRead.countDocuments({
+              userId: req.user._id, completed: true, intelBriefId: { $in: categoryBriefIds },
+            });
 
-          if (readsCount >= needed) {
-            await User.findByIdAndUpdate(req.user._id, { 'gameUnlocks.boo.unlockedAt': new Date() });
-            gameUnlocksGranted.push('boo');
+            if (readsCount >= needed) {
+              await User.findByIdAndUpdate(req.user._id, { 'gameUnlocks.boo.unlockedAt': new Date() });
+              gameUnlocksGranted.push('boo');
+            }
           }
         }
       }
+    } catch (booErr) {
+      console.error('[quiz/finish] BOO unlock detection failed:', booErr);
     }
 
     res.json({ status: 'success', data: { attempt, won, aircoinsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAircoins: attempt.cycleAircoins ?? null, totalAircoins: coinResult?.totalAircoins ?? null, gameUnlocksGranted } });

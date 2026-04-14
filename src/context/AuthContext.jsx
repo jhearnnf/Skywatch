@@ -111,7 +111,9 @@ export function AuthProvider({ children }) {
     const data = await fetch(`${API}/api/auth/me`, { headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }) })
       .then(r => r.ok ? r.json() : null)
       .catch(() => null)
-    setUser(data?.data?.user ?? null)
+    const fresh = data?.data?.user ?? null
+    setUser(fresh)
+    return fresh
   }, [])
 
   // Remove the front item from the notification queue (called by App when notif finishes)

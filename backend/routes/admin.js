@@ -37,6 +37,7 @@ const IntelLead = require('../models/IntelLead');
 const seedLeads = require('../seeds/seedLeads');
 const { scanMentionedBriefIds } = require('../utils/mentionedBriefs');
 const { autoLinkKeywords }     = require('../utils/keywordLinking');
+const { reprioritizeCategory } = require('../utils/priorityRanking');
 const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
@@ -869,6 +870,46 @@ router.patch('/system-logs/:id/resolve', async (req, res) => {
   }
 });
 
+// POST /api/admin/system-logs/:id/retry
+// Currently only supports priority_ranking_failure — re-runs reprioritizeCategory
+// for the failed category and, if every lead in that category now has a
+// priorityNumber, marks the log resolved.
+router.post('/system-logs/:id/retry', async (req, res) => {
+  try {
+    const log = await SystemLog.findById(req.params.id);
+    if (!log) return res.status(404).json({ message: 'Log not found' });
+
+    if (log.type !== 'priority_ranking_failure') {
+      return res.status(400).json({ message: `Retry not supported for log type "${log.type}"` });
+    }
+
+    await reprioritizeCategory(
+      log.category,
+      log.newStubs || [],
+      log.sourceBriefId,
+      log.sourceBriefTitle,
+      openRouterChat,
+    );
+
+    // Success check: no unranked leads left in that category.
+    const stillUnranked = await IntelLead.countDocuments({
+      category: log.category,
+      priorityNumber: null,
+    });
+
+    if (stillUnranked === 0) {
+      log.resolved = true;
+      await log.save();
+      return res.json({ status: 'success', data: { resolved: true, stillUnranked: 0 } });
+    }
+
+    res.json({ status: 'success', data: { resolved: false, stillUnranked } });
+  } catch (err) {
+    console.error('[system-logs retry] error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/admin/problems/count — unsolved report count for tab badge
 router.get('/problems/count', async (req, res) => {
   try {
@@ -963,6 +1004,7 @@ router.get('/briefs', async (req, res) => {
     const sortStage =
       sort === 'newest' ? { updatedAt: -1 }
       : sort === 'oldest' ? { updatedAt:  1 }
+      : sort === 'no-priority' ? { _isNews: 1, _hasPriority: 1, updatedAt: -1 }
       : { _effectivePublishedAt: -1, _id: -1 };
 
     const [briefs, total] = await Promise.all([
@@ -981,6 +1023,10 @@ router.get('/briefs', async (req, res) => {
               null,
             ],
           },
+          _hasPriority: {
+            $cond: [{ $ne: [{ $ifNull: ['$priorityNumber', null] }, null] }, 1, 0],
+          },
+          _isNews: { $cond: [{ $eq: ['$category', 'News'] }, 1, 0] },
         }},
         { $sort: sortStage },
         { $skip: skip },
