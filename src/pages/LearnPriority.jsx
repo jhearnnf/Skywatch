@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useAnimationControls } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -74,8 +74,8 @@ function getRankName(rankNumber) {
 const SYNC_GLITCH_CHARS = '!@/\\|<>{}01*%$-~^?#=_'
 const SYNC_BASE_TEXT    = 'aptitude_sync'
 
-const CARD_LINE1 = '> APTITUDE_SYNC — initiate terminal debrief sequence'
-const CARD_LINE2 = 'knowledge verification protocol'
+const CARD_LINE1 = '> APTITUDE_SYNC — face the debriefer'
+const CARD_LINE2 = 'live interrogation · prove what you know'
 
 function SyncHoverCard() {
   const [line1, setLine1]       = useState('')
@@ -355,6 +355,7 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
   return (
     <div
       ref={containerRef}
+      data-brief-index={index}
       className="flex flex-col items-center"
       style={{ paddingLeft: `calc(50% + ${xOffset}px - ${size / 2}px)`, alignItems: 'flex-start' }}
       onMouseEnter={() => { if (isStub) setHovered(true) }}
@@ -588,6 +589,26 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
 function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction }) {
   const navigate = useNavigate()
   const [openSyncId, setOpenSyncId] = useState(null)
+  const listRef = useRef(null)
+
+  // Scroll so the next-to-read brief sits just below the page header on arrival.
+  // In-progress briefs count as "next"; read/stub briefs are scrolled past.
+  // Runs synchronously before paint so each pathway appears pre-positioned.
+  useLayoutEffect(() => {
+    if (!pathwayUnlocked || briefs.length === 0) return
+    const targetIdx = briefs.findIndex(b => !readSet.has(b._id) && b.status !== 'stub')
+    if (targetIdx <= 0) {
+      window.scrollTo(0, 0)
+      return
+    }
+    const listEl = listRef.current
+    if (!listEl) return
+    const targetEl = listEl.querySelector(`[data-brief-index="${targetIdx}"]`)
+    if (!targetEl) return
+    const headerOffset = listEl.getBoundingClientRect().top + window.scrollY
+    const targetTop = targetEl.getBoundingClientRect().top + window.scrollY
+    window.scrollTo(0, Math.max(0, targetTop - headerOffset))
+  }, [category, briefs, pathwayUnlocked, readSet])
 
   const variants = {
     enter:  (d) => ({ opacity: 0, x: d > 0 ? 80 : -80 }),
@@ -650,6 +671,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
 
   return (
     <motion.div
+      ref={listRef}
       key={category}
       custom={direction}
       variants={variants}
