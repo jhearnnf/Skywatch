@@ -42,6 +42,7 @@ async function createBooBrief(overrides = {}) {
     keywords:            [],
     sources:             [],
     isPublished:         true,
+    status:              'published',
     gameData:            { topSpeedKph: 1000, ...(overrides.gameData ?? {}) },
     ...overrides,
   });
@@ -218,7 +219,7 @@ describe('GET /api/games/battle-of-order/briefs — booState', () => {
       const filler = await IntelligenceBrief.create({
         title: `No-Data Filler ${Date.now()}_${i}`, subtitle: '',
         category: 'Aircrafts', descriptionSections: ['Section.'],
-        keywords: [], sources: [], isPublished: true, gameData: {},
+        keywords: [], sources: [], isPublished: true, status: 'published', gameData: {},
       });
       await createReadRecord(user._id, filler._id);
     }
@@ -231,6 +232,7 @@ describe('GET /api/games/battle-of-order/briefs — booState', () => {
       keywords:            [],
       sources:             [],
       isPublished:         true,
+      status:              'published',
       gameData:            {},
     });
 

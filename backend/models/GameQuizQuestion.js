@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { DIFFICULTY_LEVELS } = require('../constants/difficulty');
 
 // Each answer is an embedded sub-document — Mongoose auto-generates _id
 const answerSchema = new mongoose.Schema({
@@ -8,7 +9,7 @@ const answerSchema = new mongoose.Schema({
 const gameQuizQuestionSchema = new mongoose.Schema({
   gameTypeId:   { type: mongoose.Schema.Types.ObjectId, ref: 'GameType', required: true },
   intelBriefId: { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', required: true },
-  difficulty:   { type: String, enum: ['easy', 'medium'], required: true },
+  difficulty:   { type: String, enum: DIFFICULTY_LEVELS, required: true },
   question:     { type: String, required: true, trim: true },
 
   // Exactly 7 answer options; one is correct

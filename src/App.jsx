@@ -13,13 +13,13 @@ if (window.matchMedia('(update: slow)').matches) {
 import { AuthProvider, useAuth }          from './context/AuthContext'
 import { AppSettingsProvider }             from './context/AppSettingsContext'
 import { AppTutorialProvider }             from './context/AppTutorialContext'
-import { FlashcardBadgeProvider }          from './context/FlashcardBadgeContext'
 import { NewGameUnlockProvider }           from './context/NewGameUnlockContext'
 import { UnsolvedReportsProvider }          from './context/UnsolvedReportsContext'
 import AppShell                            from './components/layout/AppShell'
 import AircoinNotification                 from './components/AircoinNotification'
 import LevelUpNotification                 from './components/LevelUpNotification'
 import RankPromotionNotification           from './components/RankPromotionNotification'
+import { POST_LOGIN_DEST_KEY }             from './utils/storageKeys'
 
 // v2 pages
 import Landing        from './pages/Landing'
@@ -132,11 +132,11 @@ function LoginRoute() {
 
   // Clean up the stored destination whenever this component unmounts, whether the
   // navigate in finishNewUser won the race or we redirected via <Navigate> below.
-  useEffect(() => () => sessionStorage.removeItem('sw_post_login_destination'), [])
+  useEffect(() => () => sessionStorage.removeItem(POST_LOGIN_DEST_KEY), [])
 
   if (loading) return <LoadingScreen />
   if (user && isPresent) {
-    const dest = sessionStorage.getItem('sw_post_login_destination') || '/home'
+    const dest = sessionStorage.getItem(POST_LOGIN_DEST_KEY) || '/home'
     return <Navigate to={dest} replace />
   }
   return <LoginPage />
@@ -298,11 +298,9 @@ export default function App() {
           <AppTutorialProvider>
             <NewGameUnlockProvider>
               <UnsolvedReportsProvider>
-              <FlashcardBadgeProvider>
                 <AppRoutes />
                 <NotifLayer />
                 <ReportNotifBanner />
-              </FlashcardBadgeProvider>
               </UnsolvedReportsProvider>
             </NewGameUnlockProvider>
           </AppTutorialProvider>

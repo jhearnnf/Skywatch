@@ -1,123 +1,6 @@
 const mongoose = require('mongoose');
-
-const CATEGORIES = [
-  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
-  'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
-  'Heritage',
-];
-
-// Valid subcategories per category. Empty array = subcategory not applicable.
-const SUBCATEGORIES = {
-  News: [],
-  Aircrafts: [
-    'Fast Jet',
-    'ISR & Surveillance',
-    'Maritime Patrol',
-    'Transport & Tanker',
-    'Rotary Wing',
-    'Training Aircraft',
-    'Ground-Based Air Defence',
-    'Historic — WWII',
-    'Historic — Cold War',
-    'Historic — Post-Cold War',
-  ],
-  Bases: [
-    'UK Active',
-    'UK Former',
-    'Overseas Permanent',
-    'Overseas Deployed / FOL',
-  ],
-  Ranks: [
-    'Commissioned Officer',
-    'Non-Commissioned',
-    'Specialist Role',
-  ],
-  Squadrons: [
-    'Active Front-Line',
-    'Training',
-    'Royal Auxiliary Air Force',
-    'Historic',
-  ],
-  Training: [
-    'Initial Training',
-    'Flying Training',
-    'Ground Training & PME',
-    'Tactical & Combat Training',
-  ],
-  Roles: [
-    'Fast Jet Pilot',
-    'Multi-Engine Pilot',
-    'Rotary Wing Pilot',
-    'Weapons Systems Operator',
-    'Intelligence Officer',
-    'Engineer Officer',
-    'Air Traffic Control Officer',
-    'RAF Regiment',
-    'Logistics & Supply',
-    'Medical & Nursing',
-    'Cyber & Information',
-    'Fighter Controller',
-    'Support & Administration',
-    'Space Operations',
-  ],
-  Threats: [
-    'State Actor Air',
-    'Surface-to-Air Missiles',
-    'Asymmetric & Non-State',
-    'Missiles & Stand-Off',
-    'Electronic & Cyber',
-  ],
-  Allies: [
-    'NATO',
-    'Five Eyes',
-    'AUKUS',
-    'Bilateral & Framework Partners',
-  ],
-  Missions: [
-    'World War I',
-    'World War II',
-    'Post-War & Cold War',
-    'Post-Cold War',
-    'War on Terror',
-    'NATO Standing Operations',
-    'Humanitarian & NEO',
-  ],
-  AOR: [
-    'UK Home Air Defence',
-    'NATO AOR',
-    'Middle East & CENTCOM',
-    'Atlantic & GIUK Gap',
-    'Africa',
-    'Indo-Pacific',
-    'South Atlantic & Falklands',
-  ],
-  Tech: [
-    'Weapons Systems',
-    'Sensors & Avionics',
-    'Electronic Warfare',
-    'Future Programmes',
-    'Command, Control & Comms',
-  ],
-  Terminology: [
-    'Operational Concepts',
-    'Flying & Tactical',
-    'Air Traffic & Navigation',
-    'Intelligence & Planning',
-    'Maintenance & Support',
-  ],
-  Treaties: [
-    'Founding & Core Alliances',
-    'Bilateral Defence Agreements',
-    'Arms Control & Non-Proliferation',
-    'Operational & Status Agreements',
-    'Defence Policy & Strategy',
-  ],
-  Heritage: [
-    'Famous Personnel',
-    'Traditions & Culture',
-    'Memorials & Museums',
-  ],
-};
+const { CATEGORIES, SUBCATEGORIES } = require('../constants/categories');
+const { BRIEF_STATUS } = require('../constants/briefStatus');
 
 const sourceSchema = new mongoose.Schema({
   url:         { type: String, required: true },
@@ -218,7 +101,7 @@ const intelligenceBriefSchema = new mongoose.Schema(
     priorityNumber: { type: Number, default: null },
 
     // 'stub' = title/category only, no content yet. 'published' = full brief.
-    status: { type: String, enum: ['stub', 'published'], default: 'stub' },
+    status: { type: String, enum: BRIEF_STATUS, default: 'stub' },
 
     // Set the first time a brief transitions to status='published'. Used to
     // sort the admin brief list so newly-published briefs appear first.
@@ -244,5 +127,3 @@ intelligenceBriefSchema.index({ title: 'text', nickname: 'text', subtitle: 'text
 intelligenceBriefSchema.index({ category: 1, priorityNumber: 1 });
 
 module.exports = mongoose.model('IntelligenceBrief', intelligenceBriefSchema);
-module.exports.CATEGORIES = CATEGORIES;
-module.exports.SUBCATEGORIES = SUBCATEGORIES;

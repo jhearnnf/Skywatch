@@ -8,7 +8,6 @@ import LockedCategoryModal from '../components/LockedCategoryModal'
 import MissionDetectedModal from '../components/MissionDetectedModal'
 import { requiredTier } from '../utils/subscription'
 import { useAppSettings } from '../context/AppSettingsContext'
-import { useFlashcardBadge } from '../context/FlashcardBadgeContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import { playSound, stopAllSounds, playGridRevealTone } from '../utils/sound'
 import RafBasesMap from '../components/RafBasesMap'
@@ -18,6 +17,7 @@ import FlashcardDeckNotification from '../components/FlashcardDeckNotification'
 import SEO from '../components/SEO'
 import CategoryHeader from '../components/CategoryHeader'
 import { MOCK_RANKS } from '../data/mockData'
+import { PENDING_BRIEF_KEY, BRIEF_COINS_KEY, BRIEF_JUST_COMPLETED_KEY, tutorialKey } from '../utils/storageKeys'
 
 // Render **bold** markdown syntax as <strong> spans
 function renderBoldMarkdown(text) {
@@ -1008,7 +1008,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleEmailContinue() {
-    localStorage.setItem('sw_pending_brief', brief._id)
+    localStorage.setItem(PENDING_BRIEF_KEY, brief._id)
     navigate(`/login?tab=register&pendingBrief=${brief._id}${email ? `&email=${encodeURIComponent(email)}` : ''}`)
   }
 
@@ -1152,7 +1152,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             <p className="text-xs text-slate-500 text-center">
               Already have an account?{' '}
               <button
-                onClick={() => { localStorage.setItem('sw_pending_brief', brief._id); navigate(`/login?tab=signin&pendingBrief=${brief._id}`) }}
+                onClick={() => { localStorage.setItem(PENDING_BRIEF_KEY, brief._id); navigate(`/login?tab=signin&pendingBrief=${brief._id}`) }}
                 className="text-brand-600 font-semibold hover:underline"
               >
                 Sign in
@@ -1338,7 +1338,6 @@ export default function BriefReader() {
   const startRef = useRef(start)
   useEffect(() => { startRef.current = start }, [start])
   const { settings }            = useAppSettings()
-  const { setBadge }            = useFlashcardBadge()
   const { applyUnlocks }        = useNewGameUnlock()
   const [brief, setBrief]         = useState(null)
   const [loading, setLoading]   = useState(true)
@@ -1348,7 +1347,7 @@ export default function BriefReader() {
   const [sectionIdx, setSection] = useState(0)
   const [isFirstCompletion, setIsFirstCompletion] = useState(false)
   const [done, setDone]          = useState(
-    () => sessionStorage.getItem('sw_brief_just_completed') === briefId
+    () => sessionStorage.getItem(BRIEF_JUST_COMPLETED_KEY) === briefId
   )
   const [activeKw, setActiveKw]     = useState(null)
   const [activeStat, setActiveStat] = useState(null)
@@ -1529,8 +1528,8 @@ export default function BriefReader() {
   // Clean up the sw_brief_just_completed signal after mount (kept out of the lazy
   // init to avoid render-phase side effects, which React can invoke multiple times)
   useEffect(() => {
-    if (sessionStorage.getItem('sw_brief_just_completed') === briefId) {
-      sessionStorage.removeItem('sw_brief_just_completed')
+    if (sessionStorage.getItem(BRIEF_JUST_COMPLETED_KEY) === briefId) {
+      sessionStorage.removeItem(BRIEF_JUST_COMPLETED_KEY)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1539,9 +1538,9 @@ export default function BriefReader() {
   // from triggering a phantom notification when a logged-out user visits a brief.
   useEffect(() => {
     if (!user) return
-    const raw = sessionStorage.getItem('sw_brief_coins')
+    const raw = sessionStorage.getItem(BRIEF_COINS_KEY)
     if (!raw) return
-    sessionStorage.removeItem('sw_brief_coins')
+    sessionStorage.removeItem(BRIEF_COINS_KEY)
     try {
       const d           = JSON.parse(raw)
       const briefCoins  = d.aircoinsEarned  ?? 0
@@ -1569,9 +1568,9 @@ export default function BriefReader() {
   // here rather than relying purely on the sessionStorage signal from consumePendingBrief
   useEffect(() => {
     if (!user || !brief) return
-    const pendingId = localStorage.getItem('sw_pending_brief')
+    const pendingId = localStorage.getItem(PENDING_BRIEF_KEY)
     if (!pendingId || pendingId !== String(brief._id)) return
-    localStorage.removeItem('sw_pending_brief')
+    localStorage.removeItem(PENDING_BRIEF_KEY)
     apiFetch(`${API}/api/briefs/${brief._id}/complete`, { method: 'POST', credentials: 'include' })
       .then(r => r.json())
       .then(data => {
@@ -1669,8 +1668,8 @@ export default function BriefReader() {
     }
     const briefReaderJustClosed = prevVisibleRef.current
     const briefReaderAlreadySeen = !!(
-      (uid && localStorage.getItem(`sw_tut_v2_${uid}_briefReader`)) ||
-      localStorage.getItem('sw_tut_v2_anon_briefReader')
+      (uid && localStorage.getItem(tutorialKey(uid, 'briefReader'))) ||
+      localStorage.getItem(tutorialKey('anon', 'briefReader'))
     )
     if (!visible && (briefReaderAlreadySeen || briefReaderJustClosed)) {
       prevVisibleRef.current = false
@@ -1734,7 +1733,7 @@ export default function BriefReader() {
 
   // If the user navigates away while the notification is still animating, commit the badge
   useEffect(() => {
-    return () => { if (badgePendingRef.current) setBadge() }
+    return () => { if (badgePendingRef.current) applyUnlocks(['flashcard']) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function cancelCollectAnimation() {
@@ -2085,7 +2084,7 @@ export default function BriefReader() {
           cardRect={flashcardNotifRect}
           onDone={() => {
             setTimeout(() => setSwipePromptReady(true), 3000)
-            if (badgePendingRef.current) { setBadge(); badgePendingRef.current = false }
+            if (badgePendingRef.current) { applyUnlocks(['flashcard']); badgePendingRef.current = false }
             setFlashcardNotifRect(null)
           }}
         />

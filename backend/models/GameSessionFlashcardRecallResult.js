@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
+const { FLASHCARD_RATINGS } = require('../constants/flashcardRatings');
 
 const cardResultSchema = new mongoose.Schema({
   intelBriefId:     { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' },
-  recalled:         Boolean, // did the user self-report recall?
-  rating:           { type: String, enum: ['again', 'hard', 'good', 'easy'] },
+  recalled:         { type: Boolean, required: true },
+  rating:           { type: String, enum: FLASHCARD_RATINGS },
   timeTakenSeconds: Number,
 }, { _id: false });
 

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { CATEGORY_ICONS, CATEGORY_DESCRIPTIONS } from '../data/mockData'
 import { consumePendingBrief } from '../utils/pendingBrief'
+import { PENDING_BRIEF_KEY } from '../utils/storageKeys'
 
 const TIER_CONFIG = {
   silver: {
@@ -91,7 +92,7 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, p
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleEmailContinue() {
-    if (pendingBriefId) localStorage.setItem('sw_pending_brief', pendingBriefId)
+    if (pendingBriefId) localStorage.setItem(PENDING_BRIEF_KEY, pendingBriefId)
     onClose()
     navigate(`/login?tab=register${pendingBriefId ? `&pendingBrief=${pendingBriefId}` : ''}${email ? `&email=${encodeURIComponent(email)}` : ''}`)
   }

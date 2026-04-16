@@ -22,13 +22,11 @@ const Rank  = require('../models/Rank');
 const Level = require('../models/Level');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
-const { CATEGORIES, SUBCATEGORIES } = IntelligenceBrief;
+const { CATEGORIES, SUBCATEGORIES } = require('../constants/categories');
 const GameQuizQuestion  = require('../models/GameQuizQuestion');
 const GameType          = require('../models/GameType');
 const Media             = require('../models/Media');
 const mongoose          = require('mongoose');
-const path              = require('path');
-const fs                = require('fs');
 const crypto            = require('crypto');
 const { uploadBuffer, destroyAsset } = require('../utils/cloudinary');
 const { generateBriefImages } = require('../utils/briefImages');
@@ -36,7 +34,7 @@ const { extractSubjectToCloudinary } = require('../utils/extractCutout');
 const IntelLead = require('../models/IntelLead');
 const seedLeads = require('../seeds/seedLeads');
 const { scanMentionedBriefIds } = require('../utils/mentionedBriefs');
-const { autoLinkKeywords }     = require('../utils/keywordLinking');
+const { autoLinkKeywords, buildTitleRejectCheck } = require('../utils/keywordLinking');
 const { reprioritizeCategory } = require('../utils/priorityRanking');
 const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
@@ -64,6 +62,10 @@ const AI_PROMPT_DEFAULTS = {
   // Content generation
   'brief.news':              'You are a factual intelligence writer for a Royal Air Force news platform. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
   'brief.topic':             'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
+  'brief.actors':            'You are writing a factual operational dossier on a named individual of UK defence interest. Stick to verifiable facts: full name, current role or title, appointment date, chain of command, remit, notable operational decisions or actions, and the region, organisation, or force they influence. Do NOT include political commentary, moral judgement, ideology, or speculation about intent. Where the individual is deceased, removed, or has stepped down, state the date and their successor. Tone: neutral intelligence-summary style suitable for someone building foundational situational awareness of the modern operating environment. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail. If a fact cannot be confirmed from a real source, omit it.',
+  'brief.threats':           'You are writing a factual threat assessment for a Royal Air Force training platform. Focus on adversary capability, how the threat is employed operationally, and the UK / NATO counter-response (aircraft, weapons, tactics, bases, squadrons involved). Cover: origin and operator, technical specifications that matter operationally (range, speed, payload, seeker type where relevant), typical employment doctrine, and the RAF or allied assets that counter it. Keep the focus on what a junior officer would need to recognise and respond to — not geopolitical commentary. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail. If a fact cannot be confirmed from a real source, omit it.',
+  'brief.terminology':       'You are writing a factual RAF terminology entry for a training platform. Lead with a short, plain-English definition of the term. Then explain how the term is used in the briefing room or operational context, with concrete examples (which aircraft, which phase of flight, which planning cycle, which tactical situation). Keep it definition-first and example-driven — not an essay. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail. If a fact cannot be confirmed from a real source, omit it.',
+  'brief.treaties':          'You are writing a factual entry on a defence treaty, alliance, or agreement for a Royal Air Force training platform. Cover: signatories, date of signing, core obligations (especially mutual defence or basing/overflight rights), enforcement or triggering mechanism, current status, and specific UK implications — what RAF assets, bases, or operations does this treaty enable or constrain. Keep the framing legal and structural, not operational narrative. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail. If a fact cannot be confirmed from a real source, omit it.',
   'regenerateBrief':         'You are a factual intelligence writer for a Royal Air Force training platform. Prioritise content that builds genuine understanding of the modern RAF: in-depth training pathways and what each phase involves, RAF bases and which aircraft/squadrons are stationed there and what operations occur there, different roles and how they relate to specific training blocks, and the operational context of aircraft, equipment, and missions. You only write content based on verified, published facts retrieved from the web. You never invent, speculate, or fabricate any detail — not dates, names, figures, locations, or outcomes. If a fact cannot be confirmed from a real source, omit it.',
   // Quiz generation
   'quiz':                    `You are a quiz question writer for a Royal Air Force training platform. Prioritise the most important and high-value facts from the brief — operational capabilities, training pathways and their phases, aircraft designations and roles, base locations and resident units, command structures, and key distinguishing facts that define this subject. Questions should test knowledge that builds genuine understanding of the RAF, not trivial details. Every question must be directly and fully answerable using only the information in the provided intel brief description — do not rely on external knowledge or anything not stated in the description. ANSWER FORMAT RULES: ${QUIZ_ANSWER_FORMAT_RULES}`,
@@ -81,6 +83,7 @@ const AI_PROMPT_DEFAULTS = {
   'links.Bases:aircraft':      'You are an expert on Royal Air Force bases and aircraft. Given a base brief, identify which aircraft types from the list are or were based at this location.',
   'links.Roles:training':      'You are an expert on Royal Air Force careers and training pipelines. Given a role brief, identify which training programmes from the list are required or directly relevant to this role\'s career pathway.',
   'links.Tech:aircraft':       'You are an expert on Royal Air Force technology and aircraft. Given a technology or weapon system brief, identify which aircraft from the list carry or use this system.',
+  'links.Actors:aor':          'You are an intelligence analyst. Given a brief on a named individual (head of state, commander, or non-state leader), identify which areas of responsibility (AOR) from the list they most directly influence through their role, forces, or organisation. Only select AORs with a direct, verifiable operational connection.',
   // Linking — historic
   'links.historic.Aircrafts:bases':     'You are an expert on Royal Air Force aircraft and bases. Given a HISTORIC aircraft brief, identify which RAF bases historically served as home or primary operating bases for this aircraft type during its service life.',
   'links.historic.Aircrafts:squadrons': 'You are an expert on Royal Air Force aircraft and squadrons. Given a HISTORIC aircraft brief, identify which RAF squadrons historically operated this aircraft type as their primary platform.',
@@ -106,6 +109,19 @@ const AI_PROMPT_DEFAULTS = {
 function getPrompt(settings, key) {
   const override = settings?.aiPrompts?.get?.(key);
   return (override && override.trim()) ? override : AI_PROMPT_DEFAULTS[key];
+}
+
+// Per-category system prompt resolver for topic (non-news) brief generation.
+// Categories without a tuned prompt fall back to the shared 'brief.topic'.
+const TOPIC_PROMPT_BY_CATEGORY = {
+  Actors:      'brief.actors',
+  Threats:     'brief.threats',
+  Terminology: 'brief.terminology',
+  Treaties:    'brief.treaties',
+};
+function getTopicPrompt(settings, category) {
+  const key = TOPIC_PROMPT_BY_CATEGORY[category] || 'brief.topic';
+  return getPrompt(settings, key);
 }
 
 function normaliseLeadTitle(s) {
@@ -1035,9 +1051,10 @@ router.post('/problems/:id/update', async (req, res) => {
 // GET /api/admin/briefs
 router.get('/briefs', async (req, res) => {
   try {
-    const { search, category, page = 1, limit = 20, sort = 'default', hideStubs } = req.query;
+    const { search, category, subcategory, page = 1, limit = 20, sort = 'default', hideStubs } = req.query;
     const filter = {};
     if (category) filter.category = category;
+    if (subcategory && category) filter.subcategory = subcategory;
     if (hideStubs === 'true' || hideStubs === '1') filter.status = { $ne: 'stub' };
     if (search) filter.$or = [
       { title: new RegExp(search, 'i') },
@@ -1833,9 +1850,6 @@ router.delete('/briefs/:id/media/:mediaId', async (req, res) => {
     const mediaDoc = await Media.findByIdAndDelete(mediaId);
     if (mediaDoc?.cloudinaryPublicId) {
       await destroyAsset(mediaDoc.cloudinaryPublicId).catch(() => {});
-    } else if (mediaDoc?.mediaUrl?.startsWith('/uploads/brief-images/')) {
-      const filePath = path.join(__dirname, '..', mediaDoc.mediaUrl);
-      fs.unlink(filePath, () => {});
     }
     res.json({ status: 'success', shared: false });
   } catch (err) {
@@ -1877,9 +1891,6 @@ async function cleanupOrphanedMedia(mediaId) {
 
   if (mediaDoc.cloudinaryPublicId) {
     await destroyAsset(mediaDoc.cloudinaryPublicId).catch(() => {});
-  } else if (mediaDoc.mediaUrl?.startsWith('/uploads/brief-images/')) {
-    const filePath = path.join(__dirname, '..', mediaDoc.mediaUrl);
-    fs.unlink(filePath, () => {});
   }
   if (mediaDoc.cutoutPublicId) {
     await destroyAsset(mediaDoc.cutoutPublicId).catch(() => {});
@@ -2449,8 +2460,11 @@ router.post('/ai/bulk-generate-news-item', async (req, res) => {
     const descriptionText = (briefContent.descriptionSections ?? []).join('\n\n');
     let keywords = [];
     if (descriptionText) {
-      const descLower  = descriptionText.toLowerCase();
-      const titleLower = (briefContent.title ?? '').toLowerCase();
+      const descLower = descriptionText.toLowerCase();
+      const isTitleLike = buildTitleRejectCheck({
+        title:    briefContent.title,
+        subtitle: briefContent.subtitle,
+      });
 
       // Validates keyword objects against description text and deduplicates
       const seen3 = new Set();
@@ -2459,7 +2473,7 @@ router.post('/ai/bulk-generate-news-item', async (req, res) => {
         const kl = k.keyword.toLowerCase();
         if (!descLower.includes(kl)) return false;
         if (seen3.has(kl)) return false;
-        if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
+        if (isTitleLike(k.keyword)) return false;
         seen3.add(kl);
         return true;
       });
@@ -2487,7 +2501,7 @@ router.post('/ai/bulk-generate-news-item', async (req, res) => {
       try {
         const r1 = await openRouterChat([...kwSys, {
           role: 'user',
-          content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 10 keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+          content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 10 keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself, including its expanded form, abbreviation, subtitle, or nickname (e.g. if the brief is titled "JTAC", do not extract "Joint Terminal Attack Controllers").\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
         }], kwMdl);
         pass1 = validateKws3(JSON.parse(cleanJson(r1.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 10);
       } catch (e) { warnings.push(`Keywords pass 1: ${e.message}`); }
@@ -2839,10 +2853,25 @@ router.post('/ai/generate-keywords', async (req, res) => {
     const kwAiSettings = await AppSettings.getSettings();
     const needed = bodyNeeded ?? kwAiSettings.aiKeywordsPerBrief ?? 20;
     if (needed <= 0)  return res.json({ status: 'success', data: { keywords: [] } });
-    const desc       = description.toLowerCase();
-    const titleLower = title.toLowerCase();
+    const desc = description.toLowerCase();
+
+    // Pull subtitle/nickname from the brief so acronym-expansion rejection works
+    // for existing briefs (e.g. a "JTAC" brief with subtitle "Joint Terminal
+    // Attack Controllers" should never emit either form as a keyword).
+    let subtitle = '';
+    let nickname = '';
+    if (briefId) {
+      const briefDoc = await IntelligenceBrief.findById(briefId, 'subtitle nickname').lean();
+      if (briefDoc) {
+        subtitle = briefDoc.subtitle || '';
+        nickname = briefDoc.nickname || '';
+      }
+    }
+    const isTitleLike = buildTitleRejectCheck({ title, subtitle, nickname });
+
+    const exclusionBits = [title, nickname, subtitle].filter(Boolean).map(s => `"${s}"`).join(', ');
     const titleExclusion = title
-      ? `Do NOT use the topic title or name itself as a keyword — "${title}" and any shortened form must not appear as a keyword.\n\n`
+      ? `Do NOT use the topic title or name itself as a keyword — ${exclusionBits} and any shortened form, abbreviation, or expanded/acronym form must not appear as a keyword (e.g. if the title is "JTAC", do not extract "Joint Terminal Attack Controllers").\n\n`
       : '';
 
     // Shared seen-set seeded from caller's existingKeywords; mutated by each pass
@@ -2852,7 +2881,7 @@ router.post('/ai/generate-keywords', async (req, res) => {
       const kl = k.keyword.toLowerCase();
       if (!desc.includes(kl)) return false;
       if (seen.has(kl)) return false;
-      if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
+      if (isTitleLike(k.keyword)) return false;
       seen.add(kl);
       return true;
     });
@@ -3130,9 +3159,10 @@ async function generateBriefContent(brief, aiSettings) {
     if (gdNote) TOPIC_JSON_SHAPE += `\n${gdNote}`;
   }
 
+  const systemPromptKey = TOPIC_PROMPT_BY_CATEGORY[brief.category] || 'regenerateBrief';
   const briefData = await openRouterChat([{
     role: 'system',
-    content: getPrompt(aiSettings, 'regenerateBrief'),
+    content: getPrompt(aiSettings, systemPromptKey),
   }, {
     role: 'user',
     content: `Rewrite a comprehensive intelligence brief about this RAF topic: "${brief.title}"\n\nUsing verified facts from published sources, produce a reference-style brief suitable for someone building foundational knowledge of the modern RAF. Where relevant, cover: training pathways and which training blocks/phases apply to this subject; RAF bases associated with this subject and which aircraft or squadrons are stationed there and what operations occur there; roles that interact with or are defined by this subject and how those roles relate to specific training pipelines; and the broader operational and modern-day RAF significance.\n\n${TOPIC_JSON_SHAPE}`,
@@ -3163,15 +3193,19 @@ async function generateBriefContent(brief, aiSettings) {
   let keywords = [];
   if (descriptionSections.length) {
     const descriptionText = descriptionSections.join('\n\n');
-    const descLower  = descriptionText.toLowerCase();
-    const titleLower = brief.title.toLowerCase();
+    const descLower = descriptionText.toLowerCase();
+    const isTitleLike = buildTitleRejectCheck({
+      title:    brief.title,
+      subtitle: subtitle || brief.subtitle,
+      nickname: brief.nickname,
+    });
     const seen = new Set();
     const validateKws = (kwArray) => (Array.isArray(kwArray) ? kwArray : []).filter(k => {
       if (!k.keyword) return false;
       const kl = k.keyword.toLowerCase();
       if (!descLower.includes(kl)) return false;
       if (seen.has(kl)) return false;
-      if (titleLower && (kl === titleLower || titleLower.includes(kl) || kl.includes(titleLower))) return false;
+      if (isTitleLike(k.keyword)) return false;
       seen.add(kl);
       return true;
     });
@@ -3185,7 +3219,7 @@ async function generateBriefContent(brief, aiSettings) {
     try {
       const r1 = await openRouterChat([...kwSys, {
         role: 'user',
-        content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 10 keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+        content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 10 keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself, including its expanded form, abbreviation, subtitle, or nickname (e.g. if the brief is titled "JTAC", do not extract "Joint Terminal Attack Controllers").\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
       }], kwMdl);
       pass1 = validateKws(JSON.parse(cleanJson(r1.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 10);
     } catch (e) { console.warn('[generateBriefContent] Keywords pass 1:', e.message); }
@@ -3653,23 +3687,13 @@ router.post('/ai/regenerate-description/:id', requireReason, async (req, res) =>
   }
 });
 
-// DELETE /api/admin/media/brief-image — remove a pending brief image (Cloudinary or legacy local)
+// DELETE /api/admin/media/brief-image — remove a pending brief image from Cloudinary
 router.delete('/media/brief-image', async (req, res) => {
   try {
-    const { publicId, url } = req.body;
-    if (publicId) {
-      await destroyAsset(publicId).catch(() => {});
-      return res.json({ status: 'success' });
-    }
-    // Legacy: local file path
-    if (!url || !url.startsWith('/uploads/brief-images/')) {
-      return res.status(400).json({ message: 'publicId or valid local url required' });
-    }
-    const filePath = path.join(__dirname, '..', url);
-    fs.unlink(filePath, (err) => {
-      if (err && err.code !== 'ENOENT') return res.status(500).json({ message: err.message });
-      res.json({ status: 'success' });
-    });
+    const { publicId } = req.body;
+    if (!publicId) return res.status(400).json({ message: 'publicId required' });
+    await destroyAsset(publicId).catch(() => {});
+    res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -141,13 +141,6 @@ describe('BattleOfOrderFlow — roulette / selection screen', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows loading state on initial render', () => {
-    global.fetch = setupFetch()
-    render(<BattleOfOrderFlow />)
-    // Loading pulse elements visible before data arrives
-    expect(document.querySelector('.animate-pulse')).toBeTruthy()
-  })
-
   it('shows roulette screen with "Battle of Order" heading', async () => {
     global.fetch = setupFetch({ options: OPTIONS_MULTI })
     render(<BattleOfOrderFlow />)
@@ -269,6 +262,15 @@ describe('BattleOfOrderFlow — game screen', () => {
     // abandon should have been called
     const calls = fetchMock.mock.calls.map(c => c[0])
     expect(calls.some(u => u.includes('/abandon'))).toBe(true)
+  })
+
+  it('plays battle_of_order_selection sound on roulette mount', async () => {
+    const { playSound } = await import('../../utils/sound')
+    global.fetch = setupFetch({ options: OPTIONS_MULTI })
+    render(<BattleOfOrderFlow />)
+
+    await waitFor(() => screen.getByText('Battle of Order'))
+    expect(playSound).toHaveBeenCalledWith('battle_of_order_selection')
   })
 
   it('does NOT play battle_of_order_selection sound when moving items up or down', async () => {

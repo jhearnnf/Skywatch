@@ -20,6 +20,12 @@ vi.mock('../../context/AppTutorialContext', () => ({
   useAppTutorial: () => ({ start: vi.fn(), hasSeen: vi.fn().mockReturnValue(false) }),
 }))
 
+vi.mock('../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({
+    settings: {}, levels: [], levelThresholds: [], loading: false, refreshSettings: vi.fn(),
+  }),
+}))
+
 vi.mock('../../components/tutorial/TutorialModal', () => ({
   default: () => null,
 }))
@@ -105,27 +111,14 @@ describe('Play page — game cards', () => {
 
   // In jsdom, getBoundingClientRect() returns all zeros and scrollY=0,
   // so the offset formula yields Math.max(0, 0 + 0 - 72) = 0.
-  it('clicking Intel Quiz card calls window.scrollTo with smooth behaviour', () => {
+  it.each([
+    ['Intel Quiz',          'card-quiz'],
+    ['Flashcard Recall',    'card-flashcard'],
+    ["Where's that Aircraft?", 'card-wheres-that-aircraft'],
+    ['Battle of Order',     'card-battle-order'],
+  ])('clicking %s card calls window.scrollTo with smooth behaviour', (_label, testId) => {
     renderAsGuest()
-    fireEvent.click(screen.getByTestId('card-quiz'))
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
-  })
-
-  it('clicking Flashcard Recall card calls window.scrollTo with smooth behaviour', () => {
-    renderAsGuest()
-    fireEvent.click(screen.getByTestId('card-flashcard'))
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
-  })
-
-  it("clicking Where's that Aircraft? card calls window.scrollTo with smooth behaviour", () => {
-    renderAsGuest()
-    fireEvent.click(screen.getByTestId('card-wheres-that-aircraft'))
-    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
-  })
-
-  it('clicking Battle of Order card calls window.scrollTo with smooth behaviour', () => {
-    renderAsGuest()
-    fireEvent.click(screen.getByTestId('card-battle-order'))
+    fireEvent.click(screen.getByTestId(testId))
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
   })
 

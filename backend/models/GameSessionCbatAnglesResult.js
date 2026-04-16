@@ -6,7 +6,7 @@ const schema = new mongoose.Schema({
   round1Correct: { type: Number },
   round2Correct: { type: Number },
   totalTime:     { type: Number, required: true },
-  grade:         { type: String },
+  grade:         { type: String, enum: ['Outstanding', 'Good', 'Needs Work', 'Failed', null], default: null },
   createdAt:     { type: Date, default: Date.now },
 });
 

@@ -78,8 +78,9 @@ function makeStartResponse(difficulty = 'easy') {
   }
 }
 
-// QuizFlow splits its calls: apiFetch loads brief + quiz/start, raw fetch handles
-// /result, /finish, /abandon, and battle-of-order/options.
+// All QuizFlow calls now go through apiFetch (brief, quiz/start, /result, /finish,
+// /abandon, battle-of-order/options). A bare global.fetch stub is returned for the
+// few remaining utilities (e.g. consumePendingBrief) that still use raw fetch.
 function setupFetch({ difficulty = 'easy', won = true, isFirstAttempt = true, aircoinsEarned = 10 } = {}) {
   const finishPayload = {
     data: {
@@ -91,14 +92,12 @@ function setupFetch({ difficulty = 'easy', won = true, isFirstAttempt = true, ai
   mockApiFetch.mockImplementation((url) => {
     if (url.includes('/api/briefs/'))          return Promise.resolve({ ok: true, status: 200, json: async () => BRIEF_RESPONSE })
     if (url.includes('/api/games/quiz/start')) return Promise.resolve({ ok: true, status: 200, json: async () => makeStartResponse(difficulty) })
+    if (url.includes('/finish'))               return Promise.resolve({ ok: true, status: 200, json: async () => finishPayload })
+    if (url.includes('battle-of-order'))       return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { available: false } }) })
     return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
   })
 
-  return vi.fn().mockImplementation((url) => {
-    if (url.includes('/finish'))         return Promise.resolve({ ok: true, status: 200, json: async () => finishPayload })
-    if (url.includes('battle-of-order')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { available: false } }) })
-    return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
-  })
+  return vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) })
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────

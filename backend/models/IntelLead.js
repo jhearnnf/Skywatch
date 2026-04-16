@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { CATEGORIES, SUBCATEGORIES } = require('./IntelligenceBrief');
+const { CATEGORIES } = require('../constants/categories');
 
 const intelLeadSchema = new mongoose.Schema({
   title:          { type: String, required: true, unique: true, trim: true },

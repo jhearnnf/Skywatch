@@ -179,7 +179,7 @@ export default function Rankings() {
         if (rankData?.data?.ranks?.length)        setRanks(rankData.data.ranks)
         if (settingsData?.pathwayUnlocks?.length) setPathwayUnlocks(settingsData.pathwayUnlocks)
       })
-      .catch(err => console.warn('Rankings: failed to load data', err))
+      .catch(() => {})
   }, [API])
 
   // ── Derived values ─────────────────────────────────────────────────────────

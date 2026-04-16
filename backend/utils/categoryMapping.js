@@ -3,7 +3,7 @@
  * These are the canonical tested versions — Admin.jsx mirrors this logic.
  */
 
-const { CATEGORIES } = require('../models/IntelligenceBrief');
+const { CATEGORIES } = require('../constants/categories');
 
 /**
  * Map a SECTION header string (e.g. "SECTION 10: HISTORIC & ONGOING RAF OPERATIONS")

@@ -1,4 +1,4 @@
-export const PENDING_BRIEF_KEY = 'sw_pending_brief'
+import { PENDING_BRIEF_KEY, BRIEF_COINS_KEY, BRIEF_JUST_COMPLETED_KEY } from './storageKeys'
 
 /**
  * If a guest was reading a brief before signing in, complete it on their behalf
@@ -15,8 +15,8 @@ export async function consumePendingBrief({ API, setUser, navigate }) {
     if (res.ok && data?.data) {
       // Fetch succeeded — remove from localStorage now so BriefReader's fallback doesn't re-fire
       localStorage.removeItem(PENDING_BRIEF_KEY)
-      sessionStorage.setItem('sw_brief_coins', JSON.stringify(data.data))
-      sessionStorage.setItem('sw_brief_just_completed', id)
+      sessionStorage.setItem(BRIEF_COINS_KEY, JSON.stringify(data.data))
+      sessionStorage.setItem(BRIEF_JUST_COMPLETED_KEY, id)
       if (data.data.loginStreak !== undefined && setUser) {
         setUser(u => u ? {
           ...u,

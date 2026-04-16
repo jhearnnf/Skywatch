@@ -502,11 +502,16 @@ export default function QuizFlow() {
     if (finishedRef.current || !attemptId) return
     finishedRef.current = true
     preFinishTotalRef.current = user?.totalAircoins ?? 0
-    finishPromiseRef.current = apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
+    const p = apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'completed' }),
     }).then(res => (res.ok ? res.json() : Promise.reject(new Error(`finish failed: ${res.status}`))))
+    // Observe the rejection so it isn't flagged as "unhandled" during the gap
+    // between fire and the await in handleNext. handleNext still sees the error
+    // via its own await, because p itself remains the rejected promise.
+    p.catch(() => {})
+    finishPromiseRef.current = p
   }, [API, attemptId, apiFetch, user?.totalAircoins])
 
   const handleAnswer = async (answerId) => {
@@ -533,11 +538,10 @@ export default function QuizFlow() {
     const nextIdx = qIdx + 1
     if (nextIdx >= totalQs) {
       setFinishing(true)
-      let gotResponse = false
+      let awarded = false
       try {
         const data = await (finishPromiseRef.current ?? Promise.resolve(null))
         if (data) {
-          gotResponse = true
           const earned = data.data?.aircoinsEarned ?? 0
           const didWin = data.data?.won ?? false
           setWon(didWin)
@@ -552,6 +556,7 @@ export default function QuizFlow() {
                 totalAfter:    data.data?.totalAircoins,
                 rankPromotion: data.data?.rankPromotion ?? null,
               })
+              awarded = true
             }
           }
           if (data.data?.gameUnlocksGranted?.length) {
@@ -561,15 +566,16 @@ export default function QuizFlow() {
       } catch (err) {
         console.error('[quiz] finish failed:', err)
       }
-      // Fallback: if the /finish response was lost (network blip, backgrounded tab,
-      // or a post-award throw on the server), re-sync the user and, if coins were
-      // actually awarded server-side, fire the aircoin notification based on the
-      // delta so the UI doesn't silently stay out of sync with the ledger.
-      if (!gotResponse && refreshUser) {
+      // Fallback: if the client didn't actually notify (response lost, malformed
+      // body with no aircoinsEarned field, or a post-award throw on the server),
+      // re-sync the user and fire the aircoin notification based on the delta so
+      // the UI never silently stays out of sync with the ledger.
+      if (!awarded && refreshUser) {
         try {
           const fresh = await refreshUser()
           const delta = (fresh?.totalAircoins ?? 0) - (preFinishTotalRef.current ?? 0)
           if (delta > 0 && awardAircoins) {
+            setXP(delta)
             awardAircoins(delta, 'Quiz complete', {
               totalAfter: fresh.totalAircoins,
               cycleAfter: fresh.cycleAircoins,

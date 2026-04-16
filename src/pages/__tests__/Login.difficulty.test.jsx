@@ -14,7 +14,7 @@ vi.mock('react-router-dom', () => ({
   Link: ({ children, to }) => <a href={to}>{children}</a>,
 }))
 
-vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
+vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth, storeNativeToken: vi.fn() }))
 
 vi.mock('framer-motion', () => ({
   motion: {

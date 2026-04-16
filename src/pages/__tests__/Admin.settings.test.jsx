@@ -24,6 +24,12 @@ vi.mock('../../context/UnsolvedReportsContext', () => ({
   useUnsolvedReports: () => ({ unsolvedCount: 0, unresolvedSystemLogs: 0, refresh: vi.fn() }),
 }))
 
+vi.mock('../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({
+    settings: {}, levels: [], levelThresholds: [], loading: false, refreshSettings: vi.fn(),
+  }),
+}))
+
 vi.mock('../../components/RankBadge', () => ({ default: () => null }))
 vi.mock('../../components/SEO', () => ({ default: () => null }))
 

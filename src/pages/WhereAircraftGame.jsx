@@ -489,31 +489,51 @@ export default function WhereAircraftGame() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleRound1Correct = useCallback((elapsed) => {
+  const handleRound1Correct = useCallback(async (elapsed) => {
     round1CorrectRef.current = true
     round1ElapsedRef.current = elapsed
-    apiFetch(`${API}/api/games/wheres-aircraft/round2`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ aircraftBriefId, gameSessionId: gameSessionId.current }),
-    })
-      .then(r => r.json())
-      .then(data => {
-        if (!data?.data) { setError('Failed to load round 2.'); return }
-        setRound2Data(data.data)
-        const coins = data.data.round1Aircoins ?? 0
-        setRound1Coins(coins)
-        if (coins > 0) {
-          awardAircoins(coins, 'Round 1 — Aircraft ID', {
-            cycleAfter:    data.data.cycleAircoins ?? undefined,
-            totalAfter:    data.data.totalAircoins ?? undefined,
-            rankPromotion: data.data.rankPromotion ?? null,
-          })
-        }
-        setPhase(PHASE_R1_COMPLETE)
+    const preRound1Total = user?.totalAircoins ?? 0
+    let awarded = false
+    try {
+      const r    = await apiFetch(`${API}/api/games/wheres-aircraft/round2`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aircraftBriefId, gameSessionId: gameSessionId.current }),
       })
-      .catch(() => setError('Failed to load round 2.'))
-  }, [aircraftBriefId, API, awardAircoins, apiFetch])
+      const data = await r.json()
+      if (!data?.data) { setError('Failed to load round 2.'); return }
+      setRound2Data(data.data)
+      const coins = data.data.round1Aircoins ?? 0
+      setRound1Coins(coins)
+      if (coins > 0 && awardAircoins) {
+        awardAircoins(coins, 'Round 1 — Aircraft ID', {
+          cycleAfter:    data.data.cycleAircoins ?? undefined,
+          totalAfter:    data.data.totalAircoins ?? undefined,
+          rankPromotion: data.data.rankPromotion ?? null,
+        })
+        awarded = true
+      }
+      setPhase(PHASE_R1_COMPLETE)
+    } catch {
+      setError('Failed to load round 2.')
+    }
+
+    // Fallback: if the client didn't notify (malformed response, request failure),
+    // resync the user and fire the aircoin notification based on the delta.
+    if (!awarded && refreshUser) {
+      try {
+        const fresh = await refreshUser()
+        const delta = (fresh?.totalAircoins ?? 0) - preRound1Total
+        if (delta > 0 && awardAircoins) {
+          awardAircoins(delta, 'Round 1 — Aircraft ID', {
+            totalAfter: fresh.totalAircoins,
+            cycleAfter: fresh.cycleAircoins,
+          })
+          setRound1Coins(delta)
+        }
+      } catch { /* swallow — best-effort resync */ }
+    }
+  }, [aircraftBriefId, API, awardAircoins, apiFetch, refreshUser, user?.totalAircoins])
 
   const handleRound1Wrong = useCallback(() => {
     round1CorrectRef.current = false
@@ -560,6 +580,12 @@ export default function WhereAircraftGame() {
   async function submitGame({ round1Correct, round2Attempted, round2Correct, selectedBaseIds, correctBaseIds, elapsed, round1AlreadyAwarded }) {
     abandonedRef.current = true // mark submitted so unmount cleanup doesn't double-fire
     const totalElapsed = Math.round((Date.now() - startTimeRef.current) / 1000)
+    const preSubmitTotal = user?.totalAircoins ?? 0
+    let awarded = false
+    let responseOk = false
+    let earnedForResult = 0
+    let wonForResult = false
+
     try {
       const res = await apiFetch(`${API}/api/games/wheres-aircraft/submit`, {
         method: 'POST',
@@ -580,21 +606,44 @@ export default function WhereAircraftGame() {
       })
       const data = await res.json()
       if (data?.data) {
+        responseOk = true
         const { won, aircoinsEarned, rankPromotion, cycleAircoins, totalAircoins } = data.data
-        if (aircoinsEarned > 0) {
+        wonForResult = won
+        earnedForResult = aircoinsEarned ?? 0
+        if (aircoinsEarned > 0 && awardAircoins) {
           awardAircoins(aircoinsEarned, "Where's That Aircraft", {
             cycleAfter:    cycleAircoins ?? undefined,
             totalAfter:    totalAircoins ?? undefined,
             rankPromotion: rankPromotion ?? null,
           })
+          awarded = true
         }
-        setResult({ won, aircoinsEarned, round1Correct, round2Correct: round2Correct ?? false })
-        if (!round2Attempted) return
-        setPhase(PHASE_RESULT)
       }
     } catch (err) {
       console.error("[wheres-aircraft submit] failed:", err)
-      if (refreshUser) refreshUser().catch(() => {})
+    }
+
+    // Fallback: if the client didn't notify (malformed response, request failure),
+    // resync the user and fire the aircoin notification based on the delta.
+    if (!awarded && refreshUser) {
+      try {
+        const fresh = await refreshUser()
+        const delta = (fresh?.totalAircoins ?? 0) - preSubmitTotal
+        if (delta > 0 && awardAircoins) {
+          awardAircoins(delta, "Where's That Aircraft", {
+            totalAfter: fresh.totalAircoins,
+            cycleAfter: fresh.cycleAircoins,
+          })
+          earnedForResult = delta
+          wonForResult = true
+          responseOk = true
+        }
+      } catch { /* swallow — best-effort resync */ }
+    }
+
+    if (responseOk) {
+      setResult({ won: wonForResult, aircoinsEarned: earnedForResult, round1Correct, round2Correct: round2Correct ?? false })
+      if (round2Attempted) setPhase(PHASE_RESULT)
     }
   }
 

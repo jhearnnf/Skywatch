@@ -2,7 +2,7 @@ const path = require('path');
 const fs   = require('fs');
 
 const IntelligenceBrief    = require('../models/IntelligenceBrief');
-const { SUBCATEGORIES }    = IntelligenceBrief;
+const { SUBCATEGORIES }    = require('../constants/categories');
 const IntelLead            = require('../models/IntelLead');
 const { SCAN_CATEGORIES }  = require('./mentionedBriefs');
 const { reprioritizeCategory } = require('./priorityRanking');
@@ -20,6 +20,88 @@ const SEEDABLE_CATEGORIES = [
   'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties', 'Heritage',
 ];
+
+// Title-prefix rules: these prefixes indicate subject types that don't belong
+// in the listed categories. E.g. "HMS"/"RFA"/"USS" are naval vessels — not
+// aircraft, even if they carry aircraft. Keeps the AI from shoehorning ships
+// into Aircrafts just because an F-35B brief mentioned a carrier.
+const DISALLOWED_PREFIXES_BY_CATEGORY = {
+  Aircrafts: [/^HMS\s/i, /^RFA\s/i, /^USS\s/i, /^HMCS\s/i, /^USNS\s/i, /^FS\s/i],
+};
+
+/**
+ * Reject classifications that violate hard rules:
+ *  - Ship-prefix titles in Aircrafts (naval vessels aren't aircraft)
+ *  - Umbrella titles that just restate a subcategory name (e.g.
+ *    "Front-Line Aviation" ≈ the Fast Jet subcategory itself — too generic)
+ * Returns { ok: boolean, reason?: string }.
+ */
+function validateLeadClassification(title, category, { SUBCATEGORIES }) {
+  const prefixes = DISALLOWED_PREFIXES_BY_CATEGORY[category] || [];
+  if (prefixes.some(re => re.test(title))) {
+    return { ok: false, reason: `title prefix disallowed under ${category}` };
+  }
+  const normTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+  const allSubs = Object.values(SUBCATEGORIES).flat();
+  const isUmbrella = allSubs.some(s => {
+    const normSub = s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+    return normTitle === normSub;
+  });
+  if (isUmbrella) {
+    return { ok: false, reason: `title "${title}" restates an existing subcategory (umbrella term)` };
+  }
+  return { ok: true };
+}
+
+/**
+ * Build a predicate that rejects keywords matching the brief's own title,
+ * subtitle, nickname, or acronym-expansion — the keyword extractor must never
+ * surface these because they point back at the brief itself.
+ *
+ *  - title / nickname: substring match in either direction (e.g. title "JTAC"
+ *    rejects keyword "jtac", and title "RAF Lossiemouth" rejects keyword
+ *    "Lossiemouth"). Preserves the pre-existing title behaviour.
+ *  - subtitle: normalised equality only (subtitles are often full sentences,
+ *    so a substring match would reject legitimate keywords mentioned inside
+ *    them). A JTAC brief with subtitle "Joint Terminal Attack Controllers"
+ *    therefore rejects that exact phrase as a keyword.
+ *  - acronym expansion: if the title or nickname is a 2–6 letter all-caps
+ *    acronym, reject multi-word keywords whose first letters spell the
+ *    acronym (e.g. title "JTAC" rejects "joint terminal attack controllers").
+ */
+function buildTitleRejectCheck({ title, subtitle, nickname } = {}) {
+  const titleLower    = (title || '').trim().toLowerCase();
+  const nicknameLower = (nickname || '').trim().toLowerCase();
+  const normForEquality = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const subtitleNorm = normForEquality(subtitle);
+
+  const acronymSources = [title, nickname]
+    .map(s => (s || '').trim())
+    .filter(t => /^[A-Z]{2,6}$/.test(t))
+    .map(t => t.toLowerCase());
+
+  return (keyword) => {
+    const kl = (keyword || '').toLowerCase().trim();
+    if (!kl) return false;
+
+    for (const r of [titleLower, nicknameLower]) {
+      if (!r) continue;
+      if (kl === r || r.includes(kl) || kl.includes(r)) return true;
+    }
+
+    if (subtitleNorm && normForEquality(kl) === subtitleNorm) return true;
+
+    if (acronymSources.length) {
+      const words = kl.split(/\s+/).filter(Boolean);
+      if (words.length >= 2) {
+        const firstLetters = words.map(w => w[0]).join('');
+        if (acronymSources.includes(firstLetters)) return true;
+      }
+    }
+
+    return false;
+  };
+}
 
 /**
  * Normalise a title for fuzzy duplicate detection.
@@ -144,6 +226,8 @@ Answer NO for:
 - Named exercises unless they are a well-known, recurring, strategically significant exercise (not a one-off leadership event)
 - Roles or service types that are NCO trades or administrative categories rather than distinct commissioned career streams
 - Keywords that refer to the same subject as an existing brief (see list below) under a different name — these are duplicates, not new topics
+- Naval vessels / warships (anything prefixed "HMS", "RFA", "USS", "HMCS", "USNS") — these are NOT aircraft and must never be classified under Aircrafts even when they carry aircraft. They may fit AOR or Heritage if strategically significant, otherwise leave them as keyword mentions inside the relevant aircraft brief.
+- Umbrella or generic terms that simply restate one of the subcategory names above (e.g. "Front-Line Aviation" is just the Fast Jet subcategory under a vaguer label — NO). A valid lead names a specific, concrete subject, not a category of things.
 
 Existing briefs (do NOT create duplicates of these):
 ${existingTitleList}
@@ -192,6 +276,13 @@ Only include keywords where the answer is YES. If none qualify, return { "leads"
   for (const lead of leads) {
     const { keyword, title, category, nickname, subtitle } = lead;
     if (!title || !category || !SEEDABLE_CATEGORIES.includes(category)) continue;
+
+    // Hard-rule classification check (ship-prefix in Aircrafts, umbrella titles, etc.)
+    const classCheck = validateLeadClassification(title, category, { SUBCATEGORIES });
+    if (!classCheck.ok) {
+      console.log(`[seedUnmatchedKeywords] Rejected "${title}" [${category}] — ${classCheck.reason}`);
+      continue;
+    }
 
     // Validate subcategory against the model's enum; fall back to '' rather than storing junk
     const validSubs = SUBCATEGORIES[category] ?? [];
@@ -441,4 +532,4 @@ Return ONLY valid JSON — no markdown, no extra text:
   return linkedKeywords;
 }
 
-module.exports = { autoLinkKeywords, seedUnmatchedKeywords };
+module.exports = { autoLinkKeywords, seedUnmatchedKeywords, validateLeadClassification, buildTitleRejectCheck };

@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const userNotificationSchema = new mongoose.Schema({
   userId:          { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  type:            { type: String, default: 'report_reply' },
+  type:            { type: String, enum: ['report_reply', 'rank_promotion', 'level_up', 'unlock', 'streak_bonus'], default: 'report_reply' },
   title:           { type: String, required: true },
   message:         { type: String, required: true },
   read:            { type: Boolean, default: false },

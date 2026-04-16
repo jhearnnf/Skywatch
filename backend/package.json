@@ -28,9 +28,7 @@
     "dedupe-media:apply": "node scripts/dedupeMedia.js --apply",
     "dedupe-media:apply-cloudinary": "node scripts/dedupeMedia.js --apply --cloudinary",
     "dedupe-media:orphans": "node scripts/dedupeMedia.js --orphans",
-    "dedupe-media:orphans:apply": "node scripts/dedupeMedia.js --orphans --apply --cloudinary",
-    "backfill-media-hashes": "node scripts/backfillMediaHashes.js",
-    "backfill-media-hashes:apply": "node scripts/backfillMediaHashes.js --apply"
+    "dedupe-media:orphans:apply": "node scripts/dedupeMedia.js --orphans --apply --cloudinary"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

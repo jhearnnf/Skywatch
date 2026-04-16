@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { useFlashcardBadge } from '../context/FlashcardBadgeContext'
+import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import { playSound } from '../utils/sound'
 
 const COUNT_OPTIONS = [5, 10, 15, 20]
@@ -101,8 +101,8 @@ function TitleSearch({ allTitles, onSelect, disabled }) {
 
 // ── Main modal ──────────────────────────────────────────────────────────────
 export default function FlashcardGameModal({ onClose }) {
-  const { API, apiFetch, awardAircoins, refreshUser } = useAuth()
-  const { clearBadge } = useFlashcardBadge()
+  const { user, API, apiFetch, awardAircoins, refreshUser } = useAuth()
+  const { markSeen } = useNewGameUnlock()
 
   // screen: 'pick' | 'game' | 'result'
   const [screen,        setScreen]        = useState('pick')
@@ -148,7 +148,7 @@ export default function FlashcardGameModal({ onClose }) {
   function sendAbandon(currentCardResults) {
     if (abandonSent.current || gameFinished.current || !gameId || !gameSessionId) return
     abandonSent.current = true
-    clearBadge()
+    markSeen('flashcard')
     apiFetch(`${API}/api/games/flashcard-recall/abandon`, {
       method: 'POST',
       keepalive: true,
@@ -265,8 +265,13 @@ export default function FlashcardGameModal({ onClose }) {
 
   async function finishGame(results) {
     gameFinished.current = true
-    clearBadge()
+    markSeen('flashcard')
     setSubmitting(true)
+    const preSubmitTotal = user?.totalAircoins ?? 0
+    let awarded = false
+    let earned        = 0
+    let rankPromotion = null
+
     try {
       const res  = await apiFetch(`${API}/api/games/flashcard-recall/result`, {
         method: 'POST',
@@ -275,37 +280,51 @@ export default function FlashcardGameModal({ onClose }) {
         body: JSON.stringify({ gameId, cardResults: results, gameSessionId }),
       })
       const data = await res.json()
-      const earned        = data?.data?.result?.aircoinsEarned ?? 0
-      const rankPromotion = data?.data?.rankPromotion  ?? null
+      earned              = data?.data?.result?.aircoinsEarned ?? 0
+      rankPromotion       = data?.data?.rankPromotion  ?? null
       const cycleAfter    = data?.data?.cycleAircoins  ?? null
       const totalAfter    = data?.data?.totalAircoins  ?? undefined
 
       if (earned > 0 && awardAircoins) {
         awardAircoins(earned, 'Flashcard Recall', { cycleAfter, totalAfter, rankPromotion })
+        awarded = true
       }
-
-      const correct = results.filter(r => r.recalled).length
-      setResultData({
-        correct,
-        total: results.length,
-        aircoinsEarned: earned,
-        rankPromotion,
-        cardBreakdown:  results.map((r, i) => ({
-          ...r,
-          briefTitle:      allTitles.find(t => t._id.toString() === r.intelBriefId.toString())?.title ?? 'Unknown',
-          cardCategory:    cards[i]?.category ?? '',
-          cardSubcategory: cards[i]?.subcategory ?? '',
-          contentSnippet:  cards[i]?.contentSnippet ?? '',
-        })),
-      })
-      setScreen('result')
     } catch (err) {
       console.error('[flashcard finish] failed:', err)
-      if (refreshUser) refreshUser().catch(() => {})
-      setScreen('result')
-    } finally {
-      setSubmitting(false)
     }
+
+    // Fallback: if the client didn't notify (malformed response, request failure),
+    // resync the user and fire the aircoin notification based on the delta.
+    if (!awarded && refreshUser) {
+      try {
+        const fresh = await refreshUser()
+        const delta = (fresh?.totalAircoins ?? 0) - preSubmitTotal
+        if (delta > 0 && awardAircoins) {
+          awardAircoins(delta, 'Flashcard Recall', {
+            totalAfter: fresh.totalAircoins,
+            cycleAfter: fresh.cycleAircoins,
+          })
+          earned = delta
+        }
+      } catch { /* swallow — best-effort resync */ }
+    }
+
+    const correct = results.filter(r => r.recalled).length
+    setResultData({
+      correct,
+      total: results.length,
+      aircoinsEarned: earned,
+      rankPromotion,
+      cardBreakdown:  results.map((r, i) => ({
+        ...r,
+        briefTitle:      allTitles.find(t => t._id.toString() === r.intelBriefId.toString())?.title ?? 'Unknown',
+        cardCategory:    cards[i]?.category ?? '',
+        cardSubcategory: cards[i]?.subcategory ?? '',
+        contentSnippet:  cards[i]?.contentSnippet ?? '',
+      })),
+    })
+    setScreen('result')
+    setSubmitting(false)
   }
 
   // When card index advances past last card → finish (handles timer path)

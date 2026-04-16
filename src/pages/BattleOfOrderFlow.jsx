@@ -510,7 +510,7 @@ function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, u
 export default function BattleOfOrderFlow() {
   const { briefId }              = useParams()
   const navigate                 = useNavigate()
-  const { API, apiFetch, awardAircoins, refreshUser } = useAuth()
+  const { user, API, apiFetch, awardAircoins, refreshUser } = useAuth()
 
   // 'loading' | 'roulette' | 'generating' | 'game' | 'results' | 'unavailable'
   const [screen, setScreen]          = useState('loading')
@@ -654,6 +654,9 @@ export default function BattleOfOrderFlow() {
 
   const handleSubmit = async (userChoices, timeTakenSeconds) => {
     setLastUserChoices(userChoices)
+    const preSubmitTotal = user?.totalAircoins ?? 0
+    let awarded = false
+
     try {
       const res  = await apiFetch(`${API}/api/games/battle-of-order/submit`, {
         method:      'POST',
@@ -681,12 +684,30 @@ export default function BattleOfOrderFlow() {
           totalAfter:    data.data?.totalAircoins  ?? undefined,
           rankPromotion: data.data?.rankPromotion  ?? null,
         })
+        awarded = true
       }
 
       setScreen('results')
     } catch (err) {
       console.error('[BOO submit] failed:', err)
-      if (refreshUser) refreshUser().catch(() => {})
+    }
+
+    // Fallback: mirror QuizFlow — if the client didn't actually notify (malformed
+    // response, request failure, or post-award throw), resync the user and fire
+    // the aircoin notification based on the delta so the UI stays in sync with
+    // the ledger.
+    if (!awarded && refreshUser) {
+      try {
+        const fresh = await refreshUser()
+        const delta = (fresh?.totalAircoins ?? 0) - preSubmitTotal
+        if (delta > 0 && awardAircoins) {
+          awardAircoins(delta, 'Battle of Order', {
+            totalAfter: fresh.totalAircoins,
+            cycleAfter: fresh.cycleAircoins,
+          })
+          setAircoins(delta)
+        }
+      } catch { /* swallow — best-effort resync */ }
     }
   }
 

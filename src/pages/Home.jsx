@@ -10,6 +10,7 @@ import { CATEGORY_ICONS } from '../data/mockData'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { getLevelInfo } from '../utils/levelUtils'
 import SEO from '../components/SEO'
+import { PENDING_ONBOARDING_KEY } from '../utils/storageKeys'
 
 // XP progress ring
 function XPRing({ pct = 0, level = 1, size = 72 }) {
@@ -44,7 +45,7 @@ export default function Home() {
   const [missionDone,       setMissionDone]       = useState(false)
   const [latestBriefs,      setLatestBriefs]      = useState([])
   const [showCROFlow,       setShowCROFlow]       = useState(
-    () => !!sessionStorage.getItem('sw_pending_onboarding')
+    () => !!sessionStorage.getItem(PENDING_ONBOARDING_KEY)
   )
   const [missionLoading,    setMissionLoading]    = useState(false)
   const [showFlashcard,     setShowFlashcard]     = useState(false)
@@ -60,7 +61,7 @@ export default function Home() {
 
   // Consume the onboarding flag (CRO state was already initialised above)
   useEffect(() => {
-    sessionStorage.removeItem('sw_pending_onboarding')
+    sessionStorage.removeItem(PENDING_ONBOARDING_KEY)
   }, [])
 
   // Start tutorial on first visit — skip when the CRO modal is showing

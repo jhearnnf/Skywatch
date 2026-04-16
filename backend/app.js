@@ -17,9 +17,6 @@ const allowedOrigins = [
   'capacitor://localhost',   // Capacitor Android scheme
 ].filter(Boolean)
 
-console.log('CORS allowed origins:', allowedOrigins)
-console.log('NODE_ENV:', process.env.NODE_ENV)
-
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin || allowedOrigins.includes(origin)) return cb(null, true)
@@ -41,13 +38,22 @@ app.use('/api/aptitude-sync', require('./routes/aptitudeSync'));
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
 app.get('/api/settings', async (_req, res) => {
-  try {
-    const s = await require('./models/AppSettings').getSettings();
-    const { _id, __v, _singleton, ...pub } = s.toObject();
-    res.json(pub);
-  } catch {
-    res.json({ volumeIntelBriefOpened: 100, volumeTargetLocked: 100, volumeOutOfAmmo: 100, freeCategories: ['News'], silverCategories: [] });
-  }
+  const s = await require('./models/AppSettings').getSettings();
+  const { _id, __v, _singleton, ...pub } = s.toObject();
+  res.json(pub);
+});
+
+app.use((_req, res) => {
+  res.status(404).json({ status: 'error', message: 'Not found' });
+});
+
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+  console.error('[error]', err);
+  res.status(err.status || 500).json({
+    status: 'error',
+    message: err.message || 'Internal server error',
+  });
 });
 
 module.exports = app;

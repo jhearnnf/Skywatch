@@ -4,7 +4,11 @@ const mongoose = require('mongoose');
 const aircoinLogSchema = new mongoose.Schema({
   userId:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   amount:   { type: Number, required: true },
-  reason:   { type: String, required: true }, // 'brief_read' | 'quiz' | 'order_of_battle' | 'wheres_that_aircraft' | 'wheres_aircraft' | 'flashcard' | 'admin' | 'login'
+  reason:   {
+    type: String,
+    enum: ['brief_read', 'daily_brief', 'quiz', 'battle_of_order', 'wheres_that_aircraft', 'wheres_aircraft', 'flashcard', 'admin', 'aptitude_sync', 'test'],
+    required: true,
+  },
   label:    { type: String, default: '' },    // human-readable description
   briefId:  { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', default: null },
 }, { timestamps: true });

@@ -49,7 +49,7 @@ async function ensureBOOReady(anchorBrief, pool = []) {
     const filler = await IntelligenceBrief.create({
       title: `Aircraft Gate Filler ${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`, subtitle: '',
       category: 'Aircrafts', descriptionSections: ['Section.'],
-      keywords: [], sources: [], isPublished: true, gameData: {},
+      keywords: [], sources: [], isPublished: true, status: 'published', gameData: {},
     });
     await createReadRecord(user._id, filler._id);
   }
@@ -412,7 +412,7 @@ async function ensureAircraftGate(userId) {
     const filler = await IntelligenceBrief.create({
       title: `Gate Filler Rec ${Date.now()}_${i}`, subtitle: '',
       category: 'Aircrafts', descriptionSections: ['Section.'],
-      keywords: [], sources: [], isPublished: true, gameData: {},
+      keywords: [], sources: [], isPublished: true, status: 'published', gameData: {},
     });
     await createReadRecord(userId, filler._id);
   }

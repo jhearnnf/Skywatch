@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
+const { RANK_TYPES } = require('../constants/rankTypes');
 
 const rankSchema = new mongoose.Schema({
   rankType: {
     type: String,
-    enum: ['enlisted_aviator', 'non_commissioned_aircrew', 'commissioned_officer'],
+    enum: RANK_TYPES,
     required: true,
   },
   rankNumber:       { type: Number, required: true },  // lower = more junior

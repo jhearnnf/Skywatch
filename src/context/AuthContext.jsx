@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getLevelNumber } from '../utils/levelUtils'
+import { AUTH_TOKEN_KEY, tutorialKey, tutorialClearedKey } from '../utils/storageKeys'
 
 const AuthContext = createContext(null)
 
@@ -8,10 +9,9 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 const isNative = Capacitor.isNativePlatform()
 
 // On native, store/retrieve the JWT so we can send it as a Bearer header
-const TOKEN_KEY = 'sw_auth_token'
-const getStoredToken = () => localStorage.getItem(TOKEN_KEY)
-const storeToken = (token) => { if (token) localStorage.setItem(TOKEN_KEY, token); }
-const clearToken = () => localStorage.removeItem(TOKEN_KEY)
+const getStoredToken = () => localStorage.getItem(AUTH_TOKEN_KEY)
+const storeToken = (token) => { if (token) localStorage.setItem(AUTH_TOKEN_KEY, token); }
+const clearToken = () => localStorage.removeItem(AUTH_TOKEN_KEY)
 
 // Inject Bearer header for native requests
 const nativeHeaders = () => {
@@ -77,27 +77,26 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const controller = new AbortController()
     const timeoutId  = setTimeout(() => controller.abort(), 8000)
-    console.log('[auth] checking session...')
     fetch(`${API}/api/auth/me`, { headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }), signal: controller.signal })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         const u = data?.data?.user ?? null
-        console.log('[auth] session resolved, user:', u?._id ?? null)
         setUser(u)
         // If an admin reset this user's tutorials server-side, clear localStorage tutorial keys
         if (u?.tutorialsResetAt) {
           const resetTs   = new Date(u.tutorialsResetAt).getTime()
-          const clearKey  = `sw_tut_cleared_at_${u._id}`
+          const clearKey  = tutorialClearedKey(u._id)
           const clearedTs = parseInt(localStorage.getItem(clearKey) ?? '0', 10)
           if (resetTs > clearedTs) {
+            const prefix = tutorialKey(u._id, '')
             Object.keys(localStorage)
-              .filter(k => k.startsWith(`sw_tut_v2_${u._id}_`))
+              .filter(k => k.startsWith(prefix))
               .forEach(k => localStorage.removeItem(k))
             localStorage.setItem(clearKey, String(resetTs))
           }
         }
       })
-      .catch(err => console.error('[auth] session fetch failed:', err))
+      .catch(() => {})
       .finally(() => { clearTimeout(timeoutId); setLoading(false) })
   }, [])
 

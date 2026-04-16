@@ -272,3 +272,64 @@ describe('Category progress tracking — full read journey', () => {
     expect(statsRes.body.data.stats.News.done).toBe(1); // still 1
   });
 });
+
+// ── Actors category ──────────────────────────────────────────────────────────
+describe('Actors category — brief creation, filtering, and flow', () => {
+  it('creates and lists a brief in the Actors category with a valid subcategory', async () => {
+    const user = await createUser();
+    const cookie = authCookie(user._id);
+    const brief = await createBrief({
+      category:    'Actors',
+      subcategory: 'Heads of State & Government',
+      title:       'Test Actor Brief',
+    });
+
+    const res = await request(app)
+      .get('/api/briefs?category=Actors&limit=200')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.briefs.length).toBe(1);
+    expect(res.body.data.briefs[0]._id).toBe(brief._id.toString());
+    expect(res.body.data.briefs[0].category).toBe('Actors');
+  });
+
+  it('accepts all six Actors subcategories', async () => {
+    const subs = [
+      'Heads of State & Government',
+      'Defence & Military Leadership',
+      'Adversary Commanders',
+      'Non-State & Proxy Leaders',
+      'Allied & Coalition Leaders',
+      'Historic RAF Personnel',
+    ];
+    for (const sub of subs) {
+      const brief = await createBrief({
+        category:    'Actors',
+        subcategory: sub,
+        title:       `Actor Brief — ${sub}`,
+      });
+      expect(brief.subcategory).toBe(sub);
+    }
+  });
+
+  it('rejects an invalid subcategory for the Actors category', async () => {
+    await expect(
+      createBrief({
+        category:    'Actors',
+        subcategory: 'Famous Personnel', // was Heritage sub, not valid under Actors
+        title:       'Invalid Actor Subcategory',
+      })
+    ).rejects.toThrow();
+  });
+
+  it('rejects the retired Heritage subcategory "Famous Personnel"', async () => {
+    await expect(
+      createBrief({
+        category:    'Heritage',
+        subcategory: 'Famous Personnel', // removed — must now live under Actors
+        title:       'Retired Heritage Sub',
+      })
+    ).rejects.toThrow();
+  });
+});

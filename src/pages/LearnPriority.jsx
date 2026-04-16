@@ -27,6 +27,7 @@ const PATHWAY_COLORS = {
   AOR:         { stone: '#0d9488', glow: 'rgba(13,148,136,0.4)',  ring: '#14b8a6', bg: '#042f2e' },
   Tech:        { stone: '#0284c7', glow: 'rgba(2,132,199,0.4)',   ring: '#38bdf8', bg: '#082f49' },
   Treaties:    { stone: '#db2777', glow: 'rgba(219,39,119,0.4)',  ring: '#f472b6', bg: '#500724' },
+  Actors:      { stone: '#9333ea', glow: 'rgba(147,51,234,0.4)',  ring: '#a855f7', bg: '#3b0764' },
 }
 const DEFAULT_COLORS = { stone: '#334155', glow: 'rgba(51,65,85,0.4)', ring: '#475569', bg: '#1e293b' }
 
@@ -42,6 +43,7 @@ const DEFAULT_PATHWAY_UNLOCKS = [
   { category: 'Training',    levelRequired: 4, rankRequired: 2 },
   { category: 'AOR',         levelRequired: 4, rankRequired: 2 },
   { category: 'Roles',       levelRequired: 5, rankRequired: 3 },
+  { category: 'Actors',      levelRequired: 5, rankRequired: 3 },
   { category: 'Tech',        levelRequired: 5, rankRequired: 3 },
   { category: 'Threats',     levelRequired: 6, rankRequired: 3 },
   { category: 'Missions',    levelRequired: 7, rankRequired: 4 },

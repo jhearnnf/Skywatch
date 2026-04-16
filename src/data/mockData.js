@@ -49,13 +49,14 @@ export const CATEGORY_DESCRIPTIONS = {
   Tech:        'Weapons, sensors, and future programmes.',
   Terminology: 'Key RAF terminology and concepts.',
   Treaties:    'Alliances, agreements, and arms control.',
-  Heritage:    'Famous personnel, traditions, and RAF history.',
+  Heritage:    'Traditions, memorials, and RAF history.',
+  Actors:      'Heads of state, commanders, and key figures of defence interest.',
 }
 
 export const CATEGORIES = [
   'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
-  'Heritage',
+  'Heritage', 'Actors',
 ]
 
 export const CATEGORY_ICONS = {
@@ -74,6 +75,7 @@ export const CATEGORY_ICONS = {
   Terminology: '📖',
   Treaties:    '📜',
   Heritage:    '🏅',
+  Actors:      '👤',
 }
 
 export const SUBCATEGORIES = {
@@ -182,9 +184,16 @@ export const SUBCATEGORIES = {
     'Defence Policy & Strategy',
   ],
   Heritage: [
-    'Famous Personnel',
     'Traditions & Culture',
     'Memorials & Museums',
+  ],
+  Actors: [
+    'Heads of State & Government',
+    'Defence & Military Leadership',
+    'Adversary Commanders',
+    'Non-State & Proxy Leaders',
+    'Allied & Coalition Leaders',
+    'Historic RAF Personnel',
   ],
 }
 

@@ -175,7 +175,7 @@ const appSettingsSchema = new mongoose.Schema({
 
   // Tutorial text overrides — keys are '<tutorialId>_<stepIndex>' (e.g. 'welcome_0')
   // Absent or empty fields fall back to the hardcoded defaults in TutorialContext.
-  tutorialContent: { type: mongoose.Schema.Types.Mixed, default: {} },
+  tutorialContent: { type: Map, of: String, default: () => ({}) },
 
   // Email feature flags
   emailWelcomeEnabled:        { type: Boolean, default: true },
@@ -218,8 +218,6 @@ appSettingsSchema.statics.getSettings = async function () {
     }
   } else {
     const updates = {};
-    if (settings.ammoFree === 0)   updates.ammoFree   = 3;   // old default was 0
-    if (settings.ammoSilver <= 3)  updates.ammoSilver = 10;  // old default was 3
     if (!settings.freeCategories || settings.freeCategories.length === 0)
       updates.freeCategories = ['News'];
     if (!settings.silverCategories || settings.silverCategories.length === 0)

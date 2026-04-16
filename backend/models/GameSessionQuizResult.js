@@ -12,7 +12,7 @@ const gameSessionQuizResultSchema = new mongoose.Schema({
   // All question _ids shown in this game session (for grouping/stats)
   displayedQuestionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'GameQuizQuestion' }],
 
-  selectedAnswerId: mongoose.Schema.Types.ObjectId,
+  selectedAnswerId: { type: mongoose.Schema.Types.ObjectId, default: null },
   isCorrect:        Boolean,
   timeTakenSeconds: Number,
   aircoinsEarned:   { type: Number, default: 0 },

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { DIFFICULTY_LEVELS } = require('../constants/difficulty');
 
 const BATTLE_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases'];
 
@@ -28,7 +29,7 @@ const REQUIRED_FIELD = {
 const schema = new mongoose.Schema({
   anchorBriefId: { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', required: true },
   category:      { type: String, enum: BATTLE_CATEGORIES, required: true },
-  difficulty:    { type: String, enum: ['easy', 'medium'], required: true },
+  difficulty:    { type: String, enum: DIFFICULTY_LEVELS, required: true },
   orderType:     { type: String, enum: Object.keys(REQUIRED_FIELD), required: true },
   generatedAt:   { type: Date, default: Date.now },
   choices: [{

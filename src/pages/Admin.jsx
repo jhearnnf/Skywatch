@@ -35,7 +35,7 @@ function fmtSeconds(s) {
 const ALL_CATEGORIES = [
   'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
-  'Heritage',
+  'Heritage', 'Actors',
 ]
 
 // RAF rank names indexed by rank number (1–19)
@@ -64,7 +64,7 @@ const RAF_RANKS = [
 // Pathway categories that can appear in the Learn Pathway page (ordered by default progression)
 const PATHWAY_CATEGORIES = [
   'News', 'Bases', 'Terminology', 'Aircrafts', 'Heritage', 'Ranks', 'Squadrons', 'Allies',
-  'Training', 'AOR', 'Roles', 'Tech', 'Threats', 'Missions', 'Treaties',
+  'Training', 'AOR', 'Roles', 'Actors', 'Tech', 'Threats', 'Missions', 'Treaties',
 ]
 
 
@@ -2650,7 +2650,7 @@ function GenerateSectionLinksButton({ sourceTitle, sourceDescription, sourceCate
 const BRIEF_CATEGORIES = [
   'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
   'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
-  'Heritage',
+  'Heritage', 'Actors',
 ]
 
 const BRIEF_SUBCATEGORIES = {
@@ -2668,7 +2668,8 @@ const BRIEF_SUBCATEGORIES = {
   Tech: ['Weapons Systems','Sensors & Avionics','Electronic Warfare','Future Programmes','Command, Control & Comms'],
   Terminology: ['Operational Concepts','Flying & Tactical','Air Traffic & Navigation','Intelligence & Planning','Maintenance & Support'],
   Treaties: ['Founding & Core Alliances','Bilateral Defence Agreements','Arms Control & Non-Proliferation','Operational & Status Agreements'],
-  Heritage: ['Famous Personnel','Traditions & Culture','Memorials & Museums'],
+  Heritage: ['Traditions & Culture','Memorials & Museums'],
+  Actors: ['Heads of State & Government','Defence & Military Leadership','Adversary Commanders','Non-State & Proxy Leaders','Allied & Coalition Leaders','Historic RAF Personnel'],
 }
 
 const EMPTY_DRAFT = {
@@ -3503,6 +3504,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [page,          setPage]          = useState(1)
   const [search,        setSearch]        = useState('')
   const [category,      setCategory]      = useState('')
+  const [subcategory,   setSubcategory]   = useState('')
   const [sort,          setSort]          = useState('default')
   const [hideStubs,     setHideStubs]     = useState(true)
   const [toast,         setToast]         = useState('')
@@ -3644,6 +3646,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       const params = new URLSearchParams({ page, limit: 20 })
       if (search)   params.set('search', search)
       if (category) params.set('category', category)
+      if (category && subcategory) params.set('subcategory', subcategory)
       if (sort && sort !== 'default') params.set('sort', sort)
       if (hideStubs) params.set('hideStubs', 'true')
       const res  = await apiFetch(`${API}/api/admin/briefs?${params}`, { credentials: 'include' })
@@ -3655,7 +3658,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     } finally {
       setLoading(false)
     }
-  }, [API, page, search, category, sort, hideStubs])
+  }, [API, page, search, category, subcategory, sort, hideStubs])
 
   useEffect(() => {
     if (view === 'list') loadList()
@@ -4356,12 +4359,22 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
           />
           <select
             value={category}
-            onChange={e => { setCategory(e.target.value); setPage(1) }}
+            onChange={e => { setCategory(e.target.value); setSubcategory(''); setPage(1) }}
             className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 bg-surface text-text"
           >
             <option value="">All Categories</option>
             {BRIEF_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          {category && (BRIEF_SUBCATEGORIES[category] ?? []).length > 0 && (
+            <select
+              value={subcategory}
+              onChange={e => { setSubcategory(e.target.value); setPage(1) }}
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 bg-surface text-text"
+            >
+              <option value="">All Subcategories</option>
+              {BRIEF_SUBCATEGORIES[category].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
           <select
             value={sort}
             onChange={e => { setSort(e.target.value); setPage(1) }}

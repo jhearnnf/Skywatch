@@ -28,7 +28,7 @@ const IntelLead            = require('../../models/IntelLead');
 const PERMISSIVE_PATHWAY_UNLOCKS = [
   'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training',
   'Roles', 'Threats', 'Allies', 'Missions', 'AOR', 'Tech',
-  'Terminology', 'Treaties', 'Heritage',
+  'Terminology', 'Treaties', 'Heritage', 'Actors',
 ].map(category => ({ category, levelRequired: 1, rankRequired: 1 }));
 
 // ── AppSettings ────────────────────────────────────────────────────────────
@@ -168,6 +168,7 @@ async function createBooBriefs(count, category = 'Aircrafts', overrides = {}) {
       keywords:            [],
       sources:             [],
       isPublished:         true,
+      status:              'published',
       gameData: {
         topSpeedKph:     (i + 1) * 500,       // 500, 1000, 1500 … kph
         yearIntroduced:  1980 + i * 5,
@@ -191,6 +192,7 @@ async function createTrainingBooBriefs(count, overrides = {}) {
       keywords:            [],
       sources:             [],
       isPublished:         true,
+      status:              'published',
       gameData: {
         trainingWeekStart: (i + 1) * 2,        // 2, 4, 6 … pipeline start
         trainingWeekEnd:   (i + 1) * 2 + 1,    // 3, 5, 7 …

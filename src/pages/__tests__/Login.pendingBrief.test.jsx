@@ -17,6 +17,7 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
+  storeNativeToken: vi.fn(),
 }))
 
 vi.mock('framer-motion', () => ({

@@ -9,7 +9,7 @@
 process.env.JWT_SECRET = 'test_secret';
 
 const { leadSectionToCategory, leadSubsectionToSubcategory } = require('../../utils/categoryMapping');
-const { SUBCATEGORIES } = require('../../models/IntelligenceBrief');
+const { SUBCATEGORIES } = require('../../constants/categories');
 
 // ── leadSectionToCategory ────────────────────────────────────────────────────
 

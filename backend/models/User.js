@@ -1,5 +1,8 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { DIFFICULTY_LEVELS } = require('../constants/difficulty');
+const { SUBSCRIPTION_TIERS } = require('../constants/subscriptionTiers');
+const { TUTORIAL_STATUS } = require('../constants/tutorialStatus');
 
 const loginSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
@@ -20,7 +23,7 @@ const userSchema = new mongoose.Schema(
 
     agentNumber: { type: String, unique: true, sparse: true }, // 7-digit, auto-generated
 
-    difficultySetting: { type: String, enum: ['easy', 'medium'], default: 'easy' },
+    difficultySetting: { type: String, enum: DIFFICULTY_LEVELS, default: 'easy' },
 
     isAdmin:  { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },
@@ -28,7 +31,7 @@ const userSchema = new mongoose.Schema(
     // Subscription
     subscriptionTier: {
       type: String,
-      enum: ['free', 'trial', 'silver', 'gold'],
+      enum: SUBSCRIPTION_TIERS,
       default: 'free',
     },
     trialStartDate:     Date,
@@ -45,20 +48,20 @@ const userSchema = new mongoose.Schema(
     // Tutorial progress
     // ⚠ When adding a new tutorial, add it here AND in TUTORIAL_STEPS in src/context/AppTutorialContext.jsx
     tutorials: {
-      welcome:         { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      intel_brief:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      user:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      load_up:         { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      home:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      briefReader:     { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      quiz:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      play:            { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      profile:         { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      rankings:        { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      wheres_aircraft: { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      learn_priority:  { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      pathway_swipe:   { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
-      stat_mnemonic:   { type: String, enum: ['unseen','skipped','viewed'], default: 'unseen' },
+      welcome:         { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      intel_brief:     { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      user:            { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      load_up:         { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      home:            { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      briefReader:     { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      quiz:            { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      play:            { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      profile:         { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      rankings:        { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      wheres_aircraft: { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      learn_priority:  { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      pathway_swipe:   { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      stat_mnemonic:   { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
     },
     tutorialsResetAt: { type: Date, default: null }, // admin-triggered; frontend clears localStorage tutorial keys when newer than last clear
 

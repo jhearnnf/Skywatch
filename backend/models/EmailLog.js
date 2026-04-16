@@ -1,11 +1,12 @@
 const mongoose = require('mongoose');
+const { EMAIL_TYPES, EMAIL_STATUS } = require('../constants/emailLog');
 
 const emailLogSchema = new mongoose.Schema({
-  type:            { type: String, enum: ['welcome', 'confirmation', 'password_reset', 'report_reply', 'test'], required: true },
+  type:            { type: String, enum: EMAIL_TYPES, required: true },
   recipientEmail:  { type: String, required: true, lowercase: true, trim: true },
   recipientUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   subject:         { type: String, trim: true },
-  status:          { type: String, enum: ['sent', 'failed'], required: true },
+  status:          { type: String, enum: EMAIL_STATUS, required: true },
   error:           { type: String, default: null },
   metadata:        { type: mongoose.Schema.Types.Mixed, default: {} },
   sentAt:          { type: Date, default: Date.now },

@@ -34,21 +34,27 @@ async function extractSearchTerms({ title, subtitle, imagePromptBase }) {
   return terms.slice(0, MAX_IMAGES);
 }
 
-async function resolveWikipediaImage(term) {
+async function resolveWikipediaPageTitle(term) {
   const searchRes = await fetch(
     `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`
   );
   const searchData = await searchRes.json();
-  const pageTitle = searchData.query?.search?.[0]?.title;
-  if (!pageTitle) return null;
+  return searchData.query?.search?.[0]?.title ?? null;
+}
 
+async function fetchWikipediaThumbnailUrl(pageTitle) {
   const thumbRes = await fetch(
     `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=800&origin=*`
   );
   const thumbData = await thumbRes.json();
-  const imageUrl = Object.values(thumbData.query?.pages ?? {})[0]?.thumbnail?.source;
-  if (!imageUrl) return null;
+  return Object.values(thumbData.query?.pages ?? {})[0]?.thumbnail?.source ?? null;
+}
 
+async function resolveWikipediaImage(term) {
+  const pageTitle = await resolveWikipediaPageTitle(term);
+  if (!pageTitle) return null;
+  const imageUrl = await fetchWikipediaThumbnailUrl(pageTitle);
+  if (!imageUrl) return null;
   return { pageTitle, imageUrl };
 }
 
@@ -78,22 +84,27 @@ async function getOrCreateMediaForTerm(term, { publicIdPrefix }) {
     if (existing) return { media: existing, reused: true };
   }
 
-  // Step 2 — resolve to a Wikipedia page (so we know the canonical title)
-  const resolved = await resolveWikipediaImage(term);
-  if (!resolved) return null;
+  // Step 2 — resolve to a Wikipedia page title (so we know the canonical title)
+  const pageTitle = await resolveWikipediaPageTitle(term);
+  if (!pageTitle) return null;
 
-  // Step 3 — check DB again by the resolved page title (different terms may
-  // point at the same page)
-  const normalizedPage = Media.normalizeTerm(resolved.pageTitle);
+  // Step 3 — check DB by the resolved page title BEFORE fetching the
+  // thumbnail (different terms may point at the same page — short-circuit
+  // to avoid an unnecessary Wikipedia call)
+  const normalizedPage = Media.normalizeTerm(pageTitle);
   if (normalizedPage) {
     const existing = await Media.findOne({ wikiPageTitleNormalized: normalizedPage });
     if (existing) return { media: existing, reused: true };
   }
 
-  // Step 4 — download the image, then hash-check before uploading. This
+  // Step 4 — fetch the image URL for this page
+  const imageUrl = await fetchWikipediaThumbnailUrl(pageTitle);
+  if (!imageUrl) return null;
+
+  // Step 5 — download the image, then hash-check before uploading. This
   // catches cases where a completely different term/page resolves to the
   // same underlying file bytes (e.g. two Wikipedia pages sharing a photo).
-  const buffer = await downloadImage(resolved.imageUrl);
+  const buffer = await downloadImage(imageUrl);
   const contentHash = md5Hex(buffer);
 
   const existingByHash = await Media.findOne({ contentHash });
@@ -108,9 +119,9 @@ async function getOrCreateMediaForTerm(term, { publicIdPrefix }) {
     mediaUrl: upload.secure_url,
     cloudinaryPublicId: upload.public_id,
     contentHash,
-    name: resolved.pageTitle || term,
+    name: pageTitle || term,
     searchTerm: term,
-    wikiPageTitle: resolved.pageTitle,
+    wikiPageTitle: pageTitle,
     showOnSummary: true,
   });
   return { media, reused: false };

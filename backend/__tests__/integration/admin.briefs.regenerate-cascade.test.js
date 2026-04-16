@@ -496,8 +496,11 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — audit and response
     expect(res.status).toBe(200);
     expect(res.body.data.quizQuestionsDeleted).toBe(0);
     expect(res.body.data.aircoinLogsDeleted).toBe(0);
-    // No documents left in any collection
+    // Hard-deleted collections are empty; brief-read is preserved (soft-deleted)
     expect(await GameQuizQuestion.countDocuments({ intelBriefId: brief._id })).toBe(0);
-    expect(await IntelligenceBriefRead.countDocuments({ intelBriefId: brief._id })).toBe(0);
+    const reads = await IntelligenceBriefRead.find({ intelBriefId: brief._id });
+    expect(reads).toHaveLength(1);
+    expect(reads[0].briefDeletedNote).toBe('Brief deleted or re-created');
+    expect(reads[0].completed).toBe(false);
   });
 });

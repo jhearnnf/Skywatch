@@ -1,12 +1,5 @@
 const mongoose = require('mongoose');
-
-const LOG_TYPES = [
-  'priority_ranking_failure',
-  'brief_generation_failure',
-  'image_fetch_failure',
-  'bulk_generation_warnings',
-  'duplicate_leads_detected',
-];
+const { LOG_TYPES } = require('../constants/systemLog');
 
 const systemLogSchema = new mongoose.Schema({
   type: { type: String, enum: LOG_TYPES, required: true },

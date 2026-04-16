@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
+const { DIFFICULTY_LEVELS } = require('../constants/difficulty');
 
 const gameSessionQuizAttemptSchema = new mongoose.Schema({
   userId:        { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   intelBriefId:  { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', required: true },
   gameSessionId: { type: String, required: true, unique: true },
-  difficulty:    { type: String, enum: ['easy', 'medium'], required: true },
+  difficulty:    { type: String, enum: DIFFICULTY_LEVELS, required: true },
   timeStarted:   { type: Date, default: Date.now },
   timeFinished:  Date,
   status:        { type: String, enum: ['in_progress', 'completed', 'abandoned'], default: 'in_progress' },
