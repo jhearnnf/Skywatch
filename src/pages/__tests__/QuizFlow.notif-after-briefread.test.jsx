@@ -412,6 +412,138 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
     expect(labels).toContain('Quiz complete')
   })
 
+  // ── Race condition: "See Results" clicked before fireFinish runs ──────────
+  //
+  // Repro for the "+entire balance" bug. handleAnswer awaits the per-question
+  // POST before calling fireFinish. If the user clicks "See Results" while
+  // that await is in flight, handleNext can run before finishPromiseRef is
+  // populated. Pre-fix: `await (finishPromiseRef.current ?? Promise.resolve(null))`
+  // returned null, the fallback ran, preFinishTotalRef was still its initial
+  // 0, and the user's pre-existing balance was reported as the quiz reward.
+  // Post-fix: handleNext awaits finishStartedRef before reading
+  // finishPromiseRef, AND preFinishTotalRef is captured at quiz start.
+  it('race: clicking See Results while per-question POST is in flight does NOT award the entire balance', async () => {
+    const PRE_QUIZ_BALANCE = 607
+    const HYDRATED_USER    = { ...INITIAL_USER, totalAircoins: PRE_QUIZ_BALANCE, cycleAircoins: PRE_QUIZ_BALANCE }
+
+    let releaseResult = null
+    const resultGate  = new Promise(resolve => { releaseResult = resolve })
+    let finishCalledAt = null
+
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/auth/me'))            return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { user: HYDRATED_USER } }) })
+      if (url.includes('/api/users/levels'))       return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { levels: [] } }) })
+      if (url.includes('/api/admin/loading-time')) return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
+      if (url.includes('/api/briefs/'))            return Promise.resolve({ ok: true, status: 200, json: async () => BRIEF_RESPONSE })
+      if (url.includes('/api/games/quiz/start'))   return Promise.resolve({ ok: true, status: 200, json: async () => START_RESPONSE })
+      if (url.includes('/api/games/quiz/result')) {
+        // Per-question POST is held until we explicitly release it. This is
+        // the await that handleAnswer is blocked on while the user races.
+        return resultGate.then(() => ({ ok: true, status: 200, json: async () => RESULT_RESPONSE }))
+      }
+      if (url.includes('/api/games/quiz/attempt') && url.includes('/finish')) {
+        finishCalledAt = Date.now()
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({
+          data: {
+            aircoinsEarned: 10, won: true, isFirstAttempt: true,
+            breakdown: [{ label: '1 correct × 10', amount: 10 }],
+            totalAircoins: PRE_QUIZ_BALANCE + 10, cycleAircoins: PRE_QUIZ_BALANCE + 10,
+          },
+        })})
+      }
+      if (url.includes('battle-of-order')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { available: false } }) })
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
+    })
+
+    const queueSink   = []
+    const contextSink = { current: null, seededBriefRead: false }
+    render(<Harness preSeedBriefRead={false} queueSink={queueSink} contextSink={contextSink} />)
+    await waitFor(() => screen.getByText('What is the Typhoon?'))
+
+    // Click the (only) answer → handleAnswer fires submitResult, blocks on await
+    fireEvent.click(screen.getByText('Multirole fighter'))
+    await waitFor(() => screen.getByRole('button', { name: /see results/i }))
+
+    // RACE: user clicks "See Results" while resultGate is still pending.
+    // fireFinish hasn't run yet, finishPromiseRef.current is still null.
+    fireEvent.click(screen.getByRole('button', { name: /see results/i }))
+
+    // Give handleNext a beat to start. With the fix, it awaits finishStartedRef.
+    await new Promise(r => setTimeout(r, 50))
+
+    // /finish must NOT have been called yet — fireFinish is gated on the
+    // resultGate. handleNext must be waiting, not racing past with delta=0.
+    expect(finishCalledAt).toBeNull()
+
+    // Now release the per-question POST. handleAnswer continues, fires fireFinish.
+    await act(async () => { releaseResult() })
+
+    // Wait for the results screen to render
+    await waitFor(() => screen.getByRole('button', { name: /back to brief/i }), { timeout: 3000 })
+
+    // /finish must have been called exactly once
+    expect(finishCalledAt).not.toBeNull()
+
+    // CRITICAL: notification queue must contain exactly the +10 quiz reward,
+    // NOT a +607 (entire-balance) false notification.
+    const aircoinNotifs = queueSink.filter(n => n.type === 'aircoin')
+    expect(aircoinNotifs).toHaveLength(1)
+    expect(aircoinNotifs[0].amount).toBe(10)
+    expect(aircoinNotifs[0].amount).not.toBe(PRE_QUIZ_BALANCE)
+  })
+
+  // ── Defence-in-depth: implausibly large delta is suppressed ──────────────
+  //
+  // Even if some unknown bug ever leaves preFinishTotalRef wrong (eg captured
+  // as 0 when the user really had 607), the fallback's MAX_PLAUSIBLE_DELTA cap
+  // must prevent the +entire-balance notification from EVER being shown.
+  // A single quiz can award at most ~115 (5 × 20 medium + 15 perfect bonus);
+  // anything larger is treated as a stale-baseline artefact and suppressed.
+  it('suppression: implausible delta from a lost finish response is NOT shown to the user', async () => {
+    const PRE_QUIZ_BALANCE = 607
+    const HYDRATED_USER    = { ...INITIAL_USER, totalAircoins: PRE_QUIZ_BALANCE, cycleAircoins: PRE_QUIZ_BALANCE }
+    // A "buggy" snapshot: simulate the world where the server briefly returned
+    // a wildly wrong totalAircoins (eg sum of multiple awards from another
+    // tab) so the delta would be huge.
+    const POST_QUIZ_FRESH  = { ...INITIAL_USER, totalAircoins: PRE_QUIZ_BALANCE + 5000, cycleAircoins: PRE_QUIZ_BALANCE + 5000 }
+
+    let meCallCount = 0
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/auth/me')) {
+        meCallCount += 1
+        // First call: hydrate with pre-quiz balance. Subsequent (refreshUser):
+        // return the implausible "post-award" snapshot.
+        const user = meCallCount === 1 ? HYDRATED_USER : POST_QUIZ_FRESH
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { user } }) })
+      }
+      if (url.includes('/api/users/levels'))       return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { levels: [] } }) })
+      if (url.includes('/api/admin/loading-time')) return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
+      if (url.includes('/api/briefs/'))            return Promise.resolve({ ok: true, status: 200, json: async () => BRIEF_RESPONSE })
+      if (url.includes('/api/games/quiz/start'))   return Promise.resolve({ ok: true, status: 200, json: async () => START_RESPONSE })
+      if (url.includes('/api/games/quiz/result'))  return Promise.resolve({ ok: true, status: 200, json: async () => RESULT_RESPONSE })
+      if (url.includes('/api/games/quiz/attempt') && url.includes('/finish')) {
+        // Force the fallback path: response is "lost" / malformed.
+        return Promise.reject(new TypeError('network error'))
+      }
+      if (url.includes('battle-of-order')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: { available: false } }) })
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
+    })
+
+    const queueSink   = []
+    const contextSink = { current: null, seededBriefRead: false }
+    render(<Harness preSeedBriefRead={false} queueSink={queueSink} contextSink={contextSink} />)
+    await waitFor(() => screen.getByText('What is the Typhoon?'))
+
+    fireEvent.click(screen.getByText('Multirole fighter'))
+    await waitFor(() => screen.getByRole('button', { name: /see results/i }))
+    fireEvent.click(screen.getByRole('button', { name: /see results/i }))
+    await waitFor(() => screen.getByRole('button', { name: /back to brief/i }), { timeout: 3000 })
+
+    // Implausible delta (5000) MUST be suppressed — no aircoin notif fires.
+    const aircoinNotifs = queueSink.filter(n => n.type === 'aircoin')
+    expect(aircoinNotifs).toHaveLength(0)
+  })
+
   it('repro: /finish returns a ReadableStream-like body that times out or hangs', async () => {
     // Simulate: apiFetch resolves with ok:true but .json() never resolves.
     // handleNext's `await finishPromiseRef` would hang forever.

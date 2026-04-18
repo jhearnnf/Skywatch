@@ -12,6 +12,7 @@ const AppSettings = require('../models/AppSettings');
 const Level = require('../models/Level');
 const User = require('../models/User');
 const AircoinLog = require('../models/AircoinLog');
+const SystemLog = require('../models/SystemLog');
 const { awardCoins } = require('../utils/awardCoins');
 const IntelligenceBrief     = require('../models/IntelligenceBrief');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
@@ -170,9 +171,8 @@ router.post('/quiz/start', protect, async (req, res) => {
 
 // POST /api/games/quiz/result — save per-question result (isCorrect computed server-side)
 router.post('/quiz/result', protect, async (req, res) => {
+  const { questionId, displayedAnswerIds, selectedAnswerId, timeTakenSeconds, gameSessionId, attemptId } = req.body;
   try {
-    const { questionId, displayedAnswerIds, selectedAnswerId, timeTakenSeconds, gameSessionId, attemptId } = req.body;
-
     // Compute isCorrect server-side
     const question  = await GameQuizQuestion.findById(questionId);
     const isCorrect = question ? question.correctAnswerId.equals(selectedAnswerId) : false;
@@ -192,6 +192,17 @@ router.post('/quiz/result', protect, async (req, res) => {
 
     res.status(201).json({ status: 'success', data: { result, isCorrect, aircoinsEarned: 0 } });
   } catch (err) {
+    // Silent per-question persistence failures are the main cause of missing
+    // quiz awards — surface them so admin can investigate even though the
+    // /finish backfill will most likely recover the score.
+    SystemLog.create({
+      type:          'quiz_result_persist_failure',
+      userId:        req.user?._id ?? null,
+      attemptId:     attemptId || null,
+      gameSessionId: gameSessionId || '',
+      failureReason: `Failed to persist quiz result: ${err.message}`,
+      details:       { questionId, selectedAnswerId },
+    }).catch(() => {});
     res.status(500).json({ message: err.message });
   }
 });
@@ -199,7 +210,7 @@ router.post('/quiz/result', protect, async (req, res) => {
 // POST /api/games/quiz/attempt/:id/finish — complete or abandon an attempt
 router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
   try {
-    const { status } = req.body; // 'completed' | 'abandoned'
+    const { status, answers } = req.body; // 'completed' | 'abandoned'
     if (!['completed', 'abandoned'].includes(status)) {
       return res.status(400).json({ message: 'status must be completed or abandoned' });
     }
@@ -207,10 +218,106 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
     const attempt = await GameSessionQuizAttempt.findOne({ _id: req.params.id, userId: req.user._id });
     if (!attempt) return res.status(404).json({ message: 'Attempt not found' });
 
-    const results = await GameSessionQuizResult.find({
+    // Idempotency: if /finish has already been called for this attempt, return
+    // the stored result without re-awarding. The client may legitimately retry
+    // (network blip, navigator.sendBeacon + foreground call, etc.) and we must
+    // never double-credit aircoins.
+    if (attempt.status !== 'in_progress') {
+      return res.json({ status: 'success', data: {
+        attempt,
+        won:               attempt.won,
+        aircoinsEarned:    0,                                  // already awarded on the original call
+        breakdown:         [],
+        isFirstAttempt:    false,                              // never trigger a fresh-award path
+        rankPromotion:     null,
+        cycleAircoins:     attempt.cycleAircoins ?? null,
+        totalAircoins:     null,
+        gameUnlocksGranted: [],
+        alreadyFinalised:   true,
+      }});
+    }
+
+    // Backfill any missing per-question results using the client-supplied answers[].
+    // /quiz/result is fire-and-forget, so a dropped request would silently drop a
+    // question from the score and push the user below the pass threshold. If the
+    // client sent the full answer set, upsert any rows that aren't already saved.
+    let existing = await GameSessionQuizResult.find({
       gameSessionId: attempt.gameSessionId,
       userId: req.user._id,
     });
+    const backfilledQuestionIds = [];
+    if (status === 'completed' && Array.isArray(answers) && answers.length > 0) {
+      const existingQuestionIds = new Set(existing.map(r => String(r.questionId)));
+      const missing = answers.filter(a => a?.questionId && !existingQuestionIds.has(String(a.questionId)));
+      if (missing.length > 0) {
+        // Look up the correct answers in one shot so we compute isCorrect server-side.
+        const questionDocs = await GameQuizQuestion.find({ _id: { $in: missing.map(a => a.questionId) } })
+          .select('correctAnswerId').lean();
+        const correctByQuestion = new Map(questionDocs.map(q => [String(q._id), String(q.correctAnswerId)]));
+        const toInsert = missing.map(a => ({
+          userId:             req.user._id,
+          questionId:          a.questionId,
+          gameSessionId:       attempt.gameSessionId,
+          attemptId:           attempt._id,
+          displayedAnswerIds:  Array.isArray(a.displayedAnswerIds) ? a.displayedAnswerIds : [],
+          selectedAnswerId:    a.selectedAnswerId ?? null,
+          isCorrect:           a.selectedAnswerId != null && correctByQuestion.get(String(a.questionId)) === String(a.selectedAnswerId),
+          timeTakenSeconds:    Number.isFinite(a.timeTakenSeconds) ? a.timeTakenSeconds : 0,
+          aircoinsEarned:      0,
+        }));
+        try {
+          await GameSessionQuizResult.insertMany(toInsert, { ordered: false });
+          backfilledQuestionIds.push(...toInsert.map(d => String(d.questionId)));
+          // Surface to admin so persistent drops get investigated.
+          SystemLog.create({
+            type:          'quiz_finish_failure',
+            userId:        req.user._id,
+            attemptId:     attempt._id,
+            gameSessionId: attempt.gameSessionId,
+            failureReason: `Backfilled ${toInsert.length} missing quiz result row(s) from client fallback — per-question POSTs likely failed`,
+            details: {
+              totalQuestions:      attempt.totalQuestions,
+              receivedFromClient:  answers.length,
+              existingBeforeBackfill: existing.length,
+              backfilled:          toInsert.length,
+              backfilledQuestionIds,
+            },
+          }).catch(logErr => console.error('[quiz/finish] SystemLog write failed:', logErr.message));
+          existing = await GameSessionQuizResult.find({
+            gameSessionId: attempt.gameSessionId,
+            userId: req.user._id,
+          });
+        } catch (insertErr) {
+          console.error('[quiz/finish] backfill insertMany failed:', insertErr.message);
+          SystemLog.create({
+            type:          'quiz_finish_failure',
+            userId:        req.user._id,
+            attemptId:     attempt._id,
+            gameSessionId: attempt.gameSessionId,
+            failureReason: `Backfill insertMany failed: ${insertErr.message}`,
+            details: { totalQuestions: attempt.totalQuestions, missing: missing.length },
+          }).catch(() => {});
+        }
+      }
+    }
+
+    const results = existing;
+    // If still short of totalQuestions after backfill, log so admin can spot a bug
+    // in the client's answer tracking (we scored whatever we have).
+    if (status === 'completed' && results.length < attempt.totalQuestions) {
+      SystemLog.create({
+        type:          'quiz_finish_failure',
+        userId:        req.user._id,
+        attemptId:     attempt._id,
+        gameSessionId: attempt.gameSessionId,
+        failureReason: `Scoring incomplete: only ${results.length}/${attempt.totalQuestions} results available after backfill`,
+        details: {
+          totalQuestions:   attempt.totalQuestions,
+          resultsAvailable: results.length,
+          clientSent:       Array.isArray(answers) ? answers.length : 0,
+        },
+      }).catch(() => {});
+    }
     const correct = results.filter(r => r.isCorrect).length;
     const total   = attempt.totalQuestions;
     const percentageCorrect = total > 0 ? Math.round((correct / total) * 100) : 0;
@@ -310,6 +417,14 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
 
     res.json({ status: 'success', data: { attempt, won, aircoinsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAircoins: attempt.cycleAircoins ?? null, totalAircoins: coinResult?.totalAircoins ?? null, gameUnlocksGranted } });
   } catch (err) {
+    // Log unexpected /finish failures so admin can spot missing-award reports.
+    SystemLog.create({
+      type:          'quiz_finish_failure',
+      userId:        req.user?._id ?? null,
+      attemptId:     req.params?.id ?? null,
+      failureReason: `Unhandled error in /quiz/finish: ${err.message}`,
+      details:       { stack: err.stack },
+    }).catch(() => {});
     res.status(500).json({ message: err.message });
   }
 });

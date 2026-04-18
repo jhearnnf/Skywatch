@@ -67,13 +67,38 @@ async function awardCoins(userId, amount, reason, label, briefId = null) {
 
     // Apply the cycle correction + rank change in one write. Guarded by the rank id
     // we observed so a concurrent promotion can't silently overwrite our update.
-    await User.findOneAndUpdate(
+    const cycleAdjustment = finalCycle - incremented.cycleAircoins;
+    const guarded = await User.findOneAndUpdate(
       { _id: userId, rank: incremented.rank?._id ?? null },
       {
-        $inc: { cycleAircoins: finalCycle - incremented.cycleAircoins },
+        $inc: { cycleAircoins: cycleAdjustment },
         ...(rankPromotion ? { $set: { rank: newRankId } } : {}),
       },
+      { new: true },
     );
+    // If the guard failed (concurrent award promoted the user out from under
+    // us), the cycle correction is now wrong relative to the current state. We
+    // must NOT silently leave cycleAircoins inconsistent. Reload, recompute the
+    // correction against the new state, and retry without the rank guard so we
+    // converge on a consistent total. Only correct the cycle — the other writer
+    // will handle their own rank promotion.
+    if (!guarded) {
+      const reloaded = await User.findById(userId).populate('rank');
+      if (reloaded) {
+        // The other writer applied amount via $inc too, so cycleAircoins now
+        // includes BOTH increments. Our `finalCycle` (post-promotion remainder)
+        // is still the correct end-state contribution from THIS award. The
+        // simplest safe correction is to write back the modular remainder:
+        // cycleAircoins should always be in [0, threshold). Take the existing
+        // cycle, modulo threshold, and persist it. Rank changes are owned by
+        // whichever writer crossed the threshold first; we don't fight them.
+        const currentCycle = reloaded.cycleAircoins ?? 0;
+        const correctedCycle = currentCycle % cycleThreshold;
+        if (correctedCycle !== currentCycle) {
+          await User.findByIdAndUpdate(userId, { $set: { cycleAircoins: correctedCycle } });
+        }
+      }
+    }
   }
 
   AircoinLog.create({ userId, amount, reason, label, briefId }).catch(() => {});

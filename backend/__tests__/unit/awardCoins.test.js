@@ -156,6 +156,47 @@ describe('awardCoins', () => {
     expect(result.rankPromotion.to.rankNumber).toBe(2);
   });
 
+  // ── Concurrency: two awards racing across the cycle threshold ────────────
+  //
+  // The pre-fix code did:
+  //   1. atomic $inc both totalAircoins and cycleAircoins
+  //   2. if cycleAircoins >= threshold, compute remainder + promote
+  //   3. write back the corrected cycleAircoins guarded by the OLD rank
+  //
+  // If two awardCoins() calls overlap and BOTH cross the threshold, the
+  // second write's guard ({ rank: oldRank }) silently fails because the
+  // rank already moved — leaving cycleAircoins inflated above the threshold.
+  //
+  // Post-fix: when the guarded write returns null we re-load the user and
+  // correct cycleAircoins to its modular remainder so it can never persist
+  // above the threshold. totalAircoins always reflects both increments.
+  it('concurrency: two simultaneous awards crossing the threshold leave consistent state', async () => {
+    const user = await createUser({ rank: rank1._id, totalAircoins: 14600, cycleAircoins: 14600 });
+
+    // Fire two overlapping awards. Each pushes cycle past the 14700 threshold.
+    const [r1, r2] = await Promise.all([
+      awardCoins(user._id, 200, 'test', 'race-1'),
+      awardCoins(user._id, 200, 'test', 'race-2'),
+    ]);
+
+    // Both must report a sane totalAircoins (atomic $inc accumulates both).
+    expect(r1.totalAircoins + r2.totalAircoins).toBeGreaterThanOrEqual(15000);
+
+    const updated = await User.findById(user._id).populate('rank');
+
+    // totalAircoins must reflect BOTH awards: 14600 + 200 + 200 = 15000.
+    expect(updated.totalAircoins).toBe(15000);
+
+    // CRITICAL: cycleAircoins must NEVER persist above the threshold (14700).
+    // Pre-fix this would leave it at ~14800, an inconsistent state where the
+    // user sits "above max XP" without their rank reflecting it.
+    expect(updated.cycleAircoins).toBeLessThan(14700);
+    expect(updated.cycleAircoins).toBeGreaterThanOrEqual(0);
+
+    // Rank should have advanced at least once (one or both calls promoted).
+    expect(updated.rank.rankNumber).toBeGreaterThanOrEqual(2);
+  });
+
   it('handles large award crossing multiple cycles with custom thresholds', async () => {
     await Level.deleteMany({});
     await seedLevels([

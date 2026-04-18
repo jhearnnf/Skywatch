@@ -368,6 +368,62 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     expect(res.body.data.aircoinsEarned).toBe(65);    // 5×10 + 15 bonus
   });
 
+  // ── Idempotency: a second /finish call on the same attempt MUST NOT
+  // double-award coins. The client may legitimately retry (network blip,
+  // navigator.sendBeacon firing on background + foreground call, etc.) and
+  // the server must return a safe no-op response without re-running awardCoins.
+  it('idempotency: a second /finish call on the same attempt does not award coins twice', async () => {
+    const User = require('../../models/User');
+    const { attemptId } = await runFullQuiz(true); // 5/5 correct
+
+    // First /finish call — awards 65 aircoins (5×10 + 15 perfect bonus)
+    const first = await request(app)
+      .post(`/api/games/quiz/attempt/${attemptId}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'completed' });
+    expect(first.status).toBe(200);
+    expect(first.body.data.aircoinsEarned).toBe(65);
+
+    const userAfterFirst = await User.findById(user._id);
+    expect(userAfterFirst.totalAircoins).toBe(65);
+
+    // Second /finish call on the same attempt
+    const second = await request(app)
+      .post(`/api/games/quiz/attempt/${attemptId}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'completed' });
+
+    expect(second.status).toBe(200);
+    expect(second.body.data.aircoinsEarned).toBe(0);          // no double-award
+    expect(second.body.data.alreadyFinalised).toBe(true);
+    expect(second.body.data.isFirstAttempt).toBe(false);      // never re-trigger first-award path
+
+    // CRITICAL: the user's totalAircoins must still be 65, not 130
+    const userAfterSecond = await User.findById(user._id);
+    expect(userAfterSecond.totalAircoins).toBe(65);
+  });
+
+  it('idempotency: completed → abandoned override is rejected (attempt stays completed)', async () => {
+    const { attemptId } = await runFullQuiz(true);
+    await request(app)
+      .post(`/api/games/quiz/attempt/${attemptId}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'completed' });
+
+    // Try to flip it to abandoned — should be a no-op
+    const flip = await request(app)
+      .post(`/api/games/quiz/attempt/${attemptId}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'abandoned' });
+
+    expect(flip.status).toBe(200);
+    expect(flip.body.data.alreadyFinalised).toBe(true);
+
+    const record = await GameSessionQuizAttempt.findById(attemptId);
+    expect(record.status).toBe('completed'); // unchanged
+    expect(record.won).toBe(true);
+  });
+
   it('does not award coins when user fails after a prior failed attempt', async () => {
     // First attempt — fail
     const { attemptId: a1 } = await runFullQuiz(false);
@@ -386,6 +442,96 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(false);
     expect(res.body.data.aircoinsEarned).toBe(0);
+  });
+
+  // ── Backfill: client-supplied answers[] recovers from dropped /result POSTs ─
+  it('backfill: /finish uses answers[] when per-question results are missing from DB', async () => {
+    const SystemLog = require('../../models/SystemLog');
+    await createQuizQuestions(brief._id, gameType._id, 5, 'easy');
+    const startRes = await request(app)
+      .post('/api/games/quiz/start')
+      .set('Cookie', cookie)
+      .send({ briefId: brief._id });
+    const { questions, gameSessionId, attemptId } = startRes.body.data;
+
+    // Simulate: only the FIRST 4 of 5 /result POSTs reached the server.
+    for (const q of questions.slice(0, 4)) {
+      await request(app)
+        .post('/api/games/quiz/result')
+        .set('Cookie', cookie)
+        .send({
+          questionId:         q._id,
+          displayedAnswerIds: q.answers.map(a => a._id),
+          selectedAnswerId:   q.correctAnswerId,
+          timeTakenSeconds:   3,
+          gameSessionId,
+          attemptId,
+        });
+    }
+
+    // Client sends the FULL answer set in the /finish body — server backfills #5.
+    const fullAnswers = questions.map(q => ({
+      questionId:         q._id,
+      displayedAnswerIds: q.answers.map(a => a._id),
+      selectedAnswerId:   q.correctAnswerId,
+      timeTakenSeconds:   3,
+    }));
+
+    const res = await request(app)
+      .post(`/api/games/quiz/attempt/${attemptId}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'completed', answers: fullAnswers });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.won).toBe(true);
+    // Full 65: 5×10 + 15 perfect score bonus — the dropped result was recovered.
+    expect(res.body.data.aircoinsEarned).toBe(65);
+
+    // Admin must see a SystemLog entry describing the backfill.
+    const logs = await SystemLog.find({ type: 'quiz_finish_failure' });
+    expect(logs.length).toBeGreaterThanOrEqual(1);
+    expect(logs[0].attemptId.toString()).toBe(attemptId.toString());
+    expect(logs[0].details?.backfilled).toBe(1);
+  });
+
+  it('backfill: is idempotent — answers[] with already-saved results does not duplicate rows', async () => {
+    const GameSessionQuizResult = require('../../models/GameSessionQuizResult');
+    const { attemptId, questions } = await runFullQuiz(true); // all 5 saved via /result
+
+    const gameSessionId = (await GameSessionQuizAttempt.findById(attemptId)).gameSessionId;
+    const beforeCount = await GameSessionQuizResult.countDocuments({ gameSessionId });
+    expect(beforeCount).toBe(5);
+
+    const fullAnswers = questions.map(q => ({
+      questionId:         q._id,
+      displayedAnswerIds: q.answers.map(a => a._id),
+      selectedAnswerId:   q.correctAnswerId,
+      timeTakenSeconds:   3,
+    }));
+
+    const res = await request(app)
+      .post(`/api/games/quiz/attempt/${attemptId}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'completed', answers: fullAnswers });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.aircoinsEarned).toBe(65);
+
+    // No duplicate rows created.
+    const afterCount = await GameSessionQuizResult.countDocuments({ gameSessionId });
+    expect(afterCount).toBe(5);
+  });
+
+  it('backfill: answers[] omitted → scoring uses only DB results (back-compat)', async () => {
+    // Old clients do not send answers[]. /finish must still work normally.
+    const { attemptId } = await runFullQuiz(true);
+    const res = await request(app)
+      .post(`/api/games/quiz/attempt/${attemptId}/finish`)
+      .set('Cookie', cookie)
+      .send({ status: 'completed' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.aircoinsEarned).toBe(65);
   });
 });
 

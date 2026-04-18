@@ -36,6 +36,13 @@ const systemLogSchema = new mongoose.Schema({
     reason: { type: String, default: '' },
   }],
 
+  // ── quiz_finish_failure + quiz_result_persist_failure ─────────────────────
+  userId:        { type: mongoose.Schema.Types.ObjectId, ref: 'User',                   default: null },
+  attemptId:     { type: mongoose.Schema.Types.ObjectId, ref: 'GameSessionQuizAttempt', default: null },
+  gameSessionId: { type: String, default: '' },
+  // Free-form structured detail (expected/actual answer counts, backfilled ids, etc.)
+  details:       { type: mongoose.Schema.Types.Mixed, default: null },
+
   // ── common error detail ────────────────────────────────────────────────────
   failureReason: { type: String, default: '' },
 

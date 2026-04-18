@@ -6366,11 +6366,13 @@ function SystemLogsTab({ API, onResolved }) {
   }
 
   const TYPE_LABELS = {
-    priority_ranking_failure:  { label: 'Priority Ranking Failed',  color: 'bg-red-900/40 text-red-300'    },
-    brief_generation_failure:  { label: 'Generation Failed',        color: 'bg-orange-900/40 text-orange-300' },
-    image_fetch_failure:       { label: 'Image Fetch Failed',       color: 'bg-amber-900/40 text-amber-300' },
-    bulk_generation_warnings:  { label: 'Generation Warnings',      color: 'bg-yellow-900/40 text-yellow-300' },
-    duplicate_leads_detected:  { label: 'Duplicate Leads Detected', color: 'bg-purple-900/40 text-purple-300' },
+    priority_ranking_failure:    { label: 'Priority Ranking Failed',  color: 'bg-red-900/40 text-red-300'    },
+    brief_generation_failure:    { label: 'Generation Failed',        color: 'bg-orange-900/40 text-orange-300' },
+    image_fetch_failure:         { label: 'Image Fetch Failed',       color: 'bg-amber-900/40 text-amber-300' },
+    bulk_generation_warnings:    { label: 'Generation Warnings',      color: 'bg-yellow-900/40 text-yellow-300' },
+    duplicate_leads_detected:    { label: 'Duplicate Leads Detected', color: 'bg-purple-900/40 text-purple-300' },
+    quiz_finish_failure:         { label: 'Quiz Finish Recovered',    color: 'bg-pink-900/40 text-pink-300' },
+    quiz_result_persist_failure: { label: 'Quiz Result Save Failed',  color: 'bg-pink-900/40 text-pink-300' },
   }
 
   return (

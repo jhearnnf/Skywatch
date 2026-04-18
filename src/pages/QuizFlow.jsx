@@ -384,6 +384,11 @@ export default function QuizFlow() {
   const finishedRef      = useRef(false)
   const attemptIdRef     = useRef(null)
   const booPreFetched    = useRef(false)
+  // Locally-retained answer set — sent in the /finish body so the server can
+  // backfill any per-question POSTs that failed silently. Without this, a
+  // single dropped /result request could push the user below the pass
+  // threshold and silently cost them their aircoin award.
+  const answersRef       = useRef([])
 
   // Load brief info + start quiz session
   useEffect(() => {
@@ -494,24 +499,59 @@ export default function QuizFlow() {
   // Pre-fired promise for the last question's /finish call — stored so
   // handleNext can await the already-in-flight request instead of starting fresh.
   const finishPromiseRef = useRef(null)
-  // Snapshot of totalAircoins at the moment /finish is fired, so the fallback
-  // path can detect coins awarded server-side even when the response is lost.
-  const preFinishTotalRef = useRef(0)
+  // Baseline totalAircoins captured BEFORE the quiz can mutate the balance, so
+  // the fallback path can detect coins awarded server-side even when the
+  // response is lost. `null` = "not yet captured" — fallback skips the delta
+  // notification rather than risk attributing the user's pre-existing balance
+  // to this quiz (the +entire-balance bug).
+  const preFinishTotalRef = useRef(null)
+  // Resolves once fireFinish has been called and finishPromiseRef has been set.
+  // handleNext awaits this so it can never observe a null finishPromiseRef
+  // simply because the user clicked "See Results" before handleAnswer's
+  // `await resultPromise` finished.
+  const finishStartedRef = useRef(null)
+  const finishStartedResolveRef = useRef(null)
+  if (finishStartedRef.current === null) {
+    finishStartedRef.current = new Promise(resolve => {
+      finishStartedResolveRef.current = resolve
+    })
+  }
+
+  // Continuously track the user's totalAircoins as the baseline UNTIL the
+  // quiz is finalised. Capturing at hydration alone would attribute any
+  // non-quiz awards (eg a brief-read +5 while the quiz was in progress) to
+  // the quiz reward in the fallback delta. Capturing only inside fireFinish
+  // leaves the baseline at its initial value of 0 if the user clicks "See
+  // Results" before the per-question POST resolves — that was the +entire-
+  // balance bug. Updating here while !finishedRef gives us both: an always-
+  // current baseline AND immunity from the click-race.
+  useEffect(() => {
+    if (!finishedRef.current && user?.totalAircoins != null) {
+      preFinishTotalRef.current = user.totalAircoins
+    }
+  }, [user?.totalAircoins])
 
   const fireFinish = useCallback(() => {
     if (finishedRef.current || !attemptId) return
     finishedRef.current = true
-    preFinishTotalRef.current = user?.totalAircoins ?? 0
+    // Belt-and-braces: re-capture the baseline if the useEffect above hasn't
+    // run yet (very short quiz with eager click). Never overwrite a captured
+    // baseline — the earliest snapshot is the most accurate.
+    if (preFinishTotalRef.current == null && user?.totalAircoins != null) {
+      preFinishTotalRef.current = user.totalAircoins
+    }
     const p = apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'completed' }),
+      body: JSON.stringify({ status: 'completed', answers: answersRef.current }),
     }).then(res => (res.ok ? res.json() : Promise.reject(new Error(`finish failed: ${res.status}`))))
     // Observe the rejection so it isn't flagged as "unhandled" during the gap
     // between fire and the await in handleNext. handleNext still sees the error
     // via its own await, because p itself remains the rejected promise.
     p.catch(() => {})
     finishPromiseRef.current = p
+    // Unblock handleNext if it was waiting on us.
+    finishStartedResolveRef.current?.()
   }, [API, attemptId, apiFetch, user?.totalAircoins])
 
   const handleAnswer = async (answerId) => {
@@ -523,6 +563,13 @@ export default function QuizFlow() {
     } else {
       playSound('quiz_answer_incorrect')
     }
+    // Record locally so /finish can backfill if the per-question POST fails.
+    answersRef.current.push({
+      questionId:         current._id,
+      displayedAnswerIds: current.answers.map(a => a._id),
+      selectedAnswerId:   answerId,
+      timeTakenSeconds:   Math.round((Date.now() - questionStartRef.current) / 1000),
+    })
     // Pre-fetch BOO availability in background after first answer
     preFetchBoo()
     const resultPromise = submitResult(answerId)
@@ -538,6 +585,23 @@ export default function QuizFlow() {
     const nextIdx = qIdx + 1
     if (nextIdx >= totalQs) {
       setFinishing(true)
+      // Race guard: the user can click "See Results" before handleAnswer's
+      // `await resultPromise` resolves and fires fireFinish. Without this wait,
+      // finishPromiseRef.current would be null, the success path would skip,
+      // and the fallback would compute delta from a 0 baseline → false +entire-
+      // balance notification. Wait for fireFinish (handleAnswer triggers it),
+      // with a hard timeout so the UI can never get permanently stuck.
+      if (!finishPromiseRef.current && !finishedRef.current) {
+        await Promise.race([
+          finishStartedRef.current,
+          new Promise(resolve => setTimeout(resolve, 10000)),
+        ])
+      }
+      // Defensive: if 10s elapsed and fireFinish still hasn't run (handleAnswer
+      // crashed?), fire it from here so we still attempt to award.
+      if (!finishPromiseRef.current && !finishedRef.current) {
+        fireFinish()
+      }
       let awarded = false
       try {
         const data = await (finishPromiseRef.current ?? Promise.resolve(null))
@@ -570,16 +634,28 @@ export default function QuizFlow() {
       // body with no aircoinsEarned field, or a post-award throw on the server),
       // re-sync the user and fire the aircoin notification based on the delta so
       // the UI never silently stays out of sync with the ledger.
-      if (!awarded && refreshUser) {
+      //
+      // Sanity guards (defence against the +entire-balance bug):
+      //   • Skip entirely if no baseline was ever captured — we cannot tell what
+      //     the user had before the quiz, so any delta is meaningless.
+      //   • Cap the delta at MAX_PLAUSIBLE_DELTA: a single quiz can award at
+      //     most ~115 aircoins (5 × 20 medium + 15 perfect bonus). Anything
+      //     above the cap is almost certainly a stale-baseline artefact and is
+      //     suppressed rather than shown as a false reward.
+      const MAX_PLAUSIBLE_DELTA = 250
+      if (!awarded && refreshUser && preFinishTotalRef.current != null) {
         try {
           const fresh = await refreshUser()
-          const delta = (fresh?.totalAircoins ?? 0) - (preFinishTotalRef.current ?? 0)
-          if (delta > 0 && awardAircoins) {
+          const baseline = preFinishTotalRef.current
+          const delta = (fresh?.totalAircoins ?? 0) - baseline
+          if (delta > 0 && delta <= MAX_PLAUSIBLE_DELTA && awardAircoins) {
             setXP(delta)
             awardAircoins(delta, 'Quiz complete', {
               totalAfter: fresh.totalAircoins,
               cycleAfter: fresh.cycleAircoins,
             })
+          } else if (delta > MAX_PLAUSIBLE_DELTA) {
+            console.warn('[quiz] suppressed implausible aircoin delta:', { delta, baseline, fresh: fresh?.totalAircoins })
           }
         } catch { /* swallow — best-effort resync */ }
       }
