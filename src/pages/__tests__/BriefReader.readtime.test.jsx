@@ -18,7 +18,7 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('../../context/AppTutorialContext', () => ({ useAppTutorial: () => ({ start: vi.fn() }) }))
-vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }) }))
+vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: { airstarsPerBriefRead: 5 } }) }))
 vi.mock('../../components/tutorial/TutorialModal', () => ({ default: () => null }))
 vi.mock('../../components/UpgradePrompt',          () => ({ default: () => null }))
 
@@ -63,14 +63,14 @@ function makeGetResponse(brief = BRIEF) {
 }
 
 function makeCompleteResponse() {
-  return { ok: true, json: async () => ({ status: 'success', data: { aircoinsEarned: 0, dailyCoinsEarned: 0, loginStreak: 0 } }) }
+  return { ok: true, json: async () => ({ status: 'success', data: { airstarsEarned: 0, dailyCoinsEarned: 0, loginStreak: 0 } }) }
 }
 
 function setupLoggedIn() {
   mockUseAuth.mockReturnValue({
     user:          { _id: 'user1' },
     API: '', apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
     setUser:       vi.fn(),
   })
 }
@@ -79,7 +79,7 @@ function setupGuest() {
   mockUseAuth.mockReturnValue({
     user:          null,
     API: '', apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
     setUser:       vi.fn(),
   })
 }

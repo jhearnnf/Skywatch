@@ -7,7 +7,7 @@
  * GameQuizQuestion docs but left the user's GameSessionQuizAttempt +
  * GameSessionQuizResult rows behind (causing a 0-questions breakdown in
  * game history). This script deletes those rows and reverses any quiz
- * AircoinLog entries tied to that brief for this user.
+ * AirstarLog entries tied to that brief for this user.
  *
  * Usage:
  *   node scripts/cleanupOrphanedParachuteQuizSession.js           (dry run)
@@ -20,7 +20,7 @@ const User                       = require('../models/User');
 const IntelligenceBrief          = require('../models/IntelligenceBrief');
 const GameSessionQuizAttempt     = require('../models/GameSessionQuizAttempt');
 const GameSessionQuizResult      = require('../models/GameSessionQuizResult');
-const AircoinLog                 = require('../models/AircoinLog');
+const AirstarLog                 = require('../models/AirstarLog');
 
 const TARGET_EMAIL = 'osmightymanos@hotmail.co.uk';
 const TARGET_BRIEF_TITLE = "UK's Largest Military Parachute Drop in Over a Decade";
@@ -32,14 +32,14 @@ async function run() {
   await mongoose.connect(process.env.MONGODB_URI);
   console.log('Connected to MongoDB');
 
-  const user = await User.findOne({ email: TARGET_EMAIL }).select('_id email totalAircoins cycleAircoins');
+  const user = await User.findOne({ email: TARGET_EMAIL }).select('_id email totalAirstars cycleAirstars');
   if (!user) { console.error(`User ${TARGET_EMAIL} not found`); return mongoose.disconnect(); }
 
   const brief = await IntelligenceBrief.findOne({ title: TARGET_BRIEF_TITLE }).select('_id title');
   if (!brief) { console.error(`Brief "${TARGET_BRIEF_TITLE}" not found`); return mongoose.disconnect(); }
 
   console.log(`User:  ${user.email}  (${user._id})`);
-  console.log(`       totalAircoins=${user.totalAircoins}, cycleAircoins=${user.cycleAircoins}`);
+  console.log(`       totalAirstars=${user.totalAirstars}, cycleAirstars=${user.cycleAirstars}`);
   console.log(`Brief: ${brief.title}  (${brief._id})\n`);
 
   // Find all attempts by this user on this brief
@@ -62,32 +62,32 @@ async function run() {
 
   console.log(`\nQuiz per-question results for those sessions: ${results.length}`);
 
-  // Aggregate quiz aircoin logs for this user + brief
-  const coinLogs = await AircoinLog.find({
+  // Aggregate quiz airstar logs for this user + brief
+  const coinLogs = await AirstarLog.find({
     userId: user._id,
     briefId: brief._id,
     reason: 'quiz',
   }).select('_id amount label createdAt');
 
   const coinsToReverse = coinLogs.reduce((sum, l) => sum + (l.amount ?? 0), 0);
-  console.log(`\nQuiz AircoinLog entries for this user + brief: ${coinLogs.length}  (total=${coinsToReverse} coins)`);
+  console.log(`\nQuiz AirstarLog entries for this user + brief: ${coinLogs.length}  (total=${coinsToReverse} coins)`);
   for (const l of coinLogs) {
     console.log(`  - ${l.amount} coins  "${l.label}"  ${l.createdAt?.toISOString?.() ?? ''}`);
   }
 
   // Brief-read coins should be LEFT ALONE — log them so we can verify
-  const readCoinLogs = await AircoinLog.countDocuments({
+  const readCoinLogs = await AirstarLog.countDocuments({
     userId: user._id,
     briefId: brief._id,
     reason: 'brief_read',
   });
-  console.log(`\nBrief-read AircoinLog entries for this user + brief (left untouched): ${readCoinLogs}`);
+  console.log(`\nBrief-read AirstarLog entries for this user + brief (left untouched): ${readCoinLogs}`);
 
-  const newTotal = Math.max(0, (user.totalAircoins ?? 0) - coinsToReverse);
-  const newCycle = Math.max(0, (user.cycleAircoins ?? 0) - coinsToReverse);
+  const newTotal = Math.max(0, (user.totalAirstars ?? 0) - coinsToReverse);
+  const newCycle = Math.max(0, (user.cycleAirstars ?? 0) - coinsToReverse);
   console.log(`\nProjected balance after reversal:`);
-  console.log(`  totalAircoins: ${user.totalAircoins} → ${newTotal}`);
-  console.log(`  cycleAircoins: ${user.cycleAircoins} → ${newCycle}`);
+  console.log(`  totalAirstars: ${user.totalAirstars} → ${newTotal}`);
+  console.log(`  cycleAirstars: ${user.cycleAirstars} → ${newCycle}`);
 
   if (!apply) {
     console.log(`\n(dry run) Nothing deleted. Re-run with --apply to perform cleanup.`);
@@ -96,8 +96,8 @@ async function run() {
 
   console.log(`\n── APPLYING CHANGES ──`);
 
-  user.totalAircoins = newTotal;
-  user.cycleAircoins = newCycle;
+  user.totalAirstars = newTotal;
+  user.cycleAirstars = newCycle;
   await user.save();
   console.log(`User balances updated.`);
 
@@ -113,12 +113,12 @@ async function run() {
   });
   console.log(`Deleted ${resultDel.deletedCount} GameSessionQuizResult row(s).`);
 
-  const coinDel = await AircoinLog.deleteMany({
+  const coinDel = await AirstarLog.deleteMany({
     userId: user._id,
     briefId: brief._id,
     reason: 'quiz',
   });
-  console.log(`Deleted ${coinDel.deletedCount} quiz AircoinLog row(s).`);
+  console.log(`Deleted ${coinDel.deletedCount} quiz AirstarLog row(s).`);
 
   console.log(`\nDone.`);
   return mongoose.disconnect();

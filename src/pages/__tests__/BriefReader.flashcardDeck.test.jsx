@@ -17,7 +17,7 @@ vi.mock('react-router-dom', () => ({
 }))
 
 vi.mock('../../context/AppSettingsContext', () => ({
-  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
+  useAppSettings: () => ({ settings: { airstarsPerBriefRead: 5 } }),
 }))
 
 vi.mock('../../context/AuthContext', () => ({
@@ -90,7 +90,7 @@ function setupLoggedIn() {
   mockUseAuth.mockReturnValue({
     user:          { _id: 'user1' },
     API: '', apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
     setUser:       vi.fn(),
   })
 }
@@ -99,7 +99,7 @@ function setupGuest() {
   mockUseAuth.mockReturnValue({
     user:          null,
     API: '', apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
     setUser:       vi.fn(),
   })
 }

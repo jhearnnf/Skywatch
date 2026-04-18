@@ -49,7 +49,7 @@ vi.mock('framer-motion', () => ({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function setup() {
-  mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Agent', totalAircoins: 0, cycleAircoins: 0 }, API: '', apiFetch: (...args) => fetch(...args) })
+  mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Agent', totalAirstars: 0, cycleAirstars: 0 }, API: '', apiFetch: (...args) => fetch(...args) })
   mockUseSettings.mockReturnValue({ settings: { freeCategories: ['News'], silverCategories: [], goldCategories: [], guestCategories: ['News'] } })
   global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'success', data: { counts: {}, stats: {}, briefs: [] } }) })
 }

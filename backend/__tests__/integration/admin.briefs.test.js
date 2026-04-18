@@ -21,7 +21,7 @@ const db       = require('../helpers/setupDb');
 const {
   createUser, createAdminUser, createBrief, createQuizQuestions,
   createGameType, createSettings, authCookie, createTrainingBooBriefs, createWonBooResult,
-  createPassedQuizAttempt, createQuizResult, createAircoinLog,
+  createPassedQuizAttempt, createQuizResult, createAirstarLog,
 } = require('../helpers/factories');
 const IntelligenceBrief               = require('../../models/IntelligenceBrief');
 const IntelligenceBriefRead           = require('../../models/IntelligenceBriefRead');
@@ -30,7 +30,7 @@ const GameSessionQuizAttempt          = require('../../models/GameSessionQuizAtt
 const GameSessionQuizResult           = require('../../models/GameSessionQuizResult');
 const GameOrderOfBattle               = require('../../models/GameOrderOfBattle');
 const GameSessionOrderOfBattleResult  = require('../../models/GameSessionOrderOfBattleResult');
-const AircoinLog                      = require('../../models/AircoinLog');
+const AirstarLog                      = require('../../models/AirstarLog');
 const User                            = require('../../models/User');
 const Media                           = require('../../models/Media');
 const mongoose                        = require('mongoose');
@@ -419,7 +419,7 @@ describe('POST /api/admin/briefs/:id/questions', () => {
 
   it('cascade-deletes prior quiz sessions and reverses quiz coins, leaving brief-read coins intact', async () => {
     const admin = await createAdminUser();
-    const user  = await createUser({ totalAircoins: 100, cycleAircoins: 100 });
+    const user  = await createUser({ totalAirstars: 100, cycleAirstars: 100 });
     const brief = await createBrief({ category: 'News' });
     const GameType = require('../../models/GameType');
     const gameType = await GameType.findOne({ gameTitle: 'quiz' });
@@ -430,15 +430,15 @@ describe('POST /api/admin/briefs/:id/questions', () => {
     for (const q of oldQs) {
       await createQuizResult(user._id, q._id);
     }
-    await createAircoinLog(user._id, brief._id, { amount: 30, reason: 'quiz', label: 'Quiz won' });
-    await createAircoinLog(user._id, brief._id, { amount: 10, reason: 'brief_read', label: 'Read brief' });
+    await createAirstarLog(user._id, brief._id, { amount: 30, reason: 'quiz', label: 'Quiz won' });
+    await createAirstarLog(user._id, brief._id, { amount: 10, reason: 'brief_read', label: 'Read brief' });
 
     // Unrelated brief's data must be untouched
     const otherBrief = await createBrief({ category: 'News', title: 'Other' });
     const otherQs    = await createQuizQuestions(otherBrief._id, gameType._id, 2, 'easy');
     await createPassedQuizAttempt(user._id, otherBrief._id);
     await createQuizResult(user._id, otherQs[0]._id);
-    await createAircoinLog(user._id, otherBrief._id, { amount: 20, reason: 'quiz', label: 'Quiz won' });
+    await createAirstarLog(user._id, otherBrief._id, { amount: 20, reason: 'quiz', label: 'Quiz won' });
 
     // Regenerate questions
     const res = await request(app)
@@ -454,30 +454,30 @@ describe('POST /api/admin/briefs/:id/questions', () => {
     expect(await GameSessionQuizResult.countDocuments({ questionId: { $in: oldQIds } })).toBe(0);
 
     // Quiz coins for this brief are reversed; brief-read coins remain
-    expect(await AircoinLog.countDocuments({ briefId: brief._id, reason: 'quiz' })).toBe(0);
-    expect(await AircoinLog.countDocuments({ briefId: brief._id, reason: 'brief_read' })).toBe(1);
+    expect(await AirstarLog.countDocuments({ briefId: brief._id, reason: 'quiz' })).toBe(0);
+    expect(await AirstarLog.countDocuments({ briefId: brief._id, reason: 'brief_read' })).toBe(1);
 
     // User balance: 100 - 30 (quiz reversed) = 70; brief_read coins were never in the balance seed
-    const refreshed = await User.findById(user._id).select('totalAircoins cycleAircoins');
-    expect(refreshed.totalAircoins).toBe(70);
-    expect(refreshed.cycleAircoins).toBe(70);
+    const refreshed = await User.findById(user._id).select('totalAirstars cycleAirstars');
+    expect(refreshed.totalAirstars).toBe(70);
+    expect(refreshed.cycleAirstars).toBe(70);
 
     // Unrelated brief untouched
     expect(await GameSessionQuizAttempt.countDocuments({ intelBriefId: otherBrief._id })).toBe(1);
     expect(await GameSessionQuizResult.countDocuments({ questionId: otherQs[0]._id })).toBe(1);
-    expect(await AircoinLog.countDocuments({ briefId: otherBrief._id, reason: 'quiz' })).toBe(1);
+    expect(await AirstarLog.countDocuments({ briefId: otherBrief._id, reason: 'quiz' })).toBe(1);
     expect(await GameQuizQuestion.countDocuments({ intelBriefId: otherBrief._id })).toBe(2);
   });
 
   it('floors user balance at 0 when reversed quiz coins exceed current balance', async () => {
     const admin = await createAdminUser();
-    const user  = await createUser({ totalAircoins: 10, cycleAircoins: 10 });
+    const user  = await createUser({ totalAirstars: 10, cycleAirstars: 10 });
     const brief = await createBrief({ category: 'News' });
     const GameType = require('../../models/GameType');
     const gameType = await GameType.findOne({ gameTitle: 'quiz' });
 
     await createQuizQuestions(brief._id, gameType._id, 1, 'easy');
-    await createAircoinLog(user._id, brief._id, { amount: 50, reason: 'quiz', label: 'Quiz won' });
+    await createAirstarLog(user._id, brief._id, { amount: 50, reason: 'quiz', label: 'Quiz won' });
 
     const res = await request(app)
       .post(`/api/admin/briefs/${brief._id}/questions`)
@@ -485,9 +485,9 @@ describe('POST /api/admin/briefs/:id/questions', () => {
       .send({ easyQuestions: makeQuestions(2), mediumQuestions: [] });
 
     expect(res.status).toBe(200);
-    const refreshed = await User.findById(user._id).select('totalAircoins cycleAircoins');
-    expect(refreshed.totalAircoins).toBe(0);
-    expect(refreshed.cycleAircoins).toBe(0);
+    const refreshed = await User.findById(user._id).select('totalAirstars cycleAirstars');
+    expect(refreshed.totalAirstars).toBe(0);
+    expect(refreshed.cycleAirstars).toBe(0);
   });
 
   it('works without a GameType (returns 500 with helpful message)', async () => {

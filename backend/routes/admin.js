@@ -16,7 +16,7 @@ const GameOrderOfBattle                   = require('../models/GameOrderOfBattle
 const GameFlashcardRecall                 = require('../models/GameFlashcardRecall');
 const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashcardRecallResult');
 const GameSessionWhereAircraftResult      = require('../models/GameSessionWhereAircraftResult');
-const AircoinLog             = require('../models/AircoinLog');
+const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const Rank  = require('../models/Rank');
 const Level = require('../models/Level');
@@ -39,6 +39,7 @@ const { reprioritizeCategory } = require('../utils/priorityRanking');
 const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
+const { callOpenRouter, featureMiddleware } = require('../utils/openRouter');
 
 // ── Shared quiz prompt fragments ──────────────────────────────────────────────
 // Single source of truth for answer format rules and core question rules,
@@ -205,7 +206,7 @@ router.get('/stats', async (_req, res) => {
       totalGamesPlayed, totalGamesCompleted, totalPerfectScores, totalGamesWon,
       easyLost, mediumLost,
       totalGamesAbandoned,
-      aircoinAgg, loginAgg,
+      airstarAgg, loginAgg,
       quizTimeAgg,
       booTotal, booWon, booDefeated, booAbandoned, booTimeAgg,
       wtaTotal, wtaWon, wtaAbandoned, wtaRound1Correct, wtaRound2Correct, wtaTimeAgg,
@@ -213,7 +214,7 @@ router.get('/stats', async (_req, res) => {
       tutorialAgg,
       aptitudeSyncTotal,
       aptitudeSyncCompleted,
-      aptitudeSyncAircoinsAgg,
+      aptitudeSyncAirstarsAgg,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ subscriptionTier: 'free' }),
@@ -232,7 +233,7 @@ router.get('/stats', async (_req, res) => {
       GameSessionQuizAttempt.countDocuments({ status: 'completed', difficulty: 'easy',   percentageCorrect: { $lt: passThresholdEasy } }),
       GameSessionQuizAttempt.countDocuments({ status: 'completed', difficulty: 'medium', percentageCorrect: { $lt: passThresholdMedium } }),
       GameSessionQuizAttempt.countDocuments({ status: 'abandoned' }),
-      User.aggregate([{ $group: { _id: null, total: { $sum: '$totalAircoins' } } }]),
+      User.aggregate([{ $group: { _id: null, total: { $sum: '$totalAirstars' } } }]),
       User.aggregate([{ $group: { _id: null, total: { $sum: { $size: { $ifNull: ['$logins', []] } } } } }]),
       // Quiz: sum time for attempts that have both timeStarted and timeFinished
       GameSessionQuizAttempt.aggregate([
@@ -293,7 +294,7 @@ router.get('/stats', async (_req, res) => {
       // AptitudeSync
       AptitudeSyncUsage.countDocuments(),
       AptitudeSyncUsage.countDocuments({ completedAt: { $ne: null } }),
-      AptitudeSyncUsage.aggregate([{ $group: { _id: null, total: { $sum: { $ifNull: ['$aircoinsEarned', 0] } } } }]),
+      AptitudeSyncUsage.aggregate([{ $group: { _id: null, total: { $sum: { $ifNull: ['$airstarsEarned', 0] } } } }]),
     ]);
 
     const aptitudeSyncAbandoned = aptitudeSyncTotal - aptitudeSyncCompleted;
@@ -319,7 +320,7 @@ router.get('/stats', async (_req, res) => {
           totalPerfectScores,
           totalGamesLost:      easyLost + mediumLost,
           totalGamesAbandoned: totalGamesAbandoned + aptitudeSyncAbandoned,
-          totalAircoinsEarned: aircoinAgg[0]?.total ?? 0,
+          totalAirstarsEarned: airstarAgg[0]?.total ?? 0,
           passThresholdEasy,
           passThresholdMedium,
           quizTotalSeconds: Math.round(quizTimeAgg[0]?.total ?? 0),
@@ -349,7 +350,7 @@ router.get('/stats', async (_req, res) => {
             total:          aptitudeSyncTotal,
             completed:      aptitudeSyncCompleted,
             abandoned:      aptitudeSyncAbandoned,
-            aircoinsEarned: aptitudeSyncAircoinsAgg[0]?.total ?? 0,
+            airstarsEarned: aptitudeSyncAirstarsAgg[0]?.total ?? 0,
           },
         },
         briefs: { totalBrifsRead, totalBrifsOpened, totalReadSeconds: readTimeAgg[0]?.total ?? 0 },
@@ -361,6 +362,157 @@ router.get('/stats', async (_req, res) => {
           serverUptimeSeconds: Math.floor(process.uptime()),
           totalLoadingMs: settings.totalLoadingMs ?? 0,
         },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── OpenRouter usage ────────────────────────────────────────────────────────
+
+const OpenRouterUsageLog = require('../models/OpenRouterUsageLog');
+const { fetchOpenRouterKeyUsage } = require('../utils/openRouter');
+
+// Cache lifetime numbers for 60s so repeated admin page loads don't hammer
+// OpenRouter's /api/v1/key endpoint.
+const lifetimeCache = { data: null, fetchedAt: 0 };
+const LIFETIME_CACHE_MS = 60 * 1000;
+
+async function getLifetimeUsage() {
+  if (lifetimeCache.data && (Date.now() - lifetimeCache.fetchedAt) < LIFETIME_CACHE_MS) {
+    return lifetimeCache.data;
+  }
+  const [main, aptitude] = await Promise.all([
+    fetchOpenRouterKeyUsage('main'),
+    fetchOpenRouterKeyUsage('aptitude'),
+  ]);
+  const data = { main, aptitude };
+  lifetimeCache.data = data;
+  lifetimeCache.fetchedAt = Date.now();
+  return data;
+}
+
+function startOfDay(d = new Date()) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+// GET /api/admin/openrouter/summary
+// Returns the 4 tile values: lifetime (from OpenRouter) + today (from our logs)
+// for both keys. byFeature breakdown included for expandable views.
+router.get('/openrouter/summary', async (_req, res) => {
+  try {
+    const todayStart = startOfDay();
+    const weekStart  = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [lifetime, todayAgg, weekAgg] = await Promise.all([
+      getLifetimeUsage(),
+      OpenRouterUsageLog.aggregate([
+        { $match: { createdAt: { $gte: todayStart } } },
+        { $group: { _id: { key: '$key', feature: '$feature' }, cost: { $sum: '$costUsd' }, calls: { $sum: 1 } } },
+      ]),
+      OpenRouterUsageLog.aggregate([
+        { $match: { createdAt: { $gte: weekStart } } },
+        { $group: { _id: '$key', cost: { $sum: '$costUsd' }, calls: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const today = { main: { cost: 0, calls: 0, byFeature: {} }, aptitude: { cost: 0, calls: 0, byFeature: {} } };
+    for (const row of todayAgg) {
+      const k = row._id.key;
+      if (!today[k]) continue;
+      today[k].cost += row.cost;
+      today[k].calls += row.calls;
+      today[k].byFeature[row._id.feature] = { cost: row.cost, calls: row.calls };
+    }
+    const last7Days = { main: { cost: 0, calls: 0 }, aptitude: { cost: 0, calls: 0 } };
+    for (const row of weekAgg) {
+      if (last7Days[row._id]) last7Days[row._id] = { cost: row.cost, calls: row.calls };
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        main: {
+          lifetime:  lifetime.main.usage,
+          lifetimeLabel: lifetime.main.label,
+          lifetimeError: lifetime.main.error,
+          today:     today.main.cost,
+          todayCalls: today.main.calls,
+          todayByFeature: today.main.byFeature,
+          last7Days: last7Days.main.cost,
+        },
+        aptitude: {
+          lifetime:  lifetime.aptitude.usage,
+          lifetimeLabel: lifetime.aptitude.label,
+          lifetimeError: lifetime.aptitude.error,
+          today:     today.aptitude.cost,
+          todayCalls: today.aptitude.calls,
+          todayByFeature: today.aptitude.byFeature,
+          last7Days: last7Days.aptitude.cost,
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/openrouter/logs
+// Query params: key, feature (CSV or repeated), from, to, limit, cursor
+// Returns filtered rows + totalCost/totalCalls across the full filter (not
+// just the page) so the UI can show a live-updating total at the top.
+router.get('/openrouter/logs', async (req, res) => {
+  try {
+    const { key, feature, from, to } = req.query;
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 100));
+    const cursor = req.query.cursor;
+
+    const match = {};
+    if (key === 'main' || key === 'aptitude') match.key = key;
+    if (feature) {
+      const list = Array.isArray(feature) ? feature : String(feature).split(',').map(s => s.trim()).filter(Boolean);
+      if (list.length) match.feature = { $in: list };
+    }
+    if (from || to) {
+      match.createdAt = {};
+      if (from) match.createdAt.$gte = new Date(from);
+      if (to)   match.createdAt.$lte = new Date(to);
+    }
+
+    const pageMatch = { ...match };
+    if (cursor) {
+      pageMatch.createdAt = { ...(pageMatch.createdAt || {}), $lt: new Date(cursor) };
+    }
+
+    const [rows, totals, featureList] = await Promise.all([
+      OpenRouterUsageLog.find(pageMatch)
+        .sort({ createdAt: -1 })
+        .limit(limit + 1)
+        .lean(),
+      OpenRouterUsageLog.aggregate([
+        { $match: match },
+        { $group: { _id: null, totalCost: { $sum: '$costUsd' }, totalCalls: { $sum: 1 }, totalTokens: { $sum: '$totalTokens' } } },
+      ]),
+      OpenRouterUsageLog.distinct('feature'),
+    ]);
+
+    const hasMore = rows.length > limit;
+    const page    = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore ? page[page.length - 1].createdAt.toISOString() : null;
+    const totalsRow = totals[0] || { totalCost: 0, totalCalls: 0, totalTokens: 0 };
+
+    res.json({
+      status: 'success',
+      data: {
+        rows:         page,
+        totalCost:    totalsRow.totalCost,
+        totalCalls:   totalsRow.totalCalls,
+        totalTokens:  totalsRow.totalTokens,
+        nextCursor,
+        features:     featureList.filter(Boolean).sort(),
       },
     });
   } catch (err) {
@@ -390,7 +542,7 @@ router.patch('/settings', requireReason, async (req, res) => {
     const actionType = (() => {
       if (updatedKeys.includes('betaTesterAutoGold')) return 'change_beta_settings';
       if (updatedKeys.some(k => k.startsWith('volume') || k.startsWith('soundEnabled') || k.startsWith('duration'))) return 'change_sound_settings';
-      if (updatedKeys.some(k => k.startsWith('ammo') || k.startsWith('aircoins') || k === 'trialDurationDays')) return 'change_economy_settings';
+      if (updatedKeys.some(k => k.startsWith('ammo') || k.startsWith('airstars') || k === 'trialDurationDays')) return 'change_economy_settings';
       if (updatedKeys.some(k => k.startsWith('passThreshold') || k.endsWith('AnswerCount') || k.startsWith('easyAnswer') || k.startsWith('mediumAnswer'))) return 'change_quiz_settings';
       if (updatedKeys.some(k => k === 'tutorialContent')) return 'edit_tutorial_content';
       if (updatedKeys.some(k => k.startsWith('pathway') || k.endsWith('Categories'))) return 'change_pathway_settings';
@@ -603,17 +755,17 @@ router.post('/users/:id/unban', requireReason, async (req, res) => {
   }
 });
 
-// GET /api/admin/users/:id/aircoins/history — paginated aircoin history for any user
-router.get('/users/:id/aircoins/history', async (req, res) => {
+// GET /api/admin/users/:id/airstars/history — paginated airstar history for any user
+router.get('/users/:id/airstars/history', async (req, res) => {
   try {
     const { page = 1, limit = 30 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
     const userId = req.params.id;
 
     const [logs, total, user] = await Promise.all([
-      AircoinLog.find({ userId }).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
-      AircoinLog.countDocuments({ userId }),
-      User.findById(userId).select('totalAircoins agentNumber').lean(),
+      AirstarLog.find({ userId }).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
+      AirstarLog.countDocuments({ userId }),
+      User.findById(userId).select('totalAirstars agentNumber').lean(),
     ]);
 
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -631,7 +783,7 @@ router.delete('/users/:id', requireReason, async (req, res) => {
     }
     const userId = req.params.id;
     await Promise.all([
-      AircoinLog.deleteMany({ userId }),
+      AirstarLog.deleteMany({ userId }),
       GameSessionQuizResult.deleteMany({ userId }),
       GameSessionQuizAttempt.deleteMany({ userId }),
       GameSessionOrderOfBattleResult.deleteMany({ userId }),
@@ -790,16 +942,16 @@ async function cleanupUserGameHistory(userId) {
 // POST /api/admin/users/:id/reset-stats
 router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
   try {
-    const fields = Array.isArray(req.body.fields) ? req.body.fields : ['aircoins', 'gameHistory', 'intelBriefsRead'];
+    const fields = Array.isArray(req.body.fields) ? req.body.fields : ['airstars', 'gameHistory', 'intelBriefsRead'];
     const userUpdates = {};
     const ops = [];
 
-    if (fields.includes('aircoins')) {
+    if (fields.includes('airstars')) {
       const acRank = await Rank.findOne({ rankNumber: 1 }).select('_id');
-      userUpdates.totalAircoins = 0;
-      userUpdates.cycleAircoins = 0;
+      userUpdates.totalAirstars = 0;
+      userUpdates.cycleAirstars = 0;
       userUpdates.rank = acRank?._id ?? null;
-      ops.push(AircoinLog.deleteMany({ userId: req.params.id }));
+      ops.push(AirstarLog.deleteMany({ userId: req.params.id }));
     }
     if (fields.includes('gameHistory')) {
       userUpdates.gameTypesSeen = [];
@@ -844,23 +996,23 @@ router.post('/users/:id/reset-game-badges', requireReason, async (req, res) => {
   }
 });
 
-// POST /api/admin/award-coins — award test coins to the admin's own account
+// POST /api/admin/award-coins — award test airstars to the admin's own account
 router.post('/award-coins', async (req, res) => {
   try {
     const { amount } = req.body;
     const parsed = parseInt(amount, 10);
     if (!parsed || parsed <= 0) return res.status(400).json({ message: 'Amount must be a positive integer' });
 
-    const result = await awardCoins(req.user._id, parsed, 'admin', 'Test Coins');
+    const result = await awardCoins(req.user._id, parsed, 'admin', 'Test Airstars');
 
-    await AdminAction.create({ userId: req.user._id, actionType: 'award_test_coins', reason: `Awarded ${parsed} test coins to self` });
-    res.json({ status: 'success', awarded: parsed, totalAircoins: result.totalAircoins, cycleAircoins: result.cycleAircoins, rankPromotion: result.rankPromotion });
+    await AdminAction.create({ userId: req.user._id, actionType: 'award_test_coins', reason: `Awarded ${parsed} test airstars to self` });
+    res.json({ status: 'success', awarded: parsed, totalAirstars: result.totalAirstars, cycleAirstars: result.cycleAirstars, rankPromotion: result.rankPromotion });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// POST /api/admin/users/:id/award-coins — award aircoins to any user
+// POST /api/admin/users/:id/award-coins — award airstars to any user
 router.post('/users/:id/award-coins', requireReason, async (req, res) => {
   try {
     const { amount, reason } = req.body;
@@ -873,7 +1025,7 @@ router.post('/users/:id/award-coins', requireReason, async (req, res) => {
     const result = await awardCoins(target._id, parsed, 'admin', reason || 'Admin Award');
 
     await AdminAction.create({ userId: req.user._id, actionType: 'award_coins_to_user', reason: `Awarded ${parsed} coins to Agent ${target.agentNumber}: ${reason}`, targetUserId: target._id });
-    res.json({ status: 'success', awarded: parsed, totalAircoins: result.totalAircoins, cycleAircoins: result.cycleAircoins, rankPromotion: result.rankPromotion });
+    res.json({ status: 'success', awarded: parsed, totalAirstars: result.totalAirstars, cycleAirstars: result.cycleAirstars, rankPromotion: result.rankPromotion });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1301,8 +1453,9 @@ router.post('/briefs', requireReason, async (req, res) => {
       ).populate('media');
     } else {
       const createFields = { ...fields };
-      if ((createFields.status ?? 'published') === 'published' && !createFields.publishedAt) {
-        createFields.publishedAt = new Date();
+      if ((createFields.status ?? 'published') === 'published') {
+        createFields.status = 'published';
+        if (!createFields.publishedAt) createFields.publishedAt = new Date();
       }
       brief = await IntelligenceBrief.create(createFields);
     }
@@ -1402,16 +1555,16 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
       GameWheresThatAircraft.distinct('_id', { intelBriefId: briefId }),
     ]);
 
-    // ── Reverse aircoins per user (excluding daily_brief coins) ──────
-    const coinGroups = await AircoinLog.aggregate([
+    // ── Reverse airstars per user (excluding daily_brief coins) ──────
+    const coinGroups = await AirstarLog.aggregate([
       { $match: { briefId: new mongoose.Types.ObjectId(briefId) } },
       { $group: { _id: '$userId', total: { $sum: '$amount' } } },
     ]);
     await Promise.all(coinGroups.map(async ({ _id: userId, total }) => {
-      const u = await User.findById(userId).select('totalAircoins cycleAircoins');
+      const u = await User.findById(userId).select('totalAirstars cycleAirstars');
       if (!u) return;
-      u.totalAircoins = Math.max(0, (u.totalAircoins ?? 0) - total);
-      u.cycleAircoins = Math.max(0, (u.cycleAircoins ?? 0) - total);
+      u.totalAirstars = Math.max(0, (u.totalAirstars ?? 0) - total);
+      u.cycleAirstars = Math.max(0, (u.cycleAirstars ?? 0) - total);
       await u.save();
     }));
 
@@ -1426,7 +1579,7 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
       GameQuizQuestion.deleteMany({ intelBriefId: briefId }),
       GameSessionQuizAttempt.deleteMany({ intelBriefId: briefId }),
       GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
-      AircoinLog.deleteMany({ briefId }),
+      AirstarLog.deleteMany({ briefId }),
       // BOO cascade
       GameSessionOrderOfBattleResult.deleteMany({ gameId: { $in: booGameIds } }),
       GameOrderOfBattle.deleteMany({ anchorBriefId: briefId }),
@@ -1485,16 +1638,16 @@ async function cascadeDeleteBriefData(briefId) {
     GameWheresThatAircraft.distinct('_id', { intelBriefId: briefId }),
   ]);
 
-  // Step 2: reverse Aircoins per user
-  const coinGroups = await AircoinLog.aggregate([
+  // Step 2: reverse Airstars per user
+  const coinGroups = await AirstarLog.aggregate([
     { $match: { briefId: new mongoose.Types.ObjectId(briefId) } },
     { $group: { _id: '$userId', total: { $sum: '$amount' } } },
   ]);
   await Promise.all(coinGroups.map(async ({ _id: userId, total }) => {
-    const user = await User.findById(userId).select('totalAircoins cycleAircoins');
+    const user = await User.findById(userId).select('totalAirstars cycleAirstars');
     if (!user) return;
-    user.totalAircoins = Math.max(0, (user.totalAircoins ?? 0) - total);
-    user.cycleAircoins = Math.max(0, (user.cycleAircoins ?? 0) - total);
+    user.totalAirstars = Math.max(0, (user.totalAirstars ?? 0) - total);
+    user.cycleAirstars = Math.max(0, (user.cycleAirstars ?? 0) - total);
     await user.save();
   }));
 
@@ -1504,7 +1657,7 @@ async function cascadeDeleteBriefData(briefId) {
     quizQResult,
     quizAttemptResult,
     quizResultResult,
-    aircoinResult,
+    airstarResult,
     booResultResult,
     booGameResult,
     flashResultResult,
@@ -1522,7 +1675,7 @@ async function cascadeDeleteBriefData(briefId) {
     GameQuizQuestion.deleteMany({ intelBriefId: briefId }),
     GameSessionQuizAttempt.deleteMany({ intelBriefId: briefId }),
     GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
-    AircoinLog.deleteMany({ briefId: new mongoose.Types.ObjectId(briefId) }),
+    AirstarLog.deleteMany({ briefId: new mongoose.Types.ObjectId(briefId) }),
     GameSessionOrderOfBattleResult.deleteMany({ gameId: { $in: booGameIds } }),
     GameOrderOfBattle.deleteMany({ anchorBriefId: briefId }),
     GameSessionFlashcardRecallResult.deleteMany({ gameId: { $in: flashGameIds } }),
@@ -1555,7 +1708,7 @@ async function cascadeDeleteBriefData(briefId) {
     quizQuestionsDeleted:   quizQResult.deletedCount,
     quizAttemptsDeleted:    quizAttemptResult.deletedCount,
     quizResultsDeleted:     quizResultResult.deletedCount,
-    aircoinLogsDeleted:     aircoinResult.deletedCount,
+    airstarLogsDeleted:     airstarResult.deletedCount,
     booResultsDeleted:      booResultResult.deletedCount,
     booGamesDeleted:        booGameResult.deletedCount,
     flashResultsDeleted:    flashResultResult.deletedCount,
@@ -1604,22 +1757,22 @@ router.post('/briefs/:id/questions', async (req, res) => {
     const briefObjectId = new mongoose.Types.ObjectId(req.params.id);
     const oldQuestionIds = await GameQuizQuestion.distinct('_id', { intelBriefId: briefObjectId });
 
-    const quizCoinGroups = await AircoinLog.aggregate([
+    const quizCoinGroups = await AirstarLog.aggregate([
       { $match: { briefId: briefObjectId, reason: 'quiz' } },
       { $group: { _id: '$userId', total: { $sum: '$amount' } } },
     ]);
     await Promise.all(quizCoinGroups.map(async ({ _id: userId, total }) => {
-      const user = await User.findById(userId).select('totalAircoins cycleAircoins');
+      const user = await User.findById(userId).select('totalAirstars cycleAirstars');
       if (!user) return;
-      user.totalAircoins = Math.max(0, (user.totalAircoins ?? 0) - total);
-      user.cycleAircoins = Math.max(0, (user.cycleAircoins ?? 0) - total);
+      user.totalAirstars = Math.max(0, (user.totalAirstars ?? 0) - total);
+      user.cycleAirstars = Math.max(0, (user.cycleAirstars ?? 0) - total);
       await user.save();
     }));
 
     await Promise.all([
       GameSessionQuizResult.deleteMany({ questionId: { $in: oldQuestionIds } }),
       GameSessionQuizAttempt.deleteMany({ intelBriefId: briefObjectId }),
-      AircoinLog.deleteMany({ briefId: briefObjectId, reason: 'quiz' }),
+      AirstarLog.deleteMany({ briefId: briefObjectId, reason: 'quiz' }),
       GameQuizQuestion.deleteMany({ intelBriefId: briefObjectId }),
     ]);
 
@@ -1733,7 +1886,7 @@ router.patch('/media/:mediaId', async (req, res) => {
 // via sharp, uploads the cutout to Cloudinary, and stores cutoutUrl +
 // cutoutPublicId on the Media doc. The endpoint is safe to re-run — any
 // previous cutout for this Media is destroyed and replaced.
-router.post('/briefs/:id/media/:mediaId/extract-subject', async (req, res) => {
+router.post('/briefs/:id/media/:mediaId/extract-subject', featureMiddleware('extract-cutout'), async (req, res) => {
   try {
     const { id: briefId, mediaId } = req.params;
 
@@ -1898,7 +2051,7 @@ async function cleanupOrphanedMedia(mediaId) {
 }
 
 // POST /api/admin/briefs/:id/questions/bulk — replace all quiz questions for a brief
-router.post('/briefs/:id/questions/bulk', requireReason, async (req, res) => {
+router.post('/briefs/:id/questions/bulk', requireReason, featureMiddleware('generate-quiz-bulk'), async (req, res) => {
   try {
     const { easyQuestions = [], mediumQuestions = [], reason } = req.body;
     const brief = await IntelligenceBrief.findById(req.params.id);
@@ -1982,21 +2135,10 @@ router.delete('/briefs/:id/questions', requireReason, async (req, res) => {
 // All OpenRouter calls are made server-side so OPENROUTER_KEY never reaches the browser.
 
 async function openRouterChat(messages, model, maxTokens = 2048) {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
-      'X-Title': 'SkyWatch',
-    },
-    body: JSON.stringify({ model, messages, max_tokens: maxTokens }),
+  return callOpenRouter({
+    key:  'main',
+    body: { model, messages, max_tokens: maxTokens },
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 200)}`);
-  }
-  return res.json();
 }
 
 function extractBalanced(str, open, close) {
@@ -2328,7 +2470,7 @@ function booGameDataShape(category) {
 }
 
 // POST /api/admin/ai/news-headlines
-router.post('/ai/news-headlines', async (req, res) => {
+router.post('/ai/news-headlines', featureMiddleware('news-headlines'), async (req, res) => {
   try {
     const { date } = req.body; // YYYY-MM-DD string
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -2373,7 +2515,7 @@ router.post('/ai/news-headlines', async (req, res) => {
 // POST /api/admin/ai/news-headlines-month
 // Fetches up to 10 real RAF news headlines for a given calendar month (YYYY-MM).
 // Duplicate detection is done on the frontend using existing isSimilarTitle logic.
-router.post('/ai/news-headlines-month', async (req, res) => {
+router.post('/ai/news-headlines-month', featureMiddleware('news-headlines-month'), async (req, res) => {
   try {
     const { month } = req.body; // "YYYY-MM"
     if (!month || !/^\d{4}-\d{2}$/.test(month)) {
@@ -2410,7 +2552,7 @@ router.post('/ai/news-headlines-month', async (req, res) => {
 // POST /api/admin/ai/bulk-generate-news-item
 // Full server-side pipeline for a single news headline: generates content, keywords,
 // and image, then saves a new published News IntelligenceBrief to DB.
-router.post('/ai/bulk-generate-news-item', async (req, res) => {
+router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news-item'), async (req, res) => {
   try {
     const { headline, eventDate } = req.body;
     if (!headline) return res.status(400).json({ message: 'headline required' });
@@ -2618,7 +2760,7 @@ function buildDescriptionSectionsSpec({ strict = true } = {}) {
 }
 
 // POST /api/admin/ai/generate-brief
-router.post('/ai/generate-brief', async (req, res) => {
+router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (req, res) => {
   try {
     const { headline, topic, category, eventDate, isHistoric } = req.body;
     if (!headline && !topic) return res.status(400).json({ message: 'headline or topic required' });
@@ -2845,7 +2987,7 @@ function normTitle(s) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-router.post('/ai/generate-keywords', async (req, res) => {
+router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), async (req, res) => {
   try {
     const { description, existingKeywords = [], needed: bodyNeeded, title = '', briefId = null } = req.body;
     if (!description) return res.status(400).json({ message: 'description required' });
@@ -2963,7 +3105,7 @@ router.post('/ai/generate-keywords', async (req, res) => {
 // POST /api/admin/ai/generate-links
 // Generic linked-brief suggester. sourceCategory + linkType determine the prompt.
 // linkType: 'bases' | 'squadrons' | 'aircraft'
-router.post('/ai/generate-links', async (req, res) => {
+router.post('/ai/generate-links', featureMiddleware('generate-links'), async (req, res) => {
   try {
     const { sourceTitle, sourceDescription, sourceCategory, linkType, pool, isHistoric } = req.body;
     if (!sourceTitle) return res.status(400).json({ message: 'sourceTitle required' });
@@ -3005,7 +3147,7 @@ router.post('/ai/generate-links', async (req, res) => {
 // POST /api/admin/ai/generate-bases
 // Given an aircraft brief title + body and a list of available base briefs,
 // asks the AI which bases are home bases for this aircraft.
-router.post('/ai/generate-bases', async (req, res) => {
+router.post('/ai/generate-bases', featureMiddleware('generate-bases'), async (req, res) => {
   try {
     const { title, body, basesBriefs, isHistoric } = req.body;
     if (!title) return res.status(400).json({ message: 'title required' });
@@ -3045,7 +3187,7 @@ router.post('/ai/generate-bases', async (req, res) => {
 });
 
 // POST /api/admin/ai/generate-quiz
-router.post('/ai/generate-quiz', async (req, res) => {
+router.post('/ai/generate-quiz', featureMiddleware('generate-quiz'), async (req, res) => {
   try {
     const { title, description } = req.body;
     if (!title && !description) return res.status(400).json({ message: 'title or description required' });
@@ -3085,7 +3227,7 @@ router.post('/ai/generate-quiz', async (req, res) => {
 
 // POST /api/admin/ai/generate-quiz-missing
 // Generates `needed` new questions for a single difficulty tier, avoiding repeats of existing questions.
-router.post('/ai/generate-quiz-missing', async (req, res) => {
+router.post('/ai/generate-quiz-missing', featureMiddleware('generate-quiz-missing'), async (req, res) => {
   try {
     const { title, description, difficulty = 'easy', existingQuestions = [], needed = 1 } = req.body;
     if (!title && !description) return res.status(400).json({ message: 'title or description required' });
@@ -3365,7 +3507,7 @@ async function generateBriefContent(brief, aiSettings) {
 
 // POST /api/admin/ai/regenerate-brief/:id
 // Regenerates description sections, keywords, and quiz questions for an existing brief.
-router.post('/ai/regenerate-brief/:id', async (req, res) => {
+router.post('/ai/regenerate-brief/:id', featureMiddleware('regenerate-brief'), async (req, res) => {
   let brief;
   try {
     brief = await IntelligenceBrief.findById(req.params.id);
@@ -3433,7 +3575,7 @@ const BULK_LINK_CONFIG = {
   ],
 };
 
-router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
+router.post('/ai/bulk-generate-stub/:id', featureMiddleware('bulk-generate-stub'), async (req, res) => {
   let brief;
   try {
     brief = await IntelligenceBrief.findById(req.params.id);
@@ -3643,9 +3785,9 @@ router.post('/ai/bulk-generate-stub/:id', async (req, res) => {
 
 // POST /api/admin/ai/regenerate-description/:id
 // Regenerates the description sections for an existing brief.
-// Cascade-deletes all user data first (reads, games, questions, aircoins) because
+// Cascade-deletes all user data first (reads, games, questions, airstars) because
 // questions/answers derived from the old description become stale.
-router.post('/ai/regenerate-description/:id', requireReason, async (req, res) => {
+router.post('/ai/regenerate-description/:id', requireReason, featureMiddleware('regenerate-description'), async (req, res) => {
   try {
     const brief = await IntelligenceBrief.findById(req.params.id).select('title category');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
@@ -3702,7 +3844,7 @@ router.delete('/media/brief-image', async (req, res) => {
 // POST /api/admin/ai/generate-battle-order-data
 // Accepts { title, description, category } and returns the relevant gameData fields for that category.
 const BOO_ELIGIBLE = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases', 'Squadrons', 'Threats'];
-router.post('/ai/generate-battle-order-data', async (req, res) => {
+router.post('/ai/generate-battle-order-data', featureMiddleware('generate-battle-order-data'), async (req, res) => {
   try {
     const { title, description, category } = req.body;
     if (!title && !description) return res.status(400).json({ message: 'title or description required' });
@@ -3756,7 +3898,7 @@ router.post('/ai/generate-battle-order-data', async (req, res) => {
 // POST /api/admin/ai/generate-rank-data/:id
 // For Ranks category briefs: looks up rankHierarchyOrder deterministically from the title.
 // No AI call — uses the canonical RANK_HIERARCHY table to guarantee uniqueness and accuracy.
-router.post('/ai/generate-rank-data/:id', async (req, res) => {
+router.post('/ai/generate-rank-data/:id', featureMiddleware('generate-rank-data'), async (req, res) => {
   try {
     const brief = await IntelligenceBrief.findById(req.params.id).select('title category');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
@@ -3777,7 +3919,7 @@ router.post('/ai/generate-rank-data/:id', async (req, res) => {
 // Uses the shared generateBriefImages helper which deduplicates against the
 // existing Media collection: any term (or its resolved Wikipedia page title)
 // that matches an existing Media doc is reused instead of re-uploaded.
-router.post('/ai/generate-image', async (req, res) => {
+router.post('/ai/generate-image', featureMiddleware('generate-image'), async (req, res) => {
   try {
     const { title, subtitle } = req.body;
     if (!title) return res.status(400).json({ message: 'title is required' });
@@ -3818,12 +3960,12 @@ const QUIZ_QUESTIONS_PER_SESSION = 5;
 
 // Whitelist of AppSettings fields the economy apply endpoint may write.
 const ECONOMY_RATE_FIELDS = new Set([
-  'aircoinsPerBriefRead',
-  'aircoinsPerWinEasy', 'aircoinsPerWinMedium', 'aircoins100Percent',
-  'aircoinsOrderOfBattleEasy', 'aircoinsOrderOfBattleMedium',
-  'aircoinsWhereAircraftRound1', 'aircoinsWhereAircraftRound2', 'aircoinsWhereAircraftBonus',
-  'aircoinsFlashcardPerCard', 'aircoinsFlashcardPerfectBonus',
-  'aircoinsFirstLogin', 'aircoinsStreakBonus',
+  'airstarsPerBriefRead',
+  'airstarsPerWinEasy', 'airstarsPerWinMedium', 'airstars100Percent',
+  'airstarsOrderOfBattleEasy', 'airstarsOrderOfBattleMedium',
+  'airstarsWhereAircraftRound1', 'airstarsWhereAircraftRound2', 'airstarsWhereAircraftBonus',
+  'airstarsFlashcardPerCard', 'airstarsFlashcardPerfectBonus',
+  'airstarsFirstLogin', 'airstarsStreakBonus',
 ]);
 
 router.get('/economy-viability', async (req, res) => {
@@ -3841,14 +3983,14 @@ router.get('/economy-viability', async (req, res) => {
     // BOO-eligible: all briefs in BOO categories (assume stats will be present)
     const booEligibleBriefs = briefs.filter(b => BOO_CATS.has(b.category)).length;
 
-    const wtaPerBrief = (settings.aircoinsWhereAircraftRound1 ?? 5)
-                      + (settings.aircoinsWhereAircraftRound2 ?? 10)
-                      + (settings.aircoinsWhereAircraftBonus  ?? 5);
+    const wtaPerBrief = (settings.airstarsWhereAircraftRound1 ?? 5)
+                      + (settings.airstarsWhereAircraftRound2 ?? 10)
+                      + (settings.airstarsWhereAircraftBonus  ?? 5);
 
     // Compute live cycle threshold from Level docs (same logic as getCycleThreshold)
     let liveCycleThreshold = 0;
     for (const lv of levels) {
-      if (lv.aircoinsToNextLevel != null) liveCycleThreshold += lv.aircoinsToNextLevel;
+      if (lv.airstarsToNextLevel != null) liveCycleThreshold += lv.airstarsToNextLevel;
     }
     if (!liveCycleThreshold) liveCycleThreshold = CYCLE_THRESHOLD;
 
@@ -3863,8 +4005,8 @@ router.get('/economy-viability', async (req, res) => {
 
       let finalLevel = 1, cumulative = 0;
       for (const lv of levels) {
-        if (lv.aircoinsToNextLevel === null) { finalLevel = lv.levelNumber; break; }
-        cumulative += lv.aircoinsToNextLevel;
+        if (lv.airstarsToNextLevel === null) { finalLevel = lv.levelNumber; break; }
+        cumulative += lv.airstarsToNextLevel;
         if (cycleCoins < cumulative) { finalLevel = lv.levelNumber; break; }
         finalLevel = lv.levelNumber + 1;
       }
@@ -3879,13 +4021,13 @@ router.get('/economy-viability', async (req, res) => {
     function scenarioCoins(difficulty) {
       const isNormal = difficulty === 'normal';
       const n        = totalBriefs;
-      const reads    = n * (settings.aircoinsPerBriefRead ?? 5);
+      const reads    = n * (settings.airstarsPerBriefRead ?? 5);
       const quiz     = isNormal
-        ? n * QUIZ_QUESTIONS_PER_SESSION * (settings.aircoinsPerWinEasy   ?? 10) + n * (settings.aircoins100Percent ?? 15)
-        : n * QUIZ_QUESTIONS_PER_SESSION * (settings.aircoinsPerWinMedium ?? 20) + n * (settings.aircoins100Percent ?? 15);
+        ? n * QUIZ_QUESTIONS_PER_SESSION * (settings.airstarsPerWinEasy   ?? 10) + n * (settings.airstars100Percent ?? 15)
+        : n * QUIZ_QUESTIONS_PER_SESSION * (settings.airstarsPerWinMedium ?? 20) + n * (settings.airstars100Percent ?? 15);
       const boo = booEligibleBriefs * (isNormal
-        ? (settings.aircoinsOrderOfBattleEasy   ?? 8)
-        : (settings.aircoinsOrderOfBattleMedium ?? 18));
+        ? (settings.airstarsOrderOfBattleEasy   ?? 8)
+        : (settings.airstarsOrderOfBattleMedium ?? 18));
       const wta = wtaBriefs * wtaPerBrief;
       return { reads, quiz, boo, wta, total: reads + quiz + boo + wta };
     }
@@ -3900,24 +4042,24 @@ router.get('/economy-viability', async (req, res) => {
         aiQuestionsPerDifficulty: settings.aiQuestionsPerDifficulty ?? 7,
         quizQuestionsPerSession:  QUIZ_QUESTIONS_PER_SESSION,
         rates: {
-          aircoinsPerBriefRead:          settings.aircoinsPerBriefRead          ?? 5,
-          aircoinsPerWinEasy:            settings.aircoinsPerWinEasy            ?? 10,
-          aircoinsPerWinMedium:          settings.aircoinsPerWinMedium          ?? 20,
-          aircoins100Percent:            settings.aircoins100Percent            ?? 15,
-          aircoinsOrderOfBattleEasy:     settings.aircoinsOrderOfBattleEasy     ?? 8,
-          aircoinsOrderOfBattleMedium:   settings.aircoinsOrderOfBattleMedium   ?? 18,
-          aircoinsWhereAircraftRound1:   settings.aircoinsWhereAircraftRound1   ?? 5,
-          aircoinsWhereAircraftRound2:   settings.aircoinsWhereAircraftRound2   ?? 10,
-          aircoinsWhereAircraftBonus:    settings.aircoinsWhereAircraftBonus    ?? 5,
-          aircoinsFlashcardPerCard:      settings.aircoinsFlashcardPerCard      ?? 2,
-          aircoinsFlashcardPerfectBonus: settings.aircoinsFlashcardPerfectBonus ?? 5,
-          aircoinsFirstLogin:            settings.aircoinsFirstLogin            ?? 5,
-          aircoinsStreakBonus:           settings.aircoinsStreakBonus           ?? 2,
+          airstarsPerBriefRead:          settings.airstarsPerBriefRead          ?? 5,
+          airstarsPerWinEasy:            settings.airstarsPerWinEasy            ?? 10,
+          airstarsPerWinMedium:          settings.airstarsPerWinMedium          ?? 20,
+          airstars100Percent:            settings.airstars100Percent            ?? 15,
+          airstarsOrderOfBattleEasy:     settings.airstarsOrderOfBattleEasy     ?? 8,
+          airstarsOrderOfBattleMedium:   settings.airstarsOrderOfBattleMedium   ?? 18,
+          airstarsWhereAircraftRound1:   settings.airstarsWhereAircraftRound1   ?? 5,
+          airstarsWhereAircraftRound2:   settings.airstarsWhereAircraftRound2   ?? 10,
+          airstarsWhereAircraftBonus:    settings.airstarsWhereAircraftBonus    ?? 5,
+          airstarsFlashcardPerCard:      settings.airstarsFlashcardPerCard      ?? 2,
+          airstarsFlashcardPerfectBonus: settings.airstarsFlashcardPerfectBonus ?? 5,
+          airstarsFirstLogin:            settings.airstarsFirstLogin            ?? 5,
+          airstarsStreakBonus:           settings.airstarsStreakBonus           ?? 2,
         },
         cycleThreshold: liveCycleThreshold,
         totalRanks:     ranks.length,
         ranks:  ranks.map(r => ({ rankNumber: r.rankNumber, rankName: r.rankName })),
-        levels: levels.map(l => ({ levelNumber: l.levelNumber, aircoinsToNextLevel: l.aircoinsToNextLevel })),
+        levels: levels.map(l => ({ levelNumber: l.levelNumber, airstarsToNextLevel: l.airstarsToNextLevel })),
         normal:   { ...normalCoins,   ...calcProgression(normalCoins.total)   },
         advanced: { ...advancedCoins, ...calcProgression(advancedCoins.total) },
       },
@@ -3938,16 +4080,16 @@ router.patch('/economy/levels', async (req, res) => {
       if (typeof lv.levelNumber !== 'number' || lv.levelNumber < 1 || lv.levelNumber > 10) {
         return res.status(400).json({ message: `Invalid levelNumber: ${lv.levelNumber}` });
       }
-      if (lv.aircoinsToNextLevel !== null &&
-          (typeof lv.aircoinsToNextLevel !== 'number' || lv.aircoinsToNextLevel < 1)) {
-        return res.status(400).json({ message: `Invalid aircoinsToNextLevel for level ${lv.levelNumber}` });
+      if (lv.airstarsToNextLevel !== null &&
+          (typeof lv.airstarsToNextLevel !== 'number' || lv.airstarsToNextLevel < 1)) {
+        return res.status(400).json({ message: `Invalid airstarsToNextLevel for level ${lv.levelNumber}` });
       }
     }
     await Promise.all(
       levels.map(lv =>
         Level.findOneAndUpdate(
           { levelNumber: lv.levelNumber },
-          { aircoinsToNextLevel: lv.aircoinsToNextLevel },
+          { airstarsToNextLevel: lv.airstarsToNextLevel },
           { returnDocument: 'after' }
         )
       )
@@ -3991,9 +4133,9 @@ router.post('/economy/apply', async (req, res) => {
       if (typeof lv.levelNumber !== 'number' || lv.levelNumber < 1 || lv.levelNumber > 10) {
         return res.status(400).json({ message: `Invalid levelNumber: ${lv.levelNumber}` });
       }
-      if (lv.aircoinsToNextLevel !== null &&
-          (typeof lv.aircoinsToNextLevel !== 'number' || lv.aircoinsToNextLevel < 1)) {
-        return res.status(400).json({ message: `Invalid aircoinsToNextLevel for level ${lv.levelNumber}` });
+      if (lv.airstarsToNextLevel !== null &&
+          (typeof lv.airstarsToNextLevel !== 'number' || lv.airstarsToNextLevel < 1)) {
+        return res.status(400).json({ message: `Invalid airstarsToNextLevel for level ${lv.levelNumber}` });
       }
     }
 
@@ -4005,7 +4147,7 @@ router.post('/economy/apply', async (req, res) => {
       levels.map(lv =>
         Level.findOneAndUpdate(
           { levelNumber: lv.levelNumber },
-          { aircoinsToNextLevel: lv.aircoinsToNextLevel },
+          { airstarsToNextLevel: lv.airstarsToNextLevel },
           { returnDocument: 'after' }
         )
       )
@@ -4026,7 +4168,7 @@ router.post('/economy/apply', async (req, res) => {
 // POST /api/admin/ai/generate-mnemonic
 // Generates mnemonics for one stat (statKey provided) or all stats (statKey omitted).
 // Always returns { mnemonics: { key: sentence, ... } }.
-router.post('/ai/generate-mnemonic', async (req, res) => {
+router.post('/ai/generate-mnemonic', featureMiddleware('generate-mnemonic'), async (req, res) => {
   try {
     const { title, category, gameData, statKey } = req.body;
     if (!title || !category) return res.status(400).json({ message: 'title and category required' });
@@ -4064,7 +4206,7 @@ router.post('/ai/generate-mnemonic', async (req, res) => {
 // POST /api/admin/ai/generate-mnemonics-missing
 // Finds all published BOO-category briefs that have populated stats but no mnemonics,
 // generates and saves them. Returns a summary of what was processed.
-router.post('/ai/generate-mnemonics-missing', async (req, res) => {
+router.post('/ai/generate-mnemonics-missing', featureMiddleware('generate-mnemonics-missing'), async (req, res) => {
   try {
     const [briefs, missingSettings] = await Promise.all([
       IntelligenceBrief.find({

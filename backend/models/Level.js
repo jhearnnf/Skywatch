@@ -8,8 +8,8 @@ const levelSchema = new mongoose.Schema({
     min: 1,
     max: 10,
   },
-  // Aircoins required to advance to the next level (null = max level reached)
-  aircoinsToNextLevel: {
+  // Airstars required to advance to the next level (null = max level reached)
+  airstarsToNextLevel: {
     type: Number,
     default: null,
   },
@@ -23,16 +23,16 @@ levelSchema.statics.seedLevels = async function () {
   // Exponential-style curve: increments grow by ~100–150 each step
   // Cumulative totals: 0, 100, 350, 850, 1700, 3000, 4850, 7350, 10600, 14700
   const levels = [
-    { levelNumber: 1,  aircoinsToNextLevel: 100  },
-    { levelNumber: 2,  aircoinsToNextLevel: 250  },
-    { levelNumber: 3,  aircoinsToNextLevel: 500  },
-    { levelNumber: 4,  aircoinsToNextLevel: 850  },
-    { levelNumber: 5,  aircoinsToNextLevel: 1300 },
-    { levelNumber: 6,  aircoinsToNextLevel: 1850 },
-    { levelNumber: 7,  aircoinsToNextLevel: 2500 },
-    { levelNumber: 8,  aircoinsToNextLevel: 3250 },
-    { levelNumber: 9,  aircoinsToNextLevel: 4100 },
-    { levelNumber: 10, aircoinsToNextLevel: null  },
+    { levelNumber: 1,  airstarsToNextLevel: 100  },
+    { levelNumber: 2,  airstarsToNextLevel: 250  },
+    { levelNumber: 3,  airstarsToNextLevel: 500  },
+    { levelNumber: 4,  airstarsToNextLevel: 850  },
+    { levelNumber: 5,  airstarsToNextLevel: 1300 },
+    { levelNumber: 6,  airstarsToNextLevel: 1850 },
+    { levelNumber: 7,  airstarsToNextLevel: 2500 },
+    { levelNumber: 8,  airstarsToNextLevel: 3250 },
+    { levelNumber: 9,  airstarsToNextLevel: 4100 },
+    { levelNumber: 10, airstarsToNextLevel: null  },
   ];
 
   await this.insertMany(levels);

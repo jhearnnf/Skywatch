@@ -11,7 +11,7 @@ const GameQuizQuestion = require('../models/GameQuizQuestion');
 const AppSettings = require('../models/AppSettings');
 const Level = require('../models/Level');
 const User = require('../models/User');
-const AircoinLog = require('../models/AircoinLog');
+const AirstarLog = require('../models/AirstarLog');
 const SystemLog = require('../models/SystemLog');
 const { awardCoins } = require('../utils/awardCoins');
 const IntelligenceBrief     = require('../models/IntelligenceBrief');
@@ -187,10 +187,10 @@ router.post('/quiz/result', protect, async (req, res) => {
       isCorrect,
       gameSessionId,
       attemptId: attemptId || undefined,
-      aircoinsEarned: 0,
+      airstarsEarned: 0,
     });
 
-    res.status(201).json({ status: 'success', data: { result, isCorrect, aircoinsEarned: 0 } });
+    res.status(201).json({ status: 'success', data: { result, isCorrect, airstarsEarned: 0 } });
   } catch (err) {
     // Silent per-question persistence failures are the main cause of missing
     // quiz awards — surface them so admin can investigate even though the
@@ -221,17 +221,17 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
     // Idempotency: if /finish has already been called for this attempt, return
     // the stored result without re-awarding. The client may legitimately retry
     // (network blip, navigator.sendBeacon + foreground call, etc.) and we must
-    // never double-credit aircoins.
+    // never double-credit airstars.
     if (attempt.status !== 'in_progress') {
       return res.json({ status: 'success', data: {
         attempt,
         won:               attempt.won,
-        aircoinsEarned:    0,                                  // already awarded on the original call
+        airstarsEarned:    0,                                  // already awarded on the original call
         breakdown:         [],
         isFirstAttempt:    false,                              // never trigger a fresh-award path
         rankPromotion:     null,
-        cycleAircoins:     attempt.cycleAircoins ?? null,
-        totalAircoins:     null,
+        cycleAirstars:     attempt.cycleAirstars ?? null,
+        totalAirstars:     null,
         gameUnlocksGranted: [],
         alreadyFinalised:   true,
       }});
@@ -263,7 +263,7 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
           selectedAnswerId:    a.selectedAnswerId ?? null,
           isCorrect:           a.selectedAnswerId != null && correctByQuestion.get(String(a.questionId)) === String(a.selectedAnswerId),
           timeTakenSeconds:    Number.isFinite(a.timeTakenSeconds) ? a.timeTakenSeconds : 0,
-          aircoinsEarned:      0,
+          airstarsEarned:      0,
         }));
         try {
           await GameSessionQuizResult.insertMany(toInsert, { ordered: false });
@@ -334,28 +334,28 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
       : null;
 
     // Award coins only on first win
-    let aircoinsEarned = 0;
+    let airstarsEarned = 0;
     let coinResult     = null;
     const breakdown = [];
     if (won && attempt.isFirstAttempt) {
       const coinRate   = attempt.difficulty === 'medium'
-        ? (settings.aircoinsPerWinMedium ?? 20)
-        : (settings.aircoinsPerWinEasy   ?? 10);
+        ? (settings.airstarsPerWinMedium ?? 20)
+        : (settings.airstarsPerWinEasy   ?? 10);
       const perCorrect = correct * coinRate;
       if (perCorrect > 0) {
-        aircoinsEarned += perCorrect;
+        airstarsEarned += perCorrect;
         breakdown.push({ label: `${correct} correct answer${correct !== 1 ? 's' : ''} × ${coinRate}`, amount: perCorrect });
       }
       // Bonus for 100% score
       if (correct === total) {
-        const bonus = settings.aircoins100Percent ?? 15;
-        aircoinsEarned += bonus;
+        const bonus = settings.airstars100Percent ?? 15;
+        airstarsEarned += bonus;
         breakdown.push({ label: 'Perfect score bonus', amount: bonus });
       }
-      if (aircoinsEarned > 0) {
-        coinResult = await awardCoins(req.user._id, aircoinsEarned, 'quiz', `Quiz (${attempt.difficulty}): ${brief?.title ?? 'Unknown Brief'} — ${correct}/${total} correct`, attempt.intelBriefId);
+      if (airstarsEarned > 0) {
+        coinResult = await awardCoins(req.user._id, airstarsEarned, 'quiz', `Quiz (${attempt.difficulty}): ${brief?.title ?? 'Unknown Brief'} — ${correct}/${total} correct`, attempt.intelBriefId);
         attempt.rankPromotion = coinResult.rankPromotion;
-        attempt.cycleAircoins = coinResult.cycleAircoins;
+        attempt.cycleAirstars = coinResult.cycleAirstars;
       }
     }
 
@@ -364,7 +364,7 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
     attempt.timeFinished      = new Date();
     attempt.correctAnswers    = correct;
     attempt.percentageCorrect = percentageCorrect;
-    attempt.aircoinsEarned    = aircoinsEarned;
+    attempt.airstarsEarned    = airstarsEarned;
     // Non-fatal: coins are already in the ledger; a persistence blip on the
     // attempt record must not 500 the response and hide the award from the UI.
     try {
@@ -415,7 +415,7 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
       console.error('[quiz/finish] BOO unlock detection failed:', booErr);
     }
 
-    res.json({ status: 'success', data: { attempt, won, aircoinsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAircoins: attempt.cycleAircoins ?? null, totalAircoins: coinResult?.totalAircoins ?? null, gameUnlocksGranted } });
+    res.json({ status: 'success', data: { attempt, won, airstarsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAirstars: attempt.cycleAirstars ?? null, totalAirstars: coinResult?.totalAirstars ?? null, gameUnlocksGranted } });
   } catch (err) {
     // Log unexpected /finish failures so admin can spot missing-award reports.
     SystemLog.create({
@@ -1192,10 +1192,10 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
     }
 
     const settings        = await AppSettings.getSettings();
-    let aircoinsEarned    = 0;
+    let airstarsEarned    = 0;
     let rankPromotion     = null;
-    let cycleAircoins     = null;
-    let totalAircoins     = null;
+    let cycleAirstars     = null;
+    let totalAirstars     = null;
 
     if (won) {
       // Only award coins on first win for this brief + orderType + difficulty combination
@@ -1213,19 +1213,19 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
       }));
 
       if (isFirstWin) {
-        aircoinsEarned = game.difficulty === 'medium'
-          ? (settings.aircoinsOrderOfBattleMedium ?? 18)
-          : (settings.aircoinsOrderOfBattleEasy   ?? 8);
+        airstarsEarned = game.difficulty === 'medium'
+          ? (settings.airstarsOrderOfBattleMedium ?? 18)
+          : (settings.airstarsOrderOfBattleEasy   ?? 8);
         const brief      = await IntelligenceBrief.findById(game.anchorBriefId).select('title').lean();
-        const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'battle_of_order',
+        const coinResult = await awardCoins(req.user._id, airstarsEarned, 'battle_of_order',
           `Battle of Order - Mini Game (${game.difficulty}): ${brief?.title ?? 'Unknown'} — ${game.orderType}`, game.anchorBriefId);
         rankPromotion = coinResult.rankPromotion;
-        cycleAircoins = coinResult.cycleAircoins;
-        totalAircoins = coinResult.totalAircoins;
+        cycleAirstars = coinResult.cycleAirstars;
+        totalAirstars = coinResult.totalAirstars;
       }
     }
 
-    await GameSessionOrderOfBattleResult.create({ userId: req.user._id, gameId, won, abandoned: false, userChoices, aircoinsEarned, timeTakenSeconds: timeTakenSeconds ?? null });
+    await GameSessionOrderOfBattleResult.create({ userId: req.user._id, gameId, won, abandoned: false, userChoices, airstarsEarned, timeTakenSeconds: timeTakenSeconds ?? null });
 
     // Build correct reveal (populate gameData for display values)
     const populated = await GameOrderOfBattle.findById(gameId)
@@ -1241,7 +1241,7 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
         displayValue:  getDisplayValue(game.orderType, c.briefId?.gameData),
       }));
 
-    res.json({ status: 'success', data: { won, aircoinsEarned, rankPromotion, cycleAircoins, totalAircoins, correctReveal, alreadyCompleted: won && aircoinsEarned === 0 } });
+    res.json({ status: 'success', data: { won, airstarsEarned, rankPromotion, cycleAirstars, totalAirstars, correctReveal, alreadyCompleted: won && airstarsEarned === 0 } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1252,7 +1252,7 @@ router.post('/battle-of-order/abandon', protect, async (req, res) => {
   try {
     const { gameId, timeTakenSeconds } = req.body;
     if (gameId) {
-      await GameSessionOrderOfBattleResult.create({ userId: req.user._id, gameId, won: false, abandoned: true, userChoices: [], aircoinsEarned: 0, timeTakenSeconds: timeTakenSeconds ?? null });
+      await GameSessionOrderOfBattleResult.create({ userId: req.user._id, gameId, won: false, abandoned: true, userChoices: [], airstarsEarned: 0, timeTakenSeconds: timeTakenSeconds ?? null });
     }
     res.json({ status: 'success' });
   } catch (err) {
@@ -1266,23 +1266,23 @@ router.post('/wheres-that-aircraft/result', protect, async (req, res) => {
     const { gameId, userAnswer, isCorrect, timeTakenSeconds, gameSessionId } = req.body;
 
     const settings       = await AppSettings.getSettings();
-    const aircoinsEarned = isCorrect ? settings.aircoinsPerWin : 0;
+    const airstarsEarned = isCorrect ? settings.airstarsPerWin : 0;
 
     const result = await GameSessionWheresThatAircraftResult.create({
-      userId: req.user._id, gameId, userAnswer, isCorrect, timeTakenSeconds, gameSessionId, aircoinsEarned,
+      userId: req.user._id, gameId, userAnswer, isCorrect, timeTakenSeconds, gameSessionId, airstarsEarned,
     });
 
     let rankPromotion = null;
-    let cycleAircoins = null;
-    let totalAircoins = null;
-    if (aircoinsEarned > 0) {
-      const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'wheres_that_aircraft', "Where's That Aircraft — correct identification");
+    let cycleAirstars = null;
+    let totalAirstars = null;
+    if (airstarsEarned > 0) {
+      const coinResult = await awardCoins(req.user._id, airstarsEarned, 'wheres_that_aircraft', "Where's That Aircraft — correct identification");
       rankPromotion = coinResult.rankPromotion;
-      cycleAircoins = coinResult.cycleAircoins;
-      totalAircoins = coinResult.totalAircoins;
+      cycleAirstars = coinResult.cycleAirstars;
+      totalAirstars = coinResult.totalAirstars;
     }
 
-    res.status(201).json({ status: 'success', data: { result, rankPromotion, cycleAircoins, totalAircoins, aircoinsEarned } });
+    res.status(201).json({ status: 'success', data: { result, rankPromotion, cycleAirstars, totalAirstars, airstarsEarned } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1429,24 +1429,24 @@ router.post('/flashcard-recall/result', protect, async (req, res) => {
     const settings        = await AppSettings.getSettings();
     const correctCount    = cardResults.filter(c => c.recalled).length;
     const allCorrect      = correctCount === cardResults.length;
-    const perCard         = settings.aircoinsFlashcardPerCard     ?? 2;
-    const perfectBonus    = settings.aircoinsFlashcardPerfectBonus ?? 5;
-    const aircoinsEarned  = (correctCount * perCard) + (allCorrect ? perfectBonus : 0);
+    const perCard         = settings.airstarsFlashcardPerCard     ?? 2;
+    const perfectBonus    = settings.airstarsFlashcardPerfectBonus ?? 5;
+    const airstarsEarned  = (correctCount * perCard) + (allCorrect ? perfectBonus : 0);
 
     const result = await GameSessionFlashcardRecallResult.create({
-      userId: req.user._id, gameId, cardResults, gameSessionId, aircoinsEarned,
+      userId: req.user._id, gameId, cardResults, gameSessionId, airstarsEarned,
     });
 
     const label = `Flashcard Recall — ${correctCount}/${cardResults.length}${allCorrect ? ' (perfect)' : ''}`;
-    const coinResult = await awardCoins(req.user._id, aircoinsEarned, 'flashcard', label);
+    const coinResult = await awardCoins(req.user._id, airstarsEarned, 'flashcard', label);
 
     res.status(201).json({
       status: 'success',
       data: {
         result,
         rankPromotion:  coinResult.rankPromotion,
-        cycleAircoins:  coinResult.cycleAircoins,
-        totalAircoins:  coinResult.totalAircoins,
+        cycleAirstars:  coinResult.cycleAirstars,
+        totalAirstars:  coinResult.totalAirstars,
       },
     });
   } catch (err) {
@@ -1465,7 +1465,7 @@ router.post('/flashcard-recall/abandon', protect, async (req, res) => {
       gameId,
       gameSessionId,
       cardResults:   Array.isArray(cardResults) ? cardResults : [],
-      aircoinsEarned: 0,
+      airstarsEarned: 0,
       abandoned:     true,
       cardsAnswered: Array.isArray(cardResults) ? cardResults.length : 0,
     });
@@ -1653,7 +1653,7 @@ router.post('/wheres-aircraft/round2', protect, async (req, res) => {
       correctBaseIds,
       correctBaseCount: correctBaseIds.length,
       bases:            basesWithReadStatus,
-      round1Aircoins:   settings.aircoinsWhereAircraftRound1 ?? 5,
+      round1Airstars:   settings.airstarsWhereAircraftRound1 ?? 5,
     }});
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1670,7 +1670,7 @@ router.post('/wheres-aircraft/submit', protect, async (req, res) => {
       selectedBaseIds, correctBaseIds,
       timeTakenSeconds,
       status, // 'completed' | 'abandoned'
-      round1AlreadyAwarded, // true if frontend already called awardAircoins for round 1
+      round1AlreadyAwarded, // true if frontend already called awardAirstars for round 1
     } = req.body;
 
     if (!aircraftBriefId || !gameSessionId) {
@@ -1680,19 +1680,19 @@ router.post('/wheres-aircraft/submit', protect, async (req, res) => {
     const settings = await AppSettings.getSettings();
     const won = !!(round1Correct && round2Attempted && round2Correct);
 
-    let aircoinsEarned = 0;
+    let airstarsEarned = 0;
     if (status === 'abandoned') {
       // no coins
     } else if (status === 'round1_only') {
       // User passed round 1 then abandoned — only award round 1 coins if not already given
-      if (round1Correct && !round1AlreadyAwarded) aircoinsEarned += (settings.aircoinsWhereAircraftRound1 ?? 5);
+      if (round1Correct && !round1AlreadyAwarded) airstarsEarned += (settings.airstarsWhereAircraftRound1 ?? 5);
     } else {
       // 'completed' — full award logic
       // Skip round 1 coins if frontend already awarded them (to avoid double-notification)
-      if (round1Correct && !round1AlreadyAwarded) aircoinsEarned += (settings.aircoinsWhereAircraftRound1 ?? 5);
+      if (round1Correct && !round1AlreadyAwarded) airstarsEarned += (settings.airstarsWhereAircraftRound1 ?? 5);
       if (round2Attempted && round2Correct) {
-        aircoinsEarned += (settings.aircoinsWhereAircraftRound2 ?? 10);
-        if (round1Correct) aircoinsEarned += (settings.aircoinsWhereAircraftBonus ?? 5); // full completion bonus
+        airstarsEarned += (settings.airstarsWhereAircraftRound2 ?? 10);
+        if (round1Correct) airstarsEarned += (settings.airstarsWhereAircraftBonus ?? 5); // full completion bonus
       }
     }
 
@@ -1707,25 +1707,25 @@ router.post('/wheres-aircraft/submit', protect, async (req, res) => {
       selectedBaseIds: selectedBaseIds ?? [],
       correctBaseIds:  correctBaseIds  ?? [],
       won,
-      aircoinsEarned,
+      airstarsEarned,
       timeTakenSeconds: timeTakenSeconds ?? 0,
     });
 
     let rankPromotion = null;
-    let cycleAircoins = null;
-    let totalAircoins = null;
-    if (aircoinsEarned > 0) {
+    let cycleAirstars = null;
+    let totalAirstars = null;
+    if (airstarsEarned > 0) {
       const coinResult = await awardCoins(
-        req.user._id, aircoinsEarned, 'wheres_aircraft',
+        req.user._id, airstarsEarned, 'wheres_aircraft',
         `Where's That Aircraft — ${won ? 'full completion' : 'partial'}`,
         aircraftBriefId
       );
       rankPromotion = coinResult.rankPromotion;
-      cycleAircoins = coinResult.cycleAircoins;
-      totalAircoins = coinResult.totalAircoins;
+      cycleAirstars = coinResult.cycleAirstars;
+      totalAirstars = coinResult.totalAirstars;
     }
 
-    res.status(201).json({ status: 'success', data: { won, aircoinsEarned, rankPromotion, cycleAircoins, totalAircoins } });
+    res.status(201).json({ status: 'success', data: { won, airstarsEarned, rankPromotion, cycleAirstars, totalAirstars } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1777,7 +1777,7 @@ router.get('/history', protect, async (req, res) => {
           correctAnswers:   a.correctAnswers,
           totalQuestions:   a.totalQuestions,
           percentageCorrect: a.percentageCorrect,
-          aircoinsEarned:   a.aircoinsEarned,
+          airstarsEarned:   a.airstarsEarned,
           isFirstAttempt:   a.isFirstAttempt,
           timeTakenSeconds: a.timeFinished && a.timeStarted
             ? Math.round((new Date(a.timeFinished) - new Date(a.timeStarted)) / 1000)
@@ -1794,7 +1794,7 @@ router.get('/history', protect, async (req, res) => {
         status:          r.isCorrect ? 'correct' : 'incorrect',
         isCorrect:       r.isCorrect,
         userAnswer:      r.userAnswer,
-        aircoinsEarned:  r.aircoinsEarned,
+        airstarsEarned:  r.airstarsEarned,
         timeTakenSeconds: r.timeTakenSeconds,
         canDrillDown:    false,
         resultCategory:  r.isCorrect ? 'passed' : 'failed',
@@ -1817,7 +1817,7 @@ router.get('/history', protect, async (req, res) => {
           round1Correct:   r.round1Correct,
           round2Attempted: r.round2Attempted,
           round2Correct:   r.round2Correct,
-          aircoinsEarned:  r.aircoinsEarned,
+          airstarsEarned:  r.airstarsEarned,
           timeTakenSeconds: r.timeTakenSeconds,
           canDrillDown:    r.status !== 'abandoned',
           resultCategory,
@@ -1834,7 +1834,7 @@ router.get('/history', protect, async (req, res) => {
         category:      r.gameId?.category,
         difficulty:    r.gameId?.difficulty,
         orderType:     r.gameId?.orderType,
-        aircoinsEarned:   r.aircoinsEarned,
+        airstarsEarned:   r.airstarsEarned,
         timeTakenSeconds: r.timeTakenSeconds ?? null,
         canDrillDown:     !r.abandoned,
         resultCategory:   r.abandoned ? 'abandoned' : r.won ? 'passed' : 'failed',
@@ -1846,7 +1846,7 @@ router.get('/history', protect, async (req, res) => {
         status:         r.abandoned ? 'abandoned' : 'completed',
         briefTitle:     r.briefId?.title ?? 'Unknown Brief',
         briefId:        r.briefId?._id ?? r.briefId,
-        aircoinsEarned: r.aircoinsEarned ?? null,
+        airstarsEarned: r.airstarsEarned ?? null,
         finalSummary:   r.finalSummary   ?? null,
         knowledgeGaps:  r.knowledgeGaps  ?? null,
         canDrillDown:   !r.abandoned && !!(r.finalSummary || r.knowledgeGaps),
@@ -1867,7 +1867,7 @@ router.get('/history', protect, async (req, res) => {
             recalled,
             cardCount:       total,
             timeTakenSeconds,
-            aircoinsEarned:  0,
+            airstarsEarned:  0,
             canDrillDown:    total > 0,
             resultCategory:  'abandoned',
           };
@@ -1881,7 +1881,7 @@ router.get('/history', protect, async (req, res) => {
           recalled,
           cardCount:       total,
           timeTakenSeconds,
-          aircoinsEarned:  r.aircoinsEarned,
+          airstarsEarned:  r.airstarsEarned,
           canDrillDown:    total > 0,
           resultCategory:  perfect ? 'perfect' : 'passed',
         };
@@ -2015,7 +2015,7 @@ router.get('/history/wheres-aircraft/:sessionId', protect, async (req, res) => {
       selectedBases:   (session.selectedBaseIds ?? []).map(b => ({ _id: b._id, title: b.title })),
       correctBases:    (session.correctBaseIds  ?? []).map(b => ({ _id: b._id, title: b.title })),
       won:             session.won,
-      aircoinsEarned:  session.aircoinsEarned,
+      airstarsEarned:  session.airstarsEarned,
     }});
   } catch (err) {
     res.status(500).json({ message: err.message });

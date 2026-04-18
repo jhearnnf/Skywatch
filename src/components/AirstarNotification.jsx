@@ -10,7 +10,7 @@ const MOTION_PROPS = {
   transition: { type: 'spring', damping: 18, stiffness: 280 },
 }
 
-export default function AircoinNotification({ amount, label = 'Brief Read Reward', onDone }) {
+export default function AirstarNotification({ amount, label = 'Brief Read Reward', onDone }) {
   return (
     <BaseNotification
       duration={2800}
@@ -32,7 +32,7 @@ export default function AircoinNotification({ amount, label = 'Brief Read Reward
         ))}
       </div>
       <div>
-        <p className="text-base font-extrabold">+{amount} Aircoins</p>
+        <p className="text-base font-extrabold">+{amount} Airstars</p>
         <p className="text-slate-400 text-xs font-semibold">{label}</p>
       </div>
     </BaseNotification>

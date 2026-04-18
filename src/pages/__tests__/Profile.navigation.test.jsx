@@ -45,8 +45,8 @@ vi.mock('../../data/mockData', () => ({
 }))
 
 const TEST_LEVELS = [
-  { levelNumber: 1, cumulativeAircoins: 0,   aircoinsToNextLevel: 100 },
-  { levelNumber: 2, cumulativeAircoins: 100,  aircoinsToNextLevel: 150 },
+  { levelNumber: 1, cumulativeAirstars: 0,   airstarsToNextLevel: 100 },
+  { levelNumber: 2, cumulativeAirstars: 100,  airstarsToNextLevel: 150 },
 ]
 
 vi.mock('../../context/AppSettingsContext', () => ({
@@ -65,8 +65,8 @@ const BASE_USER = {
   email:             'agent@test.com',
   displayName:       'Agent Test',
   agentNumber:       '1234567',
-  totalAircoins:     500,
-  cycleAircoins:     100,
+  totalAirstars:     500,
+  cycleAirstars:     100,
   loginStreak:       3,
   difficultySetting: 'easy',
   subscriptionTier:  'free',
@@ -139,10 +139,10 @@ describe('Profile — stat card navigation', () => {
     await waitFor(() => screen.getByText(/2 abandoned/))
   })
 
-  it('clicking "Aircoins" navigates to /aircoin-history', async () => {
+  it('clicking "Airstars" navigates to /airstar-history', async () => {
     render(<Profile />)
-    await waitFor(() => screen.getByText('Aircoins'))
-    fireEvent.click(screen.getByText('Aircoins').closest('button'))
-    expect(mockNavigate).toHaveBeenCalledWith('/aircoin-history')
+    await waitFor(() => screen.getByText('Airstars'))
+    fireEvent.click(screen.getByText('Airstars').closest('button'))
+    expect(mockNavigate).toHaveBeenCalledWith('/airstar-history')
   })
 })

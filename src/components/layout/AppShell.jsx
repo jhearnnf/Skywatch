@@ -20,7 +20,7 @@ export default function AppShell({ children }) {
         <Sidebar />
 
         {/* Main content — offset for sidebar on md+ */}
-        <main className="flex-1 md:ml-56 pb-20 md:pb-6 min-w-0 overflow-x-hidden">
+        <main className="flex-1 md:ml-56 pb-20 md:pb-6 min-w-0 overflow-x-clip">
           <div className="max-w-3xl mx-auto px-4 py-6">
             {children}
           </div>

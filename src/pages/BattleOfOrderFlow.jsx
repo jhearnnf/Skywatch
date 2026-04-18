@@ -353,7 +353,7 @@ function RelatedBriefs({ brief, navigate }) {
   )
 }
 
-function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, userChoices, orderType, onRetry, onBack, brief, navigate }) {
+function ResultsScreen({ won, airstarsEarned, alreadyCompleted, correctReveal, userChoices, orderType, onRetry, onBack, brief, navigate }) {
   const meta = ORDER_META[orderType] ?? { label: orderType, emoji: '📊' }
 
   // Build a map from choiceId → correctOrder for quick lookup
@@ -396,25 +396,25 @@ function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, u
         {won ? 'You arranged them perfectly.' : 'Review the correct order below.'}
       </p>
 
-      {aircoinsEarned > 0 && (
+      {airstarsEarned > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
           className="inline-flex items-center gap-2 bg-slate-200 border border-slate-300 text-white font-bold px-4 py-2 rounded-full mb-5 text-sm"
         >
-          <span className="star-silver">⭐</span> +{aircoinsEarned} Aircoins earned!
+          <span className="star-silver">⭐</span> +{airstarsEarned} Airstars earned!
         </motion.div>
       )}
 
-      {won && alreadyCompleted && aircoinsEarned === 0 && (
+      {won && alreadyCompleted && airstarsEarned === 0 && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
           className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-500 font-semibold px-4 py-2 rounded-full mb-5 text-sm"
         >
-          ✓ Already earned Aircoins for this order type
+          ✓ Already earned Airstars for this order type
         </motion.div>
       )}
 
@@ -510,7 +510,7 @@ function ResultsScreen({ won, aircoinsEarned, alreadyCompleted, correctReveal, u
 export default function BattleOfOrderFlow() {
   const { briefId }              = useParams()
   const navigate                 = useNavigate()
-  const { user, API, apiFetch, awardAircoins, refreshUser } = useAuth()
+  const { user, API, apiFetch, awardAirstars, refreshUser } = useAuth()
 
   // 'loading' | 'roulette' | 'generating' | 'game' | 'results' | 'unavailable'
   const [screen, setScreen]          = useState('loading')
@@ -525,7 +525,7 @@ export default function BattleOfOrderFlow() {
   const [orderType, setOrderType]    = useState(null)
 
   const [won, setWon]                    = useState(false)
-  const [aircoinsEarned, setAircoins]    = useState(0)
+  const [airstarsEarned, setAirstars]    = useState(0)
   const [alreadyCompleted, setAlreadyCompleted] = useState(false)
   const [correctReveal, setCorrectReveal]  = useState([])
   const [lastUserChoices, setLastUserChoices] = useState([])
@@ -654,7 +654,7 @@ export default function BattleOfOrderFlow() {
 
   const handleSubmit = async (userChoices, timeTakenSeconds) => {
     setLastUserChoices(userChoices)
-    const preSubmitTotal = user?.totalAircoins ?? 0
+    const preSubmitTotal = user?.totalAirstars ?? 0
     let awarded = false
 
     try {
@@ -668,20 +668,20 @@ export default function BattleOfOrderFlow() {
       abandonedRef.current = true
 
       const didWin  = data.data?.won            ?? false
-      const earned  = data.data?.aircoinsEarned ?? 0
+      const earned  = data.data?.airstarsEarned ?? 0
       const already = data.data?.alreadyCompleted ?? false
 
       setWon(didWin)
-      setAircoins(earned)
+      setAirstars(earned)
       setAlreadyCompleted(already)
       setCorrectReveal(data.data?.correctReveal ?? [])
 
       playSound(didWin ? 'battle_of_order_won' : 'battle_of_order_lost')
 
-      if (earned > 0 && awardAircoins) {
-        awardAircoins(earned, 'Battle of Order', {
-          cycleAfter:    data.data?.cycleAircoins  ?? undefined,
-          totalAfter:    data.data?.totalAircoins  ?? undefined,
+      if (earned > 0 && awardAirstars) {
+        awardAirstars(earned, 'Battle of Order', {
+          cycleAfter:    data.data?.cycleAirstars  ?? undefined,
+          totalAfter:    data.data?.totalAirstars  ?? undefined,
           rankPromotion: data.data?.rankPromotion  ?? null,
         })
         awarded = true
@@ -694,18 +694,18 @@ export default function BattleOfOrderFlow() {
 
     // Fallback: mirror QuizFlow — if the client didn't actually notify (malformed
     // response, request failure, or post-award throw), resync the user and fire
-    // the aircoin notification based on the delta so the UI stays in sync with
+    // the airstar notification based on the delta so the UI stays in sync with
     // the ledger.
     if (!awarded && refreshUser) {
       try {
         const fresh = await refreshUser()
-        const delta = (fresh?.totalAircoins ?? 0) - preSubmitTotal
-        if (delta > 0 && awardAircoins) {
-          awardAircoins(delta, 'Battle of Order', {
-            totalAfter: fresh.totalAircoins,
-            cycleAfter: fresh.cycleAircoins,
+        const delta = (fresh?.totalAirstars ?? 0) - preSubmitTotal
+        if (delta > 0 && awardAirstars) {
+          awardAirstars(delta, 'Battle of Order', {
+            totalAfter: fresh.totalAirstars,
+            cycleAfter: fresh.cycleAirstars,
           })
-          setAircoins(delta)
+          setAirstars(delta)
         }
       } catch { /* swallow — best-effort resync */ }
     }
@@ -843,7 +843,7 @@ export default function BattleOfOrderFlow() {
     return (
       <ResultsScreen
         won={won}
-        aircoinsEarned={aircoinsEarned}
+        airstarsEarned={airstarsEarned}
         alreadyCompleted={alreadyCompleted}
         correctReveal={correctReveal}
         userChoices={lastUserChoices}

@@ -52,7 +52,7 @@ function makeStartResponse(cards = MOCK_CARDS) {
   }
 }
 
-function setupFetch({ available = 10, startOk = true, cards = MOCK_CARDS, aircoinsEarned = 10 } = {}) {
+function setupFetch({ available = 10, startOk = true, cards = MOCK_CARDS, airstarsEarned = 10 } = {}) {
   global.fetch = vi.fn().mockImplementation((url, opts) => {
     if (url.includes('available-briefs'))
       return Promise.resolve({ ok: true, json: async () => ({ data: { count: available } }) })
@@ -66,18 +66,18 @@ function setupFetch({ available = 10, startOk = true, cards = MOCK_CARDS, aircoi
         ok: true,
         json: async () => ({
           status: 'success',
-          data: { result: { aircoinsEarned }, rankPromotion: null, cycleAircoins: 150, totalAircoins: 500 },
+          data: { result: { airstarsEarned }, rankPromotion: null, cycleAirstars: 150, totalAirstars: 500 },
         }),
       })
     return Promise.resolve({ ok: true, json: async () => ({}) })
   })
 }
 
-let mockAwardAircoins
+let mockAwardAirstars
 
 function setupAuth() {
-  mockAwardAircoins = vi.fn()
-  useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: mockAwardAircoins })
+  mockAwardAirstars = vi.fn()
+  useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch: (...args) => fetch(...args), awardAirstars: mockAwardAirstars })
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────
@@ -217,8 +217,8 @@ describe('FlashcardGameModal — game screen', () => {
 })
 
 describe('FlashcardGameModal — results screen', () => {
-  async function completeGame({ aircoinsEarned = 10 } = {}) {
-    setupFetch({ available: 10, cards: [MOCK_CARDS[0]], aircoinsEarned })
+  async function completeGame({ airstarsEarned = 10 } = {}) {
+    setupFetch({ available: 10, cards: [MOCK_CARDS[0]], airstarsEarned })
     render(<FlashcardGameModal onClose={vi.fn()} />)
     await waitFor(() => screen.getByTestId('flashcard-start-btn'))
     fireEvent.click(screen.getByTestId('flashcard-start-btn'))
@@ -245,19 +245,19 @@ describe('FlashcardGameModal — results screen', () => {
     expect(screen.getByTestId('flashcard-start-btn')).toBeDefined()
   })
 
-  it('calls awardAircoins with earned amount and server-returned cycle/total after game completes', async () => {
-    await completeGame({ aircoinsEarned: 10 })
-    expect(mockAwardAircoins).toHaveBeenCalledTimes(1)
-    expect(mockAwardAircoins).toHaveBeenCalledWith(
+  it('calls awardAirstars with earned amount and server-returned cycle/total after game completes', async () => {
+    await completeGame({ airstarsEarned: 10 })
+    expect(mockAwardAirstars).toHaveBeenCalledTimes(1)
+    expect(mockAwardAirstars).toHaveBeenCalledWith(
       10,
       'Flashcard Recall',
       expect.objectContaining({ cycleAfter: 150, totalAfter: 500 }),
     )
   })
 
-  it('does not call awardAircoins when aircoinsEarned is 0', async () => {
-    await completeGame({ aircoinsEarned: 0 })
-    expect(mockAwardAircoins).not.toHaveBeenCalled()
+  it('does not call awardAirstars when airstarsEarned is 0', async () => {
+    await completeGame({ airstarsEarned: 0 })
+    expect(mockAwardAirstars).not.toHaveBeenCalled()
   })
 })
 

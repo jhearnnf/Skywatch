@@ -32,7 +32,7 @@ function formatDate(iso) {
     ' · ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
-export default function AircoinHistory() {
+export default function AirstarHistory() {
   const { user, API, apiFetch } = useAuth()
   const navigate = useNavigate()
 
@@ -47,7 +47,7 @@ export default function AircoinHistory() {
   const fetchHistory = useCallback(async (p) => {
     setLoading(true); setError(null)
     try {
-      const res  = await apiFetch(`${API}/api/users/aircoins/history?page=${p}&limit=${LIMIT}`, { credentials: 'include' })
+      const res  = await apiFetch(`${API}/api/users/airstars/history?page=${p}&limit=${LIMIT}`, { credentials: 'include' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || 'Failed to load history')
       setLogs(json.data.logs)
@@ -68,21 +68,21 @@ export default function AircoinHistory() {
 
   return (
     <div className="max-w-lg mx-auto">
-      <SEO title="Aircoin History" description="View your Aircoin earning history." noIndex={true} />
+      <SEO title="Airstar History" description="View your Airstar earning history." noIndex={true} />
 
       {/* Header */}
       <div className="mb-5">
         <button onClick={() => navigate('/profile')} className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1">
           ← Back
         </button>
-        <h1 className="text-2xl font-extrabold text-slate-900">Aircoin Ledger</h1>
+        <h1 className="text-2xl font-extrabold text-slate-900">Airstar Ledger</h1>
         <p className="text-sm text-slate-500 mt-0.5">Your complete rewards history.</p>
       </div>
 
       {/* Balance card */}
       <div className="bg-gradient-to-r from-amber-500 to-amber-400 rounded-2xl p-4 mb-5 text-white card-shadow">
         <p className="text-xs font-bold text-amber-100 uppercase tracking-wider mb-1">Total Balance</p>
-        <p className="text-3xl font-extrabold"><span className="star-silver">⭐</span> {(user?.totalAircoins ?? 0).toLocaleString()}</p>
+        <p className="text-3xl font-extrabold"><span className="star-silver">⭐</span> {(user?.totalAirstars ?? 0).toLocaleString()}</p>
         <p className="text-amber-100 text-xs mt-1">{total} award{total !== 1 ? 's' : ''} on record</p>
       </div>
 
@@ -101,7 +101,7 @@ export default function AircoinHistory() {
         <div className="text-center py-16 text-slate-400">
           <div className="text-4xl mb-3 star-silver">⭐</div>
           <p className="font-semibold">No awards on record yet.</p>
-          <p className="text-sm mt-1">Read intel briefs and complete quizzes to earn Aircoins.</p>
+          <p className="text-sm mt-1">Read intel briefs and complete quizzes to earn Airstars.</p>
         </div>
       ) : (
         <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">

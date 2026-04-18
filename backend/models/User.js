@@ -42,8 +42,8 @@ const userSchema = new mongoose.Schema(
 
     // Progress
     rank:          { type: mongoose.Schema.Types.ObjectId, ref: 'Rank' },
-    totalAircoins: { type: Number, default: 0 },
-    cycleAircoins: { type: Number, default: 0 }, // aircoins in current rank cycle — resets to 0 on rank promotion
+    totalAirstars: { type: Number, default: 0 },
+    cycleAirstars: { type: Number, default: 0 }, // airstars in current rank cycle — resets to 0 on rank promotion
 
     // Tutorial progress
     // ⚠ When adding a new tutorial, add it here AND in TUTORIAL_STEPS in src/context/AppTutorialContext.jsx

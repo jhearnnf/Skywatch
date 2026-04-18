@@ -46,14 +46,14 @@ export default function TopBar() {
                 <span className="text-sm font-bold text-brand-700">{user.loginStreak ?? 0}</span>
               </button>
 
-              {/* Aircoins */}
+              {/* Airstars */}
               <button
                 onClick={() => navigate('/rankings')}
                 className="flex items-center gap-1 bg-slate-200 rounded-full px-3 py-1 border border-slate-300 hover:bg-slate-300 hover:border-slate-400 transition-colors outline-none focus:outline-none"
                 aria-label="View agent levels"
               >
                 <span className="text-base star-silver">⭐</span>
-                <span className="text-sm font-bold text-white">{user.totalAircoins ?? 0}</span>
+                <span className="text-sm font-bold text-white">{user.totalAirstars ?? 0}</span>
               </button>
 
               {/* Avatar / Rank */}

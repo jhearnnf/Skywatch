@@ -6,7 +6,7 @@ import BriefReader from '../BriefReader'
 
 const mockNavigate      = vi.hoisted(() => vi.fn())
 const mockSetUser       = vi.hoisted(() => vi.fn())
-const mockAwardAircoins = vi.hoisted(() => vi.fn())
+const mockAwardAirstars = vi.hoisted(() => vi.fn())
 const mockUseAuth       = vi.hoisted(() => vi.fn())
 
 vi.mock('../../utils/sound', () => ({ playSound: vi.fn(), stopAllSounds: vi.fn(), playGridRevealTone: vi.fn() }))
@@ -22,7 +22,7 @@ vi.mock('../../context/AuthContext', () => ({
 }))
 
 vi.mock('../../context/AppSettingsContext', () => ({
-  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
+  useAppSettings: () => ({ settings: { airstarsPerBriefRead: 5 } }),
 }))
 
 vi.mock('../../context/AppTutorialContext', () => ({
@@ -75,8 +75,8 @@ function makeCompleteResponse(overrides = {}) {
     json: async () => ({
       status: 'success',
       data: {
-        aircoinsEarned: 5, dailyCoinsEarned: 5,
-        loginStreak: 1, newTotalAircoins: 10, newCycleAircoins: 10, rankPromotion: null,
+        airstarsEarned: 5, dailyCoinsEarned: 5,
+        loginStreak: 1, newTotalAirstars: 10, newCycleAirstars: 10, rankPromotion: null,
         ...overrides,
       },
     }),
@@ -92,10 +92,10 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
     googleCallback = null
     mockNavigate.mockClear()
     mockSetUser.mockClear()
-    mockAwardAircoins.mockClear()
+    mockAwardAirstars.mockClear()
     sessionStorage.clear()
 
-    mockUseAuth.mockReturnValue({ user: null, setUser: mockSetUser, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: mockAwardAircoins })
+    mockUseAuth.mockReturnValue({ user: null, setUser: mockSetUser, API: '', apiFetch: (...args) => fetch(...args), awardAirstars: mockAwardAirstars })
 
     vi.stubEnv('VITE_GOOGLE_CLIENT_ID', 'test-client-id')
     window.google = {
@@ -124,7 +124,7 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
     await waitFor(() => screen.getByText('Brief Complete'))
   }
 
-  it('calls /complete and awardAircoins after Google sign-in on completion screen', async () => {
+  it('calls /complete and awardAirstars after Google sign-in on completion screen', async () => {
     await reachCompletionScreen()
 
     global.fetch = vi.fn()
@@ -138,7 +138,7 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
       const completeCalled = global.fetch.mock.calls.some(([url]) => url.includes('/complete'))
       expect(completeCalled).toBe(true)
     })
-    expect(mockAwardAircoins).toHaveBeenCalledWith(10, 'Daily Brief', expect.objectContaining({
+    expect(mockAwardAirstars).toHaveBeenCalledWith(10, 'Daily Brief', expect.objectContaining({
       cycleAfter: 10, totalAfter: 10,
     }))
   })
@@ -153,11 +153,11 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
     expect(googleCallback).not.toBeNull()
     await googleCallback({ credential: 'fake-token' })
 
-    await waitFor(() => expect(mockAwardAircoins).toHaveBeenCalled())
+    await waitFor(() => expect(mockAwardAirstars).toHaveBeenCalled())
     expect(mockNavigate).not.toHaveBeenCalled()
   })
 
-  it('does not call /complete or awardAircoins if Google auth fails', async () => {
+  it('does not call /complete or awardAirstars if Google auth fails', async () => {
     await reachCompletionScreen()
 
     global.fetch = vi.fn()
@@ -169,6 +169,6 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
     const completeCalled = global.fetch.mock.calls.some(([url]) => url.includes('/complete'))
     expect(completeCalled).toBe(false)
-    expect(mockAwardAircoins).not.toHaveBeenCalled()
+    expect(mockAwardAirstars).not.toHaveBeenCalled()
   })
 })

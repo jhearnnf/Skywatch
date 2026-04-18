@@ -359,7 +359,7 @@ export default function Play() {
             <div className="p-5">
               {!user ? (
                 <div className="text-center py-4">
-                  <p className="text-sm text-slate-500 mb-4">Sign in to take quizzes and earn Aircoins.</p>
+                  <p className="text-sm text-slate-500 mb-4">Sign in to take quizzes and earn Airstars.</p>
                   <Link
                     to="/login"
                     className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
@@ -489,7 +489,7 @@ export default function Play() {
             <div className="p-5">
               {!user ? (
                 <div className="text-center py-4">
-                  <p className="text-sm text-slate-500 mb-4">Sign in to run Flashcard drills and earn Aircoins.</p>
+                  <p className="text-sm text-slate-500 mb-4">Sign in to run Flashcard drills and earn Airstars.</p>
                   <Link
                     to="/login"
                     className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
@@ -574,7 +574,7 @@ export default function Play() {
             <div className="p-5">
               {!user ? (
                 <div className="text-center py-4">
-                  <p className="text-sm text-slate-500 mb-4">Sign in to play Battle of Order and earn Aircoins.</p>
+                  <p className="text-sm text-slate-500 mb-4">Sign in to play Battle of Order and earn Airstars.</p>
                   <Link
                     to="/login"
                     className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"

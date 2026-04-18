@@ -8,7 +8,7 @@
  *        - "Non-Commissioned Aircrew"         (merged into Master Aircrew)
  *        - "Chief of the Air Staff"           (appointment, not a rank)
  *   2. Cascade all dependent data for each deleted brief (reads, quiz Qs,
- *      game sessions, aircoin logs, media orphans, relationship back-refs).
+ *      game sessions, airstar logs, media orphans, relationship back-refs).
  *   3. Compact Ranks priorityNumbers to a gap-free 1..N on both IntelLead
  *      and IntelligenceBrief so the Learn Pathway stays coherent.
  *
@@ -31,7 +31,7 @@ const GameOrderOfBattle     = require('../models/GameOrderOfBattle');
 const GameSessionOrderOfBattleResult = require('../models/GameSessionOrderOfBattleResult');
 const GameFlashcardRecall   = require('../models/GameFlashcardRecall');
 const GameSessionFlashcardRecallResult = require('../models/GameSessionFlashcardRecallResult');
-const AircoinLog            = require('../models/AircoinLog');
+const AirstarLog            = require('../models/AirstarLog');
 const User                  = require('../models/User');
 
 // Optional models — load defensively in case any is absent
@@ -81,24 +81,24 @@ async function cascadeDeleteBrief(brief) {
     GameWheresThatAircraft ? GameWheresThatAircraft.distinct('_id', { intelBriefId: briefId }) : Promise.resolve([]),
   ]);
 
-  const coinGroups = await AircoinLog.aggregate([
+  const coinGroups = await AirstarLog.aggregate([
     { $match: { briefId: briefObjectId } },
     { $group: { _id: '$userId', total: { $sum: '$amount' } } },
   ]);
 
-  log(`  • AircoinLog entries to reverse: ${coinGroups.length} user(s), ` +
+  log(`  • AirstarLog entries to reverse: ${coinGroups.length} user(s), ` +
       `total coins=${coinGroups.reduce((s, g) => s + g.total, 0)}`);
   log(`  • Quiz questions: ${questionIds.length}, BOO games: ${booGameIds.length}, ` +
       `Flashcard games: ${flashGameIds.length}, WAA games: ${waaGameIds.length}`);
 
   if (!APPLY) return;
 
-  // Reverse aircoins
+  // Reverse airstars
   await Promise.all(coinGroups.map(async ({ _id: userId, total }) => {
-    const u = await User.findById(userId).select('totalAircoins cycleAircoins');
+    const u = await User.findById(userId).select('totalAirstars cycleAirstars');
     if (!u) return;
-    u.totalAircoins = Math.max(0, (u.totalAircoins ?? 0) - total);
-    u.cycleAircoins = Math.max(0, (u.cycleAircoins ?? 0) - total);
+    u.totalAirstars = Math.max(0, (u.totalAirstars ?? 0) - total);
+    u.cycleAirstars = Math.max(0, (u.cycleAirstars ?? 0) - total);
     await u.save();
   }));
 
@@ -111,7 +111,7 @@ async function cascadeDeleteBrief(brief) {
     } }),
     GameQuizQuestion.deleteMany({ intelBriefId: briefId }),
     GameSessionQuizResult.deleteMany({ questionId: { $in: questionIds } }),
-    AircoinLog.deleteMany({ briefId }),
+    AirstarLog.deleteMany({ briefId }),
     GameSessionOrderOfBattleResult.deleteMany({ gameId: { $in: booGameIds } }),
     GameOrderOfBattle.deleteMany({ anchorBriefId: briefId }),
     GameSessionFlashcardRecallResult.deleteMany({ gameId: { $in: flashGameIds } }),

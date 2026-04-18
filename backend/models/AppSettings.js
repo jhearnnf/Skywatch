@@ -18,22 +18,22 @@ const appSettingsSchema = new mongoose.Schema({
   passThresholdEasy:   { type: Number, default: 60 },
   passThresholdMedium: { type: Number, default: 60 },
 
-  // Aircoins
-  aircoinsPerWin:        { type: Number, default: 10 }, // used by non-quiz games
-  aircoinsPerWinEasy:    { type: Number, default: 10 },
-  aircoinsPerWinMedium:  { type: Number, default: 20 },
-  aircoinsPerBriefRead:  { type: Number, default: 5 },
-  aircoinsFirstLogin:    { type: Number, default: 5 },
-  aircoinsStreakBonus:   { type: Number, default: 2 },
-  aircoins100Percent:    { type: Number, default: 15 },
+  // Airstars
+  airstarsPerWin:        { type: Number, default: 10 }, // used by non-quiz games
+  airstarsPerWinEasy:    { type: Number, default: 10 },
+  airstarsPerWinMedium:  { type: Number, default: 20 },
+  airstarsPerBriefRead:  { type: Number, default: 5 },
+  airstarsFirstLogin:    { type: Number, default: 5 },
+  airstarsStreakBonus:   { type: Number, default: 2 },
+  airstars100Percent:    { type: Number, default: 15 },
 
-  // Battle of Order aircoins
-  aircoinsOrderOfBattleEasy:   { type: Number, default: 8,   min: 0 },
-  aircoinsOrderOfBattleMedium: { type: Number, default: 18,  min: 0 },
+  // Battle of Order airstars
+  airstarsOrderOfBattleEasy:   { type: Number, default: 8,   min: 0 },
+  airstarsOrderOfBattleMedium: { type: Number, default: 18,  min: 0 },
 
-  // Flashcard Recall aircoins
-  aircoinsFlashcardPerCard:     { type: Number, default: 2,  min: 0 },
-  aircoinsFlashcardPerfectBonus:{ type: Number, default: 5,  min: 0 },
+  // Flashcard Recall airstars
+  airstarsFlashcardPerCard:     { type: Number, default: 2,  min: 0 },
+  airstarsFlashcardPerfectBonus:{ type: Number, default: 5,  min: 0 },
 
   // Category access per tier (gold always gets all categories)
   silverCategories: {
@@ -53,7 +53,7 @@ const appSettingsSchema = new mongoose.Schema({
   volumeIntelBriefOpened: { type: Number, default: 100, min: 0, max: 100 },
   volumeTargetLocked:     { type: Number, default: 100, min: 0, max: 100 },
   volumeFire:             { type: Number, default: 100, min: 0, max: 100 },
-  volumeAircoin:          { type: Number, default: 100, min: 0, max: 100 },
+  volumeAirstar:          { type: Number, default: 100, min: 0, max: 100 },
   volumeOutOfAmmo:        { type: Number, default: 100, min: 0, max: 100 },
   volumeLevelUp:            { type: Number, default: 100, min: 0, max: 100 },
   volumeRankPromotion:      { type: Number, default: 100, min: 0, max: 100 },
@@ -74,7 +74,7 @@ const appSettingsSchema = new mongoose.Schema({
   soundEnabledTargetLockedKeyword: { type: Boolean, default: true },
   soundEnabledFire:                { type: Boolean, default: true },
   soundEnabledOutOfAmmo:           { type: Boolean, default: true },
-  soundEnabledAircoin:             { type: Boolean, default: true },
+  soundEnabledAirstar:             { type: Boolean, default: true },
   soundEnabledLevelUp:             { type: Boolean, default: true },
   soundEnabledRankPromotion:       { type: Boolean, default: true },
   soundEnabledQuizCompleteWin:     { type: Boolean, default: true },
@@ -86,9 +86,9 @@ const appSettingsSchema = new mongoose.Schema({
   soundEnabledWhereAircraftMissionDetected: { type: Boolean, default: true },
 
   // Where's That Aircraft — coin awards
-  aircoinsWhereAircraftRound1: { type: Number, default: 5,  min: 0 },
-  aircoinsWhereAircraftRound2: { type: Number, default: 10, min: 0 },
-  aircoinsWhereAircraftBonus:  { type: Number, default: 5,  min: 0 },
+  airstarsWhereAircraftRound1: { type: Number, default: 5,  min: 0 },
+  airstarsWhereAircraftRound2: { type: Number, default: 10, min: 0 },
+  airstarsWhereAircraftBonus:  { type: Number, default: 5,  min: 0 },
   soundEnabledBattleOfOrderWon:       { type: Boolean, default: true },
   soundEnabledBattleOfOrderLost:      { type: Boolean, default: true },
   soundEnabledBattleOfOrderSelection: { type: Boolean, default: true },

@@ -4,7 +4,7 @@ const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createBrief, createSettings, authCookie, createPassedQuizAttempt, createWonBooResult, createBooBriefs } = require('../helpers/factories');
-const AircoinLog = require('../../models/AircoinLog');
+const AirstarLog = require('../../models/AirstarLog');
 const GameSessionQuizAttempt             = require('../../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult     = require('../../models/GameSessionOrderOfBattleResult');
 const GameSessionWhereAircraftResult     = require('../../models/GameSessionWhereAircraftResult');
@@ -36,7 +36,7 @@ describe('GET /api/users/stats', () => {
     expect(data.gamesPlayed).toBe(0);
     expect(data.abandonedGames).toBe(0);
     expect(data.winPercent).toBe(0);
-    expect(data.totalAircoins).toBe(0);
+    expect(data.totalAirstars).toBe(0);
   });
 
   it('returns 401 if not authenticated', async () => {
@@ -135,9 +135,9 @@ describe('PATCH /api/users/me/difficulty', () => {
 
 // ── GET /api/users/leaderboard ────────────────────────────────────────────
 describe('GET /api/users/leaderboard', () => {
-  it('returns a list of users ordered by totalAircoins', async () => {
-    await createUser({ email: 'rich@test.com',  totalAircoins: 500 });
-    await createUser({ email: 'broke@test.com', totalAircoins: 10 });
+  it('returns a list of users ordered by totalAirstars', async () => {
+    await createUser({ email: 'rich@test.com',  totalAirstars: 500 });
+    await createUser({ email: 'broke@test.com', totalAirstars: 10 });
 
     const res = await request(app).get('/api/users/leaderboard');
 
@@ -146,7 +146,7 @@ describe('GET /api/users/leaderboard', () => {
     expect(agents.length).toBeGreaterThan(0);
     // Should be sorted descending by coins
     if (agents.length >= 2) {
-      expect(agents[0].totalAircoins).toBeGreaterThanOrEqual(agents[1].totalAircoins);
+      expect(agents[0].totalAirstars).toBeGreaterThanOrEqual(agents[1].totalAirstars);
     }
   });
 
@@ -169,10 +169,10 @@ describe('GET /api/users/leaderboard', () => {
   });
 });
 
-// ── GET /api/users/aircoins/history ───────────────────────────────────────
-describe('GET /api/users/aircoins/history', () => {
+// ── GET /api/users/airstars/history ───────────────────────────────────────
+describe('GET /api/users/airstars/history', () => {
   it('returns 401 without authentication', async () => {
-    const res = await request(app).get('/api/users/aircoins/history');
+    const res = await request(app).get('/api/users/airstars/history');
     expect(res.status).toBe(401);
   });
 
@@ -180,11 +180,11 @@ describe('GET /api/users/aircoins/history', () => {
     const user   = await createUser();
     const cookie = authCookie(user._id);
 
-    await AircoinLog.create({ userId: user._id, amount: 10, reason: 'brief_read',  label: 'Intel Brief Read' });
-    await AircoinLog.create({ userId: user._id, amount: 5,  reason: 'daily_brief', label: 'Daily Brief'      });
+    await AirstarLog.create({ userId: user._id, amount: 10, reason: 'brief_read',  label: 'Intel Brief Read' });
+    await AirstarLog.create({ userId: user._id, amount: 5,  reason: 'daily_brief', label: 'Daily Brief'      });
 
     const res = await request(app)
-      .get('/api/users/aircoins/history')
+      .get('/api/users/airstars/history')
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
@@ -199,11 +199,11 @@ describe('GET /api/users/aircoins/history', () => {
     const user   = await createUser();
     const cookie = authCookie(user._id);
 
-    await AircoinLog.create({ userId: user._id, amount: 5,  reason: 'daily_brief', label: 'First'  });
-    await AircoinLog.create({ userId: user._id, amount: 20, reason: 'quiz',         label: 'Second' });
+    await AirstarLog.create({ userId: user._id, amount: 5,  reason: 'daily_brief', label: 'First'  });
+    await AirstarLog.create({ userId: user._id, amount: 20, reason: 'quiz',         label: 'Second' });
 
     const res = await request(app)
-      .get('/api/users/aircoins/history')
+      .get('/api/users/airstars/history')
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
@@ -218,11 +218,11 @@ describe('GET /api/users/aircoins/history', () => {
     const userB  = await createUser({ email: 'b@test.com' });
     const cookie = authCookie(userA._id);
 
-    await AircoinLog.create({ userId: userA._id, amount: 10, reason: 'brief_read', label: 'A log' });
-    await AircoinLog.create({ userId: userB._id, amount: 99, reason: 'brief_read', label: 'B log' });
+    await AirstarLog.create({ userId: userA._id, amount: 10, reason: 'brief_read', label: 'A log' });
+    await AirstarLog.create({ userId: userB._id, amount: 99, reason: 'brief_read', label: 'B log' });
 
     const res = await request(app)
-      .get('/api/users/aircoins/history')
+      .get('/api/users/airstars/history')
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
@@ -236,11 +236,11 @@ describe('GET /api/users/aircoins/history', () => {
     const cookie = authCookie(user._id);
 
     for (let i = 0; i < 5; i++) {
-      await AircoinLog.create({ userId: user._id, amount: i + 1, reason: 'brief_read', label: `Entry ${i}` });
+      await AirstarLog.create({ userId: user._id, amount: i + 1, reason: 'brief_read', label: `Entry ${i}` });
     }
 
     const res = await request(app)
-      .get('/api/users/aircoins/history?limit=3')
+      .get('/api/users/airstars/history?limit=3')
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
@@ -253,7 +253,7 @@ describe('GET /api/users/aircoins/history', () => {
     const cookie = authCookie(user._id);
 
     const res = await request(app)
-      .get('/api/users/aircoins/history')
+      .get('/api/users/airstars/history')
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
@@ -265,10 +265,10 @@ describe('GET /api/users/aircoins/history', () => {
     const user   = await createUser();
     const cookie = authCookie(user._id);
 
-    await AircoinLog.create({ userId: user._id, amount: 7, reason: 'daily_brief', label: 'Daily Brief' });
+    await AirstarLog.create({ userId: user._id, amount: 7, reason: 'daily_brief', label: 'Daily Brief' });
 
     const res = await request(app)
-      .get('/api/users/aircoins/history')
+      .get('/api/users/airstars/history')
       .set('Cookie', cookie);
 
     const entry = res.body.data.logs[0];

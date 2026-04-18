@@ -24,7 +24,7 @@ const BASE_USER = {
   _id:           'user1',
   email:         'agent@test.com',
   displayName:   'Agent Test',
-  totalAircoins: 850,
+  totalAirstars: 850,
   loginStreak:   5,
   rank: { rankName: 'Aircraftman', rankAbbreviation: 'AC', rankNumber: 1 },
 }
@@ -40,7 +40,7 @@ function setupAuth(userOverrides) {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('TopBar — aircoin display', () => {
+describe('TopBar — airstar display', () => {
   beforeEach(() => {
     setupAuth({})
     mockNavigate.mockClear()
@@ -48,7 +48,7 @@ describe('TopBar — aircoin display', () => {
 
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('shows totalAircoins in the aircoins badge', () => {
+  it('shows totalAirstars in the airstars badge', () => {
     render(<TopBar />)
     expect(screen.getByText('850')).toBeDefined()
   })
@@ -58,7 +58,7 @@ describe('TopBar — aircoin display', () => {
     expect(screen.getByText('5')).toBeDefined()
   })
 
-  it('clicking aircoins badge navigates to /rankings', () => {
+  it('clicking airstars badge navigates to /rankings', () => {
     render(<TopBar />)
     fireEvent.click(screen.getByLabelText('View agent levels'))
     expect(mockNavigate).toHaveBeenCalledWith('/rankings')
@@ -101,7 +101,7 @@ describe('TopBar — aircoin display', () => {
     expect(screen.getByText('Sign In')).toBeDefined()
   })
 
-  it('does not show streak or aircoins badges when no user', () => {
+  it('does not show streak or airstars badges when no user', () => {
     setupAuth(null)
     render(<TopBar />)
     expect(screen.queryByLabelText('View agent levels')).toBeNull()
@@ -109,7 +109,7 @@ describe('TopBar — aircoin display', () => {
   })
 
   it('shows 0 for both badges when user has no coins or streak', () => {
-    setupAuth({ totalAircoins: 0, loginStreak: 0 })
+    setupAuth({ totalAirstars: 0, loginStreak: 0 })
     render(<TopBar />)
     const zeros = screen.getAllByText('0')
     expect(zeros.length).toBeGreaterThanOrEqual(2)

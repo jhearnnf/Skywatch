@@ -101,7 +101,7 @@ function TitleSearch({ allTitles, onSelect, disabled }) {
 
 // ── Main modal ──────────────────────────────────────────────────────────────
 export default function FlashcardGameModal({ onClose }) {
-  const { user, API, apiFetch, awardAircoins, refreshUser } = useAuth()
+  const { user, API, apiFetch, awardAirstars, refreshUser } = useAuth()
   const { markSeen } = useNewGameUnlock()
 
   // screen: 'pick' | 'game' | 'result'
@@ -267,7 +267,7 @@ export default function FlashcardGameModal({ onClose }) {
     gameFinished.current = true
     markSeen('flashcard')
     setSubmitting(true)
-    const preSubmitTotal = user?.totalAircoins ?? 0
+    const preSubmitTotal = user?.totalAirstars ?? 0
     let awarded = false
     let earned        = 0
     let rankPromotion = null
@@ -280,13 +280,13 @@ export default function FlashcardGameModal({ onClose }) {
         body: JSON.stringify({ gameId, cardResults: results, gameSessionId }),
       })
       const data = await res.json()
-      earned              = data?.data?.result?.aircoinsEarned ?? 0
+      earned              = data?.data?.result?.airstarsEarned ?? 0
       rankPromotion       = data?.data?.rankPromotion  ?? null
-      const cycleAfter    = data?.data?.cycleAircoins  ?? null
-      const totalAfter    = data?.data?.totalAircoins  ?? undefined
+      const cycleAfter    = data?.data?.cycleAirstars  ?? null
+      const totalAfter    = data?.data?.totalAirstars  ?? undefined
 
-      if (earned > 0 && awardAircoins) {
-        awardAircoins(earned, 'Flashcard Recall', { cycleAfter, totalAfter, rankPromotion })
+      if (earned > 0 && awardAirstars) {
+        awardAirstars(earned, 'Flashcard Recall', { cycleAfter, totalAfter, rankPromotion })
         awarded = true
       }
     } catch (err) {
@@ -294,15 +294,15 @@ export default function FlashcardGameModal({ onClose }) {
     }
 
     // Fallback: if the client didn't notify (malformed response, request failure),
-    // resync the user and fire the aircoin notification based on the delta.
+    // resync the user and fire the airstar notification based on the delta.
     if (!awarded && refreshUser) {
       try {
         const fresh = await refreshUser()
-        const delta = (fresh?.totalAircoins ?? 0) - preSubmitTotal
-        if (delta > 0 && awardAircoins) {
-          awardAircoins(delta, 'Flashcard Recall', {
-            totalAfter: fresh.totalAircoins,
-            cycleAfter: fresh.cycleAircoins,
+        const delta = (fresh?.totalAirstars ?? 0) - preSubmitTotal
+        if (delta > 0 && awardAirstars) {
+          awardAirstars(delta, 'Flashcard Recall', {
+            totalAfter: fresh.totalAirstars,
+            cycleAfter: fresh.cycleAirstars,
           })
           earned = delta
         }
@@ -313,7 +313,7 @@ export default function FlashcardGameModal({ onClose }) {
     setResultData({
       correct,
       total: results.length,
-      aircoinsEarned: earned,
+      airstarsEarned: earned,
       rankPromotion,
       cardBreakdown:  results.map((r, i) => ({
         ...r,
@@ -571,10 +571,10 @@ export default function FlashcardGameModal({ onClose }) {
               <p className="text-sm" style={{ color: '#94a3b8' }}>
                 {Math.round((resultData.correct / resultData.total) * 100)}% recalled
               </p>
-              {resultData.aircoinsEarned > 0 && (
+              {resultData.airstarsEarned > 0 && (
                 <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full" style={{ background: 'rgba(148,163,184,0.18)', border: '1px solid rgba(148,163,184,0.35)' }}>
                   <span className="star-silver">⭐</span>
-                  <span className="text-sm font-bold text-white">+{resultData.aircoinsEarned} Aircoins</span>
+                  <span className="text-sm font-bold text-white">+{resultData.airstarsEarned} Airstars</span>
                 </div>
               )}
             </div>

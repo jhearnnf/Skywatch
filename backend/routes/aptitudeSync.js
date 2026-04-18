@@ -5,10 +5,11 @@ const IntelligenceBrief = require('../models/IntelligenceBrief');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { awardCoins }   = require('../utils/awardCoins');
 const { effectiveTier } = require('../utils/subscription');
+const { callOpenRouter } = require('../utils/openRouter');
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const MAX_INPUT_LENGTH    = 600;
-const MAX_AIRCOINS_SESSION = 20;
+const MAX_AIRSTARS_SESSION = 20;
 const ROUND_COOLDOWN_MS   = 8000; // min ms between requests per user
 
 // ── Injection pattern filter ─────────────────────────────────────────────────
@@ -57,28 +58,18 @@ function canAccessAptitudeSync(user, settings) {
   return settings.aptitudeSyncTiers.includes(checkTier) || settings.aptitudeSyncTiers.includes('admin');
 }
 
-// ── OpenRouter helper (mirrors the pattern used in admin.js) ─────────────────
+// ── OpenRouter helper — routed through shared util so the call is logged ────
 async function openRouterChat(messages, maxTokens = 500) {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENROUTER_KEY_APTITUDE || process.env.OPENROUTER_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
-      'X-Title': 'SkyWatch APTITUDE_SYNC',
-    },
-    body: JSON.stringify({
+  return callOpenRouter({
+    key:     'aptitude',
+    feature: 'aptitude-sync',
+    body: {
       model: 'openai/gpt-4o',
       messages,
       max_tokens: maxTokens,
       response_format: { type: 'json_object' },
-    }),
+    },
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 200)}`);
-  }
-  return res.json();
 }
 
 // ── Build brief text from a brief document ───────────────────────────────────
@@ -153,7 +144,7 @@ router.get('/status', protect, async (req, res) => {
 
 // ── POST /api/aptitude-sync/:briefId ─────────────────────────────────────────
 // Body: { userText: string, round: number, history: [{role,content}] }
-// Returns: { response: string, aircoins: number, roundTotal: number, done: boolean, summary?: string }
+// Returns: { response: string, airstars: number, roundTotal: number, done: boolean, summary?: string }
 router.post('/:briefId', protect, async (req, res) => {
   try {
     const { briefId }              = req.params;
@@ -245,13 +236,13 @@ ${briefText}
 </intel_brief>
 
 EVALUATION RULES:
-1. Award 1 aircoin for each distinct, factually correct piece of information the agent states that is supported by the intel brief content above.
-2. Award 1 aircoin for correct information NOT in the brief that you are confident is still accurate and current — label these "BONUS INTEL". Do NOT award, and gently correct, any information that appears to be outdated or superseded (e.g. a fact that was true in 2015 but has since changed). If you are uncertain whether a piece of information is still current, award 0 and do not mention it.
-3. Award 0 aircoins for incorrect information. Correct it gently, citing the brief where possible.
+1. Award 1 airstar for each distinct, factually correct piece of information the agent states that is supported by the intel brief content above.
+2. Award 1 airstar for correct information NOT in the brief that you are confident is still accurate and current — label these "BONUS INTEL". Do NOT award, and gently correct, any information that appears to be outdated or superseded (e.g. a fact that was true in 2015 but has since changed). If you are uncertain whether a piece of information is still current, award 0 and do not mention it.
+3. Award 0 airstars for incorrect information. Correct it gently, citing the brief where possible.
 4. CRITICAL — "I DON'T KNOW" RULE: If the agent says they don't know, aren't sure, can't remember, or gives up — you MUST immediately state the correct answer from the brief, clearly and directly. Do NOT offer only sympathy. Do NOT say "let's focus on what you know" or "ask me if you need clarification." Do NOT move on to a new topic without first answering the question that was asked. Treat it as a teaching moment: give them the answer they missed.
-5. Award 0 aircoins for information already credited in a previous round (track via conversation history). This applies even if the agent is directly answering your follow-up question — if they are merely repeating a fact already stated and scored, award 0 for that fact.
-6. Keep evaluations concise — 3 to 5 sentences max per round, plus the aircoin count.
-7. The total aircoins awarded across all rounds cannot exceed ${MAX_AIRCOINS_SESSION}.
+5. Award 0 airstars for information already credited in a previous round (track via conversation history). This applies even if the agent is directly answering your follow-up question — if they are merely repeating a fact already stated and scored, award 0 for that fact.
+6. Keep evaluations concise — 3 to 5 sentences max per round, plus the airstar count.
+7. The total airstars awarded across all rounds cannot exceed ${MAX_AIRSTARS_SESSION}.
 ${isFinalRound ? `8. This is the FINAL ROUND. After your evaluation:
    a) Write a short closing debrief summary (2-3 sentences) noting what was recalled well and any significant gap.
    b) Then list every important fact from the intel brief that the agent either missed entirely or stated incorrectly across ALL rounds. For each one, provide the correct answer clearly so the agent can learn from it. If there are no significant gaps, say so.` : `8. After your evaluation prose, populate the "followUp" field with a short, direct prompt. Rules:
@@ -266,7 +257,7 @@ IMPORTANT: Evaluate the AGENT RESPONSE in the context of the full conversation a
 RESPONSE FORMAT — return ONLY valid JSON, no markdown:
 {
   "response": "<your evaluation prose — what was correct, what was wrong/missing>",
-  "aircoins": <integer — coins earned THIS round only, 0 or more>,
+  "airstars": <integer — coins earned THIS round only, 0 or more>,
   "followUp": "<non-final rounds only — a specific follow-up prompt naming a topic/fact from the brief the agent hasn't covered yet>",
   "summary": "<only present on the final round — a 2-3 sentence closing debrief>",
   "corrections": "<only present on the final round — bullet-point list of missed or incorrect facts with correct answers, or the string 'No significant gaps.' if everything was covered>"
@@ -300,14 +291,14 @@ RESPONSE FORMAT — return ONLY valid JSON, no markdown:
       parsed = JSON.parse(rawContent);
     } catch {
       // Fallback if JSON is malformed
-      parsed = { response: rawContent.slice(0, 600), aircoins: 0 };
+      parsed = { response: rawContent.slice(0, 600), airstars: 0 };
     }
 
     const responseText    = typeof parsed.response    === 'string' ? parsed.response.slice(0, 2000)    : 'Evaluation unavailable.';
     const followUpText    = typeof parsed.followUp    === 'string' ? parsed.followUp.slice(0, 400)     : undefined;
     const summaryText     = typeof parsed.summary     === 'string' ? parsed.summary.slice(0, 600)      : undefined;
     const correctionsText = typeof parsed.corrections === 'string' ? parsed.corrections.slice(0, 2000) : undefined;
-    const roundCoins      = Math.max(0, Math.min(MAX_AIRCOINS_SESSION, parseInt(parsed.aircoins, 10) || 0));
+    const roundCoins      = Math.max(0, Math.min(MAX_AIRSTARS_SESSION, parseInt(parsed.airstars, 10) || 0));
 
     // ── Persist final debrief to session record ───────────────────────────────
     if (isFinalRound) {
@@ -320,7 +311,7 @@ RESPONSE FORMAT — return ONLY valid JSON, no markdown:
     return res.json({
       data: {
         response:    responseText,
-        aircoins:    roundCoins,
+        airstars:    roundCoins,
         done:        isFinalRound,
         ...(followUpText    ? { followUp:    followUpText }    : {}),
         ...(summaryText     ? { summary:     summaryText }     : {}),
@@ -334,17 +325,17 @@ RESPONSE FORMAT — return ONLY valid JSON, no markdown:
 });
 
 // ── POST /api/aptitude-sync/:briefId/award ────────────────────────────────────
-// Called once when the terminal session closes. Awards the accumulated aircoins.
-// Body: { totalAircoins: number }
+// Called once when the terminal session closes. Awards the accumulated airstars.
+// Body: { totalAirstars: number }
 router.post('/:briefId/award', protect, async (req, res) => {
   try {
     const { briefId }     = req.params;
-    const { totalAircoins } = req.body;
+    const { totalAirstars } = req.body;
 
     // Validate the amount — server enforces the cap regardless of what client sends
-    const amount = Math.max(0, Math.min(MAX_AIRCOINS_SESSION, parseInt(totalAircoins, 10) || 0));
+    const amount = Math.max(0, Math.min(MAX_AIRSTARS_SESSION, parseInt(totalAirstars, 10) || 0));
     if (amount === 0) {
-      return res.json({ data: { awarded: 0, totalAircoins: req.user.totalAircoins, rankPromotion: null } });
+      return res.json({ data: { awarded: 0, totalAirstars: req.user.totalAirstars, rankPromotion: null } });
     }
 
     // Verify a valid session existed today for this brief (anti-fabrication check)
@@ -365,14 +356,14 @@ router.post('/:briefId/award', protect, async (req, res) => {
     // Record coin total on session
     await AptitudeSyncUsage.updateOne(
       { userId: req.user._id, briefId, date: today },
-      { $set: { aircoinsEarned: amount } },
+      { $set: { airstarsEarned: amount } },
     );
 
     return res.json({
       data: {
         awarded:        amount,
-        totalAircoins:  result.totalAircoins,
-        cycleAircoins:  result.cycleAircoins,
+        totalAirstars:  result.totalAirstars,
+        cycleAirstars:  result.cycleAirstars,
         rankPromotion:  result.rankPromotion ?? null,
       },
     });
@@ -431,7 +422,7 @@ router.get('/history', protect, async (req, res) => {
       briefSlug:      s.briefId?.slug  ?? null,
       date:           s.date,
       completedAt:    s.completedAt,
-      aircoinsEarned: s.aircoinsEarned ?? null,
+      airstarsEarned: s.airstarsEarned ?? null,
       finalSummary:   s.finalSummary   ?? null,
       knowledgeGaps:  s.knowledgeGaps  ?? null,
     }));

@@ -19,7 +19,7 @@ vi.mock('../../context/AuthContext', () => ({
     user: { _id: 'user1' },
     API: '',
     apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
   }),
 }))
 
@@ -28,7 +28,7 @@ vi.mock('../../context/AppTutorialContext', () => ({
 }))
 
 vi.mock('../../context/AppSettingsContext', () => ({
-  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
+  useAppSettings: () => ({ settings: { airstarsPerBriefRead: 5 } }),
 }))
 
 vi.mock('../../components/tutorial/TutorialModal', () => ({
@@ -83,11 +83,11 @@ const RESULT_RESPONSE = { status: 'success' }
 function makeFinishResponse(won = true) {
   return {
     data: {
-      aircoinsEarned: won ? 10 : 0,
+      airstarsEarned: won ? 10 : 0,
       won,
       isFirstAttempt: true,
       breakdown: won ? [{ label: '1 correct answer × 10', amount: 10 }] : [],
-      attempt: { cycleAircoins: 10, totalAircoins: 100 },
+      attempt: { cycleAirstars: 10, totalAirstars: 100 },
     },
   }
 }

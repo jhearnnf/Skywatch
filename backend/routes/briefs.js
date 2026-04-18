@@ -4,7 +4,7 @@ const IntelligenceBrief = require('../models/IntelligenceBrief');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const AppSettings = require('../models/AppSettings');
 const User = require('../models/User');
-const AircoinLog = require('../models/AircoinLog');
+const AirstarLog = require('../models/AirstarLog');
 const { awardCoins } = require('../utils/awardCoins');
 const { effectiveTier, getAccessibleCategories, isPathwayUnlocked, getPathwayAccessibleCategories, buildCumulativeThresholds } = require('../utils/subscription');
 const { enrichWithMatchTerms } = require('../utils/mentionedBriefs');
@@ -449,7 +449,26 @@ router.get('/pathway/:category', optionalAuth, async (req, res) => {
       isInProgress:   !readSet.has(b._id.toString()) && inProgressSet.has(b._id.toString()),
     }));
 
-    res.json({ status: 'success', data: { briefs: data, totalCount: data.length } });
+    // Populate image URLs for the first non-stub, unread brief so the pathway
+    // page can show a cycling teaser of what's up next.
+    let nextBrief = null;
+    const nextBriefEntry = data.find(b => !b.isRead && b.status !== 'stub');
+    if (nextBriefEntry) {
+      const full = await IntelligenceBrief.findById(nextBriefEntry._id)
+        .populate({ path: 'media', select: 'mediaType mediaUrl' })
+        .lean();
+      const images = Array.isArray(full?.media)
+        ? full.media
+            .filter(m => m && m.mediaType === 'picture' && m.mediaUrl)
+            .slice(0, 5)
+            .map(m => m.mediaUrl)
+        : [];
+      if (images.length > 0) {
+        nextBrief = { id: nextBriefEntry._id, images };
+      }
+    }
+
+    res.json({ status: 'success', data: { briefs: data, totalCount: data.length, nextBrief } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -618,22 +637,22 @@ router.post('/:id/complete', protect, async (req, res) => {
       });
     }
 
-    let aircoinsEarned   = 0;
+    let airstarsEarned   = 0;
     let dailyCoinsEarned = 0;
-    let newTotalAircoins;
-    let newCycleAircoins;
+    let newTotalAirstars;
+    let newCycleAirstars;
     let rankPromotion    = null;
     let updatedLoginStreak = req.user.loginStreak ?? 0;
 
     if (!readRecord.coinsAwarded) {
       // ── Brief-read coins (first completion only) ──────────────────────
-      aircoinsEarned = settings.aircoinsPerBriefRead ?? 5;
+      airstarsEarned = settings.airstarsPerBriefRead ?? 5;
       const briefResult = await awardCoins(
-        req.user._id, aircoinsEarned, 'brief_read',
+        req.user._id, airstarsEarned, 'brief_read',
         `Intel Brief Read: ${brief.title}`, brief._id
       );
-      newTotalAircoins = briefResult.totalAircoins;
-      newCycleAircoins = briefResult.cycleAircoins;
+      newTotalAirstars = briefResult.totalAirstars;
+      newCycleAirstars = briefResult.cycleAirstars;
       if (briefResult.rankPromotion) rankPromotion = briefResult.rankPromotion;
 
       // ── Daily streak reward (first completion of the calendar day) ────
@@ -646,8 +665,8 @@ router.post('/:id/complete', protect, async (req, res) => {
       if (lastStr !== todayStr) {
         const currentStreak = req.user.loginStreak ?? 0;
         const newStreak     = (lastStr === yesterStr) ? currentStreak + 1 : 1;
-        const base          = settings.aircoinsFirstLogin  ?? 5;
-        const bonus         = settings.aircoinsStreakBonus ?? 2;
+        const base          = settings.airstarsFirstLogin  ?? 5;
+        const bonus         = settings.airstarsStreakBonus ?? 2;
         dailyCoinsEarned    = base + (newStreak >= 2 ? bonus : 0);
         const dailyLabel    = newStreak >= 2
           ? `Daily Brief — ${newStreak}-day streak!`
@@ -655,8 +674,8 @@ router.post('/:id/complete', protect, async (req, res) => {
         const dailyResult   = await awardCoins(
           req.user._id, dailyCoinsEarned, 'daily_brief', dailyLabel
         );
-        newTotalAircoins    = dailyResult.totalAircoins;
-        newCycleAircoins    = dailyResult.cycleAircoins;
+        newTotalAirstars    = dailyResult.totalAirstars;
+        newCycleAirstars    = dailyResult.cycleAirstars;
         if (dailyResult.rankPromotion) rankPromotion = dailyResult.rankPromotion;
         updatedLoginStreak  = newStreak;
         await User.findByIdAndUpdate(req.user._id, {
@@ -706,12 +725,12 @@ router.post('/:id/complete', protect, async (req, res) => {
     res.json({
       status: 'success',
       data: {
-        aircoinsEarned,
+        airstarsEarned,
         dailyCoinsEarned,
         loginStreak:        updatedLoginStreak,
         lastStreakDate:     freshUser?.lastStreakDate ?? null,
-        newTotalAircoins,
-        newCycleAircoins,
+        newTotalAirstars,
+        newCycleAirstars,
         rankPromotion,
         gameUnlocksGranted,
       },

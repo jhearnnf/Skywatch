@@ -2,7 +2,7 @@
  * Streak & daily-brief-reward tests.
  *
  * Rules under test:
- *  - Login never awards aircoins.
+ *  - Login never awards airstars.
  *  - Coins are awarded via POST /api/briefs/:id/complete, NOT on GET (open).
  *  - The first completion of each calendar day awards daily coins
  *    (base + streak bonus if streak >= 2) and increments loginStreak.
@@ -19,7 +19,7 @@ const User    = require('../../models/User');
 const { createUser, createBrief, createSettings, authCookie } = require('../helpers/factories');
 
 beforeAll(async () => { await db.connect(); });
-beforeEach(async () => { await createSettings(); }); // aircoinsFirstLogin=5, aircoinsStreakBonus=2
+beforeEach(async () => { await createSettings(); }); // airstarsFirstLogin=5, airstarsStreakBonus=2
 afterEach(async () => db.clearDatabase());
 afterAll(async () => db.closeDatabase());
 
@@ -44,8 +44,8 @@ async function setLastStreakDate(userId, daysAgo) {
 
 // ── Login awards no coins ──────────────────────────────────────────────────
 
-describe('POST /api/auth/login — no aircoins on login', () => {
-  it('returns loginAircoinsEarned = 0 on email login', async () => {
+describe('POST /api/auth/login — no airstars on login', () => {
+  it('returns loginAirstarsEarned = 0 on email login', async () => {
     await createUser({ email: 'streak@test.com', password: 'Password123' });
 
     const res = await request(app)
@@ -53,16 +53,16 @@ describe('POST /api/auth/login — no aircoins on login', () => {
       .send({ email: 'streak@test.com', password: 'Password123' });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.loginAircoinsEarned).toBe(0);
+    expect(res.body.data.loginAirstarsEarned).toBe(0);
   });
 
-  it('returns loginAircoinsEarned = 0 on register', async () => {
+  it('returns loginAirstarsEarned = 0 on register', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({ email: 'newstreak@test.com', password: 'Password123' });
 
     expect(res.status).toBe(201);
-    expect(res.body.data.loginAircoinsEarned).toBe(0);
+    expect(res.body.data.loginAirstarsEarned).toBe(0);
   });
 });
 
@@ -78,7 +78,7 @@ describe('GET /api/briefs/:id — no coins on open', () => {
 
     expect(res.status).toBe(200);
     // GET no longer returns coin fields
-    expect(res.body.data.aircoinsEarned).toBeUndefined();
+    expect(res.body.data.airstarsEarned).toBeUndefined();
     expect(res.body.data.dailyCoinsEarned).toBeUndefined();
   });
 
@@ -205,7 +205,7 @@ describe('POST /api/briefs/:id/complete — daily streak reward', () => {
     await openBrief(brief._id, cookie);
     const res = await completeBrief(brief._id, cookie);
 
-    expect(res.body.data.aircoinsEarned).toBeGreaterThan(0);   // first-time brief coins
+    expect(res.body.data.airstarsEarned).toBeGreaterThan(0);   // first-time brief coins
     expect(res.body.data.dailyCoinsEarned).toBeGreaterThan(0); // daily coins
   });
 
@@ -220,7 +220,7 @@ describe('POST /api/briefs/:id/complete — daily streak reward', () => {
     const res = await completeBrief(brief._id, cookie); // second — should give nothing
 
     expect(res.status).toBe(200);
-    expect(res.body.data.aircoinsEarned).toBe(0);
+    expect(res.body.data.airstarsEarned).toBe(0);
     expect(res.body.data.dailyCoinsEarned).toBe(0);
   });
 

@@ -34,7 +34,7 @@ export default function Sidebar() {
   const { hasAnyNew } = useNewGameUnlock()
   const { unsolvedCount } = useUnsolvedReports()
   const { levels: liveLevels } = useAppSettings()
-  const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0, liveLevels) : null
+  const levelInfo = user ? getLevelInfo(user.cycleAirstars ?? 0, liveLevels) : null
 
   return (
     <aside className="hidden md:flex flex-col fixed left-0 top-14 bottom-0 w-56 bg-slate-50 border-r border-slate-200 z-30">
@@ -115,7 +115,7 @@ export default function Sidebar() {
             />
           </div>
           <p className="text-[10px] text-slate-400 mt-1 text-right">
-            {levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Aircoins
+            {levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Airstars
           </p>
 
           <button

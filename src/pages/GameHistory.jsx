@@ -428,8 +428,8 @@ function SessionRow({ session, API, index }) {
               </span>
             )}
             <StatusBadge session={session} />
-            {session.aircoinsEarned > 0 && (
-              <span className="text-[10px] font-bold text-white">+{session.aircoinsEarned} <span className="star-silver">⭐</span></span>
+            {session.airstarsEarned > 0 && (
+              <span className="text-[10px] font-bold text-white">+{session.airstarsEarned} <span className="star-silver">⭐</span></span>
             )}
           </div>
 

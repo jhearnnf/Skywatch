@@ -20,7 +20,7 @@ vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     user:          { _id: 'user1', subscriptionTier: 'free' },
     API:           '',
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
     apiFetch:      mockApiFetch,
   }),
 }))
@@ -81,11 +81,11 @@ function makeStartResponse(difficulty = 'easy') {
 // All QuizFlow calls now go through apiFetch (brief, quiz/start, /result, /finish,
 // /abandon, battle-of-order/options). A bare global.fetch stub is returned for the
 // few remaining utilities (e.g. consumePendingBrief) that still use raw fetch.
-function setupFetch({ difficulty = 'easy', won = true, isFirstAttempt = true, aircoinsEarned = 10 } = {}) {
+function setupFetch({ difficulty = 'easy', won = true, isFirstAttempt = true, airstarsEarned = 10 } = {}) {
   const finishPayload = {
     data: {
-      won, isFirstAttempt, aircoinsEarned, breakdown: [],
-      attempt: { cycleAircoins: aircoinsEarned, totalAircoins: 100 },
+      won, isFirstAttempt, airstarsEarned, breakdown: [],
+      attempt: { cycleAirstars: airstarsEarned, totalAirstars: 100 },
     },
   }
 

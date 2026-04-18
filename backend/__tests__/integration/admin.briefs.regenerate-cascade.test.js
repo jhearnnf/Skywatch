@@ -21,7 +21,7 @@ const {
   createReadRecord,
   createPassedQuizAttempt,
   createWonBooResult,
-  createAircoinLog,
+  createAirstarLog,
   createFlashcardGame, createFlashcardResult,
   createWheresThatAircraftGame, createWheresThatAircraftResult,
 } = require('../helpers/factories');
@@ -37,7 +37,7 @@ const GameFlashcardRecall             = require('../../models/GameFlashcardRecal
 const GameSessionFlashcardRecallResult = require('../../models/GameSessionFlashcardRecallResult');
 const GameWheresThatAircraft              = require('../../models/GameWheresThatAircraft');
 const GameSessionWheresThatAircraftResult = require('../../models/GameSessionWheresThatAircraftResult');
-const AircoinLog                      = require('../../models/AircoinLog');
+const AirstarLog                      = require('../../models/AirstarLog');
 const AdminAction                     = require('../../models/AdminAction');
 const User                            = require('../../models/User');
 
@@ -245,19 +245,19 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — cascade deletions'
     expect(await GameSessionWheresThatAircraftResult.countDocuments({ gameId })).toBe(0);
   });
 
-  it('deletes AircoinLog entries with matching briefId', async () => {
+  it('deletes AirstarLog entries with matching briefId', async () => {
     const brief = await createBrief();
     const user  = await createUser();
     const admin = await createAdminUser();
-    await createAircoinLog(user._id, brief._id, { reason: 'brief_read', amount: 10 });
-    await createAircoinLog(user._id, brief._id, { reason: 'quiz',       amount: 20 });
+    await createAirstarLog(user._id, brief._id, { reason: 'brief_read', amount: 10 });
+    await createAirstarLog(user._id, brief._id, { reason: 'quiz',       amount: 20 });
 
     await request(app)
       .post(`/api/admin/briefs/${brief._id}/confirm-regeneration`)
       .set('Cookie', authCookie(admin._id))
       .send({ reason: REASON });
 
-    expect(await AircoinLog.countDocuments({ briefId: brief._id })).toBe(0);
+    expect(await AirstarLog.countDocuments({ briefId: brief._id })).toBe(0);
   });
 
   it('clears quizQuestionsEasy and quizQuestionsMedium arrays on the brief document', async () => {
@@ -289,11 +289,11 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — cascade deletions'
 // ── Coin reversal ──────────────────────────────────────────────────────────
 
 describe('POST /api/admin/briefs/:id/confirm-regeneration — coin reversal', () => {
-  it('decrements User.totalAircoins by the sum of deleted log amounts', async () => {
+  it('decrements User.totalAirstars by the sum of deleted log amounts', async () => {
     const brief = await createBrief();
     const admin = await createAdminUser();
-    const user  = await createUser({ totalAircoins: 50, cycleAircoins: 50 });
-    await createAircoinLog(user._id, brief._id, { amount: 30 });
+    const user  = await createUser({ totalAirstars: 50, cycleAirstars: 50 });
+    await createAirstarLog(user._id, brief._id, { amount: 30 });
 
     await request(app)
       .post(`/api/admin/briefs/${brief._id}/confirm-regeneration`)
@@ -301,14 +301,14 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — coin reversal', ()
       .send({ reason: REASON });
 
     const updated = await User.findById(user._id);
-    expect(updated.totalAircoins).toBe(20);
+    expect(updated.totalAirstars).toBe(20);
   });
 
-  it('decrements User.cycleAircoins by the sum of deleted log amounts', async () => {
+  it('decrements User.cycleAirstars by the sum of deleted log amounts', async () => {
     const brief = await createBrief();
     const admin = await createAdminUser();
-    const user  = await createUser({ totalAircoins: 50, cycleAircoins: 40 });
-    await createAircoinLog(user._id, brief._id, { amount: 25 });
+    const user  = await createUser({ totalAirstars: 50, cycleAirstars: 40 });
+    await createAirstarLog(user._id, brief._id, { amount: 25 });
 
     await request(app)
       .post(`/api/admin/briefs/${brief._id}/confirm-regeneration`)
@@ -316,14 +316,14 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — coin reversal', ()
       .send({ reason: REASON });
 
     const updated = await User.findById(user._id);
-    expect(updated.cycleAircoins).toBe(15);
+    expect(updated.cycleAirstars).toBe(15);
   });
 
-  it('floors totalAircoins at 0 when reversal exceeds current balance', async () => {
+  it('floors totalAirstars at 0 when reversal exceeds current balance', async () => {
     const brief = await createBrief();
     const admin = await createAdminUser();
-    const user  = await createUser({ totalAircoins: 10, cycleAircoins: 10 });
-    await createAircoinLog(user._id, brief._id, { amount: 50 });
+    const user  = await createUser({ totalAirstars: 10, cycleAirstars: 10 });
+    await createAirstarLog(user._id, brief._id, { amount: 50 });
 
     await request(app)
       .post(`/api/admin/briefs/${brief._id}/confirm-regeneration`)
@@ -331,17 +331,17 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — coin reversal', ()
       .send({ reason: REASON });
 
     const updated = await User.findById(user._id);
-    expect(updated.totalAircoins).toBe(0);
-    expect(updated.cycleAircoins).toBe(0);
+    expect(updated.totalAirstars).toBe(0);
+    expect(updated.cycleAirstars).toBe(0);
   });
 
   it('reverses coins for multiple users independently', async () => {
     const brief  = await createBrief();
     const admin  = await createAdminUser();
-    const userA  = await createUser({ totalAircoins: 100, cycleAircoins: 100 });
-    const userB  = await createUser({ totalAircoins: 60,  cycleAircoins: 60  });
-    await createAircoinLog(userA._id, brief._id, { amount: 30 });
-    await createAircoinLog(userB._id, brief._id, { amount: 15 });
+    const userA  = await createUser({ totalAirstars: 100, cycleAirstars: 100 });
+    const userB  = await createUser({ totalAirstars: 60,  cycleAirstars: 60  });
+    await createAirstarLog(userA._id, brief._id, { amount: 30 });
+    await createAirstarLog(userB._id, brief._id, { amount: 15 });
 
     await request(app)
       .post(`/api/admin/briefs/${brief._id}/confirm-regeneration`)
@@ -349,17 +349,17 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — coin reversal', ()
       .send({ reason: REASON });
 
     const [a, b] = await Promise.all([User.findById(userA._id), User.findById(userB._id)]);
-    expect(a.totalAircoins).toBe(70);
-    expect(b.totalAircoins).toBe(45);
+    expect(a.totalAirstars).toBe(70);
+    expect(b.totalAirstars).toBe(45);
   });
 
-  it('does NOT delete AircoinLog entries with briefId:null (daily streak, etc.)', async () => {
+  it('does NOT delete AirstarLog entries with briefId:null (daily streak, etc.)', async () => {
     const brief = await createBrief();
     const user  = await createUser();
     const admin = await createAdminUser();
     // daily_brief log has no briefId
-    await createAircoinLog(user._id, null, { reason: 'daily_brief', amount: 5 });
-    await createAircoinLog(user._id, brief._id, { reason: 'brief_read', amount: 10 });
+    await createAirstarLog(user._id, null, { reason: 'daily_brief', amount: 5 });
+    await createAirstarLog(user._id, brief._id, { reason: 'brief_read', amount: 10 });
 
     await request(app)
       .post(`/api/admin/briefs/${brief._id}/confirm-regeneration`)
@@ -367,7 +367,7 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — coin reversal', ()
       .send({ reason: REASON });
 
     // The daily_brief log must still exist
-    expect(await AircoinLog.countDocuments({ userId: user._id, reason: 'daily_brief' })).toBe(1);
+    expect(await AirstarLog.countDocuments({ userId: user._id, reason: 'daily_brief' })).toBe(1);
   });
 });
 
@@ -431,13 +431,13 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — audit and response
   it('returns deletion counts in the response body', async () => {
     const brief    = await createBrief();
     const gameType = await createGameType();
-    const user     = await createUser({ totalAircoins: 20, cycleAircoins: 20 });
+    const user     = await createUser({ totalAirstars: 20, cycleAirstars: 20 });
     const admin    = await createAdminUser();
     await createReadRecord(user._id, brief._id);
     await createQuizQuestions(brief._id, gameType._id, 3);
     await createPassedQuizAttempt(user._id, brief._id);
     await createWonBooResult(user._id, brief._id);
-    await createAircoinLog(user._id, brief._id, { amount: 10 });
+    await createAirstarLog(user._id, brief._id, { amount: 10 });
 
     const res = await request(app)
       .post(`/api/admin/briefs/${brief._id}/confirm-regeneration`)
@@ -452,7 +452,7 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — audit and response
     expect(d.quizAttemptsDeleted).toBe(1);
     expect(d.booGamesDeleted).toBe(1);
     expect(d.booResultsDeleted).toBe(1);
-    expect(d.aircoinLogsDeleted).toBe(1);
+    expect(d.airstarLogsDeleted).toBe(1);
     expect(d.coinsReversed).toBe(10);
     expect(d.usersAffected).toBe(1);
   });
@@ -468,18 +468,18 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — audit and response
 
     expect(res.status).toBe(200);
     expect(res.body.data.quizQuestionsDeleted).toBe(0);
-    expect(res.body.data.aircoinLogsDeleted).toBe(0);
+    expect(res.body.data.airstarLogsDeleted).toBe(0);
     expect(res.body.data.coinsReversed).toBe(0);
   });
 
   it('is idempotent — double cascade produces no orphaned documents', async () => {
     const brief    = await createBrief();
     const gameType = await createGameType();
-    const user     = await createUser({ totalAircoins: 30 });
+    const user     = await createUser({ totalAirstars: 30 });
     const admin    = await createAdminUser();
     await createQuizQuestions(brief._id, gameType._id, 2);
     await createReadRecord(user._id, brief._id);
-    await createAircoinLog(user._id, brief._id, { amount: 10 });
+    await createAirstarLog(user._id, brief._id, { amount: 10 });
 
     // First cascade
     await request(app)
@@ -495,7 +495,7 @@ describe('POST /api/admin/briefs/:id/confirm-regeneration — audit and response
 
     expect(res.status).toBe(200);
     expect(res.body.data.quizQuestionsDeleted).toBe(0);
-    expect(res.body.data.aircoinLogsDeleted).toBe(0);
+    expect(res.body.data.airstarLogsDeleted).toBe(0);
     // Hard-deleted collections are empty; brief-read is preserved (soft-deleted)
     expect(await GameQuizQuestion.countDocuments({ intelBriefId: brief._id })).toBe(0);
     const reads = await IntelligenceBriefRead.find({ intelBriefId: brief._id });

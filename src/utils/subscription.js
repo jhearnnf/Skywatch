@@ -53,23 +53,23 @@ export function isFreeUser(user) {
 // Fallback cumulative thresholds — used when live levels haven't loaded yet.
 const LEVEL_THRESHOLDS_FALLBACK = [0, 100, 350, 850, 1700, 3000, 4850, 7350, 10600, 14700]
 
-// Converts a levels array (cumulativeAircoins format from /api/users/levels) to a threshold array.
+// Converts a levels array (cumulativeAirstars format from /api/users/levels) to a threshold array.
 export function buildCumulativeThresholds(levels) {
   if (!levels?.length) return LEVEL_THRESHOLDS_FALLBACK
-  if (levels[0].cumulativeAircoins !== undefined) {
-    return levels.map(l => l.cumulativeAircoins)
+  if (levels[0].cumulativeAirstars !== undefined) {
+    return levels.map(l => l.cumulativeAirstars)
   }
   const result = []
   let cumulative = 0
   for (const lv of levels) {
     result.push(cumulative)
-    if (lv.aircoinsToNextLevel) cumulative += lv.aircoinsToNextLevel
+    if (lv.airstarsToNextLevel) cumulative += lv.airstarsToNextLevel
   }
   return result
 }
 
-export function getUserLevel(totalAircoins, levelThresholds) {
-  const coins = totalAircoins ?? 0
+export function getUserLevel(totalAirstars, levelThresholds) {
+  const coins = totalAirstars ?? 0
   const thresholds = levelThresholds ?? LEVEL_THRESHOLDS_FALLBACK
   let level = 1
   for (let i = 1; i < thresholds.length; i++) {
@@ -87,7 +87,7 @@ export function isPathwayUnlocked(category, user, settings, levelThresholds) {
   if (!settings?.pathwayUnlocks) return true
   const unlock = settings.pathwayUnlocks.find(p => p.category === category)
   if (!unlock) return true
-  const userLevel = getUserLevel(user.totalAircoins, levelThresholds)
+  const userLevel = getUserLevel(user.totalAirstars, levelThresholds)
   const userRank  = user.rank?.rankNumber ?? 1
   return userRank > unlock.rankRequired || (userRank >= unlock.rankRequired && userLevel >= unlock.levelRequired)
 }

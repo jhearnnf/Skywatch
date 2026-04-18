@@ -2,16 +2,16 @@ import { describe, it, expect } from 'vitest'
 import { getLevelInfo, getLevelNumber } from '../levelUtils'
 
 const LEVELS = [
-  { levelNumber: 1,  aircoinsToNextLevel: 100,  cumulativeAircoins: 0     },
-  { levelNumber: 2,  aircoinsToNextLevel: 250,  cumulativeAircoins: 100   },
-  { levelNumber: 3,  aircoinsToNextLevel: 500,  cumulativeAircoins: 350   },
-  { levelNumber: 4,  aircoinsToNextLevel: 850,  cumulativeAircoins: 850   },
-  { levelNumber: 5,  aircoinsToNextLevel: 1300, cumulativeAircoins: 1700  },
-  { levelNumber: 6,  aircoinsToNextLevel: 1850, cumulativeAircoins: 3000  },
-  { levelNumber: 7,  aircoinsToNextLevel: 2500, cumulativeAircoins: 4850  },
-  { levelNumber: 8,  aircoinsToNextLevel: 3250, cumulativeAircoins: 7350  },
-  { levelNumber: 9,  aircoinsToNextLevel: 4100, cumulativeAircoins: 10600 },
-  { levelNumber: 10, aircoinsToNextLevel: null,  cumulativeAircoins: 14700 },
+  { levelNumber: 1,  airstarsToNextLevel: 100,  cumulativeAirstars: 0     },
+  { levelNumber: 2,  airstarsToNextLevel: 250,  cumulativeAirstars: 100   },
+  { levelNumber: 3,  airstarsToNextLevel: 500,  cumulativeAirstars: 350   },
+  { levelNumber: 4,  airstarsToNextLevel: 850,  cumulativeAirstars: 850   },
+  { levelNumber: 5,  airstarsToNextLevel: 1300, cumulativeAirstars: 1700  },
+  { levelNumber: 6,  airstarsToNextLevel: 1850, cumulativeAirstars: 3000  },
+  { levelNumber: 7,  airstarsToNextLevel: 2500, cumulativeAirstars: 4850  },
+  { levelNumber: 8,  airstarsToNextLevel: 3250, cumulativeAirstars: 7350  },
+  { levelNumber: 9,  airstarsToNextLevel: 4100, cumulativeAirstars: 10600 },
+  { levelNumber: 10, airstarsToNextLevel: null,  cumulativeAirstars: 14700 },
 ]
 
 // ── getLevelInfo ───────────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ describe('getLevelInfo', () => {
     const info = getLevelInfo(500, LEVELS)
     expect(info.level).toBe(3)
     expect(info.levelObj).toEqual(LEVELS[2])
-    expect(info.levelObj.cumulativeAircoins).toBe(350)
+    expect(info.levelObj.cumulativeAirstars).toBe(350)
   })
 })
 

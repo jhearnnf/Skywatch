@@ -1,15 +1,15 @@
-// Mock leaderboard — top agents by total aircoins
+// Mock leaderboard — top agents by total airstars
 export const MOCK_LEADERBOARD = [
-  { agentNumber: '8832941', totalAircoins: 14820 },
-  { agentNumber: '1123456', totalAircoins: 8950  },
-  { agentNumber: '7654321', totalAircoins: 5320  },
-  { agentNumber: '2987654', totalAircoins: 3100  },
-  { agentNumber: '5544332', totalAircoins: 2430  },
-  { agentNumber: '9182736', totalAircoins: 1890  },
-  { agentNumber: '3312890', totalAircoins: 1250  },
-  { agentNumber: '6789012', totalAircoins:  780  },
-  { agentNumber: '4471823', totalAircoins:  310  },
-  { agentNumber: '2234567', totalAircoins:  175  },
+  { agentNumber: '8832941', totalAirstars: 14820 },
+  { agentNumber: '1123456', totalAirstars: 8950  },
+  { agentNumber: '7654321', totalAirstars: 5320  },
+  { agentNumber: '2987654', totalAirstars: 3100  },
+  { agentNumber: '5544332', totalAirstars: 2430  },
+  { agentNumber: '9182736', totalAirstars: 1890  },
+  { agentNumber: '3312890', totalAirstars: 1250  },
+  { agentNumber: '6789012', totalAirstars:  780  },
+  { agentNumber: '4471823', totalAirstars:  310  },
+  { agentNumber: '2234567', totalAirstars:  175  },
 ]
 
 export const MOCK_RANKS = [

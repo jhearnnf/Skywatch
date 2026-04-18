@@ -20,7 +20,7 @@ vi.mock('../../context/AuthContext', () => ({
     user: { _id: 'user1' },
     API: '',
     apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
   }),
 }))
 
@@ -93,7 +93,7 @@ const START_RESPONSE = {
 function makeFinishResponse({ won = true, gameUnlocksGranted = [] } = {}) {
   return {
     data: {
-      aircoinsEarned:   won ? 10 : 0,
+      airstarsEarned:   won ? 10 : 0,
       won,
       isFirstAttempt:   true,
       breakdown:        won ? [{ label: '1 correct × 10', amount: 10 }] : [],

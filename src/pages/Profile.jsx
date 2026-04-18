@@ -91,13 +91,13 @@ export default function Profile() {
         } else if (user?.agentNumber) {
           // Inject current user into mock leaderboard at correct position
           const mock = MOCK_LEADERBOARD.filter(a => a.agentNumber !== user.agentNumber)
-          mock.push({ agentNumber: user.agentNumber, totalAircoins: user.totalAircoins ?? 0 })
-          mock.sort((a, b) => b.totalAircoins - a.totalAircoins)
+          mock.push({ agentNumber: user.agentNumber, totalAirstars: user.totalAirstars ?? 0 })
+          mock.sort((a, b) => b.totalAirstars - a.totalAirstars)
           setLeaderboard(mock)
         }
       })
       .catch(() => {})
-  }, [API, user?.agentNumber, user?.totalAircoins])
+  }, [API, user?.agentNumber, user?.totalAirstars])
 
   useEffect(() => {
     if (!user) { setStats({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0 }); setStatsLoading(false); return }
@@ -132,8 +132,8 @@ export default function Profile() {
     finally { setDiffBusy(false) }
   }
 
-  const cycleCoins = user?.cycleAircoins ?? 0   // drives XP bar (resets per rank cycle)
-  const totalCoins = user?.totalAircoins ?? 0   // lifetime total — shown in stats grid
+  const cycleCoins = user?.cycleAirstars ?? 0   // drives XP bar (resets per rank cycle)
+  const totalCoins = user?.totalAirstars ?? 0   // lifetime total — shown in stats grid
   const levelInfo  = getLevelInfo(cycleCoins, liveLevels)
   const rankDisplay = user?.rank && typeof user.rank === 'object' && user.rank.rankName
     ? `${user.rank.rankName} (${user.rank.rankAbbreviation})`
@@ -179,7 +179,7 @@ export default function Profile() {
             <div className="mt-4">
               <div className="flex justify-between text-xs text-slate-600 mb-1 intel-mono">
                 <span>Level {levelInfo.level}</span>
-                <span>{levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Aircoins</span>
+                <span>{levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Airstars</span>
               </div>
               <div className="h-2 bg-brand-200/50 rounded-full overflow-hidden">
                 <motion.div
@@ -196,7 +196,7 @@ export default function Profile() {
         <div className="bg-surface rounded-2xl border border-slate-200 p-6 mb-5 text-center card-shadow">
           <div className="text-4xl mb-3">🔒</div>
           <p className="font-bold text-slate-800 mb-1">Sign in to view your profile</p>
-          <p className="text-sm text-slate-500 mb-4">Track progress, earn Aircoins, and climb the ranks.</p>
+          <p className="text-sm text-slate-500 mb-4">Track progress, earn Airstars, and climb the ranks.</p>
           <Link to="/login" className="inline-flex px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors">
             Sign In
           </Link>
@@ -230,7 +230,7 @@ export default function Profile() {
             <StatCard loading={user && statsLoading} label="Briefs Read"  value={stats.brifsRead}           icon="📋" onClick={user ? () => navigate('/intel-brief-history') : undefined} badge={stats.flashcardsCollected} badgeLabel="flashcards" />
             <StatCard loading={user && statsLoading} label="Games Played" value={stats.gamesPlayed} icon="🎯" badge={stats.abandonedGames} onClick={user ? () => navigate('/game-history') : undefined} />
             <StatCard loading={user && statsLoading} label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />
-            <StatCard loading={user && statsLoading} label="Aircoins"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/aircoin-history') : undefined} />
+            <StatCard loading={user && statsLoading} label="Airstars"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/airstar-history') : undefined} />
           </div>
 
           {user && (
@@ -365,7 +365,7 @@ export default function Profile() {
       {tab === 'leaderboard' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
           <div className="p-4 border-b border-slate-100">
-            <p className="font-bold text-slate-800 text-sm">Top Agents — Aircoins</p>
+            <p className="font-bold text-slate-800 text-sm">Top Agents — Airstars</p>
           </div>
           <ol className="divide-y divide-slate-100">
             {leaderboard.map((agent, i) => {
@@ -383,7 +383,7 @@ export default function Profile() {
                   <span className={`flex-1 text-sm font-semibold ${isCurrent ? 'text-brand-700' : 'text-slate-800'}`}>
                     Agent {agent.agentNumber} {isCurrent && <span className="text-xs text-brand-500">(You)</span>}
                   </span>
-                  <span className="text-sm font-bold text-white"><span className="star-silver">⭐</span> {agent.totalAircoins.toLocaleString()}</span>
+                  <span className="text-sm font-bold text-white"><span className="star-silver">⭐</span> {agent.totalAirstars.toLocaleString()}</span>
                 </li>
               )
             })}
@@ -404,7 +404,7 @@ export default function Profile() {
                   <span className="flex-1 text-sm font-semibold text-brand-700">
                     Agent {user.agentNumber} <span className="text-xs text-brand-500">(You)</span>
                   </span>
-                  <span className="text-sm font-bold text-white"><span className="star-silver">⭐</span> {(user.totalAircoins ?? 0).toLocaleString()}</span>
+                  <span className="text-sm font-bold text-white"><span className="star-silver">⭐</span> {(user.totalAirstars ?? 0).toLocaleString()}</span>
                 </li>
               </>
             )}

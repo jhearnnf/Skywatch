@@ -117,7 +117,7 @@ describe('Category page API calls', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.brief._id).toBe(brief._id.toString());
     // Coins are deferred to POST /complete, not awarded on open
-    expect(res.body.data.aircoinsEarned).toBeUndefined();
+    expect(res.body.data.airstarsEarned).toBeUndefined();
   });
 
   it('opening a brief puts it in startedIds (not briefIds) on read-briefs list', async () => {
@@ -201,7 +201,7 @@ describe('Profile page API calls', () => {
       .set('Cookie', cookie);
 
     expect(res.status).toBe(200);
-    expect(res.body.data.totalAircoins).toBeDefined();
+    expect(res.body.data.totalAirstars).toBeDefined();
     expect(res.body.data.brifsRead).toBeDefined();
   });
 
@@ -256,9 +256,9 @@ describe('Profile page API calls', () => {
 
 // ── Rankings page button interactions ─────────────────────────────────────
 describe('Rankings page API calls', () => {
-  it('leaderboard loads with agents ordered by totalAircoins', async () => {
-    await createUser({ email: 'rich@test.com',  totalAircoins: 999 });
-    await createUser({ email: 'poor@test.com',  totalAircoins: 1   });
+  it('leaderboard loads with agents ordered by totalAirstars', async () => {
+    await createUser({ email: 'rich@test.com',  totalAirstars: 999 });
+    await createUser({ email: 'poor@test.com',  totalAirstars: 1   });
 
     const res = await request(app).get('/api/users/leaderboard');
 
@@ -266,7 +266,7 @@ describe('Rankings page API calls', () => {
     const agents = res.body.data.agents;
     expect(agents.length).toBeGreaterThan(0);
     if (agents.length >= 2) {
-      expect(agents[0].totalAircoins).toBeGreaterThanOrEqual(agents[1].totalAircoins);
+      expect(agents[0].totalAirstars).toBeGreaterThanOrEqual(agents[1].totalAirstars);
     }
   });
 
@@ -439,7 +439,7 @@ describe('Play page API calls', () => {
       .send({ status: 'abandoned' });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.aircoinsEarned).toBe(0);
+    expect(res.body.data.airstarsEarned).toBe(0);
   });
 });
 
@@ -448,7 +448,7 @@ describe('Auth guard — protected endpoints', () => {
   const protectedRoutes = [
     { method: 'get',   path: '/api/users/stats' },
     { method: 'get',   path: '/api/users/me/read-briefs' },
-    { method: 'get',   path: '/api/users/aircoins/history' },
+    { method: 'get',   path: '/api/users/airstars/history' },
     { method: 'patch', path: '/api/users/me/difficulty', body: { difficulty: 'easy' } },
     { method: 'post',  path: '/api/users/report-problem', body: { description: 'x' } },
     { method: 'post',  path: '/api/games/quiz/start', body: { briefId: '000000000000000000000001' } },

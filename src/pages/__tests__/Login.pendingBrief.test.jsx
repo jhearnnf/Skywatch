@@ -6,7 +6,7 @@ import LoginPage from '../Login'
 
 const mockNavigate    = vi.hoisted(() => vi.fn())
 const mockSetUser     = vi.hoisted(() => vi.fn())
-const mockAwardAircoins = vi.hoisted(() => vi.fn())
+const mockAwardAirstars = vi.hoisted(() => vi.fn())
 const mockUseAuth     = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
@@ -30,7 +30,7 @@ vi.mock('framer-motion', () => ({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function setupAuth() {
-  mockUseAuth.mockReturnValue({ setUser: mockSetUser, awardAircoins: mockAwardAircoins, API: '', apiFetch: (...args) => fetch(...args) })
+  mockUseAuth.mockReturnValue({ setUser: mockSetUser, awardAirstars: mockAwardAirstars, API: '', apiFetch: (...args) => fetch(...args) })
 }
 
 function makeAuthResponse(overrides = {}) {
@@ -47,11 +47,11 @@ function makeCompleteResponse(overrides = {}) {
     ok: true,
     json: async () => ({
       data: {
-        aircoinsEarned:   5,
+        airstarsEarned:   5,
         dailyCoinsEarned: 5,
         loginStreak:      1,
-        newTotalAircoins: 10,
-        newCycleAircoins: 10,
+        newTotalAirstars: 10,
+        newCycleAirstars: 10,
         rankPromotion:    null,
         ...overrides,
       },
@@ -66,7 +66,7 @@ describe('Login — pending brief redirect', () => {
     setupAuth()
     mockNavigate.mockClear()
     mockSetUser.mockClear()
-    mockAwardAircoins.mockClear()
+    mockAwardAirstars.mockClear()
     sessionStorage.clear()
     localStorage.clear()
     // Stub settings fetch (non-critical)
@@ -162,7 +162,7 @@ describe('Login — pending brief redirect', () => {
 
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeAuthResponse())
-      .mockResolvedValueOnce(makeCompleteResponse({ aircoinsEarned: 5, dailyCoinsEarned: 5, newTotalAircoins: 10, newCycleAircoins: 10 }))
+      .mockResolvedValueOnce(makeCompleteResponse({ airstarsEarned: 5, dailyCoinsEarned: 5, newTotalAirstars: 10, newCycleAirstars: 10 }))
 
     render(<LoginPage />)
     fireEvent.click(screen.getByText('Sign In with Email'))
@@ -172,9 +172,9 @@ describe('Login — pending brief redirect', () => {
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalled())
     const coins = JSON.parse(sessionStorage.getItem('sw_brief_coins'))
-    expect(coins.aircoinsEarned).toBe(5)
+    expect(coins.airstarsEarned).toBe(5)
     expect(coins.dailyCoinsEarned).toBe(5)
-    expect(coins.newTotalAircoins).toBe(10)
+    expect(coins.newTotalAirstars).toBe(10)
   })
 
   it('new user: sets sw_post_login_destination so LoginRoute can redirect to brief if navigate races setUser', async () => {

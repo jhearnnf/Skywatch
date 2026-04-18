@@ -37,7 +37,7 @@ function makeSession(overrides = {}) {
     correctAnswers: 5,
     totalQuestions: 5,
     percentageCorrect: 100,
-    aircoinsEarned: 10,
+    airstarsEarned: 10,
     timeTakenSeconds: 60,
     canDrillDown:  false,
     resultCategory: 'perfect',

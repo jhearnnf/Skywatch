@@ -16,7 +16,7 @@ const GameFlashcardRecall  = require('../../models/GameFlashcardRecall');
 const GameSessionFlashcardRecallResult = require('../../models/GameSessionFlashcardRecallResult');
 const GameWheresThatAircraft   = require('../../models/GameWheresThatAircraft');
 const GameSessionWheresThatAircraftResult  = require('../../models/GameSessionWheresThatAircraftResult');
-const AircoinLog           = require('../../models/AircoinLog');
+const AirstarLog           = require('../../models/AirstarLog');
 const AdminAction          = require('../../models/AdminAction');
 const GameType             = require('../../models/GameType');
 const AppSettings          = require('../../models/AppSettings');
@@ -39,11 +39,11 @@ async function createSettings(overrides = {}) {
   // "conflict at path" error when the same key appears in both operators.
   const defaults = {
     _singleton: true,
-    aircoinsFirstLogin:         5,
-    aircoinsStreakBonus:        2,
-    aircoinsPerWinEasy:         10,
-    aircoinsPerWinMedium:       20,
-    aircoins100Percent:         15,
+    airstarsFirstLogin:         5,
+    airstarsStreakBonus:        2,
+    airstarsPerWinEasy:         10,
+    airstarsPerWinMedium:       20,
+    airstars100Percent:         15,
     passThresholdEasy:          60,
     passThresholdMedium:        60,
     easyAnswerCount:            3,
@@ -77,7 +77,7 @@ async function createGameType(overrides = {}) {
         allowedCategories: ['News', 'Aircrafts', 'Bases', 'Ranks'],
         tutorialSteps:    [],
         gameDescription:  'Answer multiple choice questions',
-        awardedAircoins:  10,
+        awardedAirstars:  10,
         ...overrides,
       },
     },
@@ -258,9 +258,9 @@ async function createQuizResult(userId, questionId, overrides = {}) {
   });
 }
 
-// ── AircoinLog ─────────────────────────────────────────────────────────────
-async function createAircoinLog(userId, briefId, overrides = {}) {
-  return AircoinLog.create({
+// ── AirstarLog ─────────────────────────────────────────────────────────────
+async function createAirstarLog(userId, briefId, overrides = {}) {
+  return AirstarLog.create({
     userId,
     briefId:  briefId ?? null,
     amount:   overrides.amount ?? 10,
@@ -288,7 +288,7 @@ async function createFlashcardResult(userId, gameId, overrides = {}) {
     gameId,
     gameSessionId: overrides.gameSessionId ?? `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     cardResults:   [],
-    aircoinsEarned: 0,
+    airstarsEarned: 0,
     ...overrides,
   });
 }
@@ -311,7 +311,7 @@ async function createWheresThatAircraftResult(userId, gameId, overrides = {}) {
     gameSessionId:   overrides.gameSessionId ?? `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     userAnswer:      overrides.userAnswer    ?? 'Typhoon',
     isCorrect:       overrides.isCorrect     ?? true,
-    aircoinsEarned:  0,
+    airstarsEarned:  0,
     ...overrides,
   });
 }
@@ -373,7 +373,7 @@ module.exports = {
   createReadRecord,
   createPassedQuizAttempt,
   createWonBooResult,
-  createAircoinLog,
+  createAirstarLog,
   createFlashcardGame,
   createFlashcardResult,
   createWheresThatAircraftGame,

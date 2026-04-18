@@ -10,7 +10,7 @@ const aptitudeSyncUsageSchema = new mongoose.Schema({
   // Populated on session completion (final round response)
   finalSummary:  { type: String, default: null }, // 2–3 sentence closing debrief
   knowledgeGaps: { type: String, default: null }, // missed/incorrect facts with correct answers
-  aircoinsEarned: { type: Number, default: null }, // total awarded at end of session
+  airstarsEarned: { type: Number, default: null }, // total awarded at end of session
   completedAt:   { type: Date,   default: null },
   abandoned:     { type: Boolean, default: false },
 }, { timestamps: false });

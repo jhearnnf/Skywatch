@@ -4,7 +4,7 @@
  * Covers GET /api/admin/stats:
  *   users   section — totals, subscriptions, difficulty, logins, streaks
  *   games   section — played, completed, won (pass rate), perfect scores,
- *                     lost, abandoned, aircoins, quiz time, BOO sub-object
+ *                     lost, abandoned, airstars, quiz time, BOO sub-object
  *   briefs  section — totalBrifsRead, totalBrifsOpened, totalReadSeconds
  *   tutorials section — viewed / skipped counts
  *
@@ -426,7 +426,7 @@ function fakeWta(userId, overrides = {}) {
     round2Attempted: false,
     round2Correct:   false,
     won:             false,
-    aircoinsEarned:  0,
+    airstarsEarned:  0,
     timeTakenSeconds: 0,
     ...overrides,
   };

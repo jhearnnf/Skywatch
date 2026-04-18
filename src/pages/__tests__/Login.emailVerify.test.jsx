@@ -30,7 +30,7 @@ vi.mock('framer-motion', () => ({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function setupAuth() {
-  mockUseAuth.mockReturnValue({ setUser: mockSetUser, awardAircoins: vi.fn(), API: '', apiFetch: (...args) => fetch(...args) })
+  mockUseAuth.mockReturnValue({ setUser: mockSetUser, awardAirstars: vi.fn(), API: '', apiFetch: (...args) => fetch(...args) })
 }
 
 function makePendingResponse(email = 'agent@raf.mod.uk') {
@@ -54,8 +54,8 @@ function makeCompleteResponse() {
     ok: true,
     json: async () => ({
       data: {
-        aircoinsEarned: 10, dailyCoinsEarned: 0,
-        loginStreak: 1, newTotalAircoins: 10, newCycleAircoins: 10, rankPromotion: null,
+        airstarsEarned: 10, dailyCoinsEarned: 0,
+        loginStreak: 1, newTotalAirstars: 10, newCycleAirstars: 10, rankPromotion: null,
       },
     }),
   }

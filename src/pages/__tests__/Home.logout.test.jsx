@@ -46,7 +46,7 @@ const LOGGED_IN_USER = {
   _id: 'u1',
   displayName: 'Agent Test',
   subscriptionTier: 'gold',
-  cycleAircoins: 0,
+  cycleAirstars: 0,
   loginStreak: 0,
 }
 

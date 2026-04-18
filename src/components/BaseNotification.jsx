@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-// Shared scaffold for top-banner notifications (Aircoin, LevelUp, RankPromotion):
+// Shared scaffold for top-banner notifications (Airstar, LevelUp, RankPromotion):
 // auto-dismiss after `duration` ms, framer-motion enter/exit, aria-live region.
 // Each notification passes its own className + motion params + children.
 export default function BaseNotification({ duration, onDone, className, motionProps, children }) {

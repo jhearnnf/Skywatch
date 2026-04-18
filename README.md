@@ -8,7 +8,7 @@ An intelligence-style study platform built for RAF applicants, recruits, and ent
 
 - **Intelligence Briefs** — categorised RAF articles with keyword highlighting and interactive keyword definitions
 - **Knowledge Check Games** — Quiz, Battle of Order, Where's That Aircraft, and Flashcard Recall game modes
-- **Level & Rank Progression** — earn Aircoins through games and daily logins to level up and climb the RAF rank ladder
+- **Level & Rank Progression** — earn Airstars through games and daily logins to level up and climb the RAF rank ladder
 - **Subscription Tiers** — Free, Trial, Silver, and Gold tiers via Stripe
 - **Google OAuth + Email Auth** — secure sign-in with JWT httpOnly cookies
 - **Admin Panel** — AI-assisted brief generation, mnemonic prompt configuration, user management, problem reports, app stats, and configurable game settings
@@ -160,7 +160,7 @@ Place these MP3 files in `public/sounds/` for the full audio experience:
 | `target_locked.mp3` | Clicking a highlighted keyword |
 | `target_locked_keyword.mp3` | Keyword interaction |
 | `stand_down.mp3` | Closing a keyword sheet |
-| `aircoin.mp3` | Earning Aircoins |
+| `airstar.mp3` | Earning Airstars |
 | `level_up.mp3` | Level up |
 | `rank_promotion.mp3` | RAF rank promotion |
 | `first_brief_complete.mp3` | Completing first brief |
@@ -222,6 +222,6 @@ Tier amounts and trial duration are configurable from the Admin panel → Settin
 - **Active pages** are in `src/pages/v2/` — this is the only pages directory in use
 - **Routing** uses React Router v7 (`BrowserRouter`) — no custom state-based router
 - **Auth state** — `AuthContext` exposes `user`, `setUser`, `logout`, `loading`, and `API`; import via `useAuth()`
-- **Levels** — seeded automatically on server start via `Level.seedLevels()`; 10 levels with Aircoin thresholds
+- **Levels** — seeded automatically on server start via `Level.seedLevels()`; 10 levels with Airstar thresholds
 - **Images** — all brief images are stored on Cloudinary; the `Media` model stores both `mediaUrl` (Cloudinary URL) and `cloudinaryPublicId` for deletion
 - **Stripe** — fields are on the User schema and payment routes exist; full checkout flow not yet wired to a live Stripe account

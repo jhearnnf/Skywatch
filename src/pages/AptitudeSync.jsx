@@ -10,7 +10,7 @@ const G_BRIGHT  = '#5baaff'   // brand-600 electric blue
 const G_MID     = '#3d8fd9'   // mid blue
 const G_DIM     = '#1a4a70'   // dim blue
 const G_ERROR   = '#ff5555'
-const G_AMBER   = '#ffcc44'   // coin / aircoin highlight
+const G_AMBER   = '#ffcc44'   // coin / airstar highlight
 const G_WHITE   = '#c8e6ff'   // near-white blue tint for user text
 const G_DEBRIEFER = '#9fd6ff' // pale cyan-white — the debriefer's speaking voice
 
@@ -580,7 +580,7 @@ export default function AptitudeSync() {
   const { briefId }  = useParams()
   const navigate     = useNavigate()
   const location     = useLocation()
-  const { user, API, apiFetch, awardAircoins, isLoading } = useAuth()
+  const { user, API, apiFetch, awardAirstars, isLoading } = useAuth()
   const { settings } = useAppSettings()
 
   // Brief title / category — may be passed via navigation state or fetched
@@ -808,8 +808,8 @@ export default function AptitudeSync() {
         return
       }
 
-      const { response, aircoins, done, followUp, summary, corrections } = data.data ?? {}
-      const roundCoins = aircoins ?? 0
+      const { response, airstars, done, followUp, summary, corrections } = data.data ?? {}
+      const roundCoins = airstars ?? 0
       const newTotal   = Math.min(20, sessionCoins + roundCoins)
       setSessionCoins(newTotal)
       sessionStartedRef.current = true
@@ -819,8 +819,8 @@ export default function AptitudeSync() {
         { text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', type: 'divider' },
         { text: response ?? '', type: 'ai' },
         { text: '', type: 'blank' },
-        { text: `> INTELLIGENCE VALUE THIS ROUND:  +${roundCoins} AIRCOIN${roundCoins !== 1 ? 'S' : ''}`, type: 'coin' },
-        { text: `> RUNNING TOTAL:  ${newTotal} AIRCOINS`, type: 'coin' },
+        { text: `> INTELLIGENCE VALUE THIS ROUND:  +${roundCoins} AIRSTAR${roundCoins !== 1 ? 'S' : ''}`, type: 'coin' },
+        { text: `> RUNNING TOTAL:  ${newTotal} AIRSTARS`, type: 'coin' },
         { text: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', type: 'divider' },
         { text: '', type: 'blank' },
       ]
@@ -855,8 +855,8 @@ export default function AptitudeSync() {
           )
         }
         aiLines.push(
-          { text: `> SESSION TOTAL: ${newTotal} AIRCOINS EARNED`, type: 'coin' },
-          { text: '> AIRCOINS WILL BE CREDITED ON EXIT', type: 'system' },
+          { text: `> SESSION TOTAL: ${newTotal} AIRSTARS EARNED`, type: 'coin' },
+          { text: '> AIRSTARS WILL BE CREDITED ON EXIT', type: 'system' },
           { text: '', type: 'blank' },
           { text: '> MISSION COMPLETE. WELL DONE, AGENT.', type: 'info' },
           { text: '> [PRESS ANY KEY TO STAND DOWN]', type: 'system' },
@@ -899,18 +899,18 @@ export default function AptitudeSync() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ totalAircoins: total }),
+        body: JSON.stringify({ totalAirstars: total }),
       })
       const data = await res.json()
       if (res.ok && data?.data?.awarded > 0) {
-        awardAircoins(data.data.awarded, 'APTITUDE_SYNC', {
-          cycleAfter:    data.data.cycleAircoins,
-          totalAfter:    data.data.totalAircoins,
+        awardAirstars(data.data.awarded, 'APTITUDE_SYNC', {
+          cycleAfter:    data.data.cycleAirstars,
+          totalAfter:    data.data.totalAirstars,
           rankPromotion: data.data.rankPromotion ?? null,
         })
       }
     } catch { /* silent — coins can be re-attempted if page stays open */ }
-  }, [briefId, API, apiFetch, awardAircoins])
+  }, [briefId, API, apiFetch, awardAirstars])
 
   // ── Key handler for 'complete' phase (any key to exit) ───────────────────
   useEffect(() => {
@@ -1221,7 +1221,7 @@ export default function AptitudeSync() {
               >
                 ROUND {round}/{maxRounds}
                 {' · '}
-                {sessionCoins} AIRCOINS EARNED
+                {sessionCoins} AIRSTARS EARNED
                 {' · '}
                 {inputValue.length}/600 CHARS
               </div>

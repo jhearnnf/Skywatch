@@ -15,7 +15,7 @@ vi.mock('../../context/AuthContext', () => ({
     loading: false,
     API: '',
     apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
     setUser: vi.fn(),
   }),
 }))
@@ -64,19 +64,19 @@ const MOCK_SETTINGS = {
   mediumAnswerCount: 4,
   passThresholdEasy: 60,
   passThresholdMedium: 60,
-  aircoinsPerWinEasy: 5,
-  aircoinsPerWinMedium: 10,
-  aircoinsPerBriefRead: 5,
-  aircoinsFirstLogin: 5,
-  aircoinsStreakBonus: 2,
-  aircoins100Percent: 10,
-  aircoinsOrderOfBattleEasy: 10,
-  aircoinsOrderOfBattleMedium: 20,
-  aircoinsWhereAircraftRound1: 5,
-  aircoinsWhereAircraftRound2: 10,
-  aircoinsWhereAircraftBonus: 5,
-  aircoinsFlashcardPerCard: 3,
-  aircoinsFlashcardPerfectBonus: 5,
+  airstarsPerWinEasy: 5,
+  airstarsPerWinMedium: 10,
+  airstarsPerBriefRead: 5,
+  airstarsFirstLogin: 5,
+  airstarsStreakBonus: 2,
+  airstars100Percent: 10,
+  airstarsOrderOfBattleEasy: 10,
+  airstarsOrderOfBattleMedium: 20,
+  airstarsWhereAircraftRound1: 5,
+  airstarsWhereAircraftRound2: 10,
+  airstarsWhereAircraftBonus: 5,
+  airstarsFlashcardPerCard: 3,
+  airstarsFlashcardPerfectBonus: 5,
   useLiveLeaderboard: false,
   disableLoadingBar: false,
   // Sounds — targeting engaged at 80% to distinguish from default 100
@@ -86,7 +86,7 @@ const MOCK_SETTINGS = {
   volumeFire: 100,               soundEnabledFire: true,
   volumeOutOfAmmo: 100,          soundEnabledOutOfAmmo: true,
   volumeIntelBriefOpened: 100,   soundEnabledIntelBriefOpened: true,
-  volumeAircoin: 100,            soundEnabledAircoin: true,
+  volumeAirstar: 100,            soundEnabledAirstar: true,
   volumeLevelUp: 100,            soundEnabledLevelUp: true,
   volumeRankPromotion: 100,      soundEnabledRankPromotion: true,
   volumeQuizCompleteWin: 100,    soundEnabledQuizCompleteWin: true,
@@ -102,29 +102,29 @@ const MOCK_SETTINGS = {
   ],
 }
 
-// Mock returned by /api/admin/economy-viability — drives the AircoinsEconomy section
+// Mock returned by /api/admin/economy-viability — drives the AirstarsEconomy section
 const MOCK_ECONOMY = {
   status: 'success',
   data: {
     rates: {
-      aircoinsPerBriefRead:           5,
-      aircoinsFirstLogin:             5,
-      aircoinsStreakBonus:            2,
-      aircoinsPerWinEasy:             5,
-      aircoinsPerWinMedium:           10,
-      aircoins100Percent:             10,
-      aircoinsOrderOfBattleEasy:      10,
-      aircoinsOrderOfBattleMedium:    20,
-      aircoinsWhereAircraftRound1:    5,
-      aircoinsWhereAircraftRound2:    10,
-      aircoinsWhereAircraftBonus:     5,
-      aircoinsFlashcardPerCard:       3,
-      aircoinsFlashcardPerfectBonus:  6,
+      airstarsPerBriefRead:           5,
+      airstarsFirstLogin:             5,
+      airstarsStreakBonus:            2,
+      airstarsPerWinEasy:             5,
+      airstarsPerWinMedium:           10,
+      airstars100Percent:             10,
+      airstarsOrderOfBattleEasy:      10,
+      airstarsOrderOfBattleMedium:    20,
+      airstarsWhereAircraftRound1:    5,
+      airstarsWhereAircraftRound2:    10,
+      airstarsWhereAircraftBonus:     5,
+      airstarsFlashcardPerCard:       3,
+      airstarsFlashcardPerfectBonus:  6,
     },
     cycleThreshold:           100,
     totalRanks:                19,
     ranks:                    [],
-    levels:                   [{ levelNumber: 1, aircoinsToNextLevel: 100 }],
+    levels:                   [{ levelNumber: 1, airstarsToNextLevel: 100 }],
     content:                  { totalBriefs: 0, wtaBriefs: 0, booEligibleBriefs: 0 },
     aiQuestionsPerDifficulty: 7,
   },
@@ -484,7 +484,7 @@ describe('Admin — Settings tab: Feature Flags', () => {
   })
 })
 
-describe('Admin — Settings tab: Aircoins Economy & Game options', () => {
+describe('Admin — Settings tab: Airstars Economy & Game options', () => {
   beforeEach(() => {
     global.Audio = MockAudio
     audioInstances = []
@@ -494,27 +494,27 @@ describe('Admin — Settings tab: Aircoins Economy & Game options', () => {
     vi.restoreAllMocks()
   })
 
-  async function openAircoinsEconomy() {
+  async function openAirstarsEconomy() {
     global.fetch = setupFetch()
     render(<Admin />)
     const settingsTab = await screen.findByRole('button', { name: /settings/i })
     fireEvent.click(settingsTab)
-    await waitFor(() => screen.getByText('Aircoins Economy Settings'))
-    fireEvent.click(screen.getByText('Aircoins Economy Settings'))
+    await waitFor(() => screen.getByText('Airstars Economy Settings'))
+    fireEvent.click(screen.getByText('Airstars Economy Settings'))
     // Wait for the simulation panel to render once economy-viability resolves
     await waitFor(() => screen.getByText('Streak bonus'))
   }
 
-  it('shows correct aircoins streak bonus value from settings', async () => {
-    await openAircoinsEconomy()
-    // aircoinsStreakBonus = 2 (unique rate value in MOCK_ECONOMY)
+  it('shows correct airstars streak bonus value from settings', async () => {
+    await openAirstarsEconomy()
+    // airstarsStreakBonus = 2 (unique rate value in MOCK_ECONOMY)
     expect(screen.getByDisplayValue('2')).toBeDefined()
   })
 
-  it('changing an aircoin rate input updates the value', async () => {
-    await openAircoinsEconomy()
+  it('changing an airstar rate input updates the value', async () => {
+    await openAirstarsEconomy()
 
-    // aircoinsStreakBonus = 2 is unique among the rate inputs
+    // airstarsStreakBonus = 2 is unique among the rate inputs
     const input = screen.getByDisplayValue('2')
     fireEvent.change(input, { target: { value: '5' } })
 

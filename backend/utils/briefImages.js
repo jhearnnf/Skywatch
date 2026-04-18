@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const Media = require('../models/Media');
 const { uploadBuffer } = require('./cloudinary');
+const { callOpenRouter } = require('./openRouter');
 
 function md5Hex(buffer) {
   return crypto.createHash('md5').update(buffer).digest('hex');
@@ -9,23 +10,17 @@ function md5Hex(buffer) {
 const MAX_IMAGES = 2;
 
 async function extractSearchTerms({ title, subtitle, imagePromptBase }) {
-  const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
-      'X-Title': 'SkyWatch',
-    },
-    body: JSON.stringify({
+  const data = await callOpenRouter({
+    key:     'main',
+    feature: 'brief-image-search-terms',
+    body: {
       model: 'openai/gpt-4o-mini',
       messages: [{
         role: 'user',
         content: `${imagePromptBase}\n\nTitle: "${title}"${subtitle ? `\nSubtitle: "${subtitle}"` : ''}`,
       }],
-    }),
+    },
   });
-  const data = await aiRes.json();
   if (data.error) throw new Error(data.error.message ?? JSON.stringify(data.error));
   const raw = data.choices?.[0]?.message?.content?.trim() ?? '[]';
   let terms = [];

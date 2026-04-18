@@ -14,7 +14,7 @@ const gameSessionQuizAttemptSchema = new mongoose.Schema({
   totalQuestions:    { type: Number, default: 5 },
   correctAnswers:    { type: Number, default: 0 },
   percentageCorrect: { type: Number, default: 0 },
-  aircoinsEarned:    { type: Number, default: 0 },
+  airstarsEarned:    { type: Number, default: 0 },
 });
 
 gameSessionQuizAttemptSchema.index({ userId: 1, timeStarted: -1 });

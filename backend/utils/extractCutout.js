@@ -1,7 +1,7 @@
 const sharp = require('sharp');
 const { uploadBuffer } = require('./cloudinary');
+const { callOpenRouter } = require('./openRouter');
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const MODEL = 'google/gemini-2.5-flash-image';
 
 // Gemini is *asked* for pure magenta, but it sometimes returns a different
@@ -45,15 +45,10 @@ const EXTRACT_PROMPT = [
 async function callGeminiImageEdit(imageBuffer, mimeType) {
   const dataUrl = `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
 
-  const res = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
-      'Content-Type':  'application/json',
-      'HTTP-Referer':  process.env.CLIENT_URL || 'http://localhost:5173',
-      'X-Title':       'SkyWatch',
-    },
-    body: JSON.stringify({
+  const data = await callOpenRouter({
+    key:     'main',
+    feature: 'extract-cutout',
+    body: {
       model: MODEL,
       modalities: ['image', 'text'],
       messages: [{
@@ -63,15 +58,9 @@ async function callGeminiImageEdit(imageBuffer, mimeType) {
           { type: 'image_url', image_url: { url: dataUrl } },
         ],
       }],
-    }),
+    },
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 300)}`);
-  }
-
-  const data = await res.json();
   if (data.error) throw new Error(data.error.message ?? JSON.stringify(data.error));
 
   // OpenRouter returns image outputs as data URLs in message.images[].image_url.url

@@ -24,16 +24,16 @@ const APPLY_ENDPOINT  = '/api/admin/economy/apply';
 // Seed 10 level docs matching the real curve
 async function seedLevels(overrides = {}) {
   const defaults = [
-    { levelNumber: 1,  aircoinsToNextLevel: 100  },
-    { levelNumber: 2,  aircoinsToNextLevel: 250  },
-    { levelNumber: 3,  aircoinsToNextLevel: 500  },
-    { levelNumber: 4,  aircoinsToNextLevel: 850  },
-    { levelNumber: 5,  aircoinsToNextLevel: 1300 },
-    { levelNumber: 6,  aircoinsToNextLevel: 1850 },
-    { levelNumber: 7,  aircoinsToNextLevel: 2500 },
-    { levelNumber: 8,  aircoinsToNextLevel: 3250 },
-    { levelNumber: 9,  aircoinsToNextLevel: 4100 },
-    { levelNumber: 10, aircoinsToNextLevel: null  },
+    { levelNumber: 1,  airstarsToNextLevel: 100  },
+    { levelNumber: 2,  airstarsToNextLevel: 250  },
+    { levelNumber: 3,  airstarsToNextLevel: 500  },
+    { levelNumber: 4,  airstarsToNextLevel: 850  },
+    { levelNumber: 5,  airstarsToNextLevel: 1300 },
+    { levelNumber: 6,  airstarsToNextLevel: 1850 },
+    { levelNumber: 7,  airstarsToNextLevel: 2500 },
+    { levelNumber: 8,  airstarsToNextLevel: 3250 },
+    { levelNumber: 9,  airstarsToNextLevel: 4100 },
+    { levelNumber: 10, airstarsToNextLevel: null  },
   ];
   const levels = defaults.map(l => ({ ...l, ...(overrides[l.levelNumber] ?? {}) }));
   await Level.insertMany(levels);
@@ -47,19 +47,19 @@ afterAll(async ()   => db.closeDatabase());
 
 beforeEach(async () => {
   await createSettings({
-    aircoinsPerBriefRead:          5,
-    aircoinsPerWinEasy:            10,
-    aircoinsPerWinMedium:          20,
-    aircoins100Percent:            15,
-    aircoinsOrderOfBattleEasy:     8,
-    aircoinsOrderOfBattleMedium:   18,
-    aircoinsWhereAircraftRound1:   5,
-    aircoinsWhereAircraftRound2:   10,
-    aircoinsWhereAircraftBonus:    5,
-    aircoinsFlashcardPerCard:      2,
-    aircoinsFlashcardPerfectBonus: 5,
-    aircoinsFirstLogin:            5,
-    aircoinsStreakBonus:           2,
+    airstarsPerBriefRead:          5,
+    airstarsPerWinEasy:            10,
+    airstarsPerWinMedium:          20,
+    airstars100Percent:            15,
+    airstarsOrderOfBattleEasy:     8,
+    airstarsOrderOfBattleMedium:   18,
+    airstarsWhereAircraftRound1:   5,
+    airstarsWhereAircraftRound2:   10,
+    airstarsWhereAircraftBonus:    5,
+    airstarsFlashcardPerCard:      2,
+    airstarsFlashcardPerfectBonus: 5,
+    airstarsFirstLogin:            5,
+    airstarsStreakBonus:           2,
   });
   await seedLevels();
   admin  = await createAdminUser();
@@ -123,10 +123,10 @@ describe('GET /api/admin/economy-viability — content counts', () => {
   it('returns all expected rate fields including login/streak', async () => {
     const res = await request(app).get(GET_ENDPOINT).set('Cookie', cookie);
     const { rates } = res.body.data;
-    expect(rates.aircoinsFirstLogin).toBe(5);
-    expect(rates.aircoinsStreakBonus).toBe(2);
-    expect(rates.aircoinsFlashcardPerCard).toBe(2);
-    expect(rates.aircoinsFlashcardPerfectBonus).toBe(5);
+    expect(rates.airstarsFirstLogin).toBe(5);
+    expect(rates.airstarsStreakBonus).toBe(2);
+    expect(rates.airstarsFlashcardPerCard).toBe(2);
+    expect(rates.airstarsFlashcardPerfectBonus).toBe(5);
   });
 });
 
@@ -234,7 +234,7 @@ describe('GET /api/admin/economy-viability — rank progression', () => {
 describe('PATCH /api/admin/economy/levels — auth', () => {
   it('returns 401 when not authenticated', async () => {
     const res = await request(app).patch(LEVELS_ENDPOINT)
-      .send({ levels: [{ levelNumber: 1, aircoinsToNextLevel: 200 }], reason: 'test' });
+      .send({ levels: [{ levelNumber: 1, airstarsToNextLevel: 200 }], reason: 'test' });
     expect(res.status).toBe(401);
   });
 
@@ -242,7 +242,7 @@ describe('PATCH /api/admin/economy/levels — auth', () => {
     const user   = await createUser();
     const cookie = authCookie(user._id);
     const res    = await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
-      .send({ levels: [{ levelNumber: 1, aircoinsToNextLevel: 200 }], reason: 'test' });
+      .send({ levels: [{ levelNumber: 1, airstarsToNextLevel: 200 }], reason: 'test' });
     expect(res.status).toBe(403);
   });
 });
@@ -253,8 +253,8 @@ describe('PATCH /api/admin/economy/levels — DB writes', () => {
     const res = await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
       .send({
         levels: [
-          { levelNumber: 1, aircoinsToNextLevel: 200 },
-          { levelNumber: 2, aircoinsToNextLevel: 400 },
+          { levelNumber: 1, airstarsToNextLevel: 200 },
+          { levelNumber: 2, airstarsToNextLevel: 400 },
         ],
         reason: 'economy rebalance',
       });
@@ -263,16 +263,16 @@ describe('PATCH /api/admin/economy/levels — DB writes', () => {
 
     const l1 = await Level.findOne({ levelNumber: 1 });
     const l2 = await Level.findOne({ levelNumber: 2 });
-    expect(l1.aircoinsToNextLevel).toBe(200);
-    expect(l2.aircoinsToNextLevel).toBe(400);
+    expect(l1.airstarsToNextLevel).toBe(200);
+    expect(l2.airstarsToNextLevel).toBe(400);
     // Other levels unchanged
     const l3 = await Level.findOne({ levelNumber: 3 });
-    expect(l3.aircoinsToNextLevel).toBe(500);
+    expect(l3.airstarsToNextLevel).toBe(500);
   });
 
   it('logs an AdminAction', async () => {
     await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
-      .send({ levels: [{ levelNumber: 1, aircoinsToNextLevel: 300 }], reason: 'test rebalance' });
+      .send({ levels: [{ levelNumber: 1, airstarsToNextLevel: 300 }], reason: 'test rebalance' });
 
     const action = await AdminAction.findOne({ actionType: 'update_economy_levels' });
     expect(action).not.toBeNull();
@@ -281,13 +281,13 @@ describe('PATCH /api/admin/economy/levels — DB writes', () => {
 
   it('rejects invalid levelNumber', async () => {
     const res = await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
-      .send({ levels: [{ levelNumber: 99, aircoinsToNextLevel: 100 }], reason: 'test' });
+      .send({ levels: [{ levelNumber: 99, airstarsToNextLevel: 100 }], reason: 'test' });
     expect(res.status).toBe(400);
   });
 
-  it('rejects negative aircoinsToNextLevel', async () => {
+  it('rejects negative airstarsToNextLevel', async () => {
     const res = await request(app).patch(LEVELS_ENDPOINT).set('Cookie', cookie)
-      .send({ levels: [{ levelNumber: 1, aircoinsToNextLevel: -50 }], reason: 'test' });
+      .send({ levels: [{ levelNumber: 1, airstarsToNextLevel: -50 }], reason: 'test' });
     expect(res.status).toBe(400);
   });
 
@@ -301,8 +301,8 @@ describe('PATCH /api/admin/economy/levels — DB writes', () => {
 // ── POST /economy/apply auth ───────────────────────────────────────────────
 describe('POST /api/admin/economy/apply — auth', () => {
   const validBody = {
-    rates:  { aircoinsPerWinEasy: 12 },
-    levels: [{ levelNumber: 1, aircoinsToNextLevel: 150 }],
+    rates:  { airstarsPerWinEasy: 12 },
+    levels: [{ levelNumber: 1, airstarsToNextLevel: 150 }],
     reason: 'test',
   };
 
@@ -324,46 +324,46 @@ describe('POST /api/admin/economy/apply — DB writes', () => {
   it('updates AppSettings with provided rates', async () => {
     const res = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send({
       rates: {
-        aircoinsPerWinEasy:   15,
-        aircoinsPerWinMedium: 25,
-        aircoinsFirstLogin:   8,
-        aircoinsStreakBonus:  3,
+        airstarsPerWinEasy:   15,
+        airstarsPerWinMedium: 25,
+        airstarsFirstLogin:   8,
+        airstarsStreakBonus:  3,
       },
-      levels: [{ levelNumber: 1, aircoinsToNextLevel: 100 }],
+      levels: [{ levelNumber: 1, airstarsToNextLevel: 100 }],
       reason: 'rate adjustment',
     });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
 
     const settings = await AppSettings.getSettings();
-    expect(settings.aircoinsPerWinEasy).toBe(15);
-    expect(settings.aircoinsPerWinMedium).toBe(25);
-    expect(settings.aircoinsFirstLogin).toBe(8);
-    expect(settings.aircoinsStreakBonus).toBe(3);
+    expect(settings.airstarsPerWinEasy).toBe(15);
+    expect(settings.airstarsPerWinMedium).toBe(25);
+    expect(settings.airstarsFirstLogin).toBe(8);
+    expect(settings.airstarsStreakBonus).toBe(3);
     // Unmentioned field unchanged
-    expect(settings.aircoinsPerBriefRead).toBe(5);
+    expect(settings.airstarsPerBriefRead).toBe(5);
   });
 
   it('updates Level documents', async () => {
     await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send({
-      rates:  { aircoinsPerWinEasy: 10 },
+      rates:  { airstarsPerWinEasy: 10 },
       levels: [
-        { levelNumber: 1, aircoinsToNextLevel: 150 },
-        { levelNumber: 3, aircoinsToNextLevel: 600 },
+        { levelNumber: 1, airstarsToNextLevel: 150 },
+        { levelNumber: 3, airstarsToNextLevel: 600 },
       ],
       reason: 'level rebalance',
     });
 
     const l1 = await Level.findOne({ levelNumber: 1 });
     const l3 = await Level.findOne({ levelNumber: 3 });
-    expect(l1.aircoinsToNextLevel).toBe(150);
-    expect(l3.aircoinsToNextLevel).toBe(600);
+    expect(l1.airstarsToNextLevel).toBe(150);
+    expect(l3.airstarsToNextLevel).toBe(600);
   });
 
   it('logs an AdminAction', async () => {
     await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send({
-      rates:  { aircoinsPerWinEasy: 10 },
-      levels: [{ levelNumber: 1, aircoinsToNextLevel: 100 }],
+      rates:  { airstarsPerWinEasy: 10 },
+      levels: [{ levelNumber: 1, airstarsToNextLevel: 100 }],
       reason: 'full economy apply',
     });
 
@@ -375,7 +375,7 @@ describe('POST /api/admin/economy/apply — DB writes', () => {
   it('rejects unknown rate fields', async () => {
     const res = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send({
       rates:  { dangerousField: 999 },
-      levels: [{ levelNumber: 1, aircoinsToNextLevel: 100 }],
+      levels: [{ levelNumber: 1, airstarsToNextLevel: 100 }],
       reason: 'test',
     });
     expect(res.status).toBe(400);
@@ -384,8 +384,8 @@ describe('POST /api/admin/economy/apply — DB writes', () => {
 
   it('rejects negative rate values', async () => {
     const res = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie).send({
-      rates:  { aircoinsPerWinEasy: -5 },
-      levels: [{ levelNumber: 1, aircoinsToNextLevel: 100 }],
+      rates:  { airstarsPerWinEasy: -5 },
+      levels: [{ levelNumber: 1, airstarsToNextLevel: 100 }],
       reason: 'test',
     });
     expect(res.status).toBe(400);
@@ -393,13 +393,13 @@ describe('POST /api/admin/economy/apply — DB writes', () => {
 
   it('rejects missing rates object', async () => {
     const res = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie)
-      .send({ levels: [{ levelNumber: 1, aircoinsToNextLevel: 100 }], reason: 'test' });
+      .send({ levels: [{ levelNumber: 1, airstarsToNextLevel: 100 }], reason: 'test' });
     expect(res.status).toBe(400);
   });
 
   it('rejects missing levels array', async () => {
     const res = await request(app).post(APPLY_ENDPOINT).set('Cookie', cookie)
-      .send({ rates: { aircoinsPerWinEasy: 10 }, reason: 'test' });
+      .send({ rates: { airstarsPerWinEasy: 10 }, reason: 'test' });
     expect(res.status).toBe(400);
   });
 });

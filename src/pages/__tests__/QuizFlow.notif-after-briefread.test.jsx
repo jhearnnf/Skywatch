@@ -1,6 +1,6 @@
 // Repro for: quiz-complete notif fails to render when fired immediately after a
 // brief-read coin award. Uses the *real* AuthProvider so we can inspect the
-// actual notifQueue state instead of spying on a mocked awardAircoins.
+// actual notifQueue state instead of spying on a mocked awardAirstars.
 
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
@@ -26,7 +26,7 @@ vi.mock('../../context/AppTutorialContext', () => ({
 }))
 
 vi.mock('../../context/AppSettingsContext', () => ({
-  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 }, levelThresholds: [] }),
+  useAppSettings: () => ({ settings: { airstarsPerBriefRead: 5 }, levelThresholds: [] }),
 }))
 
 vi.mock('../../context/NewGameUnlockContext', () => ({
@@ -87,8 +87,8 @@ const INITIAL_USER = {
   email: 'u@example.com',
   username: 'u',
   role: 'user',
-  totalAircoins: 0,
-  cycleAircoins: 0,
+  totalAirstars: 0,
+  cycleAirstars: 0,
   loginStreak: 0,
 }
 
@@ -173,26 +173,26 @@ function setupFetch({ finishBehavior = { kind: 'ok' }, freshUserAfterFinish = nu
 function defaultOkBody() {
   return {
     data: {
-      aircoinsEarned: 10,
+      airstarsEarned: 10,
       won: true,
       isFirstAttempt: true,
       breakdown: [{ label: '1 correct × 10', amount: 10 }],
-      cycleAircoins: 15,   // 5 from brief-read + 10 from quiz
-      totalAircoins: 15,
-      attempt: { cycleAircoins: 15, totalAircoins: 15 },
+      cycleAirstars: 15,   // 5 from brief-read + 10 from quiz
+      totalAirstars: 15,
+      attempt: { cycleAirstars: 15, totalAirstars: 15 },
     },
   }
 }
 
 // ── Harness: renders QuizFlow inside AuthProvider and exposes notifQueue. ─
 
-// - preSeedBriefRead: if true, calls awardAircoins(5, 'Brief read', ...)
+// - preSeedBriefRead: if true, calls awardAirstars(5, 'Brief read', ...)
 //   once the user hydrates — mimicking BriefReader's post-complete award
 //   immediately before the user navigates to /quiz/:briefId.
 // - queueSink: array we push the notifQueue into on each render so tests can
 //   inspect the final state.
-// - contextSink: captures { awardAircoins, user } so tests can assert +
-//   invoke awardAircoins directly if they want.
+// - contextSink: captures { awardAirstars, user } so tests can assert +
+//   invoke awardAirstars directly if they want.
 function Harness({ preSeedBriefRead = true, queueSink, contextSink }) {
   return (
     <AuthProvider>
@@ -215,7 +215,7 @@ function QueueSpy({ queueSink, contextSink, preSeedBriefRead }) {
     if (!preSeedBriefRead) return
     if (ctx.user && !contextSink.seededBriefRead) {
       contextSink.seededBriefRead = true
-      ctx.awardAircoins(5, 'Brief read', { cycleAfter: 5, totalAfter: 5 })
+      ctx.awardAirstars(5, 'Brief read', { cycleAfter: 5, totalAfter: 5 })
     }
   }, [ctx.user, preSeedBriefRead, ctx, contextSink])
 
@@ -243,7 +243,7 @@ async function runFlow({ finishBehavior, freshUserAfterFinish, preSeedBriefRead 
   // Answer correctly → fires fireFinish() in the background
   fireEvent.click(screen.getByText('Multirole fighter'))
 
-  // Click "See Results" → handleNext awaits finishPromiseRef, calls awardAircoins
+  // Click "See Results" → handleNext awaits finishPromiseRef, calls awardAirstars
   await waitFor(() => screen.getByRole('button', { name: /see results/i }))
   fireEvent.click(screen.getByRole('button', { name: /see results/i }))
 
@@ -259,7 +259,7 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
   beforeEach(() => { vi.clearAllMocks() })
   afterEach(()  => { vi.restoreAllMocks() })
 
-  it('happy path: /finish returns 200 OK with aircoinsEarned → notifQueue has [Brief read, Quiz complete]', async () => {
+  it('happy path: /finish returns 200 OK with airstarsEarned → notifQueue has [Brief read, Quiz complete]', async () => {
     const { queueSink } = await runFlow({ finishBehavior: { kind: 'ok' } })
 
     // Expectation: 2 notifs. Brief-read first (consumed last-in-first-out? no — FIFO),
@@ -281,7 +281,7 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
   it('/finish 500 → falls through to refreshUser fallback; if delta > 0 should still notify', async () => {
     const { queueSink } = await runFlow({
       finishBehavior: { kind: 'status', status: 500 },
-      freshUserAfterFinish: { ...INITIAL_USER, totalAircoins: 10, cycleAircoins: 10 }, // server awarded 10
+      freshUserAfterFinish: { ...INITIAL_USER, totalAirstars: 10, cycleAirstars: 10 }, // server awarded 10
     })
     const labels = queueSink.map(n => n.label)
     expect(labels).toContain('Quiz complete')
@@ -290,7 +290,7 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
   it('/finish rejects (network) → falls through to refreshUser fallback', async () => {
     const { queueSink } = await runFlow({
       finishBehavior: { kind: 'reject', error: new TypeError('network error') },
-      freshUserAfterFinish: { ...INITIAL_USER, totalAircoins: 10, cycleAircoins: 10 },
+      freshUserAfterFinish: { ...INITIAL_USER, totalAirstars: 10, cycleAirstars: 10 },
     })
     const labels = queueSink.map(n => n.label)
     expect(labels).toContain('Quiz complete')
@@ -299,7 +299,7 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
   it('/finish parse error → falls through to refreshUser fallback', async () => {
     const { queueSink } = await runFlow({
       finishBehavior: { kind: 'parseError' },
-      freshUserAfterFinish: { ...INITIAL_USER, totalAircoins: 10, cycleAircoins: 10 },
+      freshUserAfterFinish: { ...INITIAL_USER, totalAirstars: 10, cycleAirstars: 10 },
     })
     const labels = queueSink.map(n => n.label)
     expect(labels).toContain('Quiz complete')
@@ -318,28 +318,28 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
   // ── Additional repro attempts ──────────────────────────────────────────
   //
   // The reported bug: "immediately after completing the read, complete the
-  // quiz at 100% → no notif, totalAircoins doesn't update until refresh."
+  // quiz at 100% → no notif, totalAirstars doesn't update until refresh."
   //
   // These try more exotic response shapes to surface the bug.
 
   // ── Regression: previously reproduced the silent no-op bug ──────────────
   // Both variations model the reported scenario:
   //   • /finish returns 200 OK (so gotResponse was true under old code)
-  //   • but the body is missing the fields the client reads for aircoinsEarned
+  //   • but the body is missing the fields the client reads for airstarsEarned
   //   • server-side, coins were actually awarded (reflected when /auth/me is refetched)
   //
   // Under the pre-fix code the fallback only fired when the HTTP response was
   // lost, so earned=0 from a 200 response silently no-opped. The fix gates the
   // fallback on `awarded` (did the client actually notify?) so any shape that
   // leaves us unnotified triggers a refreshUser + delta notification.
-  it('regression: /finish 200 OK with `aircoinsEarned` missing → fallback recovers via delta', async () => {
+  it('regression: /finish 200 OK with `airstarsEarned` missing → fallback recovers via delta', async () => {
     const { queueSink } = await runFlow({
       finishBehavior: {
         kind: 'ok',
-        body: { data: { won: true, isFirstAttempt: true, breakdown: [] /* no aircoinsEarned */ } },
+        body: { data: { won: true, isFirstAttempt: true, breakdown: [] /* no airstarsEarned */ } },
       },
       // /auth/me after finish reflects the server-side award: brief-read(5) + quiz(10) = 15
-      freshUserAfterFinish: { ...INITIAL_USER, totalAircoins: 15, cycleAircoins: 15 },
+      freshUserAfterFinish: { ...INITIAL_USER, totalAirstars: 15, cycleAirstars: 15 },
     })
     expect(queueSink.map(n => n.label)).toContain('Quiz complete')
   })
@@ -348,29 +348,29 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
     const { queueSink } = await runFlow({
       finishBehavior: {
         kind: 'ok',
-        body: { won: true, aircoinsEarned: 10, isFirstAttempt: true, breakdown: [] },
+        body: { won: true, airstarsEarned: 10, isFirstAttempt: true, breakdown: [] },
       },
-      freshUserAfterFinish: { ...INITIAL_USER, totalAircoins: 15, cycleAircoins: 15 },
+      freshUserAfterFinish: { ...INITIAL_USER, totalAirstars: 15, cycleAirstars: 15 },
     })
     expect(queueSink.map(n => n.label)).toContain('Quiz complete')
   })
 
-  it('repro: /finish returns totalAircoins equal to preFinishTotal (server thinks already awarded)', async () => {
-    // If the server was idempotent and returns the same totalAircoins that the
+  it('repro: /finish returns totalAirstars equal to preFinishTotal (server thinks already awarded)', async () => {
+    // If the server was idempotent and returns the same totalAirstars that the
     // client already has (because brief-read pre-seeded 5 into user), then:
-    //   - gotResponse=true, earned=10 (if aircoinsEarned:10 is in body) → awardAircoins IS called
-    //   - BUT if aircoinsEarned: 0 on a "repeat" → fallback runs, delta=0 → no notif
+    //   - gotResponse=true, earned=10 (if airstarsEarned:10 is in body) → awardAirstars IS called
+    //   - BUT if airstarsEarned: 0 on a "repeat" → fallback runs, delta=0 → no notif
     // This is the "repeat attempt" shape — should still at least NOT award a notif.
     const { queueSink } = await runFlow({
       finishBehavior: {
         kind: 'ok',
         body: {
           data: {
-            aircoinsEarned: 0,   // already earned
+            airstarsEarned: 0,   // already earned
             won: true,
             isFirstAttempt: false,
             breakdown: [],
-            cycleAircoins: 5, totalAircoins: 5,
+            cycleAirstars: 5, totalAirstars: 5,
           },
         },
       },
@@ -388,22 +388,22 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
     expect(true).toBe(true)
   })
 
-  it('repro: /finish returns aircoinsEarned:10 but totalAircoins matches the preseed (stale server state)', async () => {
+  it('repro: /finish returns airstarsEarned:10 but totalAirstars matches the preseed (stale server state)', async () => {
     // preFinishTotalRef captures 5 (from brief-read preseed); server returns
-    // { totalAircoins: 5 } because it didn't actually persist the brief-read yet
+    // { totalAirstars: 5 } because it didn't actually persist the brief-read yet
     // (race: brief /complete still in-flight server-side when /finish runs).
-    // aircoinsEarned is still > 0, so the primary path should fire awardAircoins.
+    // airstarsEarned is still > 0, so the primary path should fire awardAirstars.
     const { queueSink } = await runFlow({
       finishBehavior: {
         kind: 'ok',
         body: {
           data: {
-            aircoinsEarned: 10,
+            airstarsEarned: 10,
             won: true,
             isFirstAttempt: true,
             breakdown: [{ label: '1 correct × 10', amount: 10 }],
-            // totalAircoins equals the preseed (5), so the fallback delta would be 0
-            cycleAircoins: 5, totalAircoins: 5,
+            // totalAirstars equals the preseed (5), so the fallback delta would be 0
+            cycleAirstars: 5, totalAirstars: 5,
           },
         },
       },
@@ -424,7 +424,7 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
   // finishPromiseRef, AND preFinishTotalRef is captured at quiz start.
   it('race: clicking See Results while per-question POST is in flight does NOT award the entire balance', async () => {
     const PRE_QUIZ_BALANCE = 607
-    const HYDRATED_USER    = { ...INITIAL_USER, totalAircoins: PRE_QUIZ_BALANCE, cycleAircoins: PRE_QUIZ_BALANCE }
+    const HYDRATED_USER    = { ...INITIAL_USER, totalAirstars: PRE_QUIZ_BALANCE, cycleAirstars: PRE_QUIZ_BALANCE }
 
     let releaseResult = null
     const resultGate  = new Promise(resolve => { releaseResult = resolve })
@@ -445,9 +445,9 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
         finishCalledAt = Date.now()
         return Promise.resolve({ ok: true, status: 200, json: async () => ({
           data: {
-            aircoinsEarned: 10, won: true, isFirstAttempt: true,
+            airstarsEarned: 10, won: true, isFirstAttempt: true,
             breakdown: [{ label: '1 correct × 10', amount: 10 }],
-            totalAircoins: PRE_QUIZ_BALANCE + 10, cycleAircoins: PRE_QUIZ_BALANCE + 10,
+            totalAirstars: PRE_QUIZ_BALANCE + 10, cycleAirstars: PRE_QUIZ_BALANCE + 10,
           },
         })})
       }
@@ -486,10 +486,10 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
 
     // CRITICAL: notification queue must contain exactly the +10 quiz reward,
     // NOT a +607 (entire-balance) false notification.
-    const aircoinNotifs = queueSink.filter(n => n.type === 'aircoin')
-    expect(aircoinNotifs).toHaveLength(1)
-    expect(aircoinNotifs[0].amount).toBe(10)
-    expect(aircoinNotifs[0].amount).not.toBe(PRE_QUIZ_BALANCE)
+    const airstarNotifs = queueSink.filter(n => n.type === 'airstar')
+    expect(airstarNotifs).toHaveLength(1)
+    expect(airstarNotifs[0].amount).toBe(10)
+    expect(airstarNotifs[0].amount).not.toBe(PRE_QUIZ_BALANCE)
   })
 
   // ── Defence-in-depth: implausibly large delta is suppressed ──────────────
@@ -501,11 +501,11 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
   // anything larger is treated as a stale-baseline artefact and suppressed.
   it('suppression: implausible delta from a lost finish response is NOT shown to the user', async () => {
     const PRE_QUIZ_BALANCE = 607
-    const HYDRATED_USER    = { ...INITIAL_USER, totalAircoins: PRE_QUIZ_BALANCE, cycleAircoins: PRE_QUIZ_BALANCE }
+    const HYDRATED_USER    = { ...INITIAL_USER, totalAirstars: PRE_QUIZ_BALANCE, cycleAirstars: PRE_QUIZ_BALANCE }
     // A "buggy" snapshot: simulate the world where the server briefly returned
-    // a wildly wrong totalAircoins (eg sum of multiple awards from another
+    // a wildly wrong totalAirstars (eg sum of multiple awards from another
     // tab) so the delta would be huge.
-    const POST_QUIZ_FRESH  = { ...INITIAL_USER, totalAircoins: PRE_QUIZ_BALANCE + 5000, cycleAircoins: PRE_QUIZ_BALANCE + 5000 }
+    const POST_QUIZ_FRESH  = { ...INITIAL_USER, totalAirstars: PRE_QUIZ_BALANCE + 5000, cycleAirstars: PRE_QUIZ_BALANCE + 5000 }
 
     let meCallCount = 0
     global.fetch = vi.fn().mockImplementation((url) => {
@@ -539,9 +539,9 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
     fireEvent.click(screen.getByRole('button', { name: /see results/i }))
     await waitFor(() => screen.getByRole('button', { name: /back to brief/i }), { timeout: 3000 })
 
-    // Implausible delta (5000) MUST be suppressed — no aircoin notif fires.
-    const aircoinNotifs = queueSink.filter(n => n.type === 'aircoin')
-    expect(aircoinNotifs).toHaveLength(0)
+    // Implausible delta (5000) MUST be suppressed — no airstar notif fires.
+    const airstarNotifs = queueSink.filter(n => n.type === 'airstar')
+    expect(airstarNotifs).toHaveLength(0)
   })
 
   it('repro: /finish returns a ReadableStream-like body that times out or hangs', async () => {

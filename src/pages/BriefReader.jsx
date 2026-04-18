@@ -953,7 +953,7 @@ function ContinueLearning({ brief, navigate, fallbackCards }) {
 
 // ── Completion screen ─────────────────────────────────────────────────────
 function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onReRead, user, isFirstCompletion, coinReward, navigate, quizPassed, quizAvailable }) {
-  const { API, apiFetch, setUser, awardAircoins } = useAuth()
+  const { API, apiFetch, setUser, awardAirstars } = useAuth()
   const [email, setEmail]             = useState('')
   const [showEmailInput, setShowEmailInput] = useState(false)
   const googleBtnRef                  = useRef(null)
@@ -986,11 +986,11 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
         // 3. Award coins directly — no navigation needed, we're already on the completion screen
         if (completeRes.ok && completeData?.data) {
           const d     = completeData.data
-          const total = (d.aircoinsEarned ?? 0) + (d.dailyCoinsEarned ?? 0)
+          const total = (d.airstarsEarned ?? 0) + (d.dailyCoinsEarned ?? 0)
           if (total > 0) {
-            awardAircoins(total, d.dailyCoinsEarned > 0 ? 'Daily Brief' : 'Brief read', {
-              cycleAfter:    d.newCycleAircoins,
-              totalAfter:    d.newTotalAircoins,
+            awardAirstars(total, d.dailyCoinsEarned > 0 ? 'Daily Brief' : 'Brief read', {
+              cycleAfter:    d.newCycleAirstars,
+              totalAfter:    d.newTotalAirstars,
               rankPromotion: d.rankPromotion ?? null,
             })
           }
@@ -1053,7 +1053,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
                 onClick={onQuiz}
                 className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200"
               >
-                🧠 {quizPassed ? 'Retake Quiz' : 'Take the Quiz → Earn Aircoins'}
+                🧠 {quizPassed ? 'Retake Quiz' : 'Take the Quiz → Earn Airstars'}
               </button>
             ) : (
               <div className="quiz-unavailable-block">
@@ -1072,7 +1072,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
                 onClick={onBattleOrder}
                 className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
               >
-                🗺️ Battle of Order — Earn Aircoins
+                🗺️ Battle of Order — Earn Airstars
               </button>
             )}
             {booState === 'completed' && (
@@ -1103,7 +1103,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             <div className="bg-slate-200 border border-slate-300 rounded-2xl p-3.5 text-left flex items-center gap-3 coin-hook-pulse">
               <span className="text-xl shrink-0 star-silver">⭐</span>
               <div>
-                <p className="text-sm font-bold text-white">{coinReward} Aircoins waiting to be claimed</p>
+                <p className="text-sm font-bold text-white">{coinReward} Airstars waiting to be claimed</p>
                 <p className="text-xs text-slate-600">Create a free account to collect your reward and track your streak</p>
               </div>
             </div>
@@ -1333,7 +1333,7 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, qu
 export default function BriefReader() {
   const { briefId }    = useParams()
   const navigate       = useNavigate()
-  const { user, API, apiFetch, awardAircoins, setUser } = useAuth()
+  const { user, API, apiFetch, awardAirstars, setUser } = useAuth()
   const { start, visible, activeName, hasSeen } = useAppTutorial()
   const startRef = useRef(start)
   useEffect(() => { startRef.current = start }, [start])
@@ -1543,13 +1543,13 @@ export default function BriefReader() {
     sessionStorage.removeItem(BRIEF_COINS_KEY)
     try {
       const d           = JSON.parse(raw)
-      const briefCoins  = d.aircoinsEarned  ?? 0
+      const briefCoins  = d.airstarsEarned  ?? 0
       const dailyCoins  = d.dailyCoinsEarned ?? 0
       const totalEarned = briefCoins + dailyCoins
       if (totalEarned > 0) {
-        awardAircoins(totalEarned, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
-          cycleAfter:    d.newCycleAircoins,
-          totalAfter:    d.newTotalAircoins,
+        awardAirstars(totalEarned, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
+          cycleAfter:    d.newCycleAirstars,
+          totalAfter:    d.newTotalAirstars,
           rankPromotion: d.rankPromotion ?? null,
         })
       }
@@ -1575,13 +1575,13 @@ export default function BriefReader() {
       .then(r => r.json())
       .then(data => {
         if (!data?.data) return
-        const briefCoins  = data.data.aircoinsEarned  ?? 0
+        const briefCoins  = data.data.airstarsEarned  ?? 0
         const dailyCoins  = data.data.dailyCoinsEarned ?? 0
         const total = briefCoins + dailyCoins
         if (total > 0) {
-          awardAircoins(total, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
-            cycleAfter:    data.data.newCycleAircoins,
-            totalAfter:    data.data.newTotalAircoins,
+          awardAirstars(total, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
+            cycleAfter:    data.data.newCycleAirstars,
+            totalAfter:    data.data.newTotalAirstars,
             rankPromotion: data.data.rankPromotion ?? null,
           })
         }
@@ -1793,13 +1793,13 @@ export default function BriefReader() {
         })
           .then(r => r.json())
           .then(data => {
-            const briefCoins = data?.data?.aircoinsEarned ?? 0
+            const briefCoins = data?.data?.airstarsEarned ?? 0
             const dailyCoins = data?.data?.dailyCoinsEarned ?? 0
             const totalEarned = briefCoins + dailyCoins
             if (totalEarned > 0) {
-              awardAircoins(totalEarned, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
-                cycleAfter:    data.data.newCycleAircoins,
-                totalAfter:    data.data.newTotalAircoins,
+              awardAirstars(totalEarned, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
+                cycleAfter:    data.data.newCycleAirstars,
+                totalAfter:    data.data.newTotalAirstars,
                 rankPromotion: data.data.rankPromotion ?? null,
               })
             }
@@ -2177,7 +2177,7 @@ export default function BriefReader() {
           brief={brief}
           user={user}
           isFirstCompletion={isFirstCompletion}
-          coinReward={settings?.aircoinsPerBriefRead ?? 5}
+          coinReward={settings?.airstarsPerBriefRead ?? 5}
           onQuiz={() => navigate(`/quiz/${briefId}`)}
           booState={booState}
           onBattleOrder={booState === 'available' || booState === 'completed' ? () => navigate(`/battle-of-order/${briefId}`) : null}

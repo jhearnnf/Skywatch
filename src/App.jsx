@@ -16,10 +16,10 @@ import { AppTutorialProvider }             from './context/AppTutorialContext'
 import { NewGameUnlockProvider }           from './context/NewGameUnlockContext'
 import { UnsolvedReportsProvider }          from './context/UnsolvedReportsContext'
 import AppShell                            from './components/layout/AppShell'
-import AircoinNotification                 from './components/AircoinNotification'
+import AirstarNotification                 from './components/AirstarNotification'
 import LevelUpNotification                 from './components/LevelUpNotification'
 import RankPromotionNotification           from './components/RankPromotionNotification'
-import { POST_LOGIN_DEST_KEY }             from './utils/storageKeys'
+import { captureLoginReturn, resolveLoginDest } from './utils/loginRedirect'
 
 // v2 pages
 import Landing        from './pages/Landing'
@@ -43,7 +43,7 @@ import CbatAngles     from './pages/CbatAngles'
 import CbatCodeDuplicates from './pages/CbatCodeDuplicates'
 import CbatSymbols      from './pages/CbatSymbols'
 import CbatLeaderboard from './pages/CbatLeaderboard'
-import AircoinHistory from './pages/AircoinHistory'
+import AirstarHistory from './pages/AirstarHistory'
 import GameHistory        from './pages/GameHistory'
 import IntelBriefHistory from './pages/IntelBriefHistory'
 import ReportProblem  from './pages/ReportProblem'
@@ -54,6 +54,7 @@ import NotFound       from './pages/NotFound'
 
 // v2 admin
 import Admin          from './pages/Admin'
+import OpenRouterUsage from './pages/OpenRouterUsage'
 import AptitudeSync   from './pages/AptitudeSync'
 
 import { playSound } from './utils/sound'
@@ -81,15 +82,15 @@ function NotifLayer() {
   useEffect(() => {
     if (!current || current.id === prevIdRef.current) return
     prevIdRef.current = current.id
-    if (current.type === 'aircoin')       playSound('aircoin')
+    if (current.type === 'airstar')       playSound('airstar')
     else if (current.type === 'levelup')  playSound('level_up')
     else if (current.type === 'rankpromotion') playSound('rank_promotion')
   }, [current])
 
   if (!current) return null
 
-  if (current.type === 'aircoin') {
-    return <AircoinNotification key={current.id} amount={current.amount} label={current.label} onDone={shiftNotif} />
+  if (current.type === 'airstar') {
+    return <AirstarNotification key={current.id} amount={current.amount} label={current.label} onDone={shiftNotif} />
   }
   if (current.type === 'levelup') {
     return <LevelUpNotification key={current.id} level={current.level} onDone={shiftNotif} />
@@ -115,8 +116,12 @@ function LoadingScreen() {
 // ── Route guard ────────────────────────────────────────────────────────────
 function RequireAuth({ children }) {
   const { user, loading } = useAuth()
+  const location = useLocation()
   if (loading) return <LoadingScreen />
-  if (!user)   return <Navigate to="/login" replace />
+  if (!user) {
+    captureLoginReturn(location)
+    return <Navigate to="/login" replace />
+  }
   return children
 }
 
@@ -125,19 +130,14 @@ function RequireAuth({ children }) {
 //   1. flushSync in finishNewUser commits the navigate synchronously (Login.jsx)
 //   2. useIsPresent() is false during AnimatePresence exit — no redirect fires then
 //   3. sw_post_login_destination: if navigate lost the race and we DO redirect here,
-//      we send the user to the brief they just completed rather than /home
+//      we send the user to the brief/deep-link they were heading to rather than /home
 function LoginRoute() {
   const { user, loading } = useAuth()
   const isPresent = useIsPresent()
 
-  // Clean up the stored destination whenever this component unmounts, whether the
-  // navigate in finishNewUser won the race or we redirected via <Navigate> below.
-  useEffect(() => () => sessionStorage.removeItem(POST_LOGIN_DEST_KEY), [])
-
   if (loading) return <LoadingScreen />
   if (user && isPresent) {
-    const dest = sessionStorage.getItem(POST_LOGIN_DEST_KEY) || '/home'
-    return <Navigate to={dest} replace />
+    return <Navigate to={resolveLoginDest()} replace />
   }
   return <LoginPage />
 }
@@ -147,6 +147,18 @@ function AppRoutes() {
   const { loading } = useAuth()
   const location    = useLocation()
   const navigate    = useNavigate()
+
+  // When the user transitions TO /login from another route, remember where
+  // they came from so we can send them back after successful sign-in. Covers
+  // every in-page Sign-In Link/button without needing per-call-site changes.
+  const prevLocationRef = useRef(null)
+  useEffect(() => {
+    const prev = prevLocationRef.current
+    if (prev && location.pathname === '/login' && prev.pathname !== '/login') {
+      captureLoginReturn(prev)
+    }
+    prevLocationRef.current = location
+  }, [location])
 
   // Android hardware back button — navigate back or exit on home
   useEffect(() => {
@@ -202,10 +214,11 @@ function AppRoutes() {
           <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
           <Route path="/contact"          element={<PageWrapper><Contact /></PageWrapper>} />
           <Route path="/share"            element={<PageWrapper><Share /></PageWrapper>} />
-          <Route path="/aircoin-history"       element={<RequireAuth><PageWrapper><AircoinHistory /></PageWrapper></RequireAuth>} />
+          <Route path="/airstar-history"       element={<RequireAuth><PageWrapper><AirstarHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"          element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
           <Route path="/intel-brief-history"   element={<RequireAuth><PageWrapper><IntelBriefHistory /></PageWrapper></RequireAuth>} />
           <Route path="/admin"             element={<RequireAuth><PageWrapper><Admin /></PageWrapper></RequireAuth>} />
+          <Route path="/admin/openrouter-usage" element={<RequireAuth><PageWrapper><OpenRouterUsage /></PageWrapper></RequireAuth>} />
 
           {/* 404 */}
           <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />

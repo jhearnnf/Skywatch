@@ -18,7 +18,7 @@ vi.mock('../../context/AuthContext', () => ({
     loading: false,
     API: '',
     apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
     setUser: vi.fn(),
     refreshUser: vi.fn(),
   }),

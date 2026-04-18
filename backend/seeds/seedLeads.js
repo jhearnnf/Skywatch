@@ -14,7 +14,7 @@ const GameSessionFlashcardRecallResult = require('../models/GameSessionFlashcard
 const GameWheresThatAircraft = require('../models/GameWheresThatAircraft');
 const GameSessionWheresThatAircraftResult = require('../models/GameSessionWheresThatAircraftResult');
 const GameSessionWhereAircraftResult = require('../models/GameSessionWhereAircraftResult');
-const AircoinLog = require('../models/AircoinLog');
+const AirstarLog = require('../models/AirstarLog');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LEADS — canonical RAF knowledge graph entries
@@ -1382,7 +1382,7 @@ module.exports = async function seedLeads(openRouterChat) {
       GameWheresThatAircraft.deleteMany({}),
       GameSessionWheresThatAircraftResult.deleteMany({}),
       GameSessionWhereAircraftResult.deleteMany({}),
-      AircoinLog.deleteMany({}),
+      AirstarLog.deleteMany({}),
     ]);
 
     // 3 — insert leads, restoring any previously generated priority numbers

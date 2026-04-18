@@ -25,6 +25,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') })
 const mongoose        = require('mongoose')
 const IntelLead       = require('../models/IntelLead')
 const IntelligenceBrief = require('../models/IntelligenceBrief')
+const { callOpenRouter } = require('../utils/openRouter')
 
 // ── CLI args ─────────────────────────────────────────────────────────────────
 
@@ -49,25 +50,15 @@ if (!CATEGORY && !ALL) {
 // ── OpenRouter ────────────────────────────────────────────────────────────────
 
 async function openRouterChat(messages, maxTokens = 4096) {
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.OPENROUTER_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': process.env.CLIENT_URL || 'http://localhost:5173',
-      'X-Title': 'SkyWatch Priority Script',
-    },
-    body: JSON.stringify({
+  return callOpenRouter({
+    key:     'main',
+    feature: 'script-priority-numbers',
+    body: {
       model: 'anthropic/claude-sonnet-4-5',
       messages,
       max_tokens: maxTokens,
-    }),
+    },
   })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 300)}`)
-  }
-  return res.json()
 }
 
 // ── AI priority assignment ────────────────────────────────────────────────────

@@ -12,7 +12,7 @@ vi.mock('react-router-dom', () => ({
 }))
 
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { _id: 'user1' }, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() }),
+  useAuth: () => ({ user: { _id: 'user1' }, API: '', apiFetch: (...args) => fetch(...args), awardAirstars: vi.fn() }),
 }))
 
 vi.mock('../../context/AppTutorialContext', () => ({
@@ -20,7 +20,7 @@ vi.mock('../../context/AppTutorialContext', () => ({
 }))
 
 vi.mock('../../context/AppSettingsContext', () => ({
-  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
+  useAppSettings: () => ({ settings: { airstarsPerBriefRead: 5 } }),
 }))
 
 vi.mock('../../components/tutorial/TutorialModal', () => ({ default: () => null }))
@@ -54,8 +54,8 @@ const BRIEF_RESPONSE  = { data: { brief: { _id: 'brief123', title: 'Typhoon', ca
 const START_RESPONSE  = { status: 'success', data: { attemptId: 'a1', gameSessionId: 's1', questions: [QUESTION], difficulty: 'easy' } }
 const RESULT_RESPONSE = { status: 'success' }
 
-function makeFinishResponse({ won, isFirstAttempt, breakdown, aircoinsEarned }) {
-  return { ok: true, status: 200, json: async () => ({ data: { won, isFirstAttempt, breakdown, aircoinsEarned, attempt: { cycleAircoins: aircoinsEarned, totalAircoins: 100 } } }) }
+function makeFinishResponse({ won, isFirstAttempt, breakdown, airstarsEarned }) {
+  return { ok: true, status: 200, json: async () => ({ data: { won, isFirstAttempt, breakdown, airstarsEarned, attempt: { cycleAirstars: airstarsEarned, totalAirstars: 100 } } }) }
 }
 
 function setupFetch(finishData, { booAvailable = false } = {}) {
@@ -82,13 +82,13 @@ async function completeQuiz() {
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-describe('QuizFlow — aircoins breakdown on results screen', () => {
+describe('QuizFlow — airstars breakdown on results screen', () => {
   beforeEach(() => { vi.clearAllMocks() })
   afterEach(() => { vi.restoreAllMocks() })
 
   it('shows breakdown line items and total on a first-attempt win', async () => {
     global.fetch = setupFetch({
-      won: true, isFirstAttempt: true, aircoinsEarned: 65,
+      won: true, isFirstAttempt: true, airstarsEarned: 65,
       breakdown: [
         { label: '5 correct answers × 10', amount: 50 },
         { label: 'Perfect score bonus',    amount: 15 },
@@ -103,12 +103,12 @@ describe('QuizFlow — aircoins breakdown on results screen', () => {
     expect(screen.getByText('+15')).toBeDefined()
     expect(screen.getByText('Total')).toBeDefined()
     expect(screen.getByText('+65')).toBeDefined()
-    expect(screen.getByText(/65 Aircoins earned/i)).toBeDefined()
+    expect(screen.getByText(/65 Airstars earned/i)).toBeDefined()
   })
 
   it('shows only the base line item (no perfect score row) on a non-perfect win', async () => {
     global.fetch = setupFetch({
-      won: true, isFirstAttempt: true, aircoinsEarned: 40,
+      won: true, isFirstAttempt: true, airstarsEarned: 40,
       breakdown: [
         { label: '4 correct answers × 10', amount: 40 },
       ],
@@ -123,32 +123,32 @@ describe('QuizFlow — aircoins breakdown on results screen', () => {
 
   it('does not show a breakdown table on a loss', async () => {
     global.fetch = setupFetch({
-      won: false, isFirstAttempt: true, aircoinsEarned: 0,
+      won: false, isFirstAttempt: true, airstarsEarned: 0,
       breakdown: [],
     })
 
     await completeQuiz()
 
     expect(screen.queryByText('Total')).toBeNull()
-    expect(screen.queryByText(/Aircoins earned/i)).toBeNull()
+    expect(screen.queryByText(/Airstars earned/i)).toBeNull()
     expect(screen.getByText(/Score above 60%/i)).toBeDefined()
   })
 
   it('shows "already earned" message on a repeat win with 0 coins', async () => {
     global.fetch = setupFetch({
-      won: true, isFirstAttempt: false, aircoinsEarned: 0,
+      won: true, isFirstAttempt: false, airstarsEarned: 0,
       breakdown: [],
     })
 
     await completeQuiz()
 
-    expect(screen.getByText(/already earned Aircoins/i)).toBeDefined()
+    expect(screen.getByText(/already earned Airstars/i)).toBeDefined()
     expect(screen.queryByText('Total')).toBeNull()
   })
 
   it('breakdown total row matches the badge amount', async () => {
     global.fetch = setupFetch({
-      won: true, isFirstAttempt: true, aircoinsEarned: 30,
+      won: true, isFirstAttempt: true, airstarsEarned: 30,
       breakdown: [{ label: '3 correct answers × 10', amount: 30 }],
     })
 
@@ -168,7 +168,7 @@ describe('QuizFlow — Battle of Order button on results screen', () => {
 
   it('shows BOO button when quiz is won and BOO is available', async () => {
     global.fetch = setupFetch(
-      { won: true, isFirstAttempt: true, aircoinsEarned: 0, breakdown: [] },
+      { won: true, isFirstAttempt: true, airstarsEarned: 0, breakdown: [] },
       { booAvailable: true },
     )
     await completeQuiz()
@@ -177,7 +177,7 @@ describe('QuizFlow — Battle of Order button on results screen', () => {
 
   it('shows BOO button on a repeat win (prior win exists) when BOO is available', async () => {
     global.fetch = setupFetch(
-      { won: true, isFirstAttempt: false, aircoinsEarned: 0, breakdown: [] },
+      { won: true, isFirstAttempt: false, airstarsEarned: 0, breakdown: [] },
       { booAvailable: true },
     )
     await completeQuiz()
@@ -186,7 +186,7 @@ describe('QuizFlow — Battle of Order button on results screen', () => {
 
   it('does not show BOO button when quiz is won but BOO is unavailable', async () => {
     global.fetch = setupFetch(
-      { won: true, isFirstAttempt: true, aircoinsEarned: 0, breakdown: [] },
+      { won: true, isFirstAttempt: true, airstarsEarned: 0, breakdown: [] },
       { booAvailable: false },
     )
     await completeQuiz()
@@ -196,7 +196,7 @@ describe('QuizFlow — Battle of Order button on results screen', () => {
 
   it('does not show BOO button when quiz is lost (no prior win)', async () => {
     global.fetch = setupFetch(
-      { won: false, isFirstAttempt: true, aircoinsEarned: 0, breakdown: [] },
+      { won: false, isFirstAttempt: true, airstarsEarned: 0, breakdown: [] },
       { booAvailable: true },
     )
     await completeQuiz()
@@ -206,7 +206,7 @@ describe('QuizFlow — Battle of Order button on results screen', () => {
 
   it('BOO button appears above Try Again button', async () => {
     global.fetch = setupFetch(
-      { won: false, isFirstAttempt: false, aircoinsEarned: 0, breakdown: [] },
+      { won: false, isFirstAttempt: false, airstarsEarned: 0, breakdown: [] },
       { booAvailable: true },
     )
     await completeQuiz()
@@ -222,7 +222,7 @@ describe('QuizFlow — Battle of Order button on results screen', () => {
     vi.mocked(await import('react-router-dom')).useNavigate = () => mockNavigate
 
     global.fetch = setupFetch(
-      { won: true, isFirstAttempt: true, aircoinsEarned: 0, breakdown: [] },
+      { won: true, isFirstAttempt: true, airstarsEarned: 0, breakdown: [] },
       { booAvailable: true },
     )
     await completeQuiz()

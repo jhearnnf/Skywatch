@@ -31,7 +31,7 @@ vi.mock('framer-motion', () => ({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function setupAuth() {
-  mockUseAuth.mockReturnValue({ setUser: mockSetUser, awardAircoins: vi.fn(), API: '', apiFetch: (...args) => fetch(...args) })
+  mockUseAuth.mockReturnValue({ setUser: mockSetUser, awardAirstars: vi.fn(), API: '', apiFetch: (...args) => fetch(...args) })
 }
 
 function makeNewUserResponse() {

@@ -28,7 +28,7 @@ vi.mock('framer-motion', () => ({
 const NEW_USER = { _id: 'u1', email: 'new@test.com', difficultySetting: 'easy' }
 
 function setupAuth() {
-  mockUseAuth.mockReturnValue({ setUser: mockSetUser, awardAircoins: vi.fn(), API: '', apiFetch: (...args) => fetch(...args) })
+  mockUseAuth.mockReturnValue({ setUser: mockSetUser, awardAirstars: vi.fn(), API: '', apiFetch: (...args) => fetch(...args) })
 }
 
 // register returns isNew:true; PATCH difficulty always succeeds

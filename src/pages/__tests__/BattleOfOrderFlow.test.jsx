@@ -16,7 +16,7 @@ vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     user:          { _id: 'user1' },
     API: '', apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
   }),
 }))
 
@@ -82,14 +82,14 @@ const CORRECT_REVEAL = [
   { choiceId: 'c1', briefTitle: 'Typhoon', correctOrder: 3, displayValue: '2495 kph' },
 ]
 
-function makeSubmitResponse({ won, aircoinsEarned = 0, alreadyCompleted = false }) {
+function makeSubmitResponse({ won, airstarsEarned = 0, alreadyCompleted = false }) {
   return {
     status: 'success',
-    data: { won, aircoinsEarned, alreadyCompleted, correctReveal: CORRECT_REVEAL },
+    data: { won, airstarsEarned, alreadyCompleted, correctReveal: CORRECT_REVEAL },
   }
 }
 
-function setupFetch({ options = OPTIONS_MULTI, won = true, aircoinsEarned = 8, alreadyCompleted = false } = {}) {
+function setupFetch({ options = OPTIONS_MULTI, won = true, airstarsEarned = 8, alreadyCompleted = false } = {}) {
   return vi.fn().mockImplementation((url) => {
     if (url.includes('/api/briefs/'))
       return Promise.resolve({ ok: true, status: 200, json: async () => BRIEF_RESPONSE })
@@ -98,7 +98,7 @@ function setupFetch({ options = OPTIONS_MULTI, won = true, aircoinsEarned = 8, a
     if (url.includes('/generate'))
       return Promise.resolve({ ok: true, status: 200, json: async () => GENERATE_RESPONSE })
     if (url.includes('/submit'))
-      return Promise.resolve({ ok: true, status: 200, json: async () => makeSubmitResponse({ won, aircoinsEarned, alreadyCompleted }) })
+      return Promise.resolve({ ok: true, status: 200, json: async () => makeSubmitResponse({ won, airstarsEarned, alreadyCompleted }) })
     if (url.includes('/abandon'))
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'success' }) })
     return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })
@@ -303,22 +303,22 @@ describe('BattleOfOrderFlow — results screen', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows win message and aircoins earned on a win', async () => {
-    await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 8 }))
+  it('shows win message and airstars earned on a win', async () => {
+    await renderAndReachResults(setupFetch({ won: true, airstarsEarned: 8 }))
 
     expect(screen.getByText('Correct Order!')).toBeDefined()
-    expect(screen.getByText(/\+8 Aircoins earned/i)).toBeDefined()
+    expect(screen.getByText(/\+8 Airstars earned/i)).toBeDefined()
   })
 
   it('shows loss message on a loss', async () => {
-    await renderAndReachResults(setupFetch({ won: false, aircoinsEarned: 0 }))
+    await renderAndReachResults(setupFetch({ won: false, airstarsEarned: 0 }))
 
     expect(screen.getByText('Not Quite!')).toBeDefined()
-    expect(screen.queryByText(/Aircoins earned/i)).toBeNull()
+    expect(screen.queryByText(/Airstars earned/i)).toBeNull()
   })
 
   it('shows correct reveal with display values', async () => {
-    await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 8 }))
+    await renderAndReachResults(setupFetch({ won: true, airstarsEarned: 8 }))
 
     expect(screen.getByText('Hawk')).toBeDefined()
     expect(screen.getByText('Tornado')).toBeDefined()
@@ -327,15 +327,15 @@ describe('BattleOfOrderFlow — results screen', () => {
   })
 
   it('shows "already earned" message on repeat win with 0 coins', async () => {
-    await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 0, alreadyCompleted: true }))
+    await renderAndReachResults(setupFetch({ won: true, airstarsEarned: 0, alreadyCompleted: true }))
 
-    expect(screen.getByText(/already earned Aircoins for this order type/i)).toBeDefined()
-    expect(screen.queryByText(/\+0 Aircoins/i)).toBeNull()
+    expect(screen.getByText(/already earned Airstars for this order type/i)).toBeDefined()
+    expect(screen.queryByText(/\+0 Airstars/i)).toBeNull()
   })
 
   it('plays battle_of_order_won sound on win', async () => {
     const { playSound } = await import('../../utils/sound')
-    await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 8 }))
+    await renderAndReachResults(setupFetch({ won: true, airstarsEarned: 8 }))
 
     expect(playSound).toHaveBeenCalledWith('battle_of_order_won')
     expect(playSound).not.toHaveBeenCalledWith('battle_of_order_lost')
@@ -343,21 +343,21 @@ describe('BattleOfOrderFlow — results screen', () => {
 
   it('plays battle_of_order_lost sound on loss', async () => {
     const { playSound } = await import('../../utils/sound')
-    await renderAndReachResults(setupFetch({ won: false, aircoinsEarned: 0 }))
+    await renderAndReachResults(setupFetch({ won: false, airstarsEarned: 0 }))
 
     expect(playSound).toHaveBeenCalledWith('battle_of_order_lost')
     expect(playSound).not.toHaveBeenCalledWith('battle_of_order_won')
   })
 
   it('navigates back to brief when Back to Brief clicked', async () => {
-    await renderAndReachResults(setupFetch({ won: true, aircoinsEarned: 8 }))
+    await renderAndReachResults(setupFetch({ won: true, airstarsEarned: 8 }))
 
     fireEvent.click(screen.getByRole('button', { name: /back to brief/i }))
     expect(mockNavigate).toHaveBeenCalledWith('/brief/brief123')
   })
 
   it('returns to roulette (not game) when Try Again clicked', async () => {
-    const fetchMock = setupFetch({ won: false, aircoinsEarned: 0 })
+    const fetchMock = setupFetch({ won: false, airstarsEarned: 0 })
     await renderAndReachResults(fetchMock)
 
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
@@ -368,7 +368,7 @@ describe('BattleOfOrderFlow — results screen', () => {
   })
 
   it('re-generates game after Try Again → roulette → game', async () => {
-    const fetchMock = setupFetch({ won: false, aircoinsEarned: 0 })
+    const fetchMock = setupFetch({ won: false, airstarsEarned: 0 })
     await renderAndReachResults(fetchMock)
 
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
@@ -432,7 +432,7 @@ function setupTrainingFetch(options = TRAINING_OPTIONS_BOTH, generateResp = TRAI
     if (url.includes('/generate'))
       return Promise.resolve({ ok: true, status: 200, json: async () => generateResp })
     if (url.includes('/submit'))
-      return Promise.resolve({ ok: true, status: 200, json: async () => makeSubmitResponse({ won: true, aircoinsEarned: 8 }) })
+      return Promise.resolve({ ok: true, status: 200, json: async () => makeSubmitResponse({ won: true, airstarsEarned: 8 }) })
     if (url.includes('/abandon'))
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'success' }) })
     return Promise.resolve({ ok: true, status: 200, json: async () => ({}) })

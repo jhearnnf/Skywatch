@@ -137,7 +137,7 @@ function Round1Complete({ aircraftTitle, round1Coins, correctBaseCount, onContin
       {round1Coins > 0 && (
         <div className="inline-flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5 mb-6">
           <span className="text-amber-500 text-lg">✦</span>
-          <span className="text-sm font-bold text-amber-800">+{round1Coins} Aircoins earned</span>
+          <span className="text-sm font-bold text-amber-800">+{round1Coins} Airstars earned</span>
         </div>
       )}
 
@@ -289,7 +289,7 @@ function Round2({ data, aircraftTitle, onSubmit }) {
 
 // ── Results screen ─────────────────────────────────────────────────────────
 function ResultScreen({ result, aircraftTitle, bases, selectedBaseIds, correctBaseIds, onDone }) {
-  const { won, aircoinsEarned, round1Correct, round2Correct } = result
+  const { won, airstarsEarned, round1Correct, round2Correct } = result
 
   const emoji   = won ? '🏆' : round1Correct ? '🗺️' : '✈️'
   const heading = won
@@ -327,10 +327,10 @@ function ResultScreen({ result, aircraftTitle, bases, selectedBaseIds, correctBa
       <div className="bg-surface rounded-2xl border border-slate-200 p-4 mb-4 card-shadow text-left max-w-xs mx-auto space-y-2">
         <RoundRow label="Round 1 — Aircraft ID" correct={round1Correct} />
         {round1Correct && <RoundRow label="Round 2 — Base Location" correct={round2Correct} />}
-        {aircoinsEarned > 0 && (
+        {airstarsEarned > 0 && (
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-sm font-bold text-slate-700">Aircoins earned</span>
-            <span className="text-sm font-black text-amber-600">+{aircoinsEarned} ✦</span>
+            <span className="text-sm font-bold text-slate-700">Airstars earned</span>
+            <span className="text-sm font-black text-amber-600">+{airstarsEarned} ✦</span>
           </div>
         )}
       </div>
@@ -386,7 +386,7 @@ function RoundRow({ label, correct }) {
 export default function WhereAircraftGame() {
   const { aircraftBriefId } = useParams()
   const navigate = useNavigate()
-  const { user, API, apiFetch, awardAircoins, refreshUser } = useAuth()
+  const { user, API, apiFetch, awardAirstars, refreshUser } = useAuth()
   const { start } = useAppTutorial()
   const gameSessionId  = useRef(crypto.randomUUID())
   const startTimeRef   = useRef(Date.now())
@@ -492,7 +492,7 @@ export default function WhereAircraftGame() {
   const handleRound1Correct = useCallback(async (elapsed) => {
     round1CorrectRef.current = true
     round1ElapsedRef.current = elapsed
-    const preRound1Total = user?.totalAircoins ?? 0
+    const preRound1Total = user?.totalAirstars ?? 0
     let awarded = false
     try {
       const r    = await apiFetch(`${API}/api/games/wheres-aircraft/round2`, {
@@ -503,12 +503,12 @@ export default function WhereAircraftGame() {
       const data = await r.json()
       if (!data?.data) { setError('Failed to load round 2.'); return }
       setRound2Data(data.data)
-      const coins = data.data.round1Aircoins ?? 0
+      const coins = data.data.round1Airstars ?? 0
       setRound1Coins(coins)
-      if (coins > 0 && awardAircoins) {
-        awardAircoins(coins, 'Round 1 — Aircraft ID', {
-          cycleAfter:    data.data.cycleAircoins ?? undefined,
-          totalAfter:    data.data.totalAircoins ?? undefined,
+      if (coins > 0 && awardAirstars) {
+        awardAirstars(coins, 'Round 1 — Aircraft ID', {
+          cycleAfter:    data.data.cycleAirstars ?? undefined,
+          totalAfter:    data.data.totalAirstars ?? undefined,
           rankPromotion: data.data.rankPromotion ?? null,
         })
         awarded = true
@@ -519,21 +519,21 @@ export default function WhereAircraftGame() {
     }
 
     // Fallback: if the client didn't notify (malformed response, request failure),
-    // resync the user and fire the aircoin notification based on the delta.
+    // resync the user and fire the airstar notification based on the delta.
     if (!awarded && refreshUser) {
       try {
         const fresh = await refreshUser()
-        const delta = (fresh?.totalAircoins ?? 0) - preRound1Total
-        if (delta > 0 && awardAircoins) {
-          awardAircoins(delta, 'Round 1 — Aircraft ID', {
-            totalAfter: fresh.totalAircoins,
-            cycleAfter: fresh.cycleAircoins,
+        const delta = (fresh?.totalAirstars ?? 0) - preRound1Total
+        if (delta > 0 && awardAirstars) {
+          awardAirstars(delta, 'Round 1 — Aircraft ID', {
+            totalAfter: fresh.totalAirstars,
+            cycleAfter: fresh.cycleAirstars,
           })
           setRound1Coins(delta)
         }
       } catch { /* swallow — best-effort resync */ }
     }
-  }, [aircraftBriefId, API, awardAircoins, apiFetch, refreshUser, user?.totalAircoins])
+  }, [aircraftBriefId, API, awardAirstars, apiFetch, refreshUser, user?.totalAirstars])
 
   const handleRound1Wrong = useCallback(() => {
     round1CorrectRef.current = false
@@ -580,7 +580,7 @@ export default function WhereAircraftGame() {
   async function submitGame({ round1Correct, round2Attempted, round2Correct, selectedBaseIds, correctBaseIds, elapsed, round1AlreadyAwarded }) {
     abandonedRef.current = true // mark submitted so unmount cleanup doesn't double-fire
     const totalElapsed = Math.round((Date.now() - startTimeRef.current) / 1000)
-    const preSubmitTotal = user?.totalAircoins ?? 0
+    const preSubmitTotal = user?.totalAirstars ?? 0
     let awarded = false
     let responseOk = false
     let earnedForResult = 0
@@ -607,13 +607,13 @@ export default function WhereAircraftGame() {
       const data = await res.json()
       if (data?.data) {
         responseOk = true
-        const { won, aircoinsEarned, rankPromotion, cycleAircoins, totalAircoins } = data.data
+        const { won, airstarsEarned, rankPromotion, cycleAirstars, totalAirstars } = data.data
         wonForResult = won
-        earnedForResult = aircoinsEarned ?? 0
-        if (aircoinsEarned > 0 && awardAircoins) {
-          awardAircoins(aircoinsEarned, "Where's That Aircraft", {
-            cycleAfter:    cycleAircoins ?? undefined,
-            totalAfter:    totalAircoins ?? undefined,
+        earnedForResult = airstarsEarned ?? 0
+        if (airstarsEarned > 0 && awardAirstars) {
+          awardAirstars(airstarsEarned, "Where's That Aircraft", {
+            cycleAfter:    cycleAirstars ?? undefined,
+            totalAfter:    totalAirstars ?? undefined,
             rankPromotion: rankPromotion ?? null,
           })
           awarded = true
@@ -624,15 +624,15 @@ export default function WhereAircraftGame() {
     }
 
     // Fallback: if the client didn't notify (malformed response, request failure),
-    // resync the user and fire the aircoin notification based on the delta.
+    // resync the user and fire the airstar notification based on the delta.
     if (!awarded && refreshUser) {
       try {
         const fresh = await refreshUser()
-        const delta = (fresh?.totalAircoins ?? 0) - preSubmitTotal
-        if (delta > 0 && awardAircoins) {
-          awardAircoins(delta, "Where's That Aircraft", {
-            totalAfter: fresh.totalAircoins,
-            cycleAfter: fresh.cycleAircoins,
+        const delta = (fresh?.totalAirstars ?? 0) - preSubmitTotal
+        if (delta > 0 && awardAirstars) {
+          awardAirstars(delta, "Where's That Aircraft", {
+            totalAfter: fresh.totalAirstars,
+            cycleAfter: fresh.cycleAirstars,
           })
           earnedForResult = delta
           wonForResult = true
@@ -642,7 +642,7 @@ export default function WhereAircraftGame() {
     }
 
     if (responseOk) {
-      setResult({ won: wonForResult, aircoinsEarned: earnedForResult, round1Correct, round2Correct: round2Correct ?? false })
+      setResult({ won: wonForResult, airstarsEarned: earnedForResult, round1Correct, round2Correct: round2Correct ?? false })
       if (round2Attempted) setPhase(PHASE_RESULT)
     }
   }

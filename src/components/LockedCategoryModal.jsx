@@ -176,7 +176,7 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, p
                   </li>
                   <li className="flex items-center gap-2 text-sm text-slate-800">
                     <span className="text-emerald-600 font-bold shrink-0">✓</span>
-                    Easy difficulty quizzes &amp; Aircoin rewards
+                    Easy difficulty quizzes &amp; Airstar rewards
                   </li>
                 </ul>
               </div>

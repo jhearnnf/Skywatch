@@ -72,11 +72,11 @@ function makeCompleteResponse() {
     ok: true,
     json: async () => ({
       data: {
-        aircoinsEarned:   5,
+        airstarsEarned:   5,
         dailyCoinsEarned: 5,
         loginStreak:      1,
-        newTotalAircoins: 10,
-        newCycleAircoins: 10,
+        newTotalAirstars: 10,
+        newCycleAirstars: 10,
         rankPromotion:    null,
       },
     }),

@@ -88,7 +88,7 @@ export default function MissionDetectedModal({ aircraftBriefId, aircraftTitle, m
             An unidentified aircraft has entered the area. Intelligence briefings suggest you have the knowledge to identify it —
             and track it to its <span className="text-amber-400 font-semibold">home base on the map</span>.
           </p>
-          <p className="text-xs text-slate-500 mt-2">Two-round mission · Earn Aircoins for each round</p>
+          <p className="text-xs text-slate-500 mt-2">Two-round mission · Earn Airstars for each round</p>
         </motion.div>
 
         {/* CTA buttons */}

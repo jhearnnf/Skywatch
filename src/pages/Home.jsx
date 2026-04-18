@@ -51,7 +51,7 @@ export default function Home() {
   const [showFlashcard,     setShowFlashcard]     = useState(false)
   const [jumpBackBrief,     setJumpBackBrief]     = useState(null)
   const [newsLoading,       setNewsLoading]       = useState(true)
-  const levelInfo = user ? getLevelInfo(user.cycleAircoins ?? 0, liveLevels) : null
+  const levelInfo = user ? getLevelInfo(user.cycleAirstars ?? 0, liveLevels) : null
 
   // Mission done if the user completed a brief today (server-authoritative via lastStreakDate)
   useEffect(() => {
@@ -145,7 +145,7 @@ export default function Home() {
                 />
               </div>
               <p className="text-xs text-slate-600 mt-1">
-                {levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Aircoins to Level {levelInfo.level + 1}
+                {levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Airstars to Level {levelInfo.level + 1}
               </p>
             </div>
             <div className="text-right shrink-0">

@@ -81,7 +81,7 @@ function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathway
             Level {lvl.levelNumber}{isMax && <span className="ml-1.5 text-white"><span className="star-silver">⭐</span> MAX</span>}
           </p>
           <p className="text-xs intel-mono" style={{ color: C.dim }}>
-            {lvl.cumulativeAircoins.toLocaleString()} Aircoins required
+            {lvl.cumulativeAirstars.toLocaleString()} Airstars required
           </p>
         </div>
         {isCurrent && <YouBadge />}
@@ -184,7 +184,7 @@ export default function Rankings() {
 
   // ── Derived values ─────────────────────────────────────────────────────────
 
-  const coins    = user?.cycleAircoins ?? 0
+  const coins    = user?.cycleAirstars ?? 0
   const userTier = user?.subscriptionTier ?? 'free'
   const lvlInfo  = getLevelInfo(coins, levels)
   const userLevel    = user ? (lvlInfo?.level ?? 1) : null
@@ -332,7 +332,7 @@ export default function Rankings() {
               </div>
               <p className="text-xs mt-1.5" style={{ color: coinsNeeded ? C.muted : '#ffffff' }}>
                 {coinsNeeded
-                  ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} Aircoins to Level ${userLevel + 1}`
+                  ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} Airstars to Level ${userLevel + 1}`
                   : <><span className="star-silver">⭐</span> Max level — RAF Rank Promotion on next cycle</>
                 }
               </p>

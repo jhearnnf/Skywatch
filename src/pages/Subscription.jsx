@@ -334,7 +334,7 @@ export default function Subscription() {
       features: [
         '✓ Read intel briefs in free subjects',
         '✓ Basic quiz access',
-        '✓ Aircoins & level progression',
+        '✓ Airstars & level progression',
         '✗ Silver & Gold subjects locked',
         '✗ Advanced quiz difficulty locked',
       ],

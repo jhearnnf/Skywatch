@@ -30,8 +30,8 @@ vi.mock('../../context/AppTutorialContext', () => ({
 vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({
     levels: [
-      { levelNumber: 1, cumulativeAircoins: 0, aircoinsToNextLevel: 100 },
-      { levelNumber: 2, cumulativeAircoins: 100, aircoinsToNextLevel: 150 },
+      { levelNumber: 1, cumulativeAirstars: 0, airstarsToNextLevel: 100 },
+      { levelNumber: 2, cumulativeAirstars: 100, airstarsToNextLevel: 150 },
     ],
     settings: {},
     loading: false,
@@ -74,8 +74,8 @@ function setupUser(overrides = {}) {
       _id: 'u1',
       displayName: 'Agent Test',
       subscriptionTier: 'free',
-      cycleAircoins: 0,
-      totalAircoins: 0,
+      cycleAirstars: 0,
+      totalAirstars: 0,
       loginStreak: 0,
       ...overrides,
     },

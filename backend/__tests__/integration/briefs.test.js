@@ -246,7 +246,7 @@ describe('GET /api/briefs/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.readRecord).not.toBeNull();
     // Coins are NOT awarded on open — only on complete
-    expect(res.body.data.aircoinsEarned).toBeUndefined();
+    expect(res.body.data.airstarsEarned).toBeUndefined();
     expect(res.body.data.dailyCoinsEarned).toBeUndefined();
   });
 
@@ -261,8 +261,8 @@ describe('GET /api/briefs/:id', () => {
     expect(res1.status).toBe(200);
     expect(res2.status).toBe(200);
     // Neither response contains coin data
-    expect(res1.body.data.aircoinsEarned).toBeUndefined();
-    expect(res2.body.data.aircoinsEarned).toBeUndefined();
+    expect(res1.body.data.airstarsEarned).toBeUndefined();
+    expect(res2.body.data.airstarsEarned).toBeUndefined();
   });
 });
 

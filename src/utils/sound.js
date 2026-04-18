@@ -141,7 +141,7 @@ function fetchSettings() {
         volumeTargetLockedKeyword: 100, soundEnabledTargetLockedKeyword: true,
         volumeFire: 100,             soundEnabledFire: true,
         volumeOutOfAmmo: 100,        soundEnabledOutOfAmmo: true,
-        volumeAircoin: 100,          soundEnabledAircoin: true,
+        volumeAirstar: 100,          soundEnabledAirstar: true,
         volumeLevelUp: 100,          soundEnabledLevelUp: true,
         volumeRankPromotion: 100,    soundEnabledRankPromotion: true,
         volumeFirstBriefComplete: 100, soundEnabledFirstBriefComplete: true,
@@ -274,7 +274,7 @@ function playKeywordLocked(volume) {
   audio.play().catch(done)
 }
 
-// name: 'intel_brief_opened' | 'target_locked' | 'fire' | 'out_of_ammo' | 'aircoin'
+// name: 'intel_brief_opened' | 'target_locked' | 'fire' | 'out_of_ammo' | 'airstar'
 // options.onAudio(audio) — called with the Audio element once playback starts
 export function playSound(name, { onAudio } = {}) {
   return fetchSettings().then(settings => {
@@ -329,10 +329,10 @@ export function playSound(name, { onAudio } = {}) {
         file       = 'fire.mp3'
         volumeKey  = 'volumeFire'
         enabledKey = 'soundEnabledFire'
-      } else if (name === 'aircoin') {
-        file       = 'aircoin.mp3'
-        volumeKey  = 'volumeAircoin'
-        enabledKey = 'soundEnabledAircoin'
+      } else if (name === 'airstar') {
+        file       = 'airstar.mp3'
+        volumeKey  = 'volumeAirstar'
+        enabledKey = 'soundEnabledAirstar'
       } else if (name === 'level_up') {
         file       = 'level_up.mp3'
         volumeKey  = 'volumeLevelUp'

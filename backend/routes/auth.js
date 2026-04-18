@@ -8,7 +8,7 @@ const PendingRegistration    = require('../models/PendingRegistration');
 const PasswordResetToken     = require('../models/PasswordResetToken');
 const PasswordResetRateLimit = require('../models/PasswordResetRateLimit');
 const AppSettings = require('../models/AppSettings');
-const AircoinLog  = require('../models/AircoinLog');
+const AirstarLog  = require('../models/AirstarLog');
 const { sendWelcomeEmail, sendConfirmationEmail, sendPasswordResetEmail } = require('../utils/email');
 const { awardCoins }       = require('../utils/awardCoins');
 
@@ -72,7 +72,7 @@ router.post('/register', async (req, res) => {
       }
       sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
       const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
-      return sendToken(user, 201, res, { isNew: true, loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
+      return sendToken(user, 201, res, { isNew: true, loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
     }
 
     const code      = String(Math.floor(100000 + Math.random() * 900000));
@@ -115,7 +115,7 @@ router.post('/verify-email', async (req, res) => {
 
     sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
     const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
-    sendToken(user, 201, res, { isNew: true, loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
+    sendToken(user, 201, res, { isNew: true, loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -162,7 +162,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
-    sendToken(user, 200, res, { loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
+    sendToken(user, 200, res, { loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -301,7 +301,7 @@ router.post('/google', async (req, res) => {
     }
 
     const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
-    sendToken(user, 200, res, { ...(isNew ? { isNew: true } : {}), loginAircoinsEarned: loginCoins, loginAircoinLabel: loginLabel });
+    sendToken(user, 200, res, { ...(isNew ? { isNew: true } : {}), loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
   } catch (err) {
     console.error('Google auth error:', err.message);
     res.status(401).json({ message: 'Google authentication failed' });

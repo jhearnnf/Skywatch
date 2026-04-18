@@ -17,7 +17,7 @@ const gameSessionWhereAircraftResultSchema = new mongoose.Schema({
   correctBaseIds:  [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
 
   won:             { type: Boolean, default: false },
-  aircoinsEarned:  { type: Number,  default: 0 },
+  airstarsEarned:  { type: Number,  default: 0 },
   timeTakenSeconds:{ type: Number,  default: 0 },
 }, { timestamps: true });
 

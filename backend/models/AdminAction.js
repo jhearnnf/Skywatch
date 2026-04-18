@@ -8,7 +8,7 @@ const ACTION_TYPES = [
   'reset_user_stats',
   'make_admin',
   'change_quiz_questions',
-  'change_aircoins',
+  'change_airstars',
   'change_trial_duration',
   'change_silver_categories',
   'change_ammo_defaults',

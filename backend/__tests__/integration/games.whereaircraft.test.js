@@ -21,9 +21,9 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await createSettings({
-    aircoinsWhereAircraftRound1: 5,
-    aircoinsWhereAircraftRound2: 10,
-    aircoinsWhereAircraftBonus:  5,
+    airstarsWhereAircraftRound1: 5,
+    airstarsWhereAircraftRound2: 10,
+    airstarsWhereAircraftBonus:  5,
   });
   // User with low spawn threshold so tests can trigger a spawn easily
   user   = await createUser({ whereAircraftSpawnThreshold: 1 });
@@ -136,7 +136,7 @@ describe('POST /api/games/wheres-aircraft/spawn-check', () => {
       round2Correct:   true,
       selectedBaseIds: [],
       correctBaseIds:  [],
-      aircoinsEarned:  20,
+      airstarsEarned:  20,
     });
 
     const res = await request(app)
@@ -175,7 +175,7 @@ describe('POST /api/games/wheres-aircraft/spawn-check', () => {
       round2Correct:   true,
       selectedBaseIds: [],
       correctBaseIds:  [],
-      aircoinsEarned:  20,
+      airstarsEarned:  20,
     });
 
     const res = await request(app)
@@ -265,7 +265,7 @@ describe('POST /api/games/wheres-aircraft/round2', () => {
       .send({ aircraftBriefId: String(aircraftBrief._id), gameSessionId });
 
     expect(res.status).toBe(200);
-    const { bases, correctBaseIds, correctBaseCount, aircraftTitle, round1Aircoins } = res.body.data;
+    const { bases, correctBaseIds, correctBaseCount, aircraftTitle, round1Airstars } = res.body.data;
 
     expect(aircraftTitle).toBe('Eurofighter Typhoon');
     expect(correctBaseCount).toBe(1);
@@ -284,9 +284,9 @@ describe('POST /api/games/wheres-aircraft/round2', () => {
     expect(unreadBase.isRead).toBe(false);
     expect(unreadBase.isCorrect).toBe(false);
 
-    // round1Aircoins included in response
-    expect(typeof round1Aircoins).toBe('number');
-    expect(round1Aircoins).toBe(5);
+    // round1Airstars included in response
+    expect(typeof round1Airstars).toBe('number');
+    expect(round1Airstars).toBe(5);
   });
 
   it('returns 404 when aircraftBriefId does not exist', async () => {
@@ -318,7 +318,7 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
     };
   }
 
-  it('returns won:false and aircoinsEarned:0 when round 1 fails', async () => {
+  it('returns won:false and airstarsEarned:0 when round 1 fails', async () => {
     const res = await request(app)
       .post(endpoint)
       .set('Cookie', cookie)
@@ -326,7 +326,7 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.won).toBe(false);
-    expect(res.body.data.aircoinsEarned).toBe(0);
+    expect(res.body.data.airstarsEarned).toBe(0);
   });
 
   it('awards round1 coins only when round1 correct but round2 not attempted', async () => {
@@ -337,7 +337,7 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.won).toBe(false);
-    expect(res.body.data.aircoinsEarned).toBe(5); // round1 only
+    expect(res.body.data.airstarsEarned).toBe(5); // round1 only
   });
 
   it('awards round1 + round2 coins when round1 correct, round2 attempted but wrong', async () => {
@@ -348,7 +348,7 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.won).toBe(false);
-    expect(res.body.data.aircoinsEarned).toBe(5); // round1 only, no round2 or bonus
+    expect(res.body.data.airstarsEarned).toBe(5); // round1 only, no round2 or bonus
   });
 
   it('awards full coins (round1 + round2 + bonus) on a complete win', async () => {
@@ -359,7 +359,7 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.won).toBe(true);
-    expect(res.body.data.aircoinsEarned).toBe(20); // 5 + 10 + 5
+    expect(res.body.data.airstarsEarned).toBe(20); // 5 + 10 + 5
   });
 
   it('excludes round1 coins when round1AlreadyAwarded is true', async () => {
@@ -375,7 +375,7 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.won).toBe(true);
-    expect(res.body.data.aircoinsEarned).toBe(15); // 10 + 5 (no round1 coins)
+    expect(res.body.data.airstarsEarned).toBe(15); // 10 + 5 (no round1 coins)
   });
 
   it('records abandoned game with status abandoned and awards no coins', async () => {
@@ -385,7 +385,7 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
       .send(submitPayload({ status: 'abandoned', round1Correct: true }));
 
     expect(res.status).toBe(201);
-    expect(res.body.data.aircoinsEarned).toBe(0);
+    expect(res.body.data.airstarsEarned).toBe(0);
 
     const record = await GameSessionWhereAircraftResult.findOne({ userId: user._id });
     expect(record.status).toBe('abandoned');
@@ -414,7 +414,7 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
       .send(submitPayload({ status: 'round1_only', round1Correct: true, round1AlreadyAwarded: false }));
 
     expect(res.status).toBe(201);
-    expect(res.body.data.aircoinsEarned).toBe(5); // round1 only
+    expect(res.body.data.airstarsEarned).toBe(5); // round1 only
   });
 
   it('round1_only awards 0 extra coins when round1AlreadyAwarded is true', async () => {
@@ -424,7 +424,7 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
       .send(submitPayload({ status: 'round1_only', round1Correct: true, round1AlreadyAwarded: true }));
 
     expect(res.status).toBe(201);
-    expect(res.body.data.aircoinsEarned).toBe(0);
+    expect(res.body.data.airstarsEarned).toBe(0);
   });
 
   it('round1_only never awards round2 or bonus coins', async () => {
@@ -440,7 +440,7 @@ describe('POST /api/games/wheres-aircraft/submit', () => {
       }));
 
     expect(res.status).toBe(201);
-    expect(res.body.data.aircoinsEarned).toBe(5); // round1 only, no round2/bonus
+    expect(res.body.data.airstarsEarned).toBe(5); // round1 only, no round2/bonus
   });
 
   it('round1_only stores won=false and round2Attempted=false in DB', async () => {
@@ -493,7 +493,7 @@ describe('GET /api/games/history/wheres-aircraft/:sessionId', () => {
       selectedBaseIds: [baseBrief1._id],
       correctBaseIds:  [baseBrief1._id],
       won:             true,
-      aircoinsEarned:  20,
+      airstarsEarned:  20,
     });
 
     const res = await request(app)
@@ -525,7 +525,7 @@ describe('GET /api/games/history/wheres-aircraft/:sessionId', () => {
       selectedBaseIds: [],
       correctBaseIds:  [baseBrief1._id],
       won:             false,
-      aircoinsEarned:  5,
+      airstarsEarned:  5,
     });
 
     const res = await request(app)
@@ -552,7 +552,7 @@ describe('GET /api/games/history/wheres-aircraft/:sessionId', () => {
       selectedBaseIds: [baseBrief2._id],   // wrong base selected
       correctBaseIds:  [baseBrief1._id],   // correct base was baseBrief1
       won:             false,
-      aircoinsEarned:  5,
+      airstarsEarned:  5,
     });
 
     const res = await request(app)
@@ -575,7 +575,7 @@ describe('GET /api/games/history/wheres-aircraft/:sessionId', () => {
       gameSessionId:   'other-user-session',
       status:          'completed',
       won:             true,
-      aircoinsEarned:  20,
+      airstarsEarned:  20,
     });
 
     const res = await request(app)
@@ -592,7 +592,7 @@ describe('GET /api/games/history/wheres-aircraft/:sessionId', () => {
       gameSessionId:   'unauth-session',
       status:          'completed',
       won:             true,
-      aircoinsEarned:  20,
+      airstarsEarned:  20,
     });
 
     const res = await request(app)

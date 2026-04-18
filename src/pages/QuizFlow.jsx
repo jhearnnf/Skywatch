@@ -173,7 +173,7 @@ function DifficultyNudge({ user, won, difficulty }) {
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Difficulty Check</p>
       <p className="text-sm font-bold text-slate-800 mb-1">Was that quiz too easy?</p>
       <p className="text-xs text-slate-500 leading-relaxed mb-4">
-        Step up to Advanced for tougher, deeper questions — and earn bigger Aircoins rewards.
+        Step up to Advanced for tougher, deeper questions — and earn bigger Airstars rewards.
       </p>
       <div className="flex gap-2">
         <button
@@ -225,7 +225,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
         {score} out of {total} correct ({pct}%)
       </p>
       {!won && total > 0 && (
-        <p className="text-xs text-slate-400 mb-6">Score above 60% to earn Aircoins</p>
+        <p className="text-xs text-slate-400 mb-6">Score above 60% to earn Airstars</p>
       )}
 
       {/* Score ring */}
@@ -247,7 +247,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
         </div>
       </div>
 
-      {/* Aircoins earned */}
+      {/* Airstars earned */}
       {xpEarned > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -256,7 +256,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
           className="mb-6"
         >
           <div className="inline-flex items-center gap-2 bg-slate-200 border border-slate-300 text-white font-bold px-4 py-2 rounded-full mb-3 text-sm">
-            <span className="star-silver">⭐</span> +{xpEarned} Aircoins earned!
+            <span className="star-silver">⭐</span> +{xpEarned} Airstars earned!
           </div>
           {breakdown.length > 0 && (
             <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3 text-left text-sm space-y-1.5 max-w-xs mx-auto">
@@ -283,7 +283,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
           transition={{ delay: 0.5 }}
           className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200 text-slate-500 font-semibold px-4 py-2 rounded-full mb-6 text-sm"
         >
-          ✓ Already earned Aircoins for this brief
+          ✓ Already earned Airstars for this brief
         </motion.div>
       )}
 
@@ -354,7 +354,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
 export default function QuizFlow() {
   const { briefId }      = useParams()
   const navigate         = useNavigate()
-  const { user, API, apiFetch, awardAircoins, refreshUser } = useAuth()
+  const { user, API, apiFetch, awardAirstars, refreshUser } = useAuth()
   const { applyUnlocks } = useNewGameUnlock()
   const { start }        = useAppTutorial()
 
@@ -387,7 +387,7 @@ export default function QuizFlow() {
   // Locally-retained answer set — sent in the /finish body so the server can
   // backfill any per-question POSTs that failed silently. Without this, a
   // single dropped /result request could push the user below the pass
-  // threshold and silently cost them their aircoin award.
+  // threshold and silently cost them their airstar award.
   const answersRef       = useRef([])
 
   // Load brief info + start quiz session
@@ -499,7 +499,7 @@ export default function QuizFlow() {
   // Pre-fired promise for the last question's /finish call — stored so
   // handleNext can await the already-in-flight request instead of starting fresh.
   const finishPromiseRef = useRef(null)
-  // Baseline totalAircoins captured BEFORE the quiz can mutate the balance, so
+  // Baseline totalAirstars captured BEFORE the quiz can mutate the balance, so
   // the fallback path can detect coins awarded server-side even when the
   // response is lost. `null` = "not yet captured" — fallback skips the delta
   // notification rather than risk attributing the user's pre-existing balance
@@ -517,7 +517,7 @@ export default function QuizFlow() {
     })
   }
 
-  // Continuously track the user's totalAircoins as the baseline UNTIL the
+  // Continuously track the user's totalAirstars as the baseline UNTIL the
   // quiz is finalised. Capturing at hydration alone would attribute any
   // non-quiz awards (eg a brief-read +5 while the quiz was in progress) to
   // the quiz reward in the fallback delta. Capturing only inside fireFinish
@@ -526,10 +526,10 @@ export default function QuizFlow() {
   // balance bug. Updating here while !finishedRef gives us both: an always-
   // current baseline AND immunity from the click-race.
   useEffect(() => {
-    if (!finishedRef.current && user?.totalAircoins != null) {
-      preFinishTotalRef.current = user.totalAircoins
+    if (!finishedRef.current && user?.totalAirstars != null) {
+      preFinishTotalRef.current = user.totalAirstars
     }
-  }, [user?.totalAircoins])
+  }, [user?.totalAirstars])
 
   const fireFinish = useCallback(() => {
     if (finishedRef.current || !attemptId) return
@@ -537,8 +537,8 @@ export default function QuizFlow() {
     // Belt-and-braces: re-capture the baseline if the useEffect above hasn't
     // run yet (very short quiz with eager click). Never overwrite a captured
     // baseline — the earliest snapshot is the most accurate.
-    if (preFinishTotalRef.current == null && user?.totalAircoins != null) {
-      preFinishTotalRef.current = user.totalAircoins
+    if (preFinishTotalRef.current == null && user?.totalAirstars != null) {
+      preFinishTotalRef.current = user.totalAirstars
     }
     const p = apiFetch(`${API}/api/games/quiz/attempt/${attemptId}/finish`, {
       method: 'POST',
@@ -552,7 +552,7 @@ export default function QuizFlow() {
     finishPromiseRef.current = p
     // Unblock handleNext if it was waiting on us.
     finishStartedResolveRef.current?.()
-  }, [API, attemptId, apiFetch, user?.totalAircoins])
+  }, [API, attemptId, apiFetch, user?.totalAirstars])
 
   const handleAnswer = async (answerId) => {
     setSelected(answerId)
@@ -575,7 +575,7 @@ export default function QuizFlow() {
     const resultPromise = submitResult(answerId)
     if (qIdx + 1 >= totalQs) {
       // Ensure the last answer is saved before finishing, so /finish
-      // sees all results when computing aircoins.
+      // sees all results when computing airstars.
       await resultPromise
       fireFinish()
     }
@@ -606,7 +606,7 @@ export default function QuizFlow() {
       try {
         const data = await (finishPromiseRef.current ?? Promise.resolve(null))
         if (data) {
-          const earned = data.data?.aircoinsEarned ?? 0
+          const earned = data.data?.airstarsEarned ?? 0
           const didWin = data.data?.won ?? false
           setWon(didWin)
           setBreakdown(data.data?.breakdown ?? [])
@@ -614,10 +614,10 @@ export default function QuizFlow() {
           playSound(didWin ? 'quiz_complete_win' : 'quiz_complete_lose')
           if (earned > 0) {
             setXP(earned)
-            if (awardAircoins) {
-              awardAircoins(earned, 'Quiz complete', {
-                cycleAfter:    data.data?.cycleAircoins,
-                totalAfter:    data.data?.totalAircoins,
+            if (awardAirstars) {
+              awardAirstars(earned, 'Quiz complete', {
+                cycleAfter:    data.data?.cycleAirstars,
+                totalAfter:    data.data?.totalAirstars,
                 rankPromotion: data.data?.rankPromotion ?? null,
               })
               awarded = true
@@ -631,15 +631,15 @@ export default function QuizFlow() {
         console.error('[quiz] finish failed:', err)
       }
       // Fallback: if the client didn't actually notify (response lost, malformed
-      // body with no aircoinsEarned field, or a post-award throw on the server),
-      // re-sync the user and fire the aircoin notification based on the delta so
+      // body with no airstarsEarned field, or a post-award throw on the server),
+      // re-sync the user and fire the airstar notification based on the delta so
       // the UI never silently stays out of sync with the ledger.
       //
       // Sanity guards (defence against the +entire-balance bug):
       //   • Skip entirely if no baseline was ever captured — we cannot tell what
       //     the user had before the quiz, so any delta is meaningless.
       //   • Cap the delta at MAX_PLAUSIBLE_DELTA: a single quiz can award at
-      //     most ~115 aircoins (5 × 20 medium + 15 perfect bonus). Anything
+      //     most ~115 airstars (5 × 20 medium + 15 perfect bonus). Anything
       //     above the cap is almost certainly a stale-baseline artefact and is
       //     suppressed rather than shown as a false reward.
       const MAX_PLAUSIBLE_DELTA = 250
@@ -647,15 +647,15 @@ export default function QuizFlow() {
         try {
           const fresh = await refreshUser()
           const baseline = preFinishTotalRef.current
-          const delta = (fresh?.totalAircoins ?? 0) - baseline
-          if (delta > 0 && delta <= MAX_PLAUSIBLE_DELTA && awardAircoins) {
+          const delta = (fresh?.totalAirstars ?? 0) - baseline
+          if (delta > 0 && delta <= MAX_PLAUSIBLE_DELTA && awardAirstars) {
             setXP(delta)
-            awardAircoins(delta, 'Quiz complete', {
-              totalAfter: fresh.totalAircoins,
-              cycleAfter: fresh.cycleAircoins,
+            awardAirstars(delta, 'Quiz complete', {
+              totalAfter: fresh.totalAirstars,
+              cycleAfter: fresh.cycleAirstars,
             })
           } else if (delta > MAX_PLAUSIBLE_DELTA) {
-            console.warn('[quiz] suppressed implausible aircoin delta:', { delta, baseline, fresh: fresh?.totalAircoins })
+            console.warn('[quiz] suppressed implausible airstar delta:', { delta, baseline, fresh: fresh?.totalAirstars })
           }
         } catch { /* swallow — best-effort resync */ }
       }

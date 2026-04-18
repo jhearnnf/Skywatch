@@ -134,7 +134,7 @@ describe('POST /api/games/quiz/result', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.data.isCorrect).toBe(true);
-    expect(res.body.data.aircoinsEarned).toBe(0); // coins awarded at finish, not per question
+    expect(res.body.data.airstarsEarned).toBe(0); // coins awarded at finish, not per question
   });
 
   it('records a wrong answer as isCorrect=false', async () => {
@@ -209,10 +209,10 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(true);
-    expect(res.body.data.aircoinsEarned).toBeGreaterThan(0);
-    // Perfect score bonus should apply (settings.aircoins100Percent = 15)
+    expect(res.body.data.airstarsEarned).toBeGreaterThan(0);
+    // Perfect score bonus should apply (settings.airstars100Percent = 15)
     // 5 correct × 10 + 15 bonus = 65
-    expect(res.body.data.aircoinsEarned).toBe(65);
+    expect(res.body.data.airstarsEarned).toBe(65);
     expect(res.body.data.isFirstAttempt).toBe(true);
     expect(res.body.data.breakdown).toHaveLength(2);
     expect(res.body.data.breakdown[0]).toMatchObject({ label: expect.stringMatching(/5 correct/i), amount: 50 });
@@ -229,7 +229,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(false);
-    expect(res.body.data.aircoinsEarned).toBe(0);
+    expect(res.body.data.airstarsEarned).toBe(0);
   });
 
   it('allows abandoning an attempt', async () => {
@@ -247,7 +247,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(false);
-    expect(res.body.data.aircoinsEarned).toBe(0);
+    expect(res.body.data.airstarsEarned).toBe(0);
   });
 
   it('stores abandoned status correctly in the DB', async () => {
@@ -266,7 +266,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     const record = await GameSessionQuizAttempt.findById(attemptId);
     expect(record.status).toBe('abandoned');
     expect(record.won).toBe(false);
-    expect(record.aircoinsEarned).toBe(0);
+    expect(record.airstarsEarned).toBe(0);
   });
 
   it('abandoned attempts are NOT counted in /api/users/stats gamesPlayed', async () => {
@@ -342,7 +342,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(true);
-    expect(res.body.data.aircoinsEarned).toBe(0); // no coins on repeat
+    expect(res.body.data.airstarsEarned).toBe(0); // no coins on repeat
     expect(res.body.data.isFirstAttempt).toBe(false);
     expect(res.body.data.breakdown).toEqual([]);
   });
@@ -365,7 +365,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(true);
     expect(res.body.data.isFirstAttempt).toBe(true);  // no prior WIN, so still first
-    expect(res.body.data.aircoinsEarned).toBe(65);    // 5×10 + 15 bonus
+    expect(res.body.data.airstarsEarned).toBe(65);    // 5×10 + 15 bonus
   });
 
   // ── Idempotency: a second /finish call on the same attempt MUST NOT
@@ -376,16 +376,16 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     const User = require('../../models/User');
     const { attemptId } = await runFullQuiz(true); // 5/5 correct
 
-    // First /finish call — awards 65 aircoins (5×10 + 15 perfect bonus)
+    // First /finish call — awards 65 airstars (5×10 + 15 perfect bonus)
     const first = await request(app)
       .post(`/api/games/quiz/attempt/${attemptId}/finish`)
       .set('Cookie', cookie)
       .send({ status: 'completed' });
     expect(first.status).toBe(200);
-    expect(first.body.data.aircoinsEarned).toBe(65);
+    expect(first.body.data.airstarsEarned).toBe(65);
 
     const userAfterFirst = await User.findById(user._id);
-    expect(userAfterFirst.totalAircoins).toBe(65);
+    expect(userAfterFirst.totalAirstars).toBe(65);
 
     // Second /finish call on the same attempt
     const second = await request(app)
@@ -394,13 +394,13 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
       .send({ status: 'completed' });
 
     expect(second.status).toBe(200);
-    expect(second.body.data.aircoinsEarned).toBe(0);          // no double-award
+    expect(second.body.data.airstarsEarned).toBe(0);          // no double-award
     expect(second.body.data.alreadyFinalised).toBe(true);
     expect(second.body.data.isFirstAttempt).toBe(false);      // never re-trigger first-award path
 
-    // CRITICAL: the user's totalAircoins must still be 65, not 130
+    // CRITICAL: the user's totalAirstars must still be 65, not 130
     const userAfterSecond = await User.findById(user._id);
-    expect(userAfterSecond.totalAircoins).toBe(65);
+    expect(userAfterSecond.totalAirstars).toBe(65);
   });
 
   it('idempotency: completed → abandoned override is rejected (attempt stays completed)', async () => {
@@ -441,7 +441,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(false);
-    expect(res.body.data.aircoinsEarned).toBe(0);
+    expect(res.body.data.airstarsEarned).toBe(0);
   });
 
   // ── Backfill: client-supplied answers[] recovers from dropped /result POSTs ─
@@ -485,7 +485,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(true);
     // Full 65: 5×10 + 15 perfect score bonus — the dropped result was recovered.
-    expect(res.body.data.aircoinsEarned).toBe(65);
+    expect(res.body.data.airstarsEarned).toBe(65);
 
     // Admin must see a SystemLog entry describing the backfill.
     const logs = await SystemLog.find({ type: 'quiz_finish_failure' });
@@ -515,7 +515,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
       .send({ status: 'completed', answers: fullAnswers });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.aircoinsEarned).toBe(65);
+    expect(res.body.data.airstarsEarned).toBe(65);
 
     // No duplicate rows created.
     const afterCount = await GameSessionQuizResult.countDocuments({ gameSessionId });
@@ -531,7 +531,7 @@ describe('POST /api/games/quiz/attempt/:id/finish', () => {
       .send({ status: 'completed' });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.aircoinsEarned).toBe(65);
+    expect(res.body.data.airstarsEarned).toBe(65);
   });
 });
 

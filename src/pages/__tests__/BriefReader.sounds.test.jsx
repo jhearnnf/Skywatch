@@ -25,7 +25,7 @@ vi.mock('../../context/AppTutorialContext', () => ({
 }))
 
 vi.mock('../../context/AppSettingsContext', () => ({
-  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
+  useAppSettings: () => ({ settings: { airstarsPerBriefRead: 5 } }),
 }))
 
 vi.mock('../../components/tutorial/TutorialModal', () => ({

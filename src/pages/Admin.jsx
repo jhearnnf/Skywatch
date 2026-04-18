@@ -15,6 +15,13 @@ import SEO from '../components/SEO'
 
 const fmtNum = (n) => (n ?? 0).toLocaleString()
 
+const fmtUSD = (n) => {
+  const v = typeof n === 'number' ? n : 0
+  if (v >= 100) return `$${v.toFixed(0)}`
+  if (v >= 1)   return `$${v.toFixed(2)}`
+  return `$${v.toFixed(4)}`
+}
+
 function fmtUptime(s) {
   if (!s) return '0s'
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
@@ -168,8 +175,10 @@ function StatCard({ label, value, sub, color = 'slate' }) {
 
 function StatsTab({ API }) {
   const { apiFetch } = useAuth()
+  const navigate = useNavigate()
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
+  const [openRouter, setOpenRouter] = useState(null)
 
   useEffect(() => {
     apiFetch(`${API}/api/admin/stats`, { credentials: 'include' })
@@ -177,6 +186,23 @@ function StatsTab({ API }) {
       .then(d => { if (d.status === 'success') setStats(d.data); else setError('Failed to load stats') })
       .catch(() => setError('Failed to load stats'))
   }, [API])
+
+  useEffect(() => {
+    apiFetch(`${API}/api/admin/openrouter/summary`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => { if (d.status === 'success') setOpenRouter(d.data) })
+      .catch(() => {})
+  }, [API])
+
+  const openRouterNav = (key, scope) => {
+    const params = new URLSearchParams({ key })
+    if (scope === 'today') {
+      const start = new Date()
+      start.setHours(0, 0, 0, 0)
+      params.set('from', start.toISOString())
+    }
+    navigate(`/admin/openrouter-usage?${params.toString()}`)
+  }
 
   if (error) return <p className="text-sm text-red-500 py-8 text-center">{error}</p>
   if (!stats) return <div className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading stats…</div>
@@ -274,16 +300,59 @@ function StatsTab({ API }) {
           <StatCard label="Abandoned" value={pct(games.aptitudeSync?.abandoned, games.aptitudeSync?.total)}             color="red" />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <StatCard label="Aircoins Earned" value={fmtNum(games.aptitudeSync?.aircoinsEarned)} color="amber" sub="across all sessions" />
-          <StatCard label="Avg per Session" value={fmtNum(games.aptitudeSync?.completed ? Math.round((games.aptitudeSync?.aircoinsEarned ?? 0) / games.aptitudeSync.completed) : 0)} color="slate" sub="completed sessions" />
+          <StatCard label="Airstars Earned" value={fmtNum(games.aptitudeSync?.airstarsEarned)} color="amber" sub="across all sessions" />
+          <StatCard label="Avg per Session" value={fmtNum(games.aptitudeSync?.completed ? Math.round((games.aptitudeSync?.airstarsEarned ?? 0) / games.aptitudeSync.completed) : 0)} color="slate" sub="completed sessions" />
         </div>
       </section>
 
-      {/* Aircoins + Briefs + Tutorials */}
+      {/* OpenRouter API spend */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">OpenRouter Spend</h3>
+        {!openRouter ? (
+          <div className="py-4 text-center text-slate-400 text-xs animate-pulse">Loading OpenRouter usage…</div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <button type="button" onClick={() => openRouterNav('main', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
+              <StatCard
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>SkyWatch.main</>}
+                value={fmtUSD(openRouter.main?.today)}
+                sub={`${fmtNum(openRouter.main?.todayCalls)} calls today`}
+                color="red"
+              />
+            </button>
+            <button type="button" onClick={() => openRouterNav('main', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
+              <StatCard
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>SkyWatch.main</>}
+                value={fmtUSD(openRouter.main?.lifetime)}
+                sub={openRouter.main?.lifetimeError || 'all-time spend'}
+                color="amber"
+              />
+            </button>
+            <button type="button" onClick={() => openRouterNav('aptitude', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
+              <StatCard
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>SkyWatch.aptitude</>}
+                value={fmtUSD(openRouter.aptitude?.today)}
+                sub={`${fmtNum(openRouter.aptitude?.todayCalls)} calls today`}
+                color="red"
+              />
+            </button>
+            <button type="button" onClick={() => openRouterNav('aptitude', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
+              <StatCard
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>SkyWatch.aptitude</>}
+                value={fmtUSD(openRouter.aptitude?.lifetime)}
+                sub={openRouter.aptitude?.lifetimeError || 'all-time spend'}
+                color="amber"
+              />
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Airstars + Briefs + Tutorials */}
       <section>
         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Economy & Content</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Aircoins in System" value={fmtNum(games.totalAircoinsEarned)}       color="amber" />
+          <StatCard label="Airstars in System" value={fmtNum(games.totalAirstarsEarned)}       color="amber" />
           <StatCard label="Briefs Read"        value={fmtNum(briefs.totalBrifsRead)}           color="brand" />
           <StatCard label="Briefs Opened"      value={fmtNum(briefs.totalBrifsOpened)}         color="slate" />
           <StatCard label="Time Reading"       value={fmtSeconds(briefs.totalReadSeconds ?? 0)} color="brand" />
@@ -323,7 +392,7 @@ const SOUND_GROUPS = [
   {
     title: 'Rewards',
     sounds: [
-      { key: 'volumeAircoin',       enabledKey: 'soundEnabledAircoin',       label: 'Aircoins Earned', sound: 'aircoin'        },
+      { key: 'volumeAirstar',       enabledKey: 'soundEnabledAirstar',       label: 'Airstars Earned', sound: 'airstar'        },
       { key: 'volumeLevelUp',       enabledKey: 'soundEnabledLevelUp',       label: 'Level Up',        sound: 'level_up'       },
       { key: 'volumeRankPromotion', enabledKey: 'soundEnabledRankPromotion', label: 'Rank Promotion',  sound: 'rank_promotion' },
     ],
@@ -477,23 +546,23 @@ function calcEconomyScenario(sim, difficulty) {
   const isNormal = difficulty === 'normal'
   const n        = sim.totalBriefs ?? 0
   const qpd      = sim.quizQuestionsPerSession ?? 5
-  const wtaRate  = (rates.aircoinsWhereAircraftRound1 ?? 5)
-                 + (rates.aircoinsWhereAircraftRound2 ?? 10)
-                 + (rates.aircoinsWhereAircraftBonus  ?? 5)
-  const reads = n * (rates.aircoinsPerBriefRead ?? 5)
-  // questions per brief × aircoinsPerWin; every brief earns the 100% bonus (perfect-play sim)
+  const wtaRate  = (rates.airstarsWhereAircraftRound1 ?? 5)
+                 + (rates.airstarsWhereAircraftRound2 ?? 10)
+                 + (rates.airstarsWhereAircraftBonus  ?? 5)
+  const reads = n * (rates.airstarsPerBriefRead ?? 5)
+  // questions per brief × airstarsPerWin; every brief earns the 100% bonus (perfect-play sim)
   const quiz  = isNormal
-    ? n * qpd * (rates.aircoinsPerWinEasy   ?? 10) + n * (rates.aircoins100Percent ?? 15)
-    : n * qpd * (rates.aircoinsPerWinMedium ?? 20) + n * (rates.aircoins100Percent ?? 15)
+    ? n * qpd * (rates.airstarsPerWinEasy   ?? 10) + n * (rates.airstars100Percent ?? 15)
+    : n * qpd * (rates.airstarsPerWinMedium ?? 20) + n * (rates.airstars100Percent ?? 15)
   const boo   = (sim.booEligibleBriefs ?? 0) * (isNormal
-    ? (rates.aircoinsOrderOfBattleEasy   ?? 8)
-    : (rates.aircoinsOrderOfBattleMedium ?? 18))
+    ? (rates.airstarsOrderOfBattleEasy   ?? 8)
+    : (rates.airstarsOrderOfBattleMedium ?? 18))
   const wta   = (sim.wtaBriefs ?? 0) * wtaRate
   // Login: every day = firstLogin; days 2+ also earn streakBonus
   const briefsPerDay = Math.max(1, sim.briefsPerDay ?? 1)
   const days  = n > 0 ? Math.ceil(n / briefsPerDay) : 0
-  const login = days * (rates.aircoinsFirstLogin ?? 5)
-              + Math.max(0, days - 1) * (rates.aircoinsStreakBonus ?? 2)
+  const login = days * (rates.airstarsFirstLogin ?? 5)
+              + Math.max(0, days - 1) * (rates.airstarsStreakBonus ?? 2)
   return { reads, quiz, boo, wta, login, days, total: reads + quiz + boo + wta + login }
 }
 
@@ -504,8 +573,8 @@ function calcEconomyProgression(totalCoins, cycleThreshold, totalRanks, ranks, l
   const cycleCoins      = atMaxRank ? totalCoins - totalRanks * cycleThreshold : totalCoins % cycleThreshold
   let finalLevel = 1, cumulative = 0
   for (const lv of (levels ?? [])) {
-    if (lv.aircoinsToNextLevel === null) { finalLevel = lv.levelNumber; break }
-    cumulative += lv.aircoinsToNextLevel
+    if (lv.airstarsToNextLevel === null) { finalLevel = lv.levelNumber; break }
+    cumulative += lv.airstarsToNextLevel
     if (cycleCoins < cumulative) { finalLevel = lv.levelNumber; break }
     finalLevel = lv.levelNumber + 1
   }
@@ -617,15 +686,15 @@ function CeilingScenarioColumn({ label, difficulty, sim, meta, simCycleThreshold
   )
 }
 
-function AircoinsEconomy({ API, onToast }) {
-  const { apiFetch, awardAircoins } = useAuth()
+function AirstarsEconomy({ API, onToast }) {
+  const { apiFetch, awardAirstars } = useAuth()
   const [meta,            setMeta]           = useState(null)  // { cycleThreshold, totalRanks, ranks }
   const [sim,             setSim]            = useState(null)  // full editable sim state
   const [dbSim,           setDbSim]          = useState(null)  // DB snapshot for reset
   const [busy,       setBusy]       = useState(false)
   const [error,      setError]      = useState('')
   const [applyModal, setApplyModal] = useState(false)
-  // Award test coins
+  // Award test airstars
   const [testAmount, setTestAmount] = useState('')
   const [coinModal,  setCoinModal]  = useState(false)
   const [coinBusy,   setCoinBusy]   = useState(false)
@@ -648,7 +717,7 @@ function AircoinsEconomy({ API, onToast }) {
           rates,
           aiQuestionsPerDifficulty: aiQuestionsPerDifficulty ?? 7,
           quizQuestionsPerSession:  quizQuestionsPerSession  ?? 5,
-          levels:                   levels.filter(l => l.aircoinsToNextLevel !== null),
+          levels:                   levels.filter(l => l.airstarsToNextLevel !== null),
         }
         // Preserve briefsPerDay across refreshes
         setSim(prev => prev ? { ...snapshot, briefsPerDay: prev.briefsPerDay } : snapshot)
@@ -669,7 +738,7 @@ function AircoinsEconomy({ API, onToast }) {
     const val = parseInt(raw, 10)
     setSim(p => {
       const levels = [...p.levels]
-      levels[index] = { ...levels[index], aircoinsToNextLevel: isNaN(val) ? 1 : Math.max(1, val) }
+      levels[index] = { ...levels[index], airstarsToNextLevel: isNaN(val) ? 1 : Math.max(1, val) }
       return { ...p, levels }
     })
   }
@@ -703,25 +772,25 @@ function AircoinsEconomy({ API, onToast }) {
       })
       const data = await res.json()
       if (data.status === 'success') {
-        awardAircoins(data.awarded, 'Test Coins', { cycleAfter: data.cycleAircoins, totalAfter: data.totalAircoins, rankPromotion: data.rankPromotion ?? null })
-        onToast(`✓ Awarded ${data.awarded} test coins`)
+        awardAirstars(data.awarded, 'Test Airstars', { cycleAfter: data.cycleAirstars, totalAfter: data.totalAirstars, rankPromotion: data.rankPromotion ?? null })
+        onToast(`✓ Awarded ${data.awarded} test airstars`)
         setTestAmount('')
       }
     } finally { setCoinBusy(false) }
   }
 
-  const simCycleThreshold = sim ? sim.levels.reduce((acc, l) => acc + (l.aircoinsToNextLevel ?? 0), 0) : 0
+  const simCycleThreshold = sim ? sim.levels.reduce((acc, l) => acc + (l.airstarsToNextLevel ?? 0), 0) : 0
   const fmt        = n => (n ?? 0).toLocaleString()
   const derivedDays = sim
     ? (sim.totalBriefs > 0 ? Math.ceil(sim.totalBriefs / Math.max(1, sim.briefsPerDay ?? 1)) : 0)
     : 0
 
   return (
-    <Section title="Aircoins Economy Settings" collapsible>
+    <Section title="Airstars Economy Settings" collapsible>
       {applyModal && (
         <ConfirmModal
           title="Update Live Economy Values"
-          body="This will update all aircoin award rates AND level thresholds live. Every user's earning rates and progression requirements will change immediately."
+          body="This will update all airstar award rates AND level thresholds live. Every user's earning rates and progression requirements will change immediately."
           confirmLabel="Update Live Economy"
           onConfirm={applyEconomy}
           onCancel={() => setApplyModal(false)}
@@ -729,22 +798,22 @@ function AircoinsEconomy({ API, onToast }) {
       )}
       {coinModal && (
         <ConfirmModal
-          title={`Award ${testAmount} Test Coins`}
-          body="Awards aircoins directly to your admin account. Use for testing reward flows."
-          confirmLabel="Award Coins"
+          title={`Award ${testAmount} Test Airstars`}
+          body="Awards airstars directly to your admin account. Use for testing reward flows."
+          confirmLabel="Award Airstars"
           onConfirm={awardTest}
           onCancel={() => setCoinModal(false)}
         />
       )}
 
       <p className="text-xs text-slate-400 mb-3">
-        Design the aircoin economy — set award rates and level thresholds, run a simulation to verify viability, then push live.
+        Design the airstar economy — set award rates and level thresholds, run a simulation to verify viability, then push live.
         Simulation assumes perfect play (100% scores, all questions answered, all games completed).
       </p>
 
-      {/* Award Test Coins */}
-      <Section title="Award Test Coins" collapsible>
-        <p className="text-xs text-slate-400 mb-3">Awards aircoins to your admin account, logged as "Test Coins".</p>
+      {/* Award Test Airstars */}
+      <Section title="Award Test Airstars" collapsible>
+        <p className="text-xs text-slate-400 mb-3">Awards airstars to your admin account, logged as "Test Airstars".</p>
         <div className="flex items-center gap-3">
           <input
             type="number" min={1} placeholder="Amount…"
@@ -836,39 +905,39 @@ function AircoinsEconomy({ API, onToast }) {
                 <div>
                   <p className="text-[11px] text-slate-400 mb-1.5">Brief Read &amp; Login</p>
                   <div className="grid grid-cols-3 gap-2">
-                    <RateInput label="Per brief read"    value={sim.rates.aircoinsPerBriefRead}   onChange={v => setRate('aircoinsPerBriefRead', v)} />
-                    <RateInput label="First daily login" value={sim.rates.aircoinsFirstLogin}      onChange={v => setRate('aircoinsFirstLogin', v)} />
-                    <RateInput label="Streak bonus"      value={sim.rates.aircoinsStreakBonus}     onChange={v => setRate('aircoinsStreakBonus', v)} />
+                    <RateInput label="Per brief read"    value={sim.rates.airstarsPerBriefRead}   onChange={v => setRate('airstarsPerBriefRead', v)} />
+                    <RateInput label="First daily login" value={sim.rates.airstarsFirstLogin}      onChange={v => setRate('airstarsFirstLogin', v)} />
+                    <RateInput label="Streak bonus"      value={sim.rates.airstarsStreakBonus}     onChange={v => setRate('airstarsStreakBonus', v)} />
                   </div>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-400 mb-1.5">Quiz</p>
                   <div className="grid grid-cols-3 gap-2">
-                    <RateInput label="Easy — per answer"   value={sim.rates.aircoinsPerWinEasy}    onChange={v => setRate('aircoinsPerWinEasy', v)} />
-                    <RateInput label="Medium — per answer" value={sim.rates.aircoinsPerWinMedium}  onChange={v => setRate('aircoinsPerWinMedium', v)} />
-                    <RateInput label="100% score bonus"    value={sim.rates.aircoins100Percent}    onChange={v => setRate('aircoins100Percent', v)} />
+                    <RateInput label="Easy — per answer"   value={sim.rates.airstarsPerWinEasy}    onChange={v => setRate('airstarsPerWinEasy', v)} />
+                    <RateInput label="Medium — per answer" value={sim.rates.airstarsPerWinMedium}  onChange={v => setRate('airstarsPerWinMedium', v)} />
+                    <RateInput label="100% score bonus"    value={sim.rates.airstars100Percent}    onChange={v => setRate('airstars100Percent', v)} />
                   </div>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-400 mb-1.5">Battle of Order</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <RateInput label="Easy win"   value={sim.rates.aircoinsOrderOfBattleEasy}   onChange={v => setRate('aircoinsOrderOfBattleEasy', v)} />
-                    <RateInput label="Medium win" value={sim.rates.aircoinsOrderOfBattleMedium} onChange={v => setRate('aircoinsOrderOfBattleMedium', v)} />
+                    <RateInput label="Easy win"   value={sim.rates.airstarsOrderOfBattleEasy}   onChange={v => setRate('airstarsOrderOfBattleEasy', v)} />
+                    <RateInput label="Medium win" value={sim.rates.airstarsOrderOfBattleMedium} onChange={v => setRate('airstarsOrderOfBattleMedium', v)} />
                   </div>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-400 mb-1.5">Where's That Aircraft</p>
                   <div className="grid grid-cols-3 gap-2">
-                    <RateInput label="Round 1 correct"    value={sim.rates.aircoinsWhereAircraftRound1} onChange={v => setRate('aircoinsWhereAircraftRound1', v)} />
-                    <RateInput label="Round 2 correct"    value={sim.rates.aircoinsWhereAircraftRound2} onChange={v => setRate('aircoinsWhereAircraftRound2', v)} />
-                    <RateInput label="Full mission bonus" value={sim.rates.aircoinsWhereAircraftBonus}  onChange={v => setRate('aircoinsWhereAircraftBonus', v)} />
+                    <RateInput label="Round 1 correct"    value={sim.rates.airstarsWhereAircraftRound1} onChange={v => setRate('airstarsWhereAircraftRound1', v)} />
+                    <RateInput label="Round 2 correct"    value={sim.rates.airstarsWhereAircraftRound2} onChange={v => setRate('airstarsWhereAircraftRound2', v)} />
+                    <RateInput label="Full mission bonus" value={sim.rates.airstarsWhereAircraftBonus}  onChange={v => setRate('airstarsWhereAircraftBonus', v)} />
                   </div>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-400 mb-1.5">Flashcard Recall</p>
                   <div className="grid grid-cols-2 gap-2">
-                    <RateInput label="Per correct card" value={sim.rates.aircoinsFlashcardPerCard}      onChange={v => setRate('aircoinsFlashcardPerCard', v)} />
-                    <RateInput label="100% bonus"       value={sim.rates.aircoinsFlashcardPerfectBonus} onChange={v => setRate('aircoinsFlashcardPerfectBonus', v)} />
+                    <RateInput label="Per correct card" value={sim.rates.airstarsFlashcardPerCard}      onChange={v => setRate('airstarsFlashcardPerCard', v)} />
+                    <RateInput label="100% bonus"       value={sim.rates.airstarsFlashcardPerfectBonus} onChange={v => setRate('airstarsFlashcardPerfectBonus', v)} />
                   </div>
                 </div>
               </div>
@@ -884,7 +953,7 @@ function AircoinsEconomy({ API, onToast }) {
               </div>
               <div className="grid grid-cols-5 gap-2">
                 {sim.levels.map((lv, i) => (
-                  <CeilingLevelInput key={lv.levelNumber} index={i} value={lv.aircoinsToNextLevel} onSetLevel={setLevel} />
+                  <CeilingLevelInput key={lv.levelNumber} index={i} value={lv.airstarsToNextLevel} onSetLevel={setLevel} />
                 ))}
               </div>
             </div>
@@ -893,7 +962,7 @@ function AircoinsEconomy({ API, onToast }) {
           {/* Simulation results */}
           <div className="text-xs text-slate-400 mb-4">
             {meta.totalRanks} total ranks &nbsp;·&nbsp;
-            WTA: {fmt((sim.rates.aircoinsWhereAircraftRound1 ?? 5) + (sim.rates.aircoinsWhereAircraftRound2 ?? 10) + (sim.rates.aircoinsWhereAircraftBonus ?? 5))} coins/brief
+            WTA: {fmt((sim.rates.airstarsWhereAircraftRound1 ?? 5) + (sim.rates.airstarsWhereAircraftRound2 ?? 10) + (sim.rates.airstarsWhereAircraftBonus ?? 5))} coins/brief
           </div>
           <div className="flex gap-6 mb-5">
             <CeilingScenarioColumn label="Normal (Easy)"     difficulty="normal"   sim={sim} meta={meta} simCycleThreshold={simCycleThreshold} />
@@ -1427,9 +1496,9 @@ function SettingsTab({ API }) {
         </div>
       </Section>
 
-      {/* ── Aircoins ─────────────────────────────────────────── */}
-      {/* ── Aircoins Economy ─────────────────────────────────── */}
-      <AircoinsEconomy API={API} onToast={setToast} />
+      {/* ── Airstars ─────────────────────────────────────────── */}
+      {/* ── Airstars Economy ─────────────────────────────────── */}
+      <AirstarsEconomy API={API} onToast={setToast} />
 
       {/* ── Game ────────────────────────────────────────────── */}
       <Section title="Game Options" collapsible onSave={() => save('Update Game Options', [
@@ -1772,7 +1841,7 @@ function UsersTab({ API }) {
             {/* Stats row */}
             <div className="grid grid-cols-4 sm:grid-cols-7 divide-x divide-slate-100 border-b border-slate-100">
               {[
-                ['Coins', (u.totalAircoins ?? 0).toLocaleString()],
+                ['Coins', (u.totalAirstars ?? 0).toLocaleString()],
                 ['Streak', u.loginStreak ?? 0],
                 ['Logins', u.logins?.length ?? 0],
                 ['Briefs Read', u.profileStats?.brifsRead ?? 0],
@@ -1827,11 +1896,11 @@ function UsersTab({ API }) {
                     ? 'border-amber-300 text-amber-700 bg-amber-50'
                     : 'border-amber-200 text-amber-700 hover:bg-amber-50'
                 }`}>
-                ⬡ Award Coins {awardPanel === u._id ? '▲' : '▼'}
+                ⬡ Award Airstars {awardPanel === u._id ? '▲' : '▼'}
               </button>
               {(() => {
                 const progressHasData = (
-                  (u.totalAircoins ?? 0) > 0 ||
+                  (u.totalAirstars ?? 0) > 0 ||
                   (u.profileStats?.quizzesPlayed ?? 0) > 0 || (u.profileStats?.booPlayed ?? 0) > 0 ||
                   (u.profileStats?.wtaPlayed ?? 0) > 0 || (u.profileStats?.wherePlayed ?? 0) > 0 ||
                   (u.profileStats?.flashcardsPlayed ?? 0) > 0 ||
@@ -1845,7 +1914,7 @@ function UsersTab({ API }) {
                   <button
                     onClick={() => {
                       if (isOpen) { setResetPanel(null); return }
-                      const PROGRESS_FIELDS = ['aircoins', 'gameHistory', 'intelBriefsRead', 'streak', 'gameBadges']
+                      const PROGRESS_FIELDS = ['airstars', 'gameHistory', 'intelBriefsRead', 'streak', 'gameBadges']
                       const RESET_ITEMS = [
                         { key: 'progress',  defaultOn: true },
                         { key: 'tutorials', defaultOn: false },
@@ -1876,10 +1945,10 @@ function UsersTab({ API }) {
               </div>
             )}
 
-            {/* Award Coins panel (expanded) */}
+            {/* Award Airstars panel (expanded) */}
             {awardPanel === u._id && (
               <div className="px-4 py-2.5 border-b border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Award Aircoins</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Award Airstars</p>
                 <div className="flex items-center gap-2">
                   <input
                     type="number" min={1} placeholder="Amount…"
@@ -1887,13 +1956,13 @@ function UsersTab({ API }) {
                     onChange={e => setAwardAmount(e.target.value)}
                     onKeyDown={e => {
                       if (e.key === 'Enter' && parseInt(awardAmount, 10) > 0) {
-                        action(`Award ${awardAmount} coins — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/award-coins`, 'POST', { amount: parseInt(awardAmount, 10) })
+                        action(`Award ${awardAmount} airstars — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/award-coins`, 'POST', { amount: parseInt(awardAmount, 10) })
                       }
                     }}
                     className="w-28 border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-amber-200"
                   />
                   <button
-                    onClick={() => action(`Award ${awardAmount} coins — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/award-coins`, 'POST', { amount: parseInt(awardAmount, 10) })}
+                    onClick={() => action(`Award ${awardAmount} airstars — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/award-coins`, 'POST', { amount: parseInt(awardAmount, 10) })}
                     disabled={!awardAmount || parseInt(awardAmount, 10) <= 0}
                     className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold transition-colors disabled:opacity-40"
                   >
@@ -1905,9 +1974,9 @@ function UsersTab({ API }) {
 
             {/* Reset panel (expanded) */}
             {resetPanel === u._id && (() => {
-              const PROGRESS_FIELDS = ['aircoins', 'gameHistory', 'intelBriefsRead', 'streak', 'gameBadges']
+              const PROGRESS_FIELDS = ['airstars', 'gameHistory', 'intelBriefsRead', 'streak', 'gameBadges']
               const progressHasData = (
-                (u.totalAircoins ?? 0) > 0 ||
+                (u.totalAirstars ?? 0) > 0 ||
                 (u.profileStats?.quizzesPlayed ?? 0) > 0 || (u.profileStats?.booPlayed ?? 0) > 0 ||
                 (u.profileStats?.wtaPlayed ?? 0) > 0 || (u.profileStats?.wherePlayed ?? 0) > 0 ||
                 (u.profileStats?.flashcardsPlayed ?? 0) > 0 ||
@@ -2675,6 +2744,7 @@ const BRIEF_SUBCATEGORIES = {
 const EMPTY_DRAFT = {
   title: '', nickname: '', subtitle: '', category: 'News', subcategory: '', historic: false, eventDate: null,
   priorityNumber: null,
+  status: 'published',
   descriptionSections: ['', '', ''],
   keywords: [],
   sources: [],
@@ -3535,7 +3605,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [staleSourceWarning,    setStaleSourceWarning]    = useState(false)
   const [missingGameDataWarning, setMissingGameDataWarning] = useState(false)
   // Section open/close
-  const [openSections,  setOpenSections]  = useState({ core: true, desc: true, keywords: false, questions: false, images: true, sources: false, stats: false })
+  const [openSections,  setOpenSections]  = useState({ core: true, desc: false, keywords: false, questions: false, images: false, sources: false, stats: false, linkedBriefs: false })
   const [allBasesBriefs,     setAllBasesBriefs]     = useState([]) // Bases briefs for Aircraft/Squadrons picker
   const [allSquadronsBriefs, setAllSquadronsBriefs] = useState([]) // Squadrons briefs for Bases/Aircraft picker
   const [allAircraftBriefs,  setAllAircraftBriefs]  = useState([]) // Aircraft briefs for Bases/Squadrons/Tech picker
@@ -3679,6 +3749,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       historic:            br.historic ?? false,
       eventDate:           br.eventDate ? new Date(br.eventDate).toISOString().slice(0, 10) : null,
       priorityNumber:      br.priorityNumber ?? null,
+      status:              br.status ?? 'published',
       descriptionSections: br.descriptionSections?.length ? br.descriptionSections : ['','',''],
       keywords:            (br.keywords ?? []).map(k => {
         const linked = k.linkedBriefId
@@ -3889,6 +3960,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       historic:            briefData.historic ?? false,
       eventDate:           briefData.eventDate ?? null,
       priorityNumber:      lead?.priorityNumber ?? null,
+      status:              'published',
       descriptionSections: Array.isArray(briefData.descriptionSections) && briefData.descriptionSections.length
         ? briefData.descriptionSections
         : ['','',''],
@@ -4695,7 +4767,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       {confirmRegen && (
         <ConfirmModal
           title="Regenerate Brief Content"
-          body="This will delete all read history, quiz game stats, Battle of Order stats, Where's That Aircraft stats, Flashcard stats, and all Aircoins awarded for this brief — for every user. This cannot be undone."
+          body="This will delete all read history, quiz game stats, Battle of Order stats, Where's That Aircraft stats, Flashcard stats, and all Airstars awarded for this brief — for every user. This cannot be undone."
           confirmLabel="Confirm & Regenerate"
           danger
           onConfirm={handleConfirmRegen}
@@ -4705,7 +4777,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       {confirmDescRegen && (
         <ConfirmModal
           title="Regenerate Description"
-          body="This will delete all read history, quiz game stats, Battle of Order stats, Where's That Aircraft stats, Flashcard stats, and all Aircoins awarded for this brief — for every user. This cannot be undone."
+          body="This will delete all read history, quiz game stats, Battle of Order stats, Where's That Aircraft stats, Flashcard stats, and all Airstars awarded for this brief — for every user. This cannot be undone."
           confirmLabel="Confirm & Regenerate"
           danger
           onConfirm={handleConfirmDescRegen}
@@ -4863,6 +4935,26 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               />
               <span className="text-sm text-slate-700 font-medium">Historic (retired/outdated)</span>
             </label>
+            {/* Status */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Status</label>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {['published', 'stub'].map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setDraft(p => ({ ...p, status: s }))}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
+                      ${draft.status === s
+                        ? 'bg-brand-600 text-white border-brand-600'
+                        : 'bg-surface-raised text-slate-600 border-slate-400 hover:border-brand-500'
+                      }`}
+                  >
+                    {s === 'published' ? 'Published' : 'Stub (placeholder)'}
+                  </button>
+                ))}
+              </div>
+            </div>
             {/* Event Date — News briefs only */}
             {draft.category === 'News' && (
               <div>
@@ -5293,13 +5385,29 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         const selectedRelated = (draft.relatedBriefIds ?? [])
         const selectedRelatedBriefs = allRelatedPool.filter(b => selectedRelated.includes(String(b._id)))
 
+        const totalLinked =
+          (linkedSections.reduce((sum, sec) => sum + (draft[sec.field] ?? []).length, 0))
+          + (draft.relatedBriefIds ?? []).length
+
         return (
           <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
             {autoGenerating && <GeneratingOverlay />}
-            <div className="px-5 py-4 border-b border-slate-300">
-              <h3 className="font-bold text-slate-800">🕸️ Linked Briefs</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Connect related briefs to build the knowledge graph</p>
-            </div>
+            <button
+              onClick={() => toggleSection('linkedBriefs')}
+              className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-slate-800">🕸️ Linked Briefs</h3>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${totalLinked > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-raised text-text-muted'}`}>
+                    {totalLinked} selected
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">Connect related briefs to build the knowledge graph</p>
+              </div>
+              <span className="text-slate-400 text-xs">{openSections.linkedBriefs ? '▲' : '▼'}</span>
+            </button>
+            {openSections.linkedBriefs && (
             <div className="px-5 py-4 space-y-5">
               {linkedSections.map(sec => (
                 <div key={sec.field}>
@@ -5419,6 +5527,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                 )}
               </div>
             </div>
+            )}
           </div>
         )
       })()}
@@ -5426,9 +5535,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       {/* ── Section F: Keywords ───────────────────────────────────────── */}
       <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
         {(generating === 'keywords' || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
-        <button
+        <div
           onClick={() => toggleSection('keywords')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-slate-800">Keywords</h3>
@@ -5441,8 +5550,19 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               </span>
             )}
           </div>
-          <span className="text-slate-400 text-xs">{openSections.keywords ? '▲' : '▼'}</span>
-        </button>
+          <div className="flex items-center gap-3">
+            {draft.keywords.length < keywordsPerBrief && (
+              <button
+                onClick={e => { e.stopPropagation(); generateSingleKeyword() }}
+                disabled={generating === 'keywords' || generating === 'keywords-single' || regeneratingAll}
+                className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
+              >
+                {generating === 'keywords-single' ? '↺ Generating…' : `↺ Generate Missing (${keywordsPerBrief - draft.keywords.length})`}
+              </button>
+            )}
+            <span className="text-slate-400 text-xs">{openSections.keywords ? '▲' : '▼'}</span>
+          </div>
+        </div>
         {openSections.keywords && (
           <div className="px-5 py-4 space-y-3">
             {draft.keywords.map((kw, idx) => (
@@ -5498,15 +5618,6 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               >
                 {generating === 'keywords' ? '↺ Regenerating…' : '↺ Regenerate All Keywords'}
               </button>
-              {draft.keywords.length < keywordsPerBrief && (
-                <button
-                  onClick={generateSingleKeyword}
-                  disabled={generating === 'keywords' || generating === 'keywords-single' || regeneratingAll}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
-                >
-                  {generating === 'keywords-single' ? '↺ Generating…' : `↺ Generate Missing (${keywordsPerBrief - draft.keywords.length})`}
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -5992,7 +6103,7 @@ const ACTION_TYPE_LABELS = {
   reset_user_stats:          { label: 'Reset Stats',           color: 'bg-amber-900/40 text-amber-300'   },
   make_admin:                { label: 'Make Admin',            color: 'bg-purple-900/40 text-purple-300' },
   change_quiz_questions:     { label: 'Quiz Questions',        color: 'bg-blue-900/40 text-blue-300'     },
-  change_aircoins:           { label: 'Aircoins',              color: 'bg-amber-900/40 text-amber-300'   },
+  change_airstars:           { label: 'Airstars',              color: 'bg-amber-900/40 text-amber-300'   },
   change_trial_duration:     { label: 'Trial Duration',        color: 'bg-slate-700 text-slate-300'      },
   change_silver_categories:  { label: 'Silver Categories',     color: 'bg-slate-700 text-slate-300'      },
   change_ammo_defaults:      { label: 'Ammo Defaults',         color: 'bg-slate-700 text-slate-300'      },
@@ -6000,7 +6111,7 @@ const ACTION_TYPE_LABELS = {
   edit_brief:                { label: 'Edit Brief',            color: 'bg-sky-900/40 text-sky-300'       },
   delete_brief:              { label: 'Delete Brief',          color: 'bg-red-900/40 text-red-300'       },
   regenerate_brief_cascade:  { label: 'Regenerate Brief',      color: 'bg-violet-900/40 text-violet-300' },
-  award_test_coins:          { label: 'Award Coins',           color: 'bg-amber-900/40 text-amber-300'   },
+  award_test_coins:          { label: 'Award Airstars',        color: 'bg-amber-900/40 text-amber-300'   },
   change_subscription:       { label: 'Change Subscription',   color: 'bg-indigo-900/40 text-indigo-300' },
 }
 

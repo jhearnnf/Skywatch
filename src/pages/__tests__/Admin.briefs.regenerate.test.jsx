@@ -15,7 +15,7 @@ vi.mock('../../context/AuthContext', () => ({
     loading: false,
     API: '',
     apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
     setUser: vi.fn(),
     refreshUser: vi.fn(),
   }),
@@ -55,7 +55,7 @@ const MOCK_BRIEF = {
   quizQuestionsMedium: [],
 }
 
-const CASCADE_SUCCESS = { status: 'success', data: { coinsReversed: 30, usersAffected: 2, quizQuestionsDeleted: 5, briefReadsMarked: 2, booGamesDeleted: 1, aircoinLogsDeleted: 3 } }
+const CASCADE_SUCCESS = { status: 'success', data: { coinsReversed: 30, usersAffected: 2, quizQuestionsDeleted: 5, briefReadsMarked: 2, booGamesDeleted: 1, airstarLogsDeleted: 3 } }
 const REGEN_RESPONSE  = {
   status: 'success',
   data: {
@@ -107,6 +107,15 @@ async function openBriefEditor() {
   const briefBtn = await screen.findByText('Eurofighter Typhoon')
   fireEvent.click(briefBtn)
   await screen.findByRole('button', { name: /regenerate all/i })
+}
+
+/** The Description Sections panel is collapsed by default — expand it so the
+ *  Generate Description button and description textareas become visible.
+ *  Idempotent: if the panel is already open, this is a no-op. */
+async function expandDescriptionPanel() {
+  if (screen.queryByRole('button', { name: /generate description/i })) return
+  fireEvent.click(screen.getByText('Description Sections'))
+  await screen.findByRole('button', { name: /generate description/i })
 }
 
 /** Click "Regenerate All", type a reason, and click "Confirm & Regenerate". */
@@ -273,6 +282,7 @@ describe('Admin Briefs — Regenerate All two-step flow', () => {
     await confirmRegenModal()
 
     await waitFor(() => screen.getByText(/regenerated — review and save/i))
+    await expandDescriptionPanel()
     expect(screen.getByDisplayValue('Freshly generated section one.')).toBeDefined()
   })
 
@@ -330,6 +340,7 @@ describe('Admin Briefs — Generate Description button', () => {
 
   /** Click "Generate Description", type a reason, and click "Confirm & Regenerate". */
   async function confirmDescModal() {
+    await expandDescriptionPanel()
     fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
     await screen.findByText(/confirm & regenerate/i)
     const textarea = screen.getByPlaceholderText(/briefly describe why/i)
@@ -341,6 +352,7 @@ describe('Admin Briefs — Generate Description button', () => {
     global.fetch = vi.fn().mockImplementation(baseHandlers())
     render(<Admin />)
     await openBriefEditor()
+    await expandDescriptionPanel()
     expect(screen.getByRole('button', { name: /generate description/i })).toBeDefined()
   })
 
@@ -357,6 +369,7 @@ describe('Admin Briefs — Generate Description button', () => {
     global.fetch = vi.fn().mockImplementation(baseHandlers())
     render(<Admin />)
     await openBriefEditor()
+    await expandDescriptionPanel()
     fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
     await screen.findByText(/delete all read history/i)
     await screen.findByText(/confirm & regenerate/i)
@@ -366,6 +379,7 @@ describe('Admin Briefs — Generate Description button', () => {
     global.fetch = vi.fn().mockImplementation(baseHandlers())
     render(<Admin />)
     await openBriefEditor()
+    await expandDescriptionPanel()
     const callsBefore = global.fetch.mock.calls.length
     fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
     await screen.findByText(/confirm & regenerate/i)
@@ -467,6 +481,7 @@ describe('Admin Briefs — Generate Description button', () => {
     })
     render(<Admin />)
     await openBriefEditor()
+    await expandDescriptionPanel()
     // Start the full regen (opens modal)
     await confirmRegenModal()
     // While cascade is in flight, Generate Description must be disabled

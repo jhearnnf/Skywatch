@@ -571,7 +571,7 @@ body.play-mode .card-shadow {
   filter: hue-rotate(180deg) saturate(1.6) brightness(1.1);
 }
 
-/* ── White-silver star — strips colour from the ⭐ aircoins emoji with grayscale,
+/* ── White-silver star — strips colour from the ⭐ airstars emoji with grayscale,
    then pushes brightness/contrast up so the glyph reads as a bright polished
    silver-white. The cool drop-shadow adds a faint silvery glow. */
 .star-silver {

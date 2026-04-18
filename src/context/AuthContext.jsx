@@ -30,7 +30,7 @@ export function AuthProvider({ children }) {
   const levelsRef = useRef(null)
   useEffect(() => { userRef.current = user }, [user])
 
-  // Fetch levels once for level-up detection in awardAircoins
+  // Fetch levels once for level-up detection in awardAirstars
   useEffect(() => {
     fetch(`${API}/api/users/levels`, { headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }) })
       .then(r => r.ok ? r.json() : null)
@@ -120,27 +120,27 @@ export function AuthProvider({ children }) {
     setNotifQueue(q => q.slice(1))
   }, [])
 
-  // Award aircoins: updates user state, queues aircoin + level-up + rank-promotion notifs.
+  // Award airstars: updates user state, queues airstar + level-up + rank-promotion notifs.
   // cycleAfter / totalAfter: new values returned from server (used for server-driven awards)
   // rankPromotion: { from, to } if a promotion occurred (server-driven only)
-  const awardAircoins = useCallback((amount, label, { cycleAfter, totalAfter, rankPromotion } = {}) => {
-    const oldCycle = userRef.current?.cycleAircoins ?? 0
+  const awardAirstars = useCallback((amount, label, { cycleAfter, totalAfter, rankPromotion } = {}) => {
+    const oldCycle = userRef.current?.cycleAirstars ?? 0
     const newCycle = cycleAfter ?? (oldCycle + amount)
     const oldLevel = getLevelNumber(oldCycle, levelsRef.current)
     const newLevel = getLevelNumber(newCycle, levelsRef.current)
 
     setUser(u => {
       if (!u) return u
-      const updated = { ...u, cycleAircoins: newCycle }
-      if (totalAfter != null) updated.totalAircoins = totalAfter
-      else updated.totalAircoins = (u.totalAircoins ?? 0) + amount
+      const updated = { ...u, cycleAirstars: newCycle }
+      if (totalAfter != null) updated.totalAirstars = totalAfter
+      else updated.totalAirstars = (u.totalAirstars ?? 0) + amount
       if (rankPromotion) updated.rank = rankPromotion.to
       return updated
     })
 
     setNotifQueue(q => {
       const ts    = Date.now()
-      const items = [{ id: `${ts}-ac`, type: 'aircoin', amount, label }]
+      const items = [{ id: `${ts}-ac`, type: 'airstar', amount, label }]
       if (rankPromotion) {
         // Skip level-up notifs — rank promotion supersedes them
         items.push({ id: `${ts}-rp`, type: 'rankpromotion', rank: rankPromotion.to })
@@ -154,7 +154,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ user, setUser, logout, loading, API, apiFetch, isLoading, loadingStartTime, notifQueue, shiftNotif, awardAircoins, refreshUser }}>
+    <AuthContext.Provider value={{ user, setUser, logout, loading, API, apiFetch, isLoading, loadingStartTime, notifQueue, shiftNotif, awardAirstars, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

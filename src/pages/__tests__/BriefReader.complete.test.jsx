@@ -4,7 +4,7 @@ import BriefReader from '../BriefReader'
 
 // ── Hoisted mock fns ─────────────────────────────────────────────────────────
 
-const mockAwardAircoins = vi.hoisted(() => vi.fn())
+const mockAwardAirstars = vi.hoisted(() => vi.fn())
 const mockSetUser       = vi.hoisted(() => vi.fn())
 const mockUseAuth       = vi.hoisted(() => vi.fn())
 const mockNavigate      = vi.hoisted(() => vi.fn())
@@ -20,7 +20,7 @@ vi.mock('react-router-dom', () => ({
 }))
 
 vi.mock('../../context/AppSettingsContext', () => ({
-  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
+  useAppSettings: () => ({ settings: { airstarsPerBriefRead: 5 } }),
 }))
 
 vi.mock('../../context/AuthContext', () => ({
@@ -113,11 +113,11 @@ function makeCompleteResponse(overrides = {}) {
     json: async () => ({
       status: 'success',
       data: {
-        aircoinsEarned:   5,
+        airstarsEarned:   5,
         dailyCoinsEarned: 5,
         loginStreak:      1,
-        newTotalAircoins: 10,
-        newCycleAircoins: 10,
+        newTotalAirstars: 10,
+        newCycleAirstars: 10,
         rankPromotion:    null,
         ...overrides,
       },
@@ -133,7 +133,7 @@ function setupLoggedIn() {
   mockUseAuth.mockReturnValue({
     user:          { _id: 'user1', loginStreak: 0 },
     API: '', apiFetch: (...args) => fetch(...args),
-    awardAircoins: mockAwardAircoins,
+    awardAirstars: mockAwardAirstars,
     setUser:       mockSetUser,
   })
 }
@@ -142,7 +142,7 @@ function setupGuest() {
   mockUseAuth.mockReturnValue({
     user:          null,
     API: '', apiFetch: (...args) => fetch(...args),
-    awardAircoins: mockAwardAircoins,
+    awardAirstars: mockAwardAirstars,
     setUser:       mockSetUser,
   })
 }
@@ -159,20 +159,20 @@ async function swipeLeft() {
 describe('BriefReader — complete brief coin awarding', () => {
   beforeEach(() => {
     setupLoggedIn()
-    mockAwardAircoins.mockClear()
+    mockAwardAirstars.mockClear()
     mockSetUser.mockClear()
     sessionStorage.clear()
   })
 
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('does NOT call awardAircoins on mount (coins deferred to swipe-complete)', async () => {
+  it('does NOT call awardAirstars on mount (coins deferred to swipe-complete)', async () => {
     global.fetch = vi.fn().mockResolvedValue(makeGetResponse(TRAINING_BRIEF))
 
     render(<BriefReader />)
     await waitFor(() => screen.getByText('RAF Typhoon'))
 
-    expect(mockAwardAircoins).not.toHaveBeenCalled()
+    expect(mockAwardAirstars).not.toHaveBeenCalled()
   })
 
   it('GET /api/briefs/:id is called on mount without calling /complete', async () => {
@@ -202,16 +202,16 @@ describe('BriefReader — complete brief coin awarding', () => {
     })
   })
 
-  it('calls awardAircoins with combined coins after completing', async () => {
+  it('calls awardAirstars with combined coins after completing', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(TRAINING_BRIEF))
-      .mockResolvedValue(makeCompleteResponse({ aircoinsEarned: 5, dailyCoinsEarned: 5 }))
+      .mockResolvedValue(makeCompleteResponse({ airstarsEarned: 5, dailyCoinsEarned: 5 }))
 
     render(<BriefReader />)
     await swipeLeft()
 
     await waitFor(() => {
-      expect(mockAwardAircoins).toHaveBeenCalledWith(
+      expect(mockAwardAirstars).toHaveBeenCalledWith(
         10,
         'Daily Brief',
         expect.objectContaining({ cycleAfter: 10, totalAfter: 10 })
@@ -222,21 +222,21 @@ describe('BriefReader — complete brief coin awarding', () => {
   it('uses "Brief read" label when only brief-read coins (no daily coins)', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(TRAINING_BRIEF))
-      .mockResolvedValue(makeCompleteResponse({ aircoinsEarned: 5, dailyCoinsEarned: 0 }))
+      .mockResolvedValue(makeCompleteResponse({ airstarsEarned: 5, dailyCoinsEarned: 0 }))
 
     render(<BriefReader />)
     await swipeLeft()
 
     await waitFor(() => {
-      expect(mockAwardAircoins).toHaveBeenCalledWith(5, 'Brief read', expect.anything())
+      expect(mockAwardAirstars).toHaveBeenCalledWith(5, 'Brief read', expect.anything())
     })
   })
 
-  it('does NOT call awardAircoins when complete returns 0 coins (idempotent re-complete)', async () => {
+  it('does NOT call awardAirstars when complete returns 0 coins (idempotent re-complete)', async () => {
     const coinsAwardedRecord = { _id: 'rr1', coinsAwarded: true, completed: false }
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(TRAINING_BRIEF, coinsAwardedRecord))
-      .mockResolvedValue(makeCompleteResponse({ aircoinsEarned: 0, dailyCoinsEarned: 0 }))
+      .mockResolvedValue(makeCompleteResponse({ airstarsEarned: 0, dailyCoinsEarned: 0 }))
 
     render(<BriefReader />)
     await swipeLeft()
@@ -245,7 +245,7 @@ describe('BriefReader — complete brief coin awarding', () => {
       const calls = global.fetch.mock.calls.map(c => c[0])
       expect(calls.some(u => u.includes('/complete'))).toBe(true)
     })
-    expect(mockAwardAircoins).not.toHaveBeenCalled()
+    expect(mockAwardAirstars).not.toHaveBeenCalled()
   })
 
   it('updates loginStreak on user via setUser after complete', async () => {
@@ -274,7 +274,7 @@ describe('BriefReader — complete brief coin awarding', () => {
       const calls = global.fetch.mock.calls.map(c => c[0])
       expect(calls.some(u => u.includes('/complete'))).toBe(false)
     })
-    expect(mockAwardAircoins).not.toHaveBeenCalled()
+    expect(mockAwardAirstars).not.toHaveBeenCalled()
   })
 
   it('shows completion screen after swiping left on last section', async () => {
@@ -319,13 +319,13 @@ describe('BriefReader — guest completion prompt', () => {
 
   it('guest sees coin hook and email option after completing a brief', async () => {
     await completeAsGuest()
-    expect(screen.getByText('5 Aircoins waiting to be claimed')).toBeDefined()
+    expect(screen.getByText('5 Airstars waiting to be claimed')).toBeDefined()
     expect(screen.getByText('Continue with email')).toBeDefined()
   })
 
   it('guest sees investment hook with coin reward', async () => {
     await completeAsGuest()
-    expect(screen.getByText('5 Aircoins waiting to be claimed')).toBeDefined()
+    expect(screen.getByText('5 Airstars waiting to be claimed')).toBeDefined()
   })
 
   it('guest sees email input and Continue button after expanding email option', async () => {
@@ -420,7 +420,7 @@ describe('BriefReader — guest completion prompt', () => {
 describe('BriefReader — first brief detection', () => {
   beforeEach(() => {
     setupLoggedIn()
-    mockAwardAircoins.mockClear()
+    mockAwardAirstars.mockClear()
     sessionStorage.clear()
     localStorage.removeItem('skywatch_first_brief')
   })
@@ -478,7 +478,7 @@ describe('BriefReader — first brief detection', () => {
 describe('BriefReader — post-login brief completion', () => {
   beforeEach(() => {
     setupLoggedIn()
-    mockAwardAircoins.mockClear()
+    mockAwardAirstars.mockClear()
     mockSetUser.mockClear()
     sessionStorage.clear()
   })
@@ -495,13 +495,13 @@ describe('BriefReader — post-login brief completion', () => {
     expect(screen.queryByText(/Complete Brief/)).toBeNull()
   })
 
-  it('calls awardAircoins with coin data from sw_brief_coins on mount', async () => {
+  it('calls awardAirstars with coin data from sw_brief_coins on mount', async () => {
     sessionStorage.setItem('sw_brief_just_completed', 'brief123')
     sessionStorage.setItem('sw_brief_coins', JSON.stringify({
-      aircoinsEarned:   5,
+      airstarsEarned:   5,
       dailyCoinsEarned: 5,
-      newTotalAircoins: 10,
-      newCycleAircoins: 10,
+      newTotalAirstars: 10,
+      newCycleAirstars: 10,
       rankPromotion:    null,
     }))
     global.fetch = vi.fn().mockResolvedValue(makeGetResponse(TRAINING_BRIEF))
@@ -509,7 +509,7 @@ describe('BriefReader — post-login brief completion', () => {
     render(<BriefReader />)
 
     await waitFor(() => {
-      expect(mockAwardAircoins).toHaveBeenCalledWith(
+      expect(mockAwardAirstars).toHaveBeenCalledWith(
         10,
         'Daily Brief',
         expect.objectContaining({ cycleAfter: 10, totalAfter: 10 })
@@ -520,13 +520,13 @@ describe('BriefReader — post-login brief completion', () => {
   it('clears sw_brief_coins after consuming it', async () => {
     sessionStorage.setItem('sw_brief_just_completed', 'brief123')
     sessionStorage.setItem('sw_brief_coins', JSON.stringify({
-      aircoinsEarned: 5, dailyCoinsEarned: 0, newTotalAircoins: 5, newCycleAircoins: 5,
+      airstarsEarned: 5, dailyCoinsEarned: 0, newTotalAirstars: 5, newCycleAirstars: 5,
     }))
     global.fetch = vi.fn().mockResolvedValue(makeGetResponse(TRAINING_BRIEF))
 
     render(<BriefReader />)
 
-    await waitFor(() => expect(mockAwardAircoins).toHaveBeenCalled())
+    await waitFor(() => expect(mockAwardAirstars).toHaveBeenCalled())
     expect(sessionStorage.getItem('sw_brief_coins')).toBeNull()
   })
 
@@ -579,7 +579,7 @@ describe('BriefReader — BOO button on completion screen', () => {
 
     await waitFor(() => screen.getByText('Brief Complete'))
     await waitFor(() => {
-      const btn = screen.getByText('🗺️ Battle of Order — Earn Aircoins', { selector: 'button' })
+      const btn = screen.getByText('🗺️ Battle of Order — Earn Airstars', { selector: 'button' })
       expect(btn).not.toBeDisabled()
     })
   })

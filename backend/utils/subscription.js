@@ -32,26 +32,26 @@ function canAccessCategory(category, tier, settings) {
 }
 
 // Builds the cumulative-coins-per-level array from Level documents.
-// Accepts either DB format { aircoinsToNextLevel } or API format { cumulativeAircoins }.
+// Accepts either DB format { airstarsToNextLevel } or API format { cumulativeAirstars }.
 // Returns e.g. [0, 100, 350, 850, ...] — index i is the cumulative coins to reach level i+1.
 function buildCumulativeThresholds(levels) {
   if (!levels?.length) return [0];
-  if (levels[0].cumulativeAircoins !== undefined) {
-    return levels.map(l => l.cumulativeAircoins);
+  if (levels[0].cumulativeAirstars !== undefined) {
+    return levels.map(l => l.cumulativeAirstars);
   }
   const result = [];
   let cumulative = 0;
   for (const lv of levels) {
     result.push(cumulative);
-    if (lv.aircoinsToNextLevel) cumulative += lv.aircoinsToNextLevel;
+    if (lv.airstarsToNextLevel) cumulative += lv.airstarsToNextLevel;
   }
   return result;
 }
 
-// Returns the user's current level (1–10) based on total aircoins and live thresholds.
+// Returns the user's current level (1–10) based on total airstars and live thresholds.
 // levelThresholds: cumulative array built by buildCumulativeThresholds()
-function getUserLevel(totalAircoins, levelThresholds) {
-  const coins      = totalAircoins ?? 0;
+function getUserLevel(totalAirstars, levelThresholds) {
+  const coins      = totalAirstars ?? 0;
   const thresholds = levelThresholds;
   let level = 1;
   for (let i = 1; i < thresholds.length; i++) {
@@ -71,7 +71,7 @@ function isPathwayUnlocked(category, user, settings, levelThresholds) {
   if (!user) return true;
   const unlock = (settings.pathwayUnlocks ?? []).find(p => p.category === category);
   if (!unlock) return true;
-  const userLevel = getUserLevel(user.totalAircoins, levelThresholds);
+  const userLevel = getUserLevel(user.totalAirstars, levelThresholds);
   const userRank  = user.rank?.rankNumber ?? 1;
   return userRank > unlock.rankRequired || (userRank >= unlock.rankRequired && userLevel >= unlock.levelRequired);
 }
@@ -81,7 +81,7 @@ function isPathwayUnlocked(category, user, settings, levelThresholds) {
 // Useful for building DB query $in filters.
 function getPathwayAccessibleCategories(user, settings, levelThresholds) {
   if (!user) return null;
-  const userLevel = getUserLevel(user.totalAircoins, levelThresholds);
+  const userLevel = getUserLevel(user.totalAirstars, levelThresholds);
   const userRank  = user.rank?.rankNumber ?? 1;
   return (settings.pathwayUnlocks ?? [])
     .filter(p => userRank > p.rankRequired || (userRank >= p.rankRequired && userLevel >= p.levelRequired))

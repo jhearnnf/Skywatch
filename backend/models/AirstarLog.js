@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
-// One entry per aircoin award event — used to power the aircoin history page.
-const aircoinLogSchema = new mongoose.Schema({
+// One entry per airstar award event — used to power the airstar history page.
+const airstarLogSchema = new mongoose.Schema({
   userId:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   amount:   { type: Number, required: true },
   reason:   {
@@ -13,6 +13,6 @@ const aircoinLogSchema = new mongoose.Schema({
   briefId:  { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', default: null },
 }, { timestamps: true });
 
-aircoinLogSchema.index({ userId: 1, createdAt: -1 });
+airstarLogSchema.index({ userId: 1, createdAt: -1 });
 
-module.exports = mongoose.model('AircoinLog', aircoinLogSchema);
+module.exports = mongoose.model('AirstarLog', airstarLogSchema);

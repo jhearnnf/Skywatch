@@ -16,7 +16,7 @@ vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     user:          { _id: 'user1', loginStreak: 0 },
     API: '', apiFetch: (...args) => fetch(...args),
-    awardAircoins: vi.fn(),
+    awardAirstars: vi.fn(),
     setUser:       vi.fn(),
   }),
 }))
@@ -26,7 +26,7 @@ vi.mock('../../context/AppTutorialContext', () => ({
 }))
 
 vi.mock('../../context/AppSettingsContext', () => ({
-  useAppSettings: () => ({ settings: { aircoinsPerBriefRead: 5 } }),
+  useAppSettings: () => ({ settings: { airstarsPerBriefRead: 5 } }),
 }))
 
 vi.mock('../../components/tutorial/TutorialModal', () => ({ default: () => null }))

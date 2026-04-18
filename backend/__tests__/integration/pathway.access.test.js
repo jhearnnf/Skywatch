@@ -23,6 +23,8 @@ const app      = require('../../app');
 const db       = require('../helpers/setupDb');
 const Rank     = require('../../models/Rank');
 const Level    = require('../../models/Level');
+const Media    = require('../../models/Media');
+const IntelligenceBrief = require('../../models/IntelligenceBrief');
 const {
   createSettings,
   createGameType,
@@ -35,16 +37,16 @@ const {
 // Seed level thresholds matching the real curve — required for pathway level gating.
 async function seedLevels() {
   await Level.insertMany([
-    { levelNumber: 1,  aircoinsToNextLevel: 100  },
-    { levelNumber: 2,  aircoinsToNextLevel: 250  },
-    { levelNumber: 3,  aircoinsToNextLevel: 500  },
-    { levelNumber: 4,  aircoinsToNextLevel: 850  },
-    { levelNumber: 5,  aircoinsToNextLevel: 1300 },
-    { levelNumber: 6,  aircoinsToNextLevel: 1850 },
-    { levelNumber: 7,  aircoinsToNextLevel: 2500 },
-    { levelNumber: 8,  aircoinsToNextLevel: 3250 },
-    { levelNumber: 9,  aircoinsToNextLevel: 4100 },
-    { levelNumber: 10, aircoinsToNextLevel: null },
+    { levelNumber: 1,  airstarsToNextLevel: 100  },
+    { levelNumber: 2,  airstarsToNextLevel: 250  },
+    { levelNumber: 3,  airstarsToNextLevel: 500  },
+    { levelNumber: 4,  airstarsToNextLevel: 850  },
+    { levelNumber: 5,  airstarsToNextLevel: 1300 },
+    { levelNumber: 6,  airstarsToNextLevel: 1850 },
+    { levelNumber: 7,  airstarsToNextLevel: 2500 },
+    { levelNumber: 8,  airstarsToNextLevel: 3250 },
+    { levelNumber: 9,  airstarsToNextLevel: 4100 },
+    { levelNumber: 10, airstarsToNextLevel: null },
   ]);
 }
 
@@ -60,7 +62,7 @@ const S = {
   ],
 };
 
-// Aircoins needed to reach level 2 (mirrors LEVEL_THRESHOLDS[1] = 100)
+// Airstars needed to reach level 2 (mirrors LEVEL_THRESHOLDS[1] = 100)
 const LEVEL_2_COINS = 100;
 
 async function createRankDoc(rankNumber) {
@@ -81,25 +83,25 @@ afterAll(async () => db.closeDatabase());
 // User who passes all pathway requirements for Aircrafts (level 2, rank 1)
 async function userLevel2Rank1() {
   const rank = await createRankDoc(1);
-  return createUser({ subscriptionTier: 'free', totalAircoins: LEVEL_2_COINS, rank: rank._id });
+  return createUser({ subscriptionTier: 'free', totalAirstars: LEVEL_2_COINS, rank: rank._id });
 }
 
 // User who passes all pathway requirements for Bases (level 1, rank 2)
 async function userLevel1Rank2() {
   const rank = await createRankDoc(2);
-  return createUser({ subscriptionTier: 'free', totalAircoins: 0, rank: rank._id });
+  return createUser({ subscriptionTier: 'free', totalAirstars: 0, rank: rank._id });
 }
 
 // User who fails Aircrafts level gate (level 1, rank 1)
 async function userLevel1Rank1() {
   const rank = await createRankDoc(1);
-  return createUser({ subscriptionTier: 'free', totalAircoins: 0, rank: rank._id });
+  return createUser({ subscriptionTier: 'free', totalAirstars: 0, rank: rank._id });
 }
 
 // User who fails Bases rank gate (level 2, rank 1)
 async function userLevel2WrongRank() {
   const rank = await createRankDoc(1);
-  return createUser({ subscriptionTier: 'free', totalAircoins: LEVEL_2_COINS, rank: rank._id });
+  return createUser({ subscriptionTier: 'free', totalAirstars: LEVEL_2_COINS, rank: rank._id });
 }
 
 // ── GET /api/briefs/:id — pathway gate ───────────────────────────────────────
@@ -152,7 +154,7 @@ describe('GET /api/briefs/:id — pathway gating', () => {
 
   it('user with higher rank than required satisfies lower requirement → 200', async () => {
     const rank = await createRankDoc(3);
-    const user = await createUser({ subscriptionTier: 'free', totalAircoins: 0, rank: rank._id });
+    const user = await createUser({ subscriptionTier: 'free', totalAirstars: 0, rank: rank._id });
     const brief = await createBrief({ category: 'Bases' }); // rankRequired: 2
     const res  = await request(app)
       .get(`/api/briefs/${brief._id}`)
@@ -386,6 +388,82 @@ describe('GET /api/briefs/pathway/:category — pathway gating', () => {
   });
 });
 
+// ── GET /api/briefs/pathway/:category — nextBrief images ─────────────────────
+describe('GET /api/briefs/pathway/:category — nextBrief images', () => {
+  beforeEach(async () => {
+    await createSettings(S);
+    await seedLevels();
+  });
+
+  async function attachImage(briefId, url) {
+    const m = await Media.create({ mediaType: 'picture', mediaUrl: url });
+    await IntelligenceBrief.findByIdAndUpdate(briefId, { $push: { media: m._id } });
+    return m;
+  }
+
+  it('returns picture URLs for the first unread published brief', async () => {
+    const user   = await userLevel1Rank1();
+    const first  = await createBrief({ category: 'News', title: 'First',  priorityNumber: 1, eventDate: new Date('2026-01-03') });
+    const second = await createBrief({ category: 'News', title: 'Second', priorityNumber: 2, eventDate: new Date('2026-01-02') });
+    await attachImage(first._id,  'https://example.com/a.jpg');
+    await attachImage(first._id,  'https://example.com/b.jpg');
+    await attachImage(second._id, 'https://example.com/c.jpg');
+
+    const res = await request(app)
+      .get('/api/briefs/pathway/News')
+      .set('Cookie', authCookie(user._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.nextBrief).toBeTruthy();
+    expect(String(res.body.data.nextBrief.id)).toBe(String(first._id));
+    expect(res.body.data.nextBrief.images).toEqual([
+      'https://example.com/a.jpg',
+      'https://example.com/b.jpg',
+    ]);
+  });
+
+  it('skips stub briefs when picking the next-unread brief', async () => {
+    const user = await userLevel1Rank1();
+    const stub = await createBrief({ category: 'News', title: 'Stub',      status: 'stub',      eventDate: new Date('2026-01-05') });
+    const pub  = await createBrief({ category: 'News', title: 'Published', status: 'published', eventDate: new Date('2026-01-04') });
+    await attachImage(stub._id, 'https://example.com/stub.jpg');
+    await attachImage(pub._id,  'https://example.com/pub.jpg');
+
+    const res = await request(app)
+      .get('/api/briefs/pathway/News')
+      .set('Cookie', authCookie(user._id));
+
+    expect(res.status).toBe(200);
+    expect(String(res.body.data.nextBrief.id)).toBe(String(pub._id));
+    expect(res.body.data.nextBrief.images).toEqual(['https://example.com/pub.jpg']);
+  });
+
+  it('returns nextBrief = null when the brief has no picture media', async () => {
+    const user = await userLevel1Rank1();
+    await createBrief({ category: 'News', title: 'No Media', eventDate: new Date('2026-01-01') });
+
+    const res = await request(app)
+      .get('/api/briefs/pathway/News')
+      .set('Cookie', authCookie(user._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.nextBrief).toBeNull();
+  });
+
+  it('caps returned images at 5', async () => {
+    const user  = await userLevel1Rank1();
+    const brief = await createBrief({ category: 'News', title: 'Many', eventDate: new Date('2026-01-01') });
+    for (let i = 0; i < 7; i++) await attachImage(brief._id, `https://example.com/${i}.jpg`);
+
+    const res = await request(app)
+      .get('/api/briefs/pathway/News')
+      .set('Cookie', authCookie(user._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.nextBrief.images).toHaveLength(5);
+  });
+});
+
 // ── POST /api/games/quiz/start — pathway gate ─────────────────────────────────
 describe('POST /api/games/quiz/start — pathway gating', () => {
   let gameType;
@@ -428,7 +506,7 @@ describe('Pathway and subscription checks are independent (both must pass)', () 
   it('silver user at level 1 cannot open a level-2 brief → 403 pathway', async () => {
     await createSettings(S);
     const rank  = await createRankDoc(1);
-    const user  = await createUser({ subscriptionTier: 'silver', totalAircoins: 0, rank: rank._id });
+    const user  = await createUser({ subscriptionTier: 'silver', totalAirstars: 0, rank: rank._id });
     const brief = await createBrief({ category: 'Aircrafts' });
     const res   = await request(app)
       .get(`/api/briefs/${brief._id}`)
@@ -446,7 +524,7 @@ describe('Pathway and subscription checks are independent (both must pass)', () 
       ],
     });
     const rank  = await createRankDoc(1);
-    const user  = await createUser({ subscriptionTier: 'free', totalAircoins: LEVEL_2_COINS, rank: rank._id });
+    const user  = await createUser({ subscriptionTier: 'free', totalAirstars: LEVEL_2_COINS, rank: rank._id });
     const brief = await createBrief({ category: 'Treaties' });
     const res   = await request(app)
       .get(`/api/briefs/${brief._id}`)

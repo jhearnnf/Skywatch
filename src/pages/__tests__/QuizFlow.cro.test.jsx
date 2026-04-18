@@ -60,8 +60,8 @@ function makeFinishResponse(won = true) {
         won,
         isFirstAttempt: true,
         breakdown: [],
-        aircoinsEarned: won ? 5 : 0,
-        attempt: { cycleAircoins: 5, totalAircoins: 100 },
+        airstarsEarned: won ? 5 : 0,
+        attempt: { cycleAirstars: 5, totalAirstars: 100 },
       },
     }),
   }
@@ -83,8 +83,8 @@ const FREE_USER     = { _id: 'u1', subscriptionTier: 'free' }
 // Silver user: has access to silverCategories too
 const SILVER_USER   = { _id: 'u2', subscriptionTier: 'silver' }
 
-const FREE_SETTINGS    = { freeCategories: ['News'], silverCategories: ['Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles', 'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties'], aircoinsPerBriefRead: 5 }
-const SILVER_SETTINGS  = { freeCategories: ['News'], silverCategories: ['Aircrafts', 'Bases', 'Ranks', 'Squadrons'], aircoinsPerBriefRead: 5 }
+const FREE_SETTINGS    = { freeCategories: ['News'], silverCategories: ['Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles', 'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties'], airstarsPerBriefRead: 5 }
+const SILVER_SETTINGS  = { freeCategories: ['News'], silverCategories: ['Aircrafts', 'Bases', 'Ranks', 'Squadrons'], airstarsPerBriefRead: 5 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -107,7 +107,7 @@ describe('QuizFlow — locked category upsell teaser', () => {
   afterEach(() => { vi.restoreAllMocks() })
 
   it('shows upsell teaser on a WIN for a free signed-in user', async () => {
-    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
+    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAirstars: vi.fn() })
     mockUseSettings.mockReturnValue({ settings: FREE_SETTINGS })
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
@@ -116,7 +116,7 @@ describe('QuizFlow — locked category upsell teaser', () => {
   })
 
   it('does NOT show upsell teaser on a LOSS', async () => {
-    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
+    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAirstars: vi.fn() })
     mockUseSettings.mockReturnValue({ settings: FREE_SETTINGS })
     global.fetch = setupFetch(false)
     render(<QuizFlow />)
@@ -125,7 +125,7 @@ describe('QuizFlow — locked category upsell teaser', () => {
   })
 
   it('does NOT show upsell teaser for a silver user on a win', async () => {
-    mockUseAuth.mockReturnValue({ user: SILVER_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
+    mockUseAuth.mockReturnValue({ user: SILVER_USER, API: '', apiFetch: (...args) => fetch(...args), awardAirstars: vi.fn() })
     mockUseSettings.mockReturnValue({ settings: SILVER_SETTINGS })
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
@@ -134,7 +134,7 @@ describe('QuizFlow — locked category upsell teaser', () => {
   })
 
   it('does NOT show upsell teaser for a guest (null user) on a win', async () => {
-    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
+    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args), awardAirstars: vi.fn() })
     mockUseSettings.mockReturnValue({ settings: FREE_SETTINGS })
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
@@ -143,7 +143,7 @@ describe('QuizFlow — locked category upsell teaser', () => {
   })
 
   it('upsell teaser shows the highest-priority locked category (Threats first)', async () => {
-    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAircoins: vi.fn() })
+    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAirstars: vi.fn() })
     mockUseSettings.mockReturnValue({ settings: FREE_SETTINGS })
     global.fetch = setupFetch(true)
     render(<QuizFlow />)

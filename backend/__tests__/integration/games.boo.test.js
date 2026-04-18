@@ -23,7 +23,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await createSettings({ aircoinsOrderOfBattleEasy: 8, aircoinsOrderOfBattleMedium: 18 });
+  await createSettings({ airstarsOrderOfBattleEasy: 8, airstarsOrderOfBattleMedium: 18 });
   user   = await createUser({ difficultySetting: 'easy' });
   cookie = authCookie(user._id);
 });
@@ -241,7 +241,7 @@ describe('POST /api/games/battle-of-order/submit', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(true);
-    expect(res.body.data.aircoinsEarned).toBe(8); // easy difficulty
+    expect(res.body.data.airstarsEarned).toBe(8); // easy difficulty
   });
 
   it('does not award coins on a second win (repeat attempt same anchor+orderType)', async () => {
@@ -286,7 +286,7 @@ describe('POST /api/games/battle-of-order/submit', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.won).toBe(true);
-    expect(res.body.data.aircoinsEarned).toBe(0);
+    expect(res.body.data.airstarsEarned).toBe(0);
     expect(res.body.data.alreadyCompleted).toBe(true);
   });
 
@@ -336,7 +336,7 @@ describe('POST /api/games/battle-of-order/abandon', () => {
     expect(res.status).toBe(200);
   });
 
-  it('stores abandoned=true, won=false, aircoinsEarned=0 in the DB', async () => {
+  it('stores abandoned=true, won=false, airstarsEarned=0 in the DB', async () => {
     const briefs = await createBooBriefs(3, 'Aircrafts');
     await ensureBOOReady(briefs[0], briefs);
     const genRes = await request(app)
@@ -354,7 +354,7 @@ describe('POST /api/games/battle-of-order/abandon', () => {
     expect(record).toBeTruthy();
     expect(record.abandoned).toBe(true);
     expect(record.won).toBe(false);
-    expect(record.aircoinsEarned).toBe(0);
+    expect(record.airstarsEarned).toBe(0);
     expect(record.timeTakenSeconds).toBe(7);
   });
 

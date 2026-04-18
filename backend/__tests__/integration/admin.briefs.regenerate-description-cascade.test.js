@@ -24,7 +24,7 @@ const {
   createReadRecord,
   createPassedQuizAttempt,
   createWonBooResult,
-  createAircoinLog,
+  createAirstarLog,
   createFlashcardGame, createFlashcardResult,
   createWheresThatAircraftGame, createWheresThatAircraftResult,
 } = require('../helpers/factories');
@@ -40,7 +40,7 @@ const GameFlashcardRecall             = require('../../models/GameFlashcardRecal
 const GameSessionFlashcardRecallResult = require('../../models/GameSessionFlashcardRecallResult');
 const GameWheresThatAircraft              = require('../../models/GameWheresThatAircraft');
 const GameSessionWheresThatAircraftResult = require('../../models/GameSessionWheresThatAircraftResult');
-const AircoinLog                      = require('../../models/AircoinLog');
+const AirstarLog                      = require('../../models/AirstarLog');
 const AdminAction                     = require('../../models/AdminAction');
 const User                            = require('../../models/User');
 
@@ -261,20 +261,20 @@ describe('POST /api/admin/ai/regenerate-description/:id — cascade deletions', 
     expect(await GameSessionWheresThatAircraftResult.countDocuments({ gameId })).toBe(0);
   });
 
-  it('deletes AircoinLog entries with matching briefId', async () => {
+  it('deletes AirstarLog entries with matching briefId', async () => {
     mockAiFetch();
     const brief = await createBrief();
     const user  = await createUser();
     const admin = await createAdminUser();
-    await createAircoinLog(user._id, brief._id, { reason: 'brief_read', amount: 10 });
-    await createAircoinLog(user._id, brief._id, { reason: 'quiz',       amount: 20 });
+    await createAirstarLog(user._id, brief._id, { reason: 'brief_read', amount: 10 });
+    await createAirstarLog(user._id, brief._id, { reason: 'quiz',       amount: 20 });
 
     await request(app)
       .post(`/api/admin/ai/regenerate-description/${brief._id}`)
       .set('Cookie', authCookie(admin._id))
       .send({ reason: REASON });
 
-    expect(await AircoinLog.countDocuments({ briefId: brief._id })).toBe(0);
+    expect(await AirstarLog.countDocuments({ briefId: brief._id })).toBe(0);
   });
 
   it('clears quizQuestionsEasy and quizQuestionsMedium arrays on the brief document', async () => {
@@ -306,12 +306,12 @@ describe('POST /api/admin/ai/regenerate-description/:id — cascade deletions', 
 // ── Coin reversal ──────────────────────────────────────────────────────────
 
 describe('POST /api/admin/ai/regenerate-description/:id — coin reversal', () => {
-  it('decrements User.totalAircoins by the sum of deleted log amounts', async () => {
+  it('decrements User.totalAirstars by the sum of deleted log amounts', async () => {
     mockAiFetch();
     const brief = await createBrief();
     const admin = await createAdminUser();
-    const user  = await createUser({ totalAircoins: 50, cycleAircoins: 50 });
-    await createAircoinLog(user._id, brief._id, { amount: 30 });
+    const user  = await createUser({ totalAirstars: 50, cycleAirstars: 50 });
+    await createAirstarLog(user._id, brief._id, { amount: 30 });
 
     await request(app)
       .post(`/api/admin/ai/regenerate-description/${brief._id}`)
@@ -319,15 +319,15 @@ describe('POST /api/admin/ai/regenerate-description/:id — coin reversal', () =
       .send({ reason: REASON });
 
     const updated = await User.findById(user._id);
-    expect(updated.totalAircoins).toBe(20);
+    expect(updated.totalAirstars).toBe(20);
   });
 
-  it('decrements User.cycleAircoins by the sum of deleted log amounts', async () => {
+  it('decrements User.cycleAirstars by the sum of deleted log amounts', async () => {
     mockAiFetch();
     const brief = await createBrief();
     const admin = await createAdminUser();
-    const user  = await createUser({ totalAircoins: 50, cycleAircoins: 40 });
-    await createAircoinLog(user._id, brief._id, { amount: 25 });
+    const user  = await createUser({ totalAirstars: 50, cycleAirstars: 40 });
+    await createAirstarLog(user._id, brief._id, { amount: 25 });
 
     await request(app)
       .post(`/api/admin/ai/regenerate-description/${brief._id}`)
@@ -335,15 +335,15 @@ describe('POST /api/admin/ai/regenerate-description/:id — coin reversal', () =
       .send({ reason: REASON });
 
     const updated = await User.findById(user._id);
-    expect(updated.cycleAircoins).toBe(15);
+    expect(updated.cycleAirstars).toBe(15);
   });
 
-  it('floors totalAircoins at 0 when reversal exceeds current balance', async () => {
+  it('floors totalAirstars at 0 when reversal exceeds current balance', async () => {
     mockAiFetch();
     const brief = await createBrief();
     const admin = await createAdminUser();
-    const user  = await createUser({ totalAircoins: 10, cycleAircoins: 10 });
-    await createAircoinLog(user._id, brief._id, { amount: 50 });
+    const user  = await createUser({ totalAirstars: 10, cycleAirstars: 10 });
+    await createAirstarLog(user._id, brief._id, { amount: 50 });
 
     await request(app)
       .post(`/api/admin/ai/regenerate-description/${brief._id}`)
@@ -351,24 +351,24 @@ describe('POST /api/admin/ai/regenerate-description/:id — coin reversal', () =
       .send({ reason: REASON });
 
     const updated = await User.findById(user._id);
-    expect(updated.totalAircoins).toBe(0);
-    expect(updated.cycleAircoins).toBe(0);
+    expect(updated.totalAirstars).toBe(0);
+    expect(updated.cycleAirstars).toBe(0);
   });
 
-  it('does NOT delete AircoinLog entries with briefId:null (daily streak, etc.)', async () => {
+  it('does NOT delete AirstarLog entries with briefId:null (daily streak, etc.)', async () => {
     mockAiFetch();
     const brief = await createBrief();
     const user  = await createUser();
     const admin = await createAdminUser();
-    await createAircoinLog(user._id, null, { reason: 'daily_brief', amount: 5 });
-    await createAircoinLog(user._id, brief._id, { reason: 'brief_read', amount: 10 });
+    await createAirstarLog(user._id, null, { reason: 'daily_brief', amount: 5 });
+    await createAirstarLog(user._id, brief._id, { reason: 'brief_read', amount: 10 });
 
     await request(app)
       .post(`/api/admin/ai/regenerate-description/${brief._id}`)
       .set('Cookie', authCookie(admin._id))
       .send({ reason: REASON });
 
-    expect(await AircoinLog.countDocuments({ userId: user._id, reason: 'daily_brief' })).toBe(1);
+    expect(await AirstarLog.countDocuments({ userId: user._id, reason: 'daily_brief' })).toBe(1);
   });
 });
 
@@ -434,12 +434,12 @@ describe('POST /api/admin/ai/regenerate-description/:id — audit and response',
     mockAiFetch();
     const brief    = await createBrief();
     const gameType = await createGameType();
-    const user     = await createUser({ totalAircoins: 20, cycleAircoins: 20 });
+    const user     = await createUser({ totalAirstars: 20, cycleAirstars: 20 });
     const admin    = await createAdminUser();
     await createReadRecord(user._id, brief._id);
     await createQuizQuestions(brief._id, gameType._id, 3);
     await createPassedQuizAttempt(user._id, brief._id);
-    await createAircoinLog(user._id, brief._id, { amount: 10 });
+    await createAirstarLog(user._id, brief._id, { amount: 10 });
 
     const res = await request(app)
       .post(`/api/admin/ai/regenerate-description/${brief._id}`)
@@ -452,7 +452,7 @@ describe('POST /api/admin/ai/regenerate-description/:id — audit and response',
     expect(c.briefReadsMarked).toBe(1);
     expect(c.quizQuestionsDeleted).toBe(3);
     expect(c.quizAttemptsDeleted).toBe(1);
-    expect(c.aircoinLogsDeleted).toBe(1);
+    expect(c.airstarLogsDeleted).toBe(1);
     expect(c.coinsReversed).toBe(10);
     expect(c.usersAffected).toBe(1);
   });

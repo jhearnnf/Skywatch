@@ -26,7 +26,7 @@ const gameTypeSchema = new mongoose.Schema({
 
   tutorialSteps:  [tutorialStepSchema],
   gameDescription: { type: String, required: true },
-  awardedAircoins: { type: Number, default: 10 },
+  awardedAirstars: { type: Number, default: 10 },
 });
 
 module.exports = mongoose.model('GameType', gameTypeSchema);

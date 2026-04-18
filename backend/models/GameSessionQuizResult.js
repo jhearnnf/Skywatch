@@ -15,7 +15,7 @@ const gameSessionQuizResultSchema = new mongoose.Schema({
   selectedAnswerId: { type: mongoose.Schema.Types.ObjectId, default: null },
   isCorrect:        Boolean,
   timeTakenSeconds: Number,
-  aircoinsEarned:   { type: Number, default: 0 },
+  airstarsEarned:   { type: Number, default: 0 },
   createdAt:        { type: Date, default: Date.now },
 });
 

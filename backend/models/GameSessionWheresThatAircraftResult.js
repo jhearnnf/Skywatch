@@ -8,7 +8,7 @@ const gameSessionWheresThatAircraftResultSchema = new mongoose.Schema({
   userAnswer:       String, // aircraft name the user guessed
   isCorrect:        Boolean,
   timeTakenSeconds: Number,
-  aircoinsEarned:   { type: Number, default: 0 },
+  airstarsEarned:   { type: Number, default: 0 },
   createdAt:        { type: Date, default: Date.now },
 });
 

@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { consumePendingBrief } from '../utils/pendingBrief'
 import { ONBOARDING_KEY } from '../components/onboarding/WelcomeAgentFlow'
 import { PENDING_BRIEF_KEY, PENDING_ONBOARDING_KEY, POST_LOGIN_DEST_KEY } from '../utils/storageKeys'
+import { resolveLoginDest } from '../utils/loginRedirect'
 import SEO from '../components/SEO'
 
 const VIEW = {
@@ -36,7 +37,7 @@ function CrosshairLogo() {
 }
 
 export default function LoginPage() {
-  const { setUser, API, apiFetch, awardAircoins } = useAuth()
+  const { setUser, API, apiFetch, awardAirstars } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -114,12 +115,13 @@ export default function LoginPage() {
       sessionStorage.setItem(PENDING_ONBOARDING_KEY, '1')
     }
     const briefId = await consumePendingBrief({ API, setUser, navigate })
+    const dest = resolveLoginDest(briefId)
     // Store destination so LoginRoute uses it even if the navigate below loses
     // a React 18 scheduling race against setUser (see LoginRoute in App.jsx).
-    if (briefId) sessionStorage.setItem(POST_LOGIN_DEST_KEY, `/brief/${briefId}`)
+    if (briefId) sessionStorage.setItem(POST_LOGIN_DEST_KEY, dest)
     // flushSync commits the navigate synchronously before setUser fires, so
     // LoginRoute is already removed (or isPresent=false) when auth state changes.
-    flushSync(() => navigate(briefId ? `/brief/${briefId}` : '/home'))
+    flushSync(() => navigate(dest))
     setUser(userObj)
   }
 
@@ -137,8 +139,9 @@ export default function LoginPage() {
       if (data.data.isNew) { await finishNewUser(data.data.user); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief({ API, setUser, navigate })
-      if (briefId) sessionStorage.setItem(POST_LOGIN_DEST_KEY, `/brief/${briefId}`)
-      navigate(briefId ? `/brief/${briefId}` : '/home')
+      const dest = resolveLoginDest(briefId)
+      if (briefId) sessionStorage.setItem(POST_LOGIN_DEST_KEY, dest)
+      navigate(dest)
     } catch {
       setError('Google sign-in failed. Please try again.')
     } finally {
@@ -177,8 +180,9 @@ export default function LoginPage() {
       if (data.data.isNew) { await finishNewUser(data.data.user); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief({ API, setUser, navigate })
-      if (briefId) sessionStorage.setItem(POST_LOGIN_DEST_KEY, `/brief/${briefId}`)
-      navigate(briefId ? `/brief/${briefId}` : '/home')
+      const dest = resolveLoginDest(briefId)
+      if (briefId) sessionStorage.setItem(POST_LOGIN_DEST_KEY, dest)
+      navigate(dest)
     } catch {
       setError('Connection failed. Is the server running?')
     } finally {

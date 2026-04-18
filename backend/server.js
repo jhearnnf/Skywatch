@@ -10,7 +10,7 @@ async function seedGameTypes() {
         allowedCategories: ['News','Aircrafts','Bases','Ranks','Squadrons','Training','Threats','Allies','Missions','AOR','Tech','Terminology','Treaties'],
         tutorialSteps: [],
         gameDescription: 'Answer multiple choice questions about the brief',
-        awardedAircoins: 10,
+        awardedAirstars: 10,
     }},
     { upsert: true }
   );

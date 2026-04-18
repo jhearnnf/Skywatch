@@ -17,7 +17,7 @@ const DEFAULT_FOOTER = 'SkyWatch — Intelligence Study Platform for RAF Knowled
 const WELCOME_DEFAULTS = {
   subject: 'Welcome to SkyWatch — Mission Briefing',
   heading: 'Welcome to SkyWatch',
-  body:    'Your intelligence briefings are ready. Study RAF aircraft, ranks, bases, squadrons, and doctrine. Test your recall through gamified knowledge checks and earn Aircoins to climb the Intelligence Corps rank ladder.',
+  body:    'Your intelligence briefings are ready. Study RAF aircraft, ranks, bases, squadrons, and doctrine. Test your recall through gamified knowledge checks and earn Airstars to climb the Intelligence Corps rank ladder.',
   cta:     'Begin Mission',
   footer:  DEFAULT_FOOTER,
 };

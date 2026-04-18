@@ -2,7 +2,7 @@
  * new-user-setup.test.js
  *
  * Verifies that a freshly registered account has correct zero-state across:
- *   - Aircoins & level fields
+ *   - Airstars & level fields
  *   - Intel briefs read
  *   - Game history / quiz attempts
  *   - Tutorial reset flag
@@ -31,7 +31,7 @@ const {
 
 const User                           = require('../../models/User');
 const IntelligenceBriefRead          = require('../../models/IntelligenceBriefRead');
-const AircoinLog                     = require('../../models/AircoinLog');
+const AirstarLog                     = require('../../models/AirstarLog');
 const GameSessionQuizAttempt         = require('../../models/GameSessionQuizAttempt');
 const GameSessionQuizResult          = require('../../models/GameSessionQuizResult');
 const AptitudeSyncUsage              = require('../../models/AptitudeSyncUsage');
@@ -56,20 +56,20 @@ describe('New user — registration response', () => {
     expect(res.body.data.isNew).toBe(true);
   });
 
-  it('awards zero login aircoins on registration (coins come from first brief read)', async () => {
+  it('awards zero login airstars on registration (coins come from first brief read)', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({ email: 'coins@test.com', password: 'Password123' });
 
     expect(res.status).toBe(201);
-    expect(res.body.data.loginAircoinsEarned).toBe(0);
+    expect(res.body.data.loginAirstarsEarned).toBe(0);
   });
 
-  it('new user starts with zero totalAircoins before login bonus', async () => {
+  it('new user starts with zero totalAirstars before login bonus', async () => {
     // Create user directly (bypassing login bonus) to confirm field default
     const user = await createUser({ email: 'zero@test.com' });
-    expect(user.totalAircoins).toBe(0);
-    expect(user.cycleAircoins).toBe(0);
+    expect(user.totalAirstars).toBe(0);
+    expect(user.cycleAirstars).toBe(0);
   });
 
   it('new user starts at rank AC (rankNumber 1)', async () => {
@@ -148,21 +148,21 @@ describe('New user — game history', () => {
   });
 });
 
-// ── AircoinLog is clean ───────────────────────────────────────────────────
-describe('New user — aircoins', () => {
-  it('has no AircoinLog entries before first login', async () => {
+// ── AirstarLog is clean ───────────────────────────────────────────────────
+describe('New user — airstars', () => {
+  it('has no AirstarLog entries before first login', async () => {
     const user  = await createUser();
-    const count = await AircoinLog.countDocuments({ userId: user._id });
+    const count = await AirstarLog.countDocuments({ userId: user._id });
     expect(count).toBe(0);
   });
 
-  it('registration creates no AircoinLog entry (coins only come from first brief read)', async () => {
+  it('registration creates no AirstarLog entry (coins only come from first brief read)', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({ email: 'firstlogin@test.com', password: 'Password123' });
 
     const userId = res.body.data.user._id;
-    const count  = await AircoinLog.countDocuments({ userId });
+    const count  = await AirstarLog.countDocuments({ userId });
     expect(count).toBe(0);
   });
 });
@@ -184,19 +184,19 @@ describe('Admin reset-stats endpoint', () => {
       .set('Cookie', adminCookie)
       .send({ fields, reason: 'Testing reset' });
 
-  it('resets aircoins to 0 and deletes AircoinLog', async () => {
+  it('resets airstars to 0 and deletes AirstarLog', async () => {
     // Give the user some coins directly
-    await User.findByIdAndUpdate(target._id, { totalAircoins: 500, cycleAircoins: 200 });
-    await AircoinLog.create({ userId: target._id, amount: 500, reason: 'test', label: 'Test' });
+    await User.findByIdAndUpdate(target._id, { totalAirstars: 500, cycleAirstars: 200 });
+    await AirstarLog.create({ userId: target._id, amount: 500, reason: 'test', label: 'Test' });
 
-    const res = await reset(['aircoins']);
+    const res = await reset(['airstars']);
     expect(res.status).toBe(200);
 
     const updated = await User.findById(target._id);
-    expect(updated.totalAircoins).toBe(0);
-    expect(updated.cycleAircoins).toBe(0);
+    expect(updated.totalAirstars).toBe(0);
+    expect(updated.cycleAirstars).toBe(0);
 
-    const logCount = await AircoinLog.countDocuments({ userId: target._id });
+    const logCount = await AirstarLog.countDocuments({ userId: target._id });
     expect(logCount).toBe(0);
   });
 
@@ -266,7 +266,7 @@ describe('Admin reset-stats endpoint', () => {
       userId:         target._id,
       briefId:        brief._id,
       date:           '2026-04-14',
-      aircoinsEarned: 120,
+      airstarsEarned: 120,
       completedAt:    new Date(),
     });
 
@@ -277,14 +277,14 @@ describe('Admin reset-stats endpoint', () => {
     expect(count).toBe(0);
   });
 
-  it('resets aircoins — deletes aptitude_sync aircoin log entries', async () => {
-    await User.findByIdAndUpdate(target._id, { totalAircoins: 120, cycleAircoins: 120 });
-    await AircoinLog.create({ userId: target._id, amount: 120, reason: 'aptitude_sync', label: 'APTITUDE_SYNC' });
+  it('resets airstars — deletes aptitude_sync airstar log entries', async () => {
+    await User.findByIdAndUpdate(target._id, { totalAirstars: 120, cycleAirstars: 120 });
+    await AirstarLog.create({ userId: target._id, amount: 120, reason: 'aptitude_sync', label: 'APTITUDE_SYNC' });
 
-    const res = await reset(['aircoins']);
+    const res = await reset(['airstars']);
     expect(res.status).toBe(200);
 
-    const count = await AircoinLog.countDocuments({ userId: target._id, reason: 'aptitude_sync' });
+    const count = await AirstarLog.countDocuments({ userId: target._id, reason: 'aptitude_sync' });
     expect(count).toBe(0);
   });
 
@@ -310,10 +310,10 @@ describe('Admin reset-stats endpoint', () => {
     expect(updated.lastStreakDate).toBeNull();
   });
 
-  it('does NOT reset streak when only aircoins are reset', async () => {
+  it('does NOT reset streak when only airstars are reset', async () => {
     await User.findByIdAndUpdate(target._id, { loginStreak: 5, lastStreakDate: new Date() });
 
-    const res = await reset(['aircoins']);
+    const res = await reset(['airstars']);
     expect(res.status).toBe(200);
 
     const updated = await User.findById(target._id);
@@ -331,8 +331,8 @@ describe('Admin reset-stats endpoint', () => {
   });
 
   it('can reset all four categories in one call', async () => {
-    await User.findByIdAndUpdate(target._id, { totalAircoins: 100, cycleAircoins: 50 });
-    await AircoinLog.create({ userId: target._id, amount: 100, reason: 'test', label: 'Test' });
+    await User.findByIdAndUpdate(target._id, { totalAirstars: 100, cycleAirstars: 50 });
+    await AirstarLog.create({ userId: target._id, amount: 100, reason: 'test', label: 'Test' });
     const brief = await createBrief();
     await IntelligenceBriefRead.create({ userId: target._id, intelBriefId: brief._id });
     await GameSessionQuizAttempt.create({
@@ -345,17 +345,17 @@ describe('Admin reset-stats endpoint', () => {
       status:         'completed',
     });
 
-    const res = await reset(['aircoins', 'gameHistory', 'intelBriefsRead', 'tutorials']);
+    const res = await reset(['airstars', 'gameHistory', 'intelBriefsRead', 'tutorials']);
     expect(res.status).toBe(200);
 
     const updated   = await User.findById(target._id);
-    expect(updated.totalAircoins).toBe(0);
-    expect(updated.cycleAircoins).toBe(0);
+    expect(updated.totalAirstars).toBe(0);
+    expect(updated.cycleAirstars).toBe(0);
     expect(updated.loginStreak).toBe(0);
     expect(updated.lastStreakDate).toBeNull();
     expect(updated.tutorialsResetAt).not.toBeNull();
 
-    expect(await AircoinLog.countDocuments({ userId: target._id })).toBe(0);
+    expect(await AirstarLog.countDocuments({ userId: target._id })).toBe(0);
     expect(await IntelligenceBriefRead.countDocuments({ userId: target._id })).toBe(0);
     expect(await GameSessionQuizAttempt.countDocuments({ userId: target._id })).toBe(0);
   });
@@ -363,7 +363,7 @@ describe('Admin reset-stats endpoint', () => {
   it('requires admin auth — returns 401 for unauthenticated request', async () => {
     const res = await request(app)
       .post(`/api/admin/users/${target._id}/reset-stats`)
-      .send({ fields: ['aircoins'], reason: 'hack' });
+      .send({ fields: ['airstars'], reason: 'hack' });
 
     expect(res.status).toBe(401);
   });
@@ -372,7 +372,7 @@ describe('Admin reset-stats endpoint', () => {
     const res = await request(app)
       .post(`/api/admin/users/${target._id}/reset-stats`)
       .set('Cookie', adminCookie)
-      .send({ fields: ['aircoins'] });
+      .send({ fields: ['airstars'] });
 
     expect(res.status).toBe(400);
   });

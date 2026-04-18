@@ -45,9 +45,9 @@ vi.mock('../../data/mockData', () => ({
 }))
 
 const TEST_LEVELS = [
-  { levelNumber: 1, cumulativeAircoins: 0,   aircoinsToNextLevel: 100 },
-  { levelNumber: 2, cumulativeAircoins: 100,  aircoinsToNextLevel: 150 },
-  { levelNumber: 3, cumulativeAircoins: 250,  aircoinsToNextLevel: 250 },
+  { levelNumber: 1, cumulativeAirstars: 0,   airstarsToNextLevel: 100 },
+  { levelNumber: 2, cumulativeAirstars: 100,  airstarsToNextLevel: 150 },
+  { levelNumber: 3, cumulativeAirstars: 250,  airstarsToNextLevel: 250 },
 ]
 
 vi.mock('../../context/AppSettingsContext', () => ({
@@ -66,8 +66,8 @@ const BASE_USER = {
   email:             'agent@test.com',
   displayName:       'Agent Test',
   agentNumber:       '1234567',
-  totalAircoins:     1000,
-  cycleAircoins:     250,
+  totalAirstars:     1000,
+  cycleAirstars:     250,
   loginStreak:       7,
   difficultySetting: 'easy',
   rank: { rankName: 'Corporal', rankAbbreviation: 'Cpl', rankNumber: 3 },
@@ -100,7 +100,7 @@ function makeFetch() {
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-describe('Profile — aircoin display', () => {
+describe('Profile — airstar display', () => {
   beforeEach(() => {
     setupAuth()
     global.fetch = makeFetch()
@@ -111,23 +111,23 @@ describe('Profile — aircoin display', () => {
     vi.restoreAllMocks()
   })
 
-  it('stats grid Aircoins card shows totalAircoins, not cycleAircoins', async () => {
-    // totalAircoins=1000, cycleAircoins=250 — card must show 1,000
+  it('stats grid Airstars card shows totalAirstars, not cycleAirstars', async () => {
+    // totalAirstars=1000, cycleAirstars=250 — card must show 1,000
     render(<Profile />)
     await waitFor(() => expect(screen.getByText('1,000')).toBeDefined())
   })
 
-  it('stats grid does NOT show cycleAircoins as the Aircoins value when they differ', async () => {
-    setupAuth({ totalAircoins: 999, cycleAircoins: 42 })
+  it('stats grid does NOT show cycleAirstars as the Airstars value when they differ', async () => {
+    setupAuth({ totalAirstars: 999, cycleAirstars: 42 })
     render(<Profile />)
     await waitFor(() => expect(screen.getByText('999')).toBeDefined())
-    // The cycleAircoins value (42) should not appear as the Aircoins card value
-    // totalAircoins (999) should be visible
+    // The cycleAirstars value (42) should not appear as the Airstars card value
+    // totalAirstars (999) should be visible
     expect(screen.queryByText('42')).toBeNull()
   })
 
-  it('XP bar uses cycleAircoins-based level info', async () => {
-    // cycleAircoins=250, which maps to Level 3 boundary in TEST_LEVELS
+  it('XP bar uses cycleAirstars-based level info', async () => {
+    // cycleAirstars=250, which maps to Level 3 boundary in TEST_LEVELS
     render(<Profile />)
     await waitFor(() => expect(screen.getByText(/Level \d/)).toBeDefined())
   })
@@ -138,21 +138,21 @@ describe('Profile — aircoin display', () => {
     await waitFor(() => expect(screen.getByText('12')).toBeDefined())
   })
 
-  it('clicking Aircoins stat card navigates to /aircoin-history', async () => {
+  it('clicking Airstars stat card navigates to /airstar-history', async () => {
     render(<Profile />)
 
-    await waitFor(() => screen.getByText('Aircoins'))
+    await waitFor(() => screen.getByText('Airstars'))
 
-    // Find the clickable button wrapping the Aircoins label
-    const label  = screen.getByText('Aircoins')
+    // Find the clickable button wrapping the Airstars label
+    const label  = screen.getByText('Airstars')
     const button = label.closest('button')
     fireEvent.click(button)
 
-    expect(mockNavigate).toHaveBeenCalledWith('/aircoin-history')
+    expect(mockNavigate).toHaveBeenCalledWith('/airstar-history')
   })
 
-  it('shows 0 aircoins gracefully when user has no coins', async () => {
-    setupAuth({ totalAircoins: 0, cycleAircoins: 0 })
+  it('shows 0 airstars gracefully when user has no coins', async () => {
+    setupAuth({ totalAirstars: 0, cycleAirstars: 0 })
     render(<Profile />)
     await waitFor(() => {
       const zeros = screen.getAllByText('0')

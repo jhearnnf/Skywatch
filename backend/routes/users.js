@@ -14,7 +14,7 @@ const UserNotification = require('../models/UserNotification');
 const AppSettings = require('../models/AppSettings');
 const Level = require('../models/Level');
 const Rank = require('../models/Rank');
-const AircoinLog = require('../models/AircoinLog');
+const AirstarLog = require('../models/AirstarLog');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 
 // GET /api/users/stats — current user's stats for profile page
@@ -81,7 +81,7 @@ router.get('/stats', protect, async (req, res) => {
         gamesPlayed,
         abandonedGames,
         winPercent,
-        totalAircoins:    user.totalAircoins,
+        totalAirstars:    user.totalAirstars,
         flashcardsCollected,
       },
     });
@@ -114,12 +114,12 @@ router.patch('/me/difficulty', protect, async (req, res) => {
   }
 });
 
-// GET /api/users/leaderboard — top 20 agents by total aircoins (public)
+// GET /api/users/leaderboard — top 20 agents by total airstars (public)
 router.get('/leaderboard', async (req, res) => {
   try {
     const agents = await User.find({})
-      .select('agentNumber totalAircoins')
-      .sort({ totalAircoins: -1 })
+      .select('agentNumber totalAirstars')
+      .sort({ totalAirstars: -1 })
       .limit(20);
 
     res.json({ status: 'success', data: { agents } });
@@ -150,7 +150,7 @@ router.get('/settings', async (req, res) => {
   }
 });
 
-// GET /api/users/levels — all levels with computed cumulativeAircoins (public)
+// GET /api/users/levels — all levels with computed cumulativeAirstars (public)
 router.get('/levels', async (req, res) => {
   try {
     const levels = await Level.find({}).sort({ levelNumber: 1 });
@@ -158,10 +158,10 @@ router.get('/levels', async (req, res) => {
     const withCumulative = levels.map(l => {
       const item = {
         levelNumber: l.levelNumber,
-        aircoinsToNextLevel: l.aircoinsToNextLevel,
-        cumulativeAircoins: cumulative,
+        airstarsToNextLevel: l.airstarsToNextLevel,
+        cumulativeAirstars: cumulative,
       };
-      if (l.aircoinsToNextLevel) cumulative += l.aircoinsToNextLevel;
+      if (l.airstarsToNextLevel) cumulative += l.airstarsToNextLevel;
       return item;
     });
     res.json({ status: 'success', data: { levels: withCumulative } });
@@ -180,19 +180,19 @@ router.get('/ranks', async (req, res) => {
   }
 });
 
-// GET /api/users/aircoins/history — paginated aircoin award history for current user
-router.get('/aircoins/history', protect, async (req, res) => {
+// GET /api/users/airstars/history — paginated airstar award history for current user
+router.get('/airstars/history', protect, async (req, res) => {
   try {
     const { page = 1, limit = 30 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
     const [logs, total] = await Promise.all([
-      AircoinLog.find({ userId: req.user._id })
+      AirstarLog.find({ userId: req.user._id })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
         .lean(),
-      AircoinLog.countDocuments({ userId: req.user._id }),
+      AirstarLog.countDocuments({ userId: req.user._id }),
     ]);
 
     res.json({ status: 'success', data: { logs, total, page: Number(page), limit: Number(limit) } });

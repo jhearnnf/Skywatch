@@ -4,7 +4,7 @@ import { motion, AnimatePresence, useMotionValue, useAnimationControls } from 'f
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
-import { MOCK_RANKS, CATEGORY_ICONS } from '../data/mockData'
+import { MOCK_RANKS, CATEGORY_ICONS, CATEGORY_DESCRIPTIONS } from '../data/mockData'
 import { pathwayTierRequired, getAccessibleCategories } from '../utils/subscription'
 import { getLevelInfo } from '../utils/levelUtils'
 import SEO from '../components/SEO'
@@ -14,7 +14,7 @@ import SEO from '../components/SEO'
 const PATHWAY_COLORS = {
   News:        { stone: '#a16207', glow: 'rgba(161,98,7,0.4)',    ring: '#eab308', bg: '#422006' },
   Bases:       { stone: '#2563eb', glow: 'rgba(37,99,235,0.4)',   ring: '#3b82f6', bg: '#1e3a8a' },
-  Aircrafts:   { stone: '#475569', glow: 'rgba(71,85,105,0.4)',   ring: '#64748b', bg: '#1e293b' },
+  Aircrafts:   { stone: '#7c8ba2', glow: 'rgba(176,189,207,0.42)', ring: '#b4c0d1', bg: '#1e293b' },
   Ranks:       { stone: '#d97706', glow: 'rgba(217,119,6,0.4)',   ring: '#f59e0b', bg: '#451a03' },
   Squadrons:   { stone: '#7c3aed', glow: 'rgba(124,58,237,0.4)',  ring: '#8b5cf6', bg: '#3b0764' },
   Training:    { stone: '#059669', glow: 'rgba(5,150,105,0.4)',   ring: '#10b981', bg: '#022c22' },
@@ -311,6 +311,264 @@ function SyncBadge({ onClick, isCardOpen, onCardOpen, onCardClose, index = 0 }) 
   )
 }
 
+// ── Next-brief image preview (cycling, CRT-tinted) ────────────────────────────
+
+// Downscale Cloudinary-hosted image URLs so `image-rendering: pixelated`
+// stays chunky when scaled up. Mirrors the helper in AptitudeSync.jsx.
+function lowResUrl(url) {
+  if (!url || typeof url !== 'string')             return url
+  if (!/\/image\/upload\//.test(url))              return url
+  if (/\/image\/upload\/[^/]*w_\d+/.test(url))     return url
+  return url.replace('/image/upload/', '/image/upload/w_320,q_55,f_auto/')
+}
+
+// Preview width; height matches the stone it sits next to (passed in as prop)
+// so the frame sits neatly in the same row as the stone.
+const PREVIEW_W   = 255
+// Horizontal gap between the stone and the preview. Needs to clear the stone's
+// title label, which extends ~20px beyond each side of the stone.
+const PREVIEW_GAP = 20
+
+// Frayed-edge mask: the full rect is shown, with soft "bite" radial gradients
+// eating into the left and right edges at irregular points. At stone height
+// the frame is a wide strip, so top/bottom frays would be meaningless.
+function buildFrayMask(w, h) {
+  const spec = [
+    { cxPct: 0,    cyPct: 0.55, rxPct: 0.035, ryPct: 0.40 },
+    { cxPct: 1,    cyPct: 0.32, rxPct: 0.028, ryPct: 0.55 },
+    { cxPct: 0.18, cyPct: 1,    rxPct: 0.06,  ryPct: 0.18 },
+    { cxPct: 0.74, cyPct: 0,    rxPct: 0.055, ryPct: 0.20 },
+  ]
+  const ellipses = spec.map(f =>
+    `<ellipse cx='${Math.round(f.cxPct * w)}' cy='${Math.round(f.cyPct * h)}' rx='${Math.round(f.rxPct * w)}' ry='${Math.round(f.ryPct * h)}' fill='url(#b)'/>`
+  ).join('')
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${w} ${h}' preserveAspectRatio='none'><defs><radialGradient id='b'><stop offset='0%' stop-color='black'/><stop offset='55%' stop-color='black'/><stop offset='100%' stop-color='white'/></radialGradient></defs><rect width='${w}' height='${h}' fill='white'/>${ellipses}</svg>`
+  return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`
+}
+
+// Viewport-aligned replica of the body::before grid (see main.css:124).
+// `background-attachment: fixed` ties the pattern origin to the viewport so
+// these lines land on the same 48px lattice as the page's grid — making the
+// image read as if it's sitting *under* the background grid.
+const PAGE_GRID_OVERLAY = {
+  backgroundImage: `
+    linear-gradient(rgba(91,170,255,0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(91,170,255,0.022) 1px, transparent 1px)
+  `,
+  backgroundSize:       '48px 48px',
+  backgroundAttachment: 'fixed',
+}
+
+// Opacity applied to the image content so the page bg bleeds through.
+const PREVIEW_IMAGE_OPACITY = 0.45
+
+// Minimum wrapper width; guards against the viewport-fraction formula producing
+// something too small to read on tiny screens.
+const PREVIEW_MIN_W = 120
+
+// Derives a consistent wrapper width from the viewport. All previews on the
+// same device land on the same value, so the cropped edge looks uniform
+// regardless of which ZIGZAG offset the "next" stone happens to sit at.
+function computeWrapperWidth(vw) {
+  // ~45% of viewport, minus a small allowance for the stone + gap, capped at
+  // PREVIEW_W and floored at PREVIEW_MIN_W.
+  const raw = vw * 0.45 - 30
+  return Math.max(PREVIEW_MIN_W, Math.min(PREVIEW_W, raw))
+}
+
+// Minimum time the skeleton must show before the tune-in fade can start.
+// Also the *max* — if the first image is slower than this to load, the fade
+// starts as soon as it's ready (no additional delay stacked on top).
+const PREVIEW_MIN_DELAY_MS = 1100
+
+function BriefImagePreview({ images, side, accent, onTap, height }) {
+  const [idx, setIdx] = useState(0)
+  // Shared wrapper width derived from viewport width only. Consistent across
+  // every preview on the same device — image is always cropped by the same
+  // amount, regardless of which stone the preview sits next to.
+  const [wrapperW, setWrapperW] = useState(() =>
+    typeof window !== 'undefined' ? computeWrapperWidth(window.innerWidth) : PREVIEW_W
+  )
+  // Two gates that must both be true before the tune-in animation fires:
+  //   1. MIN_DELAY has elapsed since mount (skeleton must hold at least this long)
+  //   2. The first image has loaded (or errored) so there's actually something
+  //      to reveal when the fade starts.
+  const [minDelayElapsed, setMinDelayElapsed] = useState(false)
+  const [firstImageReady, setFirstImageReady] = useState(false)
+  const canReveal = minDelayElapsed && firstImageReady
+
+  useEffect(() => {
+    if (images.length <= 1) return
+    const t = setInterval(() => setIdx(i => (i + 1) % images.length), 3500)
+    return () => clearInterval(t)
+  }, [images])
+
+  useEffect(() => {
+    const onResize = () => setWrapperW(computeWrapperWidth(window.innerWidth))
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => setMinDelayElapsed(true), PREVIEW_MIN_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [])
+
+  const handleFirstImageReady = () => setFirstImageReady(true)
+
+  // Fray mask scales with the *visible* frame (wrapperW) so the frays land on
+  // the currently-visible edges, including the cropped one.
+  const frayMask = useMemo(() => buildFrayMask(wrapperW || PREVIEW_W, height), [wrapperW, height])
+
+  // side='left' → image sits to the LEFT of the parent → anchor its right edge
+  // beyond the parent's left edge. side='right' is the mirror image.
+  const positionStyle = side === 'left'
+    ? { right: `calc(100% + ${PREVIEW_GAP}px)` }
+    : { left:  `calc(100% + ${PREVIEW_GAP}px)` }
+
+  // Image layer is horizontally centred within the wrapper so any crop
+  // (PREVIEW_W − wrapperW) is split evenly between the left and right edges
+  // of the image rather than landing only on one side.
+  const imageLayerStyle = {
+    left:      '50%',
+    marginLeft: -PREVIEW_W / 2,
+  }
+
+  // Outer wrapper owns vertical centring on the stone (translateY(-50%)) so
+  // framer's animated transform on the inner button can't clobber it.
+  return (
+    <div
+      className="pointer-events-none absolute"
+      style={{
+        top:       '50%',
+        transform: 'translateY(-50%)',
+        ...positionStyle,
+        width:     wrapperW,
+        height,
+      }}
+    >
+      {/* Skeleton placeholder — see-through dark card shown immediately so
+          the image appears to tune in within a loading frame. */}
+      <motion.div
+        className="pointer-events-none absolute inset-0"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        style={{
+          background:       'rgba(12, 24, 41, 0.5)',
+          maskImage:        frayMask,
+          WebkitMaskImage:  frayMask,
+          maskSize:         '100% 100%',
+          WebkitMaskSize:   '100% 100%',
+          maskRepeat:       'no-repeat',
+          WebkitMaskRepeat: 'no-repeat',
+        }}
+      />
+
+      <motion.button
+        type="button"
+        onClick={onTap}
+        initial={{ opacity: 0, x: 0 }}
+        animate={canReveal
+          ? {
+              opacity: [0, 0.15, 0.3, 0.28, 0.5, 0.7, 0.82, 1],
+              x:       [0, 0, 0, -1, 0, 0, 0, 0],
+            }
+          : { opacity: 0, x: 0 }}
+        transition={canReveal
+          ? {
+              duration: 2.8,
+              times:    [0, 0.12, 0.28, 0.36, 0.5, 0.68, 0.85, 1],
+              ease:     'linear',
+            }
+          : undefined}
+        aria-label="Preview next intel brief"
+        className="pointer-events-auto absolute inset-0 overflow-hidden"
+        style={{
+          border:           'none',
+          background:       'transparent',
+          boxShadow:        `0 0 24px ${accent}14`,
+          cursor:           'pointer',
+          maskImage:        frayMask,
+          WebkitMaskImage:  frayMask,
+          maskSize:         '100% 100%',
+          WebkitMaskSize:   '100% 100%',
+          maskRepeat:       'no-repeat',
+          WebkitMaskRepeat: 'no-repeat',
+        }}
+      >
+        {/* Crossfading image stack — the inner layer is fixed at PREVIEW_W and
+            anchored on the stone side, so when the outer wrapper is cropped
+            (viewport edge) the image stays at full scale and only its outer
+            edge is clipped by the button's overflow:hidden. */}
+        <div
+          className="absolute top-0 motion-reduce:!animate-none"
+          style={{
+            ...imageLayerStyle,
+            width:     PREVIEW_W,
+            height:    '100%',
+            animation: 'lp-preview-flicker 2.3s ease-in-out infinite',
+          }}
+        >
+          {images.map((url, i) => (
+            <img
+              key={url + i}
+              src={lowResUrl(url)}
+              alt=""
+              draggable={false}
+              loading="lazy"
+              decoding="async"
+              onLoad={i === 0 ? handleFirstImageReady : undefined}
+              onError={i === 0 ? handleFirstImageReady : undefined}
+              style={{
+                position:       'absolute',
+                inset:          0,
+                width:          '100%',
+                height:         '100%',
+                objectFit:      'cover',
+                objectPosition: 'center',
+                filter:         'contrast(1.05) saturate(0.75) hue-rotate(190deg) brightness(0.85)',
+                opacity:        i === idx ? PREVIEW_IMAGE_OPACITY : 0,
+                transition:     'opacity 320ms ease-in-out',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Scanlines */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:   'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.22) 2px, rgba(0,0,0,0.22) 3px)',
+            mixBlendMode: 'multiply',
+          }}
+        />
+
+        {/* Page-grid replica — viewport-fixed so lines align with body::before,
+            making the image read as if the grid is passing *over* it. */}
+        <div className="absolute inset-0 pointer-events-none" style={PAGE_GRID_OVERLAY} />
+      </motion.button>
+
+      {/* Top-left transmission pip — sits outside the motion.button so it
+          stays visible through the skeleton/tune-in phase. */}
+      <span
+        className="pointer-events-none absolute"
+        style={{
+          top:          6,
+          left:         8,
+          width:        6,
+          height:       6,
+          borderRadius: '50%',
+          background:   '#ff5a5f',
+          boxShadow:    '0 0 7px #ff5a5f',
+          animation:    'lp-preview-dot 1.2s ease-in-out infinite',
+        }}
+      />
+    </div>
+  )
+}
+
 // ── Stone component ───────────────────────────────────────────────────────────
 
 function formatEventDate(dateStr) {
@@ -320,7 +578,7 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, aptitudeSyncEnabled, index, openSyncId, onCardOpen, onCardClose }) {
+function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, aptitudeSyncEnabled, index, openSyncId, onCardOpen, onCardClose, nextBriefImages, revealedStubId, onStubReveal, hoveredStubId, onStubHover, prevStubExpanded }) {
   const size         = milestone ? 72 : 60
   const isNext       = state === 'next'
   const isRead       = state === 'read'
@@ -328,9 +586,15 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
   const isLocked     = state.startsWith('locked')
   const isStub       = state === 'stub'
   const isHistoric   = !!brief.historic && !isLocked && !isStub
-  const [hovered,  setHovered]  = useState(false)
+  const hovered      = hoveredStubId === brief._id
   const [inView,   setInView]   = useState(false)
   const containerRef = useRef(null)
+  const isTouchRef = useRef(false)
+
+  // Touch-device tap-to-reveal: on stubs, the first tap reveals the title
+  // (mirroring desktop hover) and the second tap opens the brief. Parent
+  // tracks which stub is revealed so a tap on another stub resets this one.
+  const touchRevealed = revealedStubId === brief._id
 
   // Intersection observer — marks stone as in-view once it enters the viewport
   useEffect(() => {
@@ -344,6 +608,21 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
     return () => obs.disconnect()
   }, [])
 
+  const handlePointerDown = (e) => {
+    isTouchRef.current = e.pointerType === 'touch'
+  }
+
+  const handleStoneClick = (e) => {
+    if (isStub && isTouchRef.current && !touchRevealed) {
+      // First tap on mobile: reveal title, don't open brief yet
+      e.preventDefault()
+      onStubReveal?.(brief._id)
+      return
+    }
+    if (touchRevealed) onStubReveal?.(null)
+    onTap()
+  }
+
   const showSync = isRead && quizPassed && aptitudeSyncEnabled && inView
 
   // Amber historic tones — overlaid regardless of pathway colour
@@ -355,21 +634,28 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
   const xOffset = ZIGZAG[index % ZIGZAG.length]
 
   return (
-    <div
+    <motion.div
       ref={containerRef}
       data-brief-index={index}
+      layout="position"
+      transition={{ layout: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }}
       className="flex flex-col items-center"
       style={{ paddingLeft: `calc(50% + ${xOffset}px - ${size / 2}px)`, alignItems: 'flex-start' }}
-      onMouseEnter={() => { if (isStub) setHovered(true) }}
-      onMouseLeave={() => setHovered(false)}
     >
-      {/* Connector dot strip above (except first) */}
+      {/* Connector dot strip above (except first) — per-dot marginTop grows/
+          shrinks to mirror the sliding distance when the previous stub
+          reveals/hides its title. */}
       {index > 0 && (
-        <div className="flex flex-col items-center gap-1.5 mb-1.5" style={{ marginLeft: size / 2 - 3 }}>
+        <div
+          className="flex flex-col items-center mb-1.5"
+          style={{ marginLeft: size / 2 - 3 }}
+        >
           {[0,1,2].map(i => (
-            <div
+            <motion.div
               key={i}
               className="w-1.5 h-1.5 rounded-full"
+              animate={{ marginTop: i === 0 ? 0 : (prevStubExpanded ? 14 : 6) }}
+              transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
               style={{
                 background: isHistoric && isRead ? HISTORIC_BORDER
                   : isHistoric                   ? HISTORIC_BORDER + '88'
@@ -383,11 +669,14 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
       )}
 
       {/* Stone circle + optional SYNC badge in a row */}
-      <div className="flex items-center gap-2">
+      <div className="relative flex items-center gap-2">
 
       {/* The stone */}
       <button
-        onClick={onTap}
+        onPointerDown={handlePointerDown}
+        onClick={handleStoneClick}
+        onMouseEnter={() => { if (isStub) onStubHover?.(brief._id) }}
+        onMouseLeave={() => { if (isStub && hovered) onStubHover?.(null) }}
         className="relative flex items-center justify-center rounded-full transition-transform active:scale-95 select-none"
         style={{
           width:  size,
@@ -517,6 +806,18 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
         )}
       </AnimatePresence>
 
+      {/* Next-to-read cycling image preview — shown on whichever stone is the
+          parent-designated "next" (includes in-progress briefs). */}
+      {nextBriefImages && nextBriefImages.length > 0 && (
+        <BriefImagePreview
+          images={nextBriefImages}
+          side={xOffset >= 0 ? 'left' : 'right'}
+          accent={isHistoric ? HISTORIC_RING : colors.ring}
+          onTap={onTap}
+          height={size}
+        />
+      )}
+
       </div>{/* end stone-row */}
 
       {/* Title label */}
@@ -537,9 +838,9 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
           minHeight: '2.5em',
         }}
       >
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="popLayout" initial={false}>
           {isStub ? (
-            hovered ? (
+            (hovered || touchRevealed) ? (
               <motion.span
                 key="title"
                 className="block"
@@ -582,22 +883,49 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
           {formatEventDate(brief.eventDate)}
         </p>
       )}
+    </motion.div>
+  )
+}
+
+// ── Pathway header row ────────────────────────────────────────────────────────
+// Renders the category title + long-form description as the first row of each
+// pathway list, occupying the slot where a "zero-th" stepping stone would be.
+// Sits inside the scrolling pathway content (not above the sticky card) so it
+// scrolls out naturally with the rest of the stones — no fade/collapse needed.
+
+function PathwayHeader({ category, colors }) {
+  return (
+    <div className="text-center pt-4 pb-7 px-4">
+      <h1 className="text-2xl font-extrabold text-slate-900">
+        Learn <span style={{ color: colors.ring }}>{category}</span>
+      </h1>
+      <p className="text-sm text-slate-500 mt-1.5 leading-snug">
+        {CATEGORY_DESCRIPTIONS[category] ?? 'Complete the intel briefs to build RAF knowledge.'}
+      </p>
     </div>
   )
 }
 
 // ── Pathway view (vertical list of stones for one category) ──────────────────
 
-function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction }) {
+function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction, nextBriefImages, nextBriefId }) {
   const navigate = useNavigate()
   const [openSyncId, setOpenSyncId] = useState(null)
+  const [revealedStubId, setRevealedStubId] = useState(null)
+  const [hoveredStubId, setHoveredStubId] = useState(null)
   const listRef = useRef(null)
 
   // Scroll so the next-to-read brief sits just below the page header on arrival.
   // In-progress briefs count as "next"; read/stub briefs are scrolled past.
-  // Runs synchronously before paint so each pathway appears pre-positioned.
+  // Fires exactly once per mount — PathwayView re-mounts on pathway swap via the
+  // `key` in the parent, so this also covers category swaps. readSet/inProgressSet
+  // are NOT deps (they are new refs every parent render); including them would make
+  // the scroll re-fire and fight the user's own scrolling.
+  const didAutoScrollRef = useRef(false)
   useLayoutEffect(() => {
+    if (didAutoScrollRef.current) return
     if (!pathwayUnlocked || briefs.length === 0) return
+    didAutoScrollRef.current = true
     const targetIdx = briefs.findIndex(b => !readSet.has(b._id) && b.status !== 'stub')
     if (targetIdx <= 0) {
       window.scrollTo(0, 0)
@@ -610,7 +938,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
     const headerOffset = listEl.getBoundingClientRect().top + window.scrollY
     const targetTop = targetEl.getBoundingClientRect().top + window.scrollY
     window.scrollTo(0, Math.max(0, targetTop - headerOffset))
-  }, [category, briefs, pathwayUnlocked, readSet])
+  }, [briefs, pathwayUnlocked]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const variants = {
     enter:  (d) => ({ opacity: 0, x: d > 0 ? 80 : -80 }),
@@ -628,23 +956,25 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
         animate="center"
         exit="exit"
         transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="flex flex-col items-center justify-center py-20 text-center px-6"
       >
-        <div
-          className="w-20 h-20 rounded-full flex items-center justify-center text-3xl mb-4"
-          style={{ background: '#172236', border: '2px solid #243650' }}
-        >
-          🔒
+        <PathwayHeader category={category} colors={colors} />
+        <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center text-3xl mb-4"
+            style={{ background: '#172236', border: '2px solid #243650' }}
+          >
+            🔒
+          </div>
+          <p className="text-base font-bold text-slate-700 mb-1">{category} Pathway Locked</p>
+          <p className="text-sm text-slate-500 mb-5">{lockReason}</p>
+          <button
+            onClick={onLockedTap}
+            className="px-5 py-2.5 rounded-xl text-sm font-bold transition-colors"
+            style={{ background: colors.stone + '22', color: colors.ring, border: `1px solid ${colors.stone}44` }}
+          >
+            How to Unlock
+          </button>
         </div>
-        <p className="text-base font-bold text-slate-700 mb-1">{category} Pathway Locked</p>
-        <p className="text-sm text-slate-500 mb-5">{lockReason}</p>
-        <button
-          onClick={onLockedTap}
-          className="px-5 py-2.5 rounded-xl text-sm font-bold transition-colors"
-          style={{ background: colors.stone + '22', color: colors.ring, border: `1px solid ${colors.stone}44` }}
-        >
-          How to Unlock
-        </button>
       </motion.div>
     )
   }
@@ -659,11 +989,13 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
         animate="center"
         exit="exit"
         transition={{ duration: 0.25, ease: 'easeOut' }}
-        className="flex flex-col items-center justify-center py-20 text-center px-6"
       >
-        <span className="text-4xl mb-4">{CATEGORY_ICONS[category] ?? '📄'}</span>
-        <p className="text-base font-bold text-slate-700 mb-1">No pathway briefs yet</p>
-        <p className="text-sm text-slate-500">{category === 'News' ? 'No news briefs available yet. Check back soon.' : `Priority numbers haven't been assigned to ${category} briefs yet. Check back soon.`}</p>
+        <PathwayHeader category={category} colors={colors} />
+        <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+          <span className="text-4xl mb-4">{CATEGORY_ICONS[category] ?? '📄'}</span>
+          <p className="text-base font-bold text-slate-700 mb-1">No pathway briefs yet</p>
+          <p className="text-sm text-slate-500">{category === 'News' ? 'No news briefs available yet. Check back soon.' : `Priority numbers haven't been assigned to ${category} briefs yet. Check back soon.`}</p>
+        </div>
       </motion.div>
     )
   }
@@ -683,6 +1015,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
       transition={{ duration: 0.25, ease: 'easeOut' }}
       className="pb-8"
     >
+      <PathwayHeader category={category} colors={colors} />
       {briefs.map((brief, i) => {
         const isStub       = brief.status === 'stub'
         const isRead       = !isStub && readSet.has(brief._id)
@@ -690,6 +1023,9 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
         const isNext       = !isStub && !isRead && !isInProgress && i === firstUnreadIdx
         const state        = isStub ? 'stub' : isRead ? 'read' : isInProgress ? 'inprogress' : isNext ? 'next' : 'unread'
         const milestone = (i + 1) % 5 === 0
+        const prevBrief = i > 0 ? briefs[i - 1] : null
+        const prevStubExpanded = !!(prevBrief && prevBrief.status === 'stub'
+          && (hoveredStubId === prevBrief._id || revealedStubId === prevBrief._id))
 
         return (
           <Stone
@@ -706,6 +1042,12 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
             openSyncId={openSyncId}
             onCardOpen={setOpenSyncId}
             onCardClose={() => setOpenSyncId(null)}
+            nextBriefImages={i === firstUnreadIdx && String(brief._id) === String(nextBriefId) ? nextBriefImages : null}
+            revealedStubId={revealedStubId}
+            onStubReveal={setRevealedStubId}
+            hoveredStubId={hoveredStubId}
+            onStubHover={setHoveredStubId}
+            prevStubExpanded={prevStubExpanded}
           />
         )
       })}
@@ -874,6 +1216,7 @@ export default function LearnPriority() {
   const [pathwayUnlocks, setPathwayUnlocks] = useState(DEFAULT_PATHWAY_UNLOCKS)
   const [catSettings,    setCatSettings]    = useState(null) // { freeCategories, silverCategories }
   const [briefsCache,    setBriefsCache]    = useState({}) // { [category]: brief[] }
+  const [nextBriefCache, setNextBriefCache] = useState({}) // { [category]: { id, images } }
   const [loading,        setLoading]        = useState(false)
   const [activeCatIndex, setActiveCatIndex] = useState(null)
   const [direction,      setDirection]      = useState(1)   // 1=forward, -1=backward
@@ -935,7 +1278,7 @@ export default function LearnPriority() {
 
   // ── Compute user progression ────────────────────────────────────────────────
   const userTier        = user?.subscriptionTier ?? 'free'
-  const lvlInfo         = getLevelInfo(user?.cycleAircoins ?? 0, levels)
+  const lvlInfo         = getLevelInfo(user?.cycleAirstars ?? 0, levels)
   const userLevel       = lvlInfo?.level ?? 1
   const userRankObj     = user?.rank
   const userRankNumber  = userRankObj?.rankNumber ?? 1
@@ -1025,6 +1368,9 @@ export default function LearnPriority() {
       .then(d => {
         if (d?.data?.briefs) {
           setBriefsCache(prev => ({ ...prev, [cat]: d.data.briefs }))
+          if (d.data.nextBrief) {
+            setNextBriefCache(prev => ({ ...prev, [cat]: d.data.nextBrief }))
+          }
         }
       })
       .catch(() => {})
@@ -1093,6 +1439,25 @@ export default function LearnPriority() {
   return (
     <>
       <SEO title="Learn Priority" description="See your recommended learning path and priority briefs for RAF aptitude preparation." />
+      <style>{`
+        @keyframes lp-preview-flicker {
+          0%, 100% { opacity: 0.92; }
+          42%      { opacity: 0.92; }
+          44%      { opacity: 0.62; }
+          46%      { opacity: 0.92; }
+          78%      { opacity: 0.92; }
+          80%      { opacity: 0.72; }
+          82%      { opacity: 0.92; }
+        }
+        @keyframes lp-preview-dot {
+          0%, 100% { opacity: 1;   transform: scale(1);    }
+          50%      { opacity: 0.3; transform: scale(0.85); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          @keyframes lp-preview-flicker { 0%,100% { opacity: 0.92; } }
+          @keyframes lp-preview-dot     { 0%,100% { opacity: 1; transform: none; } }
+        }
+      `}</style>
       <TutorialModal />
 
       <AnimatePresence>
@@ -1122,14 +1487,28 @@ export default function LearnPriority() {
 
       <div className="max-w-sm mx-auto">
 
-        {/* ── Header ───────────────────────────────────────────────────────── */}
-        <div className="mb-5 pt-1">
-          <h1 className="text-2xl font-extrabold text-slate-900">Learning Pathway</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Follow the stones to build RAF knowledge.</p>
-        </div>
+        {/* ── Sticky: pathway dots + active category card ──────────────────── */}
+        {/* The category title + subtitle are rendered INSIDE PathwayView as a
+            header row at the top of the stone list. They scroll naturally with
+            the rest of the pathway content — no JS state, no animations, no
+            layout thrash.
 
+            `-mt-6` cancels the outer AppShell `py-6` top padding so the sticky's
+            NATURAL doc position is doc-y=56 (flush against the TopBar's bottom
+            edge). Combined with `top: 56`, this means at every scrollY ≥ 0 the
+            sticky sits at viewport y=56 — natural position and pin position
+            coincide, so there's no transition range where the card drifts. */}
+        <div
+          className="sticky z-20 -mt-6"
+          style={{
+            top:           56,
+            background:    '#06101e',
+            paddingTop:    10,
+            paddingBottom: 4,
+          }}
+        >
         {/* ── Pathway selector dots ─────────────────────────────────────────── */}
-        <div className="flex items-center justify-center gap-2 mb-5">
+        <div className="flex items-center justify-center gap-2 mb-3">
           {pathways.map((p, i) => {
             const isActive = i === activeCatIndex
             return (
@@ -1155,7 +1534,7 @@ export default function LearnPriority() {
 
         {/* ── Active pathway header ─────────────────────────────────────────── */}
         <div
-          className="rounded-2xl p-4 mb-5 flex items-center justify-between card-shadow"
+          className="rounded-2xl px-4 py-2.5 flex items-center justify-between card-shadow"
           style={{ background: activePathway.colors.bg, border: `1px solid ${activePathway.colors.stone}33` }}
         >
           <div className="flex items-center gap-3">
@@ -1193,6 +1572,7 @@ export default function LearnPriority() {
             </div>
           )}
         </div>
+        </div>{/* end sticky dots + card */}
 
         {/* ── Swipeable pathway content ──────────────────────────────────────── */}
         <motion.div
@@ -1253,6 +1633,8 @@ export default function LearnPriority() {
                 inProgressSet={inProgressSet}
                 quizPassedSet={quizPassedSet}
                 aptitudeSyncEnabled={aptitudeSyncEnabled}
+                nextBriefImages={nextBriefCache[activePathway.category]?.images ?? null}
+                nextBriefId={nextBriefCache[activePathway.category]?.id ?? null}
                 direction={direction}
                 onStoneTap={() => {}}
                 onLockedTap={() => setUnlockModal({
