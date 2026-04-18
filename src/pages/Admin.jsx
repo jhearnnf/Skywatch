@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
 import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } from '../utils/sound'
@@ -688,6 +689,7 @@ function CeilingScenarioColumn({ label, difficulty, sim, meta, simCycleThreshold
 
 function AirstarsEconomy({ API, onToast }) {
   const { apiFetch, awardAirstars } = useAuth()
+  const { applyUnlocks: applyCategoryUnlocks } = useNewCategoryUnlock()
   const [meta,            setMeta]           = useState(null)  // { cycleThreshold, totalRanks, ranks }
   const [sim,             setSim]            = useState(null)  // full editable sim state
   const [dbSim,           setDbSim]          = useState(null)  // DB snapshot for reset
@@ -772,7 +774,8 @@ function AirstarsEconomy({ API, onToast }) {
       })
       const data = await res.json()
       if (data.status === 'success') {
-        awardAirstars(data.awarded, 'Test Airstars', { cycleAfter: data.cycleAirstars, totalAfter: data.totalAirstars, rankPromotion: data.rankPromotion ?? null })
+        awardAirstars(data.awarded, 'Test Airstars', { cycleAfter: data.cycleAirstars, totalAfter: data.totalAirstars, rankPromotion: data.rankPromotion ?? null, unlockedCategories: data.unlockedCategories ?? [] })
+        if (data.categoryUnlocksGranted?.length) applyCategoryUnlocks(data.categoryUnlocksGranted)
         onToast(`✓ Awarded ${data.awarded} test airstars`)
         setTestAmount('')
       }

@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
+import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 import RankBadge from '../RankBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
@@ -32,6 +33,7 @@ export default function Sidebar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const { hasAnyNew } = useNewGameUnlock()
+  const { hasAnyNew: hasAnyNewCategory, firstNewCategory, markAllSeen: markAllCategoriesSeen } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
   const { levels: liveLevels } = useAppSettings()
   const levelInfo = user ? getLevelInfo(user.cycleAirstars ?? 0, liveLevels) : null
@@ -42,12 +44,23 @@ export default function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {NAV_ITEMS.map(({ to, emoji, label }) => {
           const isPlay     = to === '/play'
-          const showBadge  = isPlay && hasAnyNew && user
+          const isLearn    = to === '/learn-priority'
+          const showPlayBadge     = isPlay  && hasAnyNew         && user
+          const showCategoryBadge = isLearn && hasAnyNewCategory && user
+          const handleLearnClick = isLearn && hasAnyNewCategory
+            ? (e) => {
+                e.preventDefault()
+                const target = firstNewCategory
+                markAllCategoriesSeen()
+                navigate('/learn-priority', target ? { state: { category: target } } : undefined)
+              }
+            : undefined
           return (
             <NavLink
               key={to}
-              data-nav={isPlay ? 'play' : undefined}
+              data-nav={isPlay ? 'play' : isLearn ? 'learn' : undefined}
               to={to}
+              onClick={handleLearnClick}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
                 ${isActive
@@ -58,8 +71,11 @@ export default function Sidebar() {
             >
               <span className="relative text-lg w-6 text-center shrink-0">
                 {emoji}
-                {showBadge && (
+                {showPlayBadge && (
                   <span className="nav-new-badge" aria-label="New game unlocked" />
+                )}
+                {showCategoryBadge && (
+                  <span className="nav-new-badge" aria-label="New category unlocked" />
                 )}
               </span>
               {label}

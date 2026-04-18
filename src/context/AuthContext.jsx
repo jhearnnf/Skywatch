@@ -120,10 +120,11 @@ export function AuthProvider({ children }) {
     setNotifQueue(q => q.slice(1))
   }, [])
 
-  // Award airstars: updates user state, queues airstar + level-up + rank-promotion notifs.
+  // Award airstars: updates user state, queues airstar + level-up + rank-promotion + category-unlock notifs.
   // cycleAfter / totalAfter: new values returned from server (used for server-driven awards)
   // rankPromotion: { from, to } if a promotion occurred (server-driven only)
-  const awardAirstars = useCallback((amount, label, { cycleAfter, totalAfter, rankPromotion } = {}) => {
+  // unlockedCategories: string[] of categories newly accessible (server-driven, queued LAST)
+  const awardAirstars = useCallback((amount, label, { cycleAfter, totalAfter, rankPromotion, unlockedCategories } = {}) => {
     const oldCycle = userRef.current?.cycleAirstars ?? 0
     const newCycle = cycleAfter ?? (oldCycle + amount)
     const oldLevel = getLevelNumber(oldCycle, levelsRef.current)
@@ -148,6 +149,10 @@ export function AuthProvider({ children }) {
         for (let lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
           items.push({ id: `${ts}-lu-${lvl}`, type: 'levelup', level: lvl })
         }
+      }
+      // Category unlock fires LAST in the queue — grand-finale "you've unlocked new pathways" notif.
+      if (Array.isArray(unlockedCategories) && unlockedCategories.length) {
+        items.push({ id: `${ts}-cu`, type: 'categoryUnlock', categories: unlockedCategories })
       }
       return [...q, ...items]
     })

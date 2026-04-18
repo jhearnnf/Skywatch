@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { playTypingSound } from '../utils/sound'
 import SEO from '../components/SEO'
@@ -581,6 +582,7 @@ export default function AptitudeSync() {
   const navigate     = useNavigate()
   const location     = useLocation()
   const { user, API, apiFetch, awardAirstars, isLoading } = useAuth()
+  const { applyUnlocks: applyCategoryUnlocks } = useNewCategoryUnlock()
   const { settings } = useAppSettings()
 
   // Brief title / category — may be passed via navigation state or fetched
@@ -904,13 +906,15 @@ export default function AptitudeSync() {
       const data = await res.json()
       if (res.ok && data?.data?.awarded > 0) {
         awardAirstars(data.data.awarded, 'APTITUDE_SYNC', {
-          cycleAfter:    data.data.cycleAirstars,
-          totalAfter:    data.data.totalAirstars,
-          rankPromotion: data.data.rankPromotion ?? null,
+          cycleAfter:         data.data.cycleAirstars,
+          totalAfter:         data.data.totalAirstars,
+          rankPromotion:      data.data.rankPromotion ?? null,
+          unlockedCategories: data.data.unlockedCategories ?? [],
         })
+        if (data.data.categoryUnlocksGranted?.length) applyCategoryUnlocks(data.data.categoryUnlocksGranted)
       }
     } catch { /* silent — coins can be re-attempted if page stays open */ }
-  }, [briefId, API, apiFetch, awardAirstars])
+  }, [briefId, API, apiFetch, awardAirstars, applyCategoryUnlocks])
 
   // ── Key handler for 'complete' phase (any key to exit) ───────────────────
   useEffect(() => {

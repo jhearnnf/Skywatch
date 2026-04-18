@@ -86,6 +86,18 @@ const userSchema = new mongoose.Schema(
       boo:       { unlockedAt: { type: Date, default: null }, badgeSeen: { type: Boolean, default: false } },
       wta:       { unlockedAt: { type: Date, default: null }, badgeSeen: { type: Boolean, default: false } },
     },
+
+    // Pathway category unlock tracking — cross-device "NEW" badge state on Learn nav.
+    // Map keyed by category name (admin-configurable, so not a fixed object). Entry is
+    // written/refreshed each time a user crosses the pathway threshold for that category.
+    categoryUnlocks: {
+      type: Map,
+      of: new mongoose.Schema({
+        unlockedAt: { type: Date,    default: null },
+        badgeSeen:  { type: Boolean, default: false },
+      }, { _id: false }),
+      default: () => new Map(),
+    },
   },
   { timestamps: true }
 );

@@ -11,6 +11,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import { playSound } from '../utils/sound'
@@ -387,6 +388,7 @@ export default function WhereAircraftGame() {
   const { aircraftBriefId } = useParams()
   const navigate = useNavigate()
   const { user, API, apiFetch, awardAirstars, refreshUser } = useAuth()
+  const { applyUnlocks: applyCategoryUnlocks } = useNewCategoryUnlock()
   const { start } = useAppTutorial()
   const gameSessionId  = useRef(crypto.randomUUID())
   const startTimeRef   = useRef(Date.now())
@@ -507,12 +509,14 @@ export default function WhereAircraftGame() {
       setRound1Coins(coins)
       if (coins > 0 && awardAirstars) {
         awardAirstars(coins, 'Round 1 — Aircraft ID', {
-          cycleAfter:    data.data.cycleAirstars ?? undefined,
-          totalAfter:    data.data.totalAirstars ?? undefined,
-          rankPromotion: data.data.rankPromotion ?? null,
+          cycleAfter:         data.data.cycleAirstars ?? undefined,
+          totalAfter:         data.data.totalAirstars ?? undefined,
+          rankPromotion:      data.data.rankPromotion ?? null,
+          unlockedCategories: data.data.unlockedCategories ?? [],
         })
         awarded = true
       }
+      if (data.data.categoryUnlocksGranted?.length) applyCategoryUnlocks(data.data.categoryUnlocksGranted)
       setPhase(PHASE_R1_COMPLETE)
     } catch {
       setError('Failed to load round 2.')
@@ -607,17 +611,19 @@ export default function WhereAircraftGame() {
       const data = await res.json()
       if (data?.data) {
         responseOk = true
-        const { won, airstarsEarned, rankPromotion, cycleAirstars, totalAirstars } = data.data
+        const { won, airstarsEarned, rankPromotion, cycleAirstars, totalAirstars, unlockedCategories, categoryUnlocksGranted } = data.data
         wonForResult = won
         earnedForResult = airstarsEarned ?? 0
         if (airstarsEarned > 0 && awardAirstars) {
           awardAirstars(airstarsEarned, "Where's That Aircraft", {
-            cycleAfter:    cycleAirstars ?? undefined,
-            totalAfter:    totalAirstars ?? undefined,
-            rankPromotion: rankPromotion ?? null,
+            cycleAfter:         cycleAirstars ?? undefined,
+            totalAfter:         totalAirstars ?? undefined,
+            rankPromotion:      rankPromotion ?? null,
+            unlockedCategories: unlockedCategories ?? [],
           })
           awarded = true
         }
+        if (categoryUnlocksGranted?.length) applyCategoryUnlocks(categoryUnlocksGranted)
       }
     } catch (err) {
       console.error("[wheres-aircraft submit] failed:", err)

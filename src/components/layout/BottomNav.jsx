@@ -1,6 +1,7 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
+import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 import RankBadge from '../RankBadge'
 
@@ -17,10 +18,12 @@ const ADMIN_ITEM = { to: '/admin', emoji: '⚙️', label: 'Admin' }
 export default function BottomNav() {
   const { user } = useAuth()
   const { hasAnyNew } = useNewGameUnlock()
+  const { hasAnyNew: hasAnyNewCategory, firstNewCategory, markAllSeen: markAllCategoriesSeen } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
 
   const items = user?.isAdmin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS
   const location = useLocation()
+  const navigate = useNavigate()
 
   // Hide on full-screen pages
   const hide = ['/', '/login', '/register'].includes(location.pathname)
@@ -31,15 +34,26 @@ export default function BottomNav() {
       <div className="flex items-stretch h-16">
         {items.map(({ to, emoji, label }) => {
           const active = location.pathname === to || location.pathname.startsWith(to + '/')
+          const isLearn = to === '/learn-priority'
           const showBadge = to === '/play' && hasAnyNew && user
+          const showCategoryBadge = isLearn && hasAnyNewCategory && user
           const showReportBadge = to === '/admin' && unsolvedCount > 0
           const isProfileItem = to === '/profile'
           const rankNumber = user?.rank?.rankNumber ?? 1
+          const handleLearnClick = isLearn && hasAnyNewCategory && user
+            ? (e) => {
+                e.preventDefault()
+                const target = firstNewCategory
+                markAllCategoriesSeen()
+                navigate('/learn-priority', target ? { state: { category: target } } : undefined)
+              }
+            : undefined
           return (
             <NavLink
               key={to}
-              data-nav={to === '/play' ? 'play' : undefined}
+              data-nav={to === '/play' ? 'play' : isLearn ? 'learn' : undefined}
               to={user || to === '/home' || to === '/rankings' ? to : '/login'}
+              onClick={handleLearnClick}
               className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors
                 ${active
                   ? 'text-brand-600'
@@ -56,6 +70,9 @@ export default function BottomNav() {
                 }
                 {showBadge && (
                   <span className="nav-new-badge" aria-label="New game unlocked" />
+                )}
+                {showCategoryBadge && (
+                  <span className="nav-new-badge" aria-label="New category unlocked" />
                 )}
                 {showReportBadge && (
                   <span className="nav-new-badge" aria-label={`${unsolvedCount} unsolved report${unsolvedCount !== 1 ? 's' : ''}`} />

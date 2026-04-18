@@ -283,6 +283,39 @@ router.patch('/me/game-unlocks/:key/seen', protect, async (req, res) => {
   }
 });
 
+// PATCH /api/users/me/category-unlocks/:category/seen — marks one category badge as seen
+router.patch('/me/category-unlocks/:category/seen', protect, async (req, res) => {
+  try {
+    const { category } = req.params;
+    if (!category || category.includes('.')) return res.status(400).json({ message: 'Invalid category' });
+    await User.findByIdAndUpdate(req.user._id, { [`categoryUnlocks.${category}.badgeSeen`]: true });
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/users/me/category-unlocks/seen-all — marks every unseen category badge as seen.
+// Used by the Learn nav button which dismisses ALL pending category badges in one click.
+router.patch('/me/category-unlocks/seen-all', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('categoryUnlocks');
+    if (!user?.categoryUnlocks) return res.json({ status: 'success' });
+    const setOps = {};
+    for (const [cat, entry] of user.categoryUnlocks.entries()) {
+      if (entry?.unlockedAt && !entry.badgeSeen && !cat.includes('.')) {
+        setOps[`categoryUnlocks.${cat}.badgeSeen`] = true;
+      }
+    }
+    if (Object.keys(setOps).length) {
+      await User.findByIdAndUpdate(req.user._id, { $set: setOps });
+    }
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // DELETE /api/users/me/game-unlocks/:key/unlock — revokes a game unlock (e.g. after history reset)
 router.delete('/me/game-unlocks/:key/unlock', protect, async (req, res) => {
   try {

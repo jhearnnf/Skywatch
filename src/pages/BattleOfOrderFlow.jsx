@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { playSound } from '../utils/sound'
 import SEO from '../components/SEO'
 
@@ -511,6 +512,7 @@ export default function BattleOfOrderFlow() {
   const { briefId }              = useParams()
   const navigate                 = useNavigate()
   const { user, API, apiFetch, awardAirstars, refreshUser } = useAuth()
+  const { applyUnlocks: applyCategoryUnlocks } = useNewCategoryUnlock()
 
   // 'loading' | 'roulette' | 'generating' | 'game' | 'results' | 'unavailable'
   const [screen, setScreen]          = useState('loading')
@@ -680,12 +682,14 @@ export default function BattleOfOrderFlow() {
 
       if (earned > 0 && awardAirstars) {
         awardAirstars(earned, 'Battle of Order', {
-          cycleAfter:    data.data?.cycleAirstars  ?? undefined,
-          totalAfter:    data.data?.totalAirstars  ?? undefined,
-          rankPromotion: data.data?.rankPromotion  ?? null,
+          cycleAfter:         data.data?.cycleAirstars  ?? undefined,
+          totalAfter:         data.data?.totalAirstars  ?? undefined,
+          rankPromotion:      data.data?.rankPromotion  ?? null,
+          unlockedCategories: data.data?.unlockedCategories ?? [],
         })
         awarded = true
       }
+      if (data.data?.categoryUnlocksGranted?.length) applyCategoryUnlocks(data.data.categoryUnlocksGranted)
 
       setScreen('results')
     } catch (err) {

@@ -2,10 +2,12 @@ import { motion } from 'framer-motion'
 import RankBadge from './RankBadge'
 import BaseNotification from './BaseNotification'
 
+// Large-tier motion: enters from above (matching Airstar/LevelUp direction) with
+// the bounciest spring of the four — reserved for the rare/big moments.
 const MOTION_PROPS = {
-  initial:    { opacity: 0, scale: 0.7,  y: 40  },
+  initial:    { opacity: 0, scale: 0.7,  y: -60 },
   animate:    { opacity: 1, scale: 1,    y: 0   },
-  exit:       { opacity: 0, scale: 0.85, y: -40 },
+  exit:       { opacity: 0, scale: 0.85, y: -50 },
   transition: { type: 'spring', damping: 14, stiffness: 220 },
 }
 

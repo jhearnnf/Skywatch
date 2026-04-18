@@ -1,7 +1,9 @@
-const User       = require('../models/User');
-const AirstarLog = require('../models/AirstarLog');
-const Rank       = require('../models/Rank');
-const Level      = require('../models/Level');
+const User        = require('../models/User');
+const AirstarLog  = require('../models/AirstarLog');
+const Rank        = require('../models/Rank');
+const Level       = require('../models/Level');
+const AppSettings = require('../models/AppSettings');
+const { buildCumulativeThresholds, getPathwayAccessibleCategories } = require('./subscription');
 
 // Deprecated — use getCycleThreshold() for the live value from Level docs.
 const CYCLE_THRESHOLD = 14700;
@@ -27,8 +29,10 @@ async function getCycleThreshold() {
  *   - rank promotion each time cycleAirstars crosses CYCLE_THRESHOLD
  *   - handles large awards that cross the threshold multiple times
  *
- * Returns { totalAirstars, cycleAirstars, rankPromotion }
+ * Returns { totalAirstars, cycleAirstars, rankPromotion, unlockedCategories, categoryUnlocksGranted }
  *   rankPromotion: null | { from: RankDoc|null, to: RankDoc } (the final promotion)
+ *   unlockedCategories: string[] of category names newly accessible after this award
+ *   categoryUnlocksGranted: [{ category, unlockedAt, badgeSeen }] persisted to user.categoryUnlocks
  */
 async function awardCoins(userId, amount, reason, label, briefId = null) {
   // Atomic increment first — this cannot be lost to a concurrent awardCoins call.
@@ -103,7 +107,54 @@ async function awardCoins(userId, amount, reason, label, briefId = null) {
 
   AirstarLog.create({ userId, amount, reason, label, briefId }).catch(() => {});
 
-  return { totalAirstars: newTotal, cycleAirstars: finalCycle, rankPromotion };
+  // ── Pathway category unlock diff ─────────────────────────────────────────
+  // Compare the categories accessible to the user BEFORE and AFTER this award.
+  // Anything newly accessible is persisted to user.categoryUnlocks so the Learn
+  // nav badge can flag it cross-device, and returned for the client to queue a
+  // category-unlock notification at the tail of the notif queue.
+  let unlockedCategories     = [];
+  let categoryUnlocksGranted = [];
+  try {
+    const settings   = await AppSettings.getSettings();
+    const levelsList = await Level.find().sort({ levelNumber: 1 }).lean();
+    const thresholds = buildCumulativeThresholds(levelsList);
+
+    const startingRankNum = startingRankDoc?.rankNumber ?? 0;
+    const finalRankDoc    = rankPromotion?.to ?? startingRankDoc;
+    const finalRankNum    = finalRankDoc?.rankNumber ?? startingRankNum;
+
+    const beforeUser = { totalAirstars: newTotal - amount, rank: { rankNumber: startingRankNum } };
+    const afterUser  = { totalAirstars: newTotal,          rank: { rankNumber: finalRankNum    } };
+
+    const beforeCategories = getPathwayAccessibleCategories(beforeUser, settings, thresholds) ?? [];
+    const afterCategories  = getPathwayAccessibleCategories(afterUser,  settings, thresholds) ?? [];
+
+    unlockedCategories = afterCategories.filter(c => !beforeCategories.includes(c));
+
+    if (unlockedCategories.length) {
+      const now    = new Date();
+      const setOps = {};
+      for (const cat of unlockedCategories) {
+        // Skip category names containing dots — Mongo path syntax can't address them safely.
+        if (cat.includes('.')) continue;
+        setOps[`categoryUnlocks.${cat}`] = { unlockedAt: now, badgeSeen: false };
+        categoryUnlocksGranted.push({ category: cat, unlockedAt: now, badgeSeen: false });
+      }
+      if (Object.keys(setOps).length) {
+        await User.findByIdAndUpdate(userId, { $set: setOps });
+      }
+    }
+  } catch (_) {
+    // Diff is best-effort — never fail the award itself if settings/levels load fails.
+  }
+
+  return {
+    totalAirstars: newTotal,
+    cycleAirstars: finalCycle,
+    rankPromotion,
+    unlockedCategories,
+    categoryUnlocksGranted,
+  };
 }
 
 module.exports = { awardCoins, getCycleThreshold, CYCLE_THRESHOLD };

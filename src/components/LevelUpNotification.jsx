@@ -1,6 +1,9 @@
 import { motion } from 'framer-motion'
 import BaseNotification from './BaseNotification'
 
+// Medium-tier motion: slightly bouncier than Airstar, less than RankPromotion.
+// All notifs share the same direction (in/out from above) so a chained queue
+// reads as one consistent reward sequence.
 const MOTION_PROPS = {
   initial:    { opacity: 0, y: -80, scale: 0.85 },
   animate:    { opacity: 1, y: 0,   scale: 1    },

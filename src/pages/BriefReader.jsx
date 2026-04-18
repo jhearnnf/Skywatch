@@ -9,6 +9,7 @@ import MissionDetectedModal from '../components/MissionDetectedModal'
 import { requiredTier } from '../utils/subscription'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
+import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { playSound, stopAllSounds, playGridRevealTone } from '../utils/sound'
 import RafBasesMap from '../components/RafBasesMap'
 import { buildImageZones } from '../utils/briefImageZones'
@@ -989,11 +990,13 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
           const total = (d.airstarsEarned ?? 0) + (d.dailyCoinsEarned ?? 0)
           if (total > 0) {
             awardAirstars(total, d.dailyCoinsEarned > 0 ? 'Daily Brief' : 'Brief read', {
-              cycleAfter:    d.newCycleAirstars,
-              totalAfter:    d.newTotalAirstars,
-              rankPromotion: d.rankPromotion ?? null,
+              cycleAfter:         d.newCycleAirstars,
+              totalAfter:         d.newTotalAirstars,
+              rankPromotion:      d.rankPromotion ?? null,
+              unlockedCategories: d.unlockedCategories ?? [],
             })
           }
+          if (d.categoryUnlocksGranted?.length) applyCategoryUnlocks(d.categoryUnlocksGranted)
         }
       } catch { /* ignore */ }
     }
@@ -1339,6 +1342,7 @@ export default function BriefReader() {
   useEffect(() => { startRef.current = start }, [start])
   const { settings }            = useAppSettings()
   const { applyUnlocks }        = useNewGameUnlock()
+  const { applyUnlocks: applyCategoryUnlocks } = useNewCategoryUnlock()
   const [brief, setBrief]         = useState(null)
   const [loading, setLoading]   = useState(true)
   const [locked, setLocked]     = useState(false)
@@ -1548,9 +1552,10 @@ export default function BriefReader() {
       const totalEarned = briefCoins + dailyCoins
       if (totalEarned > 0) {
         awardAirstars(totalEarned, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
-          cycleAfter:    d.newCycleAirstars,
-          totalAfter:    d.newTotalAirstars,
-          rankPromotion: d.rankPromotion ?? null,
+          cycleAfter:         d.newCycleAirstars,
+          totalAfter:         d.newTotalAirstars,
+          rankPromotion:      d.rankPromotion ?? null,
+          unlockedCategories: d.unlockedCategories ?? [],
         })
       }
       if (d.loginStreak !== undefined) {
@@ -1561,6 +1566,7 @@ export default function BriefReader() {
         } : u)
       }
       if (d.gameUnlocksGranted?.length) applyUnlocks(d.gameUnlocksGranted)
+      if (d.categoryUnlocksGranted?.length) applyCategoryUnlocks(d.categoryUnlocksGranted)
     } catch { /* malformed — skip */ }
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1580,11 +1586,13 @@ export default function BriefReader() {
         const total = briefCoins + dailyCoins
         if (total > 0) {
           awardAirstars(total, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
-            cycleAfter:    data.data.newCycleAirstars,
-            totalAfter:    data.data.newTotalAirstars,
-            rankPromotion: data.data.rankPromotion ?? null,
+            cycleAfter:         data.data.newCycleAirstars,
+            totalAfter:         data.data.newTotalAirstars,
+            rankPromotion:      data.data.rankPromotion ?? null,
+            unlockedCategories: data.data.unlockedCategories ?? [],
           })
         }
+        if (data.data.categoryUnlocksGranted?.length) applyCategoryUnlocks(data.data.categoryUnlocksGranted)
         setDone(true)
       })
       .catch(() => {})
@@ -1798,9 +1806,10 @@ export default function BriefReader() {
             const totalEarned = briefCoins + dailyCoins
             if (totalEarned > 0) {
               awardAirstars(totalEarned, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
-                cycleAfter:    data.data.newCycleAirstars,
-                totalAfter:    data.data.newTotalAirstars,
-                rankPromotion: data.data.rankPromotion ?? null,
+                cycleAfter:         data.data.newCycleAirstars,
+                totalAfter:         data.data.newTotalAirstars,
+                rankPromotion:      data.data.rankPromotion ?? null,
+                unlockedCategories: data.data.unlockedCategories ?? [],
               })
             }
             if (data?.data?.loginStreak !== undefined) {
@@ -1811,6 +1820,7 @@ export default function BriefReader() {
               } : u)
             }
             if (data?.data?.gameUnlocksGranted?.length) applyUnlocks(data.data.gameUnlocksGranted)
+            if (data?.data?.categoryUnlocksGranted?.length) applyCategoryUnlocks(data.data.categoryUnlocksGranted)
           })
           .then(() => {
             // Spawn-check for Where's That Aircraft (Aircrafts category only)

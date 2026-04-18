@@ -23,6 +23,7 @@ const ACTION_TYPES = [
   'change_beta_settings',
   'update_economy_levels',
   'update_economy_apply',
+  'reset_category_badges',
 ];
 
 const adminActionSchema = new mongoose.Schema({

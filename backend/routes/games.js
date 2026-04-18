@@ -415,7 +415,7 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
       console.error('[quiz/finish] BOO unlock detection failed:', booErr);
     }
 
-    res.json({ status: 'success', data: { attempt, won, airstarsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAirstars: attempt.cycleAirstars ?? null, totalAirstars: coinResult?.totalAirstars ?? null, gameUnlocksGranted } });
+    res.json({ status: 'success', data: { attempt, won, airstarsEarned, breakdown, isFirstAttempt: attempt.isFirstAttempt, rankPromotion: attempt.rankPromotion ?? null, cycleAirstars: attempt.cycleAirstars ?? null, totalAirstars: coinResult?.totalAirstars ?? null, gameUnlocksGranted, unlockedCategories: coinResult?.unlockedCategories ?? [], categoryUnlocksGranted: coinResult?.categoryUnlocksGranted ?? [] } });
   } catch (err) {
     // Log unexpected /finish failures so admin can spot missing-award reports.
     SystemLog.create({
@@ -1196,6 +1196,8 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
     let rankPromotion     = null;
     let cycleAirstars     = null;
     let totalAirstars     = null;
+    let unlockedCategories     = [];
+    let categoryUnlocksGranted = [];
 
     if (won) {
       // Only award coins on first win for this brief + orderType + difficulty combination
@@ -1219,9 +1221,11 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
         const brief      = await IntelligenceBrief.findById(game.anchorBriefId).select('title').lean();
         const coinResult = await awardCoins(req.user._id, airstarsEarned, 'battle_of_order',
           `Battle of Order - Mini Game (${game.difficulty}): ${brief?.title ?? 'Unknown'} — ${game.orderType}`, game.anchorBriefId);
-        rankPromotion = coinResult.rankPromotion;
-        cycleAirstars = coinResult.cycleAirstars;
-        totalAirstars = coinResult.totalAirstars;
+        rankPromotion          = coinResult.rankPromotion;
+        cycleAirstars          = coinResult.cycleAirstars;
+        totalAirstars          = coinResult.totalAirstars;
+        unlockedCategories     = coinResult.unlockedCategories     ?? [];
+        categoryUnlocksGranted = coinResult.categoryUnlocksGranted ?? [];
       }
     }
 
@@ -1241,7 +1245,7 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
         displayValue:  getDisplayValue(game.orderType, c.briefId?.gameData),
       }));
 
-    res.json({ status: 'success', data: { won, airstarsEarned, rankPromotion, cycleAirstars, totalAirstars, correctReveal, alreadyCompleted: won && airstarsEarned === 0 } });
+    res.json({ status: 'success', data: { won, airstarsEarned, rankPromotion, cycleAirstars, totalAirstars, correctReveal, alreadyCompleted: won && airstarsEarned === 0, unlockedCategories, categoryUnlocksGranted } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1275,14 +1279,18 @@ router.post('/wheres-that-aircraft/result', protect, async (req, res) => {
     let rankPromotion = null;
     let cycleAirstars = null;
     let totalAirstars = null;
+    let unlockedCategories     = [];
+    let categoryUnlocksGranted = [];
     if (airstarsEarned > 0) {
       const coinResult = await awardCoins(req.user._id, airstarsEarned, 'wheres_that_aircraft', "Where's That Aircraft — correct identification");
-      rankPromotion = coinResult.rankPromotion;
-      cycleAirstars = coinResult.cycleAirstars;
-      totalAirstars = coinResult.totalAirstars;
+      rankPromotion          = coinResult.rankPromotion;
+      cycleAirstars          = coinResult.cycleAirstars;
+      totalAirstars          = coinResult.totalAirstars;
+      unlockedCategories     = coinResult.unlockedCategories     ?? [];
+      categoryUnlocksGranted = coinResult.categoryUnlocksGranted ?? [];
     }
 
-    res.status(201).json({ status: 'success', data: { result, rankPromotion, cycleAirstars, totalAirstars, airstarsEarned } });
+    res.status(201).json({ status: 'success', data: { result, rankPromotion, cycleAirstars, totalAirstars, airstarsEarned, unlockedCategories, categoryUnlocksGranted } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1444,9 +1452,11 @@ router.post('/flashcard-recall/result', protect, async (req, res) => {
       status: 'success',
       data: {
         result,
-        rankPromotion:  coinResult.rankPromotion,
-        cycleAirstars:  coinResult.cycleAirstars,
-        totalAirstars:  coinResult.totalAirstars,
+        rankPromotion:          coinResult.rankPromotion,
+        cycleAirstars:          coinResult.cycleAirstars,
+        totalAirstars:          coinResult.totalAirstars,
+        unlockedCategories:     coinResult.unlockedCategories     ?? [],
+        categoryUnlocksGranted: coinResult.categoryUnlocksGranted ?? [],
       },
     });
   } catch (err) {
@@ -1714,18 +1724,22 @@ router.post('/wheres-aircraft/submit', protect, async (req, res) => {
     let rankPromotion = null;
     let cycleAirstars = null;
     let totalAirstars = null;
+    let unlockedCategories     = [];
+    let categoryUnlocksGranted = [];
     if (airstarsEarned > 0) {
       const coinResult = await awardCoins(
         req.user._id, airstarsEarned, 'wheres_aircraft',
         `Where's That Aircraft — ${won ? 'full completion' : 'partial'}`,
         aircraftBriefId
       );
-      rankPromotion = coinResult.rankPromotion;
-      cycleAirstars = coinResult.cycleAirstars;
-      totalAirstars = coinResult.totalAirstars;
+      rankPromotion          = coinResult.rankPromotion;
+      cycleAirstars          = coinResult.cycleAirstars;
+      totalAirstars          = coinResult.totalAirstars;
+      unlockedCategories     = coinResult.unlockedCategories     ?? [];
+      categoryUnlocksGranted = coinResult.categoryUnlocksGranted ?? [];
     }
 
-    res.status(201).json({ status: 'success', data: { won, airstarsEarned, rankPromotion, cycleAirstars, totalAirstars } });
+    res.status(201).json({ status: 'success', data: { won, airstarsEarned, rankPromotion, cycleAirstars, totalAirstars, unlockedCategories, categoryUnlocksGranted } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

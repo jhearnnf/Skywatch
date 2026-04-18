@@ -952,6 +952,10 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
       userUpdates.cycleAirstars = 0;
       userUpdates.rank = acRank?._id ?? null;
       ops.push(AirstarLog.deleteMany({ userId: req.params.id }));
+      // Wipe pathway category badge state — losing airstars/rank means the user
+      // may lose access to categories they previously unlocked, and we don't
+      // want stale "NEW" badges left behind. Future awards will re-fire diffs.
+      ops.push(User.findByIdAndUpdate(req.params.id, { $unset: { categoryUnlocks: '' } }));
     }
     if (fields.includes('gameHistory')) {
       userUpdates.gameTypesSeen = [];
@@ -975,6 +979,9 @@ router.post('/users/:id/reset-stats', requireReason, async (req, res) => {
     if (fields.includes('gameBadges')) {
       ops.push(User.findByIdAndUpdate(req.params.id, { $unset: { gameUnlocks: '' } }));
     }
+    if (fields.includes('categoryBadges')) {
+      ops.push(User.findByIdAndUpdate(req.params.id, { $unset: { categoryUnlocks: '' } }));
+    }
 
     if (Object.keys(userUpdates).length) ops.push(User.findByIdAndUpdate(req.params.id, userUpdates));
     await Promise.all(ops);
@@ -996,6 +1003,17 @@ router.post('/users/:id/reset-game-badges', requireReason, async (req, res) => {
   }
 });
 
+// POST /api/admin/users/:id/reset-category-badges
+router.post('/users/:id/reset-category-badges', requireReason, async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.params.id, { $unset: { categoryUnlocks: '' } });
+    await AdminAction.create({ userId: req.user._id, actionType: 'reset_category_badges', reason: req.body.reason, targetUserId: req.params.id });
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/admin/award-coins — award test airstars to the admin's own account
 router.post('/award-coins', async (req, res) => {
   try {
@@ -1006,7 +1024,7 @@ router.post('/award-coins', async (req, res) => {
     const result = await awardCoins(req.user._id, parsed, 'admin', 'Test Airstars');
 
     await AdminAction.create({ userId: req.user._id, actionType: 'award_test_coins', reason: `Awarded ${parsed} test airstars to self` });
-    res.json({ status: 'success', awarded: parsed, totalAirstars: result.totalAirstars, cycleAirstars: result.cycleAirstars, rankPromotion: result.rankPromotion });
+    res.json({ status: 'success', awarded: parsed, totalAirstars: result.totalAirstars, cycleAirstars: result.cycleAirstars, rankPromotion: result.rankPromotion, unlockedCategories: result.unlockedCategories ?? [], categoryUnlocksGranted: result.categoryUnlocksGranted ?? [] });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1025,7 +1043,7 @@ router.post('/users/:id/award-coins', requireReason, async (req, res) => {
     const result = await awardCoins(target._id, parsed, 'admin', reason || 'Admin Award');
 
     await AdminAction.create({ userId: req.user._id, actionType: 'award_coins_to_user', reason: `Awarded ${parsed} coins to Agent ${target.agentNumber}: ${reason}`, targetUserId: target._id });
-    res.json({ status: 'success', awarded: parsed, totalAirstars: result.totalAirstars, cycleAirstars: result.cycleAirstars, rankPromotion: result.rankPromotion });
+    res.json({ status: 'success', awarded: parsed, totalAirstars: result.totalAirstars, cycleAirstars: result.cycleAirstars, rankPromotion: result.rankPromotion, unlockedCategories: result.unlockedCategories ?? [], categoryUnlocksGranted: result.categoryUnlocksGranted ?? [] });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -361,10 +361,12 @@ router.post('/:briefId/award', protect, async (req, res) => {
 
     return res.json({
       data: {
-        awarded:        amount,
-        totalAirstars:  result.totalAirstars,
-        cycleAirstars:  result.cycleAirstars,
-        rankPromotion:  result.rankPromotion ?? null,
+        awarded:                amount,
+        totalAirstars:          result.totalAirstars,
+        cycleAirstars:          result.cycleAirstars,
+        rankPromotion:          result.rankPromotion ?? null,
+        unlockedCategories:     result.unlockedCategories     ?? [],
+        categoryUnlocksGranted: result.categoryUnlocksGranted ?? [],
       },
     });
   } catch (err) {

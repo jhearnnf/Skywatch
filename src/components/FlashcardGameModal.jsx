@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
+import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { playSound } from '../utils/sound'
 
 const COUNT_OPTIONS = [5, 10, 15, 20]
@@ -103,6 +104,7 @@ function TitleSearch({ allTitles, onSelect, disabled }) {
 export default function FlashcardGameModal({ onClose }) {
   const { user, API, apiFetch, awardAirstars, refreshUser } = useAuth()
   const { markSeen } = useNewGameUnlock()
+  const { applyUnlocks: applyCategoryUnlocks } = useNewCategoryUnlock()
 
   // screen: 'pick' | 'game' | 'result'
   const [screen,        setScreen]        = useState('pick')
@@ -285,10 +287,12 @@ export default function FlashcardGameModal({ onClose }) {
       const cycleAfter    = data?.data?.cycleAirstars  ?? null
       const totalAfter    = data?.data?.totalAirstars  ?? undefined
 
+      const unlockedCategories = data?.data?.unlockedCategories ?? []
       if (earned > 0 && awardAirstars) {
-        awardAirstars(earned, 'Flashcard Recall', { cycleAfter, totalAfter, rankPromotion })
+        awardAirstars(earned, 'Flashcard Recall', { cycleAfter, totalAfter, rankPromotion, unlockedCategories })
         awarded = true
       }
+      if (data?.data?.categoryUnlocksGranted?.length) applyCategoryUnlocks(data.data.categoryUnlocksGranted)
     } catch (err) {
       console.error('[flashcard finish] failed:', err)
     }

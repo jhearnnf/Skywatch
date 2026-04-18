@@ -144,6 +144,7 @@ function fetchSettings() {
         volumeAirstar: 100,          soundEnabledAirstar: true,
         volumeLevelUp: 100,          soundEnabledLevelUp: true,
         volumeRankPromotion: 100,    soundEnabledRankPromotion: true,
+        volumeCategoryUnlocked: 100, soundEnabledCategoryUnlocked: true,
         volumeFirstBriefComplete: 100, soundEnabledFirstBriefComplete: true,
         volumeQuizCompleteWin: 100,  soundEnabledQuizCompleteWin: true,
         volumeQuizCompleteLose: 100, soundEnabledQuizCompleteLose: true,
@@ -341,6 +342,10 @@ export function playSound(name, { onAudio } = {}) {
         file       = 'rank_promotion.mp3'
         volumeKey  = 'volumeRankPromotion'
         enabledKey = 'soundEnabledRankPromotion'
+      } else if (name === 'category_unlocked') {
+        file       = 'category_unlocked.mp3'
+        volumeKey  = 'volumeCategoryUnlocked'
+        enabledKey = 'soundEnabledCategoryUnlocked'
       } else if (name === 'quiz_complete_win') {
         file       = 'quiz_complete_win.mp3'
         volumeKey  = 'volumeQuizCompleteWin'

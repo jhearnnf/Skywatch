@@ -643,6 +643,8 @@ router.post('/:id/complete', protect, async (req, res) => {
     let newCycleAirstars;
     let rankPromotion    = null;
     let updatedLoginStreak = req.user.loginStreak ?? 0;
+    let unlockedCategories     = [];
+    let categoryUnlocksGranted = [];
 
     if (!readRecord.coinsAwarded) {
       // ── Brief-read coins (first completion only) ──────────────────────
@@ -654,6 +656,10 @@ router.post('/:id/complete', protect, async (req, res) => {
       newTotalAirstars = briefResult.totalAirstars;
       newCycleAirstars = briefResult.cycleAirstars;
       if (briefResult.rankPromotion) rankPromotion = briefResult.rankPromotion;
+      if (briefResult.unlockedCategories?.length) {
+        unlockedCategories.push(...briefResult.unlockedCategories);
+        categoryUnlocksGranted.push(...(briefResult.categoryUnlocksGranted ?? []));
+      }
 
       // ── Daily streak reward (first completion of the calendar day) ────
       const todayStr  = new Date().toDateString();
@@ -677,6 +683,16 @@ router.post('/:id/complete', protect, async (req, res) => {
         newTotalAirstars    = dailyResult.totalAirstars;
         newCycleAirstars    = dailyResult.cycleAirstars;
         if (dailyResult.rankPromotion) rankPromotion = dailyResult.rankPromotion;
+        if (dailyResult.unlockedCategories?.length) {
+          for (const cat of dailyResult.unlockedCategories) {
+            if (!unlockedCategories.includes(cat)) unlockedCategories.push(cat);
+          }
+          for (const entry of dailyResult.categoryUnlocksGranted ?? []) {
+            if (!categoryUnlocksGranted.find(e => e.category === entry.category)) {
+              categoryUnlocksGranted.push(entry);
+            }
+          }
+        }
         updatedLoginStreak  = newStreak;
         await User.findByIdAndUpdate(req.user._id, {
           loginStreak: newStreak,
@@ -733,6 +749,8 @@ router.post('/:id/complete', protect, async (req, res) => {
         newCycleAirstars,
         rankPromotion,
         gameUnlocksGranted,
+        unlockedCategories,
+        categoryUnlocksGranted,
       },
     });
   } catch (err) {

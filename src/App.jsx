@@ -14,11 +14,13 @@ import { AuthProvider, useAuth }          from './context/AuthContext'
 import { AppSettingsProvider }             from './context/AppSettingsContext'
 import { AppTutorialProvider }             from './context/AppTutorialContext'
 import { NewGameUnlockProvider }           from './context/NewGameUnlockContext'
+import { NewCategoryUnlockProvider }       from './context/NewCategoryUnlockContext'
 import { UnsolvedReportsProvider }          from './context/UnsolvedReportsContext'
 import AppShell                            from './components/layout/AppShell'
 import AirstarNotification                 from './components/AirstarNotification'
 import LevelUpNotification                 from './components/LevelUpNotification'
 import RankPromotionNotification           from './components/RankPromotionNotification'
+import CategoryUnlockNotification          from './components/CategoryUnlockNotification'
 import { captureLoginReturn, resolveLoginDest } from './utils/loginRedirect'
 
 // v2 pages
@@ -85,6 +87,7 @@ function NotifLayer() {
     if (current.type === 'airstar')       playSound('airstar')
     else if (current.type === 'levelup')  playSound('level_up')
     else if (current.type === 'rankpromotion') playSound('rank_promotion')
+    else if (current.type === 'categoryUnlock') playSound('category_unlocked')
   }, [current])
 
   if (!current) return null
@@ -97,6 +100,9 @@ function NotifLayer() {
   }
   if (current.type === 'rankpromotion') {
     return <RankPromotionNotification key={current.id} rank={current.rank} onDone={shiftNotif} />
+  }
+  if (current.type === 'categoryUnlock') {
+    return <CategoryUnlockNotification key={current.id} categories={current.categories} onDone={shiftNotif} />
   }
   return null
 }
@@ -310,11 +316,13 @@ export default function App() {
         <AppSettingsProvider>
           <AppTutorialProvider>
             <NewGameUnlockProvider>
+             <NewCategoryUnlockProvider>
               <UnsolvedReportsProvider>
                 <AppRoutes />
                 <NotifLayer />
                 <ReportNotifBanner />
               </UnsolvedReportsProvider>
+             </NewCategoryUnlockProvider>
             </NewGameUnlockProvider>
           </AppTutorialProvider>
         </AppSettingsProvider>

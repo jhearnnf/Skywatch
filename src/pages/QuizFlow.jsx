@@ -11,6 +11,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { playSound } from '../utils/sound'
 import SEO from '../components/SEO'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
+import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 
 // ── Related briefs strip ─────────────────────────────────────────────────
 function RelatedBriefs({ brief, navigate }) {
@@ -356,6 +357,7 @@ export default function QuizFlow() {
   const navigate         = useNavigate()
   const { user, API, apiFetch, awardAirstars, refreshUser } = useAuth()
   const { applyUnlocks } = useNewGameUnlock()
+  const { applyUnlocks: applyCategoryUnlocks } = useNewCategoryUnlock()
   const { start }        = useAppTutorial()
 
   const { settings, levelThresholds } = useAppSettings()
@@ -616,15 +618,19 @@ export default function QuizFlow() {
             setXP(earned)
             if (awardAirstars) {
               awardAirstars(earned, 'Quiz complete', {
-                cycleAfter:    data.data?.cycleAirstars,
-                totalAfter:    data.data?.totalAirstars,
-                rankPromotion: data.data?.rankPromotion ?? null,
+                cycleAfter:         data.data?.cycleAirstars,
+                totalAfter:         data.data?.totalAirstars,
+                rankPromotion:      data.data?.rankPromotion ?? null,
+                unlockedCategories: data.data?.unlockedCategories ?? [],
               })
               awarded = true
             }
           }
           if (data.data?.gameUnlocksGranted?.length) {
             applyUnlocks(data.data.gameUnlocksGranted)
+          }
+          if (data.data?.categoryUnlocksGranted?.length) {
+            applyCategoryUnlocks(data.data.categoryUnlocksGranted)
           }
         }
       } catch (err) {
