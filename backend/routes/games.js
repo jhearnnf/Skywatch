@@ -2289,18 +2289,21 @@ async function cbatPersonalBest(req, res, gameKey) {
   if (!cfg) return res.status(400).json({ message: 'Unknown game' });
 
   try {
-    const result = await cfg.Model.aggregate([
-      { $match: { userId: req.user._id } },
-      {
-        $group: {
-          _id: null,
-          bestScore: { [cfg.bestOp]: `$${cfg.primaryField}` },
-          bestTime: { $min: '$totalTime' },
-          attempts: { $sum: 1 },
-        },
+    const [best] = await cfg.Model.find({ userId: req.user._id })
+      .sort({ [cfg.primaryField]: cfg.sortDir, totalTime: 1 })
+      .limit(1)
+      .lean();
+    if (!best) return res.json({ status: 'success', data: null });
+
+    const attempts = await cfg.Model.countDocuments({ userId: req.user._id });
+    res.json({
+      status: 'success',
+      data: {
+        bestScore: best[cfg.primaryField],
+        bestTime: best.totalTime,
+        attempts,
       },
-    ]);
-    res.json({ status: 'success', data: result[0] || null });
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

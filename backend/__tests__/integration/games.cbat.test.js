@@ -384,6 +384,23 @@ describe('CBAT Symbols', () => {
       expect(res.body.data.bestTime).toBe(38);
       expect(res.body.data.attempts).toBe(2);
     });
+
+    it('returns the time from the best-score session, not the fastest overall time', async () => {
+      // Fast but low-score run
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ correctCount: 10, tier1Correct: 5, tier2Correct: 3, tier3Correct: 2, totalTime: 20, grade: 'Needs Work' });
+      // Slower but top-score run — this is the true personal best
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ correctCount: 15, tier1Correct: 5, tier2Correct: 5, tier3Correct: 5, totalTime: 40, grade: 'Outstanding' });
+
+      const res = await request(app)
+        .get(PB_URL)
+        .set('Cookie', cookie);
+
+      expect(res.body.data.bestScore).toBe(15);
+      expect(res.body.data.bestTime).toBe(40);
+      expect(res.body.data.attempts).toBe(2);
+    });
   });
 
   describe('GET /leaderboard', () => {
