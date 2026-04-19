@@ -45,6 +45,7 @@ const GAME_CONFIG = {
     lowerIsBetter: false,
     formatScore: (s) => `${s}`,
     backPath: '/cbat/target',
+    hideTime: true,
   },
 }
 
@@ -117,11 +118,11 @@ export default function CbatLeaderboard() {
           ) : (
             <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">
               {/* Table header */}
-              <div className="grid grid-cols-[3rem_1fr_5rem_4.5rem] gap-2 px-4 py-2.5 bg-[#060e1a] border-b border-[#1a3a5c] text-[10px] text-slate-500 uppercase tracking-wide font-bold">
+              <div className={`grid ${cfg.hideTime ? 'grid-cols-[3rem_1fr_5rem]' : 'grid-cols-[3rem_1fr_5rem_4.5rem]'} gap-2 px-4 py-2.5 bg-[#060e1a] border-b border-[#1a3a5c] text-[10px] text-slate-500 uppercase tracking-wide font-bold`}>
                 <span>Rank</span>
                 <span>Agent</span>
                 <span className="text-right">{cfg.scoreLabel}</span>
-                <span className="text-right">Time</span>
+                {!cfg.hideTime && <span className="text-right">Time</span>}
               </div>
 
               {/* Rows */}
@@ -131,7 +132,7 @@ export default function CbatLeaderboard() {
                   return (
                     <div
                       key={entry._id}
-                      className={`grid grid-cols-[3rem_1fr_5rem_4.5rem] gap-2 px-4 py-2.5 text-sm ${
+                      className={`grid ${cfg.hideTime ? 'grid-cols-[3rem_1fr_5rem]' : 'grid-cols-[3rem_1fr_5rem_4.5rem]'} gap-2 px-4 py-2.5 text-sm ${
                         isMe ? 'bg-brand-600/10 border-l-2 border-l-brand-400' : ''
                       }`}
                     >
@@ -144,9 +145,11 @@ export default function CbatLeaderboard() {
                       <span className="text-right font-mono font-bold text-brand-600">
                         {cfg.formatScore(entry.bestScore)}
                       </span>
-                      <span className="text-right font-mono text-slate-400">
-                        {entry.bestTime.toFixed(1)}s
-                      </span>
+                      {!cfg.hideTime && (
+                        <span className="text-right font-mono text-slate-400">
+                          {entry.bestTime.toFixed(1)}s
+                        </span>
+                      )}
                     </div>
                   )
                 })}
@@ -156,15 +159,17 @@ export default function CbatLeaderboard() {
               {myBestOutsideTop && (
                 <>
                   <div className="px-4 py-1 text-center text-[10px] text-slate-500">···</div>
-                  <div className="grid grid-cols-[3rem_1fr_5rem_4.5rem] gap-2 px-4 py-2.5 text-sm bg-brand-600/10 border-l-2 border-l-brand-400 border-t border-[#1a3a5c]">
+                  <div className={`grid ${cfg.hideTime ? 'grid-cols-[3rem_1fr_5rem]' : 'grid-cols-[3rem_1fr_5rem_4.5rem]'} gap-2 px-4 py-2.5 text-sm bg-brand-600/10 border-l-2 border-l-brand-400 border-t border-[#1a3a5c]`}>
                     <span className="font-mono font-bold text-slate-400">#{myBest.rank}</span>
                     <span className="truncate text-brand-600 font-bold">Agent {myBest.agentNumber || '???'} (you)</span>
                     <span className="text-right font-mono font-bold text-brand-600">
                       {cfg.formatScore(myBest.bestScore)}
                     </span>
-                    <span className="text-right font-mono text-slate-400">
-                      {myBest.bestTime.toFixed(1)}s
-                    </span>
+                    {!cfg.hideTime && (
+                      <span className="text-right font-mono text-slate-400">
+                        {myBest.bestTime.toFixed(1)}s
+                      </span>
+                    )}
                   </div>
                 </>
               )}
