@@ -14,8 +14,11 @@ const NEXT_TARGET_MS = 20_000
 const MAX_ACTIVE_TARGETS = 5
 const LIGHT_CHANGE_MS = 5_000
 const SCAN_PANEL_CHANGE_MS = 10_000
-const SCAN_TARGET_CHANGE_MS = 30_000
+const SCAN_TARGET_CHANGE_MS = 45_000
 const SCAN_FIRST_APPEAR_MS = 10_000
+// When the scan panel rotates, roughly this fraction of the time it'll show
+// the current scan target so players can actually rack up ID points.
+const SCAN_PANEL_MATCH_CHANCE = 0.35
 const SECOND_SYS_TARGET_MS = 60_000
 const SYS_SCROLL_MS = 1_000        // ms per row of system-panel scroll
 const SYS_GREEN_FADE_MS = 1_500
@@ -514,7 +517,7 @@ function SystemTargetPanel({ targets }) {
       <p className="text-[9px] uppercase tracking-wide text-slate-500 mb-1">System Targets</p>
       <div className="flex flex-wrap gap-1">
         {targets.map(t => (
-          <span key={t.id} className="px-2 py-0.5 bg-[#060e1a] border border-[#1a3a5c] rounded font-mono text-[13px] text-brand-300">
+          <span key={t.id} className="px-2 py-0.5 bg-[#060e1a] border border-[#2e5d94] rounded font-mono text-[13px] font-bold text-white" style={{ textShadow: '0 0 6px rgba(91,170,255,0.75)' }}>
             {t.code}
           </span>
         ))}
@@ -792,29 +795,43 @@ export default function CbatTarget() {
     }
   }, [elapsedMs, phase, lightTarget])
 
+  // Pick an aircraft for the scan panel, biased toward the current scan target
+  // so players can score ID points regularly rather than waiting on a pure
+  // random-draw coincidence.
+  const pickScanPanelAircraft = useCallback((target) => {
+    if (target && Math.random() < SCAN_PANEL_MATCH_CHANCE) return target
+    return pick(aircraftList)
+  }, [aircraftList])
+
   // ── Scan panel / target schedules ──────────────────────────────────────────
   useEffect(() => {
     if (phase !== 'playing' || aircraftList.length === 0) return
     // First scan target appears at 10s; scan panel starts at same time
     if (!scanTargetAc && elapsedMs >= SCAN_FIRST_APPEAR_MS) {
-      setScanTargetAc(pick(aircraftList))
+      const nextTarget = pick(aircraftList)
+      setScanTargetAc(nextTarget)
       scanTargetLastChangeRef.current = elapsedMs
+      if (!scanPanelAc) {
+        setScanPanelAc(scanFrame(pickScanPanelAircraft(nextTarget)))
+        scanLastChangeRef.current = elapsedMs
+      }
+      return
     }
     if (!scanPanelAc && elapsedMs >= SCAN_FIRST_APPEAR_MS) {
-      setScanPanelAc(scanFrame(pick(aircraftList)))
+      setScanPanelAc(scanFrame(pickScanPanelAircraft(scanTargetAc)))
       scanLastChangeRef.current = elapsedMs
     }
-    // Rotate scan target every 30s
+    // Rotate scan target (SCAN_TARGET_CHANGE_MS)
     if (scanTargetAc && elapsedMs - scanTargetLastChangeRef.current >= SCAN_TARGET_CHANGE_MS) {
       setScanTargetAc(pick(aircraftList))
       scanTargetLastChangeRef.current = elapsedMs
     }
-    // Rotate scan panel every 10s
+    // Rotate scan panel (SCAN_PANEL_CHANGE_MS) — biased to current target
     if (scanPanelAc && elapsedMs - scanLastChangeRef.current >= SCAN_PANEL_CHANGE_MS) {
-      setScanPanelAc(scanFrame(pick(aircraftList)))
+      setScanPanelAc(scanFrame(pickScanPanelAircraft(scanTargetAc)))
       scanLastChangeRef.current = elapsedMs
     }
-  }, [elapsedMs, phase, aircraftList, scanPanelAc, scanTargetAc])
+  }, [elapsedMs, phase, aircraftList, scanPanelAc, scanTargetAc, pickScanPanelAircraft])
 
   // ── Scene-target activation schedule ───────────────────────────────────────
   useEffect(() => {
@@ -1009,8 +1026,11 @@ export default function CbatTarget() {
       const bonus = Math.max(0, Math.round(SCORE.scanBonus * (1 - dt)))
       bumpCounter('scanMatches')
       addScore(SCORE.scanMatch + bonus, 'scan')
-      // rotate scan panel immediately; scan target keeps its 30s schedule
-      setScanPanelAc(scanFrame(pick(aircraftList)))
+      // rotate scan panel immediately; scan target keeps its longer schedule.
+      // Force a non-matching aircraft right after a match so the player can't
+      // just mash ID repeatedly on the same target.
+      const others = aircraftList.filter(a => a.briefId !== scanTargetAc?.briefId)
+      setScanPanelAc(scanFrame(others.length ? pick(others) : pick(aircraftList)))
       scanLastChangeRef.current = elapsedMs
       setScanFlash(true)
       setTimeout(() => setScanFlash(false), 350)
