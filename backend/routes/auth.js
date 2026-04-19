@@ -11,6 +11,7 @@ const AppSettings = require('../models/AppSettings');
 const AirstarLog  = require('../models/AirstarLog');
 const { sendWelcomeEmail, sendConfirmationEmail, sendPasswordResetEmail } = require('../utils/email');
 const { awardCoins }       = require('../utils/awardCoins');
+const { verifyTurnstileToken } = require('../utils/turnstile');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ const recordLogin = async (user) => {
 // If emailConfirmationEnabled is false, skip verification and create the User immediately.
 router.post('/register', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, captchaToken } = req.body;
     if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
     if (password.length < 8)  return res.status(400).json({ message: 'Password must be at least 8 characters' });
 
@@ -60,6 +61,15 @@ router.post('/register', async (req, res) => {
     if (existing) return res.status(409).json({ message: 'Email already registered' });
 
     const settings = await AppSettings.getSettings();
+
+    if (settings.signupCaptchaEnabled) {
+      const verdict = await verifyTurnstileToken(captchaToken, req.ip);
+      if (verdict.unconfigured) {
+        console.warn('[captcha] signupCaptchaEnabled is on but TURNSTILE_SECRET_KEY is missing — allowing signup unprotected');
+      } else if (!verdict.ok) {
+        return res.status(400).json({ message: 'Bot verification failed. Please try again.', captchaFailed: true });
+      }
+    }
 
     if (settings.emailConfirmationEnabled === false) {
       // Instant registration — no verification step

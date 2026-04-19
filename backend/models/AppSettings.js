@@ -182,6 +182,9 @@ const appSettingsSchema = new mongoose.Schema({
   emailConfirmationEnabled:   { type: Boolean, default: true },
   emailPasswordResetEnabled:  { type: Boolean, default: true },
 
+  // Signup bot-prevention (Cloudflare Turnstile)
+  signupCaptchaEnabled:       { type: Boolean, default: false },
+
   // Welcome email — all fields optional; absent or empty falls back to hardcoded defaults in email.js
   welcomeEmailSubject: { type: String, default: '' },
   welcomeEmailHeading: { type: String, default: '' },

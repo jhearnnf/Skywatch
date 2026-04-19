@@ -9,7 +9,11 @@ import { consumePendingBrief } from '../utils/pendingBrief'
 import { ONBOARDING_KEY } from '../components/onboarding/WelcomeAgentFlow'
 import { PENDING_BRIEF_KEY, PENDING_ONBOARDING_KEY, POST_LOGIN_DEST_KEY } from '../utils/storageKeys'
 import { resolveLoginDest } from '../utils/loginRedirect'
+import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
+
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || ''
+const TURNSTILE_SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
 
 const VIEW = {
   CHOICE:          'choice',
@@ -38,6 +42,8 @@ function CrosshairLogo() {
 
 export default function LoginPage() {
   const { setUser, API, apiFetch, awardAirstars } = useAuth()
+  const { settings } = useAppSettings() ?? {}
+  const captchaEnabled = !!settings?.signupCaptchaEnabled && !!TURNSTILE_SITE_KEY
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -66,7 +72,10 @@ export default function LoginPage() {
   const [newPass,        setNewPass]        = useState('')
   const [confirmPass,    setConfirmPass]    = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [captchaToken, setCaptchaToken] = useState('')
   const googleBtnRef  = useRef(null)
+  const captchaContainerRef = useRef(null)
+  const captchaWidgetIdRef  = useRef(null)
 
   // Belt-and-suspenders: if the URL carries a pendingBrief param (set by BriefReader/LockedCategoryModal),
   // persist it to localStorage immediately so consumePendingBrief can find it even if storage was lost.
@@ -87,6 +96,48 @@ export default function LoginPage() {
       })
     }
   }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load Cloudflare Turnstile script once when signup CAPTCHA is active and we're on the register view.
+  useEffect(() => {
+    if (!captchaEnabled || view !== VIEW.REGISTER) return
+    if (document.querySelector(`script[src="${TURNSTILE_SCRIPT_SRC}"]`)) return
+    const s = document.createElement('script')
+    s.src = TURNSTILE_SCRIPT_SRC
+    s.async = true
+    s.defer = true
+    document.head.appendChild(s)
+  }, [captchaEnabled, view])
+
+  // Render/reset the Turnstile widget whenever we enter/leave the register view.
+  useEffect(() => {
+    if (!captchaEnabled || view !== VIEW.REGISTER) {
+      setCaptchaToken('')
+      return
+    }
+    let cancelled = false
+    const tryRender = () => {
+      if (cancelled) return
+      if (!window.turnstile || !captchaContainerRef.current) {
+        setTimeout(tryRender, 200)
+        return
+      }
+      if (captchaWidgetIdRef.current != null) return
+      captchaWidgetIdRef.current = window.turnstile.render(captchaContainerRef.current, {
+        sitekey: TURNSTILE_SITE_KEY,
+        callback: (token) => setCaptchaToken(token),
+        'error-callback': () => setCaptchaToken(''),
+        'expired-callback': () => setCaptchaToken(''),
+      })
+    }
+    tryRender()
+    return () => {
+      cancelled = true
+      if (window.turnstile && captchaWidgetIdRef.current != null) {
+        try { window.turnstile.remove(captchaWidgetIdRef.current) } catch { /* ignore */ }
+        captchaWidgetIdRef.current = null
+      }
+    }
+  }, [captchaEnabled, view])
 
   const handleNativeGoogleSignIn = async () => {
     setBusy(true); setError('')
@@ -158,16 +209,31 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const isRegister = view === VIEW.REGISTER
+    if (isRegister && captchaEnabled && !captchaToken) {
+      setError('Please complete the bot verification before continuing.')
+      return
+    }
     setBusy(true); setError('')
-    const endpoint = view === VIEW.SIGNIN ? 'login' : 'register'
+    const endpoint = isRegister ? 'register' : 'login'
     try {
+      const body = isRegister
+        ? { email, password: pass, captchaToken: captchaEnabled ? captchaToken : undefined }
+        : { email, password: pass }
       const res  = await apiFetch(`${API}/api/auth/${endpoint}`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: pass }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.message); return }
+      if (!res.ok) {
+        setError(data.message)
+        if (data.captchaFailed && window.turnstile && captchaWidgetIdRef.current != null) {
+          try { window.turnstile.reset(captchaWidgetIdRef.current) } catch { /* ignore */ }
+          setCaptchaToken('')
+        }
+        return
+      }
       // Register now returns { status: 'pending', email } — show verify screen
       if (data.status === 'pending') {
         setPendingEmail(data.email)
@@ -396,9 +462,13 @@ export default function LoginPage() {
                   <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-xl">{error}</p>
                 )}
 
+                {view === VIEW.REGISTER && captchaEnabled && (
+                  <div ref={captchaContainerRef} className="flex justify-center" data-testid="turnstile-container" />
+                )}
+
                 <button
                   type="submit"
-                  disabled={busy}
+                  disabled={busy || (view === VIEW.REGISTER && captchaEnabled && !captchaToken)}
                   className="w-full py-3.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-2xl transition-colors text-sm"
                 >
                   {busy ? 'Please wait…' : view === VIEW.SIGNIN ? 'Sign In' : 'Create Account'}

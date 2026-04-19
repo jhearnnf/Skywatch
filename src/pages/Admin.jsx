@@ -462,14 +462,14 @@ function NumInput({ label, value, onChange, min = 0, max = 9999, hint }) {
 
 function Toggle({ label, hint, checked, onChange }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
-      <div>
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-0">
+      <div className="min-w-0">
         <p className="text-sm font-semibold text-slate-700">{label}</p>
         {hint && <p className="text-xs text-slate-400">{hint}</p>}
       </div>
       <button
         onClick={() => onChange(!checked)}
-        className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-brand-500' : 'bg-slate-200'}`}
+        className={`relative w-11 h-6 shrink-0 rounded-full transition-colors ${checked ? 'bg-brand-500' : 'bg-slate-200'}`}
       >
         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-surface rounded-full shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
       </button>
@@ -1174,6 +1174,9 @@ function AiPromptsSection({ API }) {
   const [saving,    setSaving]    = useState(false)
   const [toast,     setToast]     = useState('')
   const [dirty,     setDirty]     = useState({})     // keys that have unsaved changes
+  const [keywordsOriginal, setKeywordsOriginal] = useState(null)
+  const [keywordsDraft,    setKeywordsDraft]    = useState(null)
+  const [modal,            setModal]            = useState(null)
 
   useEffect(() => {
     apiFetch(`${API}/api/admin/ai-prompts`, { credentials: 'include' })
@@ -1183,6 +1186,15 @@ function AiPromptsSection({ API }) {
           setPrompts(d.data.prompts)
           setDefaults(d.data.defaults)
           setDraft(d.data.prompts)
+        }
+      })
+    apiFetch(`${API}/api/admin/settings`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        const k = d.data?.settings?.aiKeywordsPerBrief
+        if (typeof k === 'number') {
+          setKeywordsOriginal(k)
+          setKeywordsDraft(k)
         }
       })
   }, [API])
@@ -1198,31 +1210,52 @@ function AiPromptsSection({ API }) {
     setDirty(p => ({ ...p, [key]: true }))
   }
 
-  const saveAll = async () => {
+  const keywordsDirty = keywordsOriginal !== null && keywordsDraft !== keywordsOriginal
+  const promptsDirty  = Object.values(dirty).some(Boolean)
+
+  const doSave = async (reason) => {
     setSaving(true)
     try {
-      await apiFetch(`${API}/api/admin/ai-prompts`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompts: draft }),
-      })
-      setPrompts({ ...draft })
-      setDirty({})
-      setToast('✓ AI prompts saved')
+      const tasks = []
+      if (promptsDirty) {
+        tasks.push(apiFetch(`${API}/api/admin/ai-prompts`, {
+          method: 'PATCH', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompts: draft }),
+        }))
+      }
+      if (keywordsDirty) {
+        tasks.push(apiFetch(`${API}/api/admin/settings`, {
+          method: 'PATCH', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ aiKeywordsPerBrief: keywordsDraft, reason: reason || 'AI target update' }),
+        }))
+      }
+      await Promise.all(tasks)
+      if (promptsDirty) { setPrompts({ ...draft }); setDirty({}) }
+      if (keywordsDirty) setKeywordsOriginal(keywordsDraft)
+      setToast('✓ AI settings saved')
     } catch (e) {
-      setToast('Error saving prompts')
+      setToast('Error saving')
     } finally {
       setSaving(false)
+      setModal(null)
     }
   }
 
-  const dirtyCount = Object.values(dirty).filter(Boolean).length
+  const saveAll = () => {
+    if (keywordsDirty) setModal({ label: 'Update AI settings' })
+    else doSave(null)
+  }
+
+  const dirtyCount = Object.values(dirty).filter(Boolean).length + (keywordsDirty ? 1 : 0)
 
   if (!prompts) return null
 
   return (
     <div className="rounded-2xl overflow-hidden mb-4 border-2" style={{ background: '#160808', borderColor: '#5a1a1a' }}>
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
+      {modal && <ConfirmModal title={modal.label} onConfirm={doSave} onCancel={() => setModal(null)} />}
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full px-5 py-4 border-b flex items-center justify-between text-left"
@@ -1257,6 +1290,27 @@ function AiPromptsSection({ API }) {
       </button>
 
       {open && <div className="px-5 py-4 space-y-6">
+        {keywordsDraft !== null && (
+          <div className="flex items-center justify-between pb-4 border-b" style={{ borderColor: '#3d1010' }}>
+            <div className="pr-3">
+              <p className="text-sm font-bold" style={{ color: '#fca5a5' }}>
+                Keywords per brief
+                {keywordsDirty && <span className="ml-2 font-bold" style={{ color: '#fbbf24' }}>●</span>}
+              </p>
+              <p className="text-xs mt-0.5" style={{ color: '#f87171', opacity: 0.75 }}>
+                Target for AI keyword generation and the K-badge completion threshold (pipeline ceiling is 30)
+              </p>
+            </div>
+            <input
+              type="number"
+              min={1} max={30}
+              value={keywordsDraft ?? ''}
+              onChange={e => setKeywordsDraft(Number(e.target.value))}
+              className="w-20 rounded-xl px-3 py-1.5 text-sm text-right outline-none"
+              style={{ border: '1px solid #3d1010', background: '#0f0505', color: '#ddeaf8' }}
+            />
+          </div>
+        )}
         {AI_PROMPT_GROUPS.map(({ group, items, accordion }) => {
           const isOpen = openGroup === group
           return (
@@ -1323,6 +1377,8 @@ function SettingsTab({ API }) {
   const [modal,    setModal]    = useState(null)   // { label, fields }
   const [toast,    setToast]    = useState('')
   const [wtaSpawn,   setWtaSpawn]   = useState(null)
+  const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false })
+  const toggleGameGroup = (key) => setGameGroupsOpen(p => ({ ...p, [key]: !p[key] }))
 
   const load = useCallback(() => {
     apiFetch(`${API}/api/admin/settings`, { credentials: 'include' })
@@ -1503,74 +1559,178 @@ function SettingsTab({ API }) {
       {/* ── Airstars Economy ─────────────────────────────────── */}
       <AirstarsEconomy API={API} onToast={setToast} />
 
-      {/* ── Game ────────────────────────────────────────────── */}
+      {/* ── Game Options ────────────────────────────────────── */}
       <Section title="Game Options" collapsible onSave={() => save('Update Game Options', [
         'easyAnswerCount', 'mediumAnswerCount',
         'passThresholdEasy', 'passThresholdMedium',
         'aiQuestionsPerDifficulty',
-        'aiKeywordsPerBrief',
+        'aptitudeSyncEnabled',
+        'aptitudeSyncTiers',
+        'aptitudeSyncMaxRounds',
+        'aptitudeSyncDailyLimitFree',
+        'aptitudeSyncDailyLimitSilver',
+        'aptitudeSyncDailyLimitGold',
       ])}>
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-1 pb-2">AI Content Targets</p>
-        <NumInput
-          label="Minimum quiz questions per difficulty"
-          hint="Used by admin 'Generate Missing' and the user-facing quiz availability gate"
-          value={draft.aiQuestionsPerDifficulty}
-          min={1}
-          max={20}
-          onChange={v => set('aiQuestionsPerDifficulty', v)}
-        />
-        <NumInput
-          label="Keywords per brief"
-          hint="Target for AI keyword generation and the K-badge completion threshold (pipeline ceiling is 30)"
-          value={draft.aiKeywordsPerBrief}
-          min={1}
-          max={30}
-          onChange={v => set('aiKeywordsPerBrief', v)}
-        />
+        <button
+          type="button"
+          onClick={() => toggleGameGroup('quiz')}
+          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-1 pb-2 mb-2 border-b-2 border-brand-600/40"
+        >
+          <span>Quiz</span>
+          <span className="text-brand-600 text-xs">{gameGroupsOpen.quiz ? '▲' : '▼'}</span>
+        </button>
+        {gameGroupsOpen.quiz && (
+          <>
+            <NumInput
+              label="Minimum questions per difficulty"
+              hint="Used by admin 'Generate Missing' and the user-facing quiz availability gate"
+              value={draft.aiQuestionsPerDifficulty}
+              min={1}
+              max={20}
+              onChange={v => set('aiQuestionsPerDifficulty', v)}
+            />
+            <NumInput label="Answers shown — Easy"   value={draft.easyAnswerCount}   min={2} max={10} onChange={v => set('easyAnswerCount', v)} />
+            <NumInput label="Answers shown — Medium" value={draft.mediumAnswerCount} min={2} max={10} onChange={v => set('mediumAnswerCount', v)} />
+            <PctSlider label="Pass Threshold — Easy"   value={draft.passThresholdEasy}   onChange={v => set('passThresholdEasy', v)} />
+            <PctSlider label="Pass Threshold — Medium" value={draft.passThresholdMedium} onChange={v => set('passThresholdMedium', v)} />
+          </>
+        )}
 
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Quiz Answer Count</p>
-        <NumInput label="Answers shown — Easy"   value={draft.easyAnswerCount}   min={2} max={10} onChange={v => set('easyAnswerCount', v)} />
-        <NumInput label="Answers shown — Medium" value={draft.mediumAnswerCount} min={2} max={10} onChange={v => set('mediumAnswerCount', v)} />
-
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-1">Pass Threshold</p>
-        <PctSlider label="Easy"   value={draft.passThresholdEasy}   onChange={v => set('passThresholdEasy', v)} />
-        <PctSlider label="Medium" value={draft.passThresholdMedium} onChange={v => set('passThresholdMedium', v)} />
-
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Where's That Aircraft — Next Spawn</p>
-        {!wtaSpawn ? (
-          <p className="text-xs text-slate-400">Loading…</p>
-        ) : !wtaSpawn.prereqsMet ? (
-          <p className="text-xs text-slate-400">
-            Prerequisites not met — requires ≥2 Bases reads ({wtaSpawn.basesRead ?? 0}/2) and ≥2 Aircrafts reads ({wtaSpawn.aircraftsRead ?? 0}/2).
-          </p>
-        ) : (
-          <div className="flex items-center gap-3 text-sm">
-            <div className="flex gap-1">
-              {Array.from({ length: wtaSpawn.threshold }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`w-4 h-4 rounded-sm ${i < wtaSpawn.readsSince ? 'bg-brand-500' : 'bg-slate-200'}`}
-                />
-              ))}
-            </div>
-            <span className="text-slate-600">
-              {wtaSpawn.readsSince}/{wtaSpawn.threshold} aircraft briefs read
-              {wtaSpawn.remaining > 0
-                ? <> — <span className="font-semibold text-slate-800">{wtaSpawn.remaining} more to spawn</span></>
-                : <> — <span className="font-semibold text-green-600">ready to spawn</span></>
-              }
-            </span>
+        <button
+          type="button"
+          onClick={() => toggleGameGroup('wta')}
+          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-6 pb-2 mb-2 border-b-2 border-brand-600/40"
+        >
+          <span>Where's That Aircraft</span>
+          <span className="text-brand-600 text-xs">{gameGroupsOpen.wta ? '▲' : '▼'}</span>
+        </button>
+        {gameGroupsOpen.wta && (
+          <div className="py-2.5 border-b border-slate-100">
+            <p className="text-sm font-semibold text-slate-700 mb-1">Next Spawn</p>
+            {!wtaSpawn ? (
+              <p className="text-xs text-slate-400">Loading…</p>
+            ) : !wtaSpawn.prereqsMet ? (
+              <p className="text-xs text-slate-400">
+                Prerequisites not met — requires ≥2 Bases reads ({wtaSpawn.basesRead ?? 0}/2) and ≥2 Aircrafts reads ({wtaSpawn.aircraftsRead ?? 0}/2).
+              </p>
+            ) : (
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex gap-1">
+                  {Array.from({ length: wtaSpawn.threshold }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={`w-4 h-4 rounded-sm ${i < wtaSpawn.readsSince ? 'bg-brand-500' : 'bg-slate-200'}`}
+                    />
+                  ))}
+                </div>
+                <span className="text-slate-600">
+                  {wtaSpawn.readsSince}/{wtaSpawn.threshold} aircraft briefs read
+                  {wtaSpawn.remaining > 0
+                    ? <> — <span className="font-semibold text-slate-800">{wtaSpawn.remaining} more to spawn</span></>
+                    : <> — <span className="font-semibold text-green-600">ready to spawn</span></>
+                  }
+                </span>
+              </div>
+            )}
           </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => toggleGameGroup('aptitudeSync')}
+          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-6 pb-2 mb-2 border-b-2 border-brand-600/40"
+        >
+          <span>APTITUDE_SYNC</span>
+          <span className="text-brand-600 text-xs">{gameGroupsOpen.aptitudeSync ? '▲' : '▼'}</span>
+        </button>
+        {gameGroupsOpen.aptitudeSync && (
+          <>
+            <Toggle
+              label="Enable APTITUDE_SYNC"
+              hint="Show the APTITUDE_SYNC button on completed intel briefs for qualifying users"
+              checked={draft.aptitudeSyncEnabled ?? false}
+              onChange={v => set('aptitudeSyncEnabled', v)}
+            />
+
+            {/* Tier access */}
+            <div className="py-2.5 border-b border-slate-100">
+              <p className="text-sm font-semibold text-slate-700 mb-1">Tier access</p>
+              <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access regardless of this setting</p>
+              <div className="flex flex-wrap gap-3">
+                {['gold', 'silver', 'free'].map(tier => {
+                  const tiers   = draft.aptitudeSyncTiers ?? ['admin']
+                  const checked = tiers.includes(tier)
+                  return (
+                    <label key={tier} className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          const next = checked
+                            ? tiers.filter(t => t !== tier)
+                            : [...tiers, tier]
+                          set('aptitudeSyncTiers', next)
+                        }}
+                        className="w-4 h-4 accent-brand-600"
+                      />
+                      <span className="text-sm font-medium text-slate-700 capitalize">{tier}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+
+            <NumInput
+              label="Max rounds per session"
+              hint="Number of prompt/response exchanges before the terminal closes (1–5)"
+              value={draft.aptitudeSyncMaxRounds ?? 3}
+              min={1} max={5}
+              onChange={v => set('aptitudeSyncMaxRounds', v)}
+            />
+            <NumInput
+              label="Daily sessions — Free tier"
+              hint="How many APTITUDE_SYNC sessions a free user can play per day"
+              value={draft.aptitudeSyncDailyLimitFree ?? 1}
+              min={0}
+              onChange={v => set('aptitudeSyncDailyLimitFree', v)}
+            />
+            <NumInput
+              label="Daily sessions — Silver / Trial tier"
+              hint="How many APTITUDE_SYNC sessions a silver or active-trial user can play per day"
+              value={draft.aptitudeSyncDailyLimitSilver ?? 3}
+              min={0}
+              onChange={v => set('aptitudeSyncDailyLimitSilver', v)}
+            />
+            <NumInput
+              label="Daily sessions — Gold tier"
+              hint="How many APTITUDE_SYNC sessions a gold user can play per day"
+              value={draft.aptitudeSyncDailyLimitGold ?? 10}
+              min={0}
+              onChange={v => set('aptitudeSyncDailyLimitGold', v)}
+            />
+          </>
         )}
       </Section>
 
-      {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'betaTesterAutoGold', 'cbatEnabled'])}>
+      {/* ── Account Settings ────────────────────────────────── */}
+      <Section title="Account Settings" collapsible onSave={() => save('Update Account Settings', ['emailConfirmationEnabled', 'emailWelcomeEnabled', 'emailPasswordResetEnabled', 'betaTesterAutoGold', 'signupCaptchaEnabled'])}>
         <Toggle
-          label="Live Leaderboard"
-          hint="When off, mock placeholder data is shown on the Profile page"
-          checked={draft.useLiveLeaderboard ?? false}
-          onChange={v => set('useLiveLeaderboard', v)}
+          label="Require email confirmation"
+          hint="When off, new users are registered instantly without entering a confirmation code"
+          checked={draft.emailConfirmationEnabled !== false}
+          onChange={v => set('emailConfirmationEnabled', v)}
+        />
+        <Toggle
+          label="Send welcome email"
+          hint="When off, new users will not receive a welcome email after registering"
+          checked={draft.emailWelcomeEnabled !== false}
+          onChange={v => set('emailWelcomeEnabled', v)}
+        />
+        <Toggle
+          label="Allow password reset emails"
+          hint="When off, users cannot reset their password via email — they will be directed to contact support for a manual reset"
+          checked={draft.emailPasswordResetEnabled !== false}
+          onChange={v => set('emailPasswordResetEnabled', v)}
         />
         <Toggle
           label="Beta Tester Auto-Gold"
@@ -1579,88 +1739,31 @@ function SettingsTab({ API }) {
           onChange={v => set('betaTesterAutoGold', v)}
         />
         <Toggle
+          label="Enable signup CAPTCHA"
+          hint="Require a Cloudflare Turnstile check on the email signup form. Requires VITE_TURNSTILE_SITE_KEY (frontend) and TURNSTILE_SECRET_KEY (backend) to be set in .env. Does not apply to Google signups."
+          checked={draft.signupCaptchaEnabled ?? false}
+          onChange={v => set('signupCaptchaEnabled', v)}
+        />
+        {draft.signupCaptchaEnabled && !import.meta.env.VITE_TURNSTILE_SITE_KEY && (
+          <p className="text-xs text-red-500 font-semibold mt-1">
+            ⚠ CAPTCHA enabled but VITE_TURNSTILE_SITE_KEY is not set — the widget cannot render and signups remain unprotected.
+          </p>
+        )}
+      </Section>
+
+      {/* ── Feature Flags ───────────────────────────────────── */}
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'cbatEnabled'])}>
+        <Toggle
+          label="Live Leaderboard"
+          hint="When off, mock placeholder data is shown on the Profile page"
+          checked={draft.useLiveLeaderboard ?? false}
+          onChange={v => set('useLiveLeaderboard', v)}
+        />
+        <Toggle
           label="CBAT Games"
           hint="Show the Play CBAT button on the Play page"
           checked={draft.cbatEnabled ?? false}
           onChange={v => set('cbatEnabled', v)}
-        />
-      </Section>
-
-      {/* ── APTITUDE_SYNC ────────────────────────────────────── */}
-      <Section
-        title="APTITUDE_SYNC"
-        collapsible
-        onSave={() => save('Update APTITUDE_SYNC Settings', [
-          'aptitudeSyncEnabled',
-          'aptitudeSyncTiers',
-          'aptitudeSyncMaxRounds',
-          'aptitudeSyncDailyLimitFree',
-          'aptitudeSyncDailyLimitSilver',
-          'aptitudeSyncDailyLimitGold',
-        ])}
-      >
-        <Toggle
-          label="Enable APTITUDE_SYNC"
-          hint="Show the APTITUDE_SYNC button on completed intel briefs for qualifying users"
-          checked={draft.aptitudeSyncEnabled ?? false}
-          onChange={v => set('aptitudeSyncEnabled', v)}
-        />
-
-        {/* Tier access */}
-        <div className="py-2.5 border-b border-slate-100">
-          <p className="text-sm font-semibold text-slate-700 mb-1">Tier access</p>
-          <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access regardless of this setting</p>
-          <div className="flex flex-wrap gap-3">
-            {['gold', 'silver', 'free'].map(tier => {
-              const tiers   = draft.aptitudeSyncTiers ?? ['admin']
-              const checked = tiers.includes(tier)
-              return (
-                <label key={tier} className="flex items-center gap-1.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => {
-                      const next = checked
-                        ? tiers.filter(t => t !== tier)
-                        : [...tiers, tier]
-                      set('aptitudeSyncTiers', next)
-                    }}
-                    className="w-4 h-4 accent-brand-600"
-                  />
-                  <span className="text-sm font-medium text-slate-700 capitalize">{tier}</span>
-                </label>
-              )
-            })}
-          </div>
-        </div>
-
-        <NumInput
-          label="Max rounds per session"
-          hint="Number of prompt/response exchanges before the terminal closes (1–5)"
-          value={draft.aptitudeSyncMaxRounds ?? 3}
-          min={1} max={5}
-          onChange={v => set('aptitudeSyncMaxRounds', v)}
-        />
-        <NumInput
-          label="Daily sessions — Free tier"
-          hint="How many APTITUDE_SYNC sessions a free user can play per day"
-          value={draft.aptitudeSyncDailyLimitFree ?? 1}
-          min={0}
-          onChange={v => set('aptitudeSyncDailyLimitFree', v)}
-        />
-        <NumInput
-          label="Daily sessions — Silver / Trial tier"
-          hint="How many APTITUDE_SYNC sessions a silver or active-trial user can play per day"
-          value={draft.aptitudeSyncDailyLimitSilver ?? 3}
-          min={0}
-          onChange={v => set('aptitudeSyncDailyLimitSilver', v)}
-        />
-        <NumInput
-          label="Daily sessions — Gold tier"
-          hint="How many APTITUDE_SYNC sessions a gold user can play per day"
-          value={draft.aptitudeSyncDailyLimitGold ?? 10}
-          min={0}
-          onChange={v => set('aptitudeSyncDailyLimitGold', v)}
         />
       </Section>
 
@@ -2440,28 +2543,6 @@ function ContentTab({ API }) {
     <div>
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
       {modal && <ConfirmModal title={modal.label} onConfirm={modal.isTutorial ? confirmSaveTutorials : confirmSave} onCancel={() => setModal(null)} />}
-
-      {/* ── Email Settings ────────────────────────────────────────── */}
-      <Section title="Email Settings" collapsible onSave={() => save('Update Email Settings', ['emailWelcomeEnabled', 'emailConfirmationEnabled', 'emailPasswordResetEnabled'])}>
-        <Toggle
-          label="Send welcome email"
-          hint="When off, new users will not receive a welcome email after registering"
-          checked={draft.emailWelcomeEnabled !== false}
-          onChange={v => setDraft(p => ({ ...p, emailWelcomeEnabled: v }))}
-        />
-        <Toggle
-          label="Require email confirmation"
-          hint="When off, new users are registered instantly without entering a confirmation code"
-          checked={draft.emailConfirmationEnabled !== false}
-          onChange={v => setDraft(p => ({ ...p, emailConfirmationEnabled: v }))}
-        />
-        <Toggle
-          label="Allow password reset emails"
-          hint="When off, users cannot reset their password via email — they will be directed to contact support for a manual reset"
-          checked={draft.emailPasswordResetEnabled !== false}
-          onChange={v => setDraft(p => ({ ...p, emailPasswordResetEnabled: v }))}
-        />
-      </Section>
 
       {/* ── Welcome Email ─────────────────────────────────────────── */}
       <Section title="Welcome Email" collapsible onSave={() => save('Update Welcome Email', ['welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
