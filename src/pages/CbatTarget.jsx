@@ -119,18 +119,13 @@ function planGame() {
     )
   }
 
-  // For each target: pre-place N matching shapes. Half are present in the
-  // opening seconds (so the scene reads as populated from the start); the
-  // rest drift in at even intervals through the target's pre-activation window.
+  // For each target: pre-place N matching shapes, spread evenly across the
+  // window from game start to ~2s before the target activates. Nothing spawns
+  // at t=0 — shapes trickle in gradually so the scene fills rather than dumps.
   for (const t of targets) {
     const n = randRange(3, 8)
-    const earlyCount = Math.ceil(n * 0.5)
-    const windowEnd = t.activateAt - 2000
-    const laterTimes = evenlySpread(Math.max(1, n - earlyCount), 5000, Math.max(6000, windowEnd))
+    const times = evenlySpread(n, 1500, Math.max(3000, t.activateAt - 2000))
     for (let k = 0; k < n; k++) {
-      const spawnAt = k < earlyCount
-        ? Math.random() * 4500                 // scatter in the first ~4.5s
-        : laterTimes[k - earlyCount]
       shapes.push({
         id: uid(),
         kind: t.kind,
@@ -138,14 +133,14 @@ function planGame() {
         damaged: t.damaged,
         highPriority: t.highPriority,
         direction: t.direction || (Math.random() < 0.3 ? pick(DIRECTIONS) : null),
-        spawnAt,
+        spawnAt: times[k],
         fake: false,
         ...placeRandom(),
       })
     }
   }
 
-  // Diamonds (unknown) — always yellow, spawn at t=0
+  // Diamonds (unknown) — always yellow, all present from game start.
   const diamondCount = randRange(8, 10)
   for (let i = 0; i < diamondCount; i++) {
     shapes.push({
@@ -161,14 +156,13 @@ function planGame() {
     })
   }
 
-  // Fake shapes (octagons, lines) — ~75% present from the start, the rest
-  // trickle in evenly across the remainder of the game.
+  // Fake shapes (octagons, lines) — ~half present at start, rest trickle in.
   const fakeCount = randRange(16, 20)
-  const fakeImmediateCount = Math.round(fakeCount * 0.75)
+  const fakeImmediateCount = Math.round(fakeCount * 0.5)
   const fakeLaterTimes = evenlySpread(
     Math.max(1, fakeCount - fakeImmediateCount),
-    18_000,
-    110_000,
+    15_000,
+    115_000,
   )
   for (let i = 0; i < fakeCount; i++) {
     const isLine = Math.random() < 0.5
@@ -186,12 +180,13 @@ function planGame() {
     })
   }
 
-  // Random noise shapes — ~60% immediate, rest evenly paced through the game.
+  // Random noise shapes — a few visible at game start so the scene reads
+  // as populated immediately; the rest trickle in across the game.
   const noiseCount = randRange(10, 14)
-  const noiseImmediateCount = Math.round(noiseCount * 0.6)
+  const noiseImmediateCount = randRange(3, 4)
   const noiseLaterTimes = evenlySpread(
     Math.max(1, noiseCount - noiseImmediateCount),
-    22_000,
+    20_000,
     115_000,
   )
   for (let i = 0; i < noiseCount; i++) {
@@ -212,17 +207,20 @@ function planGame() {
 }
 
 // Random position within the 1000×800 virtual canvas, with soft spacing.
+// Pad is generous enough that direction arrows and high-priority crosshair
+// arms stay inside the scene container across all viewport sizes.
 let _placed = []
 function placeRandom() {
-  const pad = 40
+  const padX = 80
+  const padY = 80
   for (let attempt = 0; attempt < 12; attempt++) {
-    const x = pad + Math.random() * (1000 - 2 * pad)
-    const y = pad + Math.random() * (800 - 2 * pad)
+    const x = padX + Math.random() * (1000 - 2 * padX)
+    const y = padY + Math.random() * (800 - 2 * padY)
     const ok = _placed.every(p => Math.hypot(p.x - x, p.y - y) > 55)
     if (ok) { _placed.push({ x, y }); return { x, y } }
   }
-  const x = pad + Math.random() * (1000 - 2 * pad)
-  const y = pad + Math.random() * (800 - 2 * pad)
+  const x = padX + Math.random() * (1000 - 2 * padX)
+  const y = padY + Math.random() * (800 - 2 * padY)
   _placed.push({ x, y })
   return { x, y }
 }
@@ -278,9 +276,10 @@ function Shape({ shape, scale = 1 }) {
     }
     shapeEl = <polygon points={pts.join(' ')} fill="none" stroke={strokeCol} strokeWidth="2.5" />
   } else if (kind === 'line') {
+    const L = R * 1.1
     shapeEl = lineHorizontal
-      ? <line x1={-R * 1.4} y1={0} x2={R * 1.4} y2={0} stroke={strokeCol} strokeWidth="3" />
-      : <line x1={0} y1={-R * 1.4} x2={0} y2={R * 1.4} stroke={strokeCol} strokeWidth="3" />
+      ? <line x1={-L} y1={-L} x2={L} y2={L} stroke={strokeCol} strokeWidth="3" />
+      : <line x1={-L} y1={L} x2={L} y2={-L} stroke={strokeCol} strokeWidth="3" />
   }
 
   const crosshairArms = isReal && highPriority ? (
@@ -408,9 +407,9 @@ function LightTargetPanel({ pattern }) {
 }
 
 // ── Scan panels ──────────────────────────────────────────────────────────────
-function ScanPanel({ aircraft, onPress }) {
+function ScanPanel({ aircraft, onPress, flash }) {
   return (
-    <div className="h-full w-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-1 flex items-center gap-1">
+    <div className={`h-full w-full bg-[#0a1628] border rounded-lg p-1 flex items-center gap-1 transition-colors ${flash ? 'border-green-400 bg-green-500/15' : 'border-[#1a3a5c]'}`}>
       <div className="flex-1 h-full relative">
         {aircraft ? (
           <Suspense fallback={<div className="w-full h-full bg-[#020a18] rounded" />}>
@@ -529,10 +528,10 @@ function Compass() {
   return (
     <svg
       width="46" height="46" viewBox="0 0 46 46"
-      className="absolute top-1.5 left-1.5 pointer-events-none opacity-85"
-      style={{ zIndex: 25 }}
+      className="absolute top-1.5 left-1.5 pointer-events-none"
+      style={{ zIndex: 25, opacity: 0.55 }}
     >
-      <circle cx="23" cy="23" r="20" fill="#060e1a" stroke="#1a3a5c" strokeWidth="1.3" />
+      <circle cx="23" cy="23" r="20" fill="#060e1a" fillOpacity="0.35" stroke="#1a3a5c" strokeWidth="1.3" />
       <polygon points="23,5 20,23 26,23" fill="#ef4444" />
       <polygon points="23,41 20,23 26,23" fill="#5baaff" />
       <text x="23" y="10" textAnchor="middle" fontSize="7" fill="#ddeaf8" fontWeight="bold">N</text>
@@ -675,6 +674,7 @@ export default function CbatTarget() {
   const [lightPattern, setLightPattern] = useState(randomLightPattern)
   const [lightTarget, setLightTarget] = useState(randomLightPattern)
   const [lightFlash, setLightFlash] = useState(false)
+  const [scanFlash, setScanFlash] = useState(false)
   const lightLastChangeRef = useRef(0)
   const lightChangeCountRef = useRef(0)
   const lightForceMatchAtRef = useRef(randRange(3, 6))
@@ -1012,6 +1012,8 @@ export default function CbatTarget() {
       // rotate scan panel immediately; scan target keeps its 30s schedule
       setScanPanelAc(scanFrame(pick(aircraftList)))
       scanLastChangeRef.current = elapsedMs
+      setScanFlash(true)
+      setTimeout(() => setScanFlash(false), 350)
     } else {
       bumpCounter('scanMisclicks')
       addScore(SCORE.scanMiss, 'scan')
@@ -1098,7 +1100,7 @@ export default function CbatTarget() {
           <div className="cbat-target-grid">
             <div className="grid-info"><InfoPanel /></div>
             <div className="grid-light"><LightPanel pattern={lightPattern} flash={lightFlash} onPress={onLightPress} /></div>
-            <div className="grid-scan"><ScanPanel aircraft={scanPanelAc} onPress={onScanPress} /></div>
+            <div className="grid-scan"><ScanPanel aircraft={scanPanelAc} onPress={onScanPress} flash={scanFlash} /></div>
             <div className="grid-system">
               <SystemPanel columns={sysColumns} highlights={sysHighlights} onClickCode={onSysCodeClick} />
             </div>
@@ -1138,7 +1140,7 @@ function blankStats() {
 
 function initSysColumns() {
   // Each column has its own speed so the three tracks don't march in lockstep.
-  const durations = [26000, 30000, 34000]
+  const durations = [58000, 66000, 74000]
   return [0, 1, 2].map((i) => ({
     codes: Array.from({ length: 50 }, () => randomCode()),
     durationMs: durations[i],

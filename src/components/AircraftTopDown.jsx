@@ -1,6 +1,7 @@
-import { Suspense, Component, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Suspense, Component, useMemo } from 'react'
+import { Canvas } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
+import * as THREE from 'three'
 
 class ErrorCatcher extends Component {
   state = { hasError: false }
@@ -11,12 +12,19 @@ class ErrorCatcher extends Component {
 
 function Model({ url }) {
   const { scene } = useGLTF(url)
-  const ref = useRef()
-  // Slow idle rotation so the silhouette reads as "alive" on radar.
-  useFrame((_, delta) => {
-    if (ref.current) ref.current.rotation.y += delta * 0.4
-  })
-  return <primitive ref={ref} object={scene.clone()} scale={[2, 2, 2]} />
+  // Re-centre the scene on its geometric centre so off-origin GLTFs frame
+  // correctly in the panel.
+  const { clonedScene, centre } = useMemo(() => {
+    const c = scene.clone()
+    const box = new THREE.Box3().setFromObject(c)
+    const ctr = box.getCenter(new THREE.Vector3())
+    return { clonedScene: c, centre: ctr }
+  }, [scene])
+  return (
+    <group scale={[2, 2, 2]}>
+      <primitive object={clonedScene} position={[-centre.x, -centre.y, -centre.z]} />
+    </group>
+  )
 }
 
 // Radar-fuzz overlay: conic sweep + faint grid + blur on the Canvas beneath.
@@ -59,7 +67,7 @@ export default function AircraftTopDown({ modelUrl, onError, partial = false, of
   // fragment of the aircraft lands in frame — forces the user to identify the
   // plane from a slice rather than the whole silhouette.
   const camPos = partial ? [offsetX, 8, offsetZ] : [0, 13, 0]
-  const camFov = partial ? 34 : 30
+  const camFov = partial ? 34 : (clear ? 26 : 30)
   const innerFilter = clear ? 'none' : 'blur(1.6px) contrast(1.1)'
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 8, background: '#020a18' }}>
