@@ -38,6 +38,14 @@ const GAME_CONFIG = {
     formatScore: (s) => `${s}/15`,
     backPath: '/cbat/symbols',
   },
+  'target': {
+    title: 'Target',
+    emoji: '\u{1F3AF}',
+    scoreLabel: 'Score',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}`,
+    backPath: '/cbat/target',
+  },
 }
 
 export default function CbatLeaderboard() {

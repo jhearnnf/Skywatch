@@ -9,6 +9,7 @@ const GameSessionCbatPlaneTurnResult      = require('../../models/GameSessionCba
 const GameSessionCbatAnglesResult         = require('../../models/GameSessionCbatAnglesResult');
 const GameSessionCbatCodeDuplicatesResult = require('../../models/GameSessionCbatCodeDuplicatesResult');
 const GameSessionCbatSymbolsResult        = require('../../models/GameSessionCbatSymbolsResult');
+const GameSessionCbatTargetResult         = require('../../models/GameSessionCbatTargetResult');
 
 let user, cookie, user2, cookie2;
 
@@ -426,6 +427,85 @@ describe('CBAT Symbols', () => {
         .get(LEADERBOARD_URL)
         .set('Cookie', cookie);
 
+      expect(res.body.data.leaderboard).toHaveLength(0);
+      expect(res.body.data.myBest).toBeNull();
+    });
+  });
+});
+
+// ── Target ───────────────────────────────────────────────────────────────────
+describe('CBAT Target', () => {
+  const RESULT_URL = '/api/games/cbat/target/result';
+  const LEADERBOARD_URL = '/api/games/cbat/target/leaderboard';
+  const PB_URL = '/api/games/cbat/target/personal-best';
+
+  const sample = (overrides = {}) => ({
+    totalScore: 320,
+    sceneScore: 180, lightScore: 60, scanScore: 50, systemScore: 30,
+    sceneHits: 18, sceneMisses: 2,
+    lightMatches: 3, lightMisclicks: 0,
+    scanMatches: 2, scanMisclicks: 0,
+    systemMatches: 2, systemMisclicks: 0,
+    totalTime: 120, grade: 'Good',
+    ...overrides,
+  });
+
+  describe('POST /result', () => {
+    it('saves a result and returns 201', async () => {
+      const res = await request(app).post(RESULT_URL).set('Cookie', cookie).send(sample());
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe('success');
+      expect(res.body.data.totalScore).toBe(320);
+      expect(res.body.data.sceneHits).toBe(18);
+      expect(res.body.data.grade).toBe('Good');
+      const count = await GameSessionCbatTargetResult.countDocuments();
+      expect(count).toBe(1);
+    });
+
+    it('accepts negative scores', async () => {
+      const res = await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send(sample({ totalScore: -25, sceneScore: -25, grade: 'Failed' }));
+      expect(res.status).toBe(201);
+      expect(res.body.data.totalScore).toBe(-25);
+    });
+
+    it('returns 401 without auth', async () => {
+      const res = await request(app).post(RESULT_URL).send(sample());
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /personal-best', () => {
+    it('returns null when user has no results', async () => {
+      const res = await request(app).get(PB_URL).set('Cookie', cookie);
+      expect(res.body.data).toBeNull();
+    });
+
+    it('returns highest totalScore across attempts', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 150, totalTime: 120 }));
+      await request(app).post(RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 420, totalTime: 120 }));
+
+      const res = await request(app).get(PB_URL).set('Cookie', cookie);
+      expect(res.body.data.bestScore).toBe(420);
+      expect(res.body.data.attempts).toBe(2);
+    });
+  });
+
+  describe('GET /leaderboard', () => {
+    it('returns leaderboard sorted by highest totalScore, then fastest time', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 300, totalTime: 120 }));
+      await request(app).post(RESULT_URL).set('Cookie', cookie2).send(sample({ totalScore: 300, totalTime: 100 }));
+
+      const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
+      const { leaderboard } = res.body.data;
+      expect(leaderboard).toHaveLength(2);
+      // Same totalScore — user2 wins on time
+      expect(leaderboard[0].agentNumber).toBe('1000002');
+      expect(leaderboard[1].agentNumber).toBe('1000001');
+    });
+
+    it('returns empty leaderboard when no results exist', async () => {
+      const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
       expect(res.body.data.leaderboard).toHaveLength(0);
       expect(res.body.data.myBest).toBeNull();
     });

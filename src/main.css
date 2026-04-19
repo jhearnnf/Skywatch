@@ -607,3 +607,145 @@ body.play-mode .card-shadow {
   opacity: 1;
   animation: blueprint-reveal 240ms ease-out forwards;
 }
+
+/* ── CBAT Target arena ─────────────────────────────────────────────────── */
+.cbat-target-arena {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* Capped at ~60% of viewport height so the game doesn't dominate the page */
+  height: 60vh;
+  max-height: 60vh;
+  min-height: 520px;
+  gap: 4px;
+}
+
+/* System panel — continuous smooth scroll */
+.cbat-target-grid .sys-column-inner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  animation-name: sys-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+.cbat-target-grid .sys-row {
+  height: 26px;
+  line-height: 26px;
+  flex: 0 0 26px;
+}
+
+@keyframes sys-scroll {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-50%); }
+}
+
+/* Scene panel background — subtle radar haze + faint grid */
+.cbat-target-scene {
+  background-color: #081424;
+  background-image:
+    radial-gradient(ellipse at center, rgba(91, 170, 255, 0.06) 0%, rgba(8, 20, 36, 0) 55%, rgba(4, 10, 22, 0.55) 100%),
+    repeating-linear-gradient(0deg,  rgba(91, 170, 255, 0.04) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg, rgba(91, 170, 255, 0.04) 0 1px, transparent 1px 28px);
+  background-blend-mode: normal, screen, screen;
+}
+
+/* Mute the shape colours so the map doesn't feel like a neon arcade. */
+.cbat-target-scene .cbat-shape-wrap {
+  filter: saturate(0.55) brightness(0.72);
+  opacity: 0.84;
+}
+
+/* Cloud cover — soft patchy haze drifting over the shapes. */
+.cbat-target-scene::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+  background:
+    radial-gradient(ellipse 22% 14% at 18% 28%, rgba(205, 220, 240, 0.10), transparent 75%),
+    radial-gradient(ellipse 28% 16% at 64% 18%, rgba(205, 220, 240, 0.09), transparent 75%),
+    radial-gradient(ellipse 24% 14% at 40% 60%, rgba(205, 220, 240, 0.08), transparent 75%),
+    radial-gradient(ellipse 30% 18% at 82% 72%, rgba(205, 220, 240, 0.10), transparent 75%),
+    radial-gradient(ellipse 20% 12% at 10% 82%, rgba(205, 220, 240, 0.08), transparent 75%),
+    radial-gradient(ellipse 26% 14% at 55% 92%, rgba(205, 220, 240, 0.07), transparent 75%);
+  mix-blend-mode: screen;
+}
+
+.cbat-target-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: #0a1628;
+  border: 1px solid #1a3a5c;
+  border-radius: 8px;
+}
+
+.cbat-target-grid {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(20, 1fr);
+  grid-template-rows: 10% 80% 10%;
+  gap: 4px;
+  min-height: 0;
+}
+
+.cbat-target-grid > div {
+  min-width: 0;
+}
+
+.grid-info          { grid-column: 1  / span 4;  grid-row: 1; }
+.grid-light         { grid-column: 5  / span 4;  grid-row: 1; }
+.grid-scan          { grid-column: 9  / span 4;  grid-row: 1; }
+.grid-system        { grid-column: 13 / span 8;  grid-row: 1 / span 2; }
+.grid-scene         { grid-column: 1  / span 12; grid-row: 2; }
+.grid-scene-target  { grid-column: 1  / span 10; grid-row: 3; }
+.grid-light-target  { grid-column: 11 / span 3;  grid-row: 3; }
+.grid-scan-target   { grid-column: 14 / span 3;  grid-row: 3; }
+.grid-system-target { grid-column: 17 / span 4;  grid-row: 3; }
+
+/* ── Mobile fallback ───────────────────────────────────────────────────── */
+/* Scene panel gets the lion's share; scan and light panels are compact.
+   Using explicit height (not min-height) so the inner h-full children resolve. */
+@media (max-width: 900px) {
+  .cbat-target-arena {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+  .cbat-target-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: auto;
+    gap: 6px;
+  }
+
+  /* Row 1 — info (full width, sizes to its content) */
+  .cbat-target-grid > .grid-info          { grid-column: 1 / span 2; grid-row: 1; }
+
+  /* Row 2 — light + scan (both above the scene) */
+  .cbat-target-grid > .grid-light         { grid-column: 1 / span 1; grid-row: 2; height: 56px; }
+  .cbat-target-grid > .grid-scan          { grid-column: 2 / span 1; grid-row: 2; height: 56px; }
+
+  /* Row 3 — scene */
+  .cbat-target-grid > .grid-scene         { grid-column: 1 / span 2; grid-row: 3; height: 33vh; min-height: 210px; }
+
+  /* Row 4 — light target + scan target (matched heights, compact) */
+  .cbat-target-grid > .grid-light-target  { grid-column: 1 / span 1; grid-row: 4; height: 50px; }
+  .cbat-target-grid > .grid-scan-target   { grid-column: 2 / span 1; grid-row: 4; height: 50px; }
+
+  /* Row 5 — scene-target labels (full width, can grow with content) */
+  .cbat-target-grid > .grid-scene-target  { grid-column: 1 / span 2; grid-row: 5; min-height: 48px; }
+
+  /* Row 6 — system-target (full width) */
+  .cbat-target-grid > .grid-system-target { grid-column: 1 / span 2; grid-row: 6; min-height: 48px; }
+
+  /* Row 7 — system panel (secondary focus) */
+  .cbat-target-grid > .grid-system        { grid-column: 1 / span 2; grid-row: 7; height: 34vh; min-height: 240px; }
+}
+

@@ -44,6 +44,7 @@ import CbatPlaneTurn  from './pages/CbatPlaneTurn'
 import CbatAngles     from './pages/CbatAngles'
 import CbatCodeDuplicates from './pages/CbatCodeDuplicates'
 import CbatSymbols      from './pages/CbatSymbols'
+import CbatTarget       from './pages/CbatTarget'
 import CbatLeaderboard from './pages/CbatLeaderboard'
 import AirstarHistory from './pages/AirstarHistory'
 import GameHistory        from './pages/GameHistory'
@@ -213,6 +214,7 @@ function AppRoutes() {
           <Route path="/cbat/angles"           element={<RequireAuth><PageWrapper><CbatAngles /></PageWrapper></RequireAuth>} />
           <Route path="/cbat/code-duplicates" element={<RequireAuth><PageWrapper><CbatCodeDuplicates /></PageWrapper></RequireAuth>} />
           <Route path="/cbat/symbols"          element={<RequireAuth><PageWrapper><CbatSymbols /></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/target"           element={<RequireAuth><PageWrapper><CbatTarget /></PageWrapper></RequireAuth>} />
           <Route path="/cbat/:gameKey/leaderboard" element={<RequireAuth><PageWrapper><CbatLeaderboard /></PageWrapper></RequireAuth>} />
 
           {/* v2 protected pages */}

@@ -23,6 +23,7 @@ const GameSessionCbatPlaneTurnResult     = require('../models/GameSessionCbatPla
 const GameSessionCbatAnglesResult        = require('../models/GameSessionCbatAnglesResult');
 const GameSessionCbatCodeDuplicatesResult = require('../models/GameSessionCbatCodeDuplicatesResult');
 const GameSessionCbatSymbolsResult        = require('../models/GameSessionCbatSymbolsResult');
+const GameSessionCbatTargetResult         = require('../models/GameSessionCbatTargetResult');
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -2120,6 +2121,13 @@ const CBAT_GAMES = {
     bestOp: '$max',
     label: 'Symbols',
   },
+  'target': {
+    Model: GameSessionCbatTargetResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Target',
+  },
 };
 
 // POST /api/games/cbat/plane-turn/result
@@ -2186,6 +2194,30 @@ router.post('/cbat/symbols/result', protect, async (req, res) => {
       tier1Correct,
       tier2Correct,
       tier3Correct,
+      totalTime,
+      grade,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/cbat/target/result
+router.post('/cbat/target/result', protect, async (req, res) => {
+  try {
+    const {
+      totalScore, sceneScore, lightScore, scanScore, systemScore,
+      sceneHits, sceneMisses, lightMatches, lightMisclicks,
+      scanMatches, scanMisclicks, systemMatches, systemMisclicks,
+      totalTime, grade,
+    } = req.body;
+    const result = await GameSessionCbatTargetResult.create({
+      userId: req.user._id,
+      totalScore,
+      sceneScore, lightScore, scanScore, systemScore,
+      sceneHits, sceneMisses, lightMatches, lightMisclicks,
+      scanMatches, scanMisclicks, systemMatches, systemMisclicks,
       totalTime,
       grade,
     });
@@ -2282,6 +2314,7 @@ router.get('/cbat/plane-turn/leaderboard', protect, (req, res) => cbatLeaderboar
 router.get('/cbat/angles/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'angles'));
 router.get('/cbat/code-duplicates/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'code-duplicates'));
 router.get('/cbat/symbols/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'symbols'));
+router.get('/cbat/target/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'target'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -2313,5 +2346,6 @@ router.get('/cbat/plane-turn/personal-best', protect, (req, res) => cbatPersonal
 router.get('/cbat/angles/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'angles'));
 router.get('/cbat/code-duplicates/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'code-duplicates'));
 router.get('/cbat/symbols/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'symbols'));
+router.get('/cbat/target/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'target'));
 
 module.exports = router;

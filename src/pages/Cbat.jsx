@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 
 const CBAT_GAMES = [
-  { key: 'target',          emoji: '🎯', title: 'Target',           desc: 'Lock on to the correct answer under pressure.',        path: null },
+  { key: 'target',          emoji: '🎯', title: 'Target',           desc: 'Multi-task across eight panels — hunt shapes, match lights, ID aircraft, find codes.', path: '/cbat/target' },
   { key: 'sdt',             emoji: '📡', title: 'SDT',              desc: 'Speed Distance Time — coming soon.',      path: null },
   { key: 'symbols',         emoji: '🔣', title: 'Symbols',          desc: 'Spot the target symbol in a growing grid, round by round.', path: '/cbat/symbols' },
   { key: 'code-duplicates', emoji: '🧩', title: 'Code Duplicates',  desc: 'Memorise a sequence of digits, then count how many times one appeared.', path: '/cbat/code-duplicates' },
