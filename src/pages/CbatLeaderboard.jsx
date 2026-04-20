@@ -47,6 +47,14 @@ const GAME_CONFIG = {
     backPath: '/cbat/target',
     hideTime: true,
   },
+  'instruments': {
+    title: 'Instruments',
+    emoji: '\u{1F6EB}',
+    scoreLabel: 'Correct',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}`,
+    backPath: '/cbat/instruments',
+  },
 }
 
 export default function CbatLeaderboard() {

@@ -9,6 +9,7 @@ import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } fr
 import RankBadge from '../components/RankBadge'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 import SEO from '../components/SEO'
+import { has3DModel } from '../data/aircraftModels'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -1377,7 +1378,8 @@ function SettingsTab({ API }) {
   const [modal,    setModal]    = useState(null)   // { label, fields }
   const [toast,    setToast]    = useState('')
   const [wtaSpawn,   setWtaSpawn]   = useState(null)
-  const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false })
+  const [cbatAircraft, setCbatAircraft] = useState(null)   // aircraft with a 3D model available
+  const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false, cbat: false })
   const toggleGameGroup = (key) => setGameGroupsOpen(p => ({ ...p, [key]: !p[key] }))
 
   const load = useCallback(() => {
@@ -1387,6 +1389,13 @@ function SettingsTab({ API }) {
     apiFetch(`${API}/api/users/me/wta-spawn`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => { if (d.data) setWtaSpawn(d.data) })
+    apiFetch(`${API}/api/games/cbat/aircraft-cutouts`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        const list = (d.data || []).filter(a => has3DModel(a.briefId, a.title))
+        setCbatAircraft(list)
+      })
+      .catch(() => setCbatAircraft([]))
   }, [API])
 
   useEffect(() => { load() }, [load])
@@ -1570,6 +1579,7 @@ function SettingsTab({ API }) {
         'aptitudeSyncDailyLimitFree',
         'aptitudeSyncDailyLimitSilver',
         'aptitudeSyncDailyLimitGold',
+        'cbatTargetAircraftBriefIds',
       ])}>
         <button
           type="button"
@@ -1708,6 +1718,79 @@ function SettingsTab({ API }) {
               min={0}
               onChange={v => set('aptitudeSyncDailyLimitGold', v)}
             />
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => toggleGameGroup('cbat')}
+          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-6 pb-2 mb-2 border-b-2 border-brand-600/40"
+        >
+          <span>CBAT</span>
+          <span className="text-brand-600 text-xs">{gameGroupsOpen.cbat ? '▲' : '▼'}</span>
+        </button>
+        {gameGroupsOpen.cbat && (
+          <>
+            <p className="text-sm font-bold text-slate-700 uppercase tracking-wide pt-2 pb-1">Target</p>
+            <div className="py-2.5 border-b border-slate-100">
+              <p className="text-sm font-semibold text-slate-700 mb-1">Aircraft in scan panels</p>
+              <p className="text-xs text-slate-400 mb-3">
+                Only ticked aircraft appear in the Target game's scan panels. New 3D models added to <code>/public/models/</code> start unticked until enabled here.
+              </p>
+              {cbatAircraft === null ? (
+                <p className="text-xs text-slate-400">Loading aircraft…</p>
+              ) : cbatAircraft.length === 0 ? (
+                <p className="text-xs text-slate-400">No aircraft with 3D models found.</p>
+              ) : (
+                <>
+                  <div className="flex gap-3 mb-2 text-xs">
+                    <button
+                      type="button"
+                      className="text-brand-600 hover:underline font-semibold"
+                      onClick={() => set('cbatTargetAircraftBriefIds', cbatAircraft.map(a => String(a.briefId)))}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      className="text-slate-500 hover:underline font-semibold"
+                      onClick={() => set('cbatTargetAircraftBriefIds', [])}
+                    >
+                      Deselect all
+                    </button>
+                    <span className="ml-auto text-slate-400">
+                      {(draft.cbatTargetAircraftBriefIds ?? []).length}/{cbatAircraft.length} enabled
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {cbatAircraft.map(a => {
+                      const id      = String(a.briefId)
+                      const enabled = (draft.cbatTargetAircraftBriefIds ?? []).includes(id)
+                      return (
+                        <label key={id} className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 rounded px-2 py-1.5 border border-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={enabled}
+                            onChange={() => {
+                              const current = draft.cbatTargetAircraftBriefIds ?? []
+                              const next    = enabled
+                                ? current.filter(x => x !== id)
+                                : [...current, id]
+                              set('cbatTargetAircraftBriefIds', next)
+                            }}
+                            className="w-4 h-4 accent-brand-600"
+                          />
+                          {a.cutoutUrl && (
+                            <img src={a.cutoutUrl} alt="" className="w-8 h-8 object-contain flex-shrink-0" />
+                          )}
+                          <span className="text-sm font-medium text-slate-700 truncate">{a.title}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
           </>
         )}
       </Section>

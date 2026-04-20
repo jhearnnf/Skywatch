@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } fro
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import SEO from '../components/SEO'
 
@@ -14,6 +15,7 @@ const NEXT_TARGET_MS = 20_000
 const MAX_ACTIVE_TARGETS = 5
 const LIGHT_CHANGE_MS = 5_000
 const SCAN_PANEL_CHANGE_MS = 10_000
+const SCAN_PANEL_MATCH_COOLDOWN_MS = 7_000
 const SCAN_TARGET_CHANGE_MS = 45_000
 const SCAN_FIRST_APPEAR_MS = 10_000
 // When the scan panel rotates, roughly this fraction of the time it'll show
@@ -168,11 +170,12 @@ function planGame() {
     115_000,
   )
   for (let i = 0; i < fakeCount; i++) {
-    const isLine = Math.random() < 0.5
+    const roll = Math.random()
+    const fakeKind = roll < 0.34 ? 'line' : roll < 0.67 ? 'octagon' : 'pentagon'
     shapes.push({
       id: uid(),
-      kind: isLine ? 'line' : 'octagon',
-      lineHorizontal: isLine ? Math.random() < 0.5 : undefined,
+      kind: fakeKind,
+      lineHorizontal: fakeKind === 'line' ? Math.random() < 0.5 : undefined,
       color: pick(SHAPE_COLOURS),
       damaged: false,
       highPriority: false,
@@ -249,8 +252,9 @@ function useShapeScale(breakpoint = 900) {
 const KIND_SCALE = {
   truck: 1, tank: 1, building: 1,
   unknown: 0.55,          // diamonds noticeably smaller
-  octagon: 1.45,          // octagons bigger
-  line: 1.05,
+  octagon: 2.05,          // octagons bigger
+  pentagon: 2.05,         // pentagons sized to match octagons
+  line: 1.25,
 }
 function Shape({ shape, scale = 1 }) {
   const { kind, color, damaged, highPriority, direction, x, y, fake, lineHorizontal } = shape
@@ -267,14 +271,25 @@ function Shape({ shape, scale = 1 }) {
   } else if (kind === 'tank') {
     shapeEl = <rect x={-R} y={-R} width={R * 2} height={R * 2} fill="none" stroke={strokeCol} strokeWidth="2.5" />
   } else if (kind === 'building') {
-    const h = R * 1.55
-    shapeEl = <polygon points={`0,${-h} ${-R},${R * 0.9} ${R},${R * 0.9}`} fill="none" stroke={strokeCol} strokeWidth="2.5" />
+    // Equilateral triangle with base 2R (side length), centroid at origin:
+    //   apex at y = -2R/√3, base at y = R/√3.
+    const apex = (R * 2) / Math.sqrt(3)
+    const base = R / Math.sqrt(3)
+    shapeEl = <polygon points={`0,${-apex} ${-R},${base} ${R},${base}`} fill="none" stroke={strokeCol} strokeWidth="2.5" />
   } else if (kind === 'unknown') {
     shapeEl = <rect x={-R} y={-R} width={R * 2} height={R * 2} fill="none" stroke={strokeCol} strokeWidth="2.5" transform="rotate(45)" />
   } else if (kind === 'octagon') {
     const pts = []
     for (let i = 0; i < 8; i++) {
       const a = (Math.PI / 4) * i + Math.PI / 8
+      pts.push(`${Math.cos(a) * R},${Math.sin(a) * R}`)
+    }
+    shapeEl = <polygon points={pts.join(' ')} fill="none" stroke={strokeCol} strokeWidth="2.5" />
+  } else if (kind === 'pentagon') {
+    // Regular pentagon, apex up, centroid at origin.
+    const pts = []
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + i * (2 * Math.PI / 5)
       pts.push(`${Math.cos(a) * R},${Math.sin(a) * R}`)
     }
     shapeEl = <polygon points={pts.join(' ')} fill="none" stroke={strokeCol} strokeWidth="2.5" />
@@ -294,10 +309,21 @@ function Shape({ shape, scale = 1 }) {
     </g>
   ) : null
 
+  // Diagonal X is inscribed into each shape so its endpoints touch the
+  // inside edge of the outline without crossing it. PAD reserves room for the
+  // shape's 2.5px stroke half + the X's rounded cap.
+  const damagedReach = (() => {
+    const PAD = 1.75
+    if (kind === 'truck')    return R / Math.sqrt(2) - PAD                       // inscribed in circle
+    if (kind === 'tank')     return R - PAD                                      // inscribed in square
+    if (kind === 'building') return R * (1 - 1 / Math.sqrt(3)) - PAD             // bound by slant edges of equilateral triangle
+    if (kind === 'octagon')  return R * Math.cos(Math.PI / 8) / Math.sqrt(2) - PAD
+    return R * 0.55
+  })()
   const damagedX = isReal && damaged ? (
     <g stroke={strokeCol} strokeWidth="3" strokeLinecap="round">
-      <line x1={-R * 0.55} y1={-R * 0.55} x2={R * 0.55} y2={R * 0.55} />
-      <line x1={-R * 0.55} y1={R * 0.55} x2={R * 0.55} y2={-R * 0.55} />
+      <line x1={-damagedReach} y1={-damagedReach} x2={damagedReach} y2={damagedReach} />
+      <line x1={-damagedReach} y1={damagedReach} x2={damagedReach} y2={-damagedReach} />
     </g>
   ) : null
 
@@ -359,7 +385,7 @@ function InfoPanel() {
         <Item icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#facc15]" />} label="neutral" />
         <Item icon={outlineSvg(<circle cx="0" cy="0" r="4.5" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="truck" />
         <Item icon={outlineSvg(<rect x="-4.5" y="-4.5" width="9" height="9" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="tank" />
-        <Item icon={outlineSvg(<polygon points="0,-5 -4.5,4 4.5,4" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="building" />
+        <Item icon={outlineSvg(<polygon points="0,-5.2 -4.5,2.6 4.5,2.6" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="building" />
         <Item icon={outlineSvg(<rect x="-3.5" y="-3.5" width="7" height="7" fill="none" stroke="#facc15" strokeWidth="1.3" transform="rotate(45)" />)} label="unknown" />
         <Item icon={<span className="text-red-300 font-bold">✕</span>} label="damaged" />
         <Item icon={outlineSvg(
@@ -410,6 +436,41 @@ function LightTargetPanel({ pattern }) {
 }
 
 // ── Scan panels ──────────────────────────────────────────────────────────────
+// Standalone radar overlay so the sweep keeps animating even when no aircraft
+// is showing in the scan panel (pre-first-spawn and during post-match cooldown).
+function ScanRadar() {
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 8, background: '#020a18' }}>
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background:
+            'radial-gradient(circle at center, transparent 40%, rgba(6,16,30,0.55) 100%), ' +
+            'repeating-linear-gradient(0deg, rgba(91,170,255,0.08) 0 1px, transparent 1px 6px), ' +
+            'repeating-linear-gradient(90deg, rgba(91,170,255,0.08) 0 1px, transparent 1px 6px)',
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        aria-hidden
+        className="radar-sweep"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background:
+            'conic-gradient(from 0deg, rgba(91,170,255,0.35) 0deg, rgba(91,170,255,0) 40deg, rgba(91,170,255,0) 360deg)',
+          mixBlendMode: 'screen',
+          pointerEvents: 'none',
+          animation: 'radar-sweep 2.6s linear infinite',
+          borderRadius: '50%',
+        }}
+      />
+    </div>
+  )
+}
+
 function ScanPanel({ aircraft, onPress, flash }) {
   return (
     <div className={`h-full w-full bg-[#0a1628] border rounded-lg p-1 flex items-center gap-1 transition-colors ${flash ? 'border-green-400 bg-green-500/15' : 'border-[#1a3a5c]'}`}>
@@ -425,7 +486,7 @@ function ScanPanel({ aircraft, onPress, flash }) {
             />
           </Suspense>
         ) : (
-          <div className="w-full h-full bg-[#020a18] rounded flex items-center justify-center text-[10px] text-slate-600">— scanning —</div>
+          <ScanRadar />
         )}
       </div>
       <button
@@ -658,6 +719,7 @@ function Intro({ onStart, personalBest, aircraftReady }) {
 // ── Main ─────────────────────────────────────────────────────────────────────
 export default function CbatTarget() {
   const { user, apiFetch, API } = useAuth()
+  const { settings } = useAppSettings()
   const shapeScale = useShapeScale()
 
   const [phase, setPhase] = useState('intro')         // intro | playing | results
@@ -687,6 +749,8 @@ export default function CbatTarget() {
   const [scanTargetAc, setScanTargetAc] = useState(null)
   const scanLastChangeRef = useRef(0)
   const scanTargetLastChangeRef = useRef(0)
+  // After a correct scan-panel match, keep the panel empty until this elapsedMs.
+  const scanCooldownUntilRef = useRef(0)
 
   // System state — 3 columns of codes
   const [sysColumns, setSysColumns] = useState(() => initSysColumns())
@@ -710,13 +774,15 @@ export default function CbatTarget() {
     apiFetch(`${API}/api/games/cbat/aircraft-cutouts`)
       .then(r => r.json())
       .then(d => {
+        const allowlist = new Set((settings?.cbatTargetAircraftBriefIds ?? []).map(String))
         const list = (d.data || [])
           .filter(a => has3DModel(a.briefId, a.title))
+          .filter(a => allowlist.has(String(a.briefId)))
           .map(a => ({ ...a, modelUrl: getModelUrl(a.briefId, a.title) }))
         setAircraftList(list)
       })
       .catch(() => {})
-  }, [user])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, settings?.cbatTargetAircraftBriefIds])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Start game ─────────────────────────────────────────────────────────────
   const startGame = useCallback(() => {
@@ -743,6 +809,7 @@ export default function CbatTarget() {
     lightForceMatchAtRef.current = randRange(3, 6)
     scanLastChangeRef.current = 0
     scanTargetLastChangeRef.current = 0
+    scanCooldownUntilRef.current = 0
     startedAtRef.current = performance.now()
     setPhase('playing')
   }, [aircraftList])
@@ -783,7 +850,11 @@ export default function CbatTarget() {
   // ── Check light-change schedule ────────────────────────────────────────────
   useEffect(() => {
     if (phase !== 'playing') return
-    if (elapsedMs - lightLastChangeRef.current < LIGHT_CHANGE_MS) return
+    // When the current pattern already matches the target, hold it twice as
+    // long so the player has a better chance of spotting and clicking it.
+    const currentlyMatching = lightPattern.every((c, i) => c === lightTarget[i])
+    const interval = currentlyMatching ? LIGHT_CHANGE_MS * 2 : LIGHT_CHANGE_MS
+    if (elapsedMs - lightLastChangeRef.current < interval) return
     lightLastChangeRef.current = elapsedMs
     lightChangeCountRef.current += 1
     if (lightChangeCountRef.current >= lightForceMatchAtRef.current) {
@@ -793,7 +864,7 @@ export default function CbatTarget() {
     } else {
       setLightPattern(randomLightPattern())
     }
-  }, [elapsedMs, phase, lightTarget])
+  }, [elapsedMs, phase, lightTarget, lightPattern])
 
   // Pick an aircraft for the scan panel, biased toward the current scan target
   // so players can score ID points regularly rather than waiting on a pure
@@ -806,18 +877,19 @@ export default function CbatTarget() {
   // ── Scan panel / target schedules ──────────────────────────────────────────
   useEffect(() => {
     if (phase !== 'playing' || aircraftList.length === 0) return
+    const cooldownActive = elapsedMs < scanCooldownUntilRef.current
     // First scan target appears at 10s; scan panel starts at same time
     if (!scanTargetAc && elapsedMs >= SCAN_FIRST_APPEAR_MS) {
       const nextTarget = pick(aircraftList)
       setScanTargetAc(nextTarget)
       scanTargetLastChangeRef.current = elapsedMs
-      if (!scanPanelAc) {
+      if (!scanPanelAc && !cooldownActive) {
         setScanPanelAc(scanFrame(pickScanPanelAircraft(nextTarget)))
         scanLastChangeRef.current = elapsedMs
       }
       return
     }
-    if (!scanPanelAc && elapsedMs >= SCAN_FIRST_APPEAR_MS) {
+    if (!scanPanelAc && !cooldownActive && elapsedMs >= SCAN_FIRST_APPEAR_MS) {
       setScanPanelAc(scanFrame(pickScanPanelAircraft(scanTargetAc)))
       scanLastChangeRef.current = elapsedMs
     }
@@ -977,7 +1049,7 @@ export default function CbatTarget() {
   }
 
   const onShapeClick = (shape) => {
-    if (shape.fake || shape.kind === 'octagon' || shape.kind === 'line') {
+    if (shape.fake || shape.kind === 'octagon' || shape.kind === 'line' || shape.kind === 'pentagon') {
       bumpCounter('sceneMisses')
       addScore(SCORE.sceneMiss, 'scene')
       return
@@ -1026,11 +1098,10 @@ export default function CbatTarget() {
       const bonus = Math.max(0, Math.round(SCORE.scanBonus * (1 - dt)))
       bumpCounter('scanMatches')
       addScore(SCORE.scanMatch + bonus, 'scan')
-      // rotate scan panel immediately; scan target keeps its longer schedule.
-      // Force a non-matching aircraft right after a match so the player can't
-      // just mash ID repeatedly on the same target.
-      const others = aircraftList.filter(a => a.briefId !== scanTargetAc?.briefId)
-      setScanPanelAc(scanFrame(others.length ? pick(others) : pick(aircraftList)))
+      // Clear the panel and hold it empty for SCAN_PANEL_MATCH_COOLDOWN_MS
+      // so the player can't mash IDs in quick succession on the same target.
+      setScanPanelAc(null)
+      scanCooldownUntilRef.current = elapsedMs + SCAN_PANEL_MATCH_COOLDOWN_MS
       scanLastChangeRef.current = elapsedMs
       setScanFlash(true)
       setTimeout(() => setScanFlash(false), 350)

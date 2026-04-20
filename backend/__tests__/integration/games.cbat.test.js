@@ -10,6 +10,7 @@ const GameSessionCbatAnglesResult         = require('../../models/GameSessionCba
 const GameSessionCbatCodeDuplicatesResult = require('../../models/GameSessionCbatCodeDuplicatesResult');
 const GameSessionCbatSymbolsResult        = require('../../models/GameSessionCbatSymbolsResult');
 const GameSessionCbatTargetResult         = require('../../models/GameSessionCbatTargetResult');
+const GameSessionCbatInstrumentsResult    = require('../../models/GameSessionCbatInstrumentsResult');
 
 let user, cookie, user2, cookie2;
 
@@ -500,6 +501,80 @@ describe('CBAT Target', () => {
       const { leaderboard } = res.body.data;
       expect(leaderboard).toHaveLength(2);
       // Same totalScore — user2 wins on time
+      expect(leaderboard[0].agentNumber).toBe('1000002');
+      expect(leaderboard[1].agentNumber).toBe('1000001');
+    });
+
+    it('returns empty leaderboard when no results exist', async () => {
+      const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
+      expect(res.body.data.leaderboard).toHaveLength(0);
+      expect(res.body.data.myBest).toBeNull();
+    });
+  });
+});
+
+// ── Instruments ──────────────────────────────────────────────────────────────
+describe('CBAT Instruments', () => {
+  const RESULT_URL = '/api/games/cbat/instruments/result';
+  const LEADERBOARD_URL = '/api/games/cbat/instruments/leaderboard';
+  const PB_URL = '/api/games/cbat/instruments/personal-best';
+
+  describe('POST /result', () => {
+    it('saves a result and returns 201', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({ correctCount: 14, roundsPlayed: 18, totalTime: 90, grade: 'Good' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.status).toBe('success');
+      expect(res.body.data.correctCount).toBe(14);
+      expect(res.body.data.roundsPlayed).toBe(18);
+      expect(res.body.data.grade).toBe('Good');
+
+      const count = await GameSessionCbatInstrumentsResult.countDocuments();
+      expect(count).toBe(1);
+    });
+
+    it('returns 401 without auth', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .send({ correctCount: 10, roundsPlayed: 15, totalTime: 90 });
+
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /personal-best', () => {
+    it('returns null when user has no results', async () => {
+      const res = await request(app).get(PB_URL).set('Cookie', cookie);
+      expect(res.body.data).toBeNull();
+    });
+
+    it('returns best score (most correct) across attempts', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ correctCount: 8, roundsPlayed: 12, totalTime: 90, grade: 'Needs Work' });
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ correctCount: 17, roundsPlayed: 20, totalTime: 90, grade: 'Outstanding' });
+
+      const res = await request(app).get(PB_URL).set('Cookie', cookie);
+      expect(res.body.data.bestScore).toBe(17);
+      expect(res.body.data.bestTime).toBe(90);
+      expect(res.body.data.attempts).toBe(2);
+    });
+  });
+
+  describe('GET /leaderboard', () => {
+    it('returns leaderboard sorted by most correct, then fastest time', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ correctCount: 12, roundsPlayed: 16, totalTime: 88, grade: 'Good' });
+      await request(app).post(RESULT_URL).set('Cookie', cookie2)
+        .send({ correctCount: 12, roundsPlayed: 14, totalTime: 75, grade: 'Good' });
+
+      const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
+      const { leaderboard } = res.body.data;
+      expect(leaderboard).toHaveLength(2);
+      // Same correctCount — user2 wins on time
       expect(leaderboard[0].agentNumber).toBe('1000002');
       expect(leaderboard[1].agentNumber).toBe('1000001');
     });

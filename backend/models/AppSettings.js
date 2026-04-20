@@ -145,6 +145,11 @@ const appSettingsSchema = new mongoose.Schema({
   aptitudeSyncDailyLimitSilver: { type: Number,   default: 3,  min: 0 },
   aptitudeSyncDailyLimitGold:   { type: Number,   default: 10, min: 0 },
 
+  // CBAT Target — strict allowlist of aircraft (briefIds) that appear in the scan panels.
+  // Empty = no aircraft enabled. New 3D models added to /public/models/ start unticked
+  // until an admin explicitly enables them via the Game Options → CBAT → Target section.
+  cbatTargetAircraftBriefIds: { type: [String], default: [] },
+
   // Pathway unlock requirements — each entry gates a category behind level + rank.
   // levelRequired: Agent Level (1–10). rankRequired: RAF Rank number (1–19).
   // Subscription tier is derived from freeCategories/silverCategories — not stored here.
