@@ -263,3 +263,72 @@ describe('POST /api/briefs/:id/complete — daily streak reward', () => {
     expect((await User.findById(user._id)).loginStreak).toBe(3);
   });
 });
+
+// ── Stale streak decay via authenticated requests ─────────────────────────
+
+describe('Authenticated requests decay stale streaks', () => {
+  it('zeros out loginStreak on GET /api/auth/me when last read was >1 day ago', async () => {
+    const user = await createUser({ loginStreak: 5 });
+    await setLastStreakDate(user._id, 2); // two days ago — lapsed
+    const cookie = authCookie(user._id);
+
+    const res = await request(app).get('/api/auth/me').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.user.loginStreak).toBe(0);
+    const persisted = await User.findById(user._id);
+    expect(persisted.loginStreak).toBe(0);
+  });
+
+  it('does NOT decay streak when last read was yesterday', async () => {
+    const user = await createUser({ loginStreak: 5 });
+    await setLastStreakDate(user._id, 1); // yesterday — still alive
+    const cookie = authCookie(user._id);
+
+    const res = await request(app).get('/api/auth/me').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.user.loginStreak).toBe(5);
+    const persisted = await User.findById(user._id);
+    expect(persisted.loginStreak).toBe(5);
+  });
+
+  it('does NOT decay streak when last read was today', async () => {
+    const user = await createUser({ loginStreak: 3 });
+    await setLastStreakDate(user._id, 0); // today
+    const cookie = authCookie(user._id);
+
+    const res = await request(app).get('/api/auth/me').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.user.loginStreak).toBe(3);
+  });
+
+  it('does nothing when user has never started a streak', async () => {
+    const user = await createUser();
+    const cookie = authCookie(user._id);
+
+    const res = await request(app).get('/api/auth/me').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.user.loginStreak).toBe(0);
+    expect(res.body.data.user.lastStreakDate).toBeNull();
+  });
+
+  it('after decay, the next brief completion starts a fresh streak at 1', async () => {
+    const user   = await createUser({ loginStreak: 5 });
+    await setLastStreakDate(user._id, 3); // gap
+    const brief  = await createBrief({ category: 'News' });
+    const cookie = authCookie(user._id);
+
+    // This request alone triggers decay via protect middleware
+    await request(app).get('/api/auth/me').set('Cookie', cookie);
+    expect((await User.findById(user._id)).loginStreak).toBe(0);
+
+    // Next completion should start at 1
+    await openBrief(brief._id, cookie);
+    const res = await completeBrief(brief._id, cookie);
+    expect(res.body.data.loginStreak).toBe(1);
+    expect(res.body.data.dailyCoinsEarned).toBe(5); // base only
+  });
+});

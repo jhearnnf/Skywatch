@@ -5,13 +5,17 @@ import SEO from '../components/SEO'
 
 const CBAT_GAMES = [
   { key: 'target',          emoji: '🎯', title: 'Target',           desc: 'Multi-task across eight panels — hunt shapes, match lights, ID aircraft, find codes.', path: '/cbat/target' },
-  { key: 'sdt',             emoji: '📡', title: 'SDT',              desc: 'Speed Distance Time — coming soon.',      path: null },
+  { key: 'sdt',             emoji: '📡', title: 'SDT',              desc: 'Speed Distance Time — compute arrival, distance, fuel or speed against the clock.', path: '/cbat/sdt' },
   { key: 'symbols',         emoji: '🔣', title: 'Symbols',          desc: 'Spot the target symbol in a growing grid, round by round.', path: '/cbat/symbols' },
   { key: 'code-duplicates', emoji: '🧩', title: 'Code Duplicates',  desc: 'Memorise a sequence of digits, then count how many times one appeared.', path: '/cbat/code-duplicates' },
   { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: '/cbat/angles' },
   { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: '/cbat/instruments' },
   { key: 'plane-turn',      emoji: '🗺️', title: 'Plane Turn',       desc: 'Plan your turn and heading with precision.',            path: '/cbat/plane-turn' },
   { key: 'audio-interrupt',  emoji: '🎧', title: 'Audio Interrupt',  desc: 'Respond to audio cues while multitasking.',             path: null },
+  { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Figures Logistics and Groups — coming soon.',           path: null },
+  { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — coming soon.',               path: null },
+  { key: 'visualisation-3d', emoji: '🧊', title: 'Visualisation 3D', desc: 'Rotate and reason about 3D shapes — coming soon.',      path: null },
+  { key: 'visualisation-2d', emoji: '🧮', title: 'Visualisation 2D', desc: 'Spatial reasoning with 2D figures — coming soon.',      path: null },
 ]
 
 export default function Cbat() {

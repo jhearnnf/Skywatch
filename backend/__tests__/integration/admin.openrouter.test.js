@@ -119,13 +119,17 @@ describe('GET /api/admin/openrouter/summary', () => {
 // ── /logs ───────────────────────────────────────────────────────────────────
 
 describe('GET /api/admin/openrouter/logs', () => {
+  // Hour-scale gaps keep the `from=` window test deterministic even if the
+  // test runner is slow — setup jitter of seconds is irrelevant against a
+  // 2.5-hour cutoff.
+  const HOUR = 3600 * 1000;
   beforeEach(async () => {
     const now = new Date();
     await OpenRouterUsageLog.create([
-      { key: 'main',     feature: 'generate-brief', costUsd: 0.20, totalTokens: 100, createdAt: new Date(now.getTime() - 1000) },
-      { key: 'main',     feature: 'generate-quiz',  costUsd: 0.10, totalTokens: 50,  createdAt: new Date(now.getTime() - 2000) },
-      { key: 'main',     feature: 'generate-brief', costUsd: 0.30, totalTokens: 200, createdAt: new Date(now.getTime() - 3000) },
-      { key: 'aptitude', feature: 'aptitude-sync',  costUsd: 0.04, totalTokens: 40,  createdAt: new Date(now.getTime() - 4000) },
+      { key: 'main',     feature: 'generate-brief', costUsd: 0.20, totalTokens: 100, createdAt: new Date(now.getTime() - 1 * HOUR) },
+      { key: 'main',     feature: 'generate-quiz',  costUsd: 0.10, totalTokens: 50,  createdAt: new Date(now.getTime() - 2 * HOUR) },
+      { key: 'main',     feature: 'generate-brief', costUsd: 0.30, totalTokens: 200, createdAt: new Date(now.getTime() - 3 * HOUR) },
+      { key: 'aptitude', feature: 'aptitude-sync',  costUsd: 0.04, totalTokens: 40,  createdAt: new Date(now.getTime() - 4 * HOUR) },
     ]);
   });
 
@@ -166,12 +170,12 @@ describe('GET /api/admin/openrouter/logs', () => {
 
   it('filters by from=<iso> to exclude older rows', async () => {
     const admin = await createAdminUser();
-    const twoSecAgo = new Date(Date.now() - 2500).toISOString();
+    const cutoff = new Date(Date.now() - 2.5 * HOUR).toISOString();
     const res = await request(app)
-      .get(`/api/admin/openrouter/logs?from=${encodeURIComponent(twoSecAgo)}`)
+      .get(`/api/admin/openrouter/logs?from=${encodeURIComponent(cutoff)}`)
       .set('Cookie', authCookie(admin._id));
 
-    // Only the two most-recent rows fall inside the window (1s and 2s ago).
+    // Only the two most-recent rows fall inside the window (1h and 2h ago).
     expect(res.body.data.totalCalls).toBe(2);
     expect(res.body.data.totalCost).toBeCloseTo(0.30, 5);
   });

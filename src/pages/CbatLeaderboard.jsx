@@ -55,6 +55,14 @@ const GAME_CONFIG = {
     formatScore: (s) => `${s}`,
     backPath: '/cbat/instruments',
   },
+  'sdt': {
+    title: 'Speed Distance Time',
+    emoji: '\u{1F4E1}',
+    scoreLabel: 'Points',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}`,
+    backPath: '/cbat/sdt',
+  },
 }
 
 export default function CbatLeaderboard() {
