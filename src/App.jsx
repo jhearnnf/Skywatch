@@ -37,6 +37,7 @@ import BOOBriefsList      from './pages/BOOBriefsList'
 // v2 pages (continued)
 import LoginPage      from './pages/Login'
 import Profile        from './pages/Profile'
+import BadgePicker    from './pages/BadgePicker'
 import Rankings       from './pages/Rankings'
 import Play           from './pages/Play'
 import Cbat           from './pages/Cbat'
@@ -207,6 +208,7 @@ function AppRoutes() {
 
           {/* v2 pages */}
           <Route path="/profile"          element={<PageWrapper><Profile /></PageWrapper>} />
+          <Route path="/profile/badge"    element={<RequireAuth><PageWrapper><BadgePicker /></PageWrapper></RequireAuth>} />
           <Route path="/rankings"         element={<PageWrapper><Rankings /></PageWrapper>} />
           <Route path="/play"                   element={<PageWrapper><Play /></PageWrapper>} />
           <Route path="/play/quiz"              element={<RequireAuth><PageWrapper><QuizBriefsList /></PageWrapper></RequireAuth>} />

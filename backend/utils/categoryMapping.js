@@ -6,10 +6,24 @@
 const { CATEGORIES } = require('../constants/categories');
 
 /**
- * Map a SECTION header string (e.g. "SECTION 10: HISTORIC & ONGOING RAF OPERATIONS")
- * to a brief category string.
+ * Subsection-level category overrides. Some subsections appear under an intuitive
+ * section in the source lead file but actually belong to a different category
+ * (e.g. GBAD systems are listed under AIRCRAFT in the source text, but they are
+ * weapons systems — not aircraft — and must be filed under Tech).
  */
-function leadSectionToCategory(section) {
+const SUBSECTION_CATEGORY_OVERRIDES = {
+  'GROUND-BASED AIR DEFENCE (RAF REGIMENT)': 'Tech',
+};
+
+/**
+ * Map a SECTION header string (e.g. "SECTION 10: HISTORIC & ONGOING RAF OPERATIONS")
+ * to a brief category string. Pass an optional subsection header to apply
+ * subsection-level category overrides.
+ */
+function leadSectionToCategory(section, subsection) {
+  if (subsection && SUBSECTION_CATEGORY_OVERRIDES[subsection]) {
+    return SUBSECTION_CATEGORY_OVERRIDES[subsection];
+  }
   if (!section) return CATEGORIES[0];
   const match = section.match(/SECTION\s+(\d+)/i);
   const num = match ? parseInt(match[1], 10) : 0;
@@ -45,7 +59,7 @@ function leadSubsectionToSubcategory(subsection) {
     'TRANSPORT & TANKER':                                  'Transport & Tanker',
     'ROTARY WING':                                         'Rotary Wing',
     'TRAINING (FIXED WING)':                               'Training Aircraft',
-    'GROUND-BASED AIR DEFENCE (RAF REGIMENT)':             'Ground-Based Air Defence',
+    'GROUND-BASED AIR DEFENCE (RAF REGIMENT)':             'Weapons Systems',
     // Aircrafts — Section 4 (historical)
     'WWII ERA':                                            'Historic — WWII',
     'PRE-WWII / INTERWAR':                                 'Historic — WWII',
@@ -122,4 +136,4 @@ function leadSubsectionToSubcategory(subsection) {
   return map[subsection] || '';
 }
 
-module.exports = { leadSectionToCategory, leadSubsectionToSubcategory };
+module.exports = { leadSectionToCategory, leadSubsectionToSubcategory, SUBSECTION_CATEGORY_OVERRIDES };

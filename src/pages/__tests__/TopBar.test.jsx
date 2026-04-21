@@ -95,6 +95,27 @@ describe('TopBar — airstar display', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/rankings', { state: { tab: 'ranks' } })
   })
 
+  it('clicking avatar navigates to /profile/badge when an aircraft cutout is selected', () => {
+    setupAuth({
+      rank: { rankName: 'Corporal', rankAbbreviation: 'Cpl', rankNumber: 4 },
+      selectedBadge: { briefId: 'b1', title: 'Typhoon', cutoutUrl: 'https://cdn/typhoon.png' },
+    })
+    render(<TopBar />)
+    fireEvent.click(screen.getByLabelText('Change profile badge'))
+    expect(mockNavigate).toHaveBeenCalledWith('/profile/badge', undefined)
+  })
+
+  it('avatar renders the aircraft cutout image when selectedBadge is set', () => {
+    setupAuth({
+      rank: { rankName: 'Corporal', rankAbbreviation: 'Cpl', rankNumber: 4 },
+      selectedBadge: { briefId: 'b1', title: 'Typhoon', cutoutUrl: 'https://cdn/typhoon.png' },
+    })
+    const { container } = render(<TopBar />)
+    const img = container.querySelector('img.profile-badge-cutout-img')
+    expect(img).not.toBeNull()
+    expect(img.getAttribute('src')).toBe('https://cdn/typhoon.png')
+  })
+
   it('shows Sign In link when no user is logged in', () => {
     setupAuth(null)
     render(<TopBar />)

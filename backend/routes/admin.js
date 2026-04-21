@@ -16,6 +16,7 @@ const GameOrderOfBattle                   = require('../models/GameOrderOfBattle
 const GameFlashcardRecall                 = require('../models/GameFlashcardRecall');
 const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashcardRecallResult');
 const GameSessionWhereAircraftResult      = require('../models/GameSessionWhereAircraftResult');
+const { CBAT_GAMES }                      = require('../constants/cbatGames');
 const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const Rank  = require('../models/Rank');
@@ -124,6 +125,16 @@ function getTopicPrompt(settings, category) {
   const key = TOPIC_PROMPT_BY_CATEGORY[category] || 'brief.topic';
   return getPrompt(settings, key);
 }
+
+// Brief shape dispatcher, subtitle spec, topic user-content guidance, and
+// descriptionSections spec builder live in utils/briefPromptShapes so they can
+// be unit-tested without importing the whole admin router.
+const {
+  getBriefShape,
+  SUBTITLE_SPEC,
+  buildTopicUserGuidance,
+  buildDescriptionSectionsSpec,
+} = require('../utils/briefPromptShapes');
 
 function normaliseLeadTitle(s) {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -273,24 +284,18 @@ router.get('/stats', async (_req, res) => {
         { $unwind: '$cardResults' },
         { $group: { _id: null, total: { $sum: { $ifNull: ['$cardResults.timeTakenSeconds', 0] } } } },
       ]),
-      // Tutorial viewed/skipped counts across all users and all 4 tutorial fields
-      User.aggregate([{
-        $group: {
-          _id: null,
-          viewed: { $sum: { $add: [
-            { $cond: [{ $eq: ['$tutorials.welcome',     'viewed'] }, 1, 0] },
-            { $cond: [{ $eq: ['$tutorials.intel_brief', 'viewed'] }, 1, 0] },
-            { $cond: [{ $eq: ['$tutorials.user',        'viewed'] }, 1, 0] },
-            { $cond: [{ $eq: ['$tutorials.load_up',     'viewed'] }, 1, 0] },
-          ]}},
-          skipped: { $sum: { $add: [
-            { $cond: [{ $eq: ['$tutorials.welcome',     'skipped'] }, 1, 0] },
-            { $cond: [{ $eq: ['$tutorials.intel_brief', 'skipped'] }, 1, 0] },
-            { $cond: [{ $eq: ['$tutorials.user',        'skipped'] }, 1, 0] },
-            { $cond: [{ $eq: ['$tutorials.load_up',     'skipped'] }, 1, 0] },
-          ]}},
-        },
-      }]),
+      // Tutorial viewed/skipped counts — derived dynamically from whatever keys
+      // live on each user's `tutorials` subdoc, so new tutorial fields are counted
+      // automatically without updating this aggregation.
+      User.aggregate([
+        { $project: { entries: { $objectToArray: { $ifNull: ['$tutorials', {}] } } } },
+        { $unwind: '$entries' },
+        { $group: {
+            _id: null,
+            viewed:  { $sum: { $cond: [{ $eq: ['$entries.v', 'viewed']  }, 1, 0] } },
+            skipped: { $sum: { $cond: [{ $eq: ['$entries.v', 'skipped'] }, 1, 0] } },
+        }},
+      ]),
       // AptitudeSync
       AptitudeSyncUsage.countDocuments(),
       AptitudeSyncUsage.countDocuments({ completedAt: { $ne: null } }),
@@ -640,7 +645,8 @@ async function enrichUsersWithStats(users) {
   if (!users.length) return [];
   const userIds = users.map(u => u._id);
 
-  const [briefCounts, quizCounts, booCounts, wtaCounts, whereCounts, flashCounts] = await Promise.all([
+  const cbatConfigs = Object.values(CBAT_GAMES);
+  const [briefCounts, quizCounts, booCounts, wtaCounts, whereCounts, flashCounts, ...cbatCountsPerGame] = await Promise.all([
     IntelligenceBriefRead.aggregate([
       { $match: { userId: { $in: userIds }, completed: true } },
       { $group: { _id: '$userId', count: { $sum: 1 } } },
@@ -673,6 +679,10 @@ async function enrichUsersWithStats(users) {
       { $match: { userId: { $in: userIds } } },
       { $group: { _id: '$userId', total: { $sum: 1 } } },
     ]),
+    ...cbatConfigs.map(cfg => cfg.Model.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      { $group: { _id: '$userId', count: { $sum: 1 } } },
+    ])),
   ]);
 
   const briefMap = Object.fromEntries(briefCounts.map(b  => [b._id.toString(), b.count]));
@@ -681,6 +691,14 @@ async function enrichUsersWithStats(users) {
   const wtaMap   = Object.fromEntries(wtaCounts.map(w    => [w._id.toString(), w.total]));
   const whereMap = Object.fromEntries(whereCounts.map(w  => [w._id.toString(), w.total]));
   const flashMap = Object.fromEntries(flashCounts.map(f  => [f._id.toString(), f.total]));
+
+  const cbatMap = {};
+  cbatCountsPerGame.forEach(gameCounts => {
+    gameCounts.forEach(row => {
+      const key = row._id.toString();
+      cbatMap[key] = (cbatMap[key] ?? 0) + row.count;
+    });
+  });
 
   return users.map(u => {
     const plain = u.toObject({ virtuals: true });
@@ -698,6 +716,7 @@ async function enrichUsersWithStats(users) {
         wtaPlayed:        wtaMap[uid]            ?? 0,
         wherePlayed:      whereMap[uid]          ?? 0,
         flashcardsPlayed: flashMap[uid]          ?? 0,
+        cbatPlayed:       cbatMap[uid]           ?? 0,
       },
     };
   });
@@ -1704,6 +1723,7 @@ async function cascadeDeleteBriefData(briefId) {
     IntelligenceBrief.findByIdAndUpdate(briefId, { $set: {
       quizQuestionsEasy:          [],
       quizQuestionsMedium:        [],
+      keywords:                   [],
       associatedBaseBriefIds:     [],
       associatedSquadronBriefIds: [],
       associatedAircraftBriefIds: [],
@@ -2579,8 +2599,9 @@ router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news
     const warnings = [];
 
     // ── Step 1: Generate content ───────────────────────────────────────────────
-    const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: true });
-    const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    ${dsArray}\n  ]`;
+    // News is always RAF-shaped — it's auto-generated from RAF-specific headlines
+    const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: true, shape: 'raf-asset' });
+    const SHARED_SECTIONS = `${SUBTITLE_SPEC},\n  "descriptionSections": [\n    ${dsArray}\n  ]`;
     const SHARED_RULES = `\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n${LIST_FORMAT_RULE}`;
     const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "concise factual title, max 70 characters",\n  ${SHARED_SECTIONS},\n  "sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}${SHARED_RULES}`;
 
@@ -2751,40 +2772,20 @@ router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news
 // Universal rule enforcing bullet-list format whenever multiple items are enumerated
 const LIST_FORMAT_RULE = 'LIST FORMAT RULE: Whenever you name 3 or more items of the same type (squadrons, aircraft, bases, roles, weapons, capabilities, or any other nouns), you MUST format them as a bullet list — NEVER as inline prose. This applies regardless of whether you would otherwise separate them with commas, semicolons, em-dashes (—), or parenthetical asides. BAD: "supports No. 1, No. 6 and No. 9 Squadron". BAD: "four squadrons—No. 1, No. 6, No. 9". GOOD: "supports four Typhoon squadrons:\\n- No. 1 Squadron\\n- No. 6 Squadron\\n- No. 9 Squadron". Each "- Item" MUST be on its own line using \\n escape sequences inside the JSON string. Introduce the list with a short lead sentence ending in a colon, then list every item on its own line.';
 
-// Shared builder for descriptionSections prompt text used by both generate-brief and
-// generateBriefContent. Single source of truth — keeps section 4 blind-identity rule
-// consistent across both paths.
-//   strict=true  → generate-brief:      EXACTLY 4 sections, 220-word cap, "Section N" labels
-//   strict=false → generateBriefContent: 2–4 sections,       240-word cap, "Paragraph N" labels
-function buildDescriptionSectionsSpec({ strict = true } = {}) {
-  const label = strict ? 'Section' : 'Paragraph';
-  const s4Omit = strict ? '' : ' (only include if genuinely needed — omit if not)';
-  const s4BlindRule = 'CRITICAL: do NOT mention the subject\'s name, title, designation, or any unique identifier that would immediately reveal what this brief is about. The summary must be specific enough that a reader given a short list of 4–5 candidates could identify the correct one, but it must not name the subject directly.';
-
-  const array = [
-    `"${label} 1 — 50–80 words. Use clear, well-structured text. Introduce the subject clearly for someone building foundational knowledge of the modern RAF."`,
-    `"${label} 2 — 50–80 words. Cover a different angle: training phases, roles, or bases associated with this subject."`,
-    `"${label} 3 — 50–80 words. Operational context, key capabilities, or RAF significance."`,
-    `"${label} 4 — 1–2 sentences only${s4Omit}. A concise summary of this subject's role and significance within the modern RAF. ${s4BlindRule}"`,
-  ].join(',\n    ');
-
-  const countRule = strict
-    ? 'descriptionSections must be a JSON array of EXACTLY 4 strings — no more, no fewer. Total word count across sections 1–3 must not exceed 220 words.'
-    : 'descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words.';
-
-  const sharedRuleTail = 'Section 4 must be 1–2 sentences and must not contain the subject\'s name or any unique identifier. Write each section as readable prose or formatted text. IMPORTANT: when listing multiple items (features, roles, bases, capabilities, etc.) put each item on its own line using \\n escape sequences inside the JSON string, with each item prefixed by "- " (e.g. "Intro sentence:\\n- Item one\\n- Item two\\n- Item three"). Use "1." prefixes for ordered steps. Never use markdown bold/italic or headers. Plain prose is fine for flowing narrative — only use the list format when genuinely listing discrete items. DATE FORMAT: any dates written in prose must use UK format — day before month — e.g. "3rd March 2026" or "14 January 2025", never "March 3rd 2026" or "January 14, 2025".';
-
-  return { array, countRule, sharedRuleTail };
-}
-
 // POST /api/admin/ai/generate-brief
 router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (req, res) => {
   try {
-    const { headline, topic, category, eventDate, isHistoric } = req.body;
+    const { headline, topic, category, subcategory, eventDate, isHistoric } = req.body;
     if (!headline && !topic) return res.status(400).json({ message: 'headline or topic required' });
 
-    const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: true });
-    const SHARED_SECTIONS = `"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections": [\n    ${dsArray}\n  ]`;
+    // News is always RAF-shaped; topic briefs branch on category/subcategory/historic
+    // so non-RAF subjects (Actors, Threats, Treaties, AOR, Allies, historic) aren't
+    // asked for "RAF bases" / "modern-day RAF significance".
+    const shape = topic
+      ? getBriefShape({ category, subcategory, historic: !!isHistoric })
+      : 'raf-asset';
+    const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: true, shape });
+    const SHARED_SECTIONS = `${SUBTITLE_SPEC},\n  "descriptionSections": [\n    ${dsArray}\n  ]`;
     const SHARED_RULES = `\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n${LIST_FORMAT_RULE}`;
 
     // News shape — AI must generate the title
@@ -2805,14 +2806,14 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
     }
 
     const userContent = topic
-      ? `Write a comprehensive intelligence brief about this RAF topic: "${topic}"\n\nUsing verified facts from published sources, produce a reference-style brief suitable for someone building foundational knowledge of the modern RAF — not a news story, but an in-depth informative overview. Where relevant, cover: training pathways and which training blocks/phases apply to this subject; RAF bases associated with this subject and which aircraft or squadrons are stationed there and what operations occur there; roles that interact with or are defined by this subject and how those roles relate to specific training pipelines; and the broader operational and modern-day RAF significance.\n\n${TOPIC_JSON_SHAPE}`
+      ? `Write a comprehensive intelligence brief about this subject: "${topic}"\n\n${buildTopicUserGuidance(shape)}\n\n${TOPIC_JSON_SHAPE}`
       : `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources, return a JSON object for an RAF news intelligence brief. Be as informative as possible about the current RAF affairs covered by this story.\n\n${JSON_SHAPE}`;
 
     const isNews = !!headline;
     const briefAiSettings = await AppSettings.getSettings();
     const systemPrompt = isNews
       ? getPrompt(briefAiSettings, 'brief.news')
-      : getPrompt(briefAiSettings, 'brief.topic');
+      : getTopicPrompt(briefAiSettings, category);
 
     const data = await openRouterChat([{
       role: 'system',
@@ -3290,7 +3291,12 @@ router.post('/ai/generate-quiz-missing', featureMiddleware('generate-quiz-missin
 // Regenerates description sections, keywords, and quiz questions for an existing brief.
 // ── Shared helper: generate description, keywords, quiz, gameData, mnemonics ─
 async function generateBriefContent(brief, aiSettings) {
-  const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: false });
+  const shape = getBriefShape({
+    category:    brief.category,
+    subcategory: brief.subcategory,
+    historic:    !!brief.historic,
+  });
+  const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: false, shape });
   // Keywords are generated separately via multi-pass extraction after we have the description,
   // so they are NOT included in this combined call — that was the cause of the 8-keyword cap.
   let TOPIC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    ${dsArray}\n  ]\n}\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}`;
@@ -3299,7 +3305,7 @@ async function generateBriefContent(brief, aiSettings) {
   // Inject subtitle before descriptionSections
   TOPIC_JSON_SHAPE = TOPIC_JSON_SHAPE.replace(
     '"descriptionSections"',
-    '"subtitle": "one factual sentence summarising the subject",\n  "descriptionSections"'
+    `${SUBTITLE_SPEC},\n  "descriptionSections"`
   );
   // Inject sources array before the closing } of the JSON schema
   const SOURCES_SHAPE = `"sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]`;
@@ -3307,7 +3313,7 @@ async function generateBriefContent(brief, aiSettings) {
     '\n}\nCRITICAL RULES:',
     `,\n  ${SOURCES_SHAPE}\n}\nCRITICAL RULES:`
   );
-  TOPIC_JSON_SHAPE += `\nFor "sources": list 1–3 real published URLs about this specific RAF topic (e.g. its Wikipedia page, raf.mod.uk, gov.uk). Set "articleDate" to the article's real publish date in YYYY-MM-DD format, or the Wikipedia page's last-modified date.`;
+  TOPIC_JSON_SHAPE += `\nFor "sources": list 1–3 real published URLs about this specific subject (e.g. its Wikipedia page, raf.mod.uk, gov.uk, or other authoritative sources). Set "articleDate" to the article's real publish date in YYYY-MM-DD format, or the Wikipedia page's last-modified date.`;
 
   const gdShape = booGameDataShape(brief.category);
   if (gdShape) {
@@ -3325,7 +3331,7 @@ async function generateBriefContent(brief, aiSettings) {
     content: getPrompt(aiSettings, systemPromptKey),
   }, {
     role: 'user',
-    content: `Rewrite a comprehensive intelligence brief about this RAF topic: "${brief.title}"\n\nUsing verified facts from published sources, produce a reference-style brief suitable for someone building foundational knowledge of the modern RAF. Where relevant, cover: training pathways and which training blocks/phases apply to this subject; RAF bases associated with this subject and which aircraft or squadrons are stationed there and what operations occur there; roles that interact with or are defined by this subject and how those roles relate to specific training pipelines; and the broader operational and modern-day RAF significance.\n\n${TOPIC_JSON_SHAPE}`,
+    content: `Rewrite a comprehensive intelligence brief about this subject: "${brief.title}"\n\n${buildTopicUserGuidance(shape)}\n\n${TOPIC_JSON_SHAPE}`,
   }], 'perplexity/sonar', 8192);
 
   const briefRaw = briefData.choices?.[0]?.message?.content ?? '{}';
@@ -3807,7 +3813,7 @@ router.post('/ai/bulk-generate-stub/:id', featureMiddleware('bulk-generate-stub'
 // questions/answers derived from the old description become stale.
 router.post('/ai/regenerate-description/:id', requireReason, featureMiddleware('regenerate-description'), async (req, res) => {
   try {
-    const brief = await IntelligenceBrief.findById(req.params.id).select('title category');
+    const brief = await IntelligenceBrief.findById(req.params.id).select('title category subcategory historic');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
     const cascadeStats = await cascadeDeleteBriefData(req.params.id);
@@ -3818,7 +3824,12 @@ router.post('/ai/regenerate-description/:id', requireReason, featureMiddleware('
       reason:     req.body.reason,
     });
 
-    const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: false });
+    const shape = getBriefShape({
+      category:    brief.category,
+      subcategory: brief.subcategory,
+      historic:    !!brief.historic,
+    });
+    const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: false, shape });
     const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text:\n{\n  "descriptionSections": [\n    ${dsArray}\n  ]\n}\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n${LIST_FORMAT_RULE}`;
 
     const descAiSettings = await AppSettings.getSettings();
@@ -3827,7 +3838,7 @@ router.post('/ai/regenerate-description/:id', requireReason, featureMiddleware('
       content: getPrompt(descAiSettings, 'regenerateBrief'),
     }, {
       role: 'user',
-      content: `Write fresh description sections for this RAF intel brief: "${brief.title}"\n\nUsing verified facts from published sources, produce clear, informative paragraphs suitable for someone building foundational knowledge of the modern RAF.\n\n${DESC_JSON_SHAPE}`,
+      content: `Write fresh description sections for this intel brief: "${brief.title}"\n\n${buildTopicUserGuidance(shape)}\n\n${DESC_JSON_SHAPE}`,
     }], 'perplexity/sonar', 4096);
 
     const raw = data.choices?.[0]?.message?.content ?? '{}';

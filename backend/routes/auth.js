@@ -327,9 +327,13 @@ router.post('/logout', (_req, res) => {
   res.json({ status: 'success' });
 });
 
+const { withSelectedBadge } = require('../utils/selectedBadge');
+
 // GET /api/auth/me
-router.get('/me', require('../middleware/auth').protect, (req, res) => {
-  res.json({ status: 'success', data: { user: req.user } });
+router.get('/me', require('../middleware/auth').protect, async (req, res) => {
+  const userObj = req.user.toObject ? req.user.toObject({ virtuals: true }) : { ...req.user };
+  await withSelectedBadge(userObj);
+  res.json({ status: 'success', data: { user: userObj } });
 });
 
 module.exports = router;

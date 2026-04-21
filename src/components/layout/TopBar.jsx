@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import RankBadge from '../RankBadge'
+import ProfileBadge from '../ProfileBadge'
 
 function CrosshairLogo() {
   return (
@@ -56,16 +56,19 @@ export default function TopBar() {
                 <span className="text-sm font-bold text-white">{user.totalAirstars ?? 0}</span>
               </button>
 
-              {/* Avatar / Rank */}
-              <button
-                onClick={() => navigate('/rankings', { state: { tab: 'ranks' } })}
-                className="w-8 h-8 rounded-full bg-brand-100 border-2 border-brand-200 flex items-center justify-center text-sm font-bold text-brand-700 hover:border-brand-400 transition-colors outline-none focus:outline-none"
-                aria-label="View RAF ranks"
-              >
-                {(user.rank?.rankNumber ?? 1) > 1
-                  ? <RankBadge rankNumber={user.rank.rankNumber} size={20} />
-                  : (user.rank?.rankAbbreviation ?? 'AC')}
-              </button>
+              {/* Avatar — rank badge routes to RAF ranks; aircraft cutout routes to the badge picker */}
+              {(() => {
+                const hasCutout = Boolean(user?.selectedBadge?.cutoutUrl)
+                return (
+                  <button
+                    onClick={() => navigate(hasCutout ? '/profile/badge' : '/rankings', hasCutout ? undefined : { state: { tab: 'ranks' } })}
+                    className="w-8 h-8 rounded-full bg-brand-100 border-2 border-brand-200 flex items-center justify-center text-sm font-bold text-brand-700 hover:border-brand-400 transition-colors outline-none focus:outline-none"
+                    aria-label={hasCutout ? 'Change profile badge' : 'View RAF ranks'}
+                  >
+                    <ProfileBadge user={user} size={hasCutout ? 26 : 20} />
+                  </button>
+                )
+              })()}
             </>
           ) : (
             <Link

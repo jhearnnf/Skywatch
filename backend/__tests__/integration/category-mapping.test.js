@@ -8,7 +8,7 @@
  */
 process.env.JWT_SECRET = 'test_secret';
 
-const { leadSectionToCategory, leadSubsectionToSubcategory } = require('../../utils/categoryMapping');
+const { leadSectionToCategory, leadSubsectionToSubcategory, SUBSECTION_CATEGORY_OVERRIDES } = require('../../utils/categoryMapping');
 const { SUBCATEGORIES } = require('../../constants/categories');
 
 // ── leadSectionToCategory ────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ describe('leadSubsectionToSubcategory', () => {
     ['TRANSPORT & TANKER',                                   'Transport & Tanker'],
     ['ROTARY WING',                                          'Rotary Wing'],
     ['TRAINING (FIXED WING)',                                'Training Aircraft'],
-    ['GROUND-BASED AIR DEFENCE (RAF REGIMENT)',              'Ground-Based Air Defence'],
+    ['GROUND-BASED AIR DEFENCE (RAF REGIMENT)',              'Weapons Systems'],
     ['WWII ERA',                                             'Historic — WWII'],
     ['PRE-WWII / INTERWAR',                                  'Historic — WWII'],
     ['COLD WAR ERA',                                         'Historic — Cold War'],
@@ -186,7 +186,7 @@ describe('leadSubsectionToSubcategory — model coverage', () => {
               ['TRANSPORT & TANKER', 'Transport & Tanker'],
               ['ROTARY WING', 'Rotary Wing'],
               ['TRAINING (FIXED WING)', 'Training Aircraft'],
-              ['GROUND-BASED AIR DEFENCE (RAF REGIMENT)', 'Ground-Based Air Defence'],
+              ['GROUND-BASED AIR DEFENCE (RAF REGIMENT)', 'Weapons Systems'],
               ['WWII ERA', 'Historic — WWII'],
               ['PRE-WWII / INTERWAR', 'Historic — WWII'],
               ['COLD WAR ERA', 'Historic — Cold War'],
@@ -259,4 +259,39 @@ describe('leadSubsectionToSubcategory — model coverage', () => {
       }
     });
   }
+});
+
+// ── Subsection category overrides ────────────────────────────────────────────
+
+describe('SUBSECTION_CATEGORY_OVERRIDES', () => {
+  it('routes GBAD subsection to Tech even when its source section is Aircrafts', () => {
+    expect(leadSectionToCategory('SECTION 3: RAF AIRCRAFT — CURRENT & RECENT', 'GROUND-BASED AIR DEFENCE (RAF REGIMENT)')).toBe('Tech');
+  });
+
+  it('falls back to the section-based category when no override applies', () => {
+    expect(leadSectionToCategory('SECTION 3: RAF AIRCRAFT — CURRENT & RECENT', 'FAST JET')).toBe('Aircrafts');
+  });
+
+  it('produces a valid (category, subcategory) pair for every override', () => {
+    for (const [subsection, overrideCategory] of Object.entries(SUBSECTION_CATEGORY_OVERRIDES)) {
+      const subcategory = leadSubsectionToSubcategory(subsection);
+      expect(SUBCATEGORIES[overrideCategory]).toBeDefined();
+      expect(SUBCATEGORIES[overrideCategory]).toContain(subcategory);
+    }
+  });
+});
+
+// ── Taxonomy drift regression ────────────────────────────────────────────────
+
+describe('taxonomy drift guards', () => {
+  it('Aircrafts category does not contain any surface-to-air or ground-defence subcategory', () => {
+    const aircraftSubs = SUBCATEGORIES.Aircrafts.map(s => s.toLowerCase());
+    for (const sub of aircraftSubs) {
+      expect(sub).not.toMatch(/ground.based|air defence|surface.to.air|\bsam\b|\bgbad\b/);
+    }
+  });
+
+  it('Ground-Based Air Defence is not a valid Aircrafts subcategory', () => {
+    expect(SUBCATEGORIES.Aircrafts).not.toContain('Ground-Based Air Defence');
+  });
 });

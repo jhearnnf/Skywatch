@@ -49,8 +49,8 @@ const updates = [
   { category: 'Aircrafts', title: 'Airbus Puma HC2',                         priority: 21 },
   { category: 'Aircrafts', title: 'BAe 146 CC2/C3',                          priority: 22 },
   { category: 'Aircrafts', title: 'Beechcraft Avenger T1',                   priority: 23 },
-  { category: 'Aircrafts', title: 'Sky Sabre / CAMM',                        priority: 24 },
-  { category: 'Aircrafts', title: 'Starstreak HVM',                          priority: 25 },
+  { category: 'Tech',      title: 'Sky Sabre / CAMM',                        priority: 24 },
+  { category: 'Tech',      title: 'Starstreak HVM',                          priority: 25 },
 
   // --- Recently Retired (26–35) ---
   { category: 'Aircrafts', title: 'Lockheed C-130J Hercules C4/C5',          priority: 26 },
@@ -60,7 +60,7 @@ const updates = [
   { category: 'Aircrafts', title: 'BAE Harrier GR7/9',                       priority: 30 },
   { category: 'Aircrafts', title: 'Panavia Tornado F3',                      priority: 31 },
   { category: 'Aircrafts', title: 'Hawker Siddeley Dominie T1',              priority: 32 },
-  { category: 'Aircrafts', title: 'Rapier FSC',                              priority: 33 },
+  { category: 'Tech',      title: 'Rapier FSC',                              priority: 33 },
   { category: 'Aircrafts', title: 'Shorts Tucano T1',                        priority: 34 },
   { category: 'Aircrafts', title: 'Lockheed Hercules C-130K',                priority: 35 },
 

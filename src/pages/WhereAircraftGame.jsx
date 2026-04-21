@@ -267,23 +267,27 @@ function Round2({ data, aircraftTitle, onSubmit }) {
         )}
       </div>
 
-      {!submitted ? (
-        <button
-          onClick={handleSubmit}
-          disabled={selected.size === 0}
-          className={`w-full py-4 font-bold rounded-2xl text-base transition-colors
-            ${selected.size === 0
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              : 'bg-brand-600 hover:bg-brand-700 text-white'
-            }`}
-        >
-          Confirm Selection →
-        </button>
-      ) : (
-        <div className="text-center py-2">
-          <div className="w-5 h-5 border-2 border-brand-400 border-t-brand-700 rounded-full animate-spin mx-auto" />
-        </div>
-      )}
+      <button
+        onClick={handleSubmit}
+        disabled={submitted || selected.size === 0}
+        className={`w-full py-4 font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200
+          ${submitted
+            ? 'bg-brand-500 text-white/80 cursor-wait'
+            : selected.size === 0
+            ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
+            : 'bg-brand-600 hover:bg-brand-700 text-white'
+          }`}
+      >
+        {submitted ? (
+          <span className="inline-flex items-center gap-2">
+            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z" />
+            </svg>
+            Loading results…
+          </span>
+        ) : 'Confirm Selection →'}
+      </button>
     </div>
   )
 }

@@ -277,6 +277,25 @@ describe('POST /api/admin/ai/regenerate-description/:id — cascade deletions', 
     expect(await AirstarLog.countDocuments({ briefId: brief._id })).toBe(0);
   });
 
+  it('clears the keywords array on the brief document', async () => {
+    mockAiFetch();
+    const admin = await createAdminUser();
+    const brief = await createBrief({
+      keywords: [
+        { keyword: 'Typhoon',  generatedDescription: 'RAF multi-role fighter.' },
+        { keyword: 'Coningsby', generatedDescription: 'RAF base in Lincolnshire.' },
+      ],
+    });
+
+    await request(app)
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: REASON });
+
+    const updated = await IntelligenceBrief.findById(brief._id);
+    expect(updated.keywords).toHaveLength(0);
+  });
+
   it('clears quizQuestionsEasy and quizQuestionsMedium arrays on the brief document', async () => {
     mockAiFetch();
     const gameType = await createGameType();

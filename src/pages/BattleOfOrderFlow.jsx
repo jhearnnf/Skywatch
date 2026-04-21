@@ -150,6 +150,7 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
   const [dragIdx, setDragIdx] = useState(null)
   const [overIdx, setOverIdx] = useState(null)
   const [elapsed, setElapsed] = useState(0)
+  const [submitting, setSubmitting] = useState(false)
   const startRef              = useRef(Date.now())
   const meta = ORDER_META[orderType] ?? { label: orderType, emoji: '📊', startLabel: 'FIRST', endLabel: 'LAST' }
 
@@ -187,13 +188,19 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
     setItems(next)
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (submitting) return
+    setSubmitting(true)
     const timeTaken   = Math.round((Date.now() - startRef.current) / 1000)
     const userChoices = items.map((item, idx) => ({
       choiceId:        item.choiceId,
       userOrderNumber: idx + 1,
     }))
-    onSubmit(userChoices, timeTaken)
+    try {
+      await onSubmit(userChoices, timeTaken)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const badgeColor = (i) => {
@@ -301,11 +308,24 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
       </div>
 
       <motion.button
-        whileTap={{ scale: 0.97 }}
+        whileTap={!submitting ? { scale: 0.97 } : {}}
         onClick={handleSubmit}
-        className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200"
+        disabled={submitting}
+        className={`w-full py-4 font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200
+          ${submitting
+            ? 'bg-brand-500 text-white/80 cursor-wait'
+            : 'bg-brand-600 hover:bg-brand-700 text-white'
+          }`}
       >
-        Submit Order →
+        {submitting ? (
+          <span className="inline-flex items-center gap-2">
+            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z" />
+            </svg>
+            Loading results…
+          </span>
+        ) : 'Submit Order →'}
       </motion.button>
     </motion.div>
   )

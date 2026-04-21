@@ -312,6 +312,56 @@ describe('GET /api/briefs/category-counts', () => {
   });
 });
 
+// ── GET /api/briefs/public-stats ──────────────────────────────────────────
+describe('GET /api/briefs/public-stats', () => {
+  it('is a public endpoint — no cookie required', async () => {
+    const res = await request(app).get('/api/briefs/public-stats');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toBeDefined();
+  });
+
+  it('returns zero counts when no briefs exist', async () => {
+    const res = await request(app).get('/api/briefs/public-stats');
+    expect(res.status).toBe(200);
+    expect(res.body.data.totalBriefs).toBe(0);
+    expect(res.body.data.totalQuestions).toBe(0);
+  });
+
+  it('only counts published briefs (excludes stubs)', async () => {
+    await createBrief({ status: 'published' });
+    await createBrief({ status: 'published' });
+    await createBrief({ status: 'stub' });
+
+    const res = await request(app).get('/api/briefs/public-stats');
+    expect(res.status).toBe(200);
+    expect(res.body.data.totalBriefs).toBe(2);
+  });
+
+  it('sums easy + medium quiz question references on published briefs', async () => {
+    const mongoose = require('mongoose');
+    const fakeIds = n => Array.from({ length: n }, () => new mongoose.Types.ObjectId());
+    await createBrief({
+      status: 'published',
+      quizQuestionsEasy:   fakeIds(3),
+      quizQuestionsMedium: fakeIds(2),
+    });
+    await createBrief({
+      status: 'published',
+      quizQuestionsEasy:   fakeIds(1),
+      quizQuestionsMedium: fakeIds(4),
+    });
+    await createBrief({
+      status: 'stub',
+      quizQuestionsEasy:   fakeIds(5),
+    });
+
+    const res = await request(app).get('/api/briefs/public-stats');
+    expect(res.status).toBe(200);
+    expect(res.body.data.totalBriefs).toBe(2);
+    expect(res.body.data.totalQuestions).toBe(3 + 2 + 1 + 4);
+  });
+});
+
 // ── Guest brief access (GET /api/briefs/:id) ──────────────────────────────
 // Guests share the free-tier category list — there is no separate guest gate
 // on brief reading. Guests are blocked at game endpoints (quiz, BOO, etc.)

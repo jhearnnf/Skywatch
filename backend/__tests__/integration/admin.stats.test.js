@@ -370,6 +370,32 @@ describe('GET /api/admin/stats — tutorials section', () => {
     expect(tutorials.viewed).toBe(2);  // A's welcome + intel_brief
     expect(tutorials.skipped).toBe(2); // A's user + B's welcome
   });
+
+  // Guards against regression where the aggregation hard-coded legacy tutorial
+  // keys (welcome / intel_brief / user / load_up) and silently reported 0 for
+  // everything the redesigned tutorial flow emits.
+  it('counts tutorials added to the schema after the legacy four', async () => {
+    const admin = await createAdminUser();
+    await createUser({
+      tutorials: {
+        home:            'viewed',
+        briefReader:     'viewed',
+        quiz:            'skipped',
+        play:            'viewed',
+        profile:         'skipped',
+        rankings:        'viewed',
+        wheres_aircraft: 'viewed',
+      },
+    });
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    const { tutorials } = res.body.data;
+
+    expect(tutorials.viewed).toBe(5);  // home, briefReader, play, rankings, wheres_aircraft
+    expect(tutorials.skipped).toBe(2); // quiz, profile
+  });
 });
 
 // ── BOO section ───────────────────────────────────────────────────────────────

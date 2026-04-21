@@ -10,6 +10,19 @@ export const ZOOM_POSITIONS = [
   '50% 78%',
 ]
 
+// A Media doc's `name` is usually a clean page/search-term title, but older
+// records sometimes hold a Cloudinary publicId (e.g. "brief-images/brief-...").
+// Display layers should only show it when it reads as a human-written title.
+export function isRealImageTitle(name) {
+  if (!name) return false
+  const s = String(name).trim()
+  if (!s) return false
+  if (s.includes('/')) return false
+  // Cloudinary publicId auto-prefixes: brief-123, brief_123, brief123 (any case)
+  if (/^brief[-_]?\d/i.test(s)) return false
+  return true
+}
+
 /**
  * Returns one image zone per section.
  * - If media[i] exists: use that image at centre.

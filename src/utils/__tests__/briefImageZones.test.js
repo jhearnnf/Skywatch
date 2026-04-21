@@ -1,4 +1,4 @@
-import { buildImageZones, PLACEHOLDER_IMG, ZOOM_POSITIONS } from '../briefImageZones'
+import { buildImageZones, isRealImageTitle, PLACEHOLDER_IMG, ZOOM_POSITIONS } from '../briefImageZones'
 
 const makeMedia = (n) =>
   Array.from({ length: n }, (_, i) => ({
@@ -85,5 +85,30 @@ describe('buildImageZones', () => {
     // Reused sections also carry the cutout since it belongs to the same media doc
     expect(zones[1].cutoutSrc).toBe('https://example.com/cutout.png')
     expect(zones[2].cutoutSrc).toBe('https://example.com/cutout.png')
+  })
+})
+
+describe('isRealImageTitle', () => {
+  it('accepts human-authored titles', () => {
+    expect(isRealImageTitle('Eurofighter Typhoon')).toBe(true)
+    expect(isRealImageTitle('F-35 Lightning II')).toBe(true)
+    expect(isRealImageTitle('No. 14 Squadron RAF')).toBe(true)
+    expect(isRealImageTitle('RAF Coningsby')).toBe(true)
+  })
+
+  it('rejects publicId-style paths and auto-generated names', () => {
+    expect(isRealImageTitle('brief-images/brief-1775566123456')).toBe(false)
+    expect(isRealImageTitle('brief-1775566123456')).toBe(false)
+    expect(isRealImageTitle('brief1775566123456')).toBe(false)
+    expect(isRealImageTitle('brief_1775566123456')).toBe(false)
+    expect(isRealImageTitle('brief-1775566-news-bulk')).toBe(false)
+    expect(isRealImageTitle('folder/filename.jpg')).toBe(false)
+  })
+
+  it('rejects empty / nullish values', () => {
+    expect(isRealImageTitle(null)).toBe(false)
+    expect(isRealImageTitle(undefined)).toBe(false)
+    expect(isRealImageTitle('')).toBe(false)
+    expect(isRealImageTitle('   ')).toBe(false)
   })
 })

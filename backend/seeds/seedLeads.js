@@ -181,10 +181,10 @@ const LEADS = [
   { title: 'Grob Tutor T1', nickname: 'Tutor', subtitle: 'Elementary flying training aircraft used by RAF and Air Cadets', category: 'Aircrafts', subcategory: 'Training Aircraft', section: 'AIRCRAFTS', subsection: 'Training Aircraft', priorityNumber: 16 },
   { title: 'Shorts Tucano T1', nickname: '', subtitle: 'Turboprop advanced trainer, retired 2019', category: 'Aircrafts', subcategory: 'Training Aircraft', section: 'AIRCRAFTS', subsection: 'Training Aircraft', priorityNumber: 44 },
 
-  // ── RAF AIRCRAFT — Ground-Based Air Defence ───────────────────────────────
-  { title: 'Sky Sabre / CAMM', nickname: 'Sky Sabre', subtitle: 'Current ground-based air defence system using Common Anti-Air Modular Missile', category: 'Aircrafts', subcategory: 'Ground-Based Air Defence', section: 'AIRCRAFTS', subsection: 'Ground-Based Air Defence', priorityNumber: 13 },
-  { title: 'Starstreak HVM', nickname: 'Starstreak', subtitle: 'High Velocity Missile short-range GBAD system operated by RAF Regiment', category: 'Aircrafts', subcategory: 'Ground-Based Air Defence', section: 'AIRCRAFTS', subsection: 'Ground-Based Air Defence', priorityNumber: 14 },
-  { title: 'Rapier FSC', nickname: 'Rapier', subtitle: 'Surface-to-air missile system retired from RAF service in 2021', category: 'Aircrafts', subcategory: 'Ground-Based Air Defence', section: 'AIRCRAFTS', subsection: 'Ground-Based Air Defence', priorityNumber: 33 },
+  // ── TECH — Ground-Based Air Defence (Weapons Systems) ─────────────────────
+  { title: 'Sky Sabre / CAMM', nickname: 'Sky Sabre', subtitle: 'Current ground-based air defence system using Common Anti-Air Modular Missile', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 13 },
+  { title: 'Starstreak HVM', nickname: 'Starstreak', subtitle: 'High Velocity Missile short-range GBAD system operated by RAF Regiment', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 14 },
+  { title: 'Rapier FSC', nickname: 'Rapier', subtitle: 'Surface-to-air missile system retired from RAF service in 2021', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 33 },
 
   // ── RAF AIRCRAFT — Historic: Cold War ────────────────────────────────────
   { title: 'BAC Lightning F6', nickname: '', subtitle: 'Mach 2 interceptor operated from 1960s until 1988', category: 'Aircrafts', subcategory: 'Historic — Cold War', section: 'AIRCRAFTS', subsection: 'Historic — Cold War', priorityNumber: 38 },

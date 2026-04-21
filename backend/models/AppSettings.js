@@ -135,6 +135,12 @@ const appSettingsSchema = new mongoose.Schema({
   betaTesterAutoGold:   { type: Boolean, default: false },
   cbatEnabled:          { type: Boolean, default: false },
 
+  // Flashcards feature — when false, News-category briefs skip the flashcard
+  // layout on section 4, are excluded from the flashcard deck and overall count,
+  // and the collect animation is suppressed. Reached-flashcard records still
+  // persist so re-enabling restores them immediately.
+  newsFlashcardsEnabled: { type: Boolean, default: false },
+
   // APTITUDE_SYNC feature
   aptitudeSyncEnabled:          { type: Boolean,  default: false },
   // Which subscription tiers can access APTITUDE_SYNC (admin always unlimited regardless)

@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
-import RankBadge from '../RankBadge'
+import ProfileBadge from '../ProfileBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
 
@@ -33,7 +33,7 @@ export default function Sidebar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const { hasAnyNew } = useNewGameUnlock()
-  const { hasAnyNew: hasAnyNewCategory, firstNewCategory, markAllSeen: markAllCategoriesSeen } = useNewCategoryUnlock()
+  const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
   const { levels: liveLevels } = useAppSettings()
   const levelInfo = user ? getLevelInfo(user.cycleAirstars ?? 0, liveLevels) : null
@@ -51,7 +51,6 @@ export default function Sidebar() {
             ? (e) => {
                 e.preventDefault()
                 const target = firstNewCategory
-                markAllCategoriesSeen()
                 navigate('/learn-priority', target ? { state: { category: target } } : undefined)
               }
             : undefined
@@ -109,12 +108,19 @@ export default function Sidebar() {
       {user && levelInfo && (
         <div className="border-t border-slate-200 p-4">
           <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-full bg-brand-200 border-2 border-brand-300 flex items-center justify-center shrink-0">
-              {(user.rank?.rankNumber ?? 1) > 1
-                ? <RankBadge rankNumber={user.rank.rankNumber} size={18} />
-                : <span className="text-xs font-bold text-brand-600">{user.rank?.rankAbbreviation ?? 'AC'}</span>
-              }
-            </div>
+            {(() => {
+              const hasCutout = Boolean(user?.selectedBadge?.cutoutUrl)
+              return (
+                <button
+                  type="button"
+                  onClick={() => navigate(hasCutout ? '/profile/badge' : '/rankings', hasCutout ? undefined : { state: { tab: 'ranks' } })}
+                  aria-label={hasCutout ? 'Change profile badge' : 'View RAF ranks'}
+                  className="w-8 h-8 rounded-full bg-brand-200 border-2 border-brand-300 flex items-center justify-center shrink-0 hover:border-brand-600 transition-colors"
+                >
+                  <ProfileBadge user={user} size={hasCutout ? 28 : 18} />
+                </button>
+              )
+            })()}
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-800 truncate">
                 {user.displayName || 'Agent'}

@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
-import RankBadge from '../RankBadge'
+import ProfileBadge from '../ProfileBadge'
 
 const NAV_ITEMS = [
   { to: '/home',     emoji: '🏠', label: 'Home'    },
@@ -18,7 +18,7 @@ const ADMIN_ITEM = { to: '/admin', emoji: '⚙️', label: 'Admin' }
 export default function BottomNav() {
   const { user } = useAuth()
   const { hasAnyNew } = useNewGameUnlock()
-  const { hasAnyNew: hasAnyNewCategory, firstNewCategory, markAllSeen: markAllCategoriesSeen } = useNewCategoryUnlock()
+  const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
 
   const items = user?.isAdmin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS
@@ -39,12 +39,10 @@ export default function BottomNav() {
           const showCategoryBadge = isLearn && hasAnyNewCategory && user
           const showReportBadge = to === '/admin' && unsolvedCount > 0
           const isProfileItem = to === '/profile'
-          const rankNumber = user?.rank?.rankNumber ?? 1
           const handleLearnClick = isLearn && hasAnyNewCategory && user
             ? (e) => {
                 e.preventDefault()
                 const target = firstNewCategory
-                markAllCategoriesSeen()
                 navigate('/learn-priority', target ? { state: { category: target } } : undefined)
               }
             : undefined
@@ -62,10 +60,7 @@ export default function BottomNav() {
             >
               <span className={`relative text-xl leading-none transition-transform ${active ? 'scale-110' : ''}`}>
                 {isProfileItem && user
-                  ? (rankNumber > 1
-                    ? <RankBadge rankNumber={rankNumber} size={20} color={active ? '#5baaff' : '#94a3b8'} />
-                    : <span className="text-xs font-bold" style={{ color: active ? '#5baaff' : '#94a3b8' }}>{user.rank?.rankAbbreviation ?? 'AC'}</span>
-                  )
+                  ? <ProfileBadge user={user} size={user?.selectedBadge?.cutoutUrl ? 26 : 20} color={active ? '#5baaff' : '#94a3b8'} />
                   : emoji
                 }
                 {showBadge && (

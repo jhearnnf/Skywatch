@@ -367,6 +367,19 @@ export default function Rankings() {
       {tab === 'ranks' && (
         <motion.div key="ranks" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
 
+          {user && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => navigate('/profile/badge')}
+                className="text-xs intel-mono font-bold hover:underline"
+                style={{ color: C.brand }}
+              >
+                Change profile badge →
+              </button>
+            </div>
+          )}
+
           {/* Rank preview card */}
           <div
             className="rounded-2xl p-4"

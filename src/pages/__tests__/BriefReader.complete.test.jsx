@@ -210,12 +210,10 @@ describe('BriefReader — complete brief coin awarding', () => {
     render(<BriefReader />)
     await swipeLeft()
 
+    // With reward preview pre-fetched, awardAirstars fires optimistically on the
+    // final swipe — no server metadata since the commit is still in flight.
     await waitFor(() => {
-      expect(mockAwardAirstars).toHaveBeenCalledWith(
-        10,
-        'Daily Brief',
-        expect.objectContaining({ cycleAfter: 10, totalAfter: 10 })
-      )
+      expect(mockAwardAirstars).toHaveBeenCalledWith(10, 'Daily Brief', expect.any(Object))
     })
   })
 
@@ -228,7 +226,7 @@ describe('BriefReader — complete brief coin awarding', () => {
     await swipeLeft()
 
     await waitFor(() => {
-      expect(mockAwardAirstars).toHaveBeenCalledWith(5, 'Brief read', expect.anything())
+      expect(mockAwardAirstars).toHaveBeenCalledWith(5, 'Brief read', expect.any(Object))
     })
   })
 
@@ -562,13 +560,15 @@ describe('BriefReader — BOO button on completion screen', () => {
   const WTA_SPAWN_EMPTY = { ok: true, json: async () => ({ data: null }) }
 
   // QUIZ_BRIEF has 1 section so isLast=true on mount, which fires POST /reached-flashcard
-  // before the swipe. That extra call must be mocked before the /complete response.
+  // and GET /reward-preview before the swipe. Both extras must be mocked before /complete.
   const REACHED_FLASHCARD_EMPTY = { ok: true, json: async () => ({ status: 'success', wasNew: false }) }
+  const PREVIEW_EMPTY           = { ok: true, json: async () => ({ data: { airstarsEarned: 0, dailyCoinsEarned: 0 } }) }
 
   it('shows active BOO button when BOO available and quiz passed', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(QUIZ_BRIEF))
       .mockResolvedValueOnce(REACHED_FLASHCARD_EMPTY)  // reached-flashcard fires on mount
+      .mockResolvedValueOnce(PREVIEW_EMPTY)             // reward-preview fires on mount (isLast)
       .mockResolvedValueOnce(makeCompleteResponse())
       .mockResolvedValueOnce(makeQuizStatusResponse(true))
       .mockResolvedValueOnce(makeBooResponse(true))
@@ -589,6 +589,7 @@ describe('BriefReader — BOO button on completion screen', () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(QUIZ_BRIEF))
       .mockResolvedValueOnce(REACHED_FLASHCARD_EMPTY)  // reached-flashcard fires on mount
+      .mockResolvedValueOnce(PREVIEW_EMPTY)             // reward-preview fires on mount (isLast)
       .mockResolvedValueOnce(makeCompleteResponse())
       .mockResolvedValueOnce(makeQuizStatusResponse(false))
       .mockResolvedValueOnce(makeBooResponse(true))
@@ -608,6 +609,7 @@ describe('BriefReader — BOO button on completion screen', () => {
   it('hides BOO button entirely when BOO not available for this category', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(QUIZ_BRIEF))
+      .mockResolvedValueOnce(PREVIEW_EMPTY)             // reward-preview fires on mount (isLast)
       .mockResolvedValueOnce(makeCompleteResponse())
       .mockResolvedValueOnce(makeBooResponse(false))
       .mockResolvedValueOnce(makeQuizStatusResponse(true))

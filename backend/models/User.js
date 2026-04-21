@@ -45,6 +45,11 @@ const userSchema = new mongoose.Schema(
     totalAirstars: { type: Number, default: 0 },
     cycleAirstars: { type: Number, default: 0 }, // airstars in current rank cycle — resets to 0 on rank promotion
 
+    // Profile badge — optional override that replaces the rank badge on the
+    // avatar. Points at an Aircrafts-category brief whose Media has a cutout.
+    // Validated at PATCH time; set to null to fall back to the rank badge.
+    selectedBadgeBriefId: { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', default: null },
+
     // Tutorial progress
     // ⚠ When adding a new tutorial, add it here AND in TUTORIAL_STEPS in src/context/AppTutorialContext.jsx
     tutorials: {

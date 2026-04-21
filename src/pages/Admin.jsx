@@ -1379,7 +1379,7 @@ function SettingsTab({ API }) {
   const [toast,    setToast]    = useState('')
   const [wtaSpawn,   setWtaSpawn]   = useState(null)
   const [cbatAircraft, setCbatAircraft] = useState(null)   // aircraft with a 3D model available
-  const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false, cbat: false })
+  const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false, cbat: false, flashcards: false })
   const toggleGameGroup = (key) => setGameGroupsOpen(p => ({ ...p, [key]: !p[key] }))
 
   const load = useCallback(() => {
@@ -1580,6 +1580,7 @@ function SettingsTab({ API }) {
         'aptitudeSyncDailyLimitSilver',
         'aptitudeSyncDailyLimitGold',
         'cbatTargetAircraftBriefIds',
+        'newsFlashcardsEnabled',
       ])}>
         <button
           type="button"
@@ -1793,21 +1794,34 @@ function SettingsTab({ API }) {
             </div>
           </>
         )}
+
+        <button
+          type="button"
+          onClick={() => toggleGameGroup('flashcards')}
+          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-6 pb-2 mb-2 border-b-2 border-brand-600/40"
+        >
+          <span>Flashcards</span>
+          <span className="text-brand-600 text-xs">{gameGroupsOpen.flashcards ? '▲' : '▼'}</span>
+        </button>
+        {gameGroupsOpen.flashcards && (
+          <>
+            <Toggle
+              label="News brief flashcards enabled"
+              hint="When off, News-category briefs skip the flashcard layout on section 4, suppress the collect animation, and are excluded from the flashcard deck and overall count. Reached-flashcard records still persist so re-enabling restores them immediately."
+              checked={draft.newsFlashcardsEnabled ?? false}
+              onChange={v => set('newsFlashcardsEnabled', v)}
+            />
+          </>
+        )}
       </Section>
 
       {/* ── Account Settings ────────────────────────────────── */}
-      <Section title="Account Settings" collapsible onSave={() => save('Update Account Settings', ['emailConfirmationEnabled', 'emailWelcomeEnabled', 'emailPasswordResetEnabled', 'betaTesterAutoGold', 'signupCaptchaEnabled'])}>
+      <Section title="Account Settings" collapsible onSave={() => save('Update Account Settings', ['emailConfirmationEnabled', 'emailPasswordResetEnabled', 'betaTesterAutoGold', 'signupCaptchaEnabled'])}>
         <Toggle
           label="Require email confirmation"
           hint="When off, new users are registered instantly without entering a confirmation code"
           checked={draft.emailConfirmationEnabled !== false}
           onChange={v => set('emailConfirmationEnabled', v)}
-        />
-        <Toggle
-          label="Send welcome email"
-          hint="When off, new users will not receive a welcome email after registering"
-          checked={draft.emailWelcomeEnabled !== false}
-          onChange={v => set('emailWelcomeEnabled', v)}
         />
         <Toggle
           label="Allow password reset emails"
@@ -2028,13 +2042,14 @@ function UsersTab({ API }) {
             </div>
 
             {/* Stats row */}
-            <div className="grid grid-cols-4 sm:grid-cols-7 divide-x divide-slate-100 border-b border-slate-100">
+            <div className="grid grid-cols-4 sm:grid-cols-8 divide-x divide-slate-100 border-b border-slate-100">
               {[
                 ['Coins', (u.totalAirstars ?? 0).toLocaleString()],
                 ['Streak', u.loginStreak ?? 0],
                 ['Logins', u.logins?.length ?? 0],
                 ['Briefs Read', u.profileStats?.brifsRead ?? 0],
                 ['Games', (u.profileStats?.quizzesPlayed ?? 0) + (u.profileStats?.booPlayed ?? 0) + (u.profileStats?.wtaPlayed ?? 0) + (u.profileStats?.wherePlayed ?? 0) + (u.profileStats?.flashcardsPlayed ?? 0)],
+                ['CBAT', u.profileStats?.cbatPlayed ?? 0],
                 ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1)],
                 ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })],
               ].map(([l, v]) => (
@@ -2628,7 +2643,13 @@ function ContentTab({ API }) {
       {modal && <ConfirmModal title={modal.label} onConfirm={modal.isTutorial ? confirmSaveTutorials : confirmSave} onCancel={() => setModal(null)} />}
 
       {/* ── Welcome Email ─────────────────────────────────────────── */}
-      <Section title="Welcome Email" collapsible onSave={() => save('Update Welcome Email', ['welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
+      <Section title="Welcome Email" collapsible onSave={() => save('Update Welcome Email', ['emailWelcomeEnabled', 'welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
+        <Toggle
+          label="Send welcome email"
+          hint="When off, new users will not receive a welcome email after registering"
+          checked={draft.emailWelcomeEnabled !== false}
+          onChange={v => setDraft(p => ({ ...p, emailWelcomeEnabled: v }))}
+        />
         {field('welcomeEmailSubject', 'Subject',  EMAIL_DEFAULTS.welcomeEmailSubject)}
         {field('welcomeEmailHeading', 'Heading',  EMAIL_DEFAULTS.welcomeEmailHeading)}
         {field('welcomeEmailBody',    'Body',     EMAIL_DEFAULTS.welcomeEmailBody, 4)}
@@ -2891,7 +2912,7 @@ const BRIEF_CATEGORIES = [
 
 const BRIEF_SUBCATEGORIES = {
   News: [],
-  Aircrafts: ['Fast Jet','ISR & Surveillance','Maritime Patrol','Transport & Tanker','Rotary Wing','Training Aircraft','Ground-Based Air Defence','Historic — WWII','Historic — Cold War','Historic — Post-Cold War'],
+  Aircrafts: ['Fast Jet','ISR & Surveillance','Maritime Patrol','Transport & Tanker','Rotary Wing','Training Aircraft','Historic — WWII','Historic — Cold War','Historic — Post-Cold War'],
   Bases: ['UK Active','UK Former','Overseas Permanent','Overseas Deployed / FOL'],
   Ranks: ['Commissioned Officer','Non-Commissioned','Specialist Role'],
   Squadrons: ['Active Front-Line','Training','Royal Auxiliary Air Force','Historic'],
@@ -3497,7 +3518,11 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
       const res  = await apiFetch(`${API}/api/admin/ai/generate-brief`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: lead.title, category: lead.category ?? 'News' }),
+        body: JSON.stringify({
+          topic:       lead.title,
+          category:    lead.category ?? 'News',
+          subcategory: lead.subcategory ?? '',
+        }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -3761,6 +3786,13 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [originalPreviewIds, setOriginalPreviewIds] = useState(() => new Set()) // per-row toggle: user explicitly chose to view the original instead of the cutout
   const [qTab,          setQTab]          = useState('easy')
   const [generating,    setGenerating]    = useState(null)
+  // Fill-missing flows run concurrently with each other and with full-regen
+  // flows, so they need their own booleans instead of sharing `generating`.
+  // Previously both used `generating = 'keywords-single' | 'questions-single'`,
+  // which clobbered when clicked near-simultaneously and prematurely re-enabled
+  // the first button when the second one resolved.
+  const [genKeywordsSingle,  setGenKeywordsSingle]  = useState(false)
+  const [genQuestionsSingle, setGenQuestionsSingle] = useState(false)
   const [autoGenerating,  setAutoGenerating]  = useState(false)
   const [regeneratingAll, setRegeneratingAll] = useState(false)
   const [saveStatus,    setSaveStatus]    = useState(null)
@@ -4305,7 +4337,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const generateSingleKeyword = async () => {
     const needed = keywordsPerBrief - draft.keywords.length
     if (needed <= 0) return
-    setGenerating('keywords-single')
+    setGenKeywordsSingle(true)
     try {
       const description = draft.descriptionSections.join(' ')
       const res = await apiFetch(`${API}/api/admin/ai/generate-keywords`, {
@@ -4318,35 +4350,39 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         setDraft(p => ({ ...p, keywords: [...p.keywords, ...data.data.keywords] }))
       }
     } finally {
-      setGenerating(null)
+      setGenKeywordsSingle(false)
     }
   }
 
-  // ── AI: Generate missing (fill gap) questions ────────────────────────────
-  const generateSingleQuestion = async () => {
-    const currentQs = qTab === 'easy' ? easyQuestions : mediumQuestions
-    const missing = questionsPerDifficulty - currentQs.length
-    if (missing <= 0) return
-    setGenerating('questions-single')
+  // ── AI: Generate missing (fill gap) questions for both difficulties ──────
+  const generateMissingQuestionsBoth = async () => {
+    const missingEasy = Math.max(0, questionsPerDifficulty - easyQuestions.length)
+    const missingMedium = Math.max(0, questionsPerDifficulty - mediumQuestions.length)
+    if (missingEasy === 0 && missingMedium === 0) return
+    setGenQuestionsSingle(true)
+    const fillOne = async (difficulty, existing, needed, setter) => {
+      if (needed <= 0) return
+      try {
+        const res = await apiFetch(`${API}/api/admin/ai/generate-quiz-missing`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: draft.title,
+            description: draft.descriptionSections.join('\n\n'),
+            difficulty,
+            existingQuestions: existing,
+            needed,
+          }),
+        })
+        const data = await res.json()
+        if (data.status === 'success') setter(p => [...p, ...(data.data.questions ?? [])])
+      } catch {}
+    }
     try {
-      const res = await apiFetch(`${API}/api/admin/ai/generate-quiz-missing`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: draft.title,
-          description: draft.descriptionSections.join('\n\n'),
-          difficulty: qTab,
-          existingQuestions: currentQs,
-          needed: missing,
-        }),
-      })
-      const data = await res.json()
-      if (data.status === 'success') {
-        if (qTab === 'easy') setEasyQuestions(p => [...p, ...(data.data.questions ?? [])])
-        else setMediumQuestions(p => [...p, ...(data.data.questions ?? [])])
-      }
+      await fillOne('easy', easyQuestions, missingEasy, setEasyQuestions)
+      await fillOne('medium', mediumQuestions, missingMedium, setMediumQuestions)
     } finally {
-      setGenerating(null)
+      setGenQuestionsSingle(false)
     }
   }
 
@@ -4434,8 +4470,12 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       })
       const data = await res.json()
       if (data.status !== 'success') throw new Error(data.message ?? 'Generation failed')
-      setDraft(p => ({ ...p, descriptionSections: data.data.descriptionSections }))
-      setToast('Description generated — review and save when ready')
+      // Server-side cascadeDeleteBriefData has wiped keywords + quiz questions —
+      // clear local state to match so a subsequent Save doesn't re-persist stale arrays.
+      setDraft(p => ({ ...p, descriptionSections: data.data.descriptionSections, keywords: [] }))
+      setEasyQuestions([])
+      setMediumQuestions([])
+      setToast('Description generated — keywords and quiz cleared. Review and save when ready')
     } catch (err) {
       setToast(`Generate description failed: ${err.message}`)
     } finally {
@@ -5221,7 +5261,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
             {draft.descriptionSections.map((sec, idx) => (
               <div key={idx}>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-500">Section {idx + 1}</label>
+                  <label className="text-xs font-semibold text-slate-500">{idx === 3 ? 'Flashcard Section' : `Section ${idx + 1}`}</label>
                   <button
                     onClick={() => setDraft(p => ({ ...p, descriptionSections: p.descriptionSections.filter((_, i) => i !== idx) }))}
                     disabled={draft.descriptionSections.length <= 1}
@@ -5241,13 +5281,14 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               </div>
             ))}
             <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
-              <button
-                onClick={() => setDraft(p => ({ ...p, descriptionSections: [...p.descriptionSections, ''] }))}
-                disabled={draft.descriptionSections.length >= 4}
-                className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-600 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
-              >
-                + Add Section
-              </button>
+              {draft.descriptionSections.length < 4 && (
+                <button
+                  onClick={() => setDraft(p => ({ ...p, descriptionSections: [...p.descriptionSections, ''] }))}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-600 font-semibold hover:bg-surface-raised transition-colors"
+                >
+                  + Add Section
+                </button>
+              )}
               {briefId && (
                 <button
                   onClick={generateDescription}
@@ -5701,7 +5742,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
 
       {/* ── Section F: Keywords ───────────────────────────────────────── */}
       <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
-        {(generating === 'keywords' || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
+        {(generating === 'keywords' || genKeywordsSingle || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
         <div
           onClick={() => toggleSection('keywords')}
           className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left cursor-pointer"
@@ -5721,10 +5762,10 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
             {draft.keywords.length < keywordsPerBrief && (
               <button
                 onClick={e => { e.stopPropagation(); generateSingleKeyword() }}
-                disabled={generating === 'keywords' || generating === 'keywords-single' || regeneratingAll}
+                disabled={generating === 'keywords' || genKeywordsSingle || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
-                {generating === 'keywords-single' ? '↺ Generating…' : `↺ Generate Missing (${keywordsPerBrief - draft.keywords.length})`}
+                {genKeywordsSingle ? '↺ Generating…' : `↺ Generate Missing (${keywordsPerBrief - draft.keywords.length})`}
               </button>
             )}
             <span className="text-slate-400 text-xs">{openSections.keywords ? '▲' : '▼'}</span>
@@ -5780,7 +5821,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               </button>
               <button
                 onClick={generateKeywords}
-                disabled={generating === 'keywords' || generating === 'keywords-single' || regeneratingAll}
+                disabled={generating === 'keywords' || genKeywordsSingle || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
                 {generating === 'keywords' ? '↺ Regenerating…' : '↺ Regenerate All Keywords'}
@@ -5792,10 +5833,10 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
 
       {/* ── Section G: Quiz Questions ─────────────────────────────────── */}
       <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
-        {(generating === 'questions' || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
-        <button
+        {(generating === 'questions' || genQuestionsSingle || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
+        <div
           onClick={() => toggleSection('questions')}
-          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left cursor-pointer"
         >
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-slate-800">Quiz Questions</h3>
@@ -5803,8 +5844,22 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               {easyQuestions.length + mediumQuestions.length} / 14
             </span>
           </div>
-          <span className="text-slate-400 text-xs">{openSections.questions ? '▲' : '▼'}</span>
-        </button>
+          <div className="flex items-center gap-3">
+            {(() => {
+              const totalMissing = Math.max(0, questionsPerDifficulty - easyQuestions.length) + Math.max(0, questionsPerDifficulty - mediumQuestions.length)
+              return totalMissing > 0 && (
+                <button
+                  onClick={e => { e.stopPropagation(); generateMissingQuestionsBoth() }}
+                  disabled={generating === 'questions' || genQuestionsSingle || autoGenerating || regeneratingAll}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
+                >
+                  {genQuestionsSingle ? '↺ Generating…' : `↺ Generate Missing (${totalMissing})`}
+                </button>
+              )
+            })()}
+            <span className="text-slate-400 text-xs">{openSections.questions ? '▲' : '▼'}</span>
+          </div>
+        </div>
         {openSections.questions && (
           <div className="px-5 py-4">
             {/* Tab switcher */}
@@ -5867,24 +5922,15 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
             <div className="flex gap-2 flex-wrap mt-4">
               <button
                 onClick={generateQuestions}
-                disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}
+                disabled={generating === 'questions' || genQuestionsSingle || autoGenerating || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
                 {generating === 'questions' || autoGenerating ? '↺ Generating…' : '↺ Generate Questions'}
               </button>
               {currentQuestions.length < questionsPerDifficulty && (
                 <button
-                  onClick={generateSingleQuestion}
-                  disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
-                >
-                  {generating === 'questions-single' ? '↺ Generating…' : `↺ Generate Missing (${questionsPerDifficulty - currentQuestions.length})`}
-                </button>
-              )}
-              {currentQuestions.length < questionsPerDifficulty && (
-                <button
                   onClick={addBlankQuestion}
-                  disabled={generating === 'questions' || generating === 'questions-single' || autoGenerating || regeneratingAll}
+                  disabled={generating === 'questions' || genQuestionsSingle || autoGenerating || regeneratingAll}
                   className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-600 font-semibold hover:bg-surface-raised transition-colors disabled:opacity-40"
                 >
                   + Add Question

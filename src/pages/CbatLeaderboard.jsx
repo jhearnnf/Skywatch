@@ -156,7 +156,7 @@ export default function CbatLeaderboard() {
                         {entry.rank <= 3 ? ['🥇', '🥈', '🥉'][entry.rank - 1] : `#${entry.rank}`}
                       </span>
                       <span className={`truncate ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}>
-                        Agent {entry.agentNumber || '???'}{isMe ? ' (you)' : ''}
+                        {entry.email ? entry.email : `Agent ${entry.agentNumber || '???'}`}{isMe ? ' (you)' : ''}
                       </span>
                       <span className="text-right font-mono font-bold text-brand-600">
                         {cfg.formatScore(entry.bestScore)}
@@ -177,7 +177,7 @@ export default function CbatLeaderboard() {
                   <div className="px-4 py-1 text-center text-[10px] text-slate-500">···</div>
                   <div className={`grid ${cfg.hideTime ? 'grid-cols-[3rem_1fr_5rem]' : 'grid-cols-[3rem_1fr_5rem_4.5rem]'} gap-2 px-4 py-2.5 text-sm bg-brand-600/10 border-l-2 border-l-brand-400 border-t border-[#1a3a5c]`}>
                     <span className="font-mono font-bold text-slate-400">#{myBest.rank}</span>
-                    <span className="truncate text-brand-600 font-bold">Agent {myBest.agentNumber || '???'} (you)</span>
+                    <span className="truncate text-brand-600 font-bold">{myBest.email ? myBest.email : `Agent ${myBest.agentNumber || '???'}`} (you)</span>
                     <span className="text-right font-mono font-bold text-brand-600">
                       {cfg.formatScore(myBest.bestScore)}
                     </span>

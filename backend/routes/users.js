@@ -9,6 +9,7 @@ const GameSessionWhereAircraftResult     = require('../models/GameSessionWhereAi
 const GameSessionFlashcardRecallResult   = require('../models/GameSessionFlashcardRecallResult');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
+const Media = require('../models/Media');
 const ProblemReport = require('../models/ProblemReport');
 const UserNotification = require('../models/UserNotification');
 const AppSettings = require('../models/AppSettings');
@@ -16,6 +17,7 @@ const Level = require('../models/Level');
 const Rank = require('../models/Rank');
 const AirstarLog = require('../models/AirstarLog');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
+const { withSelectedBadge } = require('../utils/selectedBadge');
 
 // GET /api/users/stats — current user's stats for profile page
 router.get('/stats', protect, async (req, res) => {
@@ -103,11 +105,12 @@ router.patch('/me/difficulty', protect, async (req, res) => {
         return res.status(403).json({ message: 'Advanced difficulty requires a Silver subscription or higher.' });
       }
     }
-    const user = await User.findByIdAndUpdate(
+    const updated = await User.findByIdAndUpdate(
       req.user._id,
       { difficultySetting: difficulty },
       { returnDocument: 'after' }
     ).populate('rank');
+    const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
     res.json({ status: 'success', data: { user } });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -390,6 +393,106 @@ router.post('/me/notifications/:id/read', protect, async (req, res) => {
       { read: true }
     );
     res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/users/me/badge-options — every Aircraft brief the user has read,
+// annotated with whether a cutout exists yet. Used by the badge picker page.
+// Pending (no cutout) entries are intentionally returned so the picker can
+// surface admin backlog to the user rather than hiding unlocked aircraft.
+router.get('/me/badge-options', protect, async (req, res) => {
+  try {
+    const reads = await IntelligenceBriefRead
+      .find({ userId: req.user._id, completed: true })
+      .select('intelBriefId')
+      .lean();
+    const readIds = reads.map(r => r.intelBriefId);
+    if (readIds.length === 0) {
+      return res.json({ status: 'success', data: [] });
+    }
+
+    const briefs = await IntelligenceBrief.find({
+      _id: { $in: readIds },
+      category: 'Aircrafts',
+      status: 'published',
+    })
+      .select('title media')
+      .populate('media')
+      .sort({ title: 1 })
+      .lean();
+
+    const options = briefs.map(b => {
+      const withCutout = (b.media || []).find(m => m.cutoutUrl);
+      return {
+        briefId:   b._id,
+        title:     b.title,
+        cutoutUrl: withCutout?.cutoutUrl ?? null,
+        status:    withCutout ? 'available' : 'pending',
+      };
+    });
+
+    // Available first, pending after; each group alphabetical (already sorted above).
+    options.sort((a, b) => {
+      if (a.status === b.status) return 0;
+      return a.status === 'available' ? -1 : 1;
+    });
+
+    res.json({ status: 'success', data: options });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/users/me/badge — set or clear the profile badge override.
+// Body: { briefId } or { briefId: null } to reset to the rank badge.
+// Validates that the brief is an Aircrafts-category published brief the user
+// has completed AND has a Media with a cutoutUrl. 403 otherwise.
+router.patch('/me/badge', protect, async (req, res) => {
+  try {
+    const { briefId } = req.body;
+
+    if (briefId === null || briefId === undefined) {
+      const updated = await User.findByIdAndUpdate(
+        req.user._id,
+        { selectedBadgeBriefId: null },
+        { returnDocument: 'after' }
+      ).populate('rank');
+      const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
+      return res.json({ status: 'success', data: { user } });
+    }
+
+    if (typeof briefId !== 'string' || !briefId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ message: 'briefId must be a valid ObjectId or null' });
+    }
+
+    const brief = await IntelligenceBrief.findById(briefId).populate('media').lean();
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    if (brief.category !== 'Aircrafts' || brief.status !== 'published') {
+      return res.status(403).json({ message: 'Badge must be an Aircraft brief' });
+    }
+
+    const cutoutMedia = (brief.media || []).find(m => m.cutoutUrl);
+    if (!cutoutMedia) {
+      return res.status(403).json({ message: 'No cutout image is available for this aircraft yet' });
+    }
+
+    const hasRead = await IntelligenceBriefRead.exists({
+      userId: req.user._id,
+      intelBriefId: briefId,
+      completed: true,
+    });
+    if (!hasRead) return res.status(403).json({ message: 'Read this brief before using it as a badge' });
+
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { selectedBadgeBriefId: briefId },
+      { returnDocument: 'after' }
+    ).populate('rank');
+    const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
+
+    res.json({ status: 'success', data: { user } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

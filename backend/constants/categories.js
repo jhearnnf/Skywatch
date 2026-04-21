@@ -13,7 +13,6 @@ const SUBCATEGORIES = {
     'Transport & Tanker',
     'Rotary Wing',
     'Training Aircraft',
-    'Ground-Based Air Defence',
     'Historic — WWII',
     'Historic — Cold War',
     'Historic — Post-Cold War',

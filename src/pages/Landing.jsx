@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -8,10 +8,10 @@ import SEO from '../components/SEO'
 const FEATURES = [
   { icon: '✈️', title: 'Learn About the RAF',        body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — designed for aspiring aviators.' },
   { icon: '🧠', title: 'Section-by-Section Reading', body: 'Each brief is broken into short, clear sections. Read at your own pace and build genuine knowledge.' },
-  { icon: '🎮', title: 'Test Yourself',              body: 'After each brief, take a quiz to reinforce what you\'ve learned and earn Airstars.' },
+  { icon: '🎮', title: 'Test Yourself',              body: 'After each brief, take a quiz to reinforce what you\'ve learned and earn Airstars.', badge: 'Now includes CBAT games!' },
   { icon: '🔥', title: 'Daily Streaks',              body: 'Return every day to keep your streak alive. Consistent learning beats last-minute cramming every time.' },
   { icon: '🏆', title: 'Climb the Rankings',         body: 'Compete with other learners on the leaderboard as you progress through subjects.' },
-  { icon: '📰', title: 'Live RAF News',              body: 'Stay up to date with real RAF news — automatically sourced and formatted as intel briefs.' },
+  { icon: '📰', title: 'Daily RAF News',             body: 'Stay up to date with real RAF news — automatically sourced and formatted as intel briefs.' },
 ]
 
 const PREVIEW_CATEGORIES = [
@@ -70,8 +70,21 @@ function CornerBrackets({ size = 18, color = '#5baaff', opacity = 0.4 }) {
 }
 
 export default function Landing() {
-  const { user } = useAuth()
+  const { user, API } = useAuth()
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [liveStats, setLiveStats] = useState(null)
+
+  useEffect(() => {
+    let aborted = false
+    fetch(`${API}/api/briefs/public-stats`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => { if (!aborted && j?.data) setLiveStats(j.data) })
+      .catch(() => {})
+    return () => { aborted = true }
+  }, [API])
+
+  const briefCount    = liveStats?.totalBriefs
+  const questionCount = liveStats?.totalQuestions
 
   return (
     <div className="min-h-screen" style={{ background: '#06101e' }}>
@@ -159,15 +172,16 @@ export default function Landing() {
           className="mt-16 flex flex-wrap justify-center gap-10 text-center"
         >
           {[
-            { value: '15',    label: 'Subject Areas'   },
-            { value: '100+',  label: 'Intel Briefs'    },
-            { value: '1000+', label: 'Quiz Questions'  },
-            { value: 'Daily', label: 'Streak System'     },
-          ].map(({ value, label }) => (
+            { value: '15',                                                 label: 'Subject Areas'  },
+            { value: briefCount    != null ? briefCount.toLocaleString()    : '—', label: 'Intel Briefs',   caption: 'Expanding daily' },
+            { value: questionCount != null ? questionCount.toLocaleString() : '—', label: 'Quiz Questions', caption: 'Every brief covered' },
+            { value: 'Daily',                                              label: 'Streak System'  },
+          ].map(({ value, label, caption }) => (
             <div key={label} className="relative px-4 py-3" style={{ border: '1px solid rgba(91,170,255,0.12)', borderRadius: 8 }}>
               <CornerBrackets size={8} />
               <div className="text-2xl font-extrabold text-brand-600 intel-mono">{value}</div>
               <div className="text-xs text-slate-500 intel-mono mt-0.5">{label}</div>
+              {caption && <div className="text-[10px] text-slate-500/80 intel-mono mt-0.5">{caption}</div>}
             </div>
           ))}
         </motion.div>
@@ -228,7 +242,7 @@ export default function Landing() {
         </motion.div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {FEATURES.map(({ icon, title, body }, i) => (
+          {FEATURES.map(({ icon, title, body, badge }, i) => (
             <motion.div
               key={title}
               initial={{ opacity: 0, y: 20 }}
@@ -238,6 +252,19 @@ export default function Landing() {
               className="relative card-intel rounded-2xl p-5"
             >
               <CornerBrackets size={12} />
+              {badge && (
+                <span
+                  className="absolute -top-2 right-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full intel-mono"
+                  style={{
+                    background: 'linear-gradient(135deg, #5baaff 0%, #1d4ed8 100%)',
+                    color: '#ffffff',
+                    boxShadow: '0 0 12px rgba(91,170,255,0.5)',
+                    border: '1px solid rgba(91,170,255,0.6)',
+                  }}
+                >
+                  {badge}
+                </span>
+              )}
               <span className={`text-3xl${icon === '🔥' ? ' flame-blue' : ''}`}>{icon}</span>
               <h3 className="font-bold text-slate-900 mt-3 mb-1.5">{title}</h3>
               <p className="text-sm text-slate-500 leading-relaxed">{body}</p>
@@ -266,7 +293,7 @@ export default function Landing() {
           </div>
 
           <div className="text-5xl mb-4">🎯</div>
-          <h2 className="text-3xl font-extrabold text-slate-50 mb-3">Aim Higher.</h2>
+          <h2 className="text-3xl font-extrabold mb-3" style={{ color: '#ffffff' }}>Aim Higher.</h2>
           <p className="text-lg mb-8 max-w-md mx-auto" style={{ color: '#a8c4e0' }}>
             Stop skimming Wikipedia. Start actually knowing the RAF.
           </p>

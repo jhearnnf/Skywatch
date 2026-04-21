@@ -7,6 +7,7 @@ import { useAppTutorial } from '../context/AppTutorialContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import FlashcardGameModal from '../components/FlashcardGameModal'
+import FlyingNewBadge from '../components/FlyingNewBadge'
 import SEO from '../components/SEO'
 
 // BOO states that trigger the unlock notification (game is actually playable)
@@ -269,18 +270,13 @@ export default function Play() {
       {/* Flying "NEW GAME" badges — animate from nav Play button to game card */}
       <AnimatePresence>
         {flyingBadges.map(badge => (
-          <motion.div
+          <FlyingNewBadge
             key={badge.key}
-            initial={{ left: badge.from.x, top: badge.from.y, opacity: 0, scale: 0.5 }}
-            animate={{ left: badge.to.x,   top: badge.to.y,   opacity: 1, scale: 1   }}
-            exit={{ opacity: 0, scale: 0.6 }}
-            transition={{ type: 'spring', stiffness: 180, damping: 22 }}
-            onAnimationComplete={() => handleBadgeArrived(badge.key)}
-            style={{ position: 'fixed', zIndex: 9999, pointerEvents: 'none' }}
-            className="text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full shadow-lg"
-          >
-            NEW GAME
-          </motion.div>
+            from={badge.from}
+            to={badge.to}
+            label="NEW GAME"
+            onArrived={() => handleBadgeArrived(badge.key)}
+          />
         ))}
       </AnimatePresence>
 

@@ -122,3 +122,49 @@ describe('CbatLeaderboard — populated rows', () => {
     expect(screen.getByText('Agent A001 (you)')).toBeDefined()
   })
 })
+
+describe('CbatLeaderboard — admin email display', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('renders email instead of agent number when backend returns email (admin view)', async () => {
+    setupAuth(mockApiFetch({
+      leaderboard: [
+        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', email: 'ace@skywatch.test' },
+        { _id: 'e2', userId: 'u1',    rank: 2, bestScore: 14, bestTime: 31, agentNumber: 'A001', email: 'me@skywatch.test' },
+      ],
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByText('ace@skywatch.test')).toBeDefined())
+    expect(screen.getByText('me@skywatch.test (you)')).toBeDefined()
+    expect(screen.queryByText(/Agent A999/)).toBeNull()
+    expect(screen.queryByText(/Agent A001/)).toBeNull()
+  })
+
+  it('renders email on the myBest row when admin is outside the top list', async () => {
+    setupAuth(mockApiFetch({
+      leaderboard: [
+        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', email: 'ace@skywatch.test' },
+      ],
+      myBest: { userId: 'u1', rank: 42, bestScore: 8, bestTime: 55, agentNumber: 'A001', email: 'boss@skywatch.test' },
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByText('#42')).toBeDefined())
+    expect(screen.getByText('boss@skywatch.test (you)')).toBeDefined()
+  })
+
+  it('falls back to agent number when email is absent (non-admin view)', async () => {
+    setupAuth(mockApiFetch({
+      leaderboard: [
+        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999' },
+      ],
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByText('Agent A999')).toBeDefined())
+  })
+})

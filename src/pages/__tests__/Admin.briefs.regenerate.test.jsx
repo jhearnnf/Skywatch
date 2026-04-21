@@ -431,7 +431,10 @@ describe('Admin Briefs — Generate Description button', () => {
     expect(screen.getByDisplayValue('Brand new section beta.')).toBeDefined()
   })
 
-  it('does NOT modify keywords after a successful description generation', async () => {
+  it('clears keywords from local state to match the server-side cascade', async () => {
+    // Server's regenerate-description route runs cascadeDeleteBriefData, which
+    // wipes the brief's keywords + quiz questions. The UI must reflect that so
+    // a subsequent Save doesn't re-persist stale local-state keywords.
     global.fetch = vi.fn().mockImplementation((url, opts) => {
       if (url.includes('regenerate-description'))
         return Promise.resolve({ ok: true, json: async () => DESC_RESPONSE })
@@ -443,8 +446,8 @@ describe('Admin Briefs — Generate Description button', () => {
     await waitFor(() => screen.getByDisplayValue('Brand new section alpha.'))
     // Keywords section is collapsed by default — expand it to see the keyword inputs
     fireEvent.click(screen.getByText('Keywords'))
-    // Original keyword from MOCK_BRIEF must still be in the editor
-    await waitFor(() => expect(screen.getByDisplayValue('Typhoon')).toBeDefined())
+    // Original keyword from MOCK_BRIEF must have been cleared from the editor
+    await waitFor(() => expect(screen.queryByDisplayValue('Typhoon')).toBeNull())
   })
 
   it('shows success toast after generation completes', async () => {
@@ -456,7 +459,7 @@ describe('Admin Briefs — Generate Description button', () => {
     render(<Admin />)
     await openBriefEditor()
     await confirmDescModal()
-    await waitFor(() => screen.getByText(/description generated — review and save/i))
+    await waitFor(() => screen.getByText(/description generated — keywords and quiz cleared/i))
   })
 
   it('shows error toast when the API returns an error response', async () => {

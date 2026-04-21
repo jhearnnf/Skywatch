@@ -3,7 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useAnimationControls } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
+import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
+import FlyingNewBadge from '../components/FlyingNewBadge'
 import { MOCK_RANKS, CATEGORY_ICONS, CATEGORY_DESCRIPTIONS } from '../data/mockData'
 import { pathwayTierRequired, getAccessibleCategories } from '../utils/subscription'
 import { getLevelInfo } from '../utils/levelUtils'
@@ -1228,6 +1230,14 @@ export default function LearnPriority() {
   const swipeControls = useAnimationControls()
   const [showSwipeHint, setShowSwipeHint] = useState(false)
 
+  // ── New-category unlock animation state ───────────────────────────────────
+  const { newCategories, markSeen: markCategorySeen } = useNewCategoryUnlock()
+  const [unlockQueue,      setUnlockQueue]      = useState(null)   // null | string[] (category names in order)
+  const [unlockCursor,     setUnlockCursor]     = useState(0)
+  const [flyingBadge,      setFlyingBadge]      = useState(null)   // { category, from:{x,y}, to:{x,y} }
+  const [landedCategories, setLandedCategories] = useState(() => new Set())
+  const sequenceStartedRef = useRef(false)
+
   // ── Tutorial ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const t = setTimeout(() => start('learn-priority'), 600)
@@ -1304,8 +1314,10 @@ export default function LearnPriority() {
 
   // ── Jump to category passed via navigation state (e.g. back from BriefReader) ─
   // Fires once, after settings fetch settles, so pathways reflect server order.
+  // Skipped if the unlock sequence has already taken over — it controls the index.
   useEffect(() => {
     if (!settingsLoaded) return
+    if (sequenceStartedRef.current) return
     const cat = location.state?.category
     if (cat) {
       const idx = pathways.findIndex(p => p.category === cat)
@@ -1323,6 +1335,76 @@ export default function LearnPriority() {
     setActiveCatIndex(firstUnlocked !== -1 ? firstUnlocked : 0)
   }, [settingsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Start the new-category unlock sequence (once per mount) ───────────────
+  // After settings load and pathways are known, if there are any unseen category
+  // unlocks, queue them in pathway order and swipe to the first one.
+  useEffect(() => {
+    if (!settingsLoaded) return
+    if (sequenceStartedRef.current) return
+    if (newCategories.size === 0) return
+    if (pathways.length === 0) return
+    const ordered = pathways
+      .filter(p => newCategories.has(p.category))
+      .map(p => p.category)
+    if (ordered.length === 0) return
+    sequenceStartedRef.current = true
+    setUnlockQueue(ordered)
+    setUnlockCursor(0)
+    const firstIdx = pathways.findIndex(p => p.category === ordered[0])
+    if (firstIdx !== -1) {
+      setDirection(firstIdx > (activeCatIndex ?? 0) ? 1 : -1)
+      setActiveCatIndex(firstIdx)
+    }
+  }, [settingsLoaded, pathways.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fly the next badge when the carousel lands on the queued category ─────
+  useEffect(() => {
+    if (!unlockQueue) return
+    const targetCat = unlockQueue[unlockCursor]
+    if (!targetCat) return
+    if (pathways[activeCatIndex]?.category !== targetCat) return
+    if (flyingBadge) return // already flying
+    if (landedCategories.has(targetCat)) return // already landed
+    const t = setTimeout(() => {
+      const navEl  = document.querySelector('[data-nav="learn"]')
+      const cardEl = document.querySelector(`[data-testid="category-card-${targetCat}"]`)
+      if (!navEl || !cardEl) {
+        handleBadgeArrived(targetCat)
+        return
+      }
+      const navRect  = navEl.getBoundingClientRect()
+      const cardRect = cardEl.getBoundingClientRect()
+      setFlyingBadge({
+        category: targetCat,
+        from: { x: navRect.left + navRect.width / 2 - 18, y: navRect.top },
+        to:   { x: cardRect.right - 52,                   y: cardRect.top + 4 },
+      })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [unlockQueue, unlockCursor, activeCatIndex, pathways, flyingBadge, landedCategories]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleBadgeArrived(category) {
+    setFlyingBadge(null)
+    setLandedCategories(prev => new Set([...prev, category]))
+    markCategorySeen(category)
+    setTimeout(() => {
+      setUnlockCursor(cursor => {
+        const next = cursor + 1
+        if (!unlockQueue || next >= unlockQueue.length) {
+          setUnlockQueue(null) // sequence complete — swipe unlocks
+          return cursor
+        }
+        const nextCat = unlockQueue[next]
+        const nextIdx = pathways.findIndex(p => p.category === nextCat)
+        if (nextIdx !== -1) {
+          setDirection(nextIdx > activeCatIndex ? 1 : -1)
+          setActiveCatIndex(nextIdx)
+        }
+        return next
+      })
+    }, 1200)
+  }
+
   // ── Show inline swipe hint after learn-priority tutorial is seen ───────────
   // Gates on `visible` (no modal open) + hasSeen('learn-priority') so the hint
   // never fights with the modal. hasSeen reads live from localStorage — next()
@@ -1330,6 +1412,7 @@ export default function LearnPriority() {
   // visible=false and hasSeen=true simultaneously.
   useEffect(() => {
     if (visible) return
+    if (unlockQueue) return // don't fight with the unlock sequence
     if (pathways.length < 2) return
     if (!hasSeen('learn-priority')) return
     const uid = user?._id
@@ -1337,7 +1420,7 @@ export default function LearnPriority() {
     if (localStorage.getItem(key)) return
     const t = setTimeout(() => setShowSwipeHint(true), 800)
     return () => clearTimeout(t)
-  }, [visible, pathways.length, user?._id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [visible, pathways.length, user?._id, unlockQueue]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Oscillate the pathway content while the hint is visible — x-only (no rotate) so
   // the displacement stays constant regardless of how many stones are in the pathway.
@@ -1396,6 +1479,8 @@ export default function LearnPriority() {
   }
 
   function handleDragEnd(_, info) {
+    if (unlockQueue) { dragX.set(0); return }
+
     const goNext = info.offset.x < -80 || info.velocity.x < -500
     const goPrev = info.offset.x > 80  || info.velocity.x > 500
 
@@ -1415,6 +1500,7 @@ export default function LearnPriority() {
   }
 
   function goToPathway(index) {
+    if (unlockQueue) return
     if (index === activeCatIndex) return
     setDirection(index > activeCatIndex ? 1 : -1)
     setActiveCatIndex(index)
@@ -1459,6 +1545,19 @@ export default function LearnPriority() {
         }
       `}</style>
       <TutorialModal />
+
+      {/* Flying "NEW" badge — nav Learn button → category header card */}
+      <AnimatePresence>
+        {flyingBadge && (
+          <FlyingNewBadge
+            key={flyingBadge.category}
+            from={flyingBadge.from}
+            to={flyingBadge.to}
+            label="NEW"
+            onArrived={() => handleBadgeArrived(flyingBadge.category)}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showSwipeHint && (
@@ -1534,9 +1633,17 @@ export default function LearnPriority() {
 
         {/* ── Active pathway header ─────────────────────────────────────────── */}
         <div
-          className="rounded-2xl px-4 py-2.5 flex items-center justify-between card-shadow"
+          data-testid={`category-card-${activePathway.category}`}
+          className="relative rounded-2xl px-4 py-2.5 flex items-center justify-between card-shadow"
           style={{ background: activePathway.colors.bg, border: `1px solid ${activePathway.colors.stone}33` }}
         >
+          {/* Persistent "NEW" pill — appears after fly-in lands, stays until navigation */}
+          {landedCategories.has(activePathway.category) && (
+            <span className="absolute -top-1.5 -right-1.5 text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full shadow-lg">
+              NEW
+            </span>
+          )}
+
           <div className="flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-full flex items-center justify-center text-xl"
@@ -1576,7 +1683,7 @@ export default function LearnPriority() {
 
         {/* ── Swipeable pathway content ──────────────────────────────────────── */}
         <motion.div
-          drag={pathways.length > 1 ? 'x' : false}
+          drag={pathways.length > 1 && !unlockQueue ? 'x' : false}
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.15}
           animate={swipeControls}

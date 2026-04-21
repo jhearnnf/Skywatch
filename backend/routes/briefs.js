@@ -5,13 +5,14 @@ const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const AppSettings = require('../models/AppSettings');
 const User = require('../models/User');
 const AirstarLog = require('../models/AirstarLog');
-const { awardCoins } = require('../utils/awardCoins');
+const { awardCoins, getCycleThreshold } = require('../utils/awardCoins');
 const { effectiveTier, getAccessibleCategories, isPathwayUnlocked, getPathwayAccessibleCategories, buildCumulativeThresholds } = require('../utils/subscription');
 const { enrichWithMatchTerms } = require('../utils/mentionedBriefs');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
 require('../models/GameQuizQuestion');
 const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
 const Level = require('../models/Level');
+const Rank  = require('../models/Rank');
 
 // Gold ammo sentinel — treated as unlimited throughout
 const AMMO_GOLD = 9999;
@@ -98,6 +99,34 @@ router.get('/', optionalAuth, async (req, res) => {
 
     const totalPages = Math.ceil(total / limitNum);
     res.json({ status: 'success', data: { briefs: briefsOut, total, page: pageNum, totalPages } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/briefs/public-stats — totals for the marketing landing page
+// Published brief count + total quiz questions (easy + medium) across those briefs
+router.get('/public-stats', async (_req, res) => {
+  try {
+    const rows = await IntelligenceBrief.aggregate([
+      { $match: { status: 'published' } },
+      {
+        $group: {
+          _id: null,
+          totalBriefs:    { $sum: 1 },
+          totalQuestions: {
+            $sum: {
+              $add: [
+                { $size: { $ifNull: ['$quizQuestionsEasy',   []] } },
+                { $size: { $ifNull: ['$quizQuestionsMedium', []] } },
+              ],
+            },
+          },
+        },
+      },
+    ]);
+    const { totalBriefs = 0, totalQuestions = 0 } = rows[0] || {};
+    res.json({ status: 'success', data: { totalBriefs, totalQuestions } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -611,6 +640,89 @@ const idToLinked = new Map(linkedBriefs.map(b => [String(b._id), b]));
   }
 });
 
+// GET /api/briefs/:id/reward-preview — compute pending coin reward without committing.
+// Mirrors the award math in POST /:id/complete so the client can optimistically show
+// the airstars notification the instant the user swipes past the final section.
+router.get('/:id/reward-preview', protect, async (req, res) => {
+  try {
+    const brief = await IntelligenceBrief.findById(req.params.id).select('status descriptionSections');
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    if (brief.status === 'stub' || !brief.descriptionSections?.length) {
+      return res.status(400).json({ message: 'Brief has no content yet' });
+    }
+
+    const settings   = await AppSettings.getSettings();
+    const readRecord = await IntelligenceBriefRead.findOne({
+      userId:       req.user._id,
+      intelBriefId: brief._id,
+    }).select('coinsAwarded');
+
+    // Already rewarded — preview is zero, client should show nothing
+    if (readRecord?.coinsAwarded) {
+      return res.json({ status: 'success', data: { airstarsEarned: 0, dailyCoinsEarned: 0, unlockedCategories: [] } });
+    }
+
+    const airstarsEarned = settings.airstarsPerBriefRead ?? 5;
+
+    let dailyCoinsEarned = 0;
+    const todayStr  = new Date().toDateString();
+    const lastStr   = req.user.lastStreakDate
+      ? new Date(req.user.lastStreakDate).toDateString()
+      : null;
+    const yesterStr = new Date(Date.now() - 86400000).toDateString();
+    if (lastStr !== todayStr) {
+      const currentStreak = req.user.loginStreak ?? 0;
+      const newStreak     = (lastStr === yesterStr) ? currentStreak + 1 : 1;
+      const base          = settings.airstarsFirstLogin  ?? 5;
+      const bonus         = settings.airstarsStreakBonus ?? 2;
+      dailyCoinsEarned    = base + (newStreak >= 2 ? bonus : 0);
+    }
+
+    // ── Project would-be pathway category unlocks (mirrors awardCoins's diff) ──
+    // Without committing, simulate the cycleAirstars/rank change that POST /complete
+    // would produce and diff the pathway-accessible categories before vs after.
+    // Must stay in sync with awardCoins so the preview and commit always agree.
+    const totalEarned = airstarsEarned + dailyCoinsEarned;
+    let unlockedCategories = [];
+    try {
+      const levelsList = await Level.find().sort({ levelNumber: 1 }).lean();
+      const thresholds = buildCumulativeThresholds(levelsList);
+      const cycleThreshold = await getCycleThreshold();
+
+      const startingTotal    = req.user.totalAirstars ?? 0;
+      const startingCycle    = req.user.cycleAirstars ?? 0;
+      const startingRankNum  = req.user.rank?.rankNumber ?? 0;
+
+      // Simulate awardCoins's rank promotion: keep subtracting threshold and
+      // advancing rank until below threshold (or no higher rank exists).
+      let projectedCycle   = startingCycle + totalEarned;
+      let projectedRankNum = startingRankNum;
+      if (projectedCycle >= cycleThreshold) {
+        const allRanks = await Rank.find().sort({ rankNumber: 1 }).lean();
+        while (projectedCycle >= cycleThreshold) {
+          const nextRank = allRanks.find(r => r.rankNumber > projectedRankNum);
+          if (!nextRank) break;
+          projectedCycle  -= cycleThreshold;
+          projectedRankNum = nextRank.rankNumber;
+        }
+      }
+
+      const beforeUser = { totalAirstars: startingTotal,                rank: { rankNumber: startingRankNum  } };
+      const afterUser  = { totalAirstars: startingTotal + totalEarned, rank: { rankNumber: projectedRankNum } };
+
+      const before = getPathwayAccessibleCategories(beforeUser, settings, thresholds) ?? [];
+      const after  = getPathwayAccessibleCategories(afterUser,  settings, thresholds) ?? [];
+      unlockedCategories = after.filter(c => !before.includes(c));
+    } catch (_) {
+      // Projection is best-effort — never fail the preview if settings/levels lookup fails.
+    }
+
+    res.json({ status: 'success', data: { airstarsEarned, dailyCoinsEarned, unlockedCategories } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/briefs/:id/complete — award coins when user finishes reading a brief
 router.post('/:id/complete', protect, async (req, res) => {
   try {
@@ -836,41 +948,81 @@ router.post('/:id/mnemonic-viewed', protect, async (req, res) => {
   }
 });
 
+// Shared logic used by both the POST commit and the GET preview so the two
+// can't drift. `commit: true` writes state (reach flag + unlock); `commit: false`
+// returns the projected outcome as if the reach had just happened.
+async function computeFlashcardReachOutcome(user, briefId, { commit }) {
+  const existing = await IntelligenceBriefRead.findOne({
+    userId:       user._id,
+    intelBriefId: briefId,
+  });
+
+  if (existing?.reachedFlashcard || existing?.completed) {
+    return { wasNew: false };
+  }
+
+  if (commit) {
+    await IntelligenceBriefRead.findOneAndUpdate(
+      { userId: user._id, intelBriefId: briefId },
+      { $set: { reachedFlashcard: true } },
+      { upsert: true }
+    );
+  }
+
+  // When News flashcards are disabled, exclude News-category briefs from the
+  // unlock count so the gate mirrors what the user actually sees on the Play page.
+  const settings   = await AppSettings.getSettings();
+  const briefFilter = { status: 'published' };
+  if (!settings.newsFlashcardsEnabled) briefFilter.category = { $ne: 'News' };
+  const validBriefIds = await IntelligenceBrief.distinct('_id', briefFilter);
+
+  // Projected count after this reach: when committing, the write above has landed;
+  // when previewing, add 1 iff the target brief qualifies under the filter.
+  const committedCount = await IntelligenceBriefRead.countDocuments({
+    userId:       user._id,
+    intelBriefId: { $in: validBriefIds },
+    $or: [{ completed: true }, { reachedFlashcard: true }],
+  });
+  let flashcardCount = committedCount;
+  if (!commit) {
+    const qualifies = validBriefIds.some(id => String(id) === String(briefId));
+    if (qualifies) flashcardCount += 1;
+  }
+
+  const gameUnlocksGranted = [];
+  if (flashcardCount >= 5 && !user.gameUnlocks?.flashcard?.unlockedAt) {
+    if (commit) {
+      await User.findByIdAndUpdate(user._id, { 'gameUnlocks.flashcard.unlockedAt': new Date() });
+    }
+    gameUnlocksGranted.push('flashcard');
+  }
+
+  return { wasNew: true, flashcardCount, gameUnlocksGranted };
+}
+
+// GET /api/briefs/:id/reached-flashcard-preview — read-only projection of the POST
+// so the client can pre-fetch the outcome on section 3 and start the collect
+// animation the instant the user swipes to section 4, with no network wait.
+router.get('/:id/reached-flashcard-preview', protect, async (req, res) => {
+  try {
+    const brief = await IntelligenceBrief.findById(req.params.id).select('status');
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    if (brief.status === 'stub') return res.status(400).json({ message: 'Brief has no content yet' });
+
+    const outcome = await computeFlashcardReachOutcome(req.user, req.params.id, { commit: false });
+    res.json({ status: 'success', ...outcome });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/briefs/:id/reached-flashcard
 // Idempotent — marks that the user has reached section 4 of this brief.
 // Returns wasNew: true only the first time (drives the deck notification on the client).
 router.post('/:id/reached-flashcard', protect, async (req, res) => {
   try {
-    const existing = await IntelligenceBriefRead.findOne({
-      userId: req.user._id,
-      intelBriefId: req.params.id,
-    });
-
-    // Already flagged (via flashcard reach or full completion) — nothing to do
-    if (existing?.reachedFlashcard || existing?.completed) {
-      return res.json({ status: 'success', wasNew: false });
-    }
-
-    await IntelligenceBriefRead.findOneAndUpdate(
-      { userId: req.user._id, intelBriefId: req.params.id },
-      { $set: { reachedFlashcard: true } },
-      { upsert: true }
-    );
-
-    const validBriefIds = await IntelligenceBrief.distinct('_id', { status: 'published' });
-    const flashcardCount = await IntelligenceBriefRead.countDocuments({
-      userId:       req.user._id,
-      intelBriefId: { $in: validBriefIds },
-      $or: [{ completed: true }, { reachedFlashcard: true }],
-    });
-
-    const gameUnlocksGranted = [];
-    if (flashcardCount >= 5 && !req.user.gameUnlocks?.flashcard?.unlockedAt) {
-      await User.findByIdAndUpdate(req.user._id, { 'gameUnlocks.flashcard.unlockedAt': new Date() });
-      gameUnlocksGranted.push('flashcard');
-    }
-
-    res.json({ status: 'success', wasNew: true, flashcardCount, gameUnlocksGranted });
+    const outcome = await computeFlashcardReachOutcome(req.user, req.params.id, { commit: true });
+    res.json({ status: 'success', ...outcome });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -9,7 +9,7 @@ import { getMasterVolume, setMasterVolume } from '../utils/sound'
 import { displayTier, isFreeUser } from '../utils/subscription'
 import { getLevelInfo } from '../utils/levelUtils'
 import { useAppSettings } from '../context/AppSettingsContext'
-import RankBadge from '../components/RankBadge'
+import ProfileBadge from '../components/ProfileBadge'
 import SEO from '../components/SEO'
 
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
@@ -63,7 +63,7 @@ export default function Profile() {
   const navigate = useNavigate()
   const { start, replay, resetAll, step, visible } = useAppTutorial()
 
-  const { levels: liveLevels } = useAppSettings()
+  const { levels: liveLevels, settings: appSettings } = useAppSettings()
   const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0, flashcardsCollected: 0 })
   const [statsLoading, setStatsLoading] = useState(!!user)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
@@ -154,13 +154,15 @@ export default function Profile() {
           style={{ background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)' }}
         >
           <div className="flex items-center gap-4">
-            {/* Avatar — rank badge */}
-            <div className="w-14 h-14 rounded-2xl bg-brand-200/60 border-2 border-brand-400/50 flex items-center justify-center shrink-0">
-              {(user.rank?.rankNumber ?? 1) > 1
-                ? <RankBadge rankNumber={user.rank.rankNumber} size={38} />
-                : <span className="text-xl font-extrabold text-brand-600">{user.rank?.rankAbbreviation ?? 'AC'}</span>
-              }
-            </div>
+            {/* Avatar — tap to change badge */}
+            <button
+              type="button"
+              onClick={() => navigate('/profile/badge')}
+              aria-label="Change profile badge"
+              className="w-14 h-14 rounded-2xl bg-brand-200/60 border-2 border-brand-400/50 flex items-center justify-center shrink-0 hover:border-brand-600/80 transition-colors"
+            >
+              <ProfileBadge user={user} size={user?.selectedBadge?.cutoutUrl ? 48 : 38} />
+            </button>
             <div className="flex-1 min-w-0">
               <p className="font-extrabold text-lg text-slate-800 leading-tight truncate">{user.displayName || 'Agent'}</p>
               <p className="text-slate-600 text-sm">{rankDisplay}</p>
@@ -314,8 +316,8 @@ export default function Profile() {
                 </div>
               </div>
 
-              {/* Subscription */}
-              {(() => {
+              {/* Subscription — hidden while beta tester auto-gold is active */}
+              {!appSettings?.betaTesterAutoGold && (() => {
                 const tier        = user.subscriptionTier ?? 'free'
                 const isGold      = tier === 'gold'
                 const isSilver    = tier === 'silver'

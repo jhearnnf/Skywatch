@@ -12,7 +12,7 @@ import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { playSound, stopAllSounds, playGridRevealTone } from '../utils/sound'
 import RafBasesMap from '../components/RafBasesMap'
-import { buildImageZones } from '../utils/briefImageZones'
+import { buildImageZones, isRealImageTitle } from '../utils/briefImageZones'
 import RankBadge from '../components/RankBadge'
 import FlashcardDeckNotification from '../components/FlashcardDeckNotification'
 import SEO from '../components/SEO'
@@ -294,7 +294,7 @@ function ImageGridReveal({ src, isFirstSeen, alt, imgClassName, imgStyle }) {
 }
 
 // ── Section card (image zone + stat + text) ───────────────────────────────
-function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, sectionIdx, total, isLast, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial }) {
+function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, sectionIdx, total, isLast, suppressFlashcard, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial }) {
   const hasBases = (highlightedBaseNames ?? []).length > 0
   const statTapOrigin = useRef(null)
 
@@ -347,7 +347,7 @@ function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, se
     return () => clearTimeout(tid)
   }, [text, imageZone?.src, category])
 
-  if (isLast) {
+  if (isLast && !suppressFlashcard) {
     return (
       <FlashCard
         sectionIdx={sectionIdx}
@@ -446,6 +446,13 @@ function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, se
         >
           <span className="text-xs font-bold text-white">{sectionIdx + 1} / {total}</span>
         </motion.div>
+        {category !== 'Ranks' && isRealImageTitle(imageZone?.alt) && (
+          <div className="absolute top-2 right-2 pointer-events-none max-w-[55%]">
+            <span className="block text-[10px] font-medium text-white/55 tracking-wide truncate drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+              {imageZone.alt}
+            </span>
+          </div>
+        )}
         {flashes.map(f => {
           if (f.type === 'word') return (
             <span key={f.key} className="intel-flash-word" style={{ left: f.x, top: f.y }} aria-hidden="true">{f.word}</span>
@@ -953,7 +960,7 @@ function ContinueLearning({ brief, navigate, fallbackCards }) {
 }
 
 // ── Completion screen ─────────────────────────────────────────────────────
-function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onReRead, user, isFirstCompletion, coinReward, navigate, quizPassed, quizAvailable }) {
+function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onReRead, user, isFirstCompletion, coinReward, navigate, quizPassed, quizAvailable, syncingReward }) {
   const { API, apiFetch, setUser, awardAirstars } = useAuth()
   const [email, setEmail]             = useState('')
   const [showEmailInput, setShowEmailInput] = useState(false)
@@ -1046,6 +1053,21 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
 
       <h2 className="text-2xl font-extrabold text-slate-900 mb-2">{heading}</h2>
       <p className="text-slate-500 mb-8">{subheading}</p>
+
+      <AnimatePresence>
+        {syncingReward && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.25 }}
+            className="flex items-center justify-center gap-2 text-xs text-slate-400 -mt-6 mb-6"
+          >
+            <span className="inline-block w-3 h-3 rounded-full border-2 border-slate-300 border-t-brand-500 animate-spin" />
+            <span>Syncing rewards…</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="space-y-3">
         {user ? (
@@ -1336,7 +1358,7 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, qu
 export default function BriefReader() {
   const { briefId }    = useParams()
   const navigate       = useNavigate()
-  const { user, API, apiFetch, awardAirstars, setUser } = useAuth()
+  const { user, API, apiFetch, awardAirstars, queueCategoryUnlockNotif, setUser } = useAuth()
   const { start, visible, activeName, hasSeen } = useAppTutorial()
   const startRef = useRef(start)
   useEffect(() => { startRef.current = start }, [start])
@@ -1376,6 +1398,12 @@ export default function BriefReader() {
   const [flashcardGlowing, setFlashcardGlowing]     = useState(false)
   const [swipePromptReady, setSwipePromptReady]     = useState(false)
   const [topFaded, setTopFaded] = useState(false)
+  const [rewardPreview, setRewardPreview]           = useState(null) // { airstarsEarned, dailyCoinsEarned } — pre-fetched on flashcard
+  const [syncingReward, setSyncingReward]           = useState(false) // true from optimistic notify until commit resolves
+  const [flashcardPreview, setFlashcardPreview]     = useState(null) // { wasNew, flashcardCount, gameUnlocksGranted } — pre-fetched on section 3
+  const previewNotifiedRef         = useRef(false) // set when awardAirstars has already been fired optimistically
+  const flashcardPreviewFetchedRef = useRef(false) // prevents duplicate preview GETs per brief
+  const collectFiredRef            = useRef(false) // prevents optimistic animation replay on 4 → 3 → 4 oscillation
   const markingRef                 = useRef(false)
   const contentRef                 = useRef(null)
   const briefOpenedRef             = useRef(false)
@@ -1697,7 +1725,16 @@ export default function BriefReader() {
   const sections   = brief?.descriptionSections?.filter(Boolean) ?? []
   const total      = sections.length
   const isLast     = sectionIdx >= total - 1
-  const topOpacity = isLast ? 1 : topFaded ? 0.3 : 1
+  // News-category briefs hide the flashcard UI entirely when the admin setting is off.
+  // The reached-flashcard POST still fires so records persist silently (re-enabling
+  // the setting makes them immediately available), but no FlashCard layout, no collect
+  // animation, and no deck notification. The brief header and section progress bar
+  // stay visible on section 4 in this case so it reads like a normal section.
+  const isNewsFlashcardHidden = brief?.category === 'News' && settings?.newsFlashcardsEnabled === false
+  // Flashcard view = last section AND not hidden. Drives chrome that differs between
+  // normal sections and the flashcard view (header fade, progress-bar hide).
+  const flashcardView = isLast && !isNewsFlashcardHidden
+  const topOpacity    = flashcardView ? 1 : topFaded ? 0.3 : 1
 
   // Memoised so prevImageZoneRef effect can reference it outside the render IIFE
   const imageZonesMemo = useMemo(
@@ -1705,32 +1742,92 @@ export default function BriefReader() {
     [brief, total] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
-  // Fire reached-flashcard once per brief per user when they first hit section 4
+  // Reset flashcard preview state whenever the brief changes so a new read starts clean
+  useEffect(() => {
+    setFlashcardPreview(null)
+    flashcardPreviewFetchedRef.current = false
+    collectFiredRef.current = false
+  }, [brief?._id])
+
+  // Lazy-load the reached-flashcard outcome on section 3 so the collect animation
+  // can fire instantly on section 4 without waiting on the POST round-trip. The
+  // GET mirrors the POST via a shared server-side helper; staleness between the
+  // two (e.g. completion from another tab) is reconciled by the background POST.
+  useEffect(() => {
+    if (flashcardPreviewFetchedRef.current) return
+    if (!user || !brief) return
+    if (total < 2) return
+    if (sectionIdx !== total - 2) return
+    if (readRecord?.reachedFlashcard || readRecord?.completed) return
+    if (isNewsFlashcardHidden) return
+    flashcardPreviewFetchedRef.current = true
+    let cancelled = false
+    fetch(`${API}/api/briefs/${brief._id}/reached-flashcard-preview`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data) return
+        setFlashcardPreview({
+          wasNew:             data.wasNew ?? false,
+          flashcardCount:     data.flashcardCount ?? 0,
+          gameUnlocksGranted: data.gameUnlocksGranted ?? [],
+        })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [sectionIdx, total, user, brief?._id, readRecord?.reachedFlashcard, readRecord?.completed, isNewsFlashcardHidden]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function startCollectAnimation() {
+    if (!flashcardCardRef.current) return
+    collectTimer1Ref.current = setTimeout(() => {
+      playSound('flashcard_collect')
+      setFlashcardGlowing(true)
+      collectTimer2Ref.current = setTimeout(() => {
+        setFlashcardGlowing(false)
+        if (flashcardCardRef.current) {
+          setFlashcardNotifRect(flashcardCardRef.current.getBoundingClientRect())
+        }
+      }, 1200)
+    }, 600)
+  }
+
+  // Fire reached-flashcard once per brief per user when they first hit section 4.
+  // Fast path: preview was pre-fetched on section 3 — start the animation
+  // immediately and fire the POST in the background. Slow path (no preview, e.g.
+  // rapid swipe or direct link to the last section): await the POST then animate.
   useEffect(() => {
     if (!isLast) return
     setSwipePromptReady(false)
     if (!user || !brief) { setSwipePromptReady(true); return }
     if (readRecord?.reachedFlashcard || readRecord?.completed) { setSwipePromptReady(true); return }
+    if (collectFiredRef.current) { setSwipePromptReady(true); return }
+    collectFiredRef.current = true
+
+    if (flashcardPreview) {
+      if (flashcardPreview.wasNew && !isNewsFlashcardHidden) {
+        if ((flashcardPreview.flashcardCount ?? 0) >= 5) badgePendingRef.current = true
+        startCollectAnimation()
+      } else {
+        setSwipePromptReady(true)
+      }
+      // Fire the commit POST in the background. Its response is authoritative for
+      // unlocks: use it to reconcile the optimistic prediction.
+      fetch(`${API}/api/briefs/${brief._id}/reached-flashcard`, {
+        method: 'POST', credentials: 'include',
+      })
+        .then(r => r.json())
+        .then(data => { if (data?.gameUnlocksGranted?.length) applyUnlocks(data.gameUnlocksGranted) })
+        .catch(() => {})
+      return
+    }
+
     fetch(`${API}/api/briefs/${brief._id}/reached-flashcard`, {
       method: 'POST', credentials: 'include',
     })
       .then(r => r.json())
       .then(data => {
-        if (data?.wasNew) {
+        if (data?.wasNew && !isNewsFlashcardHidden) {
           if ((data.flashcardCount ?? 0) >= 5) badgePendingRef.current = true
-          if (flashcardCardRef.current) {
-            collectTimer1Ref.current = setTimeout(() => {
-              playSound('flashcard_collect')
-              setFlashcardGlowing(true)
-              collectTimer2Ref.current = setTimeout(() => {
-                setFlashcardGlowing(false)
-                if (flashcardCardRef.current) {
-                  setFlashcardNotifRect(flashcardCardRef.current.getBoundingClientRect())
-                }
-              }, 1200)
-            }, 600)
-          }
-          // swipePromptReady will be set by onDone after animation completes
+          startCollectAnimation()
         } else {
           setSwipePromptReady(true)
         }
@@ -1743,6 +1840,28 @@ export default function BriefReader() {
   useEffect(() => {
     return () => { if (badgePendingRef.current) applyUnlocks(['flashcard']) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lazy-load the pending coin reward once the user lands on the flashcard.
+  // The amount is used to fire the airstars notification optimistically on the
+  // final swipe so the reward feels instant. Skipped if coins are already awarded.
+  useEffect(() => {
+    if (!isLast || !user || !brief) return
+    if (readRecord?.completed) return
+    if (rewardPreview) return
+    let cancelled = false
+    apiFetch(`${API}/api/briefs/${brief._id}/reward-preview`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data?.data) return
+        setRewardPreview({
+          airstarsEarned:     data.data.airstarsEarned     ?? 0,
+          dailyCoinsEarned:   data.data.dailyCoinsEarned   ?? 0,
+          unlockedCategories: data.data.unlockedCategories ?? [],
+        })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [isLast, user, brief?._id, readRecord?.completed]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function cancelCollectAnimation() {
     clearTimeout(collectTimer1Ref.current)
@@ -1795,6 +1914,18 @@ export default function BriefReader() {
       setDone(true)
       // Award coins now that the user has finished reading
       if (user) {
+        // Optimistic notification: if we pre-fetched the preview, fire the airstars
+        // animation immediately so the reward lands on the same beat as the swipe.
+        const preview       = rewardPreview
+        const previewTotal  = preview ? (preview.airstarsEarned + preview.dailyCoinsEarned) : 0
+        const previewUnlocks = preview?.unlockedCategories ?? []
+        if (preview && previewTotal > 0) {
+          awardAirstars(previewTotal, preview.dailyCoinsEarned > 0 ? 'Daily Brief' : 'Brief read', {
+            unlockedCategories: previewUnlocks,
+          })
+          previewNotifiedRef.current = true
+        }
+        setSyncingReward(true)
         apiFetch(`${API}/api/briefs/${briefId}/complete`, {
           method: 'POST',
           credentials: 'include',
@@ -1804,7 +1935,26 @@ export default function BriefReader() {
             const briefCoins = data?.data?.airstarsEarned ?? 0
             const dailyCoins = data?.data?.dailyCoinsEarned ?? 0
             const totalEarned = briefCoins + dailyCoins
-            if (totalEarned > 0) {
+            if (previewNotifiedRef.current) {
+              // Reconcile drift: if the server awarded more than we previewed, top up silently.
+              // Only pass extra unlocks the preview missed — preview already fired its set.
+              const diff = totalEarned - previewTotal
+              const serverUnlocks = data.data?.unlockedCategories ?? []
+              const extraUnlocks  = serverUnlocks.filter(c => !previewUnlocks.includes(c))
+              if (diff > 0) {
+                awardAirstars(diff, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
+                  cycleAfter:         data.data.newCycleAirstars,
+                  totalAfter:         data.data.newTotalAirstars,
+                  rankPromotion:      data.data.rankPromotion ?? null,
+                  unlockedCategories: extraUnlocks,
+                })
+              } else if (extraUnlocks.length) {
+                // Diff is zero (preview matched coins) but server found unlocks the preview missed.
+                // Queue the pathway notif on its own so we don't double-fire airstars.
+                queueCategoryUnlockNotif(extraUnlocks)
+              }
+            } else if (totalEarned > 0) {
+              // No preview was ready in time — fall back to the original immediate notification.
               awardAirstars(totalEarned, dailyCoins > 0 ? 'Daily Brief' : 'Brief read', {
                 cycleAfter:         data.data.newCycleAirstars,
                 totalAfter:         data.data.newTotalAirstars,
@@ -1822,6 +1972,7 @@ export default function BriefReader() {
             if (data?.data?.gameUnlocksGranted?.length) applyUnlocks(data.data.gameUnlocksGranted)
             if (data?.data?.categoryUnlocksGranted?.length) applyCategoryUnlocks(data.data.categoryUnlocksGranted)
           })
+          .finally(() => { setSyncingReward(false) })
           .then(() => {
             // Spawn-check for Where's That Aircraft (Aircrafts category only)
             if (brief?.category !== 'Aircrafts') return
@@ -2146,7 +2297,7 @@ export default function BriefReader() {
         {/* Brief header */}
         <div className="mb-5 overflow-hidden">
           <AnimatePresence initial={false}>
-            {!isLast && (
+            {!flashcardView && !done && (
               <motion.div
                 key="header-content"
                 initial={{ opacity: 0, height: 0 }}
@@ -2196,6 +2347,7 @@ export default function BriefReader() {
           navigate={navigate}
           quizPassed={quizPassed}
           quizAvailable={quizAvailable}
+          syncingReward={syncingReward}
         />
       ) : (
         <>
@@ -2205,7 +2357,7 @@ export default function BriefReader() {
             animate={{ opacity: topOpacity }}
             transition={{ duration: 1.6, ease: 'easeInOut' }}
           >
-            {total > 1 && !isLast && (
+            {total > 1 && !flashcardView && !done && (
               <div className="mb-5">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-xs font-semibold text-slate-500">
@@ -2294,6 +2446,7 @@ export default function BriefReader() {
                     sectionIdx={sectionIdx}
                     total={total}
                     isLast={isLast}
+                    suppressFlashcard={isNewsFlashcardHidden}
                     tutorialActive={visible}
                     highlightedBaseNames={
                       brief.category === 'Bases'

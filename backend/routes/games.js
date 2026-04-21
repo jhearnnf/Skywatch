@@ -19,13 +19,14 @@ const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const GameOrderOfBattle = require('../models/GameOrderOfBattle');
 const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/GameOrderOfBattle');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
-const GameSessionCbatPlaneTurnResult     = require('../models/GameSessionCbatPlaneTurnResult');
-const GameSessionCbatAnglesResult        = require('../models/GameSessionCbatAnglesResult');
-const GameSessionCbatCodeDuplicatesResult = require('../models/GameSessionCbatCodeDuplicatesResult');
-const GameSessionCbatSymbolsResult        = require('../models/GameSessionCbatSymbolsResult');
-const GameSessionCbatTargetResult         = require('../models/GameSessionCbatTargetResult');
-const GameSessionCbatInstrumentsResult    = require('../models/GameSessionCbatInstrumentsResult');
-const GameSessionCbatSdtResult            = require('../models/GameSessionCbatSdtResult');
+const { CBAT_GAMES } = require('../constants/cbatGames');
+const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn'].Model;
+const GameSessionCbatAnglesResult         = CBAT_GAMES['angles'].Model;
+const GameSessionCbatCodeDuplicatesResult = CBAT_GAMES['code-duplicates'].Model;
+const GameSessionCbatSymbolsResult        = CBAT_GAMES['symbols'].Model;
+const GameSessionCbatTargetResult         = CBAT_GAMES['target'].Model;
+const GameSessionCbatInstrumentsResult    = CBAT_GAMES['instruments'].Model;
+const GameSessionCbatSdtResult            = CBAT_GAMES['sdt'].Model;
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -1303,7 +1304,10 @@ router.post('/wheres-that-aircraft/result', protect, async (req, res) => {
 // Returns the count of completed briefs available for flashcard rounds.
 router.get('/flashcard-recall/available-briefs', protect, async (req, res) => {
   try {
-    const validBriefIds = await IntelligenceBrief.distinct('_id', { status: 'published' });
+    const settings = await AppSettings.getSettings();
+    const briefFilter = { status: 'published' };
+    if (!settings.newsFlashcardsEnabled) briefFilter.category = { $ne: 'News' };
+    const validBriefIds = await IntelligenceBrief.distinct('_id', briefFilter);
     const count = await IntelligenceBriefRead.countDocuments({
       userId: req.user._id,
       intelBriefId: { $in: validBriefIds },
@@ -1324,8 +1328,11 @@ router.post('/flashcard-recall/start', protect, async (req, res) => {
 
     const gameType = await require('../models/GameType').findOne({ key: 'flashcard_recall' }).lean();
 
-    // All valid published brief IDs
-    const validBriefIds = await IntelligenceBrief.distinct('_id', { status: 'published' });
+    // All valid published brief IDs — exclude News when News flashcards are disabled
+    const settings = await AppSettings.getSettings();
+    const briefFilter = { status: 'published' };
+    if (!settings.newsFlashcardsEnabled) briefFilter.category = { $ne: 'News' };
+    const validBriefIds = await IntelligenceBrief.distinct('_id', briefFilter);
 
     // User's eligible read records — completed briefs OR briefs where they reached section 4
     const readRecords = await IntelligenceBriefRead.find({
@@ -2092,59 +2099,8 @@ router.get('/cbat/aircraft-cutouts', protect, async (_req, res) => {
 });
 
 // ── CBAT — Score submission, leaderboards & personal bests ──────────────────
-// Config map keeps each CBAT game's specifics in one place so adding a new game
-// is a single entry.  Keys: Model, primary sort field, sort direction, max field.
-const CBAT_GAMES = {
-  'plane-turn': {
-    Model: GameSessionCbatPlaneTurnResult,
-    primaryField: 'totalRotations',
-    sortDir: 1,            // lower is better
-    bestOp: '$min',
-    label: 'Plane Turn',
-  },
-  'angles': {
-    Model: GameSessionCbatAnglesResult,
-    primaryField: 'correctCount',
-    sortDir: -1,           // higher is better
-    bestOp: '$max',
-    label: 'Angles',
-  },
-  'code-duplicates': {
-    Model: GameSessionCbatCodeDuplicatesResult,
-    primaryField: 'correctCount',
-    sortDir: -1,
-    bestOp: '$max',
-    label: 'Code Duplicates',
-  },
-  'symbols': {
-    Model: GameSessionCbatSymbolsResult,
-    primaryField: 'correctCount',
-    sortDir: -1,
-    bestOp: '$max',
-    label: 'Symbols',
-  },
-  'target': {
-    Model: GameSessionCbatTargetResult,
-    primaryField: 'totalScore',
-    sortDir: -1,
-    bestOp: '$max',
-    label: 'Target',
-  },
-  'instruments': {
-    Model: GameSessionCbatInstrumentsResult,
-    primaryField: 'correctCount',
-    sortDir: -1,
-    bestOp: '$max',
-    label: 'Instruments',
-  },
-  'sdt': {
-    Model: GameSessionCbatSdtResult,
-    primaryField: 'totalScore',
-    sortDir: -1,
-    bestOp: '$max',
-    label: 'Speed Distance Time',
-  },
-};
+// CBAT_GAMES is imported from ../constants/cbatGames — the single source of
+// truth for all CBAT games. Adding a new CBAT game = one entry there.
 
 // POST /api/games/cbat/plane-turn/result
 router.post('/cbat/plane-turn/result', protect, async (req, res) => {
@@ -2287,6 +2243,8 @@ async function cbatLeaderboard(req, res, gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return res.status(400).json({ message: 'Unknown game' });
 
+  const isAdmin = !!req.user?.isAdmin;
+
   try {
     const pipeline = [
       { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
@@ -2305,6 +2263,7 @@ async function cbatLeaderboard(req, res, gameKey) {
           _id: 1,
           userId: 1,
           agentNumber: '$user.agentNumber',
+          ...(isAdmin ? { email: '$user.email' } : {}),
           bestScore: `$${cfg.primaryField}`,
           bestTime: '$totalTime',
         },
@@ -2349,6 +2308,7 @@ async function cbatLeaderboard(req, res, gameKey) {
             _id: best._id,
             userId: req.user._id,
             agentNumber: req.user.agentNumber,
+            ...(isAdmin ? { email: req.user.email } : {}),
             bestScore: scoreVal,
             bestTime: timeVal,
             rank: countBetter + 1,

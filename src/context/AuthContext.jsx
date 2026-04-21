@@ -158,8 +158,17 @@ export function AuthProvider({ children }) {
     })
   }, [])
 
+  // Queues ONLY a category-unlock notif. Used to reconcile when a preview-driven
+  // optimistic awardAirstars call missed a server-side unlock (e.g. the preview
+  // diff and the commit diff disagreed) and we don't want to fire another
+  // airstar/levelup notif for a zero-coin reconciliation.
+  const queueCategoryUnlockNotif = useCallback((categories) => {
+    if (!Array.isArray(categories) || !categories.length) return
+    setNotifQueue(q => [...q, { id: `${Date.now()}-cu`, type: 'categoryUnlock', categories }])
+  }, [])
+
   return (
-    <AuthContext.Provider value={{ user, setUser, logout, loading, API, apiFetch, isLoading, loadingStartTime, notifQueue, shiftNotif, awardAirstars, refreshUser }}>
+    <AuthContext.Provider value={{ user, setUser, logout, loading, API, apiFetch, isLoading, loadingStartTime, notifQueue, shiftNotif, awardAirstars, queueCategoryUnlockNotif, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

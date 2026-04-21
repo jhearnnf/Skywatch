@@ -14,7 +14,20 @@ const {
   createUser, createAdminUser, createSettings, authCookie,
 } = require('../helpers/factories');
 const IntelligenceBriefRead = require('../../models/IntelligenceBriefRead');
+const { CBAT_GAMES }        = require('../../constants/cbatGames');
 const mongoose = require('mongoose');
+
+// Minimal payload satisfying the union of required fields across every CBAT
+// schema. If a new CBAT game adds a required field not listed here, tests that
+// seed these docs will fail loudly — signalling the helper needs updating.
+function seedCbatDoc(cfg, userId) {
+  return cfg.Model.create({
+    userId,
+    [cfg.primaryField]: 1,
+    totalTime: 1,
+    roundsPlayed: 1,
+  });
+}
 
 // ── lifecycle ────────────────────────────────────────────────────────────────
 
@@ -93,6 +106,60 @@ describe('GET /api/admin/users — profileStats.brifsRead', () => {
 
     expect(aRow.profileStats.brifsRead).toBe(2);
     expect(bRow.profileStats.brifsRead).toBe(1);
+  });
+});
+
+// ── profileStats.cbatPlayed ──────────────────────────────────────────────────
+
+describe('GET /api/admin/users — profileStats.cbatPlayed', () => {
+  it('returns 0 when the user has no CBAT submissions', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    expect(u.profileStats.cbatPlayed).toBe(0);
+  });
+
+  // This is the key guard: iterating CBAT_GAMES means any new game added to
+  // the shared registry is automatically covered by the admin stat — no edits
+  // to admin.js or this test required for the count to stay correct.
+  it('sums submissions across every game in the CBAT_GAMES registry', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    await Promise.all(Object.values(CBAT_GAMES).map(cfg => seedCbatDoc(cfg, user._id)));
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    expect(u.profileStats.cbatPlayed).toBe(Object.keys(CBAT_GAMES).length);
+  });
+
+  it('isolates CBAT counts per user', async () => {
+    const admin = await createAdminUser();
+    const userA = await createUser();
+    const userB = await createUser();
+
+    const firstGame = Object.values(CBAT_GAMES)[0];
+    await seedCbatDoc(firstGame, userA._id);
+    await seedCbatDoc(firstGame, userA._id);
+    await seedCbatDoc(firstGame, userB._id);
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const aRow = res.body.data.users.find(x => x._id.toString() === userA._id.toString());
+    const bRow = res.body.data.users.find(x => x._id.toString() === userB._id.toString());
+
+    expect(aRow.profileStats.cbatPlayed).toBe(2);
+    expect(bRow.profileStats.cbatPlayed).toBe(1);
   });
 });
 
