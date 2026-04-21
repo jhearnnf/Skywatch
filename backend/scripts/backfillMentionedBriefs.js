@@ -62,7 +62,7 @@ async function run() {
 
   let mentionUpdated = 0;
   for (const brief of briefs) {
-    const descLower = (brief.descriptionSections || []).join(' ').toLowerCase();
+    const descLower = require('../utils/descriptionSections').bodiesText(brief.descriptionSections).toLowerCase();
     if (!descLower.trim()) continue;
 
     // Exclude self and all explicitly associated briefs

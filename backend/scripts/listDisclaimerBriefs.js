@@ -46,7 +46,8 @@ async function run() {
   const hits = [];
   for (const b of briefs) {
     const subtitleHit = matches(b.subtitle);
-    const descHit     = (b.descriptionSections || []).some(matches);
+    const { normalizeSections } = require('../utils/descriptionSections');
+    const descHit     = normalizeSections(b.descriptionSections).some(s => matches(s.body));
     if (subtitleHit || descHit) {
       hits.push({
         _id:         b._id.toString(),

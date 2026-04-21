@@ -78,21 +78,25 @@ async function main() {
 
   let updatedCount = 0;
 
+  const { normalizeSections } = require('../utils/descriptionSections');
   for (const brief of briefs) {
     if (!brief.descriptionSections?.length) continue;
 
-    const originalSections = brief.descriptionSections;
-    const updatedSections  = originalSections.map(convertDates);
+    const originalSections = normalizeSections(brief.descriptionSections);
+    const updatedSections  = originalSections.map(s => ({
+      heading: s.heading,
+      body:    convertDates(s.body),
+    }));
 
-    const changed = updatedSections.some((s, i) => s !== originalSections[i]);
+    const changed = updatedSections.some((s, i) => s.body !== originalSections[i].body);
     if (!changed) continue;
 
     updatedCount++;
     console.log(`--- ${brief.title} (${brief._id}) ---`);
     originalSections.forEach((orig, i) => {
-      if (orig !== updatedSections[i]) {
-        console.log(`  Section ${i + 1} BEFORE: ${orig}`);
-        console.log(`  Section ${i + 1} AFTER:  ${updatedSections[i]}`);
+      if (orig.body !== updatedSections[i].body) {
+        console.log(`  Section ${i + 1} BEFORE: ${orig.body}`);
+        console.log(`  Section ${i + 1} AFTER:  ${updatedSections[i].body}`);
       }
     });
     console.log();

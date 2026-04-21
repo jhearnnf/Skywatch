@@ -1,5 +1,6 @@
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const IntelLead = require('../models/IntelLead');
+const { bodiesText } = require('./descriptionSections');
 
 // Categories whose titles are worth scanning for as in-text mentions
 const SCAN_CATEGORIES = [
@@ -69,7 +70,7 @@ function getMatchCandidates(title, category, nickname) {
  * Returns an array of ObjectIds for matched briefs.
  */
 async function scanMentionedBriefIds(brief, openRouterChat) {
-  const descText  = (brief.descriptionSections || []).join(' ');
+  const descText  = bodiesText(brief.descriptionSections);
   const descLower = descText.toLowerCase();
   if (!descLower.trim()) return [];
 

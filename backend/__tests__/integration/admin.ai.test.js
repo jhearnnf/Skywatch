@@ -799,8 +799,8 @@ describe('POST /api/admin/ai/regenerate-brief/:id', () => {
 describe('POST /api/admin/ai/regenerate-description/:id', () => {
   const MOCK_DESC_JSON = JSON.stringify({
     descriptionSections: [
-      'The Typhoon is a multi-role combat aircraft operated by the RAF.',
-      'It is based primarily at RAF Coningsby in Lincolnshire.',
+      { heading: 'Role and Structure', body: 'The Typhoon is a multi-role combat aircraft operated by the RAF.' },
+      { heading: 'Operating Base',     body: 'It is based primarily at RAF Coningsby in Lincolnshire.' },
     ],
   });
 
@@ -820,7 +820,8 @@ describe('POST /api/admin/ai/regenerate-description/:id', () => {
     expect(res.body.status).toBe('success');
     expect(Array.isArray(res.body.data.descriptionSections)).toBe(true);
     expect(res.body.data.descriptionSections.length).toBeGreaterThan(0);
-    expect(res.body.data.descriptionSections[0]).toContain('Typhoon');
+    expect(res.body.data.descriptionSections[0].body).toContain('Typhoon');
+    expect(res.body.data.descriptionSections[0].heading).toBe('Role and Structure');
   });
 
   it('returns cascade stats alongside descriptionSections', async () => {

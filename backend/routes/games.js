@@ -14,6 +14,7 @@ const User = require('../models/User');
 const AirstarLog = require('../models/AirstarLog');
 const SystemLog = require('../models/SystemLog');
 const { awardCoins } = require('../utils/awardCoins');
+const { sectionBody, normalizeSections } = require('../utils/descriptionSections');
 const IntelligenceBrief     = require('../models/IntelligenceBrief');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const GameOrderOfBattle = require('../models/GameOrderOfBattle');
@@ -1403,7 +1404,7 @@ router.post('/flashcard-recall/start', protect, async (req, res) => {
       intelBriefId:   brief._id,
       category:       brief.category,
       subcategory:    brief.subcategory ?? '',
-      contentSnippet: brief.descriptionSections?.[3] ?? '',
+      contentSnippet: sectionBody(normalizeSections(brief.descriptionSections)[3]),
     }));
 
     // Shuffle cards so they don't appear in same order as picked
@@ -1413,7 +1414,7 @@ router.post('/flashcard-recall/start', protect, async (req, res) => {
     // Build GameFlashcardRecall cards with required fields
     const gameCards = briefs.map(b => ({
       intelBriefId:      b._id,
-      displayedQuestion: b.descriptionSections?.[3] || b.category,
+      displayedQuestion: sectionBody(normalizeSections(b.descriptionSections)[3]) || b.category,
       displayedAnswer:   b.title,
     }));
 
@@ -2061,7 +2062,7 @@ router.get('/history/flashcard/:sessionId', protect, async (req, res) => {
     const cards = (session.cardResults ?? []).map(c => ({
       briefId:          c.intelBriefId?._id ? String(c.intelBriefId._id) : null,
       briefTitle:       c.intelBriefId?.title ?? 'Unknown Brief',
-      contentSnippet:   c.intelBriefId?.descriptionSections?.[3] ?? '',
+      contentSnippet:   sectionBody(normalizeSections(c.intelBriefId?.descriptionSections)[3]),
       recalled:         c.recalled ?? false,
       timeTakenSeconds: c.timeTakenSeconds ?? 0,
     }));

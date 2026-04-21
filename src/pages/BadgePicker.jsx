@@ -97,7 +97,7 @@ export default function BadgePicker() {
           Select the aircraft that represents you
         </p>
         <p className="text-sm px-1 mb-5" style={{ color: C.subtle }}>
-          Read an Aircraft intel brief to unlock it here. Pending entries show aircraft you&apos;ve read but whose recon image is still being processed.
+          Read an Aircraft intel brief to unlock it here. Locked entries show aircraft you haven&apos;t read yet; pending entries show aircraft you&apos;ve read but whose recon image is still being processed.
         </p>
 
         {/* Rank badge (default) reset tile */}
@@ -145,29 +145,33 @@ export default function BadgePicker() {
               const id = String(opt.briefId)
               const isSelected = id === selectedId
               const isPending  = opt.status === 'pending'
+              const isLocked   = opt.status === 'locked'
               const isBusy     = busyBriefId === id
+              const nonInteractive = isPending || isLocked
               return (
                 <motion.button
                   key={id}
                   type="button"
-                  onClick={isPending ? undefined : () => submit(id)}
-                  disabled={isPending || busyBriefId != null}
-                  aria-disabled={isPending ? 'true' : undefined}
+                  onClick={nonInteractive ? undefined : () => submit(id)}
+                  disabled={nonInteractive || busyBriefId != null}
+                  aria-disabled={nonInteractive ? 'true' : undefined}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.03 }}
                   className="rounded-2xl p-3 card-intel flex flex-col items-center gap-2 transition-colors disabled:cursor-not-allowed"
                   style={{
                     borderColor: isSelected ? C.brand : C.border,
-                    background:  isSelected ? 'rgba(91,170,255,0.10)' : C.surface,
-                    opacity:     isPending ? 0.75 : 1,
+                    background:  isSelected
+                      ? 'rgba(91,170,255,0.10)'
+                      : isLocked ? '#061120' : C.surface,
+                    opacity:     nonInteractive ? 0.55 : 1,
                   }}
                 >
                   <div className="w-20 h-20 rounded-2xl flex items-center justify-center shrink-0" style={{ background: isPending ? 'transparent' : '#081424', border: isPending ? 'none' : `1px solid ${C.border}` }}>
                     {isPending ? (
                       <RadarPlaceholder size={72} />
                     ) : (
-                      <span className="profile-badge-cutout-wrap" style={{ width: 72, height: 72 }}>
+                      <span className="profile-badge-cutout-wrap" style={{ width: 72, height: 72, filter: isLocked ? 'grayscale(1)' : 'none' }}>
                         <img src={opt.cutoutUrl} alt={opt.title} className="profile-badge-cutout-img" draggable={false} />
                       </span>
                     )}
@@ -177,6 +181,8 @@ export default function BadgePicker() {
                   </p>
                   {isPending ? (
                     <span className="intel-tag" style={{ opacity: 0.8 }}>Recon pending</span>
+                  ) : isLocked ? (
+                    <span className="intel-tag" style={{ opacity: 0.8 }}>Locked</span>
                   ) : isSelected ? (
                     <span className="intel-tag">Selected</span>
                   ) : isBusy ? (

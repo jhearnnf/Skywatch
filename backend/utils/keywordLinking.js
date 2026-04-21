@@ -6,6 +6,7 @@ const { SUBCATEGORIES }    = require('../constants/categories');
 const IntelLead            = require('../models/IntelLead');
 const { SCAN_CATEGORIES }  = require('./mentionedBriefs');
 const { reprioritizeCategory } = require('./priorityRanking');
+const { bodiesText }       = require('./descriptionSections');
 
 // Auto-generated leads are appended to a JSONL sidecar file — NOT to seedLeads.js
 // directly. Writing to a .js file inside the backend tree would trigger nodemon
@@ -408,7 +409,7 @@ Only include keywords where the answer is YES. If none qualify, return { "leads"
  *   new IntelLead + stub brief. Creates them in DB and appends to seedLeads.js.
  *
  * @param {Array}    keywords           - keyword objects: [{ keyword, generatedDescription }]
- * @param {string[]} descriptionSections
+ * @param {Array}    descriptionSections - canonical [{heading, body}] array (strings also tolerated)
  * @param {Function} openRouterChat     - the openRouterChat fn from admin.js
  * @param {*}        [currentBriefId]   - ID of the brief being generated (prevents self-linking)
  * @param {string}   [currentBriefTitle]
@@ -419,7 +420,7 @@ Only include keywords where the answer is YES. If none qualify, return { "leads"
 async function autoLinkKeywords(keywords, descriptionSections, openRouterChat, currentBriefId, currentBriefTitle, { skipSeed = false } = {}) {
   if (!keywords?.length) return keywords;
 
-  const descText  = (descriptionSections || []).join(' ');
+  const descText  = bodiesText(descriptionSections);
   const descLower = descText.toLowerCase();
 
   // Load all scannable leads

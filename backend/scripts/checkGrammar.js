@@ -75,8 +75,9 @@ async function run() {
     console.log(`  → ${brief.title}`);
     const briefIssues = [];
 
-    for (let i = 0; i < brief.descriptionSections.length; i++) {
-      const section = brief.descriptionSections[i];
+    const sections = require('../utils/descriptionSections').normalizeSections(brief.descriptionSections);
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i].body;
       if (!section || !section.trim()) continue;
 
       let result;

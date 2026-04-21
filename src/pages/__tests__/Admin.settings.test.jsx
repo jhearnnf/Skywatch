@@ -169,7 +169,10 @@ class MockAudio {
   constructor(src) {
     this.src = src
     this.volume = 1
+    this.currentTime = 0
     this.play = vi.fn().mockResolvedValue(undefined)
+    this.pause = vi.fn()
+    this.addEventListener = vi.fn()
     audioInstances.push(this)
   }
 }
@@ -261,6 +264,37 @@ describe('Admin — Settings tab: Sound Effects', () => {
     const last = audioInstances.at(-1)
     expect(last.src).toBe('/sounds/quiz_complete_lose.mp3')
     expect(last.play).toHaveBeenCalled()
+  })
+
+  it('▶ for "Category Unlocked" plays category_unlocked.mp3', async () => {
+    await renderAndOpenSettings()
+
+    const row = screen.getByText('Category Unlocked').closest('div')
+    fireEvent.click(within(row).getByTitle('Preview'))
+
+    const last = audioInstances.at(-1)
+    expect(last.src).toBe('/sounds/category_unlocked.mp3')
+    expect(last.play).toHaveBeenCalled()
+  })
+
+  it('clicking a second ▶ cancels the previously playing preview', async () => {
+    await renderAndOpenSettings()
+
+    const firstRow = screen.getByText('Brief Opened').closest('div')
+    fireEvent.click(within(firstRow).getByTitle('Preview'))
+    const firstAudio = audioInstances.at(-1)
+    expect(firstAudio.play).toHaveBeenCalled()
+    expect(firstAudio.pause).not.toHaveBeenCalled()
+
+    const secondRow = screen.getByText('Quiz Won').closest('div')
+    fireEvent.click(within(secondRow).getByTitle('Preview'))
+
+    // First preview must have been stopped before the second one started
+    expect(firstAudio.pause).toHaveBeenCalled()
+    expect(firstAudio.currentTime).toBe(0)
+    const secondAudio = audioInstances.at(-1)
+    expect(secondAudio).not.toBe(firstAudio)
+    expect(secondAudio.play).toHaveBeenCalled()
   })
 
   it('▶ for "Keyword Scan" plays target_locked_keyword.mp3', async () => {

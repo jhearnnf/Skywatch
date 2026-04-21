@@ -204,7 +204,7 @@ describe('Admin — Users tab: ban / unban routing', () => {
   })
 })
 
-describe('Admin — Users tab: self-action error toasts', () => {
+describe('Admin — Users tab: self-action buttons hidden on own row', () => {
   beforeEach(() => {
     global.Audio = class { play = vi.fn().mockResolvedValue(undefined) }
   })
@@ -213,75 +213,44 @@ describe('Admin — Users tab: self-action error toasts', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows error toast when admin tries to delete their own account', async () => {
-    global.fetch = vi.fn().mockImplementation((url, opts) => {
-      if (url.includes('/api/admin/stats'))         return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: {}, games: { boo: {} }, briefs: {}, tutorials: {} } }) })
-      if (url.includes('/api/admin/problems/count')) return Promise.resolve({ ok: true, json: async () => ({ data: { unsolvedCount: 0 } }) })
-      if (url.includes('/api/admin/settings'))       return Promise.resolve({ ok: true, json: async () => ({ data: { settings: {} } }) })
-      if (url.includes('/api/admin/users') && opts?.method === 'DELETE') {
-        return Promise.resolve({ ok: false, status: 400, json: async () => ({ message: 'You cannot delete your own account' }) })
-      }
-      if (url.includes('/api/admin/users'))          return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: [SELF_USER] } }) })
-      return Promise.resolve({ ok: true, json: async () => ({}) })
-    })
-
-    render(<Admin />)
-    await navigateToUsers()
-    await waitFor(() => screen.getByText('admin@test.com'))
-
-    fireEvent.click(screen.getByRole('button', { name: /^delete$/i }))
-    await submitModal()
-
-    await waitFor(() =>
-      expect(screen.getByText('You cannot delete your own account')).toBeDefined()
-    )
-  })
-
-  it('shows error toast when admin tries to ban their own account', async () => {
-    global.fetch = vi.fn().mockImplementation((url, opts) => {
+  function setupSelfOnly() {
+    global.fetch = vi.fn().mockImplementation((url) => {
       if (url.includes('/api/admin/stats'))          return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: {}, games: { boo: {} }, briefs: {}, tutorials: {} } }) })
       if (url.includes('/api/admin/problems/count')) return Promise.resolve({ ok: true, json: async () => ({ data: { unsolvedCount: 0 } }) })
       if (url.includes('/api/admin/settings'))       return Promise.resolve({ ok: true, json: async () => ({ data: { settings: {} } }) })
-      if (url.includes('/ban')) {
-        return Promise.resolve({ ok: false, status: 400, json: async () => ({ message: 'You cannot ban your own account.' }) })
-      }
       if (url.includes('/api/admin/users'))          return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: [SELF_USER] } }) })
       return Promise.resolve({ ok: true, json: async () => ({}) })
     })
+  }
 
+  it('does not render Delete / Ban / Remove Admin on the admin\'s own row', async () => {
+    setupSelfOnly()
     render(<Admin />)
     await navigateToUsers()
     await waitFor(() => screen.getByText('admin@test.com'))
 
-    fireEvent.click(screen.getByRole('button', { name: /^ban$/i }))
-    await submitModal()
-
-    await waitFor(() =>
-      expect(screen.getByText('You cannot ban your own account.')).toBeDefined()
-    )
+    // The self row should not expose any destructive self-actions
+    expect(screen.queryByRole('button', { name: /^delete$/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^ban$/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^remove admin$/i })).toBeNull()
   })
 
-  it('shows error toast when admin tries to remove their own admin status', async () => {
-    global.fetch = vi.fn().mockImplementation((url, opts) => {
-      if (url.includes('/api/admin/stats'))         return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: {}, games: { boo: {} }, briefs: {}, tutorials: {} } }) })
+  it('still renders Ban / Remove Admin / Delete on other users\' rows', async () => {
+    const OTHER_ADMIN = { ...MOCK_USER, _id: 'u9', agentNumber: '009', email: 'other-admin@test.com', isAdmin: true }
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/stats'))          return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: {}, games: { boo: {} }, briefs: {}, tutorials: {} } }) })
       if (url.includes('/api/admin/problems/count')) return Promise.resolve({ ok: true, json: async () => ({ data: { unsolvedCount: 0 } }) })
       if (url.includes('/api/admin/settings'))       return Promise.resolve({ ok: true, json: async () => ({ data: { settings: {} } }) })
-      if (url.includes('remove-admin')) {
-        return Promise.resolve({ ok: false, status: 400, json: async () => ({ message: 'You cannot remove your own admin access.' }) })
-      }
-      if (url.includes('/api/admin/users'))          return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: [SELF_USER] } }) })
+      if (url.includes('/api/admin/users'))          return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: [OTHER_ADMIN] } }) })
       return Promise.resolve({ ok: true, json: async () => ({}) })
     })
 
     render(<Admin />)
     await navigateToUsers()
-    await waitFor(() => screen.getByText('admin@test.com'))
+    await waitFor(() => screen.getByText('other-admin@test.com'))
 
-    fireEvent.click(screen.getByRole('button', { name: /^remove admin$/i }))
-    await submitModal()
-
-    await waitFor(() =>
-      expect(screen.getByText('You cannot remove your own admin access.')).toBeDefined()
-    )
+    expect(screen.getByRole('button', { name: /^delete$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^ban$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^remove admin$/i })).toBeDefined()
   })
 })

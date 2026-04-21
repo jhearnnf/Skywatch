@@ -1776,27 +1776,6 @@ export default function LearnPriority() {
           </div>
         )}
 
-        {/* Locked pathways strip */}
-        {pathways.some(p => !p.unlocked) && (
-          <div className="mt-6 mb-2">
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 text-center">Locked Pathways</p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {pathways.filter(p => !p.unlocked).map(p => (
-                <button
-                  key={p.category}
-                  onClick={() => setUnlockModal({ unlock: p, category: p.category, colors: p.colors })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors"
-                  style={{ borderColor: '#243650', color: '#3d5a7a', background: '#0d1625' }}
-                >
-                  <span>{CATEGORY_ICONS[p.category] ?? '📄'}</span>
-                  <span>{p.category}</span>
-                  <span className="opacity-50">🔒</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
       </div>
     </>
   )

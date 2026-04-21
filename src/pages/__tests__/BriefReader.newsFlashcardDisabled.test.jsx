@@ -5,7 +5,7 @@ import BriefReader from '../BriefReader'
 const mockUseAuth         = vi.hoisted(() => vi.fn())
 const mockUseAppSettings  = vi.hoisted(() => vi.fn())
 
-vi.mock('../../utils/sound', () => ({ playSound: vi.fn(), stopAllSounds: vi.fn(), playGridRevealTone: vi.fn() }))
+vi.mock('../../utils/sound', () => ({ playSound: vi.fn(), stopAllSounds: vi.fn(), playGridRevealTone: vi.fn(), preloadSound: vi.fn() }))
 
 vi.mock('react-router-dom', () => ({
   useParams:   () => ({ briefId: 'brief123' }),
@@ -161,6 +161,22 @@ describe('BriefReader — News flashcard gating (newsFlashcardsEnabled=false)', 
     expect(screen.getByText(/Section four flashcard text/)).toBeDefined()
   })
 
+  it('uses the brief title as the section 4 heading when News flashcards are disabled', async () => {
+    setupLoggedIn()
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce(makeGetResponse(NEWS_BRIEF, lastSectionRecord()))
+      .mockResolvedValueOnce(makeReachedFlashcardResponse(true))
+      .mockResolvedValue(SAFE_EMPTY)
+
+    render(<BriefReader />)
+    await waitFor(() => screen.getByText(/Section four flashcard text/))
+
+    // SectionCard renders the heading as an h3. With News flashcards disabled,
+    // section 4 would have no heading (sec 4 is by design headingless), so the
+    // brief title is used as a fallback so the card has a visual anchor.
+    expect(screen.getByRole('heading', { level: 3, name: 'Test News Story' })).toBeDefined()
+  })
+
   it('DOES render the FlashCard layout on section 4 for News briefs when enabled', async () => {
     mockUseAppSettings.mockReturnValue({ settings: { newsFlashcardsEnabled: true } })
     setupLoggedIn()
@@ -176,7 +192,7 @@ describe('BriefReader — News flashcard gating (newsFlashcardsEnabled=false)', 
     expect(screen.getByText('Context')).toBeDefined()
   })
 
-  it('keeps the brief header (title + subtitle) visible on section 4 when News flashcards are disabled', async () => {
+  it('hides the brief header + progress bar on section 4 for News briefs when flashcards are disabled', async () => {
     setupLoggedIn()
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(NEWS_BRIEF, lastSectionRecord()))
@@ -186,12 +202,12 @@ describe('BriefReader — News flashcard gating (newsFlashcardsEnabled=false)', 
     render(<BriefReader />)
     await waitFor(() => screen.getByText(/Section four flashcard text/))
 
-    // On a flashcard section the header (h1 title + subtitle) is hidden; we're
-    // rendering as a normal section so those should stay like sections 1-3.
-    expect(screen.getByRole('heading', { level: 1, name: 'Test News Story' })).toBeDefined()
-    expect(screen.getByText('A headline')).toBeDefined()
-    // Section progress bar ("Section 4 of 4") must also remain on a normal section.
-    expect(screen.getByText(/Section 4 of 4/)).toBeDefined()
+    // Section 4 now uses the brief title as its heading (via SectionCard's
+    // heading fallback), so the page-level h1 + subtitle + progress bar
+    // minimise exactly like they do on the normal flashcard view — showing
+    // the title twice would be redundant.
+    expect(screen.queryByRole('heading', { level: 1, name: 'Test News Story' })).toBeNull()
+    expect(screen.queryByText(/Section 4 of 4/)).toBeNull()
   })
 
   it('hides the brief header on the flashcard section when News flashcards are enabled', async () => {
@@ -227,9 +243,11 @@ describe('BriefReader — News flashcard gating (newsFlashcardsEnabled=false)', 
     render(<BriefReader />)
     await waitFor(() => screen.getByText(/Section four flashcard text/))
 
-    // Sanity: header + progress bar visible on section 4 before swipe
-    expect(screen.getByRole('heading', { level: 1, name: 'Test News Story' })).toBeDefined()
-    expect(screen.getByText(/Section 4 of 4/)).toBeDefined()
+    // Sanity: section 4 content is on-screen before the swipe. The header
+    // and progress bar are already hidden on section 4 (section now uses
+    // the brief title as its heading, so duplicating it above is redundant).
+    expect(screen.queryByRole('heading', { level: 1, name: 'Test News Story' })).toBeNull()
+    expect(screen.queryByText(/Section 4 of 4/)).toBeNull()
 
     fireEvent.click(screen.getByTestId('swipe-left'))
 

@@ -76,9 +76,12 @@ async function openRouterChat(messages, maxTokens = 500) {
 function extractBriefText(brief) {
   const parts = [];
 
-  // Main content — stored as an array of section strings
-  if (Array.isArray(brief.descriptionSections) && brief.descriptionSections.length > 0) {
-    parts.push(...brief.descriptionSections.filter(Boolean));
+  // Main content — canonical [{heading, body}] (legacy strings tolerated)
+  const { normalizeSections } = require('../utils/descriptionSections');
+  const sections = normalizeSections(brief.descriptionSections);
+  for (const s of sections) {
+    if (s.heading) parts.push(s.heading);
+    if (s.body)    parts.push(s.body);
   }
 
   // Game-data stats (factual figures shown to the user on the brief page)

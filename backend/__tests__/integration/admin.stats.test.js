@@ -23,6 +23,7 @@ const GameSessionQuizAttempt          = require('../../models/GameSessionQuizAtt
 const GameSessionOrderOfBattleResult  = require('../../models/GameSessionOrderOfBattleResult');
 const GameSessionWhereAircraftResult  = require('../../models/GameSessionWhereAircraftResult');
 const IntelligenceBriefRead           = require('../../models/IntelligenceBriefRead');
+const EmailLog                        = require('../../models/EmailLog');
 const mongoose = require('mongoose');
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -138,6 +139,34 @@ describe('GET /api/admin/stats — users section', () => {
 
     expect(users.totalLogins).toBe(0);
     expect(users.combinedStreaks).toBe(0);
+  });
+
+  it('returns 0 emailsSent and emailsFailed when no email log entries exist', async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    const { users } = res.body.data;
+
+    expect(users.emailsSent).toBe(0);
+    expect(users.emailsFailed).toBe(0);
+  });
+
+  it('counts EmailLog entries by status for emailsSent and emailsFailed', async () => {
+    const admin = await createAdminUser();
+    await EmailLog.create([
+      { type: 'welcome',        recipientEmail: 'a@example.com', status: 'sent'   },
+      { type: 'confirmation',   recipientEmail: 'b@example.com', status: 'sent'   },
+      { type: 'password_reset', recipientEmail: 'c@example.com', status: 'failed', error: 'boom' },
+    ]);
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    const { users } = res.body.data;
+
+    expect(users.emailsSent).toBe(2);
+    expect(users.emailsFailed).toBe(1);
   });
 });
 

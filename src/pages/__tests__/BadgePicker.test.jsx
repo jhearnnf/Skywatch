@@ -95,6 +95,35 @@ describe('BadgePicker', () => {
     expect(pendingBtn.disabled).toBe(true)
   })
 
+  it('renders locked aircraft disabled with a Locked label', async () => {
+    setupAuth({
+      fetchData: [
+        { briefId: 'b3', title: 'Lightning', cutoutUrl: 'https://cdn/lightning.png', status: 'locked' },
+      ],
+    })
+    render(<BadgePicker />)
+    await waitFor(() => expect(screen.getByText('Lightning')).toBeDefined())
+    expect(screen.getByText('Locked')).toBeDefined()
+    const lockedBtn = screen.getByText('Lightning').closest('button')
+    expect(lockedBtn.disabled).toBe(true)
+    // Cutout image is still shown (grayscale) so the user can preview the look
+    const img = document.querySelector('.profile-badge-cutout-img')
+    expect(img).not.toBeNull()
+  })
+
+  it('does not PATCH when a locked aircraft is clicked', async () => {
+    const { apiFetch } = setupAuth({
+      fetchData: [
+        { briefId: 'b3', title: 'Lightning', cutoutUrl: 'https://cdn/lightning.png', status: 'locked' },
+      ],
+    })
+    render(<BadgePicker />)
+    await waitFor(() => expect(screen.getByText('Lightning')).toBeDefined())
+    fireEvent.click(screen.getByText('Lightning').closest('button'))
+    const patchCall = apiFetch.mock.calls.find(c => c[0].endsWith('/badge') && c[1]?.method === 'PATCH')
+    expect(patchCall).toBeUndefined()
+  })
+
   it('flags the currently selected aircraft', async () => {
     setupAuth({
       user: baseUser({ selectedBadge: { briefId: 'b1', title: 'Typhoon', cutoutUrl: 'x' } }),

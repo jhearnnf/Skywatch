@@ -135,6 +135,7 @@ const {
   buildTopicUserGuidance,
   buildDescriptionSectionsSpec,
 } = require('../utils/briefPromptShapes');
+const { normalizeSections, sectionBody, bodiesText, toPlain } = require('../utils/descriptionSections');
 
 function normaliseLeadTitle(s) {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -152,6 +153,34 @@ async function unmarkLeadInDb(briefTitle) {
   } catch (err) {
     return { matched: false, error: err.message };
   }
+}
+
+// Overwrite a lead's editable shared fields from a brief. Matches lead by
+// normalised title (brief titles are effectively never renamed — confirmed
+// with the user — so a plain current-title match is sufficient). No-op if
+// no lead matches. Returns { matched, changed, changedFields } for logging.
+const LEAD_SYNC_FIELDS = ['title', 'subtitle', 'nickname', 'category', 'subcategory'];
+async function syncLeadFromBrief(brief) {
+  if (!brief?.title) return { matched: false, changed: false, changedFields: [] };
+  const norm  = normaliseLeadTitle(brief.title);
+  const leads = await IntelLead.find().select('_id title subtitle nickname category subcategory isHistoric');
+  const match = leads.find(l => normaliseLeadTitle(l.title) === norm);
+  if (!match) return { matched: false, changed: false, changedFields: [] };
+
+  const updates = {};
+  for (const f of LEAD_SYNC_FIELDS) {
+    const next = brief[f] ?? '';
+    const prev = match[f] ?? '';
+    if (next !== prev) updates[f] = next;
+  }
+  const nextHistoric = !!brief.historic;
+  if (nextHistoric !== !!match.isHistoric) updates.isHistoric = nextHistoric;
+
+  const changedFields = Object.keys(updates);
+  if (!changedFields.length) return { matched: true, changed: false, changedFields: [] };
+
+  await IntelLead.updateOne({ _id: match._id }, updates);
+  return { matched: true, changed: true, changedFields };
 }
 
 // POST /api/admin/loading-time — open (no auth), accumulates frontend fetch durations
@@ -226,6 +255,7 @@ router.get('/stats', async (_req, res) => {
       aptitudeSyncTotal,
       aptitudeSyncCompleted,
       aptitudeSyncAirstarsAgg,
+      emailsSent, emailsFailed,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ subscriptionTier: 'free' }),
@@ -300,6 +330,8 @@ router.get('/stats', async (_req, res) => {
       AptitudeSyncUsage.countDocuments(),
       AptitudeSyncUsage.countDocuments({ completedAt: { $ne: null } }),
       AptitudeSyncUsage.aggregate([{ $group: { _id: null, total: { $sum: { $ifNull: ['$airstarsEarned', 0] } } } }]),
+      EmailLog.countDocuments({ status: 'sent' }),
+      EmailLog.countDocuments({ status: 'failed' }),
     ]);
 
     const aptitudeSyncAbandoned = aptitudeSyncTotal - aptitudeSyncCompleted;
@@ -317,6 +349,7 @@ router.get('/stats', async (_req, res) => {
           easyPlayers, mediumPlayers,
           totalLogins:      loginAgg[0]?.total ?? 0,
           combinedStreaks,
+          emailsSent, emailsFailed,
         },
         games: {
           totalGamesPlayed:    totalGamesPlayed    + aptitudeSyncCompleted + aptitudeSyncAbandoned,
@@ -1179,6 +1212,7 @@ router.get('/problems', async (req, res) => {
     const problems = await ProblemReport.find(filter)
       .populate('userId', 'email agentNumber')
       .populate('updates.adminUserId', 'agentNumber email')
+      .populate('intelligenceBrief', 'title')
       .sort({ time: -1 });
 
     res.json({ status: 'success', data: { problems } });
@@ -1240,11 +1274,12 @@ router.post('/problems/:id/update', async (req, res) => {
 // GET /api/admin/briefs
 router.get('/briefs', async (req, res) => {
   try {
-    const { search, category, subcategory, page = 1, limit = 20, sort = 'default', hideStubs } = req.query;
+    const { search, category, subcategory, page = 1, limit = 20, sort = 'default', hideStubs, flaggedForEdit } = req.query;
     const filter = {};
     if (category) filter.category = category;
     if (subcategory && category) filter.subcategory = subcategory;
     if (hideStubs === 'true' || hideStubs === '1') filter.status = { $ne: 'stub' };
+    if (flaggedForEdit === 'true' || flaggedForEdit === '1') filter.flaggedForEdit = true;
     if (search) filter.$or = [
       { title: new RegExp(search, 'i') },
       { subtitle: new RegExp(search, 'i') },
@@ -1303,9 +1338,27 @@ router.get('/briefs', async (req, res) => {
                       $filter: {
                         input: { $ifNull: ['$descriptionSections', []] },
                         as: 's',
+                        // Tolerate both legacy string and new {heading, body} shape
                         cond: {
                           $gt: [
-                            { $strLenCP: { $ifNull: [{ $trim: { input: '$$s' } }, ''] } },
+                            {
+                              $strLenCP: {
+                                $ifNull: [
+                                  {
+                                    $trim: {
+                                      input: {
+                                        $cond: [
+                                          { $eq: [{ $type: '$$s' }, 'string'] },
+                                          '$$s',
+                                          { $ifNull: ['$$s.body', ''] },
+                                        ],
+                                      },
+                                    },
+                                  },
+                                  '',
+                                ],
+                              },
+                            },
                             0,
                           ],
                         },
@@ -1535,9 +1588,17 @@ router.post('/briefs', requireReason, async (req, res) => {
 router.patch('/briefs/:id', requireReason, async (req, res) => {
   try {
     const { reason, ...fields } = req.body;
-    if (fields.status === 'published') {
-      const existing = await IntelligenceBrief.findById(req.params.id).select('publishedAt').lean();
-      if (existing && !existing.publishedAt) fields.publishedAt = new Date();
+    if (fields.status === 'published' || fields.flaggedForEdit !== undefined) {
+      const existing = await IntelligenceBrief.findById(req.params.id).select('publishedAt flaggedForEdit').lean();
+      if (existing && fields.status === 'published' && !existing.publishedAt) {
+        fields.publishedAt = new Date();
+      }
+      if (existing && fields.flaggedForEdit !== undefined) {
+        const wasFlagged = !!existing.flaggedForEdit;
+        const willFlag   = !!fields.flaggedForEdit;
+        if (!wasFlagged && willFlag)      fields.flaggedAt = new Date();
+        else if (wasFlagged && !willFlag) fields.flaggedAt = null;
+      }
     }
     const brief = await IntelligenceBrief.findByIdAndUpdate(req.params.id, fields, { returnDocument: 'after', runValidators: true }).populate('media');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
@@ -1566,6 +1627,16 @@ router.patch('/briefs/:id', requireReason, async (req, res) => {
         );
       }
     }
+
+    // Keep the matching IntelLead in sync with the updated brief — leads store a
+    // subset of fields (title, subtitle, nickname, category, subcategory, isHistoric)
+    // and would otherwise drift whenever admin edits a brief. Never block the PATCH.
+    try {
+      await syncLeadFromBrief(brief);
+    } catch (syncErr) {
+      console.error('[PATCH briefs] lead sync failed (non-fatal):', syncErr.message);
+    }
+
     await AdminAction.create({ userId: req.user._id, actionType: 'edit_brief', reason });
     res.json({ status: 'success', data: { brief } });
   } catch (err) {
@@ -2638,7 +2709,10 @@ router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news
     }
 
     // ── Step 3: Keywords ───────────────────────────────────────────────────────
-    const descriptionText = (briefContent.descriptionSections ?? []).join('\n\n');
+    // Normalize at the boundary — the LLM emits {heading, body} objects going
+    // forward; tolerate legacy strings from any callsite that still emits them.
+    briefContent.descriptionSections = toPlain(briefContent.descriptionSections);
+    const descriptionText = briefContent.descriptionSections.map(s => s.body).join('\n\n');
     let keywords = [];
     if (descriptionText) {
       const descLower = descriptionText.toLowerCase();
@@ -2741,7 +2815,10 @@ router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news
       category:            'News',
       title:               briefContent.title,
       subtitle:            briefContent.subtitle,
-      descriptionSections: (briefContent.descriptionSections ?? []).map(s => typeof s === 'string' ? s.replace(/[*_`#]/g, '') : s),
+      descriptionSections: briefContent.descriptionSections.map(s => ({
+        heading: (s.heading ?? '').replace(/[*_`#]/g, ''),
+        body:    (s.body    ?? '').replace(/[*_`#]/g, ''),
+      })),
       sources:             briefContent.sources ?? [],
       keywords,
       status:              'published',
@@ -2832,6 +2909,10 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
     }
     // Lock title to the lead topic — AI must not rename the subject
     if (topic) brief.title = topic;
+
+    // Normalize descriptionSections to {heading, body} objects — the prompt
+    // requests this shape but we tolerate legacy strings for forward compat.
+    brief.descriptionSections = toPlain(brief.descriptionSections);
 
     // Scrape real source publication dates — AI-supplied dates are often inaccurate
     if (brief.sources?.length) {
@@ -2957,6 +3038,67 @@ router.post('/intel-leads/:id/create-stub', async (req, res) => {
     });
 
     res.status(201).json({ status: 'success', data: { brief: stub } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/intel-leads/sync-from-briefs — overwrite every lead's shared
+// fields (title, subtitle, nickname, category, subcategory, isHistoric) from
+// its matching brief. Includes stubs AND published — the brief is the source
+// of truth for these fields, regardless of status.
+//
+// Query: ?dryRun=true → returns the would-be changes without writing.
+router.post('/intel-leads/sync-from-briefs', async (req, res) => {
+  try {
+    const dryRun = req.query.dryRun === 'true' || req.body?.dryRun === true;
+    const briefs = await IntelligenceBrief.find()
+      .select('title subtitle nickname category subcategory historic')
+      .lean();
+
+    const briefByNorm = new Map();
+    for (const b of briefs) {
+      if (b.title) briefByNorm.set(normaliseLeadTitle(b.title), b);
+    }
+
+    const leads = await IntelLead.find()
+      .select('_id title subtitle nickname category subcategory isHistoric')
+      .lean();
+
+    const changes = [];
+    const unmatched = [];
+
+    for (const lead of leads) {
+      const brief = briefByNorm.get(normaliseLeadTitle(lead.title));
+      if (!brief) { unmatched.push({ leadId: lead._id, title: lead.title }); continue; }
+
+      const updates = {};
+      for (const f of LEAD_SYNC_FIELDS) {
+        const next = brief[f] ?? '';
+        const prev = lead[f] ?? '';
+        if (next !== prev) updates[f] = next;
+      }
+      const nextHistoric = !!brief.historic;
+      if (nextHistoric !== !!lead.isHistoric) updates.isHistoric = nextHistoric;
+
+      if (Object.keys(updates).length) {
+        changes.push({ leadId: lead._id, title: lead.title, updates });
+        if (!dryRun) {
+          await IntelLead.updateOne({ _id: lead._id }, updates);
+        }
+      }
+    }
+
+    res.json({
+      status: 'success',
+      dryRun,
+      totalLeads:     leads.length,
+      matchedBriefs:  leads.length - unmatched.length,
+      unmatchedLeads: unmatched.length,
+      changedLeads:   changes.length,
+      changes,
+      unmatched,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -3348,8 +3490,11 @@ async function generateBriefContent(brief, aiSettings) {
     throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
   }
 
-  const descriptionSections = (Array.isArray(briefGenerated.descriptionSections) ? briefGenerated.descriptionSections : [])
-    .map(s => typeof s === 'string' ? s.replace(/[*_`#]/g, '') : s);
+  // Normalize once at the boundary, then strip residual markdown chars from heading+body.
+  const descriptionSections = toPlain(briefGenerated.descriptionSections).map(s => ({
+    heading: (s.heading ?? '').replace(/[*_`#]/g, ''),
+    body:    (s.body    ?? '').replace(/[*_`#]/g, ''),
+  }));
   const subtitle = typeof briefGenerated.subtitle === 'string' ? briefGenerated.subtitle.trim() : null;
   const sources  = Array.isArray(briefGenerated.sources) ? briefGenerated.sources : [];
 
@@ -3358,7 +3503,7 @@ async function generateBriefContent(brief, aiSettings) {
   // removing the token-limit bottleneck that previously forced a hard cap of 8.
   let keywords = [];
   if (descriptionSections.length) {
-    const descriptionText = descriptionSections.join('\n\n');
+    const descriptionText = descriptionSections.map(s => s.body).join('\n\n');
     const descLower = descriptionText.toLowerCase();
     const isTitleLike = buildTitleRejectCheck({
       title:    brief.title,
@@ -3427,7 +3572,7 @@ async function generateBriefContent(brief, aiSettings) {
   ]);
 
   if (descriptionSections.length) {
-    const descText = descriptionSections.join(' ').toLowerCase();
+    const descText = descriptionSections.map(s => s.body).join(' ').toLowerCase();
     const titleLower = brief.title.toLowerCase();
     keywords = keywords.filter(k => {
       if (!k.keyword) return false;
@@ -3465,7 +3610,7 @@ async function generateBriefContent(brief, aiSettings) {
     if (rankOrder !== null) gameData = { rankHierarchyOrder: rankOrder };
   }
 
-  const freshDescription = descriptionSections.join('\n\n');
+  const freshDescription = descriptionSections.map(s => s.body).join('\n\n');
   const targetQ = aiSettings.aiQuestionsPerDifficulty ?? 7;
   const quizData = await openRouterChat([{
     role: 'system',
@@ -3651,7 +3796,7 @@ router.post('/ai/bulk-generate-stub/:id', featureMiddleware('bulk-generate-stub'
     const linkUpdates = {};
     const linkConfig = BULK_LINK_CONFIG[brief.category] ?? [];
     if (linkConfig.length > 0) {
-      const descriptionText = descriptionSections.join('\n\n');
+      const descriptionText = descriptionSections.map(s => s.body).join('\n\n');
       // Fetch all needed pools in parallel
       const poolCategories = [...new Set(linkConfig.map(l => l.poolCategory))];
       const pools = {};
@@ -3850,9 +3995,60 @@ router.post('/ai/regenerate-description/:id', requireReason, featureMiddleware('
       throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
     }
 
-    const descriptionSections = (Array.isArray(generated.descriptionSections) ? generated.descriptionSections : [])
-      .map(s => typeof s === 'string' ? s.replace(/[*_`#]/g, '') : s);
+    const descriptionSections = toPlain(generated.descriptionSections).map(s => ({
+      heading: (s.heading ?? '').replace(/[*_`#]/g, ''),
+      body:    (s.body    ?? '').replace(/[*_`#]/g, ''),
+    }));
     res.json({ status: 'success', data: { descriptionSections, cascade: cascadeStats } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/ai/regenerate-subtitle/:id
+// Lightweight subtitle-only regeneration. Returns { subtitle } without persisting —
+// the caller reviews and saves via the normal PATCH flow. No cascade: subtitle has
+// no downstream dependents (keywords/quiz/reads are all derived from description).
+// Grounds on identity fields only (title, nickname, category, subcategory, historic)
+// — deliberately does NOT include the current subtitle or description, because if
+// the admin is regenerating it's usually because those are wrong.
+router.post('/ai/regenerate-subtitle/:id', featureMiddleware('regenerate-subtitle'), async (req, res) => {
+  try {
+    const brief = await IntelligenceBrief.findById(req.params.id).select('title nickname category subcategory historic');
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+
+    const shape = getBriefShape({
+      category:    brief.category,
+      subcategory: brief.subcategory,
+      historic:    !!brief.historic,
+    });
+
+    const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  ${SUBTITLE_SPEC}\n}`;
+    const nicknameHint = brief.nickname ? ` (also known as "${brief.nickname}")` : '';
+    const subcatHint   = brief.subcategory ? ` — ${brief.subcategory}` : '';
+
+    const aiSettings  = await AppSettings.getSettings();
+    const systemKey   = TOPIC_PROMPT_BY_CATEGORY[brief.category] || 'brief.topic';
+    const userContent = `Write a one-sentence identity subtitle for this ${brief.category}${subcatHint} intel brief.\n\nSubject: "${brief.title}"${nicknameHint}\n\n${buildTopicUserGuidance(shape)}\n\n${JSON_SHAPE}`;
+
+    const data = await openRouterChat([
+      { role: 'system', content: getPrompt(aiSettings, systemKey) },
+      { role: 'user',   content: userContent },
+    ], 'perplexity/sonar', 512);
+
+    const raw = data.choices?.[0]?.message?.content ?? '{}';
+    let generated;
+    try {
+      generated = JSON.parse(cleanJson(raw));
+    } catch (parseErr) {
+      console.error('[regenerate-subtitle] JSON parse failed. Raw:', raw);
+      throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
+    }
+
+    const subtitle = typeof generated.subtitle === 'string' ? generated.subtitle.trim() : '';
+    if (!subtitle) throw new Error('AI returned empty subtitle');
+
+    res.json({ status: 'success', data: { subtitle } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

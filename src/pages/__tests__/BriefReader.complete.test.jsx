@@ -11,7 +11,7 @@ const mockNavigate      = vi.hoisted(() => vi.fn())
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('../../utils/sound', () => ({ playSound: vi.fn(), stopAllSounds: vi.fn(), playGridRevealTone: vi.fn() }))
+vi.mock('../../utils/sound', () => ({ playSound: vi.fn(), stopAllSounds: vi.fn(), playGridRevealTone: vi.fn(), preloadSound: vi.fn() }))
 
 vi.mock('react-router-dom', () => ({
   useParams:   () => ({ briefId: 'brief123' }),
@@ -711,5 +711,75 @@ describe('BriefReader — section position persistence', () => {
     expect(typeof body.currentSection).toBe('number')
 
     vi.useRealTimers()
+  })
+})
+
+// ── Re-read coin idempotency ──────────────────────────────────────────────────
+
+describe('BriefReader — re-read does not re-award coins', () => {
+  beforeEach(() => {
+    setupLoggedIn()
+    mockAwardAirstars.mockClear()
+    mockSetUser.mockClear()
+    sessionStorage.clear()
+    localStorage.clear()
+    localStorage.setItem('skywatch_first_brief', '1')
+  })
+
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('firing the optimistic reward preview on the FIRST read does not leak into the RE-READ swipe', async () => {
+    // Backend returns full reward on first POST /complete and zero on the second (idempotent).
+    // Without the re-read guard, the stale rewardPreview from the first read would fire
+    // awardAirstars a second time on the re-read swipe — a phantom client-only award.
+    let completeCallCount = 0
+
+    global.fetch = vi.fn().mockImplementation((url, opts) => {
+      const u = typeof url === 'string' ? url : url.toString()
+
+      if (u.includes('/api/briefs/brief123/complete') && opts?.method === 'POST') {
+        completeCallCount += 1
+        if (completeCallCount === 1) {
+          return Promise.resolve(makeCompleteResponse({
+            airstarsEarned: 5, dailyCoinsEarned: 5,
+            newTotalAirstars: 10, newCycleAirstars: 10,
+          }))
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'success', data: { airstarsEarned: 0, dailyCoinsEarned: 0 } }),
+        })
+      }
+      if (u.includes('/reward-preview')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ status: 'success', data: { airstarsEarned: 5, dailyCoinsEarned: 5, unlockedCategories: [] } }),
+        })
+      }
+      if (u.includes('/reached-flashcard')) {
+        return Promise.resolve({ ok: true, json: async () => ({ status: 'success', wasNew: false }) })
+      }
+      if (u.match(/\/api\/briefs\/brief123(\?|$)/)) {
+        return Promise.resolve(makeGetResponse(TRAINING_BRIEF, FRESH_READ_RECORD))
+      }
+      return Promise.resolve(SAFE_EMPTY)
+    })
+
+    render(<BriefReader />)
+
+    // First read → one swipe completes the single-section brief
+    await swipeLeft()
+    await waitFor(() => expect(mockAwardAirstars).toHaveBeenCalledTimes(1))
+    await waitFor(() => screen.getByText('Brief Complete'))
+
+    // Re-read from the completion screen
+    fireEvent.click(screen.getByText('↩ Re-read Brief'))
+
+    // Second swipe triggers another POST /complete (backend returns 0 coins)
+    await swipeLeft()
+    await waitFor(() => expect(completeCallCount).toBeGreaterThanOrEqual(2))
+
+    // Critical assertion: awardAirstars stays at ONE call — no phantom re-award
+    expect(mockAwardAirstars).toHaveBeenCalledTimes(1)
   })
 })

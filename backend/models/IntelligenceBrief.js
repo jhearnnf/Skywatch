@@ -39,7 +39,12 @@ const intelligenceBriefSchema = new mongoose.Schema(
     title:       { type: String, required: true, trim: true },
     nickname:    { type: String, trim: true },   // informal/popular name (e.g. "Typhoon" for Eurofighter)
     subtitle:    { type: String, trim: true },
-    descriptionSections: [{ type: String, trim: true }], // exactly 4 sections; section 4 is a name-free 1–2 sentence summary (used for flashcard recall)
+    // Exactly 4 sections. Canonical shape: [{ heading: String, body: String }].
+    // Section 4 is a name-free 1–2 sentence summary (used for flashcard recall)
+    // and by convention has an empty heading. Stored as Mixed during the
+    // legacy-string → object migration window; readers MUST normalize via
+    // backend/utils/descriptionSections.js.
+    descriptionSections: { type: [mongoose.Schema.Types.Mixed], default: [] },
 
     sources:  [sourceSchema],
     keywords: [keywordSchema],
@@ -107,6 +112,11 @@ const intelligenceBriefSchema = new mongoose.Schema(
     // sort the admin brief list so newly-published briefs appear first.
     publishedAt: { type: Date, default: null },
 
+    // Admin triage flag — raised by admins in the editor or automatically when
+    // a user submits a problem report attached to this brief.
+    flaggedForEdit: { type: Boolean, default: false },
+    flaggedAt:      { type: Date, default: null },
+
     // 10 questions per difficulty — references to GameQuizQuestion
     quizQuestionsEasy: {
       type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'GameQuizQuestion' }],
@@ -125,5 +135,6 @@ intelligenceBriefSchema.index({ category: 1, subcategory: 1, dateAdded: -1 });
 intelligenceBriefSchema.index({ historic: 1 });
 intelligenceBriefSchema.index({ title: 'text', nickname: 'text', subtitle: 'text' });
 intelligenceBriefSchema.index({ category: 1, priorityNumber: 1 });
+intelligenceBriefSchema.index({ flaggedForEdit: 1, flaggedAt: -1 });
 
 module.exports = mongoose.model('IntelligenceBrief', intelligenceBriefSchema);

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
@@ -7,11 +7,31 @@ import SEO from '../components/SEO'
 export default function ReportProblem() {
   const { user, API, apiFetch } = useAuth()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const briefId = searchParams.get('briefId') || null
 
   const [description, setDescription] = useState('')
   const [submitted,   setSubmitted]   = useState(false)
   const [error,       setError]       = useState('')
   const [busy,        setBusy]        = useState(false)
+  const [brief,       setBrief]       = useState(null)
+
+  useEffect(() => {
+    if (!briefId) { setBrief(null); return }
+    let cancelled = false
+    apiFetch(`${API}/api/briefs/${briefId}`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d?.data?.brief) setBrief(d.data.brief) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [briefId, API, apiFetch])
+
+  const clearBrief = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('briefId')
+    setSearchParams(next, { replace: true })
+    setBrief(null)
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -21,7 +41,11 @@ export default function ReportProblem() {
       const res = await apiFetch(`${API}/api/users/report-problem`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description, pageReported: document.referrer || 'unknown' }),
+        body: JSON.stringify({
+          description,
+          pageReported: briefId ? `/brief/${briefId}` : (document.referrer || 'unknown'),
+          ...(briefId ? { briefId } : {}),
+        }),
       })
       if (!res.ok) throw new Error()
       setSubmitted(true)
@@ -86,6 +110,23 @@ export default function ReportProblem() {
 
       <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow">
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          {briefId && (
+            <div className="flex items-start justify-between gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Reporting on brief</p>
+                <p className="text-sm text-amber-800 truncate">{brief?.title ?? briefId}</p>
+              </div>
+              <button
+                type="button"
+                onClick={clearBrief}
+                aria-label="Remove brief association"
+                className="text-amber-500 hover:text-amber-700 text-lg leading-none shrink-0"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2" htmlFor="description">
               Describe the problem

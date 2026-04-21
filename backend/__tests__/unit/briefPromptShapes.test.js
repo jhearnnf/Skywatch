@@ -122,8 +122,19 @@ describe('buildDescriptionSectionsSpec', () => {
   test('strict mode emits EXACTLY 4 rule; non-strict emits 2-4 rule', () => {
     const strict    = buildDescriptionSectionsSpec({ strict: true,  shape: 'raf-asset' });
     const nonStrict = buildDescriptionSectionsSpec({ strict: false, shape: 'raf-asset' });
-    expect(strict.countRule).toMatch(/EXACTLY 4 strings/);
-    expect(nonStrict.countRule).toMatch(/2–4 strings/);
+    expect(strict.countRule).toMatch(/EXACTLY 4 objects/);
+    expect(nonStrict.countRule).toMatch(/2–4 objects/);
+  });
+
+  test('every shape asks for heading + body on each section', () => {
+    for (const shape of ['raf-asset', 'raf-asset-historic', 'actor', 'threat', 'treaty', 'region-or-ally']) {
+      const { array, countRule } = buildDescriptionSectionsSpec({ strict: true, shape });
+      expect(array).toMatch(/"heading"/);
+      expect(array).toMatch(/"body"/);
+      // Section 4 must be explicitly headingless (empty heading string)
+      expect(array).toMatch(/"heading":\s*""/);
+      expect(countRule).toMatch(/empty string for section 4/);
+    }
   });
 
   test('section 4 still carries the blind-identity rule on every shape', () => {

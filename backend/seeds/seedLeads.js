@@ -149,26 +149,26 @@ const LEADS = [
   { title: 'Eurofighter Typhoon T3', nickname: '', subtitle: 'Two-seat trainer variant of the Typhoon for conversion and currency', category: 'Aircrafts', subcategory: 'Fast Jet', section: 'AIRCRAFTS', subsection: 'Fast Jet', priorityNumber: 12 },
   { title: 'F-35B Lightning II', nickname: 'Lightning', subtitle: 'STOVL stealth multirole fighter, based at RAF Marham', category: 'Aircrafts', subcategory: 'Fast Jet', section: 'AIRCRAFTS', subsection: 'Fast Jet', priorityNumber: 2 },
   { title: 'BAE Systems Hawk T1', nickname: '', subtitle: 'Advanced jet trainer and adversary aircraft, being retired', category: 'Aircrafts', subcategory: 'Fast Jet', section: 'AIRCRAFTS', subsection: 'Fast Jet', priorityNumber: 26 },
-  { title: 'BAE Systems Hawk T2', nickname: '', subtitle: 'Advanced fast jet trainer used at RAF Valley', category: 'Aircrafts', subcategory: 'Fast Jet', section: 'AIRCRAFTS', subsection: 'Fast Jet', priorityNumber: 11 },
+  { title: 'Hawk T2', nickname: '', subtitle: 'Advanced fast jet trainer used at RAF Valley', category: 'Aircrafts', subcategory: 'Fast Jet', section: 'AIRCRAFTS', subsection: 'Fast Jet', priorityNumber: 11 },
 
   // ── RAF AIRCRAFT — ISR & Surveillance ────────────────────────────────────
-  { title: 'Boeing RC-135W Rivet Joint', nickname: 'Rivet Joint', subtitle: 'Signals intelligence aircraft operated by 51 Sqn from RAF Waddington', category: 'Aircrafts', subcategory: 'ISR & Surveillance', section: 'AIRCRAFTS', subsection: 'ISR & Surveillance', priorityNumber: 9 },
+  { title: 'RC-135W Rivet Joint', nickname: 'Rivet Joint', subtitle: 'Signals intelligence aircraft operated by 51 Sqn from RAF Waddington', category: 'Aircrafts', subcategory: 'ISR & Surveillance', section: 'AIRCRAFTS', subsection: 'ISR & Surveillance', priorityNumber: 9 },
   { title: 'Beechcraft Shadow R1', nickname: 'Shadow', subtitle: 'Tactical ISR light aircraft, based at RAF Waddington', category: 'Aircrafts', subcategory: 'ISR & Surveillance', section: 'AIRCRAFTS', subsection: 'ISR & Surveillance', priorityNumber: 17 },
   { title: 'MQ-9A Reaper', nickname: 'Reaper', subtitle: 'RPAS based at RAF Waddington, being retired and replaced by Protector', category: 'Aircrafts', subcategory: 'ISR & Surveillance', section: 'AIRCRAFTS', subsection: 'ISR & Surveillance', priorityNumber: 18 },
   { title: 'Protector RG1', nickname: 'SkyGuardian', subtitle: 'MQ-9B RPAS replacing the Reaper, with enhanced range and payload', category: 'Aircrafts', subcategory: 'ISR & Surveillance', section: 'AIRCRAFTS', subsection: 'ISR & Surveillance', priorityNumber: 10 },
-  { title: 'Boeing E-7A Wedgetail', nickname: 'Wedgetail', subtitle: 'Airborne early warning and control aircraft replacing the E-3D Sentry', category: 'Aircrafts', subcategory: 'ISR & Surveillance', section: 'AIRCRAFTS', subsection: 'ISR & Surveillance', priorityNumber: 8 },
+  { title: 'E-7A Wedgetail', nickname: 'Wedgetail', subtitle: 'Airborne early warning and control aircraft replacing the E-3D Sentry', category: 'Aircrafts', subcategory: 'ISR & Surveillance', section: 'AIRCRAFTS', subsection: 'ISR & Surveillance', priorityNumber: 8 },
 
   // ── RAF AIRCRAFT — Maritime Patrol ────────────────────────────────────────
-  { title: 'Boeing P-8A Poseidon MRA1', nickname: 'Poseidon', subtitle: 'Maritime patrol and anti-submarine warfare aircraft based at RAF Lossiemouth', category: 'Aircrafts', subcategory: 'Maritime Patrol', section: 'AIRCRAFTS', subsection: 'Maritime Patrol', priorityNumber: 7 },
+  { title: 'P-8A Poseidon MRA1', nickname: 'Poseidon', subtitle: 'Maritime patrol and anti-submarine warfare aircraft based at RAF Lossiemouth', category: 'Aircrafts', subcategory: 'Maritime Patrol', section: 'AIRCRAFTS', subsection: 'Maritime Patrol', priorityNumber: 7 },
 
   // ── RAF AIRCRAFT — Transport & Tanker ────────────────────────────────────
-  { title: 'Airbus A330 MRTT Voyager KC2/KC3', nickname: 'Voyager', subtitle: 'Multi-role AAR tanker and transport aircraft, based at RAF Brize Norton', category: 'Aircrafts', subcategory: 'Transport & Tanker', section: 'AIRCRAFTS', subsection: 'Transport & Tanker', priorityNumber: 6 },
-  { title: 'Airbus A400M Atlas C1', nickname: 'Atlas', subtitle: 'Tactical and strategic transport aircraft based at RAF Brize Norton', category: 'Aircrafts', subcategory: 'Transport & Tanker', section: 'AIRCRAFTS', subsection: 'Transport & Tanker', priorityNumber: 4 },
-  { title: 'Boeing C-17A Globemaster III', nickname: 'Globemaster', subtitle: 'Heavy strategic airlift aircraft based at RAF Brize Norton', category: 'Aircrafts', subcategory: 'Transport & Tanker', section: 'AIRCRAFTS', subsection: 'Transport & Tanker', priorityNumber: 5 },
+  { title: 'A330 MRTT Voyager KC2/KC3', nickname: 'Voyager', subtitle: 'Multi-role AAR tanker and transport aircraft, based at RAF Brize Norton', category: 'Aircrafts', subcategory: 'Transport & Tanker', section: 'AIRCRAFTS', subsection: 'Transport & Tanker', priorityNumber: 6 },
+  { title: 'A400M Atlas C1', nickname: 'Atlas', subtitle: 'Tactical and strategic transport aircraft based at RAF Brize Norton', category: 'Aircrafts', subcategory: 'Transport & Tanker', section: 'AIRCRAFTS', subsection: 'Transport & Tanker', priorityNumber: 4 },
+  { title: 'C-17A Globemaster III', nickname: 'Globemaster', subtitle: 'Heavy strategic airlift aircraft based at RAF Brize Norton', category: 'Aircrafts', subcategory: 'Transport & Tanker', section: 'AIRCRAFTS', subsection: 'Transport & Tanker', priorityNumber: 5 },
   { title: 'BAe 146 CC2/C3', nickname: '', subtitle: 'VIP and Royal Squadron transport aircraft based at RAF Northolt', category: 'Aircrafts', subcategory: 'Transport & Tanker', section: 'AIRCRAFTS', subsection: 'Transport & Tanker', priorityNumber: 23 },
 
   // ── RAF AIRCRAFT — Rotary Wing ────────────────────────────────────────────
-  { title: 'Boeing Chinook HC6/6A', nickname: 'Wokka Wokka', subtitle: 'Heavy-lift tandem rotor helicopter based at RAF Odiham', category: 'Aircrafts', subcategory: 'Rotary Wing', section: 'AIRCRAFTS', subsection: 'Rotary Wing', priorityNumber: 5 },
+  { title: 'Chinook HC6/6A', nickname: 'Wokka Wokka', subtitle: 'Heavy-lift tandem rotor helicopter based at RAF Odiham', category: 'Aircrafts', subcategory: 'Rotary Wing', section: 'AIRCRAFTS', subsection: 'Rotary Wing', priorityNumber: 5 },
   { title: 'Airbus Puma HC2', nickname: '', subtitle: 'Medium utility helicopter based at RAF Benson, being retired', category: 'Aircrafts', subcategory: 'Rotary Wing', section: 'AIRCRAFTS', subsection: 'Rotary Wing', priorityNumber: 25 },
   { title: 'AgustaWestland AW109 Jupiter HT1', nickname: 'Jupiter', subtitle: 'Helicopter trainer used at RAF Shawbury', category: 'Aircrafts', subcategory: 'Rotary Wing', section: 'AIRCRAFTS', subsection: 'Rotary Wing', priorityNumber: 20 },
   { title: 'Airbus H135 Juno HT1', nickname: 'Juno', subtitle: 'Helicopter trainer used at RAF Shawbury for rotary wing training', category: 'Aircrafts', subcategory: 'Rotary Wing', section: 'AIRCRAFTS', subsection: 'Rotary Wing', priorityNumber: 19 },
@@ -501,13 +501,14 @@ const LEADS = [
   { title: 'COVID-19 medical logistics operations', nickname: '', subtitle: 'RAF strategic airlift of medical equipment and PPE during COVID-19 pandemic', category: 'Missions', subcategory: 'Humanitarian & NEO', section: 'MISSIONS', subsection: 'Humanitarian & NEO', priorityNumber: 16 },
 
   // ── TECHNOLOGY — Weapons Systems ─────────────────────────────────────────
-  { title: 'Brimstone 2/3', nickname: 'Brimstone', subtitle: 'RAF dual-mode seeker stand-off missile, low collateral damage', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 6 },
+  { title: 'Brimstone 2/3', nickname: 'Brimstone', subtitle: 'Current RAF in-service variants — dual-mode laser/radar seeker and extended range, carried by Typhoon and Protector for precision strike.', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 6 },
+  { title: 'Brimstone', nickname: '', subtitle: 'UK air-to-surface missile family — three MBDA generations since 2005, pioneered as a fire-and-forget anti-armour weapon.', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 7 },
   { title: 'MBDA Meteor BVRAAM', nickname: 'Meteor', subtitle: 'Ramjet-powered beyond-visual-range air-to-air missile, no-escape zone', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 2 },
   { title: 'ASRAAM / AIM-132', nickname: 'ASRAAM', subtitle: 'Advanced short-range air-to-air missile, highly agile IR seeker', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 3 },
   { title: 'Storm Shadow / SCALP-EG', nickname: 'Storm Shadow', subtitle: 'Stand-off cruise missile with 500km+ range for deep strike', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 4 },
-  { title: 'SPEAR 3 / MBDA SPEAR', nickname: 'SPEAR 3', subtitle: 'Powered precision network-enabled stand-off strike weapon, entering service', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 11 },
+  { title: 'SPEAR 3', nickname: 'SPEAR 3', subtitle: 'Powered precision network-enabled stand-off strike weapon, entering service', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 11 },
   { title: 'Paveway IV', nickname: '', subtitle: 'Dual-mode GPS and laser-guided bomb, the RAF\'s standard precision weapon', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 1 },
-  { title: 'Harpoon anti-ship missile', nickname: 'Harpoon', subtitle: 'Anti-ship missile carried by P-8A Poseidon for maritime strike', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 14 },
+  { title: 'Harpoon', nickname: 'Harpoon', subtitle: 'Anti-ship missile carried by P-8A Poseidon for maritime strike', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 14 },
   { title: 'Stingray torpedo', nickname: 'Stingray', subtitle: 'Lightweight air-launched anti-submarine torpedo carried by P-8A', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 15 },
   { title: 'AIM-120 AMRAAM', nickname: 'AMRAAM', subtitle: 'Beyond-visual-range active radar air-to-air missile carried by F-35B', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems', priorityNumber: 64 },
 
@@ -533,7 +534,6 @@ const LEADS = [
   // ── TECHNOLOGY — Future Programmes ───────────────────────────────────────
   { title: 'GCAP / Global Combat Air Programme', nickname: 'GCAP', subtitle: 'UK, Japan and Italy 6th-generation combat aircraft, in service 2035', category: 'Tech', subcategory: 'Future Programmes', section: 'TECH', subsection: 'Future Programmes', priorityNumber: 28 },
   { title: 'Tempest demonstrator', nickname: 'Tempest', subtitle: 'BAE Systems technology demonstrator preceding GCAP', category: 'Tech', subcategory: 'Future Programmes', section: 'TECH', subsection: 'Future Programmes', priorityNumber: 56 },
-  { title: 'Dragonfire directed energy laser weapon', nickname: 'Dragonfire', subtitle: '50kW-class laser weapon for counter-UAS and future combat aircraft', category: 'Tech', subcategory: 'Future Programmes', section: 'TECH', subsection: 'Future Programmes', priorityNumber: 31 },
   { title: 'Autonomous Collaborative Platforms', nickname: 'ACP', subtitle: 'RAF loyal wingman and uncrewed teaming concept for future operations', category: 'Tech', subcategory: 'Future Programmes', section: 'TECH', subsection: 'Future Programmes', priorityNumber: 32 },
   { title: 'ECRS Mk2 Radar', nickname: '', subtitle: 'Typhoon Block 20 electronic attack radar with jamming capability', category: 'Tech', subcategory: 'Future Programmes', section: 'TECH', subsection: 'Future Programmes', priorityNumber: 30 },
   { title: 'F-35B Block 4 upgrade', nickname: '', subtitle: 'New weapons integration, software and sensor fusion upgrade for F-35B', category: 'Tech', subcategory: 'Future Programmes', section: 'TECH', subsection: 'Future Programmes', priorityNumber: 29 },
@@ -542,7 +542,6 @@ const LEADS = [
   // ── TECHNOLOGY — Command, Control & Comms ────────────────────────────────
   { title: 'Link 16 Tactical Data Link', nickname: 'Link 16', subtitle: 'Real-time air picture sharing datalink used across NATO air forces', category: 'Tech', subcategory: 'Command, Control & Comms', section: 'TECH', subsection: 'Command, Control & Comms', priorityNumber: 20 },
   { title: 'SKYNET 5/6', nickname: 'SKYNET', subtitle: 'UK military satellite communications system', category: 'Tech', subcategory: 'Command, Control & Comms', section: 'TECH', subsection: 'Command, Control & Comms', priorityNumber: 21 },
-  { title: 'Morpheus', nickname: '', subtitle: 'UK future tactical communications programme replacing Bowman', category: 'Tech', subcategory: 'Command, Control & Comms', section: 'TECH', subsection: 'Command, Control & Comms', priorityNumber: 38 },
   { title: 'NATO ACCS', nickname: '', subtitle: 'NATO Air Command and Control System for integrated airspace management', category: 'Tech', subcategory: 'Command, Control & Comms', section: 'TECH', subsection: 'Command, Control & Comms', priorityNumber: 22 },
   { title: 'Combined Air Operations Centre', nickname: 'CAOC', subtitle: 'NATO CAOC Uedem and Torrejon managing Allied air operations', category: 'Tech', subcategory: 'Command, Control & Comms', section: 'TECH', subsection: 'Command, Control & Comms', priorityNumber: 23 },
   { title: 'ISTAR fusion at RAF Waddington', nickname: '', subtitle: 'Multi-source intelligence fusion centre at the RAF\'s ISR hub', category: 'Tech', subcategory: 'Command, Control & Comms', section: 'TECH', subsection: 'Command, Control & Comms', priorityNumber: 24 },
@@ -1103,7 +1102,7 @@ const LEADS = [
   { title: 'Permanent Joint Headquarters', nickname: 'PJHQ', subtitle: 'Coordinates UK military operations from Northwood.', category: 'Bases', subcategory: 'UK Active', section: 'BASES', subsection: 'UK Active' },
   { title: 'Defence Intelligence', nickname: '', subtitle: 'Provides all-source intelligence to support UK defence operations.', category: 'Roles', subcategory: 'Intelligence Officer', section: 'ROLES', subsection: 'Intelligence Officer' },
 
-  { title: 'FOX DEFENDER', nickname: '', subtitle: 'A multinational exercise in Qatar enhancing air support coordination with allies.', category: 'Missions', subcategory: 'NATO Standing Operations', section: 'MISSIONS', subsection: 'NATO Standing Operations' },
+  { title: 'Operation FOX DEFENDER', nickname: '', subtitle: 'A multinational exercise in Qatar enhancing air support coordination with allies.', category: 'Missions', subcategory: 'NATO Standing Operations', section: 'MISSIONS', subsection: 'NATO Standing Operations' },
   { title: 'Air Land Integration Cell', nickname: '', subtitle: 'Trains RAF personnel in air and ground force coordination at RAF Coningsby.', category: 'Training', subcategory: 'Tactical & Combat Training', section: 'TRAINING', subsection: 'Tactical & Combat Training' },
 
   { title: 'Joint Air Traffic Control Course', nickname: '', subtitle: 'A key RAF program delivering foundational and advanced air traffic management skills.', category: 'Training', subcategory: 'Ground Training & PME', section: 'TRAINING', subsection: 'Ground Training & PME' },
@@ -1119,12 +1118,11 @@ const LEADS = [
   { title: 'Quick Reaction Alert', nickname: '', subtitle: 'Typhoon squadrons ready for rapid interception of unidentified aircraft.', category: 'Roles', subcategory: 'Fast Jet Pilot', section: 'ROLES', subsection: 'Fast Jet Pilot' },
 
   { title: 'Project Centurion', nickname: '', subtitle: 'A £425 million upgrade programme for RAF Typhoons enhancing precision ground attack capabilities.', category: 'Tech', subcategory: 'Future Programmes', section: 'TECH', subsection: 'Future Programmes' },
-  { title: 'Storm Shadow', nickname: '', subtitle: 'A long-range, stealthy air-launched cruise missile used by RAF Typhoons.', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems' },
 
   { title: 'Short Takeoff and Vertical Landing', nickname: '', subtitle: 'STOVL capability allows F-35B operations from carriers and expeditionary bases.', category: 'Tech', subcategory: 'Future Programmes', section: 'TECH', subsection: 'Future Programmes' },
 
   { title: 'No. 35 Squadron', nickname: '', subtitle: 'Operates the Airbus A400M Atlas for strategic and tactical air transport.', category: 'Squadrons', subcategory: 'Active Front-Line', section: 'SQUADRONS', subsection: 'Active Front-Line' },
-  { title: 'Operation Ruman', nickname: '', subtitle: 'A humanitarian response by the RAF to Hurricane Irma in 2017.', category: 'Missions', subcategory: 'Humanitarian & NEO', section: 'MISSIONS', subsection: 'Humanitarian & NEO' },
+  { title: 'Operation RUMAN', nickname: '', subtitle: 'A humanitarian response by the RAF to Hurricane Irma in 2017.', category: 'Missions', subcategory: 'Humanitarian & NEO', section: 'MISSIONS', subsection: 'Humanitarian & NEO' },
 
 
   { title: 'Joint Helicopter Command', nickname: 'JHC', subtitle: 'Command structure centralizing battlefield helicopter operations across the RAF, Army, and Navy.', category: 'Roles', subcategory: 'Rotary Wing Pilot', section: 'ROLES', subsection: 'Rotary Wing Pilot' },
@@ -1168,7 +1166,6 @@ const LEADS = [
   { title: 'Ramjet Propulsion', nickname: '', subtitle: 'A high-speed air-breathing engine used for advanced missile systems.', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems' },
   { title: 'No-Escape Zone', nickname: '', subtitle: 'An area where targets cannot evade missile interception by the RAF.', category: 'Terminology', subcategory: 'Flying & Tactical', section: 'TERMINOLOGY', subsection: 'Flying & Tactical' },
 
-  { title: 'AIM-132 ASRAAM', nickname: '', subtitle: 'Short range air-to-air missile used by the RAF for close combat.', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems' },
 
   { title: 'Cobham 905E', nickname: '', subtitle: 'Refuelling pod used on RAF Voyager aircraft, compatible with over 100 aircraft types.', category: 'Tech', subcategory: 'Weapons Systems', section: 'TECH', subsection: 'Weapons Systems' },
 

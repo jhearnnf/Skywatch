@@ -99,18 +99,25 @@ function buildDescriptionSectionsSpec({ strict = true, shape = 'raf-asset' } = {
       break;
   }
 
+  // Each section is an object: { heading, body }. heading is a 2–5 word
+  // subject-matter label (not "Section 1" / "Paragraph 1"); body is the
+  // written content. Section 4 MUST have an empty heading — it's the
+  // name-free flashcard-recall summary and is rendered without a heading.
+  const headingSpec = (suffix) => `"heading": "2–5 word topic label that summarises what this ${suffix.toLowerCase()} covers (plain text, no punctuation at the end, no markdown). Examples: \\"Role and Structure\\", \\"Service History\\", \\"Operational Reach\\". Do NOT use generic labels like \\"Introduction\\" or \\"Overview\\"."`;
+  const bodySpec = (copy) => `"body": "${copy}"`;
+
   const array = [
-    `"${label} 1 — 50–80 words. Use clear, well-structured text. ${s1Intro}"`,
-    `"${label} 2 — 50–80 words. ${s2}"`,
-    `"${label} 3 — 50–80 words. ${s3}"`,
-    `"${label} 4 — 1–2 sentences only${s4Omit}. A concise summary of ${s4Focus}. ${s4BlindRule}"`,
+    `{\n      ${headingSpec(`${label} 1`)},\n      ${bodySpec(`${label} 1 — 50–80 words. Use clear, well-structured text. ${s1Intro}`)}\n    }`,
+    `{\n      ${headingSpec(`${label} 2`)},\n      ${bodySpec(`${label} 2 — 50–80 words. ${s2}`)}\n    }`,
+    `{\n      ${headingSpec(`${label} 3`)},\n      ${bodySpec(`${label} 3 — 50–80 words. ${s3}`)}\n    }`,
+    `{\n      "heading": "",\n      ${bodySpec(`${label} 4 — 1–2 sentences only${s4Omit}. A concise summary of ${s4Focus}. ${s4BlindRule}`)}\n    }`,
   ].join(',\n    ');
 
   const countRule = strict
-    ? 'descriptionSections must be a JSON array of EXACTLY 4 strings — no more, no fewer. Total word count across sections 1–3 must not exceed 220 words.'
-    : 'descriptionSections must be a JSON array of 2–4 strings. Total word count across all sections must not exceed 240 words.';
+    ? 'descriptionSections must be a JSON array of EXACTLY 4 objects — no more, no fewer. Each object has a "heading" (2–5 words; empty string for section 4) and a "body" (the prose). Total word count across bodies of sections 1–3 must not exceed 220 words.'
+    : 'descriptionSections must be a JSON array of 2–4 objects. Each object has a "heading" (2–5 words; empty string on the final section) and a "body" (the prose). Total word count across all bodies must not exceed 240 words.';
 
-  const sharedRuleTail = 'Section 4 must be 1–2 sentences and must not contain the subject\'s name or any unique identifier. Write each section as readable prose or formatted text. IMPORTANT: when listing multiple items (features, roles, bases, capabilities, etc.) put each item on its own line using \\n escape sequences inside the JSON string, with each item prefixed by "- " (e.g. "Intro sentence:\\n- Item one\\n- Item two\\n- Item three"). Use "1." prefixes for ordered steps. Never use markdown bold/italic or headers. Plain prose is fine for flowing narrative — only use the list format when genuinely listing discrete items. DATE FORMAT: any dates written in prose must use UK format — day before month — e.g. "3rd March 2026" or "14 January 2025", never "March 3rd 2026" or "January 14, 2025".';
+  const sharedRuleTail = 'The final section must be 1–2 sentences with an empty "heading" and must not contain the subject\'s name or any unique identifier in its "body". Write each "body" as readable prose or formatted text. IMPORTANT: when listing multiple items (features, roles, bases, capabilities, etc.) put each item on its own line within the body using \\n escape sequences inside the JSON string, with each item prefixed by "- " (e.g. "Intro sentence:\\n- Item one\\n- Item two\\n- Item three"). Use "1." prefixes for ordered steps. Never use markdown bold/italic or headers inside the body (the "heading" field is the section title — do not repeat it in the body). Plain prose is fine for flowing narrative — only use the list format when genuinely listing discrete items. DATE FORMAT: any dates written in prose must use UK format — day before month — e.g. "3rd March 2026" or "14 January 2025", never "March 3rd 2026" or "January 14, 2025".';
 
   return { array, countRule, sharedRuleTail };
 }

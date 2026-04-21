@@ -196,6 +196,22 @@ export function invalidateSoundSettings() {
   fetchSettings()
 }
 
+// Warm the browser's audio cache for a specific sound so the first playSound()
+// call lands without file-fetch latency. Safe to call repeatedly — only the
+// first call per name actually allocates an Audio element.
+const preloadedAudio = new Map()
+
+export function preloadSound(name) {
+  if (preloadedAudio.has(name)) return
+  let file
+  if (name === 'flashcard_collect') file = 'flashcard_collect.mp3'
+  else return
+  const audio = new Audio(`/sounds/${file}`)
+  audio.preload = 'auto'
+  audio.load()
+  preloadedAudio.set(name, audio)
+}
+
 // Stop the current sound immediately and drain the pending queue
 export function stopAllSounds() {
   for (const entry of queue) entry.resolve()

@@ -8,6 +8,7 @@ const AirstarLog = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold } = require('../utils/awardCoins');
 const { effectiveTier, getAccessibleCategories, isPathwayUnlocked, getPathwayAccessibleCategories, buildCumulativeThresholds } = require('../utils/subscription');
 const { enrichWithMatchTerms } = require('../utils/mentionedBriefs');
+const { normalizeSections, sectionBody } = require('../utils/descriptionSections');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
 require('../models/GameQuizQuestion');
 const GameSessionQuizAttempt = require('../models/GameSessionQuizAttempt');
@@ -397,8 +398,8 @@ router.get('/history', protect, async (req, res) => {
         lastReadAt:       r.lastReadAt,
       };
       if (flashcard) {
-        const sections = r.intelBriefId?.descriptionSections ?? [];
-        base.flashcardQuestion = sections[3] ?? null;
+        const sections = normalizeSections(r.intelBriefId?.descriptionSections);
+        base.flashcardQuestion = sections[3]?.body ?? null;
       }
       return base;
     });

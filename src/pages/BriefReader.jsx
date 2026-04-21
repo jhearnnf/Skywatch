@@ -10,7 +10,7 @@ import { requiredTier } from '../utils/subscription'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
-import { playSound, stopAllSounds, playGridRevealTone } from '../utils/sound'
+import { playSound, stopAllSounds, playGridRevealTone, preloadSound } from '../utils/sound'
 import RafBasesMap from '../components/RafBasesMap'
 import { buildImageZones, isRealImageTitle } from '../utils/briefImageZones'
 import RankBadge from '../components/RankBadge'
@@ -19,6 +19,7 @@ import SEO from '../components/SEO'
 import CategoryHeader from '../components/CategoryHeader'
 import { MOCK_RANKS } from '../data/mockData'
 import { PENDING_BRIEF_KEY, BRIEF_COINS_KEY, BRIEF_JUST_COMPLETED_KEY, tutorialKey } from '../utils/storageKeys'
+import { normalizeSections, sectionBody } from '../utils/descriptionSections'
 
 // Render **bold** markdown syntax as <strong> spans
 function renderBoldMarkdown(text) {
@@ -294,7 +295,7 @@ function ImageGridReveal({ src, isFirstSeen, alt, imgClassName, imgStyle }) {
 }
 
 // ── Section card (image zone + stat + text) ───────────────────────────────
-function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, sectionIdx, total, isLast, suppressFlashcard, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial }) {
+function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, sectionIdx, total, isLast, suppressFlashcard, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, heading, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial }) {
   const hasBases = (highlightedBaseNames ?? []).length > 0
   const statTapOrigin = useRef(null)
 
@@ -508,7 +509,16 @@ function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, se
       )}
 
       <div className="p-5">
-        <SectionText text={text} keywords={keywords} learnedKws={learnedKws} onKeywordTap={onKeywordTap} />
+        {heading && (
+          <h3 className="text-lg font-bold text-text leading-snug mb-3">{heading}</h3>
+        )}
+        {/* Body inset from the heading's left edge — creates a classic hanging-
+            heading hierarchy where the heading "owns" the full width and the
+            body nests beneath it. Reduces line length from ~73 → ~65 chars,
+            still comfortably in the 45–75 ideal range. */}
+        <div className="pl-3">
+          <SectionText text={text} keywords={keywords} learnedKws={learnedKws} onKeywordTap={onKeywordTap} />
+        </div>
       </div>
     </div>
   )
@@ -696,13 +706,12 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
         <button
           key={i}
           onClick={() => onKeywordTap(seg.keyword)}
-          className={`inline rounded px-0.5 -mx-0.5 font-semibold transition-all
-            border-b-2 focus:outline-none cursor-pointer
+          className={`inline font-medium transition-colors border-b border-dashed focus:outline-none cursor-pointer
             ${learned
-              ? 'text-emerald-700/70 border-emerald-300/60 bg-emerald-50/30'
+              ? 'text-emerald-600/80 border-emerald-600/40'
               : linked
-                ? 'text-amber-600/60 border-amber-200/40 bg-amber-50/20 hover:bg-amber-50/35 hover:border-amber-200/50'
-                : 'text-brand-700 border-brand-300/70 bg-brand-50/50 hover:bg-brand-50/80 hover:border-brand-300'
+                ? 'text-amber-700 border-amber-700/50 hover:border-amber-700'
+                : 'text-brand-600 border-brand-500/60 hover:border-brand-600'
             }`}
         >
           {seg.content}
@@ -721,21 +730,57 @@ function SectionText({ text, keywords, learnedKws, onKeywordTap }) {
     })
   }
 
+  // Split the first N whitespace-delimited tokens off the front of a paragraph.
+  // Preserves bold markers (**foo**) as a single token so we never slice mid-
+  // markdown. Returns null if the paragraph is too short to bother.
+  function splitLeadIn(str, wordCount = 4) {
+    const trimmed = str.trimStart()
+    const leadPad = str.slice(0, str.length - trimmed.length)
+    const tokens  = []
+    const re      = /\*\*[^*]+\*\*|\S+/g
+    let m
+    while ((m = re.exec(trimmed)) !== null) {
+      tokens.push({ end: m.index + m[0].length })
+      if (tokens.length === wordCount) break
+    }
+    if (tokens.length < wordCount) return null
+    const splitAt = tokens[tokens.length - 1].end
+    return {
+      leadIn: leadPad + trimmed.slice(0, splitAt),
+      rest:   trimmed.slice(splitAt),
+    }
+  }
+
   const blocks = parseSectionBlocks(text)
+  // Find the first paragraph block — that's where the editorial lead-in goes.
+  // If the section opens with a list, we skip the treatment entirely (lists
+  // are already visually distinct enough).
+  const firstParagraphIdx = blocks.findIndex(b => b.type === 'p')
 
   return (
-    <div className="space-y-3 text-base leading-8 text-slate-700">
+    <div className="space-y-4 text-base leading-7 text-text">
       {blocks.map((block, bi) => {
         if (block.type === 'ul') return (
-          <ul key={bi} className="list-disc list-outside pl-5 space-y-1">
+          <ul key={bi} className="list-disc list-outside pl-5 space-y-2">
             {block.items.map((item, ii) => <li key={ii}>{renderInline(item)}</li>)}
           </ul>
         )
         if (block.type === 'ol') return (
-          <ol key={bi} className="list-decimal list-outside pl-5 space-y-1">
+          <ol key={bi} className="list-decimal list-outside pl-5 space-y-2">
             {block.items.map((item, ii) => <li key={ii}>{renderInline(item)}</li>)}
           </ol>
         )
+        if (bi === firstParagraphIdx) {
+          const split = splitLeadIn(block.content, 4)
+          if (split) {
+            return (
+              <p key={bi}>
+                <span className="section-lead-in">{renderInline(split.leadIn)}</span>
+                {renderInline(split.rest)}
+              </p>
+            )
+          }
+        }
         return <p key={bi}>{renderInline(block.content)}</p>
       })}
     </div>
@@ -1722,18 +1767,21 @@ export default function BriefReader() {
     setShowStatTutorial(true)
   }, [brief?._id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sections   = brief?.descriptionSections?.filter(Boolean) ?? []
+  const sections   = normalizeSections(brief?.descriptionSections)
   const total      = sections.length
   const isLast     = sectionIdx >= total - 1
   // News-category briefs hide the flashcard UI entirely when the admin setting is off.
   // The reached-flashcard POST still fires so records persist silently (re-enabling
   // the setting makes them immediately available), but no FlashCard layout, no collect
-  // animation, and no deck notification. The brief header and section progress bar
-  // stay visible on section 4 in this case so it reads like a normal section.
+  // animation, and no deck notification. Chrome (brief header + progress bar) still
+  // minimises on section 4 regardless — the section now uses the brief title as its
+  // heading, so duplicating it in the page header above would be redundant.
   const isNewsFlashcardHidden = brief?.category === 'News' && settings?.newsFlashcardsEnabled === false
-  // Flashcard view = last section AND not hidden. Drives chrome that differs between
-  // normal sections and the flashcard view (header fade, progress-bar hide).
-  const flashcardView = isLast && !isNewsFlashcardHidden
+  // Flashcard view = on the last section. Drives chrome that differs between normal
+  // sections and the final section (header fade, progress-bar hide). Independent of
+  // whether the last section renders as a FlashCard component or as a regular
+  // SectionCard (the News-flashcard-disabled case) — the chrome behaviour is the same.
+  const flashcardView = isLast
   const topOpacity    = flashcardView ? 1 : topFaded ? 0.3 : 1
 
   // Memoised so prevImageZoneRef effect can reference it outside the render IIFE
@@ -1761,6 +1809,7 @@ export default function BriefReader() {
     if (readRecord?.reachedFlashcard || readRecord?.completed) return
     if (isNewsFlashcardHidden) return
     flashcardPreviewFetchedRef.current = true
+    preloadSound('flashcard_collect')
     let cancelled = false
     fetch(`${API}/api/briefs/${brief._id}/reached-flashcard-preview`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
@@ -1916,7 +1965,9 @@ export default function BriefReader() {
       if (user) {
         // Optimistic notification: if we pre-fetched the preview, fire the airstars
         // animation immediately so the reward lands on the same beat as the swipe.
-        const preview       = rewardPreview
+        // Skip on re-read — coins are already awarded server-side and stale rewardPreview
+        // from the first read would otherwise fire a phantom client-only award.
+        const preview       = reReadMode ? null : rewardPreview
         const previewTotal  = preview ? (preview.airstarsEarned + preview.dailyCoinsEarned) : 0
         const previewUnlocks = preview?.unlockedCategories ?? []
         if (preview && previewTotal > 0) {
@@ -2227,7 +2278,7 @@ export default function BriefReader() {
         quizPassed={quizPassed}
         booState={booState}
         gameStatusLoading={gameStatusLoading}
-        onReRead={() => { localStorage.removeItem(`sw_brief_sec_${briefId}`); setReReadMode(true); setSection(0); setNavDir(1) }}
+        onReRead={() => { localStorage.removeItem(`sw_brief_sec_${briefId}`); setReReadMode(true); setSection(0); setNavDir(1); setRewardPreview(null); previewNotifiedRef.current = false }}
         navigate={navigate}
         quizAvailable={quizAvailable}
       />
@@ -2343,7 +2394,7 @@ export default function BriefReader() {
           booState={booState}
           onBattleOrder={booState === 'available' || booState === 'completed' ? () => navigate(`/battle-of-order/${briefId}`) : null}
           onBack={() => navigate('/learn-priority', { state: { category: brief?.category } })}
-          onReRead={() => { localStorage.removeItem(`sw_brief_sec_${briefId}`); setDone(false); setReReadMode(true); setSection(0); setNavDir(1) }}
+          onReRead={() => { localStorage.removeItem(`sw_brief_sec_${briefId}`); setDone(false); setReReadMode(true); setSection(0); setNavDir(1); setRewardPreview(null); previewNotifiedRef.current = false }}
           navigate={navigate}
           quizPassed={quizPassed}
           quizAvailable={quizAvailable}
@@ -2460,7 +2511,16 @@ export default function BriefReader() {
                     subtitle={brief.subtitle}
                     category={brief.category}
                     subcategory={brief.subcategory}
-                    text={sections[sectionIdx]}
+                    heading={
+                      // News briefs with the flashcard UI disabled render
+                      // section 4 as a normal card — fall back to the brief
+                      // title so it has a visual anchor (the flashcard view,
+                      // when shown, already displays the title prominently).
+                      isLast && isNewsFlashcardHidden
+                        ? brief.title
+                        : (sections[sectionIdx]?.heading ?? '')
+                    }
+                    text={sections[sectionIdx]?.body ?? ''}
                     keywords={kwList}
                     learnedKws={learnedKws}
                     onKeywordTap={handleKeywordTap}
@@ -2486,7 +2546,7 @@ export default function BriefReader() {
 
           {/* Keyword hint — first section only */}
           {sectionIdx === 0 && brief.keywords?.some(kw =>
-            sections[sectionIdx]?.toLowerCase().includes(kw.keyword.toLowerCase())
+            (sections[sectionIdx]?.body ?? '').toLowerCase().includes(kw.keyword.toLowerCase())
           ) && (
             <motion.p
               initial={{ opacity: 0 }}
@@ -2531,26 +2591,37 @@ export default function BriefReader() {
             />
           </motion.div>
 
-          {/* Sources */}
-          {brief.sources?.length > 0 && (
-            <motion.div layout transition={{ layout: { duration: 0.35, ease: 'easeInOut' } }} className="mt-6 pt-4 border-t border-slate-100">
-              <p className="text-xs text-slate-300 mb-1">Sources</p>
-              <div className="space-y-0.5">
-                {brief.sources.map((s, i) => (
-                  <a
-                    key={i}
-                    href={s.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-xs text-slate-300 hover:text-slate-400 truncate"
-                  >
-                    {s.siteName || s.url}
-                    {s.articleDate && <span className="ml-1">· {new Date(s.articleDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
-                  </a>
-                ))}
-              </div>
-            </motion.div>
-          )}
+          {/* Sources + Report an issue */}
+          <motion.div layout transition={{ layout: { duration: 0.35, ease: 'easeInOut' } }} className="mt-6 pt-4 border-t border-slate-100 flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              {brief.sources?.length > 0 && (
+                <>
+                  <p className="text-xs text-slate-300 mb-1">Sources</p>
+                  <div className="space-y-0.5">
+                    {brief.sources.map((s, i) => (
+                      <a
+                        key={i}
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-xs text-slate-300 hover:text-slate-400 truncate"
+                      >
+                        {s.siteName || s.url}
+                        {s.articleDate && <span className="ml-1">· {new Date(s.articleDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                      </a>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate(`/report?briefId=${brief._id}`)}
+              className="shrink-0 text-xs text-slate-300 hover:text-slate-400"
+            >
+              Report an issue
+            </button>
+          </motion.div>
           </LayoutGroup>
         </>
       )}

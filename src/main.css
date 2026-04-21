@@ -171,6 +171,18 @@ body::before {
   font-weight: 600;
 }
 
+/* Editorial lead-in on the first few words of a section's first paragraph.
+   Real small-caps (via OpenType) + slight weight bump + tracking — gives the
+   eye an anchor to land on without the volume of uppercase labels used
+   elsewhere in the app. Body tone is preserved so the lead-in flows into
+   normal prose rather than reading as a heading. */
+.section-lead-in {
+  font-variant-caps: all-small-caps;
+  font-feature-settings: "smcp", "c2sc";
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 /* Small "CLASSIFIED" tag */
 .classified-tag {
   font-family: var(--font-family-mono);

@@ -175,7 +175,23 @@ function StatCard({ label, value, sub, color = 'slate' }) {
 // STATS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function StatsTab({ API }) {
+function StatsSection({ title, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <section>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between text-left mb-3"
+      >
+        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">{title}</h3>
+        <span className="text-slate-400 text-xs ml-2">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && children}
+    </section>
+  )
+}
+
+function StatsTab({ API, onViewEmailLog }) {
   const { apiFetch } = useAuth()
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
@@ -216,8 +232,7 @@ function StatsTab({ API }) {
   return (
     <div className="space-y-8">
       {/* Users */}
-      <section>
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Users</h3>
+      <StatsSection title="Users" defaultOpen>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="Total Users"      value={fmtNum(users.totalUsers)}       color="brand" />
           <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate" />
@@ -230,86 +245,26 @@ function StatsTab({ API }) {
           <StatCard label="Total Logins"     value={fmtNum(users.totalLogins)}       color="slate" />
           <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate" />
         </div>
-      </section>
-
-      {/* Quiz */}
-      <section>
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Quiz</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Played"           value={fmtNum(games.totalGamesPlayed)}  color="brand" />
-          <StatCard label="Completed"        value={fmtNum(games.totalGamesCompleted)} color="slate" />
-          <StatCard label="Perfect Score"    value={pct(games.totalPerfectScores, games.totalGamesCompleted)} color="emerald" />
-          <StatCard label="Abandoned"        value={pct(games.totalGamesAbandoned, games.totalGamesPlayed)} color="red" />
-        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <StatCard label="Time Played"      value={fmtSeconds(games.quizTotalSeconds)} color="slate" />
-          <StatCard label="Pass Rate"        value={pct(games.totalGamesWon, games.totalGamesCompleted)} color="emerald" />
-          <StatCard label="Failed Quizzes"   value={pct(games.totalGamesLost, games.totalGamesCompleted)} color="amber" sub={`below pass threshold`} />
+          <button
+            type="button"
+            onClick={() => onViewEmailLog?.('sent')}
+            className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-brand-300 rounded-2xl"
+          >
+            <StatCard label="Emails Sent"   value={fmtNum(users.emailsSent)}   color="brand" sub="sent successfully" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onViewEmailLog?.('failed')}
+            className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl"
+          >
+            <StatCard label="Emails Failed" value={fmtNum(users.emailsFailed)} color="red" sub="delivery failed" />
+          </button>
         </div>
-      </section>
-
-      {/* Battle of Order */}
-      <section>
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Battle of Order</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Games"     value={fmtNum(games.boo?.total)}                                    color="brand" />
-          <StatCard label="Won"       value={pct(games.boo?.won, games.boo?.total)}                       color="emerald" />
-          <StatCard label="Defeated"  value={pct(games.boo?.defeated, games.boo?.total)}                  color="amber" />
-          <StatCard label="Abandoned" value={pct(games.boo?.abandoned, games.boo?.total)}                 color="red" />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <StatCard label="Time Played" value={fmtSeconds(games.boo?.totalSeconds)} color="slate" />
-        </div>
-      </section>
-
-      {/* Where's That Aircraft */}
-      <section>
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Where's That Aircraft</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Games"       value={fmtNum(games.wta?.total)}                                     color="brand" />
-          <StatCard label="Won"         value={pct(games.wta?.won, games.wta?.total)}                        color="emerald" />
-          <StatCard label="Abandoned"   value={pct(games.wta?.abandoned, games.wta?.total)}                  color="red" />
-          <StatCard label="Time Played" value={fmtSeconds(games.wta?.totalSeconds)}                          color="slate" />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <StatCard label="R1 Correct (ID)"    value={pct(games.wta?.round1Correct, games.wta?.total)}  color="amber" sub="Aircraft identified" />
-          <StatCard label="R2 Correct (Base)"  value={pct(games.wta?.round2Correct, games.wta?.total)}  color="amber" sub="Base located" />
-        </div>
-      </section>
-
-
-      {/* Flashcard Recall */}
-      <section>
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Flashcard Recall</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Sessions"    value={fmtNum(games.flashcard?.sessions)}                                                                        color="brand" />
-          <StatCard label="Cards Total" value={fmtNum(games.flashcard?.totalCards)}                                                                      color="slate" />
-          <StatCard label="Recalled"    value={pct(games.flashcard?.recalled, games.flashcard?.totalCards)}                                              color="emerald" />
-          <StatCard label="Missed"      value={pct((games.flashcard?.totalCards ?? 0) - (games.flashcard?.recalled ?? 0), games.flashcard?.totalCards)}  color="red" />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <StatCard label="Time Played" value={fmtSeconds(games.flashcard?.totalSeconds)} color="slate" />
-          <StatCard label="Abandoned"   value={fmtNum(games.flashcard?.abandoned)}        color="red" />
-        </div>
-      </section>
-
-      {/* Aptitude Sync */}
-      <section>
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Aptitude Sync</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Sessions"  value={fmtNum(games.aptitudeSync?.total)}                                         color="brand" />
-          <StatCard label="Completed" value={pct(games.aptitudeSync?.completed, games.aptitudeSync?.total)}             color="emerald" />
-          <StatCard label="Abandoned" value={pct(games.aptitudeSync?.abandoned, games.aptitudeSync?.total)}             color="red" />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <StatCard label="Airstars Earned" value={fmtNum(games.aptitudeSync?.airstarsEarned)} color="amber" sub="across all sessions" />
-          <StatCard label="Avg per Session" value={fmtNum(games.aptitudeSync?.completed ? Math.round((games.aptitudeSync?.airstarsEarned ?? 0) / games.aptitudeSync.completed) : 0)} color="slate" sub="completed sessions" />
-        </div>
-      </section>
+      </StatsSection>
 
       {/* OpenRouter API spend */}
-      <section>
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">OpenRouter Spend</h3>
+      <StatsSection title="OpenRouter Spend" defaultOpen>
         {!openRouter ? (
           <div className="py-4 text-center text-slate-400 text-xs animate-pulse">Loading OpenRouter usage…</div>
         ) : (
@@ -348,11 +303,10 @@ function StatsTab({ API }) {
             </button>
           </div>
         )}
-      </section>
+      </StatsSection>
 
       {/* Airstars + Briefs + Tutorials */}
-      <section>
-        <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-3">Economy & Content</h3>
+      <StatsSection title="Economy & Content" defaultOpen>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="Airstars in System" value={fmtNum(games.totalAirstarsEarned)}       color="amber" />
           <StatCard label="Briefs Read"        value={fmtNum(briefs.totalBrifsRead)}           color="brand" />
@@ -363,7 +317,76 @@ function StatsTab({ API }) {
           <StatCard label="Uptime Since Deploy"  value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="emerald" />
           <StatCard label="Total Loading Time"  value={fmtSeconds(Math.round((server?.totalLoadingMs ?? 0) / 1000))} color="brand" sub="cumulative user fetch wait" />
         </div>
-      </section>
+      </StatsSection>
+
+      {/* Quiz */}
+      <StatsSection title="Quiz">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Played"           value={fmtNum(games.totalGamesPlayed)}  color="brand" />
+          <StatCard label="Completed"        value={fmtNum(games.totalGamesCompleted)} color="slate" />
+          <StatCard label="Perfect Score"    value={pct(games.totalPerfectScores, games.totalGamesCompleted)} color="emerald" />
+          <StatCard label="Abandoned"        value={pct(games.totalGamesAbandoned, games.totalGamesPlayed)} color="red" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="Time Played"      value={fmtSeconds(games.quizTotalSeconds)} color="slate" />
+          <StatCard label="Pass Rate"        value={pct(games.totalGamesWon, games.totalGamesCompleted)} color="emerald" />
+          <StatCard label="Failed Quizzes"   value={pct(games.totalGamesLost, games.totalGamesCompleted)} color="amber" sub={`below pass threshold`} />
+        </div>
+      </StatsSection>
+
+      {/* Battle of Order */}
+      <StatsSection title="Battle of Order">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Games"     value={fmtNum(games.boo?.total)}                                    color="brand" />
+          <StatCard label="Won"       value={pct(games.boo?.won, games.boo?.total)}                       color="emerald" />
+          <StatCard label="Defeated"  value={pct(games.boo?.defeated, games.boo?.total)}                  color="amber" />
+          <StatCard label="Abandoned" value={pct(games.boo?.abandoned, games.boo?.total)}                 color="red" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="Time Played" value={fmtSeconds(games.boo?.totalSeconds)} color="slate" />
+        </div>
+      </StatsSection>
+
+      {/* Where's That Aircraft */}
+      <StatsSection title="Where's That Aircraft">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Games"       value={fmtNum(games.wta?.total)}                                     color="brand" />
+          <StatCard label="Won"         value={pct(games.wta?.won, games.wta?.total)}                        color="emerald" />
+          <StatCard label="Abandoned"   value={pct(games.wta?.abandoned, games.wta?.total)}                  color="red" />
+          <StatCard label="Time Played" value={fmtSeconds(games.wta?.totalSeconds)}                          color="slate" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="R1 Correct (ID)"    value={pct(games.wta?.round1Correct, games.wta?.total)}  color="amber" sub="Aircraft identified" />
+          <StatCard label="R2 Correct (Base)"  value={pct(games.wta?.round2Correct, games.wta?.total)}  color="amber" sub="Base located" />
+        </div>
+      </StatsSection>
+
+      {/* Flashcard Recall */}
+      <StatsSection title="Flashcard Recall">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Sessions"    value={fmtNum(games.flashcard?.sessions)}                                                                        color="brand" />
+          <StatCard label="Cards Total" value={fmtNum(games.flashcard?.totalCards)}                                                                      color="slate" />
+          <StatCard label="Recalled"    value={pct(games.flashcard?.recalled, games.flashcard?.totalCards)}                                              color="emerald" />
+          <StatCard label="Missed"      value={pct((games.flashcard?.totalCards ?? 0) - (games.flashcard?.recalled ?? 0), games.flashcard?.totalCards)}  color="red" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="Time Played" value={fmtSeconds(games.flashcard?.totalSeconds)} color="slate" />
+          <StatCard label="Abandoned"   value={fmtNum(games.flashcard?.abandoned)}        color="red" />
+        </div>
+      </StatsSection>
+
+      {/* Aptitude Sync */}
+      <StatsSection title="Aptitude Sync">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Sessions"  value={fmtNum(games.aptitudeSync?.total)}                                         color="brand" />
+          <StatCard label="Completed" value={pct(games.aptitudeSync?.completed, games.aptitudeSync?.total)}             color="emerald" />
+          <StatCard label="Abandoned" value={pct(games.aptitudeSync?.abandoned, games.aptitudeSync?.total)}             color="red" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard label="Airstars Earned" value={fmtNum(games.aptitudeSync?.airstarsEarned)} color="amber" sub="across all sessions" />
+          <StatCard label="Avg per Session" value={fmtNum(games.aptitudeSync?.completed ? Math.round((games.aptitudeSync?.airstarsEarned ?? 0) / games.aptitudeSync.completed) : 0)} color="slate" sub="completed sessions" />
+        </div>
+      </StatsSection>
     </div>
   )
 }
@@ -394,9 +417,10 @@ const SOUND_GROUPS = [
   {
     title: 'Rewards',
     sounds: [
-      { key: 'volumeAirstar',       enabledKey: 'soundEnabledAirstar',       label: 'Airstars Earned', sound: 'airstar'        },
-      { key: 'volumeLevelUp',       enabledKey: 'soundEnabledLevelUp',       label: 'Level Up',        sound: 'level_up'       },
-      { key: 'volumeRankPromotion', enabledKey: 'soundEnabledRankPromotion', label: 'Rank Promotion',  sound: 'rank_promotion' },
+      { key: 'volumeAirstar',          enabledKey: 'soundEnabledAirstar',          label: 'Airstars Earned',   sound: 'airstar'           },
+      { key: 'volumeLevelUp',          enabledKey: 'soundEnabledLevelUp',          label: 'Level Up',          sound: 'level_up'          },
+      { key: 'volumeRankPromotion',    enabledKey: 'soundEnabledRankPromotion',    label: 'Rank Promotion',    sound: 'rank_promotion'    },
+      { key: 'volumeCategoryUnlocked', enabledKey: 'soundEnabledCategoryUnlocked', label: 'Category Unlocked', sound: 'category_unlocked' },
     ],
   },
   {
@@ -480,9 +504,19 @@ function Toggle({ label, hint, checked, onChange }) {
 
 const OUT_OF_AMMO_VARIANTS = ['out_of_ammo_1', 'out_of_ammo_2', 'out_of_ammo_3']
 
+// Shared across rows: only one preview MP3 plays at a time.
+let _currentPreviewAudio = null
+function stopCurrentPreviewAudio() {
+  if (_currentPreviewAudio) {
+    try { _currentPreviewAudio.pause(); _currentPreviewAudio.currentTime = 0 } catch {}
+    _currentPreviewAudio = null
+  }
+}
+
 function SoundRowV2({ label, sound, value, onChange, enabled, onToggle, durationValue, onDurationChange, durationMax = 50, durationDefault = 12 }) {
   const preview = () => {
     invalidateSoundSettings()
+    stopCurrentPreviewAudio()
     if (sound === '__typing__') {
       previewTypingSound(value ?? 30, durationValue)
       return
@@ -497,6 +531,10 @@ function SoundRowV2({ label, sound, value, onChange, enabled, onToggle, duration
         : sound
       const audio = new Audio(`/sounds/${file}.mp3`)
       audio.volume = Math.min(1, (value ?? 100) / 100)
+      audio.addEventListener('ended', () => {
+        if (_currentPreviewAudio === audio) _currentPreviewAudio = null
+      })
+      _currentPreviewAudio = audio
       audio.play().catch(() => {})
     } catch {}
   }
@@ -1931,7 +1969,7 @@ function SubscriptionTierRow({ u, action }) {
 }
 
 function UsersTab({ API }) {
-  const { refreshUser, apiFetch } = useAuth()
+  const { user: currentUser, refreshUser, apiFetch } = useAuth()
   const [users,   setUsers]   = useState([])
   const [q,       setQ]       = useState('')
   const [loading, setLoading] = useState(true)
@@ -2068,24 +2106,28 @@ function UsersTab({ API }) {
                   Make Admin
                 </button>
               )}
-              {u.isAdmin && (
+              {u.isAdmin && u._id !== currentUser?._id && (
                 <button onClick={() => action(`Remove admin — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}/remove-admin`)}
                   className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold transition-colors">
                   Remove Admin
                 </button>
               )}
-              <button onClick={() => action(`${u.isBanned ? 'Unban' : 'Ban'} — Agent ${u.agentNumber}`, u.isBanned ? `/api/admin/users/${u._id}/unban` : `/api/admin/users/${u._id}/ban`)}
-                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors
-                  ${u.isBanned
-                    ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
-                    : 'border-red-200 text-red-600 hover:bg-red-50'
-                  }`}>
-                {u.isBanned ? 'Unban' : 'Ban'}
-              </button>
-              <button onClick={() => action(`Delete account — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}`, 'DELETE')}
-                className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors">
-                Delete
-              </button>
+              {u._id !== currentUser?._id && (
+                <button onClick={() => action(`${u.isBanned ? 'Unban' : 'Ban'} — Agent ${u.agentNumber}`, u.isBanned ? `/api/admin/users/${u._id}/unban` : `/api/admin/users/${u._id}/ban`)}
+                  className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors
+                    ${u.isBanned
+                      ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
+                      : 'border-red-200 text-red-600 hover:bg-red-50'
+                    }`}>
+                  {u.isBanned ? 'Unban' : 'Ban'}
+                </button>
+              )}
+              {u._id !== currentUser?._id && (
+                <button onClick={() => action(`Delete account — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}`, 'DELETE')}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors">
+                  Delete
+                </button>
+              )}
               <button onClick={() => setTierPanel(tierPanel === u._id ? null : u._id)}
                 className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
                   tierPanel === u._id
@@ -2243,7 +2285,7 @@ function UsersTab({ API }) {
 // PROBLEMS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ProblemsTab({ API }) {
+function ProblemsTab({ API, onOpenBrief }) {
   const { apiFetch } = useAuth()
   const { refresh: refreshUnsolvedCount } = useUnsolvedReports()
   const [problems, setProblems] = useState([])
@@ -2384,6 +2426,17 @@ function ProblemsTab({ API }) {
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-slate-400 mb-0.5">{p.pageReported || 'Unknown page'} · {new Date(p.time).toLocaleDateString('en-GB')}</p>
                 <p className="text-sm font-semibold text-slate-100 line-clamp-2">{p.description}</p>
+                {p.intelligenceBrief && (
+                  <span
+                    role="link"
+                    tabIndex={0}
+                    onClick={e => { e.stopPropagation(); onOpenBrief?.(String(p.intelligenceBrief._id ?? p.intelligenceBrief)) }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpenBrief?.(String(p.intelligenceBrief._id ?? p.intelligenceBrief)) } }}
+                    className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-900/30 text-amber-300 hover:bg-amber-800/40 cursor-pointer"
+                  >
+                    ⚑ Brief: {p.intelligenceBrief.title ?? String(p.intelligenceBrief).slice(-6)}
+                  </span>
+                )}
               </div>
               <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${p.solved ? 'bg-emerald-900/40 text-emerald-300' : 'bg-red-900/40 text-red-300'}`}>
                 {p.solved ? 'Solved' : 'Open'}
@@ -2929,11 +2982,29 @@ const BRIEF_SUBCATEGORIES = {
   Actors: ['Heads of State & Government','Defence & Military Leadership','Adversary Commanders','Non-State & Proxy Leaders','Allied & Coalition Leaders','Historic RAF Personnel'],
 }
 
+// Canonical empty descriptionSections row — {heading, body} object.
+const EMPTY_SECTION_ROW = () => ({ heading: '', body: '' })
+// Normalize any descriptionSections payload (legacy strings or {heading, body})
+// to the canonical editor shape so the draft state is always consistent.
+function normalizeDraftSections(sections) {
+  if (!Array.isArray(sections) || sections.length === 0) {
+    return [EMPTY_SECTION_ROW(), EMPTY_SECTION_ROW(), EMPTY_SECTION_ROW()]
+  }
+  return sections.map(s => {
+    if (typeof s === 'string') return { heading: '', body: s }
+    return {
+      heading: typeof s?.heading === 'string' ? s.heading : '',
+      body:    typeof s?.body    === 'string' ? s.body    : '',
+    }
+  })
+}
+
 const EMPTY_DRAFT = {
   title: '', nickname: '', subtitle: '', category: 'News', subcategory: '', historic: false, eventDate: null,
   priorityNumber: null,
   status: 'published',
-  descriptionSections: ['', '', ''],
+  flaggedForEdit: false,
+  descriptionSections: [EMPTY_SECTION_ROW(), EMPTY_SECTION_ROW(), EMPTY_SECTION_ROW()],
   keywords: [],
   sources: [],
   gameData: {},
@@ -3467,6 +3538,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
   const [resetModal,      setResetModal]      = useState(false)
   const [showCompleted,   setShowCompleted]   = useState(false)
   const [stubBusy,        setStubBusy]        = useState(null)
+  const [syncBusy,        setSyncBusy]        = useState(false)
 
   const toggleSection = (sec) => setOpenSections(prev => {
     const next = new Set(prev); next.has(sec) ? next.delete(sec) : next.add(sec); return next
@@ -3558,6 +3630,45 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
     }
   }
 
+  const syncLeadsFromBriefs = async () => {
+    // Two-step: dry run first, confirm the diff, then write.
+    setSyncBusy(true)
+    try {
+      const dryRes = await apiFetch(`${API}/api/admin/intel-leads/sync-from-briefs?dryRun=true`, {
+        method: 'POST', credentials: 'include',
+      })
+      const dry = await dryRes.json()
+      if (dry.status !== 'success') throw new Error(dry.message ?? 'Dry-run failed')
+
+      if (dry.changedLeads === 0) {
+        alert(`All ${dry.matchedBriefs} matched leads already in sync. ${dry.unmatchedLeads} leads have no matching brief.`)
+        return
+      }
+
+      const ok = window.confirm(
+        `Dry run found ${dry.changedLeads} lead(s) to update, across ${dry.totalLeads} total leads (${dry.unmatchedLeads} unmatched).\n\nProceed with the write?`
+      )
+      if (!ok) return
+
+      const res  = await apiFetch(`${API}/api/admin/intel-leads/sync-from-briefs`, {
+        method: 'POST', credentials: 'include',
+      })
+      const data = await res.json()
+      if (data.status !== 'success') throw new Error(data.message ?? 'Sync failed')
+
+      // Reload leads list so the updated fields show immediately
+      const r = await fetch(`${API}/api/admin/intel-leads`, { credentials: 'include' })
+      const d = await r.json()
+      if (d.status === 'success') setLeads(d.data.leads)
+
+      alert(`Synced ${data.changedLeads} lead(s) from briefs.`)
+    } catch (err) {
+      alert(`Sync error: ${err.message}`)
+    } finally {
+      setSyncBusy(false)
+    }
+  }
+
   const resetLeads = async (reason) => {
     setResetModal(false)
     setResetBusy(true)
@@ -3629,6 +3740,14 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
                 className="text-xs px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition-colors disabled:opacity-50"
               >
                 {resetBusy ? '…Resetting' : '🔄 Reset All Leads & Stubs'}
+              </button>
+              <button
+                onClick={syncLeadsFromBriefs}
+                disabled={syncBusy}
+                className="text-xs px-3 py-1.5 rounded-lg border border-brand-400/60 bg-brand-100 text-brand-600 font-semibold hover:bg-brand-200 transition-colors disabled:opacity-50"
+                title="Overwrite each lead's title/subtitle/nickname/category/subcategory/isHistoric from its matching brief. Dry-run first."
+              >
+                {syncBusy ? '…Syncing' : '↻ Sync Leads From Briefs'}
               </button>
               <button
                 onClick={() => setShowCompleted(v => !v)}
@@ -3769,6 +3888,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [subcategory,   setSubcategory]   = useState('')
   const [sort,          setSort]          = useState('default')
   const [hideStubs,     setHideStubs]     = useState(true)
+  const [flaggedOnly,   setFlaggedOnly]   = useState(false)
   const [toast,         setToast]         = useState('')
   const [showLeads,     setShowLeads]     = useState(false)
   const [showNews,      setShowNews]      = useState(false)
@@ -3777,7 +3897,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     if (openLeads) setShowLeads(true)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   // Editor state
-  const [draft,         setDraft]         = useState({ ...EMPTY_DRAFT, descriptionSections: ['','',''] })
+  const [draft,         setDraft]         = useState({ ...EMPTY_DRAFT, descriptionSections: normalizeDraftSections(null) })
   const [easyQuestions, setEasyQuestions] = useState([])
   const [mediumQuestions,setMediumQuestions] = useState([])
   const [media,         setMedia]         = useState([])
@@ -3918,6 +4038,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       if (category && subcategory) params.set('subcategory', subcategory)
       if (sort && sort !== 'default') params.set('sort', sort)
       if (hideStubs) params.set('hideStubs', 'true')
+      if (flaggedOnly) params.set('flaggedForEdit', 'true')
       const res  = await apiFetch(`${API}/api/admin/briefs?${params}`, { credentials: 'include' })
       const data = await res.json()
       if (data.status === 'success') {
@@ -3927,7 +4048,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     } finally {
       setLoading(false)
     }
-  }, [API, page, search, category, subcategory, sort, hideStubs])
+  }, [API, page, search, category, subcategory, sort, hideStubs, flaggedOnly])
 
   useEffect(() => {
     if (view === 'list') loadList()
@@ -3949,7 +4070,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       eventDate:           br.eventDate ? new Date(br.eventDate).toISOString().slice(0, 10) : null,
       priorityNumber:      br.priorityNumber ?? null,
       status:              br.status ?? 'published',
-      descriptionSections: br.descriptionSections?.length ? br.descriptionSections : ['','',''],
+      flaggedForEdit:      br.flaggedForEdit ?? false,
+      flaggedAt:           br.flaggedAt ?? null,
+      descriptionSections: normalizeDraftSections(br.descriptionSections),
       keywords:            (br.keywords ?? []).map(k => {
         const linked = k.linkedBriefId
         const linkedId = linked?._id ?? linked ?? null
@@ -4024,7 +4147,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const newBrief = () => {
-    setDraft({ ...EMPTY_DRAFT, descriptionSections: ['','',''] })
+    setDraft({ ...EMPTY_DRAFT, descriptionSections: normalizeDraftSections(null) })
     setEasyQuestions([])
     setMediumQuestions([])
     setMedia([])
@@ -4043,7 +4166,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     try {
       const body = {
         ...draft,
-        descriptionSections: draft.descriptionSections.filter(s => s.trim()),
+        descriptionSections: draft.descriptionSections
+          .filter(s => (s?.body ?? '').trim())
+          .map(s => ({ heading: (s.heading ?? '').trim(), body: s.body.trim() })),
         reason: briefId ? 'Admin edit' : 'Admin create',
       }
       const url    = briefId ? `${API}/api/admin/briefs/${briefId}` : `${API}/api/admin/briefs`
@@ -4146,9 +4271,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     const title       = lead ? lead.title : (briefData.title ?? '')  // always use lead title — never the AI-generated one
     const nickname    = lead ? (lead.nickname ?? '') : (briefData.nickname ?? '')
     const subtitle    = briefData.subtitle ?? ''
-    const description = Array.isArray(briefData.descriptionSections)
-      ? briefData.descriptionSections.join('\n\n')
-      : ''
+    const description = normalizeDraftSections(briefData.descriptionSections)
+      .map(s => s.body)
+      .join('\n\n')
 
     setDraft({
       title,
@@ -4160,9 +4285,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       eventDate:           briefData.eventDate ?? null,
       priorityNumber:      lead?.priorityNumber ?? null,
       status:              'published',
-      descriptionSections: Array.isArray(briefData.descriptionSections) && briefData.descriptionSections.length
-        ? briefData.descriptionSections
-        : ['','',''],
+      descriptionSections: normalizeDraftSections(briefData.descriptionSections),
       keywords:                  Array.isArray(briefData.keywords) ? briefData.keywords : [],
       sources:                   Array.isArray(briefData.sources) ? briefData.sources : [],
       gameData:                  (briefData.gameData && typeof briefData.gameData === 'object') ? briefData.gameData : {},
@@ -4299,7 +4422,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const generateKeywords = async () => {
     setGenerating('keywords')
     try {
-      const description = draft.descriptionSections.join(' ')
+      const description = draft.descriptionSections.map(s => s.body ?? '').join(' ')
       const res  = await apiFetch(`${API}/api/admin/ai/generate-keywords`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -4321,7 +4444,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       const res  = await apiFetch(`${API}/api/admin/ai/generate-quiz`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draft.title, description: draft.descriptionSections.join('\n\n') }),
+        body: JSON.stringify({ title: draft.title, description: draft.descriptionSections.map(s => s.body ?? '').join('\n\n') }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -4339,7 +4462,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     if (needed <= 0) return
     setGenKeywordsSingle(true)
     try {
-      const description = draft.descriptionSections.join(' ')
+      const description = draft.descriptionSections.map(s => s.body ?? '').join(' ')
       const res = await apiFetch(`${API}/api/admin/ai/generate-keywords`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -4368,7 +4491,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: draft.title,
-            description: draft.descriptionSections.join('\n\n'),
+            description: draft.descriptionSections.map(s => s.body ?? '').join('\n\n'),
             difficulty,
             existingQuestions: existing,
             needed,
@@ -4442,7 +4565,13 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       if (regenData.status !== 'success') throw new Error(regenData.message ?? 'Regeneration failed')
 
       const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData, mnemonics } = regenData.data
-      setDraft(p => ({ ...p, descriptionSections, keywords, ...(gameData ? { gameData } : {}), ...(mnemonics ? { mnemonics } : {}) }))
+      setDraft(p => ({
+        ...p,
+        descriptionSections: normalizeDraftSections(descriptionSections),
+        keywords,
+        ...(gameData ? { gameData } : {}),
+        ...(mnemonics ? { mnemonics } : {}),
+      }))
       setEasyQuestions(easyQuestions ?? [])
       setMediumQuestions(mediumQuestions ?? [])
       setToast('Regenerated — review and save when ready')
@@ -4450,6 +4579,26 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       setToast(`Regenerate failed: ${err.message}`)
     } finally {
       setRegeneratingAll(false)
+    }
+  }
+
+  // ── Regenerate subtitle only (lightweight — no cascade, no reason required) ─
+  const regenerateSubtitle = async () => {
+    if (!briefId) return
+    setGenerating('subtitle')
+    try {
+      const res  = await apiFetch(`${API}/api/admin/ai/regenerate-subtitle/${briefId}`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const data = await res.json()
+      if (data.status !== 'success') throw new Error(data.message ?? 'Generation failed')
+      setDraft(p => ({ ...p, subtitle: data.data.subtitle }))
+      setToast('Subtitle regenerated — review and save when ready')
+    } catch (err) {
+      setToast(`Regenerate subtitle failed: ${err.message}`)
+    } finally {
+      setGenerating(null)
     }
   }
 
@@ -4472,7 +4621,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       if (data.status !== 'success') throw new Error(data.message ?? 'Generation failed')
       // Server-side cascadeDeleteBriefData has wiped keywords + quiz questions —
       // clear local state to match so a subsequent Save doesn't re-persist stale arrays.
-      setDraft(p => ({ ...p, descriptionSections: data.data.descriptionSections, keywords: [] }))
+      setDraft(p => ({ ...p, descriptionSections: normalizeDraftSections(data.data.descriptionSections), keywords: [] }))
       setEasyQuestions([])
       setMediumQuestions([])
       setToast('Description generated — keywords and quiz cleared. Review and save when ready')
@@ -4579,7 +4728,10 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     const hasMedium      = (brief.quizQuestionsMedium?.length ?? 0) >= questionsPerDifficulty
     const hasQuiz        = hasEasy && hasMedium
     const hasMedia       = (brief.media ?? []).some(m => m.cloudinaryPublicId)
-    const hasDescription = (brief.descriptionSections ?? []).filter(s => s?.trim()).length >= 4
+    const hasDescription = (brief.descriptionSections ?? []).filter(s => {
+      if (typeof s === 'string') return s.trim()
+      return (s?.body ?? '').trim()
+    }).length >= 4
     const hasPriority    = brief.priorityNumber != null
     const priorityNA     = brief.category === 'News'
     return (
@@ -4597,10 +4749,10 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   }
 
   // ── Word count for description ────────────────────────────────────────────
-  const wordCount = draft.descriptionSections.join(' ').split(/\s+/).filter(Boolean).length
+  const wordCount = draft.descriptionSections.map(s => s.body ?? '').join(' ').split(/\s+/).filter(Boolean).length
 
   // ── Keyword verbatim warning ─────────────────────────────────────────────
-  const descLower = draft.descriptionSections.join(' ').toLowerCase()
+  const descLower = draft.descriptionSections.map(s => s.body ?? '').join(' ').toLowerCase()
   const badKeywords = draft.keywords.filter(k => k.keyword && !descLower.includes(k.keyword.toLowerCase()))
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -4675,6 +4827,15 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               className="accent-brand-600"
             />
             Hide stubs
+          </label>
+          <label className="flex items-center gap-2 px-3 py-2 text-sm text-slate-600 border border-slate-200 rounded-xl bg-surface cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={flaggedOnly}
+              onChange={e => { setFlaggedOnly(e.target.checked); setPage(1) }}
+              className="accent-amber-500"
+            />
+            Flagged only
           </label>
           <button
             onClick={newBrief}
@@ -4901,6 +5062,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                 {isStub && (
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 whitespace-nowrap">STUB</span>
                 )}
+                {b.flaggedForEdit && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">⚑ FLAGGED</span>
+                )}
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 whitespace-nowrap">{b.category}</span>
                 <BriefStatusPills brief={b} />
                 <span className="text-slate-300 text-sm">›</span>
@@ -5062,6 +5226,28 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         </div>
       )}
 
+      {/* ── Flag for editing toggle ─────────────────────────────────────── */}
+      {briefId && (
+        <div className={`flex items-center gap-2 px-4 py-2 mb-4 rounded-xl border ${draft.flaggedForEdit ? 'bg-amber-50 border-amber-300' : 'bg-surface border-slate-300'}`}>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={!!draft.flaggedForEdit}
+              onChange={e => setDraft(p => ({ ...p, flaggedForEdit: e.target.checked }))}
+              className="h-4 w-4 accent-amber-500"
+            />
+            <span className={`text-xs font-semibold ${draft.flaggedForEdit ? 'text-amber-800' : 'text-slate-500'}`}>
+              {draft.flaggedForEdit ? '⚑ Flagged for editing' : 'Flag for editing'}
+            </span>
+          </label>
+          {draft.flaggedForEdit && draft.flaggedAt && (
+            <span className="text-[10px] text-amber-600">
+              since {new Date(draft.flaggedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ── Section A: Core Fields ─────────────────────────────────────── */}
       <div className="bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
         <button
@@ -5200,12 +5386,24 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
             {/* Subtitle */}
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1">Subtitle</label>
-              <input
-                type="text"
-                value={draft.subtitle}
-                onChange={e => setDraft(p => ({ ...p, subtitle: e.target.value }))}
-                className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={draft.subtitle}
+                  onChange={e => setDraft(p => ({ ...p, subtitle: e.target.value }))}
+                  className="flex-1 border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
+                />
+                {briefId && (
+                  <button
+                    type="button"
+                    onClick={regenerateSubtitle}
+                    disabled={generating === 'subtitle'}
+                    className="px-3 py-2 text-xs font-semibold rounded-xl border border-brand-400/60 bg-brand-100 text-brand-600 hover:bg-brand-200 transition-colors disabled:opacity-40 whitespace-nowrap"
+                  >
+                    {generating === 'subtitle' ? '↺ Regenerating…' : '↺ Regenerate'}
+                  </button>
+                )}
+              </div>
             </div>
             {/* Priority Number */}
             <div>
@@ -5258,32 +5456,50 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         </button>
         {openSections.desc && (
           <div className="px-5 py-4 space-y-3">
-            {draft.descriptionSections.map((sec, idx) => (
-              <div key={idx}>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-slate-500">{idx === 3 ? 'Flashcard Section' : `Section ${idx + 1}`}</label>
-                  <button
-                    onClick={() => setDraft(p => ({ ...p, descriptionSections: p.descriptionSections.filter((_, i) => i !== idx) }))}
-                    disabled={draft.descriptionSections.length <= 1}
-                    className="text-xs text-red-400 hover:text-red-600 disabled:opacity-30"
-                  >
-                    Remove
-                  </button>
+            {draft.descriptionSections.map((sec, idx) => {
+              const isFlashcardSection = idx === 3
+              return (
+                <div key={idx}>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-slate-500">{isFlashcardSection ? 'Flashcard Section' : `Section ${idx + 1}`}</label>
+                    <button
+                      onClick={() => setDraft(p => ({ ...p, descriptionSections: p.descriptionSections.filter((_, i) => i !== idx) }))}
+                      disabled={draft.descriptionSections.length <= 1}
+                      className="text-xs text-red-400 hover:text-red-600 disabled:opacity-30"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  {!isFlashcardSection && (
+                    <input
+                      type="text"
+                      value={sec.heading ?? ''}
+                      onChange={e => setDraft(p => {
+                        const s = [...p.descriptionSections]
+                        s[idx] = { ...s[idx], heading: e.target.value }
+                        return { ...p, descriptionSections: s }
+                      })}
+                      placeholder="Heading (2–5 words, e.g. Role and Structure)"
+                      className="w-full border border-slate-500 rounded-xl px-3 py-2 text-sm mb-2 outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text placeholder:text-text-muted"
+                    />
+                  )}
+                  <textarea
+                    rows={4}
+                    value={sec.body ?? ''}
+                    onChange={e => setDraft(p => {
+                      const s = [...p.descriptionSections]
+                      s[idx] = { ...s[idx], body: e.target.value }
+                      return { ...p, descriptionSections: s }
+                    })}
+                    className="w-full border border-slate-500 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text placeholder:text-text-muted"
+                  />
                 </div>
-                <textarea
-                  rows={4}
-                  value={sec}
-                  onChange={e => setDraft(p => {
-                    const s = [...p.descriptionSections]; s[idx] = e.target.value; return { ...p, descriptionSections: s }
-                  })}
-                  className="w-full border border-slate-500 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text placeholder:text-text-muted"
-                />
-              </div>
-            ))}
+              )
+            })}
             <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
               {draft.descriptionSections.length < 4 && (
                 <button
-                  onClick={() => setDraft(p => ({ ...p, descriptionSections: [...p.descriptionSections, ''] }))}
+                  onClick={() => setDraft(p => ({ ...p, descriptionSections: [...p.descriptionSections, { heading: '', body: '' }] }))}
                   className="text-xs px-3 py-1.5 rounded-lg border border-slate-400 text-slate-600 font-semibold hover:bg-surface-raised transition-colors"
                 >
                   + Add Section
@@ -5628,7 +5844,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                     </div>
                     <GenerateSectionLinksButton
                       sourceTitle={draft.title}
-                      sourceDescription={draft.descriptionSections.join(' ')}
+                      sourceDescription={draft.descriptionSections.map(s => s.body ?? '').join(' ')}
                       sourceCategory={draft.category}
                       linkType={sec.linkType}
                       pool={sec.pool}
@@ -6095,7 +6311,7 @@ function GenerateStatsButton({ draft, setDraft, API }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title:       draft.title,
-          description: draft.descriptionSections.join('\n\n'),
+          description: draft.descriptionSections.map(s => s.body ?? '').join('\n\n'),
           category:    draft.category,
         }),
       })
@@ -6140,7 +6356,7 @@ function AircraftDataSection({ draft, setDraft, briefId, API }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title:       draft.title,
-          description: draft.descriptionSections.join('\n\n'),
+          description: draft.descriptionSections.map(s => s.body ?? '').join('\n\n'),
           category:    'Aircrafts',
         }),
       })
@@ -6197,7 +6413,7 @@ function TrainingDataSection({ draft, setDraft, briefId, API }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title:       draft.title,
-          description: draft.descriptionSections.join('\n\n'),
+          description: draft.descriptionSections.map(s => s.body ?? '').join('\n\n'),
           category:    'Training',
         }),
       })
@@ -6465,7 +6681,7 @@ function EmailTypeBadge({ type }) {
   return <LabelBadge label={info.label} color={info.color} uppercase />
 }
 
-function EmailLogsTab({ API }) {
+function EmailLogsTab({ API, initialStatusFilter }) {
   const { apiFetch } = useAuth()
   const [logs,       setLogs]       = useState([])
   const [loading,    setLoading]    = useState(true)
@@ -6473,7 +6689,7 @@ function EmailLogsTab({ API }) {
   const [totalPages, setTotalPages] = useState(1)
   const [total,      setTotal]      = useState(0)
   const [typeFilter, setTypeFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter ?? '')
   const [search,     setSearch]     = useState('')
   const [searchInput, setSearchInput] = useState('')
 
@@ -6842,8 +7058,8 @@ function SystemLogsTab({ API, onResolved }) {
   )
 }
 
-function IntelTab({ API, unsolvedCount, unresolvedSystemLogs }) {
-  const [sub, setSub] = useState('reports')
+function IntelTab({ API, unsolvedCount, unresolvedSystemLogs, initialSub, initialEmailStatus, onOpenBrief }) {
+  const [sub, setSub] = useState(initialSub ?? 'reports')
   const { refresh } = useUnsolvedReports()
   return (
     <div>
@@ -6864,9 +7080,9 @@ function IntelTab({ API, unsolvedCount, unresolvedSystemLogs }) {
           </button>
         ))}
       </div>
-      {sub === 'reports'     && <ProblemsTab    API={API} />}
+      {sub === 'reports'     && <ProblemsTab    API={API} onOpenBrief={onOpenBrief} />}
       {sub === 'action-log'  && <LogsTab        API={API} />}
-      {sub === 'email-log'   && <EmailLogsTab   API={API} />}
+      {sub === 'email-log'   && <EmailLogsTab   API={API} initialStatusFilter={initialEmailStatus} />}
       {sub === 'system-logs' && <SystemLogsTab  API={API} onResolved={refresh} />}
     </div>
   )
@@ -6894,6 +7110,17 @@ export default function Admin() {
   const [leadsInitialSearch, setLeadsInitialSearch] = useState(() => location.state?.leadsSearch ?? '')
   const [openLeadsOnMount,   setOpenLeadsOnMount]   = useState(() => !!location.state?.openLeads)
   const [editBriefIdOnMount, setEditBriefIdOnMount] = useState(() => location.state?.editBriefId ?? null)
+  const [intelInitial,       setIntelInitial]       = useState({ sub: null, emailStatus: null })
+
+  const openEmailLog = (status) => {
+    setIntelInitial({ sub: 'email-log', emailStatus: status })
+    setTab('intel')
+  }
+
+  const openBriefFromReport = (briefId) => {
+    setEditBriefIdOnMount(briefId)
+    setTab('briefs')
+  }
 
   useEffect(() => {
     if (location.state?.editBriefId || location.state?.openLeads) {
@@ -6951,12 +7178,12 @@ export default function Admin() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
           >
-            {tab === 'stats'    && <StatsTab    API={API} />}
+            {tab === 'stats'    && <StatsTab    API={API} onViewEmailLog={openEmailLog} />}
             {tab === 'settings' && <SettingsTab API={API} />}
             {tab === 'users'    && <UsersTab    API={API} />}
             {tab === 'content'  && <ContentTab  API={API} />}
             {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} editBriefIdOnMount={editBriefIdOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false); setEditBriefIdOnMount(null) }} />}
-            {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} />}
+            {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} initialSub={intelInitial.sub} initialEmailStatus={intelInitial.emailStatus} onOpenBrief={openBriefFromReport} />}
           </motion.div>
         </AnimatePresence>
 

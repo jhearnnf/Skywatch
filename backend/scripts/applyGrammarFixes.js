@@ -61,14 +61,15 @@ async function run() {
       continue;
     }
 
-    // Clone sections so we can preview changes
-    const updatedSections = [...brief.descriptionSections];
+    // Clone sections (normalized to {heading, body}) so we can preview changes
+    const { normalizeSections } = require('../utils/descriptionSections');
+    const updatedSections = normalizeSections(brief.descriptionSections);
 
     console.log(`── ${title} ──`);
 
     for (const fix of fixes) {
       const { sectionIndex, sectionNumber, flaggedText, approvedFix } = fix;
-      const original = updatedSections[sectionIndex];
+      const original = updatedSections[sectionIndex]?.body ?? '';
 
       if (!original.includes(flaggedText)) {
         console.warn(`  [Section ${sectionNumber}] Could not locate flaggedText in current DB content — skipping.`);
@@ -76,8 +77,10 @@ async function run() {
         continue;
       }
 
-      const updated = original.replace(flaggedText, approvedFix);
-      updatedSections[sectionIndex] = updated;
+      updatedSections[sectionIndex] = {
+        ...updatedSections[sectionIndex],
+        body: original.replace(flaggedText, approvedFix),
+      };
 
       console.log(`  Section ${sectionNumber}:`);
       console.log(`    Before: ...${flaggedText}...`);

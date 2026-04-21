@@ -40,14 +40,75 @@ async function briefWithCutout({ title = 'Typhoon', hasCutout = true } = {}) {
 // ── GET /api/users/me/badge-options ─────────────────────────────────────────
 
 describe('GET /api/users/me/badge-options', () => {
-  it('returns only Aircraft briefs the user has completed', async () => {
+  it('marks read Aircraft briefs with cutouts as available, unread ones as locked', async () => {
     const user = await createUser();
-    const { brief: read }    = await briefWithCutout({ title: 'Typhoon' });
-    const { brief: unread }  = await briefWithCutout({ title: 'Lightning' });
-    const nonAircraft        = await createBrief({ title: 'Waddington', category: 'Bases', status: 'published' });
+    const { brief: read }   = await briefWithCutout({ title: 'Typhoon' });
+    const { brief: unread } = await briefWithCutout({ title: 'Lightning' });
+    const nonAircraft       = await createBrief({ title: 'Waddington', category: 'Bases', status: 'published' });
     await createReadRecord(user._id, read._id);
-    await createReadRecord(user._id, unread._id, { completed: false });
     await createReadRecord(user._id, nonAircraft._id);
+
+    const res = await request(app)
+      .get('/api/users/me/badge-options')
+      .set('Cookie', authCookie(user._id));
+
+    expect(res.status).toBe(200);
+    const byTitle = Object.fromEntries(res.body.data.map(o => [o.title, o]));
+    expect(byTitle.Typhoon.status).toBe('available');
+    expect(byTitle.Lightning.status).toBe('locked');
+    expect(byTitle.Lightning.cutoutUrl).toMatch(/Lightning\.png$/);
+    expect(byTitle.Waddington).toBeUndefined();
+  });
+
+  it('treats incomplete reads as not-yet-unlocked (locked)', async () => {
+    const user = await createUser();
+    const { brief } = await briefWithCutout({ title: 'Typhoon' });
+    await createReadRecord(user._id, brief._id, { completed: false });
+
+    const res = await request(app)
+      .get('/api/users/me/badge-options')
+      .set('Cookie', authCookie(user._id));
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].status).toBe('locked');
+  });
+
+  it('flags read aircraft without cutouts as pending; hides unread cutoutless ones', async () => {
+    const user = await createUser();
+    const { brief: pending } = await briefWithCutout({ title: 'Chinook',  hasCutout: false });
+    await briefWithCutout({ title: 'Hercules', hasCutout: false });
+    await createReadRecord(user._id, pending._id);
+
+    const res = await request(app)
+      .get('/api/users/me/badge-options')
+      .set('Cookie', authCookie(user._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].title).toBe('Chinook');
+    expect(res.body.data[0].status).toBe('pending');
+    expect(res.body.data[0].cutoutUrl).toBeNull();
+  });
+
+  it('sorts available → locked → pending', async () => {
+    const user = await createUser();
+    const { brief: pending }  = await briefWithCutout({ title: 'Chinook', hasCutout: false });
+    const { brief: ready }    = await briefWithCutout({ title: 'Typhoon' });
+    await briefWithCutout({ title: 'Lightning' });
+    await createReadRecord(user._id, pending._id);
+    await createReadRecord(user._id, ready._id);
+
+    const res = await request(app)
+      .get('/api/users/me/badge-options')
+      .set('Cookie', authCookie(user._id));
+
+    expect(res.body.data.map(o => o.status)).toEqual(['available', 'locked', 'pending']);
+  });
+
+  it('returns locked cutouts even when user has read nothing', async () => {
+    const user = await createUser();
+    await briefWithCutout({ title: 'Typhoon' });
+    await briefWithCutout({ title: 'Chinook', hasCutout: false });
 
     const res = await request(app)
       .get('/api/users/me/badge-options')
@@ -56,39 +117,10 @@ describe('GET /api/users/me/badge-options', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].title).toBe('Typhoon');
-    expect(res.body.data[0].status).toBe('available');
+    expect(res.body.data[0].status).toBe('locked');
   });
 
-  it('flags aircraft without cutouts as pending', async () => {
-    const user = await createUser();
-    const { brief: pending } = await briefWithCutout({ title: 'Chinook', hasCutout: false });
-    await createReadRecord(user._id, pending._id);
-
-    const res = await request(app)
-      .get('/api/users/me/badge-options')
-      .set('Cookie', authCookie(user._id));
-
-    expect(res.status).toBe(200);
-    expect(res.body.data).toHaveLength(1);
-    expect(res.body.data[0].status).toBe('pending');
-    expect(res.body.data[0].cutoutUrl).toBeNull();
-  });
-
-  it('sorts available before pending', async () => {
-    const user = await createUser();
-    const { brief: pending } = await briefWithCutout({ title: 'Chinook', hasCutout: false });
-    const { brief: ready }   = await briefWithCutout({ title: 'Typhoon' });
-    await createReadRecord(user._id, pending._id);
-    await createReadRecord(user._id, ready._id);
-
-    const res = await request(app)
-      .get('/api/users/me/badge-options')
-      .set('Cookie', authCookie(user._id));
-
-    expect(res.body.data.map(o => o.status)).toEqual(['available', 'pending']);
-  });
-
-  it('returns empty array for a user who has read nothing', async () => {
+  it('returns empty array when no Aircraft briefs exist', async () => {
     const user = await createUser();
     const res = await request(app)
       .get('/api/users/me/badge-options')

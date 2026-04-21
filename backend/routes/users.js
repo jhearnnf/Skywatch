@@ -336,14 +336,30 @@ router.delete('/me/game-unlocks/:key/unlock', protect, async (req, res) => {
 // POST /api/users/report-problem
 router.post('/report-problem', protect, async (req, res) => {
   try {
-    const { pageReported, description } = req.body;
+    const { pageReported, description, briefId } = req.body;
     if (!description) return res.status(400).json({ message: 'Description required' });
+
+    let intelligenceBrief = null;
+    if (briefId) {
+      const brief = await IntelligenceBrief.findById(briefId).select('_id');
+      if (!brief) return res.status(400).json({ message: 'Associated brief not found' });
+      intelligenceBrief = brief._id;
+    }
 
     const report = await ProblemReport.create({
       userId: req.user._id,
       pageReported: pageReported || 'unknown',
       description,
+      intelligenceBrief,
     });
+
+    // Auto-raise the editor flag so admins see the issue in the briefs list.
+    if (intelligenceBrief) {
+      await IntelligenceBrief.updateOne(
+        { _id: intelligenceBrief, flaggedForEdit: { $ne: true } },
+        { $set: { flaggedForEdit: true, flaggedAt: new Date() } }
+      );
+    }
 
     res.status(201).json({ status: 'success', data: { report } });
   } catch (err) {
@@ -398,46 +414,55 @@ router.post('/me/notifications/:id/read', protect, async (req, res) => {
   }
 });
 
-// GET /api/users/me/badge-options — every Aircraft brief the user has read,
-// annotated with whether a cutout exists yet. Used by the badge picker page.
-// Pending (no cutout) entries are intentionally returned so the picker can
-// surface admin backlog to the user rather than hiding unlocked aircraft.
+// GET /api/users/me/badge-options — every published Aircraft brief with a
+// cutout, plus any the user has read that are still recon-pending. Annotated
+// with status: 'available' (unlocked by user), 'locked' (cutout exists but
+// user hasn't read the brief), or 'pending' (user read it, no cutout yet).
 router.get('/me/badge-options', protect, async (req, res) => {
   try {
-    const reads = await IntelligenceBriefRead
-      .find({ userId: req.user._id, completed: true })
-      .select('intelBriefId')
-      .lean();
-    const readIds = reads.map(r => r.intelBriefId);
-    if (readIds.length === 0) {
-      return res.json({ status: 'success', data: [] });
-    }
-
     const briefs = await IntelligenceBrief.find({
-      _id: { $in: readIds },
       category: 'Aircrafts',
-      status: 'published',
+      status:   'published',
     })
       .select('title media')
       .populate('media')
       .sort({ title: 1 })
       .lean();
 
-    const options = briefs.map(b => {
-      const withCutout = (b.media || []).find(m => m.cutoutUrl);
-      return {
-        briefId:   b._id,
-        title:     b.title,
-        cutoutUrl: withCutout?.cutoutUrl ?? null,
-        status:    withCutout ? 'available' : 'pending',
-      };
-    });
+    if (briefs.length === 0) {
+      return res.json({ status: 'success', data: [] });
+    }
 
-    // Available first, pending after; each group alphabetical (already sorted above).
-    options.sort((a, b) => {
-      if (a.status === b.status) return 0;
-      return a.status === 'available' ? -1 : 1;
-    });
+    const reads = await IntelligenceBriefRead
+      .find({
+        userId:       req.user._id,
+        completed:    true,
+        intelBriefId: { $in: briefs.map(b => b._id) },
+      })
+      .select('intelBriefId')
+      .lean();
+    const readSet = new Set(reads.map(r => String(r.intelBriefId)));
+
+    const options = briefs
+      .map(b => {
+        const withCutout = (b.media || []).find(m => m.cutoutUrl);
+        const hasRead    = readSet.has(String(b._id));
+        let status;
+        if (withCutout && hasRead)      status = 'available';
+        else if (withCutout)            status = 'locked';
+        else if (hasRead)               status = 'pending';
+        else                            return null;
+        return {
+          briefId:   b._id,
+          title:     b.title,
+          cutoutUrl: withCutout?.cutoutUrl ?? null,
+          status,
+        };
+      })
+      .filter(Boolean);
+
+    const order = { available: 0, locked: 1, pending: 2 };
+    options.sort((a, b) => order[a.status] - order[b.status]);
 
     res.json({ status: 'success', data: options });
   } catch (err) {
