@@ -29,7 +29,7 @@ jest.mock('../../utils/cloudinary', () => ({
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
-const { createUser, createAdminUser, createSettings, authCookie, createBrief } = require('../helpers/factories');
+const { createUser, createAdminUser, createSettings, authCookie, createBrief, createLead } = require('../helpers/factories');
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => { await createSettings(); });
@@ -202,6 +202,55 @@ describe('POST /api/admin/ai/generate-brief', () => {
 
     expect(res.status).toBe(500);
     expect(res.body.message).toMatch(/not valid json/i);
+  });
+
+  it('injects lead grounding (subtitle + nickname) into the topic prompt when a matching lead exists', async () => {
+    const capturedBodies = [];
+    jest.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+      if (!String(url).includes('openrouter.ai')) return mockFetchResponse({});
+      const bodyStr = typeof opts?.body === 'string' ? opts.body : JSON.stringify(opts?.body ?? '');
+      capturedBodies.push(bodyStr);
+      return mockOpenRouter(MOCK_BRIEF_JSON);
+    });
+
+    await createLead({
+      title:    'Operation AZALEA',
+      category: 'Missions',
+      subtitle: 'RAF standing air defence patrol of the Falkland Islands',
+      nickname: 'AZALEA',
+    });
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ topic: 'Operation AZALEA', category: 'Missions' });
+
+    expect(res.status).toBe(200);
+    const body = capturedBodies.find(b => b.includes('Operation AZALEA')) ?? '';
+    expect(body).toContain('Authoritative context');
+    expect(body).toContain('RAF standing air defence patrol of the Falkland Islands');
+    expect(body).toContain('Also known as');
+    expect(body).toContain('AZALEA');
+  });
+
+  it('omits grounding block when no matching lead exists', async () => {
+    const capturedBodies = [];
+    jest.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+      if (!String(url).includes('openrouter.ai')) return mockFetchResponse({});
+      const bodyStr = typeof opts?.body === 'string' ? opts.body : JSON.stringify(opts?.body ?? '');
+      capturedBodies.push(bodyStr);
+      return mockOpenRouter(MOCK_BRIEF_JSON);
+    });
+
+    const admin = await createAdminUser();
+    await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ topic: 'Some Unmatched Topic', category: 'Missions' });
+
+    const body = capturedBodies.find(b => b.includes('Some Unmatched Topic')) ?? '';
+    expect(body).not.toContain('Authoritative context');
   });
 
   it('sets staleSourceWarning: true for a news headline with a source older than 24 hours', async () => {
@@ -720,6 +769,57 @@ describe('POST /api/admin/ai/regenerate-brief/:id', () => {
 
     expect(res.status).toBe(404);
     expect(res.body.message).toMatch(/brief not found/i);
+  });
+
+  it('injects lead grounding into the regenerate prompt when a matching lead exists', async () => {
+    const capturedBodies = [];
+    jest.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+      if (!String(url).includes('openrouter.ai')) return mockFetchResponse({});
+      const bodyStr = typeof opts?.body === 'string' ? opts.body : JSON.stringify(opts?.body ?? '');
+      capturedBodies.push(bodyStr);
+      if (bodyStr.includes('easyQuestions') && bodyStr.includes('mediumQuestions')) return mockOpenRouter(MOCK_QUIZ_JSON);
+      if (bodyStr.includes('descriptionSections')) return mockOpenRouter(MOCK_BRIEF_JSON);
+      return mockOpenRouter('{}');
+    });
+
+    await createLead({
+      title:    'Operation PELEGRI',
+      category: 'Missions',
+      subtitle: 'Ongoing RAF maintenance of air superiority in the Falkland Islands from RAF Mount Pleasant',
+    });
+    const brief = await createBrief({ title: 'Operation PELEGRI', category: 'Missions' });
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-brief/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const body = capturedBodies.find(b => b.includes('Rewrite a comprehensive intelligence brief') && b.includes('Operation PELEGRI')) ?? '';
+    expect(body).toContain('Authoritative context');
+    expect(body).toContain('Falkland Islands');
+    expect(body).toContain('RAF Mount Pleasant');
+  });
+
+  it('omits grounding block on regenerate when no matching lead exists', async () => {
+    const capturedBodies = [];
+    jest.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+      if (!String(url).includes('openrouter.ai')) return mockFetchResponse({});
+      const bodyStr = typeof opts?.body === 'string' ? opts.body : JSON.stringify(opts?.body ?? '');
+      capturedBodies.push(bodyStr);
+      if (bodyStr.includes('easyQuestions') && bodyStr.includes('mediumQuestions')) return mockOpenRouter(MOCK_QUIZ_JSON);
+      if (bodyStr.includes('descriptionSections')) return mockOpenRouter(MOCK_BRIEF_JSON);
+      return mockOpenRouter('{}');
+    });
+
+    const brief = await createBrief({ title: 'No Lead For This Brief', category: 'Aircrafts' });
+    const admin = await createAdminUser();
+    await request(app)
+      .post(`/api/admin/ai/regenerate-brief/${brief._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    const body = capturedBodies.find(b => b.includes('Rewrite a comprehensive intelligence brief') && b.includes('No Lead For This Brief')) ?? '';
+    expect(body).not.toContain('Authoritative context');
   });
 
   it('returns 500 with message when brief-generation AI returns malformed JSON', async () => {

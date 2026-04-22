@@ -203,6 +203,7 @@ export default function CbatPlaneTurn() {
   const [won, setWon] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [use3D, setUse3D] = useState(true)
+  const [model3DReady, setModel3DReady] = useState(false)
 
   // Totals across all levels
   const [totalRotations, setTotalRotations] = useState(0)
@@ -264,6 +265,13 @@ export default function CbatPlaneTurn() {
   useEffect(() => {
     gameRef.current = { plane, pkg, collected, rotations, level, won, phase }
   })
+
+  // Reset 3D-ready flag whenever aircraft changes so the morph animation re-plays
+  useEffect(() => {
+    setModel3DReady(false)
+  }, [selected?.briefId])
+
+  const handle3DReady = useCallback(() => setModel3DReady(true), [])
 
   const startGame = useCallback((lvl = 1, keepSelected = false) => {
     const start = randomSafePos()
@@ -565,9 +573,17 @@ export default function CbatPlaneTurn() {
                           </motion.div>
                         )}
 
-                        {/* Plane (2D fallback only — 3D is rendered as overlay outside grid) */}
-                        {isPlane && !(use3D && selected.modelUrl) && (
-                          <div className="absolute inset-0 flex items-center justify-center z-20">
+                        {/* Plane 2D cutout — always rendered at the plane's cell.
+                            Visible when 3D is disabled/unavailable, or while the GLB is still loading.
+                            Fades out once the 3D model is ready. */}
+                        {isPlane && (
+                          <div
+                            className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"
+                            style={{
+                              opacity: use3D && selected.modelUrl && model3DReady ? 0 : 1,
+                              transition: 'opacity 0.4s ease-out',
+                            }}
+                          >
                             <img
                               src={selected.cutoutUrl}
                               alt={selected.title}
@@ -584,7 +600,9 @@ export default function CbatPlaneTurn() {
                   })}
                 </div>
 
-                {/* 3D plane overlay — persistent Canvas positioned over grid */}
+                {/* 3D plane overlay — persistent Canvas positioned over grid.
+                    Structure unchanged from pre-animation: same wrapper, no inner transforms,
+                    so the GLB renders at its original size/position. Opacity fade only. */}
                 {use3D && selected.modelUrl && (
                   <div
                     className="absolute z-30 pointer-events-none"
@@ -593,7 +611,8 @@ export default function CbatPlaneTurn() {
                       height: `${100 / GRID * 3}%`,
                       left: `${(plane.c / GRID) * 100 - (100 / GRID)}%`,
                       top: `${(plane.r / GRID) * 100 - (100 / GRID)}%`,
-                      transition: 'left 0.15s ease-out, top 0.15s ease-out',
+                      opacity: model3DReady ? 1 : 0,
+                      transition: 'left 0.15s ease-out, top 0.15s ease-out, opacity 0.45s ease-out',
                     }}
                   >
                     <Suspense fallback={null}>
@@ -601,8 +620,51 @@ export default function CbatPlaneTurn() {
                         modelUrl={selected.modelUrl}
                         angle={plane.angle}
                         onError={() => setUse3D(false)}
+                        onReady={handle3DReady}
                       />
                     </Suspense>
+                  </div>
+                )}
+
+                {/* Targeting-lock ring burst — separate overlay, fires once when 3D becomes ready.
+                    Kept out of the 3D wrapper so it can't affect the GLB rendering. */}
+                {use3D && selected.modelUrl && model3DReady && (
+                  <div
+                    className="absolute z-40 pointer-events-none"
+                    style={{
+                      width: `${100 / GRID * 3}%`,
+                      height: `${100 / GRID * 3}%`,
+                      left: `${(plane.c / GRID) * 100 - (100 / GRID)}%`,
+                      top: `${(plane.r / GRID) * 100 - (100 / GRID)}%`,
+                      transition: 'left 0.15s ease-out, top 0.15s ease-out',
+                    }}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.25, opacity: 0.9 }}
+                      animate={{ scale: 1.8, opacity: 0 }}
+                      transition={{ duration: 0.7, ease: 'easeOut' }}
+                      className="absolute inset-0 flex items-center justify-center"
+                    >
+                      <div
+                        className="rounded-full border-2 border-brand-400"
+                        style={{
+                          width: '55%',
+                          height: '55%',
+                          boxShadow: '0 0 24px rgba(91,170,255,0.8), inset 0 0 12px rgba(91,170,255,0.4)',
+                        }}
+                      />
+                    </motion.div>
+                    <motion.div
+                      initial={{ scale: 0.35, opacity: 0.6 }}
+                      animate={{ scale: 2.2, opacity: 0 }}
+                      transition={{ duration: 0.9, ease: 'easeOut', delay: 0.12 }}
+                      className="absolute inset-0 flex items-center justify-center"
+                    >
+                      <div
+                        className="rounded-full border border-brand-300"
+                        style={{ width: '55%', height: '55%' }}
+                      />
+                    </motion.div>
                   </div>
                 )}
 

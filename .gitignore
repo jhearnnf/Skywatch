@@ -32,6 +32,9 @@ dist-ssr
 # Runtime-generated seed sidecar (auto-generated leads from keyword linking)
 backend/seeds/seedLeads.generated.jsonl
 
+# Uncompressed GLB source models — compressed versions in public/models/ ship to users
+models-src/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

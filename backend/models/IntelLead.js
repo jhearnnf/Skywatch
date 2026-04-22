@@ -12,6 +12,10 @@ const intelLeadSchema = new mongoose.Schema({
   isPublished:    { type: Boolean, default: false },
   isHistoric:     { type: Boolean, default: false }, // true = retired/concluded/no current RAF relevance
   priorityNumber: { type: Number, default: null }, // advised learning order within category
+  // Date of the news event this lead represents (News category only). Mirrors
+  // IntelligenceBrief.eventDate so the AI can reference the event date when
+  // generating full content from the lead later.
+  eventDate:      { type: Date, default: null },
 }, { timestamps: true });
 
 module.exports = mongoose.model('IntelLead', intelLeadSchema);

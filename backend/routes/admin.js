@@ -141,6 +141,39 @@ function normaliseLeadTitle(s) {
   return s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
+// Fetch the matching lead's admin-curated subtitle + nickname for a title —
+// used to ground AI brief generation so Perplexity doesn't hallucinate a
+// wrong subject (e.g. treating Op AZALEA as Baltic Air Policing when it's
+// the Falklands air-defence patrol). Returns { subtitle, nickname } with
+// empty-string defaults; non-fatal on error.
+async function getLeadGrounding(title) {
+  try {
+    if (!title) return { subtitle: '', nickname: '' };
+    const norm  = normaliseLeadTitle(title);
+    const leads = await IntelLead.find().select('title subtitle nickname').lean();
+    const match = leads.find(l => normaliseLeadTitle(l.title) === norm);
+    if (!match) return { subtitle: '', nickname: '' };
+    return { subtitle: match.subtitle || '', nickname: match.nickname || '' };
+  } catch (err) {
+    console.error('[getLeadGrounding] lookup failed (non-fatal):', err.message);
+    return { subtitle: '', nickname: '' };
+  }
+}
+
+// Build a grounding block for the AI prompt. Empty string when we have
+// nothing to ground on, so prompts stay unchanged for subjects without a
+// lead (e.g. fresh News headlines).
+function buildGroundingBlock({ subtitle, nickname }) {
+  const lines = [];
+  if (subtitle) lines.push(`- Description: "${subtitle}"`);
+  if (nickname) lines.push(`- Also known as: "${nickname}"`);
+  if (!lines.length) return '';
+  return (
+    `Authoritative context for this subject (use to disambiguate and stay on-topic; do NOT quote or copy verbatim into the output):\n` +
+    lines.join('\n') + '\n\n'
+  );
+}
+
 // Returns { matched: bool, error: string|null }
 async function unmarkLeadInDb(briefTitle) {
   try {
@@ -157,15 +190,42 @@ async function unmarkLeadInDb(briefTitle) {
 
 // Overwrite a lead's editable shared fields from a brief. Matches lead by
 // normalised title (brief titles are effectively never renamed — confirmed
-// with the user — so a plain current-title match is sufficient). No-op if
-// no lead matches. Returns { matched, changed, changedFields } for logging.
+// with the user — so a plain current-title match is sufficient).
+//
+// Behaviours:
+//   - Auto-creates a lead for News briefs that have no matching lead (News is
+//     the one category where the brief comes first — other categories seed
+//     leads upfront via seedLeads.js).
+//   - Syncs eventDate both ways-compatible (brief → lead) so the AI can
+//     reference it later when expanding a news lead into full content.
+//   - Auto-ticks lead.isPublished when brief.status === 'published'. Forward
+//     only — never auto-unticks. Manual mark-complete remains the authority
+//     for the "content done before publish" edge case.
+//
+// Returns { matched, changed, changedFields, created } for logging.
 const LEAD_SYNC_FIELDS = ['title', 'subtitle', 'nickname', 'category', 'subcategory'];
 async function syncLeadFromBrief(brief) {
-  if (!brief?.title) return { matched: false, changed: false, changedFields: [] };
+  if (!brief?.title) return { matched: false, changed: false, changedFields: [], created: false };
   const norm  = normaliseLeadTitle(brief.title);
-  const leads = await IntelLead.find().select('_id title subtitle nickname category subcategory isHistoric priorityNumber');
+  const leads = await IntelLead.find().select('_id title subtitle nickname category subcategory isHistoric isPublished eventDate priorityNumber');
   const match = leads.find(l => normaliseLeadTitle(l.title) === norm);
-  if (!match) return { matched: false, changed: false, changedFields: [] };
+
+  // News-only: auto-create a lead if none matches. Other categories are seeded
+  // upfront — absence of a lead there is intentional (e.g. unused stub).
+  if (!match) {
+    if (brief.category !== 'News') return { matched: false, changed: false, changedFields: [], created: false };
+    const created = await IntelLead.create({
+      title:       brief.title,
+      subtitle:    brief.subtitle    ?? '',
+      nickname:    brief.nickname    ?? '',
+      category:    brief.category,
+      subcategory: brief.subcategory ?? '',
+      isHistoric:  !!brief.historic,
+      isPublished: brief.status === 'published',
+      eventDate:   brief.eventDate   ?? null,
+    });
+    return { matched: true, changed: true, changedFields: ['__created__'], created: true, leadId: created._id };
+  }
 
   const updates = {};
   for (const f of LEAD_SYNC_FIELDS) {
@@ -176,8 +236,18 @@ async function syncLeadFromBrief(brief) {
   const nextHistoric = !!brief.historic;
   if (nextHistoric !== !!match.isHistoric) updates.isHistoric = nextHistoric;
 
+  // eventDate sync — compare as timestamps to avoid Date-object identity false positives.
+  const prevEventTs = match.eventDate ? new Date(match.eventDate).getTime() : null;
+  const nextEventTs = brief.eventDate ? new Date(brief.eventDate).getTime() : null;
+  if (prevEventTs !== nextEventTs) updates.eventDate = brief.eventDate ?? null;
+
+  // Auto-tick isPublished when brief is published. Forward-only.
+  if (brief.status === 'published' && !match.isPublished) {
+    updates.isPublished = true;
+  }
+
   const changedFields = Object.keys(updates);
-  if (!changedFields.length) return { matched: true, changed: false, changedFields: [] };
+  if (!changedFields.length) return { matched: true, changed: false, changedFields: [], created: false };
 
   // When category changes, the lead's priorityNumber was ranked against siblings
   // of the old category — it has no meaning in the new one. Clear it so the
@@ -199,7 +269,7 @@ async function syncLeadFromBrief(brief) {
       .catch(err => console.error(`[syncLeadFromBrief] reprioritize new category "${newCategory}" failed:`, err.message));
   }
 
-  return { matched: true, changed: true, changedFields };
+  return { matched: true, changed: true, changedFields, created: false };
 }
 
 // POST /api/admin/loading-time — open (no auth), accumulates frontend fetch durations
@@ -1300,9 +1370,10 @@ router.get('/briefs', async (req, res) => {
     if (subcategory && category) filter.subcategory = subcategory;
     if (hideStubs === 'true' || hideStubs === '1') filter.status = { $ne: 'stub' };
     if (flaggedForEdit === 'true' || flaggedForEdit === '1') filter.flaggedForEdit = true;
-    if (search) filter.$or = [
-      { title: new RegExp(search, 'i') },
-      { subtitle: new RegExp(search, 'i') },
+    const searchRegex = search ? new RegExp(search, 'i') : null;
+    if (searchRegex) filter.$or = [
+      { title: searchRegex },
+      { subtitle: searchRegex },
     ];
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -1313,7 +1384,7 @@ router.get('/briefs', async (req, res) => {
     const questionsPerDifficulty = settings?.aiQuestionsPerDifficulty ?? 7;
     const descriptionSectionMin  = 4;
 
-    const sortStage =
+    const baseSort =
       sort === 'newest' ? { updatedAt: -1 }
       : sort === 'oldest' ? { updatedAt:  1 }
       : sort === 'no-priority' ? { _isNews: 1, _hasPriority: 1, updatedAt: -1 }
@@ -1321,6 +1392,8 @@ router.get('/briefs', async (req, res) => {
       : sort === 'uncompleted-questions'   ? { _incompleteQuestions: -1, updatedAt: -1 }
       : sort === 'uncompleted-description' ? { _incompleteDescription: -1, updatedAt: -1 }
       : { _effectivePublishedAt: -1, _id: -1 };
+    // When searching, surface title matches before subtitle-only matches.
+    const sortStage = searchRegex ? { _titleMatch: -1, ...baseSort } : baseSort;
 
     const [briefs, total] = await Promise.all([
       IntelligenceBrief.aggregate([
@@ -1342,6 +1415,9 @@ router.get('/briefs', async (req, res) => {
             $cond: [{ $ne: [{ $ifNull: ['$priorityNumber', null] }, null] }, 1, 0],
           },
           _isNews: { $cond: [{ $eq: ['$category', 'News'] }, 1, 0] },
+          _titleMatch: search
+            ? { $cond: [{ $regexMatch: { input: { $ifNull: ['$title', ''] }, regex: search, options: 'i' } }, 1, 0] }
+            : 0,
           _incompleteKeywords: {
             $cond: [
               { $lt: [{ $size: { $ifNull: ['$keywords', []] } }, keywordsPerBrief] },
@@ -1595,6 +1671,15 @@ router.post('/briefs', requireReason, async (req, res) => {
       } catch (scanErr) {
         console.error('[POST briefs] mentionedBriefIds scan failed (non-fatal):', scanErr.message);
       }
+    }
+
+    // Mirror the new brief into a lead — auto-creates a lead for News briefs
+    // that have none, syncs eventDate, and ticks isPublished if the brief is
+    // published. Non-fatal — failures are logged but don't block the create.
+    try {
+      await syncLeadFromBrief(brief);
+    } catch (syncErr) {
+      console.error('[POST briefs] lead sync failed (non-fatal):', syncErr.message);
     }
 
     await AdminAction.create({ userId: req.user._id, actionType: 'create_brief', reason });
@@ -2904,8 +2989,13 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
       if (gdNote) TOPIC_JSON_SHAPE += `\n${gdNote}`;
     }
 
+    // Ground the topic prompt with the lead's curated subtitle/nickname so
+    // Perplexity disambiguates obscure codenames correctly. News (headline
+    // path) has no pre-existing lead at generation time — skip grounding there.
+    const grounding = topic ? buildGroundingBlock(await getLeadGrounding(topic)) : '';
+
     const userContent = topic
-      ? `Write a comprehensive intelligence brief about this subject: "${topic}"\n\n${buildTopicUserGuidance(shape)}\n\n${TOPIC_JSON_SHAPE}`
+      ? `Write a comprehensive intelligence brief about this subject: "${topic}"\n\n${grounding}${buildTopicUserGuidance(shape)}\n\n${TOPIC_JSON_SHAPE}`
       : `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources, return a JSON object for an RAF news intelligence brief. Be as informative as possible about the current RAF affairs covered by this story.\n\n${JSON_SHAPE}`;
 
     const isNews = !!headline;
@@ -3132,6 +3222,126 @@ router.post('/intel-leads/sync-from-briefs', async (req, res) => {
       matchedBriefs:  leads.length - unmatched.length,
       unmatchedLeads: unmatched.length,
       changedLeads:   changes.length,
+      changes,
+      unmatched,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/intel-leads/backfill-from-news-briefs — walks all News
+// briefs and creates a matching lead for any that have none. Mirrors the
+// auto-create behaviour in syncLeadFromBrief (which only fires on new
+// POST/PATCH) to retroactively cover News briefs that predate the feature.
+//
+// Query: ?dryRun=true → returns the would-be creations without writing.
+router.post('/intel-leads/backfill-from-news-briefs', async (req, res) => {
+  try {
+    const dryRun = req.query.dryRun === 'true' || req.body?.dryRun === true;
+
+    const [newsBriefs, leads] = await Promise.all([
+      IntelligenceBrief.find({ category: 'News' })
+        .select('_id title subtitle nickname category subcategory historic status eventDate')
+        .lean(),
+      IntelLead.find().select('title').lean(),
+    ]);
+
+    const leadSet = new Set(leads.map(l => normaliseLeadTitle(l.title)));
+
+    const toCreate = [];
+    for (const b of newsBriefs) {
+      if (!b.title) continue;
+      if (leadSet.has(normaliseLeadTitle(b.title))) continue;
+      toCreate.push({
+        title:       b.title,
+        subtitle:    b.subtitle    ?? '',
+        nickname:    b.nickname    ?? '',
+        category:    b.category,
+        subcategory: b.subcategory ?? '',
+        isHistoric:  !!b.historic,
+        isPublished: b.status === 'published',
+        eventDate:   b.eventDate   ?? null,
+        _sourceBriefId: b._id,
+      });
+    }
+
+    if (!dryRun && toCreate.length) {
+      // Strip _sourceBriefId (reporting only — not a schema field)
+      const docs = toCreate.map(({ _sourceBriefId, ...doc }) => doc);
+      await IntelLead.insertMany(docs, { ordered: false });
+    }
+
+    res.json({
+      status: 'success',
+      dryRun,
+      totalNewsBriefs: newsBriefs.length,
+      alreadyHaveLead: newsBriefs.length - toCreate.length,
+      created:         toCreate.length,
+      creations:       toCreate.map(({ title, category, _sourceBriefId, eventDate, isPublished }) => ({
+        title, category, briefId: _sourceBriefId, eventDate, isPublished,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/intel-leads/backfill-briefs-from-leads — reverse of
+// sync-from-briefs. Copies nickname/subtitle from a lead into its matching
+// brief, but ONLY when the brief's current value is empty. Never overwrites
+// non-empty brief data. This addresses the drift case where the lead was
+// seeded with the richer value and the brief was created with a blank.
+//
+// Query: ?dryRun=true → returns the would-be changes without writing.
+router.post('/intel-leads/backfill-briefs-from-leads', async (req, res) => {
+  try {
+    const dryRun = req.query.dryRun === 'true' || req.body?.dryRun === true;
+    const BACKFILL_FIELDS = ['nickname', 'subtitle'];
+
+    const leads = await IntelLead.find()
+      .select('_id title nickname subtitle')
+      .lean();
+
+    const briefs = await IntelligenceBrief.find()
+      .select('_id title nickname subtitle')
+      .lean();
+
+    const leadByNorm = new Map();
+    for (const l of leads) {
+      if (l.title) leadByNorm.set(normaliseLeadTitle(l.title), l);
+    }
+
+    const changes   = [];
+    const unmatched = [];
+
+    for (const brief of briefs) {
+      const lead = leadByNorm.get(normaliseLeadTitle(brief.title));
+      if (!lead) { unmatched.push({ briefId: brief._id, title: brief.title }); continue; }
+
+      const updates = {};
+      for (const f of BACKFILL_FIELDS) {
+        const briefVal = (brief[f] ?? '').trim();
+        const leadVal  = (lead[f]  ?? '').trim();
+        // Only fill when brief is empty AND lead has a value. Never overwrite.
+        if (!briefVal && leadVal) updates[f] = leadVal;
+      }
+
+      if (Object.keys(updates).length) {
+        changes.push({ briefId: brief._id, leadId: lead._id, title: brief.title, updates });
+        if (!dryRun) {
+          await IntelligenceBrief.updateOne({ _id: brief._id }, updates);
+        }
+      }
+    }
+
+    res.json({
+      status: 'success',
+      dryRun,
+      totalBriefs:    briefs.length,
+      matchedLeads:   briefs.length - unmatched.length,
+      unmatchedBriefs: unmatched.length,
+      changedBriefs:  changes.length,
       changes,
       unmatched,
     });
@@ -3519,12 +3729,16 @@ async function generateBriefContent(brief, aiSettings) {
   }
 
   const systemPromptKey = TOPIC_PROMPT_BY_CATEGORY[brief.category] || 'regenerateBrief';
+  // Ground the regeneration with the lead's curated subtitle/nickname — the
+  // main reason admins regenerate is that the current body is wrong, so we
+  // don't feed the existing brief back in; the lead is the source of truth.
+  const grounding = buildGroundingBlock(await getLeadGrounding(brief.title));
   const briefData = await openRouterChat([{
     role: 'system',
     content: getPrompt(aiSettings, systemPromptKey),
   }, {
     role: 'user',
-    content: `Rewrite a comprehensive intelligence brief about this subject: "${brief.title}"\n\n${buildTopicUserGuidance(shape)}\n\n${TOPIC_JSON_SHAPE}`,
+    content: `Rewrite a comprehensive intelligence brief about this subject: "${brief.title}"\n\n${grounding}${buildTopicUserGuidance(shape)}\n\n${TOPIC_JSON_SHAPE}`,
   }], 'perplexity/sonar', 8192);
 
   const briefRaw = briefData.choices?.[0]?.message?.content ?? '{}';

@@ -9,6 +9,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
+    "optimize-models": "node scripts/optimize-models.mjs",
+    "predev": "node scripts/optimize-models.mjs",
+    "prebuild": "node scripts/optimize-models.mjs",
     "postinstall": "node scripts/fix-google-auth-gradle.cjs"
   },
   "dependencies": {

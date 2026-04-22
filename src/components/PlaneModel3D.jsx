@@ -20,12 +20,17 @@ class ErrorCatcher extends Component {
   }
 }
 
-function AircraftModel({ url, angle }) {
+function AircraftModel({ url, angle, onReady }) {
   const { scene } = useGLTF(url)
   const meshRef = useRef()
   const targetAngleRef = useRef(angle)
   const currentAngleRef = useRef(angle)
   const bankRef = useRef(0)
+
+  // Fire onReady once the GLB is resolved and this component mounts
+  useEffect(() => {
+    onReady?.()
+  }, [onReady])
 
   // Update target when angle prop changes
   useEffect(() => {
@@ -62,7 +67,7 @@ function AircraftModel({ url, angle }) {
   return <primitive ref={meshRef} object={scene.clone()} scale={[2, 2, 2]} />
 }
 
-export default function PlaneModel3D({ modelUrl, angle, onError }) {
+export default function PlaneModel3D({ modelUrl, angle, onError, onReady }) {
   const [failed, setFailed] = useState(false)
 
   if (failed) {
@@ -83,7 +88,7 @@ export default function PlaneModel3D({ modelUrl, angle, onError }) {
       <pointLight position={[-2, 6, -1]} intensity={1} color="#ffffff" />
       <Suspense fallback={null}>
         <ErrorCatcher onError={() => setFailed(true)}>
-          <AircraftModel url={modelUrl} angle={angle} />
+          <AircraftModel key={modelUrl} url={modelUrl} angle={angle} onReady={onReady} />
         </ErrorCatcher>
       </Suspense>
     </Canvas>
