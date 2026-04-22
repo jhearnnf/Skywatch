@@ -36,9 +36,14 @@ describe('CBAT leaderboard — admin email exposure', () => {
     expect(res.status).toBe(200);
 
     const { leaderboard } = res.body.data;
-    expect(leaderboard).toHaveLength(2);
-    const emails = leaderboard.map(e => e.email).sort();
+    expect(leaderboard).toHaveLength(20);
+    const real = leaderboard.filter(e => !e.isFake);
+    expect(real).toHaveLength(2);
+    const emails = real.map(e => e.email).sort();
     expect(emails).toEqual(['boss@skywatch.test', 'pilot@example.com']);
+    // Fakes carry email="demo" so admins can tell them apart from real users
+    const fakes = leaderboard.filter(e => e.isFake);
+    expect(fakes.every(e => e.email === 'demo')).toBe(true);
   });
 
   it('does NOT include email for any row when requester is a regular user', async () => {
@@ -46,7 +51,7 @@ describe('CBAT leaderboard — admin email exposure', () => {
     expect(res.status).toBe(200);
 
     const { leaderboard } = res.body.data;
-    expect(leaderboard).toHaveLength(2);
+    expect(leaderboard).toHaveLength(20);
     leaderboard.forEach(entry => {
       expect(entry.email).toBeUndefined();
       expect(entry.agentNumber).toBeDefined();

@@ -674,7 +674,7 @@ function Intro({ onStart, personalBest, aircraftReady }) {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-lg bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
     >
       <p className="text-4xl mb-3">🎯</p>
       <p className="text-xl font-extrabold text-white mb-2">Target</p>
@@ -683,12 +683,31 @@ function Intro({ onStart, personalBest, aircraftReady }) {
         identify aircraft on radar, and find strings in the system feed.
       </p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-1.5 text-[12px] text-[#ddeaf8]">
-        <div>• <span className="text-brand-300">Scene:</span> click shapes matching each target label</div>
-        <div>• <span className="text-brand-300">Light:</span> press LOCK when your 3-light pattern matches the target</div>
-        <div>• <span className="text-brand-300">Scan:</span> press ID when your radar aircraft matches the scan target</div>
-        <div>• <span className="text-brand-300">System:</span> click any scrolling code matching a system target</div>
-        <div className="text-[11px] text-amber-300 pt-1">Wrong clicks lose points. Score can go negative.</div>
+      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
+        <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+          <span className="text-brand-300 font-bold shrink-0">{'⏱'}</span>
+          <span>2-minute total time limit</span>
+        </div>
+        <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+          <span className="text-brand-300 font-bold shrink-0">Scene</span>
+          <span>click shapes matching each target label</span>
+        </div>
+        <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+          <span className="text-brand-300 font-bold shrink-0">Light</span>
+          <span>press LOCK when your 3-light pattern matches the target</span>
+        </div>
+        <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+          <span className="text-brand-300 font-bold shrink-0">Scan</span>
+          <span>press ID when your radar aircraft matches the scan target</span>
+        </div>
+        <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+          <span className="text-brand-300 font-bold shrink-0">System</span>
+          <span>click any scrolling code matching a system target</span>
+        </div>
+        <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
+          <span className="shrink-0">{'⚠️'}</span>
+          <span>Wrong clicks lose points. Score can go negative.</span>
+        </div>
       </div>
 
       {personalBest && (

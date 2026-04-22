@@ -115,32 +115,28 @@ describe('CBAT Plane Turn', () => {
       expect(res.status).toBe(200);
       const { leaderboard, myBest } = res.body.data;
 
-      expect(leaderboard).toHaveLength(3);
-      // pilot2 #1 — fewest rotations
-      expect(leaderboard[0].agentNumber).toBe('1000002');
-      expect(leaderboard[0].bestScore).toBe(20);
-      expect(leaderboard[0].rank).toBe(1);
-      // pilot1's 30-rotation run is #2
-      expect(leaderboard[1].agentNumber).toBe('1000001');
-      expect(leaderboard[1].bestScore).toBe(30);
-      expect(leaderboard[1].rank).toBe(2);
-      // pilot1's 50-rotation run is #3 — both sessions appear
-      expect(leaderboard[2].agentNumber).toBe('1000001');
-      expect(leaderboard[2].bestScore).toBe(50);
-      expect(leaderboard[2].rank).toBe(3);
-
-      // myBest is pilot1's best (first) entry in the board
-      expect(myBest.rank).toBe(2);
+      expect(leaderboard).toHaveLength(20);
+      const real = leaderboard.filter(e => !e.isFake);
+      expect(real).toHaveLength(3);
+      // All three real runs are present — both of pilot1's sessions
+      expect(real.map(r => r.bestScore).sort((a, b) => a - b)).toEqual([20, 30, 50]);
+      // Global sort: lower rotations first, time breaks ties
+      for (let i = 1; i < leaderboard.length; i++) {
+        expect(leaderboard[i].bestScore).toBeGreaterThanOrEqual(leaderboard[i - 1].bestScore);
+      }
+      // myBest is pilot1's best real run (30 rotations); rank reflects merged position
       expect(myBest.bestScore).toBe(30);
+      expect(myBest.userId.toString()).toBe(user._id.toString());
     });
 
-    it('returns empty leaderboard when no results exist', async () => {
+    it('returns a fully-padded fake leaderboard when no results exist', async () => {
       const res = await request(app)
         .get(LEADERBOARD_URL)
         .set('Cookie', cookie);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.leaderboard).toHaveLength(0);
+      expect(res.body.data.leaderboard).toHaveLength(20);
+      expect(res.body.data.leaderboard.every(e => e.isFake)).toBe(true);
       expect(res.body.data.myBest).toBeNull();
     });
 
@@ -154,10 +150,12 @@ describe('CBAT Plane Turn', () => {
         .get(LEADERBOARD_URL)
         .set('Cookie', cookie);
 
-      expect(res.body.data.leaderboard).toHaveLength(2);
-      expect(res.body.data.leaderboard[0].bestScore).toBe(40);
-      expect(res.body.data.leaderboard[1].bestScore).toBe(100);
-      expect(res.body.data.leaderboard[0].userId).toBe(res.body.data.leaderboard[1].userId);
+      expect(res.body.data.leaderboard).toHaveLength(20);
+      const real = res.body.data.leaderboard.filter(e => !e.isFake);
+      expect(real).toHaveLength(2);
+      // Both of this user's sessions show up (40 and 100 rotations)
+      expect(real.map(r => r.bestScore).sort((a, b) => a - b)).toEqual([40, 100]);
+      expect(real[0].userId).toBe(real[1].userId);
     });
   });
 });
@@ -219,10 +217,13 @@ describe('CBAT Angles', () => {
         .set('Cookie', cookie);
 
       const { leaderboard } = res.body.data;
-      expect(leaderboard).toHaveLength(2);
-      // Same correctCount — pilot2 wins on time
-      expect(leaderboard[0].agentNumber).toBe('1000002');
-      expect(leaderboard[1].agentNumber).toBe('1000001');
+      expect(leaderboard).toHaveLength(20);
+      const real = leaderboard.filter(e => !e.isFake);
+      expect(real).toHaveLength(2);
+      // Same correctCount — pilot2 (faster time) sits above pilot1
+      const p2Idx = leaderboard.findIndex(e => e.agentNumber === '1000002');
+      const p1Idx = leaderboard.findIndex(e => e.agentNumber === '1000001');
+      expect(p2Idx).toBeLessThan(p1Idx);
     });
   });
 });
@@ -293,13 +294,18 @@ describe('CBAT Code Duplicates', () => {
         .set('Cookie', cookie);
 
       const { leaderboard, myBest } = res.body.data;
-      expect(leaderboard).toHaveLength(2);
-      expect(leaderboard[0].agentNumber).toBe('1000002');
-      expect(leaderboard[0].bestScore).toBe(14);
-      expect(leaderboard[1].agentNumber).toBe('1000001');
-      expect(leaderboard[1].bestScore).toBe(10);
+      expect(leaderboard).toHaveLength(20);
+      const real = leaderboard.filter(e => !e.isFake);
+      expect(real).toHaveLength(2);
+      // Both real entries present with their scores
+      const scores = real.map(r => r.bestScore).sort((a, b) => b - a);
+      expect(scores).toEqual([14, 10]);
+      // pilot2 (14) ranks above pilot1 (10) in the merged list
+      const p2Idx = leaderboard.findIndex(e => e.agentNumber === '1000002');
+      const p1Idx = leaderboard.findIndex(e => e.agentNumber === '1000001');
+      expect(p2Idx).toBeLessThan(p1Idx);
 
-      expect(myBest.rank).toBe(2);
+      expect(myBest.bestScore).toBe(10);
     });
 
     it('returns myBest with rank when user is outside top 20', async () => {
@@ -418,18 +424,22 @@ describe('CBAT Symbols', () => {
         .set('Cookie', cookie);
 
       const { leaderboard } = res.body.data;
-      expect(leaderboard).toHaveLength(2);
-      // Same correctCount — pilot2 wins on time
-      expect(leaderboard[0].agentNumber).toBe('1000002');
-      expect(leaderboard[1].agentNumber).toBe('1000001');
+      expect(leaderboard).toHaveLength(20);
+      const real = leaderboard.filter(e => !e.isFake);
+      expect(real).toHaveLength(2);
+      // Same correctCount — pilot2 (faster time) sits above pilot1
+      const p2Idx = leaderboard.findIndex(e => e.agentNumber === '1000002');
+      const p1Idx = leaderboard.findIndex(e => e.agentNumber === '1000001');
+      expect(p2Idx).toBeLessThan(p1Idx);
     });
 
-    it('returns empty leaderboard when no results exist', async () => {
+    it('returns a fully-padded fake leaderboard when no results exist', async () => {
       const res = await request(app)
         .get(LEADERBOARD_URL)
         .set('Cookie', cookie);
 
-      expect(res.body.data.leaderboard).toHaveLength(0);
+      expect(res.body.data.leaderboard).toHaveLength(20);
+      expect(res.body.data.leaderboard.every(e => e.isFake)).toBe(true);
       expect(res.body.data.myBest).toBeNull();
     });
   });
@@ -500,15 +510,19 @@ describe('CBAT Target', () => {
 
       const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
       const { leaderboard } = res.body.data;
-      expect(leaderboard).toHaveLength(2);
-      // Same totalScore — user2 wins on time
-      expect(leaderboard[0].agentNumber).toBe('1000002');
-      expect(leaderboard[1].agentNumber).toBe('1000001');
+      expect(leaderboard).toHaveLength(20);
+      const real = leaderboard.filter(e => !e.isFake);
+      expect(real).toHaveLength(2);
+      // Same totalScore — user2 (faster time) sits above user1
+      const p2Idx = leaderboard.findIndex(e => e.agentNumber === '1000002');
+      const p1Idx = leaderboard.findIndex(e => e.agentNumber === '1000001');
+      expect(p2Idx).toBeLessThan(p1Idx);
     });
 
-    it('returns empty leaderboard when no results exist', async () => {
+    it('returns a fully-padded fake leaderboard when no results exist', async () => {
       const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
-      expect(res.body.data.leaderboard).toHaveLength(0);
+      expect(res.body.data.leaderboard).toHaveLength(20);
+      expect(res.body.data.leaderboard.every(e => e.isFake)).toBe(true);
       expect(res.body.data.myBest).toBeNull();
     });
   });
@@ -574,15 +588,19 @@ describe('CBAT Instruments', () => {
 
       const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
       const { leaderboard } = res.body.data;
-      expect(leaderboard).toHaveLength(2);
-      // Same correctCount — user2 wins on time
-      expect(leaderboard[0].agentNumber).toBe('1000002');
-      expect(leaderboard[1].agentNumber).toBe('1000001');
+      expect(leaderboard).toHaveLength(20);
+      const real = leaderboard.filter(e => !e.isFake);
+      expect(real).toHaveLength(2);
+      // Same correctCount — user2 (faster time) sits above user1
+      const p2Idx = leaderboard.findIndex(e => e.agentNumber === '1000002');
+      const p1Idx = leaderboard.findIndex(e => e.agentNumber === '1000001');
+      expect(p2Idx).toBeLessThan(p1Idx);
     });
 
-    it('returns empty leaderboard when no results exist', async () => {
+    it('returns a fully-padded fake leaderboard when no results exist', async () => {
       const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
-      expect(res.body.data.leaderboard).toHaveLength(0);
+      expect(res.body.data.leaderboard).toHaveLength(20);
+      expect(res.body.data.leaderboard.every(e => e.isFake)).toBe(true);
       expect(res.body.data.myBest).toBeNull();
     });
   });
@@ -658,15 +676,19 @@ describe('CBAT Speed Distance Time', () => {
 
       const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
       const { leaderboard } = res.body.data;
-      expect(leaderboard).toHaveLength(2);
-      // Same totalScore — user2 wins on time
-      expect(leaderboard[0].agentNumber).toBe('1000002');
-      expect(leaderboard[1].agentNumber).toBe('1000001');
+      expect(leaderboard).toHaveLength(20);
+      const real = leaderboard.filter(e => !e.isFake);
+      expect(real).toHaveLength(2);
+      // Same totalScore — user2 (faster time) sits above user1
+      const p2Idx = leaderboard.findIndex(e => e.agentNumber === '1000002');
+      const p1Idx = leaderboard.findIndex(e => e.agentNumber === '1000001');
+      expect(p2Idx).toBeLessThan(p1Idx);
     });
 
-    it('returns empty leaderboard when no results exist', async () => {
+    it('returns a fully-padded fake leaderboard when no results exist', async () => {
       const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
-      expect(res.body.data.leaderboard).toHaveLength(0);
+      expect(res.body.data.leaderboard).toHaveLength(20);
+      expect(res.body.data.leaderboard.every(e => e.isFake)).toBe(true);
       expect(res.body.data.myBest).toBeNull();
     });
   });

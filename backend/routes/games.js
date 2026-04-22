@@ -21,6 +21,7 @@ const GameOrderOfBattle = require('../models/GameOrderOfBattle');
 const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/GameOrderOfBattle');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { CBAT_GAMES } = require('../constants/cbatGames');
+const { padLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn'].Model;
 const GameSessionCbatAnglesResult         = CBAT_GAMES['angles'].Model;
 const GameSessionCbatCodeDuplicatesResult = CBAT_GAMES['code-duplicates'].Model;
@@ -2273,13 +2274,16 @@ async function cbatLeaderboard(req, res, gameKey) {
 
     const leaderboard = await cfg.Model.aggregate(pipeline);
 
-    // Add rank
-    leaderboard.forEach((entry, i) => { entry.rank = i + 1; });
+    // Pad with demo rows and re-sort so points-priority order holds across the
+    // merged list. padLeaderboard reassigns each row's rank based on its
+    // position after sort (real and fake interleaved by score / time).
+    const padded = padLeaderboard(leaderboard, gameKey, { limit: 20, isAdmin });
 
-    // If current user has no session in the top 20, surface their best run + rank.
+    // Surface the user's entry from the padded list when they're in view; fall
+    // back to a real-only rank computation when they're outside the top 20.
     let myBest = null;
     if (req.user) {
-      const myEntry = leaderboard.find(e => e.userId.toString() === req.user._id.toString());
+      const myEntry = padded.find(e => !e.isFake && e.userId.toString() === req.user._id.toString());
       if (myEntry) {
         myBest = myEntry;
       } else {
@@ -2318,7 +2322,7 @@ async function cbatLeaderboard(req, res, gameKey) {
       }
     }
 
-    res.json({ status: 'success', data: { leaderboard, myBest } });
+    res.json({ status: 'success', data: { leaderboard: padded, myBest } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

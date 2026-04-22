@@ -54,6 +54,7 @@ const GAME_CONFIG = {
     lowerIsBetter: false,
     formatScore: (s) => `${s}`,
     backPath: '/cbat/instruments',
+    hideTime: true,
   },
   'sdt': {
     title: 'Speed Distance Time',

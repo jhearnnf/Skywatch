@@ -1,0 +1,136 @@
+const { CBAT_GAMES } = require('../constants/cbatGames');
+
+// Deterministic, believable filler for CBAT leaderboards so new users never
+// see a sparse or empty board. Fakes can outrank real entries — after padding,
+// the merged list is resorted by score-priority-then-time, so each row's
+// position reflects its actual score.
+
+// Pool of 7-digit agent numbers matching the shape of real ones (see User model).
+// Each game picks a different offset so the roster varies per board.
+const FAKE_AGENTS = [
+  '2847193', '5102338', '4061729', '3384501', '6728014',
+  '1904872', '7532091', '2360458', '4917263', '5845120',
+  '3079614', '6451802', '2183947', '5692035', '4738621',
+  '3917205', '2504816', '6183470', '4260917', '5371829',
+  '3648102', '2971305', '5814026', '4503718', '6247193',
+];
+
+const GAME_OFFSET = {
+  'plane-turn':      0,
+  'angles':          4,
+  'code-duplicates': 8,
+  'symbols':        12,
+  'target':         16,
+  'instruments':    20,
+  'sdt':             2,
+};
+
+// Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
+//   - floor > 0 (no demo shows a zero)
+//   - ceiling < game max (no demo hits the perfect score)
+// seedScore is the best-ranked fake when the pool is empty; the generator
+// walks from there toward the worse end using SCORE_STEPS / TIME_STEPS.
+// scoreSequence (optional) overrides the step generator when a game's real
+// scores can only take specific values (e.g. SDT awards 0/5/10 per round,
+// so totals are always multiples of 5).
+// seedTime is the fastest fake's totalTime; timeStep scales the between-row
+// deltas. Both reflect what a real completion actually looks like for each
+// game (e.g. code-duplicates is 15 rounds × ~5s display + answer ≈ 100–200s,
+// instruments is capped at a 90-second timer, SDT runs 8×60s rounds ≈ 180–450s).
+const FAKE_TUNING = {
+  'plane-turn': {
+    floor: 42, ceiling: 107, seedTime: 80, timeStep: 3,
+    // Lower = better. Top fake sits at 42 rotations (no demo beats this);
+    // worst fake up near 107. Fastest demo time is 80s (no demo goes faster).
+    scoreSequence: [42, 45, 48, 52, 55, 58, 62, 65, 68, 72, 75, 78, 82, 85, 88, 92, 95, 98, 102, 107],
+  },
+  'angles':          { floor: 1,  ceiling: 19,  seedScore: 18,  seedTime: 38, scoreStep: 1,  timeStep: 2.5 },
+  'code-duplicates': { floor: 1,  ceiling: 14,  seedScore: 13,  seedTime: 110, scoreStep: 1, timeStep: 4   },
+  'symbols':         { floor: 1,  ceiling: 14,  seedScore: 13,  seedTime: 30, scoreStep: 1,  timeStep: 2   },
+  'target': {
+    floor: 15, ceiling: 580, seedTime: 95, timeStep: 6,
+    // Top fakes sit in the 300–600 "decent to impressive" band (Outstanding
+    // threshold is 400); the rest trail off through Good / Needs Work / Failed.
+    scoreSequence: [580, 520, 470, 420, 380, 340, 300, 260, 220, 180, 140, 110, 85, 65, 50, 40, 32, 25, 20, 15],
+  },
+  'instruments': {
+    // Always runs to the 90s time limit, so fake times barely vary.
+    floor: 1, ceiling: 10, seedTime: 87, timeStep: 0.1,
+    // Top fake sits at the low end of "Good" (≥10); most of the roster is
+    // "Needs Work" (5–9) or "Failed" (<5). Grade bands: 15+ / 10+ / 5+.
+    scoreSequence: [10, 9, 9, 8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 1],
+  },
+  'sdt': {
+    floor: 5, ceiling: 75, seedTime: 210, timeStep: 9,
+    // 20 multiples-of-5 values, monotonically non-increasing, max 75, min 5.
+    // Every SDT total is a multiple of 5 (10 exact / 5 partial / 0 miss × 8 rounds).
+    scoreSequence: [70, 65, 60, 55, 50, 45, 45, 40, 35, 30, 30, 25, 20, 15, 15, 10, 10, 5, 5, 5],
+  },
+};
+
+// Fixed delta tables — natural-looking variance without randomness.
+const SCORE_STEPS = [1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1, 1];
+const TIME_STEPS  = [1, 1, 2, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1];
+
+function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
+  const offset = GAME_OFFSET[gameKey] ?? 0;
+  const fakes = [];
+  let runScore = tuning.seedScore;
+  let runTime = tuning.seedTime;
+  for (let i = 0; i < count; i++) {
+    // If the game defines an explicit score sequence (e.g. SDT's multiples
+    // of 5), use it directly. Otherwise walk from seedScore with deltas.
+    if (tuning.scoreSequence) {
+      runScore = tuning.scoreSequence[i % tuning.scoreSequence.length];
+    } else if (i > 0) {
+      const scoreDelta = SCORE_STEPS[i % SCORE_STEPS.length] * tuning.scoreStep;
+      runScore = lowerBetter
+        ? Math.min(runScore + scoreDelta, tuning.ceiling)
+        : Math.max(runScore - scoreDelta, tuning.floor);
+    }
+    if (i > 0) {
+      const timeDelta = TIME_STEPS[i % TIME_STEPS.length] * tuning.timeStep;
+      runTime += timeDelta;
+    }
+    const entry = {
+      _id: `fake-${gameKey}-${i}`,
+      userId: `fake-user-${gameKey}-${i}`,
+      agentNumber: FAKE_AGENTS[(offset + i) % FAKE_AGENTS.length],
+      bestScore: runScore,
+      bestTime: Number(runTime.toFixed(1)),
+      isFake: true,
+    };
+    if (isAdmin) entry.email = 'demo';
+    fakes.push(entry);
+  }
+  return fakes;
+}
+
+function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
+  const cfg = CBAT_GAMES[gameKey];
+  const tuning = FAKE_TUNING[gameKey];
+
+  // If the pool is already full or we don't have tuning for this game, just
+  // rank the real entries as-is (aggregate already sorted them correctly).
+  if (real.length >= limit || !cfg || !tuning) {
+    real.forEach((e, i) => { e.rank = i + 1; });
+    return real;
+  }
+
+  const lowerBetter = cfg.sortDir === 1;
+  const needed = limit - real.length;
+  const fakes = generateFakes(gameKey, needed, { lowerBetter, tuning, isAdmin });
+
+  // Merge real + fakes, then sort by points-priority, time-on-ties.
+  const merged = [...real, ...fakes].sort((a, b) => {
+    if (a.bestScore !== b.bestScore) {
+      return lowerBetter ? a.bestScore - b.bestScore : b.bestScore - a.bestScore;
+    }
+    return a.bestTime - b.bestTime;
+  });
+
+  merged.forEach((e, i) => { e.rank = i + 1; });
+  return merged;
+}
+
+module.exports = { padLeaderboard, FAKE_AGENTS, FAKE_TUNING };
