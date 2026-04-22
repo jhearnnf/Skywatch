@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback } f
 import { Capacitor } from '@capacitor/core'
 import { getLevelNumber } from '../utils/levelUtils'
 import { AUTH_TOKEN_KEY, tutorialKey, tutorialClearedKey } from '../utils/storageKeys'
+import { identifyUser, resetPostHog } from '../lib/posthog'
 
 const AuthContext = createContext(null)
 
@@ -82,6 +83,7 @@ export function AuthProvider({ children }) {
       .then(data => {
         const u = data?.data?.user ?? null
         setUser(u)
+        if (u) identifyUser(u)
         // If an admin reset this user's tutorials server-side, clear localStorage tutorial keys
         if (u?.tutorialsResetAt) {
           const resetTs   = new Date(u.tutorialsResetAt).getTime()
@@ -104,6 +106,7 @@ export function AuthProvider({ children }) {
     await fetch(`${API}/api/auth/logout`, { method: 'POST', headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }) })
     if (isNative) clearToken()
     setUser(null)
+    resetPostHog()
   }
 
   const refreshUser = useCallback(async () => {
@@ -112,6 +115,7 @@ export function AuthProvider({ children }) {
       .catch(() => null)
     const fresh = data?.data?.user ?? null
     setUser(fresh)
+    if (fresh) identifyUser(fresh)
     return fresh
   }, [])
 
