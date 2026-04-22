@@ -40,7 +40,7 @@ const { reprioritizeCategory } = require('../utils/priorityRanking');
 const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
-const { callOpenRouter, featureMiddleware } = require('../utils/openRouter');
+const { callOpenRouter, featureMiddleware, setBrief } = require('../utils/openRouter');
 
 // ── Shared quiz prompt fragments ──────────────────────────────────────────────
 // Single source of truth for answer format rules and core question rules,
@@ -163,7 +163,7 @@ const LEAD_SYNC_FIELDS = ['title', 'subtitle', 'nickname', 'category', 'subcateg
 async function syncLeadFromBrief(brief) {
   if (!brief?.title) return { matched: false, changed: false, changedFields: [] };
   const norm  = normaliseLeadTitle(brief.title);
-  const leads = await IntelLead.find().select('_id title subtitle nickname category subcategory isHistoric');
+  const leads = await IntelLead.find().select('_id title subtitle nickname category subcategory isHistoric priorityNumber');
   const match = leads.find(l => normaliseLeadTitle(l.title) === norm);
   if (!match) return { matched: false, changed: false, changedFields: [] };
 
@@ -179,7 +179,26 @@ async function syncLeadFromBrief(brief) {
   const changedFields = Object.keys(updates);
   if (!changedFields.length) return { matched: true, changed: false, changedFields: [] };
 
+  // When category changes, the lead's priorityNumber was ranked against siblings
+  // of the old category — it has no meaning in the new one. Clear it so the
+  // rerank picks the lead up as "to place", then fire-and-forget reprioritize
+  // for both the old category (close the gap) and the new category (place this
+  // lead among its new siblings).
+  const categoryChanged = changedFields.includes('category');
+  const oldCategory = match.category;
+  const newCategory = brief.category;
+  if (categoryChanged) updates.priorityNumber = null;
+
   await IntelLead.updateOne({ _id: match._id }, updates);
+
+  if (categoryChanged) {
+    const sourceTitle = `lead-category-move:${match._id}`;
+    reprioritizeCategory(oldCategory, [], brief._id, sourceTitle, openRouterChat)
+      .catch(err => console.error(`[syncLeadFromBrief] reprioritize old category "${oldCategory}" failed:`, err.message));
+    reprioritizeCategory(newCategory, [], brief._id, sourceTitle, openRouterChat)
+      .catch(err => console.error(`[syncLeadFromBrief] reprioritize new category "${newCategory}" failed:`, err.message));
+  }
+
   return { matched: true, changed: true, changedFields };
 }
 
@@ -529,6 +548,7 @@ router.get('/openrouter/logs', async (req, res) => {
       OpenRouterUsageLog.find(pageMatch)
         .sort({ createdAt: -1 })
         .limit(limit + 1)
+        .populate('briefId', 'title')
         .lean(),
       OpenRouterUsageLog.aggregate([
         { $match: match },
@@ -1998,6 +2018,7 @@ router.patch('/media/:mediaId', async (req, res) => {
 router.post('/briefs/:id/media/:mediaId/extract-subject', featureMiddleware('extract-cutout'), async (req, res) => {
   try {
     const { id: briefId, mediaId } = req.params;
+    setBrief(briefId);
 
     // Guard: the cutout-display flow is only surfaced for Aircraft briefs, so
     // there's no reason to let the extraction run on other categories.
@@ -2162,6 +2183,7 @@ async function cleanupOrphanedMedia(mediaId) {
 // POST /api/admin/briefs/:id/questions/bulk — replace all quiz questions for a brief
 router.post('/briefs/:id/questions/bulk', requireReason, featureMiddleware('generate-quiz-bulk'), async (req, res) => {
   try {
+    setBrief(req.params.id);
     const { easyQuestions = [], mediumQuestions = [], reason } = req.body;
     const brief = await IntelligenceBrief.findById(req.params.id);
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
@@ -3062,11 +3084,12 @@ router.post('/intel-leads/sync-from-briefs', async (req, res) => {
     }
 
     const leads = await IntelLead.find()
-      .select('_id title subtitle nickname category subcategory isHistoric')
+      .select('_id title subtitle nickname category subcategory isHistoric priorityNumber')
       .lean();
 
     const changes = [];
     const unmatched = [];
+    const categoriesToRerank = new Set();
 
     for (const lead of leads) {
       const brief = briefByNorm.get(normaliseLeadTitle(lead.title));
@@ -3082,10 +3105,23 @@ router.post('/intel-leads/sync-from-briefs', async (req, res) => {
       if (nextHistoric !== !!lead.isHistoric) updates.isHistoric = nextHistoric;
 
       if (Object.keys(updates).length) {
+        // Category move invalidates priorityNumber (see syncLeadFromBrief).
+        if ('category' in updates) {
+          updates.priorityNumber = null;
+          categoriesToRerank.add(lead.category);
+          categoriesToRerank.add(brief.category);
+        }
         changes.push({ leadId: lead._id, title: lead.title, updates });
         if (!dryRun) {
           await IntelLead.updateOne({ _id: lead._id }, updates);
         }
+      }
+    }
+
+    if (!dryRun && categoriesToRerank.size) {
+      for (const cat of categoriesToRerank) {
+        reprioritizeCategory(cat, [], null, 'sync-from-briefs', openRouterChat)
+          .catch(err => console.error(`[sync-from-briefs] reprioritize "${cat}" failed:`, err.message));
       }
     }
 
@@ -3151,6 +3187,7 @@ function normTitle(s) {
 router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), async (req, res) => {
   try {
     const { description, existingKeywords = [], needed: bodyNeeded, title = '', briefId = null } = req.body;
+    if (briefId) setBrief(briefId);
     if (!description) return res.status(400).json({ message: 'description required' });
 
     const kwAiSettings = await AppSettings.getSettings();
@@ -3196,9 +3233,16 @@ router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), asy
       ? `Already used (do NOT repeat these): ${existingKeywords.join(', ')}\n\n`
       : '';
 
-    // Pass 1 — technical terms, aircraft, operations, systems, training programmes (up to 10)
+    // Per-pass target: distribute the full quota across 3 passes instead of
+    // capping each at 10 (which silently capped the total at ~10 when pass 2
+    // found no proper nouns and pass 3's prompt declared the coverage done).
+    // Kept per-pass well below the OpenRouter/Perplexity response-length
+    // ceiling that made a single full-quota call truncate mid-JSON.
+    const perPassTarget = Math.ceil(needed / 3);
+
+    // Pass 1 — technical terms, aircraft, operations, systems, training programmes
     let pass1 = [];
-    const pass1Target = Math.min(10, needed);
+    const pass1Target = Math.min(perPassTarget, needed);
     try {
       const r1 = await openRouterChat([...kwSys, {
         role: 'user',
@@ -3207,9 +3251,9 @@ router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), asy
       pass1 = validateKws(JSON.parse(cleanJson(r1.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, pass1Target);
     } catch (e) { /* pass1 stays empty — caller gets whatever passes succeed */ }
 
-    // Pass 2 — proper nouns: squadron names, base names, unit designations (up to 10)
+    // Pass 2 — proper nouns: squadron names, base names, unit designations
     let pass2 = [];
-    const pass2Target = Math.min(10, needed - pass1.length);
+    const pass2Target = Math.min(perPassTarget, needed - pass1.length);
     if (pass2Target > 0) {
       try {
         const alreadyAll  = [...existingKeywords, ...pass1.map(k => k.keyword)];
@@ -3222,7 +3266,10 @@ router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), asy
       } catch (e) { /* pass2 stays empty */ }
     }
 
-    // Pass 3 — coverage check: fills the gap left by passes 1 & 2, capped at 10
+    // Pass 3 — gap-fill: broadens scope to reach the full quota when passes 1
+    // and 2 fell short (common when the description has no squadron/base
+    // proper nouns for pass 2). Capped at 10 per request for response-length
+    // safety; any remainder can be filled by a follow-up "Generate Missing".
     const combined12 = [...pass1, ...pass2];
     const pass3Target = Math.min(10, needed - combined12.length);
     let pass3 = [];
@@ -3231,7 +3278,7 @@ router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), asy
         const alreadyAll = [...existingKeywords, ...combined12.map(k => k.keyword)];
         const r3 = await openRouterChat([...kwSys, {
           role: 'user',
-          content: `Description:\n"""${description}"""\n\nAlready extracted: ${alreadyAll.join(', ')}\n\nIdentify up to ${pass3Target} important terms from this description that were NOT already extracted. Look for aircraft designations, operation names, training programme names, squadron names, base names, technical systems, or role titles appearing verbatim in the description but absent from the list above. If nothing important is missing, return {"keywords":[]}.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
+          content: `Description:\n"""${description}"""\n\nAlready extracted (do NOT repeat): ${alreadyAll.join(', ')}\n\n${titleExclusion}Extract exactly ${pass3Target} additional keywords from the description above. Every keyword MUST appear verbatim in the description and must NOT already appear in the list above. Broaden your scope beyond earlier passes: consider equipment, weapons, locations, personnel roles, capabilities, doctrine or concept terms, aircraft designations, operation names, training programmes, squadron names, base names, or any other meaningful noun phrase in the description. Only return fewer than ${pass3Target} if the description genuinely contains no more qualifying terms.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference or summarise the intel brief.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
         }], kwMdl);
         pass3 = validateKws(JSON.parse(cleanJson(r3.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, pass3Target);
       } catch (e) { /* pass3 stays empty */ }
@@ -3268,7 +3315,8 @@ router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), asy
 // linkType: 'bases' | 'squadrons' | 'aircraft'
 router.post('/ai/generate-links', featureMiddleware('generate-links'), async (req, res) => {
   try {
-    const { sourceTitle, sourceDescription, sourceCategory, linkType, pool, isHistoric } = req.body;
+    const { sourceTitle, sourceDescription, sourceCategory, linkType, pool, isHistoric, briefId = null } = req.body;
+    if (briefId) setBrief(briefId);
     if (!sourceTitle) return res.status(400).json({ message: 'sourceTitle required' });
     if (!Array.isArray(pool) || pool.length === 0)
       return res.status(400).json({ message: 'pool required' });
@@ -3310,7 +3358,8 @@ router.post('/ai/generate-links', featureMiddleware('generate-links'), async (re
 // asks the AI which bases are home bases for this aircraft.
 router.post('/ai/generate-bases', featureMiddleware('generate-bases'), async (req, res) => {
   try {
-    const { title, body, basesBriefs, isHistoric } = req.body;
+    const { title, body, basesBriefs, isHistoric, briefId = null } = req.body;
+    if (briefId) setBrief(briefId);
     if (!title) return res.status(400).json({ message: 'title required' });
     if (!Array.isArray(basesBriefs) || basesBriefs.length === 0)
       return res.status(400).json({ message: 'basesBriefs required' });
@@ -3350,7 +3399,8 @@ router.post('/ai/generate-bases', featureMiddleware('generate-bases'), async (re
 // POST /api/admin/ai/generate-quiz
 router.post('/ai/generate-quiz', featureMiddleware('generate-quiz'), async (req, res) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, briefId = null } = req.body;
+    if (briefId) setBrief(briefId);
     if (!title && !description) return res.status(400).json({ message: 'title or description required' });
     const quizAiSettings = await AppSettings.getSettings();
     const targetQ = quizAiSettings.aiQuestionsPerDifficulty ?? 7;
@@ -3390,7 +3440,8 @@ router.post('/ai/generate-quiz', featureMiddleware('generate-quiz'), async (req,
 // Generates `needed` new questions for a single difficulty tier, avoiding repeats of existing questions.
 router.post('/ai/generate-quiz-missing', featureMiddleware('generate-quiz-missing'), async (req, res) => {
   try {
-    const { title, description, difficulty = 'easy', existingQuestions = [], needed = 1 } = req.body;
+    const { title, description, difficulty = 'easy', existingQuestions = [], needed = 1, briefId = null } = req.body;
+    if (briefId) setBrief(briefId);
     if (!title && !description) return res.status(400).json({ message: 'title or description required' });
     if (needed <= 0) return res.json({ status: 'success', data: { questions: [] } });
 
@@ -3679,6 +3730,7 @@ async function generateBriefContent(brief, aiSettings) {
 router.post('/ai/regenerate-brief/:id', featureMiddleware('regenerate-brief'), async (req, res) => {
   let brief;
   try {
+    setBrief(req.params.id);
     brief = await IntelligenceBrief.findById(req.params.id);
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
     const aiSettings = await AppSettings.getSettings();
@@ -3747,6 +3799,7 @@ const BULK_LINK_CONFIG = {
 router.post('/ai/bulk-generate-stub/:id', featureMiddleware('bulk-generate-stub'), async (req, res) => {
   let brief;
   try {
+    setBrief(req.params.id);
     brief = await IntelligenceBrief.findById(req.params.id);
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
     if (brief.status !== 'stub') return res.status(400).json({ message: 'Brief is not a stub' });
@@ -3958,6 +4011,7 @@ router.post('/ai/bulk-generate-stub/:id', featureMiddleware('bulk-generate-stub'
 // questions/answers derived from the old description become stale.
 router.post('/ai/regenerate-description/:id', requireReason, featureMiddleware('regenerate-description'), async (req, res) => {
   try {
+    setBrief(req.params.id);
     const brief = await IntelligenceBrief.findById(req.params.id).select('title category subcategory historic');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
@@ -3975,7 +4029,12 @@ router.post('/ai/regenerate-description/:id', requireReason, featureMiddleware('
       historic:    !!brief.historic,
     });
     const { array: dsArray, countRule: dsCountRule, sharedRuleTail: dsRuleTail } = buildDescriptionSectionsSpec({ strict: false, shape });
-    const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text:\n{\n  "descriptionSections": [\n    ${dsArray}\n  ]\n}\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n${LIST_FORMAT_RULE}`;
+    // Sources regenerate alongside descriptionSections — they must be grounded
+    // in the new text, so the old sources (cited against stale claims) are
+    // discarded. Mirror the sources shape used by generateBriefContent so both
+    // regen paths produce the same source objects.
+    const SOURCES_SHAPE = `"sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]`;
+    const DESC_JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "descriptionSections": [\n    ${dsArray}\n  ],\n  ${SOURCES_SHAPE}\n}\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n${LIST_FORMAT_RULE}\nFor "sources": list 1–3 real published URLs that back the claims made in the description above (e.g. its Wikipedia page, raf.mod.uk, gov.uk, or other authoritative sources). Set "articleDate" to the article's real publish date in YYYY-MM-DD format, or the Wikipedia page's last-modified date.`;
 
     const descAiSettings = await AppSettings.getSettings();
     const data = await openRouterChat([{
@@ -3999,7 +4058,15 @@ router.post('/ai/regenerate-description/:id', requireReason, featureMiddleware('
       heading: (s.heading ?? '').replace(/[*_`#]/g, ''),
       body:    (s.body    ?? '').replace(/[*_`#]/g, ''),
     }));
-    res.json({ status: 'success', data: { descriptionSections, cascade: cascadeStats } });
+    let sources = Array.isArray(generated.sources) ? generated.sources : [];
+    if (sources.length) {
+      try {
+        sources = await enrichSourceDates(sources);
+      } catch (srcErr) {
+        console.error('[regenerate-description] source date enrichment failed (non-fatal):', srcErr.message);
+      }
+    }
+    res.json({ status: 'success', data: { descriptionSections, sources, cascade: cascadeStats } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -4014,6 +4081,7 @@ router.post('/ai/regenerate-description/:id', requireReason, featureMiddleware('
 // the admin is regenerating it's usually because those are wrong.
 router.post('/ai/regenerate-subtitle/:id', featureMiddleware('regenerate-subtitle'), async (req, res) => {
   try {
+    setBrief(req.params.id);
     const brief = await IntelligenceBrief.findById(req.params.id).select('title nickname category subcategory historic');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
 
@@ -4071,7 +4139,8 @@ router.delete('/media/brief-image', async (req, res) => {
 const BOO_ELIGIBLE = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases', 'Squadrons', 'Threats'];
 router.post('/ai/generate-battle-order-data', featureMiddleware('generate-battle-order-data'), async (req, res) => {
   try {
-    const { title, description, category } = req.body;
+    const { title, description, category, briefId = null } = req.body;
+    if (briefId) setBrief(briefId);
     if (!title && !description) return res.status(400).json({ message: 'title or description required' });
     if (!BOO_ELIGIBLE.includes(category)) {
       return res.status(400).json({ message: `Category "${category}" is not eligible for Battle of Order data` });
@@ -4146,7 +4215,8 @@ router.post('/ai/generate-rank-data/:id', featureMiddleware('generate-rank-data'
 // that matches an existing Media doc is reused instead of re-uploaded.
 router.post('/ai/generate-image', featureMiddleware('generate-image'), async (req, res) => {
   try {
-    const { title, subtitle } = req.body;
+    const { title, subtitle, briefId = null } = req.body;
+    if (briefId) setBrief(briefId);
     if (!title) return res.status(400).json({ message: 'title is required' });
 
     const imgAiSettings = await AppSettings.getSettings();
@@ -4395,7 +4465,8 @@ router.post('/economy/apply', async (req, res) => {
 // Always returns { mnemonics: { key: sentence, ... } }.
 router.post('/ai/generate-mnemonic', featureMiddleware('generate-mnemonic'), async (req, res) => {
   try {
-    const { title, category, gameData, statKey } = req.body;
+    const { title, category, gameData, statKey, briefId = null } = req.body;
+    if (briefId) setBrief(briefId);
     if (!title || !category) return res.status(400).json({ message: 'title and category required' });
 
     const mnemonicSettings = await AppSettings.getSettings();
@@ -4454,6 +4525,7 @@ router.post('/ai/generate-mnemonics-missing', featureMiddleware('generate-mnemon
 
     for (const brief of toProcess) {
       try {
+        setBrief(brief._id);
         const mnemonics = await generateMnemonicsForBrief(brief.title, brief.category, brief.gameData ?? {}, batchPrompt);
         if (mnemonics) {
           await IntelligenceBrief.findByIdAndUpdate(brief._id, { mnemonics });

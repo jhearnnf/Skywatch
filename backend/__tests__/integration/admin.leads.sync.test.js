@@ -10,6 +10,12 @@
 process.env.JWT_SECRET     = 'test_secret';
 process.env.OPENROUTER_KEY = 'test_key';
 
+// Mock priorityRanking so the PATCH-brief category-change path doesn't make
+// real AI calls — we just want to assert it's invoked with the right args.
+jest.mock('../../utils/priorityRanking', () => ({
+  reprioritizeCategory: jest.fn().mockResolvedValue(undefined),
+}));
+
 const request  = require('supertest');
 const app      = require('../../app');
 const db       = require('../helpers/setupDb');
@@ -22,9 +28,13 @@ const {
 
 const IntelLead         = require('../../models/IntelLead');
 const IntelligenceBrief = require('../../models/IntelligenceBrief');
+const { reprioritizeCategory } = require('../../utils/priorityRanking');
 
 beforeAll(async () => { await db.connect(); });
-beforeEach(async () => { await createSettings(); });
+beforeEach(async () => {
+  await createSettings();
+  reprioritizeCategory.mockClear();
+});
 afterEach(async () => {
   jest.restoreAllMocks();
   await db.clearDatabase();
@@ -150,6 +160,40 @@ describe('PATCH /api/admin/briefs/:id — lead sync', () => {
     const lead = await IntelLead.findOne({ title: 'Ground-Based Air Defence' });
     expect(lead.category).toBe('Tech');
     expect(lead.subcategory).toBe('Weapons Systems');
+  });
+
+  it('clears priorityNumber and triggers reprioritize for old + new category on category change', async () => {
+    const admin = await createAdminUser();
+    const brief = await createBrief({ title: 'GBAD', category: 'Aircrafts' });
+    await createLead({ title: 'GBAD', category: 'Aircrafts', priorityNumber: 3 });
+
+    await request(app)
+      .patch(`/api/admin/briefs/${brief._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: 'move to tech', category: 'Tech' });
+
+    const lead = await IntelLead.findOne({ title: 'GBAD' });
+    expect(lead.category).toBe('Tech');
+    expect(lead.priorityNumber).toBeNull();
+
+    const calls = reprioritizeCategory.mock.calls.map(c => c[0]);
+    expect(calls).toContain('Aircrafts');
+    expect(calls).toContain('Tech');
+  });
+
+  it('does NOT reprioritize when category is unchanged (subtitle-only edit)', async () => {
+    const admin = await createAdminUser();
+    const brief = await createBrief({ title: 'Typhoon', category: 'Aircrafts', subtitle: 'old' });
+    await createLead({ title: 'Typhoon', category: 'Aircrafts', priorityNumber: 2 });
+
+    await request(app)
+      .patch(`/api/admin/briefs/${brief._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: 'subtitle only', subtitle: 'new' });
+
+    const lead = await IntelLead.findOne({ title: 'Typhoon' });
+    expect(lead.priorityNumber).toBe(2);
+    expect(reprioritizeCategory).not.toHaveBeenCalled();
   });
 
   it('propagates nickname changes to the matching lead', async () => {

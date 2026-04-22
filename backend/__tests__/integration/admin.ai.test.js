@@ -856,6 +856,47 @@ describe('POST /api/admin/ai/regenerate-description/:id', () => {
     expect(res.body.data.mediumQuestions).toBeUndefined();
   });
 
+  it('returns sources when the AI provides them (fresh citations for the new description)', async () => {
+    const descWithSources = JSON.stringify({
+      descriptionSections: [
+        { heading: 'Role', body: 'Typhoon body.' },
+        { heading: 'Base', body: 'RAF Coningsby.' },
+      ],
+      sources: [
+        { url: 'https://www.raf.mod.uk/typhoon', siteName: 'RAF', articleDate: '2024-05-01' },
+        { url: 'https://en.wikipedia.org/wiki/Eurofighter_Typhoon', siteName: 'Wikipedia', articleDate: '2024-06-15' },
+      ],
+    });
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce(mockOpenRouter(descWithSources));
+
+    const brief = await createBrief({ title: 'Eurofighter Typhoon' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: REASON });
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data.sources)).toBe(true);
+    expect(res.body.data.sources.length).toBe(2);
+    expect(res.body.data.sources[0].url).toContain('raf.mod.uk');
+  });
+
+  it('returns an empty sources array when the AI omits them (reset behaviour)', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce(mockOpenRouter(MOCK_DESC_JSON));
+
+    const brief = await createBrief({ title: 'Eurofighter Typhoon' });
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post(`/api/admin/ai/regenerate-description/${brief._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ reason: REASON });
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data.sources)).toBe(true);
+    expect(res.body.data.sources.length).toBe(0);
+  });
+
   it('returns 400 when reason is missing', async () => {
     const brief = await createBrief();
     const admin = await createAdminUser();

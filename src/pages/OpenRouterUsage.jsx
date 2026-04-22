@@ -245,6 +245,7 @@ export default function OpenRouterUsage() {
                 <th className="text-left px-3 py-2 font-semibold">When</th>
                 <th className="text-left px-3 py-2 font-semibold">Key</th>
                 <th className="text-left px-3 py-2 font-semibold">Feature</th>
+                <th className="text-left px-3 py-2 font-semibold">Brief</th>
                 <th className="text-left px-3 py-2 font-semibold hidden sm:table-cell">Model</th>
                 <th className="text-right px-3 py-2 font-semibold">Tokens</th>
                 <th className="text-right px-3 py-2 font-semibold">Cost</th>
@@ -256,6 +257,20 @@ export default function OpenRouterUsage() {
                   <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDateTime(r.createdAt)}</td>
                   <td className="px-3 py-2"><span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${r.key === 'aptitude' ? 'bg-amber-50 text-amber-700' : 'bg-brand-50 text-brand-700'}`}>{r.key}</span></td>
                   <td className="px-3 py-2 text-slate-700">{r.feature}</td>
+                  <td className="px-3 py-2 text-slate-600 truncate max-w-[200px]">
+                    {r.briefId && r.briefId.title ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate('/admin', { state: { editBriefId: String(r.briefId._id) } })}
+                        className="text-brand-600 hover:text-brand-800 hover:underline text-left truncate"
+                        title={r.briefId.title}
+                      >
+                        {r.briefId.title}
+                      </button>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-slate-500 hidden sm:table-cell truncate max-w-[180px]">{r.model}</td>
                   <td className="px-3 py-2 text-right text-slate-600 tabular-nums">{fmtNum(r.totalTokens)}</td>
                   <td className="px-3 py-2 text-right font-semibold text-slate-800 tabular-nums">{fmtUSD(r.costUsd)}</td>

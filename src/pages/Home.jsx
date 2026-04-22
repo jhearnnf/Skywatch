@@ -157,15 +157,37 @@ export default function Home() {
         </motion.div>
       )}
 
+      {/* Jump Back In */}
+      {jumpBackBrief && (
+        <motion.div
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+          onClick={() => navigate(`/brief/${jumpBackBrief.briefId}`)}
+          className="rounded-2xl p-4 mb-6 flex items-center gap-3 border border-brand-300/40 transition-all cursor-pointer hover:border-brand-400/60 hover:-translate-y-0.5 card-shadow hover:card-shadow-hover"
+          style={{ background: 'linear-gradient(135deg, #0d1e35 0%, #091628 100%)' }}
+        >
+          <div className="w-10 h-10 rounded-xl bg-brand-200/60 flex items-center justify-center shrink-0 text-xl text-brand-600">
+            ◑
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="intel-mono text-brand-600 mb-0.5">Jump Back In</p>
+            <p className="text-sm font-bold text-white truncate">{jumpBackBrief.title}</p>
+            <p className="text-xs text-brand-700">{jumpBackBrief.category} · In Progress</p>
+          </div>
+          <span className="shrink-0 text-xs font-bold bg-brand-600 text-slate-900 px-3 py-1.5 rounded-xl">Resume →</span>
+        </motion.div>
+      )}
+
       {/* Daily challenge prompt */}
       {user && <motion.div
         initial={{ opacity: 0, x: -12 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: 0.2 }}
+        transition={{ delay: 0.25 }}
         onClick={!missionDone && !missionLoading ? async () => {
           setMissionLoading(true)
           try {
-            const res = await apiFetch(`${API}/api/briefs/random-unlocked`, { credentials: 'include' })
+            const res = await apiFetch(`${API}/api/briefs/next-pathway-brief`, { credentials: 'include' })
             const data = await res.json()
             if (data.status === 'success') {
               navigate(`/brief/${data.data.briefId}`)
@@ -206,28 +228,6 @@ export default function Home() {
           </span>
         )}
       </motion.div>}
-
-      {/* Jump Back In */}
-      {jumpBackBrief && (
-        <motion.div
-          initial={{ opacity: 0, x: -12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.25 }}
-          onClick={() => navigate(`/brief/${jumpBackBrief.briefId}`)}
-          className="rounded-2xl p-4 mb-6 flex items-center gap-3 border border-brand-300/40 transition-all cursor-pointer hover:border-brand-400/60 hover:-translate-y-0.5 card-shadow hover:card-shadow-hover"
-          style={{ background: 'linear-gradient(135deg, #0d1e35 0%, #091628 100%)' }}
-        >
-          <div className="w-10 h-10 rounded-xl bg-brand-200/60 flex items-center justify-center shrink-0 text-xl text-brand-600">
-            ◑
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="intel-mono text-brand-600 mb-0.5">Jump Back In</p>
-            <p className="text-sm font-bold text-white truncate">{jumpBackBrief.title}</p>
-            <p className="text-xs text-brand-700">{jumpBackBrief.category} · In Progress</p>
-          </div>
-          <span className="shrink-0 text-xs font-bold bg-brand-600 text-slate-900 px-3 py-1.5 rounded-xl">Resume →</span>
-        </motion.div>
-      )}
 
       {/* Quick Actions */}
       {user && (

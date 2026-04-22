@@ -165,7 +165,7 @@ describe('Admin Briefs — Regenerate All confirmation modal', () => {
     fireEvent.click(screen.getByRole('button', { name: /regenerate all/i }))
 
     // Modal warning text must be visible
-    await screen.findByText(/delete all read history/i)
+    await screen.findByText(/delete every user's read history/i)
     // No cascade or AI fetch should have been called yet
     const calls = global.fetch.mock.calls.map(c => c[0])
     expect(calls.some(u => u.includes('confirm-regeneration'))).toBe(false)
@@ -371,7 +371,7 @@ describe('Admin Briefs — Generate Description button', () => {
     await openBriefEditor()
     await expandDescriptionPanel()
     fireEvent.click(screen.getByRole('button', { name: /generate description/i }))
-    await screen.findByText(/delete all read history/i)
+    await screen.findByText(/delete every user's read history/i)
     await screen.findByText(/confirm & regenerate/i)
   })
 
@@ -459,7 +459,7 @@ describe('Admin Briefs — Generate Description button', () => {
     render(<Admin />)
     await openBriefEditor()
     await confirmDescModal()
-    await waitFor(() => screen.getByText(/description generated — keywords and quiz cleared/i))
+    await waitFor(() => screen.getByText(/description generated — keywords, quiz, and sources refreshed/i))
   })
 
   it('shows error toast when the API returns an error response', async () => {

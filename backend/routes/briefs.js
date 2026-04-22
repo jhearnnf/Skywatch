@@ -284,17 +284,31 @@ router.get('/random-unlocked', optionalAuth, async (req, res) => {
   }
 });
 
-// GET /api/briefs/random-in-progress — returns one random started-but-not-completed brief for the current user
+// GET /api/briefs/random-in-progress — returns the in-progress brief with the
+// lowest priorityNumber (most foundational first). Null priorities sort last;
+// ties break by most recent lastReadAt.
 router.get('/random-in-progress', protect, async (req, res) => {
   try {
     const reads = await IntelligenceBriefRead.find({ userId: req.user._id, completed: false })
-      .populate('intelBriefId', 'title category _id status')
+      .populate('intelBriefId', 'title category _id status priorityNumber')
       .lean();
 
     const valid = reads.filter(r => r.intelBriefId && r.intelBriefId.status === 'published');
     if (!valid.length) return res.json({ status: 'success', data: null });
 
-    const pick = valid[Math.floor(Math.random() * valid.length)];
+    valid.sort((a, b) => {
+      const pa = a.intelBriefId.priorityNumber;
+      const pb = b.intelBriefId.priorityNumber;
+      if (pa == null && pb == null) {
+        return new Date(b.lastReadAt ?? 0) - new Date(a.lastReadAt ?? 0);
+      }
+      if (pa == null) return 1;
+      if (pb == null) return -1;
+      if (pa !== pb) return pa - pb;
+      return new Date(b.lastReadAt ?? 0) - new Date(a.lastReadAt ?? 0);
+    });
+
+    const pick = valid[0];
     res.json({
       status: 'success',
       data: {
@@ -304,6 +318,71 @@ router.get('/random-in-progress', protect, async (req, res) => {
         currentSection: pick.currentSection ?? 0,
       },
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/briefs/next-pathway-brief — returns the next unread stepping stone.
+// Picks a random accessible category that has ≥1 eligible unread brief, then returns
+// the one with the lowest priorityNumber within it (null priorities sort last).
+// Eligible = published (stubs excluded), has descriptionSections, accessible by tier
+// AND pathway, and the user has no read record for it (neither completed nor in-progress).
+// In-progress briefs are excluded so this pairs cleanly with the Jump Back In card —
+// Daily Mission surfaces a fresh next-stepping-stone, Jump Back In covers resume.
+router.get('/next-pathway-brief', protect, async (req, res) => {
+  try {
+    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
+    const tier       = effectiveTier(req.user);
+    const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
+    const pathway    = getPathwayAccessibleCategories(req.user, settings, levelThresholds);
+
+    let finalCategories = null;
+    if (accessible !== null && pathway !== null) {
+      finalCategories = accessible.filter(c => pathway.includes(c));
+    } else if (accessible !== null) {
+      finalCategories = accessible;
+    } else if (pathway !== null) {
+      finalCategories = pathway;
+    }
+
+    // Exclude any brief the user has a read record for — completed OR in-progress.
+    // In-progress briefs are surfaced by the Jump Back In card instead.
+    const reads = await IntelligenceBriefRead.find({ userId: req.user._id })
+      .select('intelBriefId').lean();
+    const excludeIds = reads.map(r => r.intelBriefId);
+
+    const filter = {
+      status: 'published',
+      'descriptionSections.0': { $exists: true },
+    };
+    if (finalCategories !== null) filter.category = { $in: finalCategories };
+    if (excludeIds.length)        filter._id      = { $nin: excludeIds };
+
+    // Find the set of categories that have at least one eligible brief, then pick one at random
+    const categoriesWithBriefs = await IntelligenceBrief.distinct('category', filter);
+    if (!categoriesWithBriefs.length) {
+      return res.status(404).json({ message: 'No briefs available.' });
+    }
+
+    const chosenCategory = categoriesWithBriefs[Math.floor(Math.random() * categoriesWithBriefs.length)];
+
+    // Within the chosen category, pick the lowest priorityNumber (nulls last)
+    const candidates = await IntelligenceBrief
+      .find({ ...filter, category: chosenCategory })
+      .select('_id priorityNumber')
+      .lean();
+
+    candidates.sort((a, b) => {
+      if (a.priorityNumber == null && b.priorityNumber == null) return 0;
+      if (a.priorityNumber == null) return 1;
+      if (b.priorityNumber == null) return -1;
+      return a.priorityNumber - b.priorityNumber;
+    });
+
+    const pick = candidates[0];
+    res.json({ status: 'success', data: { briefId: pick._id, category: chosenCategory } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

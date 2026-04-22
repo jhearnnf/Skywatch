@@ -2902,7 +2902,7 @@ function SubEmulator({ user, API, onTierChange }) {
 // GENERATE BASES BUTTON
 // ─────────────────────────────────────────────────────────────────────────────
 
-function GenerateSectionLinksButton({ sourceTitle, sourceDescription, sourceCategory, linkType, pool, isHistoric, API, onResult }) {
+function GenerateSectionLinksButton({ sourceTitle, sourceDescription, sourceCategory, linkType, pool, isHistoric, briefId, API, onResult }) {
   const { apiFetch } = useAuth()
   const [status, setStatus] = useState(null) // null | 'loading' | 'done' | 'error'
   const [msg, setMsg]       = useState('')
@@ -2923,6 +2923,7 @@ function GenerateSectionLinksButton({ sourceTitle, sourceDescription, sourceCate
           linkType,
           pool: pool.map(b => ({ _id: b._id, title: b.title })),
           isHistoric: isHistoric ?? false,
+          briefId: briefId || null,
         }),
       })
       const data = await res.json()
@@ -4054,6 +4055,31 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     if (view === 'list') loadList()
   }, [view, loadList])
 
+  // ── Toggle flag-for-edit inline from the list (auto-save, no reason prompt) ──
+  const toggleFlagInline = async (b, next) => {
+    // Optimistic update so the row flips immediately
+    setBriefs(prev => prev.map(x => x._id === b._id ? { ...x, flaggedForEdit: next, flaggedAt: next ? new Date().toISOString() : null } : x))
+    try {
+      const res  = await apiFetch(`${API}/api/admin/briefs/${b._id}`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: next ? 'Flag for edit (inline)' : 'Unflag for edit (inline)', flaggedForEdit: next }),
+      })
+      const data = await res.json()
+      if (data.status !== 'success') throw new Error(data.message || 'Flag update failed')
+      setToast(next ? '⚑ Flagged for edit' : 'Flag cleared')
+      // If the list is filtered to flagged-only, drop the row after unflagging
+      if (flaggedOnly && !next) {
+        setBriefs(prev => prev.filter(x => x._id !== b._id))
+        setTotal(t => Math.max(0, t - 1))
+      }
+    } catch (err) {
+      // Revert on failure
+      setBriefs(prev => prev.map(x => x._id === b._id ? { ...x, flaggedForEdit: !next, flaggedAt: b.flaggedAt ?? null } : x))
+      setToast('Flag update failed')
+    }
+  }
+
   // ── Open brief in editor ─────────────────────────────────────────────────
   const openBrief = async (b) => {
     const res  = await apiFetch(`${API}/api/admin/briefs/${b._id}`, { credentials: 'include' })
@@ -4362,6 +4388,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
           linkType,
           pool: pool.map(b => ({ _id: b._id, title: b.title })),
           isHistoric: draft.historic ?? false,
+          briefId: briefId || null,
         }),
       }).then(r => r.json()).catch(() => null)
     }
@@ -4373,12 +4400,12 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         fetch(`${API}/api/admin/ai/generate-quiz`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, description }),
+          body: JSON.stringify({ title, description, briefId: briefId || null }),
         }),
         fetch(`${API}/api/admin/ai/generate-image`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, subtitle }),
+          body: JSON.stringify({ title, subtitle, briefId: briefId || null }),
         }),
         fetch(`${API}/api/admin/ai/generate-keywords`, {
           method: 'POST', credentials: 'include',
@@ -4444,7 +4471,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       const res  = await apiFetch(`${API}/api/admin/ai/generate-quiz`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draft.title, description: draft.descriptionSections.map(s => s.body ?? '').join('\n\n') }),
+        body: JSON.stringify({ title: draft.title, description: draft.descriptionSections.map(s => s.body ?? '').join('\n\n'), briefId: briefId || null }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -4495,6 +4522,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
             difficulty,
             existingQuestions: existing,
             needed,
+            briefId: briefId || null,
           }),
         })
         const data = await res.json()
@@ -4524,7 +4552,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       const res  = await apiFetch(`${API}/api/admin/ai/generate-image`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draft.title, subtitle: draft.subtitle }),
+        body: JSON.stringify({ title: draft.title, subtitle: draft.subtitle, briefId: briefId || null }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -4547,6 +4575,13 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const handleConfirmRegen = async (reason) => {
     setConfirmRegen(false)
     setRegeneratingAll(true)
+    // Optimistic clear — cascade + regeneration will replace all of these, so
+    // don't leave stale draft values visible during the AI wait. Description
+    // sections stay put to avoid a flash of empty textareas; they're visibly
+    // replaced when the response arrives.
+    setDraft(p => ({ ...p, keywords: [], sources: [] }))
+    setEasyQuestions([])
+    setMediumQuestions([])
     try {
       // Cascade: wipe all user stats / coins tied to this brief
       const cascadeRes  = await apiFetch(`${API}/api/admin/briefs/${briefId}/confirm-regeneration`, {
@@ -4564,11 +4599,12 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       const regenData = await regenRes.json()
       if (regenData.status !== 'success') throw new Error(regenData.message ?? 'Regeneration failed')
 
-      const { descriptionSections, keywords, easyQuestions, mediumQuestions, gameData, mnemonics } = regenData.data
+      const { descriptionSections, keywords, sources, easyQuestions, mediumQuestions, gameData, mnemonics } = regenData.data
       setDraft(p => ({
         ...p,
         descriptionSections: normalizeDraftSections(descriptionSections),
         keywords,
+        sources: Array.isArray(sources) ? sources : [],
         ...(gameData ? { gameData } : {}),
         ...(mnemonics ? { mnemonics } : {}),
       }))
@@ -4611,6 +4647,16 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const handleConfirmDescRegen = async (reason) => {
     setConfirmDescRegen(false)
     setGenerating('description')
+    // Optimistic clear — the server-side cascade wipes keywords and quiz
+    // questions the moment the POST is received, so match that state in the
+    // UI rather than leaving stale values visible during the AI wait. Sources
+    // are tied to the old description and about to be replaced, so drop them
+    // too. Description sections stay put — they're visibly replaced when the
+    // response arrives, and keeping the old ones avoids a flash of empty
+    // textareas during the long AI wait.
+    setDraft(p => ({ ...p, keywords: [], sources: [] }))
+    setEasyQuestions([])
+    setMediumQuestions([])
     try {
       const res  = await apiFetch(`${API}/api/admin/ai/regenerate-description/${briefId}`, {
         method: 'POST', credentials: 'include',
@@ -4619,12 +4665,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       })
       const data = await res.json()
       if (data.status !== 'success') throw new Error(data.message ?? 'Generation failed')
-      // Server-side cascadeDeleteBriefData has wiped keywords + quiz questions —
-      // clear local state to match so a subsequent Save doesn't re-persist stale arrays.
-      setDraft(p => ({ ...p, descriptionSections: normalizeDraftSections(data.data.descriptionSections), keywords: [] }))
-      setEasyQuestions([])
-      setMediumQuestions([])
-      setToast('Description generated — keywords and quiz cleared. Review and save when ready')
+      const nextSources = Array.isArray(data.data.sources) ? data.data.sources : []
+      setDraft(p => ({ ...p, descriptionSections: normalizeDraftSections(data.data.descriptionSections), sources: nextSources }))
+      setToast('Description generated — keywords, quiz, and sources refreshed. Review and save when ready')
     } catch (err) {
       setToast(`Generate description failed: ${err.message}`)
     } finally {
@@ -5050,25 +5093,37 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
           {briefs.map((b, i) => {
             const isStub = b.status === 'stub';
             return (
-              <button
+              <div
                 key={b._id}
-                onClick={() => openBrief(b)}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${i !== 0 ? 'border-t border-slate-100' : ''} ${isStub ? 'bg-slate-50 hover:bg-slate-100' : 'hover:bg-slate-50'}`}
+                className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${i !== 0 ? 'border-t border-slate-100' : ''} ${isStub ? 'bg-slate-50' : ''}`}
               >
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold truncate ${isStub ? 'text-slate-400' : 'text-slate-800'}`}>{b.title}</p>
-                  <p className="text-xs text-slate-400 truncate">{b.subtitle}</p>
-                </div>
-                {isStub && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 whitespace-nowrap">STUB</span>
-                )}
-                {b.flaggedForEdit && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 whitespace-nowrap">⚑ FLAGGED</span>
-                )}
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 whitespace-nowrap">{b.category}</span>
-                <BriefStatusPills brief={b} />
-                <span className="text-slate-300 text-sm">›</span>
-              </button>
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={!!b.flaggedForEdit}
+                  aria-label={`Flag ${b.title} for editing`}
+                  title={b.flaggedForEdit ? 'Flagged for editing — click to unflag' : 'Flag for editing'}
+                  onClick={(e) => { e.stopPropagation(); toggleFlagInline(b, !b.flaggedForEdit); }}
+                  className={`h-6 w-6 shrink-0 flex items-center justify-center rounded-md text-base leading-none transition-colors ${b.flaggedForEdit ? 'text-orange-500 hover:text-orange-600' : 'text-slate-300 hover:text-slate-400'}`}
+                >
+                  <span aria-hidden="true">{b.flaggedForEdit ? '⚑' : '⚐'}</span>
+                </button>
+                <button
+                  onClick={() => openBrief(b)}
+                  className={`flex-1 flex items-center gap-3 min-w-0 text-left transition-colors ${isStub ? 'hover:bg-slate-100' : 'hover:bg-slate-50'}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold truncate ${isStub ? 'text-slate-400' : 'text-slate-800'}`}>{b.title}</p>
+                    <p className="text-xs text-slate-400 truncate">{b.subtitle}</p>
+                  </div>
+                  {isStub && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 whitespace-nowrap">STUB</span>
+                  )}
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 whitespace-nowrap">{b.category}</span>
+                  <BriefStatusPills brief={b} />
+                  <span className="text-slate-300 text-sm">›</span>
+                </button>
+              </div>
             );
           })}
         </div>
@@ -5138,7 +5193,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       {confirmRegen && (
         <ConfirmModal
           title="Regenerate Brief Content"
-          body="This will delete all read history, quiz game stats, Battle of Order stats, Where's That Aircraft stats, Flashcard stats, and all Airstars awarded for this brief — for every user. This cannot be undone."
+          body="This will replace this brief's description, subtitle, sources, keywords, quiz questions, game data, and mnemonics with fresh AI output; clear all linked-brief relationships (bases, squadrons, aircraft, related); delete every user's read history, quiz results, Battle of Order, Where's That Aircraft, and Flashcard Recall plays tied to this brief; and reverse every Airstar awarded for it. This cannot be undone."
           confirmLabel="Confirm & Regenerate"
           danger
           onConfirm={handleConfirmRegen}
@@ -5148,7 +5203,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       {confirmDescRegen && (
         <ConfirmModal
           title="Regenerate Description"
-          body="This will delete all read history, quiz game stats, Battle of Order stats, Where's That Aircraft stats, Flashcard stats, and all Airstars awarded for this brief — for every user. This cannot be undone."
+          body="This will replace the description and sources on this brief with fresh AI output; wipe its keywords and quiz questions (these are NOT regenerated — regenerate them separately afterwards); clear all linked-brief relationships; delete every user's read history, quiz results, Battle of Order, Where's That Aircraft, and Flashcard Recall plays tied to this brief; and reverse every Airstar awarded for it. This cannot be undone."
           confirmLabel="Confirm & Regenerate"
           danger
           onConfirm={handleConfirmDescRegen}
@@ -5754,20 +5809,20 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                   label={{ Bases: 'Year Opened', Squadrons: 'Year Formed', Threats: 'Year Introduced' }[draft.category] ?? 'Start Year'}
                   field="startYear" draft={draft} setDraft={setDraft}
                 />
-                <MnemonicField mnemonicKey="startYear" draft={draft} setDraft={setDraft} API={API} />
+                <MnemonicField mnemonicKey="startYear" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
 
                 <GameDataField
                   label={{ Bases: 'Year Closed (blank = still active)', Squadrons: 'Year Disbanded (blank = still active)', Threats: 'Year Retired (blank = in service)' }[draft.category] ?? 'End Year (blank = ongoing)'}
                   field="endYear" draft={draft} setDraft={setDraft} nullable
                 />
                 {['Missions', 'Tech', 'Treaties'].includes(draft.category)
-                  ? <MnemonicField mnemonicKey="period" draft={draft} setDraft={setDraft} API={API} />
-                  : <MnemonicField mnemonicKey="status" draft={draft} setDraft={setDraft} API={API} />
+                  ? <MnemonicField mnemonicKey="period" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
+                  : <MnemonicField mnemonicKey="status" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
                 }
 
                 <div className="pt-1 flex flex-wrap gap-2 items-center">
-                  <GenerateStatsButton draft={draft} setDraft={setDraft} API={API} />
-                  <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} API={API} />
+                  <GenerateStatsButton draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
+                  <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
                 </div>
               </>)}
             </div>
@@ -5849,6 +5904,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                       linkType={sec.linkType}
                       pool={sec.pool}
                       isHistoric={draft.historic ?? false}
+                      briefId={briefId}
                       API={API}
                       onResult={ids => setDraft(p => ({ ...p, [sec.field]: ids }))}
                     />
@@ -6174,7 +6230,7 @@ function getMnemonicRequiredFields(category, statKey) {
   return map[category]?.[statKey] ?? []
 }
 
-function GenerateAllMnemonicsButton({ draft, setDraft, API }) {
+function GenerateAllMnemonicsButton({ draft, setDraft, briefId, API }) {
   const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState(null)
@@ -6186,7 +6242,7 @@ function GenerateAllMnemonicsButton({ draft, setDraft, API }) {
       const res  = await apiFetch(`${API}/api/admin/ai/generate-mnemonic`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draft.title, category: draft.category, gameData: draft.gameData ?? {} }),
+        body: JSON.stringify({ title: draft.title, category: draft.category, gameData: draft.gameData ?? {}, briefId: briefId || null }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -6224,7 +6280,7 @@ function GenerateAllMnemonicsButton({ draft, setDraft, API }) {
 }
 
 // ── MnemonicField — paired mnemonic textarea + generate button ────────────
-function MnemonicField({ mnemonicKey, draft, setDraft, API }) {
+function MnemonicField({ mnemonicKey, draft, setDraft, briefId, API }) {
   const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState(null)
@@ -6236,7 +6292,7 @@ function MnemonicField({ mnemonicKey, draft, setDraft, API }) {
       const res  = await apiFetch(`${API}/api/admin/ai/generate-mnemonic`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draft.title, category: draft.category, gameData: draft.gameData ?? {}, statKey: mnemonicKey }),
+        body: JSON.stringify({ title: draft.title, category: draft.category, gameData: draft.gameData ?? {}, statKey: mnemonicKey, briefId: briefId || null }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -6297,7 +6353,7 @@ function GameDataField({ label, field, draft, setDraft, nullable = false }) {
   )
 }
 
-function GenerateStatsButton({ draft, setDraft, API }) {
+function GenerateStatsButton({ draft, setDraft, briefId, API }) {
   const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const [err,  setErr]  = useState(null)
@@ -6313,6 +6369,7 @@ function GenerateStatsButton({ draft, setDraft, API }) {
           title:       draft.title,
           description: draft.descriptionSections.map(s => s.body ?? '').join('\n\n'),
           category:    draft.category,
+          briefId:     briefId || null,
         }),
       })
       const data = await res.json()
@@ -6358,6 +6415,7 @@ function AircraftDataSection({ draft, setDraft, briefId, API }) {
           title:       draft.title,
           description: draft.descriptionSections.map(s => s.body ?? '').join('\n\n'),
           category:    'Aircrafts',
+          briefId:     briefId || null,
         }),
       })
       const data = await res.json()
@@ -6376,13 +6434,13 @@ function AircraftDataSection({ draft, setDraft, briefId, API }) {
   return (
     <>
       <GameDataField label="Top Speed (km/h)" field="topSpeedKph" draft={draft} setDraft={setDraft} />
-      <MnemonicField mnemonicKey="topSpeedKph" draft={draft} setDraft={setDraft} API={API} />
+      <MnemonicField mnemonicKey="topSpeedKph" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
 
       <GameDataField label="Year Introduced" field="yearIntroduced" draft={draft} setDraft={setDraft} />
-      <MnemonicField mnemonicKey="yearIntroduced" draft={draft} setDraft={setDraft} API={API} />
+      <MnemonicField mnemonicKey="yearIntroduced" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
 
       <GameDataField label="Year Retired (blank = still in service)" field="yearRetired" draft={draft} setDraft={setDraft} nullable />
-      <MnemonicField mnemonicKey="status" draft={draft} setDraft={setDraft} API={API} />
+      <MnemonicField mnemonicKey="status" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
 
       <div className="pt-1 flex flex-wrap gap-2 items-center">
         <button
@@ -6392,7 +6450,7 @@ function AircraftDataSection({ draft, setDraft, briefId, API }) {
         >
           {busy ? '↺ Generating…' : '↺ Generate Stats'}
         </button>
-        <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} API={API} />
+        <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
         {err && <p className="text-xs text-red-500">{err}</p>}
       </div>
     </>
@@ -6415,6 +6473,7 @@ function TrainingDataSection({ draft, setDraft, briefId, API }) {
           title:       draft.title,
           description: draft.descriptionSections.map(s => s.body ?? '').join('\n\n'),
           category:    'Training',
+          briefId:     briefId || null,
         }),
       })
       const data = await res.json()
@@ -6434,10 +6493,10 @@ function TrainingDataSection({ draft, setDraft, briefId, API }) {
     <>
       <GameDataField label="Pipeline Week Start (0 if unknown)" field="trainingWeekStart" draft={draft} setDraft={setDraft} />
       <GameDataField label="Pipeline Week End (0 if unknown)"   field="trainingWeekEnd"   draft={draft} setDraft={setDraft} />
-      <MnemonicField mnemonicKey="pipelinePosition" draft={draft} setDraft={setDraft} API={API} />
+      <MnemonicField mnemonicKey="pipelinePosition" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
 
       <GameDataField label="Training Duration (weeks, 0 if unknown)" field="weeksOfTraining" draft={draft} setDraft={setDraft} />
-      <MnemonicField mnemonicKey="trainingDuration" draft={draft} setDraft={setDraft} API={API} />
+      <MnemonicField mnemonicKey="trainingDuration" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
 
       <div className="pt-1 flex flex-wrap gap-2 items-center">
         <button
@@ -6447,7 +6506,7 @@ function TrainingDataSection({ draft, setDraft, briefId, API }) {
         >
           {busy ? '↺ Generating…' : '↺ Generate Stats'}
         </button>
-        <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} API={API} />
+        <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
         {err && <p className="text-xs text-red-500">{err}</p>}
       </div>
     </>
@@ -6513,8 +6572,8 @@ function RankDataField({ draft, setDraft, briefId, API }) {
         )}
       </div>
       {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
-      <MnemonicField mnemonicKey="rankHierarchyOrder" draft={draft} setDraft={setDraft} API={API} />
-      <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} API={API} />
+      <MnemonicField mnemonicKey="rankHierarchyOrder" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
+      <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
     </div>
   )
 }

@@ -13,7 +13,7 @@ process.env.OPENROUTER_KEY_APTITUDE = 'test_aptitude_key';
 
 const db = require('../helpers/setupDb');
 const OpenRouterUsageLog = require('../../models/OpenRouterUsageLog');
-const { callOpenRouter, withFeature, fetchOpenRouterKeyUsage, _flushPendingLogWrites } = require('../../utils/openRouter');
+const { callOpenRouter, withFeature, setBrief, fetchOpenRouterKeyUsage, _flushPendingLogWrites } = require('../../utils/openRouter');
 
 function mockFetchJson(body, ok = true, status = 200) {
   return Promise.resolve({
@@ -109,6 +109,39 @@ describe('callOpenRouter', () => {
 
     const rows = await OpenRouterUsageLog.find().lean();
     expect(rows[0].feature).toBe('scoped-feature');
+  });
+
+  it('persists briefId from setBrief() on the logged row', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(
+      mockFetchJson({ choices: [], usage: { cost: 0 }, model: 'x' })
+    );
+
+    const mongoose = require('mongoose');
+    const briefId  = new mongoose.Types.ObjectId();
+
+    await withFeature('generate-quiz', async () => {
+      setBrief(briefId);
+      await callOpenRouter({ body: { model: 'x', messages: [] } });
+    });
+    await _flushPendingLogWrites();
+
+    const rows = await OpenRouterUsageLog.find().lean();
+    expect(rows).toHaveLength(1);
+    expect(String(rows[0].briefId)).toBe(String(briefId));
+  });
+
+  it('leaves briefId null when setBrief() is not called', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(
+      mockFetchJson({ choices: [], usage: { cost: 0 }, model: 'x' })
+    );
+
+    await withFeature('news-headlines', async () => {
+      await callOpenRouter({ body: { model: 'x', messages: [] } });
+    });
+    await _flushPendingLogWrites();
+
+    const rows = await OpenRouterUsageLog.find().lean();
+    expect(rows[0].briefId).toBeNull();
   });
 
   it('does not throw when the log write fails', async () => {

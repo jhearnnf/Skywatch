@@ -6,18 +6,32 @@ const OpenRouterUsageLog = require('../models/OpenRouterUsageLog');
 // that scope — including ones made by utility functions that receive
 // openRouterChat as an injected parameter — logs against the right feature
 // without having to thread an extra argument through every call site.
+//
+// The store also carries an optional briefId so every call inside a brief-tied
+// request (generate-keywords, regenerate-brief, bulk-generate-stub, etc.) is
+// linked back to its brief on the usage page. Routes call setBrief(id) at
+// entry; downstream wrapper calls pick it up without threading a parameter.
 const featureStorage = new AsyncLocalStorage();
 
 function withFeature(feature, fn) {
-  return featureStorage.run({ feature }, fn);
+  return featureStorage.run({ feature, briefId: null }, fn);
 }
 
 function featureMiddleware(feature) {
-  return (req, res, next) => featureStorage.run({ feature }, () => next());
+  return (req, res, next) => featureStorage.run({ feature, briefId: null }, () => next());
 }
 
 function currentFeature(fallback = 'generic') {
   return featureStorage.getStore()?.feature || fallback;
+}
+
+function setBrief(briefId) {
+  const store = featureStorage.getStore();
+  if (store && briefId) store.briefId = briefId;
+}
+
+function currentBriefId() {
+  return featureStorage.getStore()?.briefId || null;
 }
 
 function resolveKeyAndHeader(key) {
@@ -37,12 +51,13 @@ function resolveKeyAndHeader(key) {
 // Pending writes are tracked on a module-level set so tests can await them.
 const pendingLogWrites = new Set();
 
-function logUsage({ key, feature, model, usage }) {
+function logUsage({ key, feature, briefId, model, usage }) {
   const u = usage || {};
   const costUsd = typeof u.cost === 'number' ? u.cost : 0;
   const p = OpenRouterUsageLog.create({
     key,
     feature,
+    briefId:          briefId || null,
     model,
     promptTokens:     u.prompt_tokens     ?? 0,
     completionTokens: u.completion_tokens ?? 0,
@@ -91,6 +106,7 @@ async function callOpenRouter({ key = 'main', feature, body, extraHeaders }) {
   logUsage({
     key,
     feature: resolvedFeature,
+    briefId: currentBriefId(),
     model:   body.model || data.model || 'unknown',
     usage:   data.usage,
   });
@@ -131,5 +147,7 @@ module.exports = {
   withFeature,
   featureMiddleware,
   currentFeature,
+  setBrief,
+  currentBriefId,
   _flushPendingLogWrites,
 };
