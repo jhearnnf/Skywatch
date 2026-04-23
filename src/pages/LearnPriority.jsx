@@ -592,6 +592,7 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
   const [inView,   setInView]   = useState(false)
   const containerRef = useRef(null)
   const isTouchRef = useRef(false)
+  const hoverTimerRef = useRef(null)
 
   // Touch-device tap-to-reveal: on stubs, the first tap reveals the title
   // (mirroring desktop hover) and the second tap opens the brief. Parent
@@ -610,8 +611,35 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
     return () => obs.disconnect()
   }, [])
 
+  // Clear any pending stub-hover timer on unmount so it can't fire after the
+  // stone is gone (e.g. pathway swap).
+  useEffect(() => () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+  }, [])
+
   const handlePointerDown = (e) => {
     isTouchRef.current = e.pointerType === 'touch'
+  }
+
+  // Stub title reveal on hover is delayed by 0.6s so passing the cursor over
+  // many stubs while scanning the pathway doesn't flash titles open. Touch
+  // taps still reveal instantly via handleStoneClick → onStubReveal.
+  const handleStubMouseEnter = () => {
+    if (!isStub) return
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = setTimeout(() => {
+      hoverTimerRef.current = null
+      onStubHover?.(brief._id)
+    }, 600)
+  }
+
+  const handleStubMouseLeave = () => {
+    if (!isStub) return
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+    if (hovered) onStubHover?.(null)
   }
 
   const handleStoneClick = (e) => {
@@ -675,8 +703,8 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
       <button
         onPointerDown={handlePointerDown}
         onClick={handleStoneClick}
-        onMouseEnter={() => { if (isStub) onStubHover?.(brief._id) }}
-        onMouseLeave={() => { if (isStub && hovered) onStubHover?.(null) }}
+        onMouseEnter={handleStubMouseEnter}
+        onMouseLeave={handleStubMouseLeave}
         className="relative flex items-center justify-center rounded-full transition-transform active:scale-95 select-none"
         style={{
           width:  size,
