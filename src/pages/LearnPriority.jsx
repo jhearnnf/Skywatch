@@ -259,7 +259,7 @@ function SyncBadge({ onClick, isCardOpen, onCardOpen, onCardClose, index = 0 }) 
       <motion.button
         initial={{ opacity: 0, x: -8, scale: 0.92 }}
         animate={{ opacity: 1, x: 0, scale: 1 }}
-        transition={{ duration: 0.25, ease: 'easeOut' }}
+        transition={{ duration: 0.15, ease: 'easeOut' }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onTouchStart={handleTouchStart}
@@ -639,8 +639,6 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
     <motion.div
       ref={containerRef}
       data-brief-index={index}
-      layout="position"
-      transition={{ layout: { duration: 0.28, ease: [0.4, 0, 0.2, 1] } }}
       className="flex flex-col items-center"
       style={{ paddingLeft: `calc(50% + ${xOffset}px - ${size / 2}px)`, alignItems: 'flex-start' }}
     >
@@ -840,9 +838,9 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
           minHeight: '2.5em',
         }}
       >
-        <AnimatePresence mode="popLayout" initial={false}>
-          {isStub ? (
-            (hovered || touchRevealed) ? (
+        {isStub ? (
+          <AnimatePresence mode="popLayout" initial={false}>
+            {(hovered || touchRevealed) ? (
               <motion.span
                 key="title"
                 className="block"
@@ -865,11 +863,11 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
               >
                 Intel being collected
               </motion.span>
-            )
-          ) : (
-            <span className="block">{brief.title}</span>
-          )}
-        </AnimatePresence>
+            )}
+          </AnimatePresence>
+        ) : (
+          <span className="block">{brief.title}</span>
+        )}
       </p>
 
       {/* Event date label — News pathway only */}
@@ -910,12 +908,37 @@ function PathwayHeader({ category, colors }) {
 
 // ── Pathway view (vertical list of stones for one category) ──────────────────
 
+// Progressive render — long pathways (100+ stones) render in batches over idle
+// frames instead of all at once. The initial batch always covers the auto-scroll
+// target (next unread + buffer), so landing position is correct on first paint.
+const INITIAL_RENDER_COUNT = 25
+const RENDER_BATCH_SIZE    = 20
+
 function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction, nextBriefImages, nextBriefId }) {
   const navigate = useNavigate()
   const [openSyncId, setOpenSyncId] = useState(null)
   const [revealedStubId, setRevealedStubId] = useState(null)
   const [hoveredStubId, setHoveredStubId] = useState(null)
   const listRef = useRef(null)
+
+  const [renderLimit, setRenderLimit] = useState(() => {
+    const firstUnread = briefs.findIndex(b => !readSet.has(b._id) && b.status !== 'stub')
+    return Math.max(INITIAL_RENDER_COUNT, firstUnread + 10)
+  })
+
+  useEffect(() => {
+    if (renderLimit >= briefs.length) return
+    const schedule = typeof window.requestIdleCallback === 'function'
+      ? (cb) => window.requestIdleCallback(cb, { timeout: 200 })
+      : (cb) => setTimeout(cb, 16)
+    const cancel = typeof window.cancelIdleCallback === 'function'
+      ? window.cancelIdleCallback
+      : clearTimeout
+    const id = schedule(() => {
+      setRenderLimit(n => Math.min(briefs.length, n + RENDER_BATCH_SIZE))
+    })
+    return () => cancel(id)
+  }, [renderLimit, briefs.length])
 
   // Scroll so the next-to-read brief sits just below the page header on arrival.
   // In-progress briefs count as "next"; read/stub briefs are scrolled past.
@@ -957,7 +980,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
         initial="enter"
         animate="center"
         exit="exit"
-        transition={{ duration: 0.25, ease: 'easeOut' }}
+        transition={{ duration: 0.15, ease: 'easeOut' }}
       >
         <PathwayHeader category={category} colors={colors} />
         <div className="flex flex-col items-center justify-center py-12 text-center px-6">
@@ -990,7 +1013,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
         initial="enter"
         animate="center"
         exit="exit"
-        transition={{ duration: 0.25, ease: 'easeOut' }}
+        transition={{ duration: 0.15, ease: 'easeOut' }}
       >
         <PathwayHeader category={category} colors={colors} />
         <div className="flex flex-col items-center justify-center py-12 text-center px-6">
@@ -1018,7 +1041,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
       className="pb-8"
     >
       <PathwayHeader category={category} colors={colors} />
-      {briefs.map((brief, i) => {
+      {briefs.slice(0, renderLimit).map((brief, i) => {
         const isStub       = brief.status === 'stub'
         const isRead       = !isStub && readSet.has(brief._id)
         const isInProgress = !isStub && !isRead && inProgressSet.has(brief._id)
@@ -1374,10 +1397,16 @@ export default function LearnPriority() {
       }
       const navRect  = navEl.getBoundingClientRect()
       const cardRect = cardEl.getBoundingClientRect()
+      // Measure the (invisible) target pill so the flying badge lands exactly
+      // where the persistent pill will appear — avoids a visual snap on arrival.
+      const pillEl   = document.querySelector(`[data-testid="new-pill-${targetCat}"]`)
+      const pillRect = pillEl?.getBoundingClientRect()
       setFlyingBadge({
         category: targetCat,
         from: { x: navRect.left + navRect.width / 2 - 18, y: navRect.top },
-        to:   { x: cardRect.right - 52,                   y: cardRect.top + 4 },
+        to:   pillRect
+          ? { x: pillRect.left,      y: pillRect.top      }
+          : { x: cardRect.right - 34, y: cardRect.top - 6 },
       })
     }, 250)
     return () => clearTimeout(t)
@@ -1637,9 +1666,15 @@ export default function LearnPriority() {
           className="relative rounded-2xl px-4 py-2.5 flex items-center justify-between card-shadow"
           style={{ background: activePathway.colors.bg, border: `1px solid ${activePathway.colors.stone}33` }}
         >
-          {/* Persistent "NEW" pill — appears after fly-in lands, stays until navigation */}
-          {landedCategories.has(activePathway.category) && (
-            <span className="absolute -top-1.5 -right-1.5 text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full shadow-lg">
+          {/* Persistent "NEW" pill — rendered invisibly while this category is
+              queued for unlock (so the flying badge can measure its exact
+              landing spot), then fades in once the flying badge arrives. */}
+          {(landedCategories.has(activePathway.category) || unlockQueue?.includes(activePathway.category)) && (
+            <span
+              data-testid={`new-pill-${activePathway.category}`}
+              className="absolute -top-1.5 -right-1.5 text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full shadow-lg"
+              style={{ opacity: landedCategories.has(activePathway.category) ? 1 : 0, pointerEvents: 'none' }}
+            >
               NEW
             </span>
           )}

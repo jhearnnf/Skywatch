@@ -6,6 +6,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
+import { useAppSettings } from './AppSettingsContext'
 
 const Ctx = createContext(null)
 
@@ -146,6 +147,10 @@ export function AppTutorialProvider({ children }) {
   const [tutorialContent, setTutorialContent] = useState(null)
   const location     = useLocation()
   const { user, loading: authLoading } = useAuth()
+  const { settings } = useAppSettings()
+  const mnemonicsEnabled = settings?.mnemonicsClickEnabled === true
+  const mnemonicsEnabledRef = useRef(mnemonicsEnabled)
+  useEffect(() => { mnemonicsEnabledRef.current = mnemonicsEnabled }, [mnemonicsEnabled])
   const pendingRef        = useRef(null) // tutorial name waiting for auth to resolve
   const pendingNavRef     = useRef(null) // { name, stepIndex } — fires after next route change
   const tutContentRef     = useRef(null) // mirror of tutorialContent for use in effects
@@ -195,7 +200,10 @@ export function AppTutorialProvider({ children }) {
     if (pendingNavRef.current) {
       const { name, stepIndex } = pendingNavRef.current
       pendingNavRef.current = null
-      const steps = applyOverrides(TUTORIAL_STEPS, tutContentRef.current)[name] ?? null
+      let steps = applyOverrides(TUTORIAL_STEPS, tutContentRef.current)[name] ?? null
+      if (steps && name === 'briefReader' && !mnemonicsEnabledRef.current) {
+        steps = steps.filter(s => s.title !== 'Key Stats & Memory Aids')
+      }
       if (steps?.length) {
         const idx = Math.min(stepIndex, steps.length - 1)
         setActive({ name, steps, stepIndex: idx })
@@ -208,8 +216,14 @@ export function AppTutorialProvider({ children }) {
   // Returns steps for a named tutorial, with DB overrides applied
   const getSteps = useCallback((name) => {
     const overridden = applyOverrides(TUTORIAL_STEPS, tutorialContent)
-    return overridden[name] ?? null
-  }, [tutorialContent])
+    let steps = overridden[name] ?? null
+    // When the mnemonic feature flag is off, drop the "Key Stats & Memory Aids"
+    // step from the briefReader tutorial so users aren't taught a disabled feature.
+    if (steps && name === 'briefReader' && !mnemonicsEnabled) {
+      steps = steps.filter(s => s.title !== 'Key Stats & Memory Aids')
+    }
+    return steps
+  }, [tutorialContent, mnemonicsEnabled])
 
   // When auth finishes loading, fire any tutorial that was queued during the loading window
   useEffect(() => {

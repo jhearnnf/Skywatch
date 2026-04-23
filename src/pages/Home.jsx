@@ -157,28 +157,6 @@ export default function Home() {
         </motion.div>
       )}
 
-      {/* Jump Back In */}
-      {jumpBackBrief && (
-        <motion.div
-          initial={{ opacity: 0, x: -12 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
-          onClick={() => navigate(`/brief/${jumpBackBrief.briefId}`)}
-          className="rounded-2xl p-4 mb-6 flex items-center gap-3 border border-brand-300/40 transition-all cursor-pointer hover:border-brand-400/60 hover:-translate-y-0.5 card-shadow hover:card-shadow-hover"
-          style={{ background: 'linear-gradient(135deg, #0d1e35 0%, #091628 100%)' }}
-        >
-          <div className="w-10 h-10 rounded-xl bg-brand-200/60 flex items-center justify-center shrink-0 text-xl text-brand-600">
-            ◑
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="intel-mono text-brand-600 mb-0.5">Jump Back In</p>
-            <p className="text-sm font-bold text-white truncate">{jumpBackBrief.title}</p>
-            <p className="text-xs text-brand-700">{jumpBackBrief.category} · In Progress</p>
-          </div>
-          <span className="shrink-0 text-xs font-bold bg-brand-600 text-slate-900 px-3 py-1.5 rounded-xl">Resume →</span>
-        </motion.div>
-      )}
-
       {/* Daily challenge prompt */}
       {user && <motion.div
         initial={{ opacity: 0, x: -12 }}
@@ -208,7 +186,7 @@ export default function Home() {
               : 'bg-amber-50 border-amber-200 cursor-pointer hover:border-amber-400 hover:-translate-y-0.5 card-shadow hover:card-shadow-hover'
           }`}
       >
-        <span className={`text-2xl${!missionDone && !missionLoading ? ' target-amber' : ''}`}>{missionDone ? '✅' : missionLoading ? '…' : '🎯'}</span>
+        <span className={`text-2xl w-7 text-center shrink-0${!missionDone && !missionLoading ? ' target-amber' : ''}`}>{missionDone ? '✅' : missionLoading ? '…' : '🎯'}</span>
         <div className="flex-1 min-w-0">
           {missionDone ? (
             <>
@@ -238,18 +216,34 @@ export default function Home() {
           className="mb-6"
         >
           <h2 className="text-base font-bold text-slate-800 mb-3">Quick Actions</h2>
-          <button
-            onClick={() => setShowFlashcard(true)}
-            data-testid="home-flashcard-btn"
-            className="w-full flex items-center gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 cursor-pointer bg-amber-50 border-amber-200 hover:border-amber-400"
-          >
-            <span className="text-2xl">⚡</span>
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-bold text-amber-900">Flashcard Round</p>
-              <p className="text-xs text-amber-600">Identify briefs from content alone — title hidden</p>
-            </div>
-            <span className="text-xs font-bold bg-amber-500 text-white px-3 py-1.5 rounded-xl shrink-0">Play →</span>
-          </button>
+          <div className="space-y-2">
+            {jumpBackBrief && (
+              <button
+                type="button"
+                onClick={() => navigate(`/brief/${jumpBackBrief.briefId}`)}
+                className="w-full flex items-center gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 cursor-pointer bg-surface border-brand-300/40 hover:border-brand-400/60"
+              >
+                <span className="text-2xl w-7 text-center shrink-0">◑</span>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-bold text-white truncate">{jumpBackBrief.title}</p>
+                  <p className="text-xs text-brand-600">{jumpBackBrief.category} · In Progress</p>
+                </div>
+                <span className="text-xs font-bold bg-brand-600 text-slate-900 px-3 py-1.5 rounded-xl shrink-0">Resume →</span>
+              </button>
+            )}
+            <button
+              onClick={() => setShowFlashcard(true)}
+              data-testid="home-flashcard-btn"
+              className="w-full flex items-center gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 cursor-pointer bg-amber-50 border-amber-200 hover:border-amber-400"
+            >
+              <span className="text-2xl w-7 text-center shrink-0">⚡</span>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-bold text-amber-900">Flashcard Round</p>
+                <p className="text-xs text-amber-600">Identify briefs from content alone — title hidden</p>
+              </div>
+              <span className="text-xs font-bold bg-amber-500 text-white px-3 py-1.5 rounded-xl shrink-0">Play →</span>
+            </button>
+          </div>
         </motion.div>
       )}
 
@@ -289,6 +283,15 @@ export default function Home() {
                     ? 'bg-amber-400'
                     : 'bg-brand-600'
 
+              const eventDate = brief.eventDate
+                ? new Date(brief.eventDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                : null
+
+              const metaSuffix = brief.isRead ? 'Read' : brief.isStarted ? 'In Progress' : null
+              const metaLine = locked
+                ? 'Sign in to read'
+                : [eventDate, metaSuffix ?? (eventDate ? null : brief.category)].filter(Boolean).join(' · ')
+
               const inner = (
                 <>
                   {/* left accent bar */}
@@ -306,10 +309,7 @@ export default function Home() {
                         : brief.isRead ? 'text-slate-500'
                         : brief.isStarted ? 'text-amber-600'
                         : 'text-slate-500'}`}>
-                      {locked ? 'Sign in to read'
-                        : brief.isRead ? `${brief.category} · Read`
-                        : brief.isStarted ? `${brief.category} · In Progress`
-                        : brief.category}
+                      {metaLine}
                     </p>
                   </div>
                   {!locked && (

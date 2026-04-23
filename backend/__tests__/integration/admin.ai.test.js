@@ -1205,3 +1205,96 @@ describe('POST /api/admin/ai/bulk-generate-stub/:id', () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ── POST /api/admin/ai/generate-links ─────────────────────────────────────────
+
+describe('POST /api/admin/ai/generate-links', () => {
+  it('supports Roles:bases (role brief → associated base briefs)', async () => {
+    const admin = await createAdminUser();
+    const base1 = await createBrief({ title: 'RAF Cranwell', category: 'Bases', subcategory: 'UK Active' });
+    const base2 = await createBrief({ title: 'RAF Halton',   category: 'Bases', subcategory: 'UK Active' });
+
+    jest.spyOn(global, 'fetch').mockImplementation(() =>
+      mockOpenRouter(JSON.stringify({ titles: ['RAF Cranwell'] }))
+    );
+
+    const res = await request(app)
+      .post('/api/admin/ai/generate-links')
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        sourceTitle: 'Officer',
+        sourceDescription: 'Officers begin training at RAF Cranwell.',
+        sourceCategory: 'Roles',
+        linkType: 'bases',
+        pool: [
+          { _id: base1._id, title: base1.title },
+          { _id: base2._id, title: base2.title },
+        ],
+        isHistoric: false,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.ids).toEqual([String(base1._id)]);
+  });
+
+  it('supports Training:squadrons (training brief → delivering squadron briefs)', async () => {
+    const admin = await createAdminUser();
+    const sqn1  = await createBrief({ title: 'IV(R) Squadron RAF', category: 'Squadrons', subcategory: 'Training' });
+    const sqn2  = await createBrief({ title: 'No. 41 Squadron RAF', category: 'Squadrons', subcategory: 'Active Front-Line' });
+
+    jest.spyOn(global, 'fetch').mockImplementation(() =>
+      mockOpenRouter(JSON.stringify({ titles: ['IV(R) Squadron RAF'] }))
+    );
+
+    const res = await request(app)
+      .post('/api/admin/ai/generate-links')
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        sourceTitle: 'Advanced Fast Jet Training',
+        sourceDescription: 'AFJT is delivered at RAF Valley by IV(R) Squadron.',
+        sourceCategory: 'Training',
+        linkType: 'squadrons',
+        pool: [
+          { _id: sqn1._id, title: sqn1.title },
+          { _id: sqn2._id, title: sqn2.title },
+        ],
+        isHistoric: false,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.ids).toEqual([String(sqn1._id)]);
+  });
+
+  it('supports Aircrafts:tech (aircraft brief → carried tech briefs)', async () => {
+    const admin = await createAdminUser();
+    const tech1 = await createBrief({ title: 'Meteor BVRAAM',   category: 'Tech', subcategory: 'Weapons Systems' });
+    const tech2 = await createBrief({ title: 'Storm Shadow',    category: 'Tech', subcategory: 'Weapons Systems' });
+    const tech3 = await createBrief({ title: 'AGM-65 Maverick', category: 'Tech', subcategory: 'Weapons Systems' });
+
+    jest.spyOn(global, 'fetch').mockImplementation(() =>
+      mockOpenRouter(JSON.stringify({ titles: ['Meteor BVRAAM', 'Storm Shadow'] }))
+    );
+
+    const res = await request(app)
+      .post('/api/admin/ai/generate-links')
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        sourceTitle: 'Eurofighter Typhoon',
+        sourceDescription: 'Typhoon carries Meteor BVRAAM and Storm Shadow cruise missiles.',
+        sourceCategory: 'Aircrafts',
+        linkType: 'tech',
+        pool: [
+          { _id: tech1._id, title: tech1.title },
+          { _id: tech2._id, title: tech2.title },
+          { _id: tech3._id, title: tech3.title },
+        ],
+        isHistoric: false,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.ids).toEqual([String(tech1._id), String(tech2._id)]);
+  });
+});

@@ -1200,7 +1200,7 @@ const LEADS = [
 
   { title: 'Intercept Missions', nickname: '', subtitle: 'RAF operations to identify and engage hostile aircraft in UK airspace.', category: 'Missions', subcategory: 'Post-Cold War', section: 'MISSIONS', subsection: 'Post-Cold War' },
 
-  { title: 'Operations Support Branch', nickname: '', subtitle: 'Specialist officers coordinating essential planning and support functions for air operations.', category: 'Roles', subcategory: '', section: 'ROLES', subsection: '' },
+  { title: 'Operations Support Branch', nickname: '', subtitle: 'Specialist officers coordinating essential planning and support functions for air operations.', category: 'Roles', subcategory: 'Support & Administration', section: 'ROLES', subsection: 'Support & Administration' },
   { title: 'Officer Training School', nickname: 'OTS', subtitle: 'Pathway for commissioning officers, focusing on leadership and foundational military skills.', category: 'Training', subcategory: 'Initial Training', section: 'TRAINING', subsection: 'Initial Training' },
   { title: 'RAF Academy', nickname: 'AFA', subtitle: 'Primary institution for developing RAF officers with leadership and military instruction.', category: 'Training', subcategory: 'Initial Training', section: 'TRAINING', subsection: 'Initial Training' },
   { title: 'Electronic Warfare', nickname: '', subtitle: 'Using electromagnetic spectrum to disrupt enemy operations while protecting friendly forces.', category: 'Threats', subcategory: 'Electronic & Cyber', section: 'THREATS', subsection: 'Electronic & Cyber' },
@@ -1279,7 +1279,7 @@ const LEADS = [
   { title: 'HMS Mersey', nickname: '', subtitle: 'Batch 2 River-class vessel supporting RAF air operations in UK waters.', category: 'Allies', subcategory: 'Bilateral & Framework Partners', section: 'ALLIES', subsection: 'Bilateral & Framework Partners' },
   { title: 'RFA Tideforce', nickname: '', subtitle: 'Logistical support tanker enhancing RAF Poseidon operational endurance at sea.', category: 'Allies', subcategory: 'Bilateral & Framework Partners', section: 'ALLIES', subsection: 'Bilateral & Framework Partners' },
   { title: 'Wildcat Helicopters', nickname: '', subtitle: 'Multi-role aircraft providing maritime operational support alongside RAF Poseidon.', category: 'Aircrafts', subcategory: 'Rotary Wing', section: 'AIRCRAFTS', subsection: 'Rotary Wing' },
-  { title: 'North Atlantic', nickname: '', subtitle: 'Critical theatre for RAF maritime patrol against submarine threats.', category: 'AOR', subcategory: '', section: 'AOR', subsection: '' },
+  { title: 'North Atlantic', nickname: '', subtitle: 'Critical theatre for RAF maritime patrol against submarine threats.', category: 'AOR', subcategory: 'Atlantic & GIUK Gap', section: 'AOR', subsection: 'Atlantic & GIUK Gap' },
 
   // ── AUTO-GENERATED LEADS (seeded from keyword linking — do not edit this line) ──
 ];

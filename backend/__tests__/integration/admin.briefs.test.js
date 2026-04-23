@@ -918,13 +918,34 @@ describe('POST /api/admin/briefs — category and subcategory validation', () =>
     expect(res.status).toBe(200);
   });
 
-  it('accepts a brief with no subcategory when the category has subcategories (subcategory is optional)', async () => {
+  it('rejects a brief with no subcategory when the category defines subcategories', async () => {
     const admin = await createAdminUser();
     const res = await request(app)
       .post('/api/admin/briefs')
       .set('Cookie', authCookie(admin._id))
       .send({ title: 'Aircraft no sub', category: 'Aircrafts', reason: 'test' });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Subcategory is required/i);
+  });
+
+  it('rejects a Treaties brief with no subcategory', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'Treaty no sub', category: 'Treaties', reason: 'test' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/Subcategory is required/i);
+  });
+
+  it('rejects a News brief that specifies a subcategory (News has none)', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/briefs')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 'News with sub', category: 'News', subcategory: 'Fast Jet', reason: 'test' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/must not have a subcategory/i);
   });
 });
 
@@ -1004,6 +1025,7 @@ describe('Brief relationship arrays', () => {
     const stub = await IntelligenceBrief.create({
       title: 'Stub Brief',
       category: 'Aircrafts',
+      subcategory: 'Fast Jet',
       status: 'stub',
       descriptionSections: [],
       keywords: [],
@@ -1016,7 +1038,7 @@ describe('Brief relationship arrays', () => {
   it('POST /api/briefs/:id/complete returns 400 for stub briefs', async () => {
     const user = await createAdminUser({ isAdmin: false });
     const stub = await IntelligenceBrief.create({
-      title: 'Stub', category: 'Aircrafts', status: 'stub',
+      title: 'Stub', category: 'Aircrafts', subcategory: 'Fast Jet', status: 'stub',
       descriptionSections: [], keywords: [], sources: [],
     });
 
@@ -1035,7 +1057,7 @@ describe('POST /api/admin/briefs — stub promotion', () => {
   it('upgrades a stub to published when same title+category is POSTed, preserving _id', async () => {
     const admin = await createAdminUser();
     const stub  = await IntelligenceBrief.create({
-      title: 'Boeing P-8A Poseidon MRA1', category: 'Aircrafts', status: 'stub',
+      title: 'Boeing P-8A Poseidon MRA1', category: 'Aircrafts', subcategory: 'Maritime Patrol', status: 'stub',
       descriptionSections: [], keywords: [], sources: [],
     });
     const stubId = String(stub._id);
@@ -1046,6 +1068,7 @@ describe('POST /api/admin/briefs — stub promotion', () => {
       .send({
         title: 'Boeing P-8A Poseidon MRA1',
         category: 'Aircrafts',
+        subcategory: 'Maritime Patrol',
         descriptionSections: ['The P-8A Poseidon is a maritime patrol aircraft.'],
         reason: 'Generate from stub',
       });
@@ -1073,7 +1096,7 @@ describe('POST /api/admin/briefs — stub promotion', () => {
     const admin    = await createAdminUser();
     const base     = await createBrief({ category: 'Bases', title: 'RAF Lossiemouth' });
     const stub     = await IntelligenceBrief.create({
-      title: 'P-8A Test Aircraft', category: 'Aircrafts', status: 'stub',
+      title: 'P-8A Test MRA1', category: 'Aircrafts', subcategory: 'Maritime Patrol', status: 'stub',
       descriptionSections: [], keywords: [], sources: [],
       associatedBaseBriefIds: [base._id],
     });
@@ -1084,8 +1107,9 @@ describe('POST /api/admin/briefs — stub promotion', () => {
       .post('/api/admin/briefs')
       .set('Cookie', authCookie(admin._id))
       .send({
-        title: 'P-8A Test Aircraft',
+        title: 'P-8A Test MRA1',
         category: 'Aircrafts',
+        subcategory: 'Maritime Patrol',
         descriptionSections: ['Maritime patrol aircraft.'],
         associatedBaseBriefIds: [String(newBase._id)],
         reason: 'Promote stub',
@@ -1105,7 +1129,7 @@ describe('POST /api/admin/briefs — stub promotion', () => {
     const res = await request(app)
       .post('/api/admin/briefs')
       .set('Cookie', authCookie(admin._id))
-      .send({ title: 'Typhoon FGR4', category: 'Aircrafts', reason: 'Duplicate test' });
+      .send({ title: 'Typhoon FGR4', category: 'Aircrafts', subcategory: 'Fast Jet', reason: 'Duplicate test' });
 
     expect(res.status).toBe(409);
   });
@@ -1113,7 +1137,7 @@ describe('POST /api/admin/briefs — stub promotion', () => {
   it('existing briefs referencing the stub _id now resolve to the promoted brief', async () => {
     const admin    = await createAdminUser();
     const stub     = await IntelligenceBrief.create({
-      title: 'P-8A Link Test', category: 'Aircrafts', status: 'stub',
+      title: 'P-8A Link Test', category: 'Aircrafts', subcategory: 'Maritime Patrol', status: 'stub',
       descriptionSections: [], keywords: [], sources: [],
     });
     const base = await createBrief({ category: 'Bases', title: 'RAF Test Base' });
@@ -1127,7 +1151,7 @@ describe('POST /api/admin/briefs — stub promotion', () => {
       .post('/api/admin/briefs')
       .set('Cookie', authCookie(admin._id))
       .send({
-        title: 'P-8A Link Test', category: 'Aircrafts',
+        title: 'P-8A Link Test', category: 'Aircrafts', subcategory: 'Maritime Patrol',
         descriptionSections: ['Full content.'],
         reason: 'Promote',
       });

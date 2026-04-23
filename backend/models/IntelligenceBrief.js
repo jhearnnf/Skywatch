@@ -22,12 +22,26 @@ const intelligenceBriefSchema = new mongoose.Schema(
       type: String,
       trim: true,
       validate: {
+        // Document-context only: on a full save (IntelligenceBrief.create /
+        // doc.save) we can see the sibling category via `this.category` and
+        // enforce the category/subcategory pairing. In query context
+        // (findOneAndUpdate + runValidators) `this` is a Query, not a Document
+        // — `this.category` is undefined unless the update touches category,
+        // so we skip the pairing check there and rely on the route-level
+        // validators in routes/admin.js (POST + PATCH) to catch required /
+        // must-not-have / not-valid cases.
         validator: function (val) {
-          if (!val) return true; // optional
-          const valid = SUBCATEGORIES[this.category];
-          return valid && valid.includes(val);
+          if (typeof this.getUpdate === 'function') return true; // query context
+          const valid = SUBCATEGORIES[this.category] ?? [];
+          if (valid.length === 0) return !val;
+          return !!val && valid.includes(val);
         },
-        message: (props) => `"${props.value}" is not a valid subcategory for the chosen category`,
+        message: function (props) {
+          const valid = SUBCATEGORIES[this.category] ?? [];
+          if (valid.length === 0) return `"${this.category}" briefs must not have a subcategory`;
+          if (!props.value)        return `Subcategory is required for ${this.category} briefs`;
+          return `"${props.value}" is not a valid subcategory for ${this.category}`;
+        },
       },
     },
 
@@ -83,6 +97,8 @@ const intelligenceBriefSchema = new mongoose.Schema(
     associatedMissionBriefIds:  [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
     // Roles briefs → Training programmes
     associatedTrainingBriefIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
+    // Aircraft briefs → Tech (weapons, sensors, EW, C2 carried/used by the airframe)
+    associatedTechBriefIds:     [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
     // Generic catch-all for any cross-category link (Terminology, Roles, etc.)
     relatedBriefIds:            [{ type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief' }],
     // Back-links from historic briefs — populated automatically when a historic brief is saved

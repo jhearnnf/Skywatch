@@ -10,6 +10,7 @@ import RankBadge from '../components/RankBadge'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 import SEO from '../components/SEO'
 import { has3DModel } from '../data/aircraftModels'
+import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } from '../../backend/constants/categories.json'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -1887,7 +1888,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'cbatEnabled'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'cbatEnabled', 'mnemonicsClickEnabled'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -1899,6 +1900,12 @@ function SettingsTab({ API }) {
           hint="Show the Play CBAT button on the Play page"
           checked={draft.cbatEnabled ?? false}
           onChange={v => set('cbatEnabled', v)}
+        />
+        <Toggle
+          label="Mnemonic Memory Aids"
+          hint="When off, the 💡 beside stats is hidden, stat taps do nothing, and the mnemonic tutorial is suppressed"
+          checked={draft.mnemonicsClickEnabled ?? false}
+          onChange={v => set('mnemonicsClickEnabled', v)}
         />
       </Section>
 
@@ -2958,31 +2965,6 @@ function GenerateSectionLinksButton({ sourceTitle, sourceDescription, sourceCate
 // BRIEFS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BRIEF_CATEGORIES = [
-  'News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Roles',
-  'Threats', 'Allies', 'Missions', 'AOR', 'Tech', 'Terminology', 'Treaties',
-  'Heritage', 'Actors',
-]
-
-const BRIEF_SUBCATEGORIES = {
-  News: [],
-  Aircrafts: ['Fast Jet','ISR & Surveillance','Maritime Patrol','Transport & Tanker','Rotary Wing','Training Aircraft','Historic — WWII','Historic — Cold War','Historic — Post-Cold War'],
-  Bases: ['UK Active','UK Former','Overseas Permanent','Overseas Deployed / FOL'],
-  Ranks: ['Commissioned Officer','Non-Commissioned','Specialist Role'],
-  Squadrons: ['Active Front-Line','Training','Royal Auxiliary Air Force','Historic'],
-  Training: ['Initial Training','Flying Training','Ground Training & PME','Tactical & Combat Training'],
-  Roles: ['Fast Jet Pilot','Multi-Engine Pilot','Rotary Wing Pilot','Weapons Systems Operator','Intelligence Officer','Engineer Officer','Air Traffic Control Officer','RAF Regiment','Logistics & Supply','Medical & Nursing','Cyber & Information','Fighter Controller'],
-  Threats: ['State Actor Air','Surface-to-Air Missiles','Asymmetric & Non-State','Missiles & Stand-Off','Electronic & Cyber'],
-  Allies: ['NATO','Five Eyes','AUKUS','Bilateral & Framework Partners'],
-  Missions: ['World War I','World War II','Post-War & Cold War','Post-Cold War','War on Terror','NATO Standing Operations','Humanitarian & NEO'],
-  AOR: ['UK Home Air Defence','NATO AOR','Middle East & CENTCOM','Atlantic & GIUK Gap','Africa','Indo-Pacific','South Atlantic & Falklands'],
-  Tech: ['Weapons Systems','Sensors & Avionics','Electronic Warfare','Future Programmes','Command, Control & Comms'],
-  Terminology: ['Operational Concepts','Flying & Tactical','Air Traffic & Navigation','Intelligence & Planning','Maintenance & Support'],
-  Treaties: ['Founding & Core Alliances','Bilateral Defence Agreements','Arms Control & Non-Proliferation','Operational & Status Agreements'],
-  Heritage: ['Traditions & Culture','Memorials & Museums'],
-  Actors: ['Heads of State & Government','Defence & Military Leadership','Adversary Commanders','Non-State & Proxy Leaders','Allied & Coalition Leaders','Historic RAF Personnel'],
-}
-
 // Canonical empty descriptionSections row — {heading, body} object.
 const EMPTY_SECTION_ROW = () => ({ heading: '', body: '' })
 // Normalize any descriptionSections payload (legacy strings or {heading, body})
@@ -3013,6 +2995,7 @@ const EMPTY_DRAFT = {
   associatedBaseBriefIds:     [],
   associatedSquadronBriefIds: [],
   associatedAircraftBriefIds: [],
+  associatedTechBriefIds:     [],
   relatedBriefIds:            [],
   relatedHistoric:            [],
 }
@@ -3931,6 +3914,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [allAircraftBriefs,  setAllAircraftBriefs]  = useState([]) // Aircraft briefs for Bases/Squadrons/Tech picker
   const [allMissionsBriefs,  setAllMissionsBriefs]  = useState([]) // Missions briefs for Aircrafts/Squadrons picker
   const [allTrainingsBriefs, setAllTrainingsBriefs] = useState([]) // Training briefs for Roles picker
+  const [allTechBriefs,      setAllTechBriefs]      = useState([]) // Tech briefs for Aircrafts picker
   const [allRelatedPool,     setAllRelatedPool]     = useState([]) // All non-typed-link briefs for Related picker
   const [relatedSearch,      setRelatedSearch]      = useState('')
   const [dupePanel,          setDupePanel]          = useState(false)
@@ -4116,6 +4100,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       associatedAircraftBriefIds: (br.associatedAircraftBriefIds ?? []).map(b => String(b._id ?? b)),
       associatedMissionBriefIds:  (br.associatedMissionBriefIds  ?? []).map(b => String(b._id ?? b)),
       associatedTrainingBriefIds: (br.associatedTrainingBriefIds ?? []).map(b => String(b._id ?? b)),
+      associatedTechBriefIds:     (br.associatedTechBriefIds     ?? []).map(b => String(b._id ?? b)),
       relatedBriefIds:            (br.relatedBriefIds            ?? []).map(b => String(b._id ?? b)),
       relatedHistoric:            (br.relatedHistoric            ?? []).map(b => String(b._id ?? b)),
     })
@@ -4136,11 +4121,12 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     setSaveStatus(null)
     setStaleSourceWarning(false)
     // Pre-load briefs for linked-brief pickers
-    const needsBases     = ['Aircrafts', 'Squadrons'].includes(br.category)
-    const needsSquadrons = ['Bases', 'Aircrafts'].includes(br.category)
+    const needsBases     = ['Aircrafts', 'Squadrons', 'Training', 'Roles'].includes(br.category)
+    const needsSquadrons = ['Bases', 'Aircrafts', 'Training'].includes(br.category)
     const needsAircraft  = ['Bases', 'Squadrons', 'Tech'].includes(br.category)
     const needsMissions  = ['Aircrafts', 'Squadrons'].includes(br.category)
     const needsTraining  = ['Roles'].includes(br.category)
+    const needsTech      = ['Aircrafts'].includes(br.category)
     const fetches = []
     if (needsBases     && allBasesBriefs.length === 0)
       fetches.push(fetch(`${API}/api/admin/briefs?category=Bases&limit=200`, { credentials: 'include' })
@@ -4157,6 +4143,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     if (needsTraining  && allTrainingsBriefs.length === 0)
       fetches.push(fetch(`${API}/api/admin/briefs?category=Training&limit=200`, { credentials: 'include' })
         .then(r => r.json()).then(d => { if (d.data?.briefs) setAllTrainingsBriefs(d.data.briefs) }).catch(() => {}))
+    if (needsTech      && allTechBriefs.length === 0)
+      fetches.push(fetch(`${API}/api/admin/briefs?category=Tech&limit=200`, { credentials: 'include' })
+        .then(r => r.json()).then(d => { if (d.data?.briefs) setAllTechBriefs(d.data.briefs) }).catch(() => {}))
     if (allRelatedPool.length === 0)
       fetches.push(fetch(`${API}/api/admin/briefs/related-pool`, { credentials: 'include' })
         .then(r => r.json()).then(d => { if (d.data?.briefs) setAllRelatedPool(d.data.briefs) }).catch(() => {}))
@@ -4320,6 +4309,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       associatedAircraftBriefIds: [],
       associatedMissionBriefIds:  [],
       associatedTrainingBriefIds: [],
+      associatedTechBriefIds:     [],
       relatedBriefIds:            [],
       relatedHistoric:            [],
     })
@@ -4347,10 +4337,11 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
 
     // Fetch pools needed for this category — awaited so we can use them for link suggestions
     const needsBases     = ['Aircrafts', 'Squadrons'].includes(category)
-    const needsSquadrons = ['Bases', 'Aircrafts'].includes(category)
+    const needsSquadrons = ['Bases', 'Aircrafts', 'Training'].includes(category)
     const needsAircraft  = ['Bases', 'Squadrons', 'Tech'].includes(category)
     const needsMissions  = ['Aircrafts', 'Squadrons'].includes(category)
     const needsTraining  = ['Roles'].includes(category)
+    const needsTech      = ['Aircrafts'].includes(category)
 
     const fetchPool = (cat, current, setter) => {
       if (current.length > 0) return Promise.resolve(current)
@@ -4366,12 +4357,13 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         .then(r => r.json()).then(d => { if (d.data?.briefs) setAllRelatedPool(d.data.briefs) }).catch(() => {})
     }
 
-    const [poolBases, poolSquadrons, poolAircraft, poolMissions, poolTraining] = await Promise.all([
+    const [poolBases, poolSquadrons, poolAircraft, poolMissions, poolTraining, poolTech] = await Promise.all([
       needsBases     ? fetchPool('Bases',     allBasesBriefs,     setAllBasesBriefs)     : Promise.resolve([]),
       needsSquadrons ? fetchPool('Squadrons', allSquadronsBriefs, setAllSquadronsBriefs) : Promise.resolve([]),
       needsAircraft  ? fetchPool('Aircrafts', allAircraftBriefs,  setAllAircraftBriefs)  : Promise.resolve([]),
       needsMissions  ? fetchPool('Missions',  allMissionsBriefs,  setAllMissionsBriefs)  : Promise.resolve([]),
       needsTraining  ? fetchPool('Training',  allTrainingsBriefs, setAllTrainingsBriefs) : Promise.resolve([]),
+      needsTech      ? fetchPool('Tech',      allTechBriefs,      setAllTechBriefs)      : Promise.resolve([]),
       fetchRelatedPool(),
     ])
 
@@ -4396,7 +4388,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     // Auto-generate everything in parallel
     setAutoGenerating(true)
     try {
-      const [qRes, imgRes, kwRes, basesRes, squadronsRes, aircraftRes, missionsRes, trainingRes] = await Promise.all([
+      const [qRes, imgRes, kwRes, basesRes, squadronsRes, aircraftRes, missionsRes, trainingRes, techRes] = await Promise.all([
         fetch(`${API}/api/admin/ai/generate-quiz`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -4417,6 +4409,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         needsAircraft  ? suggestLinks('aircraft',  poolAircraft)  : Promise.resolve(null),
         needsMissions  ? suggestLinks('missions',  poolMissions)  : Promise.resolve(null),
         needsTraining  ? suggestLinks('training',  poolTraining)  : Promise.resolve(null),
+        needsTech      ? suggestLinks('tech',      poolTech)      : Promise.resolve(null),
       ])
       const [qData, imgData, kwData] = await Promise.all([qRes.json(), imgRes.json(), kwRes.json()])
 
@@ -4439,6 +4432,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         ...(aircraftRes?.status === 'success' && { associatedAircraftBriefIds: aircraftRes.data.ids }),
         ...(missionsRes?.status === 'success' && { associatedMissionBriefIds:  missionsRes.data.ids }),
         ...(trainingRes?.status === 'success' && { associatedTrainingBriefIds: trainingRes.data.ids }),
+        ...(techRes?.status === 'success'     && { associatedTechBriefIds:     techRes.data.ids }),
       }))
     } finally {
       setAutoGenerating(false)
@@ -5324,10 +5318,10 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                     type="button"
                     onClick={() => {
                       setDraft(p => ({ ...p, category: c, subcategory: '' }))
-                      if (['Aircrafts', 'Squadrons'].includes(c) && allBasesBriefs.length === 0)
+                      if (['Aircrafts', 'Squadrons', 'Training', 'Roles'].includes(c) && allBasesBriefs.length === 0)
                         fetch(`${API}/api/admin/briefs?category=Bases&limit=200`, { credentials: 'include' })
                           .then(r => r.json()).then(d => { if (d.data?.briefs) setAllBasesBriefs(d.data.briefs) }).catch(() => {})
-                      if (['Bases', 'Aircrafts'].includes(c) && allSquadronsBriefs.length === 0)
+                      if (['Bases', 'Aircrafts', 'Training'].includes(c) && allSquadronsBriefs.length === 0)
                         fetch(`${API}/api/admin/briefs?category=Squadrons&limit=200`, { credentials: 'include' })
                           .then(r => r.json()).then(d => { if (d.data?.briefs) setAllSquadronsBriefs(d.data.briefs) }).catch(() => {})
                       if (['Bases', 'Squadrons', 'Tech'].includes(c) && allAircraftBriefs.length === 0)
@@ -5339,6 +5333,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                       if (['Roles'].includes(c) && allTrainingsBriefs.length === 0)
                         fetch(`${API}/api/admin/briefs?category=Training&limit=200`, { credentials: 'include' })
                           .then(r => r.json()).then(d => { if (d.data?.briefs) setAllTrainingsBriefs(d.data.briefs) }).catch(() => {})
+                      if (['Aircrafts'].includes(c) && allTechBriefs.length === 0)
+                        fetch(`${API}/api/admin/briefs?category=Tech&limit=200`, { credentials: 'include' })
+                          .then(r => r.json()).then(d => { if (d.data?.briefs) setAllTechBriefs(d.data.briefs) }).catch(() => {})
                     }}
                     className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
                       ${draft.category === c
@@ -5836,11 +5833,11 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         const cat = draft.category
         const linkedSections = []
 
-        if (['Aircrafts', 'Squadrons'].includes(cat))
+        if (['Aircrafts', 'Squadrons', 'Training', 'Roles'].includes(cat))
           linkedSections.push({
             label: '🗺️ Home Bases', desc: 'Link base briefs', field: 'associatedBaseBriefIds', pool: allBasesBriefs, linkType: 'bases',
           })
-        if (['Bases', 'Aircrafts'].includes(cat))
+        if (['Bases', 'Aircrafts', 'Training'].includes(cat))
           linkedSections.push({
             label: '✈️ Squadrons', desc: 'Link squadron briefs', field: 'associatedSquadronBriefIds', pool: allSquadronsBriefs, linkType: 'squadrons',
           })
@@ -5855,6 +5852,10 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         if (['Roles'].includes(cat))
           linkedSections.push({
             label: '🎓 Training', desc: 'Link training programme briefs', field: 'associatedTrainingBriefIds', pool: allTrainingsBriefs, linkType: 'training',
+          })
+        if (['Aircrafts'].includes(cat))
+          linkedSections.push({
+            label: '🛠️ Tech', desc: 'Link weapons, sensors, EW, and C2 tech briefs', field: 'associatedTechBriefIds', pool: allTechBriefs, linkType: 'tech',
           })
         // Related Briefs uses its own dedicated pool + search — handled separately below
 
@@ -6034,7 +6035,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
             {draft.keywords.length < keywordsPerBrief && (
               <button
                 onClick={e => { e.stopPropagation(); generateSingleKeyword() }}
-                disabled={generating === 'keywords' || genKeywordsSingle || regeneratingAll}
+                disabled={generating === 'keywords' || generating === 'description' || genKeywordsSingle || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
                 {genKeywordsSingle ? '↺ Generating…' : `↺ Generate Missing (${keywordsPerBrief - draft.keywords.length})`}
@@ -6093,7 +6094,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               </button>
               <button
                 onClick={generateKeywords}
-                disabled={generating === 'keywords' || genKeywordsSingle || regeneratingAll}
+                disabled={generating === 'keywords' || generating === 'description' || genKeywordsSingle || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
                 {generating === 'keywords' ? '↺ Regenerating…' : '↺ Regenerate All Keywords'}
@@ -6122,7 +6123,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               return totalMissing > 0 && (
                 <button
                   onClick={e => { e.stopPropagation(); generateMissingQuestionsBoth() }}
-                  disabled={generating === 'questions' || genQuestionsSingle || autoGenerating || regeneratingAll}
+                  disabled={generating === 'questions' || generating === 'description' || genQuestionsSingle || autoGenerating || regeneratingAll}
                   className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
                 >
                   {genQuestionsSingle ? '↺ Generating…' : `↺ Generate Missing (${totalMissing})`}
@@ -6194,7 +6195,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
             <div className="flex gap-2 flex-wrap mt-4">
               <button
                 onClick={generateQuestions}
-                disabled={generating === 'questions' || genQuestionsSingle || autoGenerating || regeneratingAll}
+                disabled={generating === 'questions' || generating === 'description' || genQuestionsSingle || autoGenerating || regeneratingAll}
                 className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
               >
                 {generating === 'questions' || autoGenerating ? '↺ Generating…' : '↺ Generate Questions'}

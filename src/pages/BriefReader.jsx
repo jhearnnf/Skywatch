@@ -842,13 +842,14 @@ function buildSections(brief) {
   const aircraft    = (brief.associatedAircraftBriefIds ?? []).filter(b => b?._id)
   const missions    = (brief.associatedMissionBriefIds  ?? []).filter(b => b?._id)
   const training    = (brief.associatedTrainingBriefIds ?? []).filter(b => b?._id)
+  const tech        = (brief.associatedTechBriefIds     ?? []).filter(b => b?._id)
   const related         = (brief.relatedBriefIds ?? []).filter(b => b?._id)
   const historicRelated = (brief.relatedHistoric ?? []).filter(b => b?._id)
 
   const sections = []
-  if (['Aircrafts', 'Squadrons'].includes(cat) && bases.length > 0)
+  if (['Aircrafts', 'Squadrons', 'Training', 'Roles'].includes(cat) && bases.length > 0)
     sections.push({ label: `Home Base${bases.length > 1 ? 's' : ''}`, items: bases, isBasesSection: true })
-  if (['Bases', 'Aircrafts'].includes(cat) && squadrons.length > 0)
+  if (['Bases', 'Aircrafts', 'Training'].includes(cat) && squadrons.length > 0)
     sections.push({ label: 'Squadrons', items: squadrons })
   if (['Bases', 'Squadrons', 'Tech'].includes(cat) && aircraft.length > 0)
     sections.push({ label: 'Aircraft', items: aircraft })
@@ -856,6 +857,8 @@ function buildSections(brief) {
     sections.push({ label: 'Missions', items: missions })
   if (['Roles'].includes(cat) && training.length > 0)
     sections.push({ label: 'Training', items: training })
+  if (['Aircrafts'].includes(cat) && tech.length > 0)
+    sections.push({ label: 'Tech', items: tech })
   if (related.length > 0)
     sections.push({ label: 'Related', items: related })
   if (['Bases', 'Squadrons', 'Missions', 'AOR'].includes(cat) && historicRelated.length > 0)
@@ -966,6 +969,7 @@ function ContinueLearning({ brief, navigate, fallbackCards }) {
     ...(brief.associatedAircraftBriefIds ?? []),
     ...(brief.associatedMissionBriefIds  ?? []),
     ...(brief.associatedTrainingBriefIds ?? []),
+    ...(brief.associatedTechBriefIds     ?? []),
     ...(brief.relatedBriefIds            ?? []),
   ]
     .filter(b => b?._id && !seen.has(String(b._id)) && seen.add(String(b._id)))
@@ -1761,11 +1765,12 @@ export default function BriefReader() {
   // Show the stat mnemonic mini-tutorial the first time a brief with a mnemonic stat is loaded
   useEffect(() => {
     if (!brief) return
+    if (settings?.mnemonicsClickEnabled !== true) return
     const hasMnemonic = brief.descriptionSections?.some((_, i) => buildStats(brief)[i]?.mnemonic)
     if (!hasMnemonic) return
     if (hasSeen('stat_mnemonic')) return
     setShowStatTutorial(true)
-  }, [brief?._id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [brief?._id, settings?.mnemonicsClickEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const sections   = normalizeSections(brief?.descriptionSections)
   const total      = sections.length
@@ -1777,6 +1782,7 @@ export default function BriefReader() {
   // minimises on section 4 regardless — the section now uses the brief title as its
   // heading, so duplicating it in the page header above would be redundant.
   const isNewsFlashcardHidden = brief?.category === 'News' && settings?.newsFlashcardsEnabled === false
+  const mnemonicsEnabled = settings?.mnemonicsClickEnabled === true
   // Flashcard view = on the last section. Drives chrome that differs between normal
   // sections and the final section (header fade, progress-bar hide). Independent of
   // whether the last section renders as a FlashCard component or as a regular
@@ -2067,6 +2073,7 @@ export default function BriefReader() {
   }
 
   const handleStatTap = (stat) => {
+    if (!mnemonicsEnabled) return
     if (!stat?.mnemonic) return
     setActiveStat(stat)
     if (user && brief?._id) {
@@ -2441,7 +2448,10 @@ export default function BriefReader() {
             // IS visible, so the effect should fire as normal.
             const isBasesMapSection = brief?.category === 'Bases' && sectionIdx === 0
             const isFirstSeenImage = !hasNavigatedRef.current && !isBasesMapSection
-            const stats      = buildStats(brief)
+            const rawStats   = buildStats(brief)
+            // When the mnemonic feature flag is off, drop mnemonics so the 💡 button
+            // isn't rendered and stat taps fall through (the stat row still shows).
+            const stats      = mnemonicsEnabled ? rawStats : rawStats.map(s => ({ ...s, mnemonic: null }))
             // Each associated brief now carries matchTerms[] (all variant forms of its
             // title, e.g. "No. 14 Squadron", "No. 14 Squadron RAF", "No. 14").
             // flatMap expands each brief into one keyword entry per variant so any
@@ -2463,6 +2473,7 @@ export default function BriefReader() {
               ...assocToKws(brief.associatedAircraftBriefIds),
               ...assocToKws(brief.associatedMissionBriefIds),
               ...assocToKws(brief.associatedTrainingBriefIds),
+              ...assocToKws(brief.associatedTechBriefIds),
               ...assocToKws(brief.relatedBriefIds),
               ...assocToKws(brief.mentionedBriefIds),
             ]

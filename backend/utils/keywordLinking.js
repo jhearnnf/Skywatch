@@ -7,6 +7,7 @@ const IntelLead            = require('../models/IntelLead');
 const { SCAN_CATEGORIES }  = require('./mentionedBriefs');
 const { reprioritizeCategory } = require('./priorityRanking');
 const { bodiesText }       = require('./descriptionSections');
+const { validateAirframeTitle } = require('./airframeValidation');
 
 // Auto-generated leads are appended to a JSONL sidecar file — NOT to seedLeads.js
 // directly. Writing to a .js file inside the backend tree would trigger nodemon
@@ -50,6 +51,13 @@ function validateLeadClassification(title, category, { SUBCATEGORIES }) {
   });
   if (isUmbrella) {
     return { ok: false, reason: `title "${title}" restates an existing subcategory (umbrella term)` };
+  }
+  // Airframe-specific rules for Aircrafts: reject generic role phrases,
+  // plural-suffix titles ("Wildcat Helicopters"), and role phrases
+  // ("Maritime Patrol and Reconnaissance").
+  if (category === 'Aircrafts') {
+    const airframeCheck = validateAirframeTitle(title);
+    if (!airframeCheck.ok) return { ok: false, reason: airframeCheck.message };
   }
   return { ok: true };
 }
@@ -118,6 +126,75 @@ function normForDupe(title) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+// Minimum normalised length for a title to participate in substring-based dupe
+// matching. Anything shorter is too weak a signal — e.g. "Royal Air Force"
+// strips to "" and would otherwise match every new title.
+const MIN_NORM_LEN = 4;
+
+function isFuzzyTitleDuplicate(newTitle, existingNorms) {
+  const normNew = normForDupe(newTitle);
+  if (normNew.length < MIN_NORM_LEN) return false;
+  for (const ex of existingNorms) {
+    if (!ex || ex.length < MIN_NORM_LEN) continue;
+    if (ex.includes(normNew) || normNew.includes(ex)) return true;
+  }
+  return false;
+}
+
+// Normalisation used by the exact-match override. Mirrors the EXACT-MATCH
+// PRIORITY rule in the Stage 2 prompt: case-insensitive, strip leading "The ",
+// strip trailing simple plural "s". Trim and lowercase.
+function normExactTitle(s) {
+  return String(s || '').toLowerCase().trim()
+    .replace(/^the\s+/, '')
+    .replace(/s$/, '');
+}
+
+// Pure function: re-points AI-chosen links to an exact-title-match candidate
+// when one exists (any category). Respects AI null decisions — only overrides
+// when the AI picked a non-null but different target. Returns a new links array.
+function applyExactMatchOverride(links, candidateList, logger) {
+  let overrideCount = 0;
+  const result = links.map(l => {
+    if (!l?.title) return l;
+    const kwNorm = normExactTitle(l.keyword);
+    if (!kwNorm) return l;
+    const exactMatch = candidateList.find(t => normExactTitle(t) === kwNorm);
+    if (exactMatch && exactMatch !== l.title) {
+      logger?.(`[autoLinkKeywords] Exact-match override "${l.keyword}" [${l.type || '?'}]: "${l.title}" → "${exactMatch}"`);
+      overrideCount++;
+      return { ...l, title: exactMatch };
+    }
+    return l;
+  });
+  if (overrideCount > 0) {
+    logger?.(`[autoLinkKeywords] Exact-match override re-pointed ${overrideCount} link(s)`);
+  }
+  return result;
+}
+
+// Allowed pairs between the AI's keyword-type classification and the
+// candidate brief's category. Used as a post-AI safety net in Stage 2 —
+// if Haiku classifies a keyword as ROLE but still proposes a [Squadrons]
+// candidate, we strip the link rather than arguing with the model.
+// GENERIC is intentionally absent (generics never link).
+const KEYWORD_TYPE_TO_CATEGORY = {
+  AIRCRAFT:  'Aircrafts',
+  BASE:      'Bases',
+  UNIT:      'Squadrons',
+  ROLE:      'Roles',
+  RANK:      'Ranks',
+  PERSON:    'Actors',
+  OPERATION: 'Missions',
+  TECH:      'Tech',
+  TRAINING:  'Training',
+  THREAT:    'Threats',
+  ALLY:      'Allies',
+  REGION:    'AOR',
+  TREATY:    'Treaties',
+  TERM:      'Terminology',
+};
 
 // Common English words that are too generic to use as title-matching signals
 const STOP_WORDS = new Set([
@@ -289,10 +366,17 @@ Only include keywords where the answer is YES. If none qualify, return { "leads"
     const validSubs = SUBCATEGORIES[category] ?? [];
     const subcategory = validSubs.includes(lead.subcategory) ? lead.subcategory : '';
 
-    // Fuzzy duplicate check: if normalised title is a substring of (or contains) an existing title, skip
+    // Subcategory is mandatory for any category that defines subcategories — skip
+    // this lead rather than seeding a brief that would fail the model validator
+    // (or worse, slip through with a blank and hide from subcategory filters).
+    if (validSubs.length > 0 && !subcategory) {
+      console.log(`[seedUnmatchedKeywords] Skipped "${title}" [${category}] — AI returned no valid subcategory`);
+      continue;
+    }
+
+    // Fuzzy duplicate check: if normalised title is a substring of (or contains) an existing title, skip.
     const normNew = normForDupe(title);
-    const isFuzzyDupe = [...normExisting].some(ex => ex.includes(normNew) || normNew.includes(ex));
-    if (isFuzzyDupe) {
+    if (isFuzzyTitleDuplicate(title, normExisting)) {
       console.log(`[seedUnmatchedKeywords] Skipped near-duplicate "${title}" (fuzzy match with existing lead)`);
       continue;
     }
@@ -475,6 +559,60 @@ async function autoLinkKeywords(keywords, descriptionSections, openRouterChat, c
     if (candidateList.length) {
       const prompt = `You are linking RAF intel brief keywords to the correct brief title from a candidate list.
 
+YOUR DEFAULT ANSWER IS null. A missing link is ALWAYS better than a wrong one.
+
+For every keyword, follow this exact procedure IN ORDER:
+
+STEP 1 — Classify the keyword. Decide the TYPE of subject the keyword names. Use this mapping:
+  • Aircraft / airframe / helicopter / drone (e.g. "F-35B", "Dassault Falcon 900LX", "Chinook HC6A") → type = AIRCRAFT
+  • Base / airfield / station (e.g. "RAF Lossiemouth", "RAF Marham") → type = BASE
+  • Unit / squadron / wing / group / team that is explicitly named as a single collective entity (e.g. "No. 617 Squadron", "Tactical Air Control Parties", "RAF Police") → type = UNIT
+  • Role / career / job title, INCLUDING roles prefixed with a unit or branch name (e.g. "Weapon Systems Operator", "Gunners", "RAF Regiment Gunners", "Flight Operations Officer", "Intelligence Analyst", "Royal Engineers Sapper") → type = ROLE. A plural job title preceded by a branch name (e.g. "X Branch Y-ers") is still a ROLE, not a UNIT — it names the people doing the job, not a specific named squadron.
+  • Military rank (e.g. "Sergeant", "Flight Lieutenant") → type = RANK
+  • Named individual person → type = PERSON
+  • Named operation, mission, or exercise (e.g. "Operation SHADER", "Exercise Cobra Warrior") → type = OPERATION
+  • Named weapon system, sensor, equipment (e.g. "AIM-120 AMRAAM", "Paveway IV") → type = TECH
+  • Named training programme or course (e.g. "Initial Officer Training", "JTAC Training and Certification") → type = TRAINING
+  • Named threat / adversary asset (e.g. "Iskander-M", "Kh-101") → type = THREAT
+  • Named ally / partner nation / organisation (e.g. "NATO", "France") → type = ALLY
+  • Named region / area of responsibility (e.g. "Gaza Strip", "Baltic States") → type = REGION
+  • Named treaty / agreement → type = TREATY
+  • Doctrine / tactical concept / terminology (e.g. "Quick Reaction Alert") → type = TERM
+  • Generic descriptor that does NOT name a specific subject (e.g. "ground forces", "air assets", "air defence", "fighter aircraft", "radar systems", "combat sorties", "training pipelines", "expeditionary operations", "battlefield effectiveness", "time-sensitive strikes", "air-to-ground missions", "multinational exercises", "basic courses") → type = GENERIC
+
+STEP 2 — If the keyword's type is GENERIC, return null IMMEDIATELY. Do not link. Move to the next keyword.
+
+STEP 3 — Otherwise, check the candidate list. A link is ONLY allowed when the candidate's [category] EXACTLY matches the keyword's type:
+  AIRCRAFT → [Aircrafts]      BASE → [Bases]          UNIT → [Squadrons]       ROLE → [Roles]
+  RANK → [Ranks]              PERSON → [Actors]       OPERATION → [Missions]   TECH → [Tech]
+  TRAINING → [Training]       THREAT → [Threats]      ALLY → [Allies]          REGION → [AOR]
+  TREATY → [Treaties]         TERM → [Terminology]
+
+  HARD RULE: If no candidate has a category that EXACTLY matches the keyword's type, return null. Do NOT substitute a related or semantically-adjacent category. The following cross-type substitutions are all WRONG and must return null — even though each pair feels related, the substitution sends the reader to a different subject than the one they clicked on:
+    • ROLE keyword → [Squadrons] candidate: WRONG (role is a job; squadron is a unit of people doing various jobs). Example: "RAF Regiment Gunners" → "No. 1 Squadron RAF Regiment" — NULL.
+    • ROLE keyword → [Training] candidate: WRONG (role is the job; training is the course you take to get the job). Example: "Intelligence Analyst Trade" → "Intelligence Analyst Training" — NULL.
+    • ROLE keyword → [Ranks] candidate: WRONG (role is a job; rank is a level). Example: "Fighter Controller" → "Sergeant" — NULL.
+    • AIRCRAFT keyword → [Squadrons] candidate: WRONG. Example: "Dassault Falcon 900LX" → "No. 32 Squadron RAF" — NULL.
+    • AIRCRAFT keyword → [Bases] candidate: WRONG (aircraft type is not a place). Example: "F-35B" → "RAF Marham" — NULL.
+    • UNIT keyword → [Training] candidate: WRONG. Example: "Fire Support Teams" → "JTAC Training and Certification" — NULL.
+    • UNIT keyword → [Roles] candidate: WRONG. Example: "Tactical Air Control Parties" → "Air Traffic Control Officer" — NULL.
+    • BASE keyword → [Squadrons] candidate: WRONG (a base is a location; a squadron is a unit based there). Example: "RAF Marham" → "No. 617 Squadron" — NULL.
+    • Any generic/object keyword → [Roles]/[Ranks]/[Actors] candidate: WRONG. Example: "air traffic control infrastructure" → "Air Traffic Control Officer" — NULL.
+
+  If you feel tempted to substitute a "close enough" category because the learner might find it "relevant" — resist. The link sends the reader to a DIFFERENT subject than the keyword named, and that breaks trust. null is always safer than cross-type.
+
+STEP 4 — Among candidates of the matching category, pick the one the description is SPECIFICALLY about. Use these rules in order:
+  • EXACT-MATCH PRIORITY (highest). If one of the matching-category candidates has a title that is an exact case-insensitive match for the keyword text (ignoring leading "The " and trailing plurals), you MUST select that candidate — never prefer a similar-but-different-variant candidate when an exact match is available.
+    – Example (aircraft): keyword "Hawk T2" with candidates ["BAE Systems Hawk T1", "Hawk T2"] → MUST pick "Hawk T2", NEVER "BAE Systems Hawk T1".
+    – Example (ally): keyword "Royal Air Force" with candidates ["NATO", "Royal Air Force"] → MUST pick "Royal Air Force", NEVER "NATO" — even when the surrounding passage discusses alliance/coalition context. The keyword names the RAF specifically; NATO is a different (related but distinct) subject.
+    – The rule is about NAMING: when the reader clicks a keyword titled X, they expect to land on the brief titled X. Picking a different brief because it's "related" breaks that contract.
+  • Abbreviations / spelled-out forms (e.g. "QRA" ↔ "UK QRA North", "JTAC" ↔ "Joint Terminal Attack Controller").
+  • Temporal coherence: modern-service passages link to current candidates, not Historic/Former/WWII/Cold War ones. Historical passages link to period-appropriate candidates.
+  • Allegiance coherence: adversary/threat keywords must NOT link to RAF/Allied candidates. RAF keywords must NOT link to Threat candidates.
+  • Context specificity: the surrounding sentences must be genuinely about that candidate's specific subject, not merely mentioning related words.
+
+If after all four steps you are not confident, return null.
+
 Description:
 """
 ${descText.slice(0, 1500)}
@@ -486,18 +624,16 @@ ${unlinkedKws.map(k => `- "${k.keyword}"${k.generatedDescription ? `: ${k.genera
 Candidate brief titles with their category (you may ONLY link to titles in this list):
 ${candidateList.map(t => `- "${t}" [${titleToCategory.get(t) || 'Unknown'}]`).join('\n')}
 
-For each keyword, identify which candidate title it refers to in context — considering abbreviations (e.g. "QRA" → "UK QRA North"), spelled-out forms (e.g. "Quick Reaction Alert" → "UK QRA North"), and partial names. Use the category as a type hint: if a keyword names a company or manufacturer, prefer a [Tech] or [Allies] candidate over an [Aircrafts] candidate; if a keyword names an aircraft, prefer [Aircrafts]. Use the description context to disambiguate when multiple candidates are plausible. Return null if no candidate clearly matches.
-
-Return ONLY valid JSON — no markdown, no extra text:
+Return ONLY valid JSON — no markdown, no extra text. Include the "type" you classified in STEP 1 for every keyword so your reasoning is auditable:
 {
   "links": [
-    { "keyword": "exact keyword text", "title": "matched candidate title or null" }
+    { "keyword": "exact keyword text", "type": "AIRCRAFT|BASE|UNIT|ROLE|RANK|PERSON|OPERATION|TECH|TRAINING|THREAT|ALLY|REGION|TREATY|TERM|GENERIC", "title": "matched candidate title or null" }
   ]
 }`;
 
       let links = [];
       try {
-        const raw     = await openRouterChat([{ role: 'user', content: prompt }], 'openai/gpt-4o-mini', 1024);
+        const raw     = await openRouterChat([{ role: 'user', content: prompt }], 'anthropic/claude-haiku-4.5', 1024);
         const content = raw.choices?.[0]?.message?.content ?? '{}';
         const cleaned = content.replace(/```json\n?|```/g, '').trim();
         links = JSON.parse(cleaned).links ?? [];
@@ -506,6 +642,37 @@ Return ONLY valid JSON — no markdown, no extra text:
       }
 
       if (links.length) {
+        // Exact-match override (runs FIRST): any AI pick where the keyword text
+        // exactly matches a candidate title (any category) is re-pointed to that
+        // candidate. Respects AI null decisions. See applyExactMatchOverride.
+        links = applyExactMatchOverride(links, candidateList, (msg) => console.log(msg));
+
+        // Type-guard (runs AFTER exact-match): drop any remaining link where the AI's
+        // declared keyword type doesn't match the candidate's category. Exact-match
+        // overrides above are exempt (they may intentionally cross categories). For
+        // everything else — catches cases where Haiku classifies correctly in STEP 1
+        // but still proposes a cross-type link in STEP 4.
+        const beforeCount = links.filter(l => l.title).length;
+        const exactOverrideTitles = new Set(
+          links.filter(l => l.title && normExactTitle(l.title) === normExactTitle(l.keyword))
+               .map(l => l.title)
+        );
+        links = links.map(l => {
+          if (!l.title || !l.type) return l;
+          if (exactOverrideTitles.has(l.title)) return l; // exempt exact matches
+          const expected = KEYWORD_TYPE_TO_CATEGORY[l.type];
+          const actual   = titleToCategory.get(l.title);
+          if (!expected || expected !== actual) {
+            console.log(`[autoLinkKeywords] Type-mismatch guard dropped "${l.keyword}" [${l.type}] → "${l.title}" [${actual || 'Unknown'}]`);
+            return { ...l, title: null };
+          }
+          return l;
+        });
+        const droppedCount = beforeCount - links.filter(l => l.title).length;
+        if (droppedCount > 0) {
+          console.log(`[autoLinkKeywords] Type-mismatch guard dropped ${droppedCount} cross-type link(s)`);
+        }
+
         // Resolve matched titles → IntelligenceBrief IDs
         const matchedTitles = [...new Set(links.filter(l => l.title).map(l => l.title))];
         const briefDocs     = await IntelligenceBrief.find({ title: { $in: matchedTitles } }, '_id title').lean();
@@ -533,4 +700,4 @@ Return ONLY valid JSON — no markdown, no extra text:
   return linkedKeywords;
 }
 
-module.exports = { autoLinkKeywords, seedUnmatchedKeywords, validateLeadClassification, buildTitleRejectCheck };
+module.exports = { autoLinkKeywords, seedUnmatchedKeywords, validateLeadClassification, buildTitleRejectCheck, isFuzzyTitleDuplicate, normForDupe, applyExactMatchOverride, normExactTitle };

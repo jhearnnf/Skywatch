@@ -97,6 +97,7 @@ async function scanMentionedBriefIds(brief, openRouterChat) {
     ...(brief.associatedAircraftBriefIds || []).map(b => String(b._id ?? b)),
     ...(brief.associatedMissionBriefIds  || []).map(b => String(b._id ?? b)),
     ...(brief.associatedTrainingBriefIds || []).map(b => String(b._id ?? b)),
+    ...(brief.associatedTechBriefIds     || []).map(b => String(b._id ?? b)),
     ...(brief.relatedBriefIds            || []).map(b => String(b._id ?? b)),
   ]);
 

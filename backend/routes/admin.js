@@ -36,6 +36,7 @@ const IntelLead = require('../models/IntelLead');
 const seedLeads = require('../seeds/seedLeads');
 const { scanMentionedBriefIds } = require('../utils/mentionedBriefs');
 const { autoLinkKeywords, buildTitleRejectCheck } = require('../utils/keywordLinking');
+const { validateBriefTitleForCategory } = require('../utils/airframeValidation');
 const { reprioritizeCategory } = require('../utils/priorityRanking');
 const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
@@ -73,7 +74,7 @@ const AI_PROMPT_DEFAULTS = {
   'quiz':                    `You are a quiz question writer for a Royal Air Force training platform. Prioritise the most important and high-value facts from the brief — operational capabilities, training pathways and their phases, aircraft designations and roles, base locations and resident units, command structures, and key distinguishing facts that define this subject. Questions should test knowledge that builds genuine understanding of the RAF, not trivial details. Every question must be directly and fully answerable using only the information in the provided intel brief description — do not rely on external knowledge or anything not stated in the description. ANSWER FORMAT RULES: ${QUIZ_ANSWER_FORMAT_RULES}`,
   'quizMissing':             `You are a quiz question writer for a Royal Air Force training platform. Prioritise the most important and high-value facts from the brief — operational capabilities, training pathways and their phases, aircraft designations and roles, base locations and resident units, command structures, and key distinguishing facts that define this subject. Questions should test knowledge that builds genuine understanding of the RAF, not trivial details. Every question must be directly and fully answerable using only the information in the provided intel brief description — do not rely on external knowledge or anything not stated in the description. You will be given a list of existing questions — do not repeat or closely paraphrase any of them. ANSWER FORMAT RULES: ${QUIZ_ANSWER_FORMAT_RULES}`,
   // Keywords
-  'keywords':                'You are a keyword extractor for a Royal Air Force training platform. Prioritise terms that build understanding of the modern RAF — training pathways, bases, aircraft, squadrons, roles, and operational context. You only select terms that appear verbatim in the provided description text. For each keyword you write a general RAF-specific definition of that term — what it is, its role and capabilities — without referencing the specific intel brief it was found in.',
+  'keywords':                'You are a keyword extractor for a Royal Air Force training platform. Prioritise terms that build understanding of the modern RAF — training pathways, bases, aircraft, squadrons, roles, and operational context. You only select terms that appear verbatim in the provided description text. For each keyword you write a concise RAF-specific definition framed around how the term is used in the description — the role, capability, or scenario the term plays within that passage — without naming the specific subject (title, nickname, or acronym) of the intel brief it was found in.',
   // Linking — current
   'links.Aircrafts:bases':     'You are an expert on Royal Air Force aircraft and bases. Given an aircraft brief, identify which RAF bases are home/primary operating bases for this aircraft. Only select bases where this aircraft type is permanently stationed.',
   'links.Aircrafts:squadrons': 'You are an expert on Royal Air Force aircraft and squadrons. Given an aircraft brief, identify which RAF squadrons operate this aircraft type as their primary platform.',
@@ -84,7 +85,11 @@ const AI_PROMPT_DEFAULTS = {
   'links.Bases:squadrons':     'You are an expert on Royal Air Force bases and squadrons. Given a base brief, identify which RAF squadrons are or were stationed at this base.',
   'links.Bases:aircraft':      'You are an expert on Royal Air Force bases and aircraft. Given a base brief, identify which aircraft types from the list are or were based at this location.',
   'links.Roles:training':      'You are an expert on Royal Air Force careers and training pipelines. Given a role brief, identify which training programmes from the list are required or directly relevant to this role\'s career pathway.',
+  'links.Roles:bases':         'You are an expert on Royal Air Force careers, training pipelines, and bases. Given a role brief, identify which RAF bases from the list are where personnel in this role are typically stationed or receive their training. Include bases that host the role\'s primary training units AND bases where the role is commonly posted in service. Only select bases with a direct, established connection to this role.',
+  'links.Training:bases':      'You are an expert on Royal Air Force training pipelines and bases. Given a training brief, identify which RAF bases host or primarily deliver this training phase or course. Only select bases where this training is actually conducted.',
+  'links.Training:squadrons':  'You are an expert on Royal Air Force training pipelines and squadrons. Given a training brief, identify which RAF squadrons from the list actually deliver this training phase or course (for example the training or reserve squadron that runs the syllabus, such as an OCU or advanced flying training squadron). Only select squadrons with a direct instructional role for this training.',
   'links.Tech:aircraft':       'You are an expert on Royal Air Force technology and aircraft. Given a technology or weapon system brief, identify which aircraft from the list carry or use this system.',
+  'links.Aircrafts:tech':      'You are an expert on Royal Air Force aircraft and the weapons, sensors, pods, electronic warfare, and C2 systems they carry. Given an aircraft brief, identify which tech briefs from the list are actually carried, integrated, or operationally used by this airframe. Only select tech with a confirmed operational fit on this aircraft.',
   'links.Actors:aor':          'You are an intelligence analyst. Given a brief on a named individual (head of state, commander, or non-state leader), identify which areas of responsibility (AOR) from the list they most directly influence through their role, forces, or organisation. Only select AORs with a direct, verifiable operational connection.',
   // Linking — historic
   'links.historic.Aircrafts:bases':     'You are an expert on Royal Air Force aircraft and bases. Given a HISTORIC aircraft brief, identify which RAF bases historically served as home or primary operating bases for this aircraft type during its service life.',
@@ -1596,11 +1601,22 @@ router.post('/briefs', requireReason, async (req, res) => {
     if (fields.category && !CATEGORIES.includes(fields.category)) {
       return res.status(400).json({ message: `Invalid category "${fields.category}". Must be one of: ${CATEGORIES.join(', ')}` });
     }
-    if (fields.subcategory && fields.category) {
+    if (fields.category) {
       const validSubs = SUBCATEGORIES[fields.category] ?? [];
-      if (validSubs.length > 0 && !validSubs.includes(fields.subcategory)) {
-        return res.status(400).json({ message: `"${fields.subcategory}" is not a valid subcategory for ${fields.category}` });
+      if (validSubs.length > 0) {
+        if (!fields.subcategory) {
+          return res.status(400).json({ message: `Subcategory is required for ${fields.category} briefs` });
+        }
+        if (!validSubs.includes(fields.subcategory)) {
+          return res.status(400).json({ message: `"${fields.subcategory}" is not a valid subcategory for ${fields.category}` });
+        }
+      } else if (fields.subcategory) {
+        return res.status(400).json({ message: `${fields.category} briefs must not have a subcategory` });
       }
+    }
+    if (fields.title && fields.category) {
+      const airframeCheck = validateBriefTitleForCategory(fields.title, fields.category);
+      if (!airframeCheck.ok) return res.status(400).json({ message: airframeCheck.message });
     }
     let existing = null;
     if (fields.title && fields.category) {
@@ -1629,6 +1645,7 @@ router.post('/briefs', requireReason, async (req, res) => {
         associatedAircraftBriefIds: mergeIds(existing.associatedAircraftBriefIds, fields.associatedAircraftBriefIds),
         associatedMissionBriefIds:  mergeIds(existing.associatedMissionBriefIds,  fields.associatedMissionBriefIds),
         associatedTrainingBriefIds: mergeIds(existing.associatedTrainingBriefIds, fields.associatedTrainingBriefIds),
+        associatedTechBriefIds:     mergeIds(existing.associatedTechBriefIds,     fields.associatedTechBriefIds),
         relatedBriefIds:            mergeIds(existing.relatedBriefIds,            fields.relatedBriefIds),
         relatedHistoric:            mergeIds(existing.relatedHistoric ?? [],       fields.relatedHistoric),
       };
@@ -1693,8 +1710,14 @@ router.post('/briefs', requireReason, async (req, res) => {
 router.patch('/briefs/:id', requireReason, async (req, res) => {
   try {
     const { reason, ...fields } = req.body;
+    const touchingCategory    = Object.prototype.hasOwnProperty.call(fields, 'category');
+    const touchingSubcategory = Object.prototype.hasOwnProperty.call(fields, 'subcategory');
+    const touchingTitle       = Object.prototype.hasOwnProperty.call(fields, 'title');
+    const needsCategoryCheck  = touchingCategory || touchingSubcategory || touchingTitle || fields.status === 'published' || fields.flaggedForEdit !== undefined;
+    const existing = needsCategoryCheck
+      ? await IntelligenceBrief.findById(req.params.id).select('title category subcategory publishedAt flaggedForEdit status').lean()
+      : null;
     if (fields.status === 'published' || fields.flaggedForEdit !== undefined) {
-      const existing = await IntelligenceBrief.findById(req.params.id).select('publishedAt flaggedForEdit').lean();
       if (existing && fields.status === 'published' && !existing.publishedAt) {
         fields.publishedAt = new Date();
       }
@@ -1704,6 +1727,37 @@ router.patch('/briefs/:id', requireReason, async (req, res) => {
         if (!wasFlagged && willFlag)      fields.flaggedAt = new Date();
         else if (wasFlagged && !willFlag) fields.flaggedAt = null;
       }
+    }
+    // Category/subcategory validation — effective category is whatever will be on
+    // the doc after the patch; stubs are excused (they exist specifically as
+    // pre-content placeholders and are filled in when promoted to published).
+    if (existing && (touchingCategory || touchingSubcategory || fields.status === 'published')) {
+      const effectiveCategory    = touchingCategory    ? fields.category    : existing.category;
+      const effectiveSubcategory = touchingSubcategory ? fields.subcategory : existing.subcategory;
+      const effectiveStatus      = fields.status ?? existing.status;
+      const validSubs = SUBCATEGORIES[effectiveCategory] ?? [];
+      if (effectiveStatus === 'published') {
+        if (validSubs.length > 0) {
+          if (!effectiveSubcategory) {
+            return res.status(400).json({ message: `Subcategory is required for ${effectiveCategory} briefs` });
+          }
+          if (!validSubs.includes(effectiveSubcategory)) {
+            return res.status(400).json({ message: `"${effectiveSubcategory}" is not a valid subcategory for ${effectiveCategory}` });
+          }
+        } else if (effectiveSubcategory) {
+          return res.status(400).json({ message: `${effectiveCategory} briefs must not have a subcategory` });
+        }
+      } else if (effectiveSubcategory && validSubs.length > 0 && !validSubs.includes(effectiveSubcategory)) {
+        return res.status(400).json({ message: `"${effectiveSubcategory}" is not a valid subcategory for ${effectiveCategory}` });
+      }
+    }
+    // Airframe title validation — only for Aircrafts category; check the
+    // effective (post-patch) title + category combination.
+    if (existing && (touchingTitle || touchingCategory)) {
+      const effectiveCategory = touchingCategory ? fields.category : existing.category;
+      const effectiveTitle    = touchingTitle    ? fields.title    : existing.title;
+      const airframeCheck = validateBriefTitleForCategory(effectiveTitle, effectiveCategory);
+      if (!airframeCheck.ok) return res.status(400).json({ message: airframeCheck.message });
     }
     const brief = await IntelligenceBrief.findByIdAndUpdate(req.params.id, fields, { returnDocument: 'after', runValidators: true }).populate('media');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
@@ -1809,6 +1863,7 @@ router.delete('/briefs/:id', requireReason, async (req, res) => {
         associatedBaseBriefIds:     new mongoose.Types.ObjectId(briefId),
         associatedSquadronBriefIds: new mongoose.Types.ObjectId(briefId),
         associatedAircraftBriefIds: new mongoose.Types.ObjectId(briefId),
+        associatedTechBriefIds:     new mongoose.Types.ObjectId(briefId),
         relatedBriefIds:            new mongoose.Types.ObjectId(briefId),
         relatedHistoric:            new mongoose.Types.ObjectId(briefId),
       } }),
@@ -1903,6 +1958,7 @@ async function cascadeDeleteBriefData(briefId) {
       associatedBaseBriefIds:     [],
       associatedSquadronBriefIds: [],
       associatedAircraftBriefIds: [],
+      associatedTechBriefIds:     [],
       relatedBriefIds:            [],
     } }),
   ]);
@@ -1912,6 +1968,7 @@ async function cascadeDeleteBriefData(briefId) {
     associatedBaseBriefIds:     new mongoose.Types.ObjectId(briefId),
     associatedSquadronBriefIds: new mongoose.Types.ObjectId(briefId),
     associatedAircraftBriefIds: new mongoose.Types.ObjectId(briefId),
+    associatedTechBriefIds:     new mongoose.Types.ObjectId(briefId),
     relatedBriefIds:            new mongoose.Types.ObjectId(briefId),
   } });
 
@@ -2856,14 +2913,14 @@ router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news
 
       const kwSys  = [{ role: 'system', content: getPrompt(aiSettings, 'keywords') }];
       const kwMdl  = 'perplexity/sonar';
-      const KW_JSON = '{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition"},...]}';
+      const KW_JSON = '{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"RAF-specific definition framed around how the term is used in this description"},...]}';
 
       // Pass 1 — technical terms, aircraft, operations, systems, roles (10 keywords)
       let pass1 = [];
       try {
         const r1 = await openRouterChat([...kwSys, {
           role: 'user',
-          content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 10 keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself, including its expanded form, abbreviation, subtitle, or nickname (e.g. if the brief is titled "JTAC", do not extract "Joint Terminal Attack Controllers").\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+          content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 10 keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself, including its expanded form, abbreviation, subtitle, or nickname (e.g. if the brief is titled "JTAC", do not extract "Joint Terminal Attack Controllers").\n\nFor "generatedDescription": write a concise RAF-specific definition framed around how the keyword is used in this description — the role, capability, or scenario it plays within the passage — without naming the brief's subject, title, or nickname.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
         }], kwMdl);
         pass1 = validateKws3(JSON.parse(cleanJson(r1.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 10);
       } catch (e) { warnings.push(`Keywords pass 1: ${e.message}`); }
@@ -2874,7 +2931,7 @@ router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news
         const alreadyList = pass1.length ? `Already extracted (do NOT repeat): ${pass1.map(k => k.keyword).join(', ')}\n\n` : '';
         const r2 = await openRouterChat([...kwSys, {
           role: 'user',
-          content: `Description:\n"""${descriptionText}"""\n\n${alreadyList}Extract up to 10 proper noun keywords from the description above. Focus SPECIFICALLY on: RAF squadron names and numbers (e.g. "No. 617 Squadron", "XI Squadron"), RAF base and airfield names (e.g. "RAF Lossiemouth"), named military units, formations, and commands. Every keyword MUST appear verbatim in the description.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+          content: `Description:\n"""${descriptionText}"""\n\n${alreadyList}Extract up to 10 proper noun keywords from the description above. Focus SPECIFICALLY on: RAF squadron names and numbers (e.g. "No. 617 Squadron", "XI Squadron"), RAF base and airfield names (e.g. "RAF Lossiemouth"), named military units, formations, and commands. Every keyword MUST appear verbatim in the description.\n\nFor "generatedDescription": write a concise RAF-specific definition framed around how the keyword is used in this description — the role, capability, or scenario it plays within the passage — without naming the brief's subject, title, or nickname.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
         }], kwMdl);
         pass2 = validateKws3(JSON.parse(cleanJson(r2.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 10);
       } catch (e) { warnings.push(`Keywords pass 2: ${e.message}`); }
@@ -3135,6 +3192,14 @@ router.post('/intel-leads/:id/create-stub', async (req, res) => {
     if (existing) {
       return res.status(409).json({ message: `A brief already exists for "${lead.title}"` });
     }
+
+    const validSubs = SUBCATEGORIES[lead.category] ?? [];
+    if (validSubs.length > 0 && !lead.subcategory) {
+      return res.status(400).json({ message: `Lead "${lead.title}" has no subcategory — set one on the lead before creating a stub` });
+    }
+
+    const airframeCheck = validateBriefTitleForCategory(lead.title, lead.category);
+    if (!airframeCheck.ok) return res.status(400).json({ message: airframeCheck.message });
 
     const stub = await IntelligenceBrief.create({
       title:               lead.title,
@@ -3438,7 +3503,7 @@ router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), asy
 
     const kwSys  = [{ role: 'system', content: getPrompt(kwAiSettings, 'keywords') }];
     const kwMdl  = 'perplexity/sonar';
-    const KW_JSON = '{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition of this term"},{"keyword":"...","generatedDescription":"..."}]}';
+    const KW_JSON = '{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"RAF-specific definition framed around how the term is used in this description"},{"keyword":"...","generatedDescription":"..."}]}';
     const existingList = existingKeywords.length
       ? `Already used (do NOT repeat these): ${existingKeywords.join(', ')}\n\n`
       : '';
@@ -3456,7 +3521,7 @@ router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), asy
     try {
       const r1 = await openRouterChat([...kwSys, {
         role: 'user',
-        content: `Description:\n"""${description}"""\n\n${existingList}${titleExclusion}Extract exactly ${pass1Target} keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference or summarise the intel brief.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
+        content: `Description:\n"""${description}"""\n\n${existingList}${titleExclusion}Extract exactly ${pass1Target} keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself.\n\nFor "generatedDescription": write a concise RAF-specific definition framed around how the keyword is used in this description — the role, capability, or scenario it plays within the passage — without naming the brief's subject, title, or nickname.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
       }], kwMdl);
       pass1 = validateKws(JSON.parse(cleanJson(r1.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, pass1Target);
     } catch (e) { /* pass1 stays empty — caller gets whatever passes succeed */ }
@@ -3470,7 +3535,7 @@ router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), asy
         const alreadyList2 = alreadyAll.length ? `Already extracted (do NOT repeat): ${alreadyAll.join(', ')}\n\n` : '';
         const r2 = await openRouterChat([...kwSys, {
           role: 'user',
-          content: `Description:\n"""${description}"""\n\n${alreadyList2}${titleExclusion}Extract up to ${pass2Target} proper noun keywords from the description above. Focus SPECIFICALLY on: RAF squadron names and numbers (e.g. "No. 617 Squadron", "XI Squadron"), RAF base and airfield names (e.g. "RAF Lossiemouth"), named military units, formations, and commands. Every keyword MUST appear verbatim in the description.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
+          content: `Description:\n"""${description}"""\n\n${alreadyList2}${titleExclusion}Extract up to ${pass2Target} proper noun keywords from the description above. Focus SPECIFICALLY on: RAF squadron names and numbers (e.g. "No. 617 Squadron", "XI Squadron"), RAF base and airfield names (e.g. "RAF Lossiemouth"), named military units, formations, and commands. Every keyword MUST appear verbatim in the description.\n\nFor "generatedDescription": write a concise RAF-specific definition framed around how the keyword is used in this description — the role, capability, or scenario it plays within the passage — without naming the brief's subject, title, or nickname.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
         }], kwMdl);
         pass2 = validateKws(JSON.parse(cleanJson(r2.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, pass2Target);
       } catch (e) { /* pass2 stays empty */ }
@@ -3488,7 +3553,7 @@ router.post('/ai/generate-keywords', featureMiddleware('generate-keywords'), asy
         const alreadyAll = [...existingKeywords, ...combined12.map(k => k.keyword)];
         const r3 = await openRouterChat([...kwSys, {
           role: 'user',
-          content: `Description:\n"""${description}"""\n\nAlready extracted (do NOT repeat): ${alreadyAll.join(', ')}\n\n${titleExclusion}Extract exactly ${pass3Target} additional keywords from the description above. Every keyword MUST appear verbatim in the description and must NOT already appear in the list above. Broaden your scope beyond earlier passes: consider equipment, weapons, locations, personnel roles, capabilities, doctrine or concept terms, aircraft designations, operation names, training programmes, squadron names, base names, or any other meaningful noun phrase in the description. Only return fewer than ${pass3Target} if the description genuinely contains no more qualifying terms.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference or summarise the intel brief.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
+          content: `Description:\n"""${description}"""\n\nAlready extracted (do NOT repeat): ${alreadyAll.join(', ')}\n\n${titleExclusion}Extract exactly ${pass3Target} additional keywords from the description above. Every keyword MUST appear verbatim in the description and must NOT already appear in the list above. Broaden your scope beyond earlier passes: consider equipment, weapons, locations, personnel roles, capabilities, doctrine or concept terms, aircraft designations, operation names, training programmes, squadron names, base names, or any other meaningful noun phrase in the description. Only return fewer than ${pass3Target} if the description genuinely contains no more qualifying terms.\n\nFor "generatedDescription": write a concise RAF-specific definition framed around how the keyword is used in this description — the role, capability, or scenario it plays within the passage — without naming the brief's subject, title, or nickname.\n\nReturn ONLY valid JSON — no markdown, no code blocks:\n${KW_JSON}`,
         }], kwMdl);
         pass3 = validateKws(JSON.parse(cleanJson(r3.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, pass3Target);
       } catch (e) { /* pass3 stays empty */ }
@@ -3788,14 +3853,14 @@ async function generateBriefContent(brief, aiSettings) {
 
     const kwSys = [{ role: 'system', content: getPrompt(aiSettings, 'keywords') }];
     const kwMdl = 'perplexity/sonar';
-    const KW_JSON = '{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"general RAF-specific definition"},...]}';
+    const KW_JSON = '{"keywords":[{"keyword":"exact phrase from description","generatedDescription":"RAF-specific definition framed around how the term is used in this description"},...]}';
 
     // Pass 1 — technical terms, aircraft, operations, systems, roles (10 keywords)
     let pass1 = [];
     try {
       const r1 = await openRouterChat([...kwSys, {
         role: 'user',
-        content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 10 keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself, including its expanded form, abbreviation, subtitle, or nickname (e.g. if the brief is titled "JTAC", do not extract "Joint Terminal Attack Controllers").\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+        content: `Description:\n"""${descriptionText}"""\n\nExtract exactly 10 keywords from the description above. Every keyword MUST appear verbatim in the description. Choose technical terms, acronyms, aircraft designations, system names, operation names, training programmes, and roles — but never the subject/title of the brief itself, including its expanded form, abbreviation, subtitle, or nickname (e.g. if the brief is titled "JTAC", do not extract "Joint Terminal Attack Controllers").\n\nFor "generatedDescription": write a concise RAF-specific definition framed around how the keyword is used in this description — the role, capability, or scenario it plays within the passage — without naming the brief's subject, title, or nickname.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
       }], kwMdl);
       pass1 = validateKws(JSON.parse(cleanJson(r1.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 10);
     } catch (e) { console.warn('[generateBriefContent] Keywords pass 1:', e.message); }
@@ -3806,7 +3871,7 @@ async function generateBriefContent(brief, aiSettings) {
       const alreadyList = pass1.length ? `Already extracted (do NOT repeat): ${pass1.map(k => k.keyword).join(', ')}\n\n` : '';
       const r2 = await openRouterChat([...kwSys, {
         role: 'user',
-        content: `Description:\n"""${descriptionText}"""\n\n${alreadyList}Extract up to 10 proper noun keywords from the description above. Focus SPECIFICALLY on: RAF squadron names and numbers (e.g. "No. 617 Squadron", "XI Squadron"), RAF base and airfield names (e.g. "RAF Lossiemouth"), named military units, formations, and commands. Every keyword MUST appear verbatim in the description.\n\nFor "generatedDescription": write a general RAF-specific definition. Do NOT reference this intel brief.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
+        content: `Description:\n"""${descriptionText}"""\n\n${alreadyList}Extract up to 10 proper noun keywords from the description above. Focus SPECIFICALLY on: RAF squadron names and numbers (e.g. "No. 617 Squadron", "XI Squadron"), RAF base and airfield names (e.g. "RAF Lossiemouth"), named military units, formations, and commands. Every keyword MUST appear verbatim in the description.\n\nFor "generatedDescription": write a concise RAF-specific definition framed around how the keyword is used in this description — the role, capability, or scenario it plays within the passage — without naming the brief's subject, title, or nickname.\n\nReturn ONLY valid JSON:\n${KW_JSON}`,
       }], kwMdl);
       pass2 = validateKws(JSON.parse(cleanJson(r2.choices?.[0]?.message?.content ?? '{}')).keywords ?? []).slice(0, 10);
     } catch (e) { console.warn('[generateBriefContent] Keywords pass 2:', e.message); }
@@ -3992,6 +4057,7 @@ const BULK_LINK_CONFIG = {
     { linkType: 'bases',     field: 'associatedBaseBriefIds',     poolCategory: 'Bases' },
     { linkType: 'squadrons', field: 'associatedSquadronBriefIds', poolCategory: 'Squadrons' },
     { linkType: 'missions',  field: 'associatedMissionBriefIds',  poolCategory: 'Missions' },
+    { linkType: 'tech',      field: 'associatedTechBriefIds',     poolCategory: 'Tech' },
   ],
   Squadrons: [
     { linkType: 'bases',    field: 'associatedBaseBriefIds',     poolCategory: 'Bases' },
@@ -4004,6 +4070,11 @@ const BULK_LINK_CONFIG = {
   ],
   Roles: [
     { linkType: 'training', field: 'associatedTrainingBriefIds', poolCategory: 'Training' },
+    { linkType: 'bases',    field: 'associatedBaseBriefIds',     poolCategory: 'Bases'    },
+  ],
+  Training: [
+    { linkType: 'bases',     field: 'associatedBaseBriefIds',     poolCategory: 'Bases' },
+    { linkType: 'squadrons', field: 'associatedSquadronBriefIds', poolCategory: 'Squadrons' },
   ],
   Tech: [
     { linkType: 'aircraft', field: 'associatedAircraftBriefIds', poolCategory: 'Aircrafts' },

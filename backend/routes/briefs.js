@@ -595,6 +595,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       .populate('associatedAircraftBriefIds', '_id title subtitle nickname category status')
       .populate('associatedMissionBriefIds',  '_id title subtitle nickname category status')
       .populate('associatedTrainingBriefIds', '_id title subtitle nickname category status')
+      .populate('associatedTechBriefIds',     '_id title subtitle nickname category status')
       .populate('relatedBriefIds',            '_id title subtitle nickname category status')
       .populate('relatedHistoric',            '_id title subtitle category status historic')
       .populate('mentionedBriefIds',          '_id title subtitle nickname category');
@@ -675,6 +676,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     briefObj.associatedAircraftBriefIds = enrichWithMatchTerms(briefObj.associatedAircraftBriefIds);
     briefObj.associatedMissionBriefIds  = enrichWithMatchTerms(briefObj.associatedMissionBriefIds);
     briefObj.associatedTrainingBriefIds = enrichWithMatchTerms(briefObj.associatedTrainingBriefIds);
+    briefObj.associatedTechBriefIds     = enrichWithMatchTerms(briefObj.associatedTechBriefIds);
     briefObj.relatedBriefIds            = enrichWithMatchTerms(briefObj.relatedBriefIds);
     briefObj.mentionedBriefIds          = enrichWithMatchTerms(briefObj.mentionedBriefIds);
 
@@ -689,6 +691,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
     briefObj.associatedAircraftBriefIds = filterAccessible(briefObj.associatedAircraftBriefIds);
     briefObj.associatedMissionBriefIds  = filterAccessible(briefObj.associatedMissionBriefIds);
     briefObj.associatedTrainingBriefIds = filterAccessible(briefObj.associatedTrainingBriefIds);
+    briefObj.associatedTechBriefIds     = filterAccessible(briefObj.associatedTechBriefIds);
     briefObj.relatedBriefIds            = filterAccessible(briefObj.relatedBriefIds);
     briefObj.mentionedBriefIds          = filterAccessible(briefObj.mentionedBriefIds);
 

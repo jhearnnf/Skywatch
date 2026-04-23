@@ -93,18 +93,19 @@ describe('Home — Daily Mission card', () => {
     })
   })
 
-  it('renders Jump Back In above Daily Mission when both are present', async () => {
+  it('renders Daily Mission above the Resume Quick Action when both are present', async () => {
     global.fetch = makeFetch({
       inProgress: { briefId: 'in-prog', title: 'Resume Me', category: 'News', currentSection: 2 },
       nextPathway: { briefId: 'next-id', category: 'News' },
     })
     render(<Home />)
 
-    const jumpLabel = await screen.findByText('Jump Back In')
     const missionLabel = await screen.findByText('Daily mission available')
+    const resumeLabel = await screen.findByText('Resume Me')
 
-    // Compare document order — Jump Back In must come first in the DOM
-    const pos = jumpLabel.compareDocumentPosition(missionLabel)
+    // Compare document order — Daily Mission must come first in the DOM,
+    // with the Resume button now grouped under Quick Actions below it.
+    const pos = missionLabel.compareDocumentPosition(resumeLabel)
     expect(pos & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

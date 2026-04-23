@@ -342,6 +342,7 @@ function RelatedBriefs({ brief, navigate }) {
     ...(brief.associatedAircraftBriefIds ?? []),
     ...(brief.associatedMissionBriefIds  ?? []),
     ...(brief.associatedTrainingBriefIds ?? []),
+    ...(brief.associatedTechBriefIds     ?? []),
     ...(brief.relatedBriefIds            ?? []),
   ]
     .filter(b => b?._id && !seen.has(String(b._id)) && seen.add(String(b._id)))

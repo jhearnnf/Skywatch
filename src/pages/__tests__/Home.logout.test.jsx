@@ -109,8 +109,8 @@ describe('Home — stale brief read-state cleared on logout', () => {
     const { rerender } = render(<Home />)
     await waitFor(() => expect(screen.getByText('Eurofighter Typhoon')).toBeDefined())
 
-    // Read state surfaces as a "· Read" suffix on the category line
-    expect(screen.getByText(/Aircrafts · Read/i)).toBeDefined()
+    // Read state surfaces as a "Read" meta line under the title
+    expect(screen.getByText('Read')).toBeDefined()
 
     // Simulate logout — guest fetch returns same brief but isRead: false
     global.fetch = makeFetch({ briefs: [UNREAD_BRIEF] })
@@ -119,7 +119,7 @@ describe('Home — stale brief read-state cleared on logout', () => {
 
     // After re-fetch, brief is still shown but no longer carries the read marker
     await waitFor(() => {
-      expect(screen.queryByText(/· Read/i)).toBeNull()
+      expect(screen.queryByText('Read')).toBeNull()
       expect(screen.getByText('Eurofighter Typhoon')).toBeDefined()
     })
   })

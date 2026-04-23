@@ -21,6 +21,14 @@ const AdminAction          = require('../../models/AdminAction');
 const GameType             = require('../../models/GameType');
 const AppSettings          = require('../../models/AppSettings');
 const IntelLead            = require('../../models/IntelLead');
+const { SUBCATEGORIES }    = require('../../constants/categories');
+
+// Pick a deterministic default subcategory for tests that don't care which one
+// is used. Returns '' for categories that define no subcategories (e.g. News).
+function defaultSubcategory(category) {
+  const subs = SUBCATEGORIES[category] ?? [];
+  return subs[0] ?? '';
+}
 
 // Permissive pathway unlocks used as the default in tests: every category is
 // accessible from the start (level 1, rank 1) so subscription-only tests are
@@ -118,10 +126,12 @@ function authCookie(userId) {
 
 // ── Brief ──────────────────────────────────────────────────────────────────
 async function createBrief(overrides = {}) {
+  const category = overrides.category ?? 'News';
   return IntelligenceBrief.create({
     title:               overrides.title ?? `Test Brief ${Date.now()}`,
     subtitle:            overrides.subtitle ?? '',
-    category:            overrides.category ?? 'News',
+    category,
+    subcategory:         overrides.subcategory ?? defaultSubcategory(category),
     descriptionSections: overrides.descriptionSections ?? ['Section one text.', 'Section two text.'],
     keywords:            overrides.keywords ?? [],
     sources:             overrides.sources ?? [],
@@ -164,6 +174,7 @@ async function createBooBriefs(count, category = 'Aircrafts', overrides = {}) {
       title:               overrides.title ?? `BOO Brief ${Date.now()}_${i}`,
       subtitle:            '',
       category,
+      subcategory:         overrides.subcategory ?? defaultSubcategory(category),
       descriptionSections: ['Section text.'],
       keywords:            [],
       sources:             [],
@@ -188,6 +199,7 @@ async function createTrainingBooBriefs(count, overrides = {}) {
       title:               overrides.title ?? `Training Brief ${Date.now()}_${i}`,
       subtitle:            '',
       category:            'Training',
+      subcategory:         overrides.subcategory ?? defaultSubcategory('Training'),
       descriptionSections: ['Section text.'],
       keywords:            [],
       sources:             [],

@@ -337,7 +337,7 @@ describe('POST /api/admin/briefs — publishedAt stamp', () => {
     const res = await request(app)
       .post('/api/admin/briefs')
       .set('Cookie', authCookie(admin._id))
-      .send({ title: 'Fresh brief', category: 'Aircrafts', reason: 'test' });
+      .send({ title: 'Fresh brief', category: 'Aircrafts', subcategory: 'Fast Jet', reason: 'test' });
 
     expect(res.status).toBe(200);
     const saved = await IntelligenceBrief.findById(res.body.data.brief._id).lean();
@@ -355,7 +355,7 @@ describe('POST /api/admin/briefs — publishedAt stamp', () => {
     const res = await request(app)
       .post('/api/admin/briefs')
       .set('Cookie', authCookie(admin._id))
-      .send({ title: 'Stub to promote', category: 'Aircrafts', reason: 'test' });
+      .send({ title: 'Stub to promote', category: 'Aircrafts', subcategory: 'Fast Jet', reason: 'test' });
 
     expect(res.status).toBe(200);
     const saved = await IntelligenceBrief.findById(stub._id).lean();

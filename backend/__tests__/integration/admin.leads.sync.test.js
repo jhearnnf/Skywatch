@@ -170,7 +170,7 @@ describe('PATCH /api/admin/briefs/:id — lead sync', () => {
     await request(app)
       .patch(`/api/admin/briefs/${brief._id}`)
       .set('Cookie', authCookie(admin._id))
-      .send({ reason: 'move to tech', category: 'Tech' });
+      .send({ reason: 'move to tech', category: 'Tech', subcategory: 'Weapons Systems' });
 
     const lead = await IntelLead.findOne({ title: 'GBAD' });
     expect(lead.category).toBe('Tech');
@@ -458,6 +458,7 @@ describe('POST /api/admin/briefs — News brief auto-creates matching lead', () 
         reason:              'add aircraft stub',
         title:               'Auto-Create Test Aircraft',
         category:            'Aircrafts',
+        subcategory:         'Fast Jet',
         status:              'stub',
         descriptionSections: [],
       });

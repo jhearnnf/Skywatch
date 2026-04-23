@@ -130,10 +130,11 @@ const appSettingsSchema = new mongoose.Schema({
   totalLoadingMs: { type: Number, default: 0 },
 
   // Feature flags
-  useLiveLeaderboard:   { type: Boolean, default: false },
-  disableLoadingBar:    { type: Boolean, default: false },
-  betaTesterAutoGold:   { type: Boolean, default: false },
-  cbatEnabled:          { type: Boolean, default: false },
+  useLiveLeaderboard:    { type: Boolean, default: false },
+  disableLoadingBar:     { type: Boolean, default: false },
+  betaTesterAutoGold:    { type: Boolean, default: false },
+  cbatEnabled:           { type: Boolean, default: false },
+  mnemonicsClickEnabled: { type: Boolean, default: false },
 
   // Flashcards feature — when false, News-category briefs skip the flashcard
   // layout on section 4, are excluded from the flashcard deck and overall count,

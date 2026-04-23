@@ -25,7 +25,7 @@ const getAcRankId = async () => {
 const signToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
-const sendToken = (user, statusCode, res, extras = {}) => {
+const sendToken = async (user, statusCode, res, extras = {}) => {
   const token = signToken(user._id);
   const isProd = process.env.NODE_ENV === 'production'
   res.cookie('jwt', token, {
@@ -35,6 +35,10 @@ const sendToken = (user, statusCode, res, extras = {}) => {
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   });
   user.password = undefined;
+  // Populate rank so the frontend sees { rankNumber, rankName, ... } on the very
+  // first response — otherwise pathway/rank-gated UI reads user.rank as a bare
+  // ObjectId and falls back to rank 1 until the next /api/auth/me fetch.
+  await user.populate('rank');
   // Token included in body so native apps (Capacitor) can store it for Bearer auth
   res.status(statusCode).json({ status: 'success', data: { user, token, ...extras } });
 };
@@ -82,7 +86,7 @@ router.post('/register', async (req, res) => {
       }
       sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
       const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
-      return sendToken(user, 201, res, { isNew: true, loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
+      return await sendToken(user, 201, res, { isNew: true, loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
     }
 
     const code      = String(Math.floor(100000 + Math.random() * 900000));
@@ -125,7 +129,7 @@ router.post('/verify-email', async (req, res) => {
 
     sendWelcomeEmail({ email: user.email, agentNumber: user.agentNumber });
     const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
-    sendToken(user, 201, res, { isNew: true, loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
+    await sendToken(user, 201, res, { isNew: true, loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -172,7 +176,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
-    sendToken(user, 200, res, { loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
+    await sendToken(user, 200, res, { loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -311,7 +315,7 @@ router.post('/google', async (req, res) => {
     }
 
     const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
-    sendToken(user, 200, res, { ...(isNew ? { isNew: true } : {}), loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
+    await sendToken(user, 200, res, { ...(isNew ? { isNew: true } : {}), loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
   } catch (err) {
     console.error('Google auth error:', err.message);
     res.status(401).json({ message: 'Google authentication failed' });
