@@ -939,7 +939,7 @@ function PathwayHeader({ category, colors }) {
 // Progressive render — long pathways (100+ stones) render in batches over idle
 // frames instead of all at once. The initial batch always covers the auto-scroll
 // target (next unread + buffer), so landing position is correct on first paint.
-const INITIAL_RENDER_COUNT = 25
+const INITIAL_RENDER_COUNT = 12
 const RENDER_BATCH_SIZE    = 20
 
 function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction, nextBriefImages, nextBriefId }) {
@@ -947,25 +947,33 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
   const [openSyncId, setOpenSyncId] = useState(null)
   const [revealedStubId, setRevealedStubId] = useState(null)
   const [hoveredStubId, setHoveredStubId] = useState(null)
-  const listRef = useRef(null)
+  const listRef     = useRef(null)
+  const sentinelRef = useRef(null)
 
   const [renderLimit, setRenderLimit] = useState(() => {
     const firstUnread = briefs.findIndex(b => !readSet.has(b._id) && b.status !== 'stub')
     return Math.max(INITIAL_RENDER_COUNT, firstUnread + 10)
   })
 
+  // Scroll-gated rendering: grow `renderLimit` when a sentinel near the tail of
+  // the currently-rendered list enters the viewport. Bounds DOM size on long
+  // pathways and keeps idle-time free for other UI work.
   useEffect(() => {
     if (renderLimit >= briefs.length) return
-    const schedule = typeof window.requestIdleCallback === 'function'
-      ? (cb) => window.requestIdleCallback(cb, { timeout: 200 })
-      : (cb) => setTimeout(cb, 16)
-    const cancel = typeof window.cancelIdleCallback === 'function'
-      ? window.cancelIdleCallback
-      : clearTimeout
-    const id = schedule(() => {
-      setRenderLimit(n => Math.min(briefs.length, n + RENDER_BATCH_SIZE))
-    })
-    return () => cancel(id)
+    const el = sentinelRef.current
+    if (!el) return
+    if (typeof IntersectionObserver === 'undefined') {
+      // Fallback for environments without IO (old jsdom etc.) — render the rest.
+      setRenderLimit(briefs.length)
+      return
+    }
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) {
+        setRenderLimit(n => Math.min(briefs.length, n + RENDER_BATCH_SIZE))
+      }
+    }, { rootMargin: '600px 0px' }) // pre-load a viewport ahead of the scroll
+    io.observe(el)
+    return () => io.disconnect()
   }, [renderLimit, briefs.length])
 
   // Scroll so the next-to-read brief sits just below the page header on arrival.
@@ -1104,6 +1112,9 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
           />
         )
       })}
+      {renderLimit < briefs.length && (
+        <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
+      )}
     </motion.div>
   )
 }
@@ -1270,6 +1281,7 @@ export default function LearnPriority() {
   const [catSettings,    setCatSettings]    = useState(null) // { freeCategories, silverCategories }
   const [briefsCache,    setBriefsCache]    = useState({}) // { [category]: brief[] }
   const [nextBriefCache, setNextBriefCache] = useState({}) // { [category]: { id, images } }
+  const [pathwayCounts,  setPathwayCounts]  = useState({}) // { [category]: { total, read } } — lightweight count cache
   const [loading,        setLoading]        = useState(false)
   const [activeCatIndex, setActiveCatIndex] = useState(null)
   const [direction,      setDirection]      = useState(1)   // 1=forward, -1=backward
@@ -1315,6 +1327,22 @@ export default function LearnPriority() {
       .then(d => { if (d?.data?.levels?.length) setLevels(d.data.levels) })
       .catch(() => {})
   }, [API])
+
+  // ── Fetch lightweight per-category counts so the header card can show
+  //    "X / Y completed" immediately on swipe, before the full brief list for
+  //    that pathway has loaded. Refetches when the logged-in user changes so
+  //    read-counts track the active account.
+  useEffect(() => {
+    apiFetch(`${API}/api/briefs/pathway-counts`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!Array.isArray(d?.data)) return
+        const map = {}
+        for (const row of d.data) map[row.category] = { total: row.total, read: row.read }
+        setPathwayCounts(map)
+      })
+      .catch(() => {})
+  }, [user?._id, API]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch quiz-passed brief IDs (background, after page has loaded) ─────────
   useEffect(() => {
@@ -1500,6 +1528,7 @@ export default function LearnPriority() {
 
   useEffect(() => {
     if (!activePathway) return
+    if (!activePathway.unlocked) return // locked pathway renders synchronously — skip fetch
     const cat = activePathway.category
     if (briefsCache[cat]) return // already loaded
     setLoading(true)
@@ -1515,7 +1544,42 @@ export default function LearnPriority() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [activeCatIndex, activePathway?.category, API]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeCatIndex, activePathway?.category, activePathway?.unlocked, API]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Prefetch adjacent unlocked pathways so swipes feel instant ────────────
+  // Fires after the active pathway settles. Fills briefsCache in the background
+  // without touching `loading`, so the skeleton never shows on the next swipe.
+  useEffect(() => {
+    if (activeCatIndex == null || pathways.length <= 1) return
+    const neighbors = [activeCatIndex - 1, activeCatIndex + 1]
+      .map(i => pathways[i])
+      .filter(p => p && p.unlocked && !briefsCache[p.category])
+    if (neighbors.length === 0) return
+
+    const schedule = typeof window.requestIdleCallback === 'function'
+      ? (cb) => window.requestIdleCallback(cb, { timeout: 1000 })
+      : (cb) => setTimeout(cb, 120)
+    const cancel = typeof window.cancelIdleCallback === 'function'
+      ? window.cancelIdleCallback
+      : clearTimeout
+
+    const id = schedule(() => {
+      neighbors.forEach(p => {
+        apiFetch(`${API}/api/briefs/pathway/${encodeURIComponent(p.category)}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(d => {
+            if (d?.data?.briefs) {
+              setBriefsCache(prev => prev[p.category] ? prev : { ...prev, [p.category]: d.data.briefs })
+              if (d.data.nextBrief) {
+                setNextBriefCache(prev => prev[p.category] ? prev : { ...prev, [p.category]: d.data.nextBrief })
+              }
+            }
+          })
+          .catch(() => {})
+      })
+    })
+    return () => cancel(id)
+  }, [activeCatIndex, pathways, briefsCache, API]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Build read set ──────────────────────────────────────────────────────────
   const activeBriefs = briefsCache[activePathway?.category] ?? []
@@ -1525,8 +1589,12 @@ export default function LearnPriority() {
   const inProgressSet = new Set(
     activeBriefs.filter(b => b.isInProgress).map(b => b._id)
   )
-  const readCount  = readSet.size
-  const totalCount = activeBriefs.length
+  // Prefer live counts from the loaded brief list, fall back to the lightweight
+  // count cache so the header card doesn't flash "No briefs yet" on swipe.
+  const briefListLoaded = !!briefsCache[activePathway?.category]
+  const cachedCounts    = pathwayCounts[activePathway?.category]
+  const readCount  = briefListLoaded ? readSet.size        : (cachedCounts?.read  ?? 0)
+  const totalCount = briefListLoaded ? activeBriefs.length : (cachedCounts?.total ?? 0)
 
   // ── Swipe handler ───────────────────────────────────────────────────────────
   function markPathwaySwipeSeen() {

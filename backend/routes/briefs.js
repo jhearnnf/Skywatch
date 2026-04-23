@@ -490,6 +490,77 @@ router.get('/history', protect, async (req, res) => {
 });
 
 
+// GET /api/briefs/pathway-counts — lightweight { category, total, read } list
+// for every category the user can access. Used by the Learn page header card
+// so it can show "X / Y completed" immediately on swipe without fetching the
+// full brief list for each pathway.
+router.get('/pathway-counts', optionalAuth, async (req, res) => {
+  try {
+    const [settings, rawLevels] = await Promise.all([
+      AppSettings.getSettings(),
+      Level.find().sort({ levelNumber: 1 }).lean(),
+    ]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
+    const tier       = req.user ? effectiveTier(req.user) : 'guest';
+    const accessible = getAccessibleCategories(tier, settings);           // null = all
+    const pathway    = getPathwayAccessibleCategories(req.user, settings, levelThresholds);
+
+    let finalCategories = null;
+    if (accessible !== null && pathway !== null) {
+      finalCategories = accessible.filter(c => pathway.includes(c));
+    } else if (accessible !== null) {
+      finalCategories = accessible;
+    } else if (pathway !== null) {
+      finalCategories = pathway;
+    }
+
+    // Mirror the /pathway/:category filter: News includes everything, other
+    // categories only count briefs with a priorityNumber assigned.
+    const filter = {
+      $or: [
+        { category: 'News' },
+        { priorityNumber: { $ne: null } },
+      ],
+    };
+    if (finalCategories !== null) filter.category = { $in: finalCategories };
+
+    const briefs = await IntelligenceBrief.find(filter, '_id category').lean();
+
+    let readIds = new Set();
+    if (req.user) {
+      const readRecs = await IntelligenceBriefRead.find({
+        userId: req.user._id,
+        completed: true,
+      }).select('intelBriefId').lean();
+      readIds = new Set(readRecs.map(r => r.intelBriefId.toString()));
+    }
+
+    const counts = {};
+    for (const b of briefs) {
+      const c = counts[b.category] ?? (counts[b.category] = { total: 0, read: 0 });
+      c.total += 1;
+      if (readIds.has(b._id.toString())) c.read += 1;
+    }
+
+    // Include zero-entries for accessible categories with no briefs yet, so the
+    // frontend can tell "no briefs" apart from "not fetched".
+    if (finalCategories !== null) {
+      for (const cat of finalCategories) {
+        if (!counts[cat]) counts[cat] = { total: 0, read: 0 };
+      }
+    }
+
+    const data = Object.entries(counts).map(([category, { total, read }]) => ({
+      category, total, read,
+    }));
+
+    res.json({ status: 'success', data });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
 // GET /api/briefs/pathway/:category — ordered pathway briefs with isRead flag.
 // News: all briefs sorted by eventDate DESC (newest first).
 // Other categories: briefs with priorityNumber set, sorted by priorityNumber ASC.
