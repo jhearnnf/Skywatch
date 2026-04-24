@@ -171,9 +171,14 @@ describe('GET /api/briefs/:id — pathway gating', () => {
     expect(res.status).toBe(200);
   });
 
-  it('guest can read any free-tier brief — pathway gating does not apply to guests', async () => {
-    // Guests are treated as free-tier for brief access; the guest gate lives at
-    // game endpoints (quiz start, BOO, etc.), not brief reading.
+  it('guest can read a guest-tier brief with a pathway gate — pathway does not apply to guests', async () => {
+    // Pathway (level/rank) gating only applies to authenticated users; guests
+    // bypass it entirely. Use a category in guestCategories so the subscription
+    // check passes, then confirm the level-2 pathway gate is still bypassed.
+    await createSettings({
+      ...S,
+      guestCategories: ['News', 'Aircrafts'],
+    });
     const brief = await createBrief({ category: 'Aircrafts' });
     const res   = await request(app).get(`/api/briefs/${brief._id}`);
     expect(res.status).toBe(200);

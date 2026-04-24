@@ -2,7 +2,10 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppSettings } from '../../context/AppSettingsContext'
+import { useAuth } from '../../context/AuthContext'
 import { CATEGORY_ICONS, CATEGORY_DESCRIPTIONS } from '../../data/mockData'
+import { setCroFirstBrief } from '../../utils/storageKeys'
+import { getAccessibleCategories } from '../../utils/subscription'
 
 export const ONBOARDING_KEY = 'skywatch_onboarded'
 
@@ -13,6 +16,8 @@ export function markOnboarded() {
 export default function WelcomeAgentFlow({ onClose }) {
   const navigate     = useNavigate()
   const { settings } = useAppSettings()
+  const { user }     = useAuth() ?? {}
+  const isSignedIn   = !!user
 
   // Close on Escape
   useEffect(() => {
@@ -29,11 +34,18 @@ export default function WelcomeAgentFlow({ onClose }) {
 
   function pickCategory(cat) {
     markOnboarded()
+    setCroFirstBrief()
     onClose()
     navigate('/learn-priority', { state: { category: cat } })
   }
 
-  const freeCategories = settings?.freeCategories ?? ['News']
+  // Guests see guest-tier categories only; signed-in users see whatever
+  // their effective subscription tier can access (gold → null → fall back
+  // to silverCategories so we still render picks).
+  const accessible = getAccessibleCategories(user, settings)
+  const pickable   = accessible === null
+    ? (settings?.silverCategories ?? settings?.freeCategories ?? ['News'])
+    : (accessible.length ? accessible : (settings?.guestCategories ?? ['News']))
 
   return (
     <AnimatePresence>
@@ -57,13 +69,15 @@ export default function WelcomeAgentFlow({ onClose }) {
               Choose your first mission area
             </h2>
             <p className="text-slate-400 text-sm">
-              Select a subject to start reading intel briefs — free, no account needed.
+              {isSignedIn
+                ? 'Select a subject to dive into — pick anything to begin.'
+                : 'Select a subject to start reading intel briefs — free, no account needed.'}
             </p>
           </div>
 
           {/* Category grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-            {freeCategories.map((cat, i) => (
+            {pickable.map((cat, i) => (
               <motion.button
                 key={cat}
                 initial={{ opacity: 0, y: 14 }}
@@ -98,16 +112,22 @@ export default function WelcomeAgentFlow({ onClose }) {
           {/* Footer */}
           <div className="text-center">
             <p className="text-xs text-slate-500 mb-3">
-              Free accounts include these subject areas + a 5-day Silver trial on sign-up.
+              {isSignedIn
+                ? 'These subject areas are unlocked on your account — switch any time.'
+                : 'Free accounts include these subject areas + a 5-day Silver trial on sign-up.'}
             </p>
-            <button
-              onClick={() => { markOnboarded(); onClose(); navigate('/login?tab=register') }}
-              className="text-sm font-semibold"
-              style={{ color: '#5baaff' }}
-            >
-              Create account first →
-            </button>
-            <span className="text-slate-600 mx-2">·</span>
+            {!isSignedIn && (
+              <>
+                <button
+                  onClick={() => { markOnboarded(); onClose(); navigate('/login?tab=register') }}
+                  className="text-sm font-semibold"
+                  style={{ color: '#5baaff' }}
+                >
+                  Create account first →
+                </button>
+                <span className="text-slate-600 mx-2">·</span>
+              </>
+            )}
             <button
               onClick={onClose}
               className="text-sm text-slate-500 hover:text-slate-400"

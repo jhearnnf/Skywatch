@@ -238,7 +238,7 @@ function StatsTab({ API, onViewEmailLog }) {
           <StatCard label="Total Users"      value={fmtNum(users.totalUsers)}       color="brand" />
           <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate" />
           <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber" />
-          <StatCard label="Subscribed"       value={fmtNum(users.subscribedUsers)}   color="emerald" />
+          <StatCard label="Paying Subscribers" value={fmtNum(users.subscribedUsers)}   color="emerald" />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate" />
@@ -1489,14 +1489,23 @@ function SettingsTab({ API }) {
     return 'gold'
   }
 
-  // Set subscription tier for a category by updating the three tier arrays
+  // Set subscription tier for a category by updating the three tier arrays.
+  // Arrays are inclusive: a category appears in every tier array that can access it.
+  // guest  → guestCategories + freeCategories + silverCategories
+  // free   → freeCategories + silverCategories
+  // silver → silverCategories
+  // gold   → none
   const setCatTier = (cat, tier) => setDraft(p => {
+    const add    = arr => [...(arr ?? []).filter(c => c !== cat), cat]
     const remove = arr => (arr ?? []).filter(c => c !== cat)
+    const inGuest  = tier === 'guest'
+    const inFree   = tier === 'guest' || tier === 'free'
+    const inSilver = tier === 'guest' || tier === 'free' || tier === 'silver'
     return {
       ...p,
-      guestCategories:  tier === 'guest'  ? [...(p.guestCategories  ?? []), cat] : remove(p.guestCategories),
-      freeCategories:   tier === 'free'   ? [...(p.freeCategories   ?? []), cat] : remove(p.freeCategories),
-      silverCategories: tier === 'silver' ? [...(p.silverCategories ?? []), cat] : remove(p.silverCategories),
+      guestCategories:  inGuest  ? add(p.guestCategories)  : remove(p.guestCategories),
+      freeCategories:   inFree   ? add(p.freeCategories)   : remove(p.freeCategories),
+      silverCategories: inSilver ? add(p.silverCategories) : remove(p.silverCategories),
     }
   })
 
@@ -2064,7 +2073,7 @@ function UsersTab({ API }) {
 
       <div className="space-y-3">
         {users.map(u => (
-          <div key={u._id} className="bg-surface rounded-2xl border border-slate-200 overflow-hidden">
+          <div key={u._id} className={`rounded-2xl border overflow-hidden ${u._id === currentUser?._id ? 'bg-red-950/40 border-red-900/50' : 'bg-surface border-slate-200'}`}>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
               <div>
@@ -2075,15 +2084,27 @@ function UsersTab({ API }) {
                 </p>
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>
-              {(() => {
-                const diff = (u.difficultySetting ?? 'easy')
-                const DIFF_COLORS = { easy: 'bg-green-100 text-green-700', medium: 'bg-amber-100 text-amber-700', hard: 'bg-red-100 text-red-600' }
-                return (
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${DIFF_COLORS[diff] ?? DIFF_COLORS.easy}`}>
-                    {diff.charAt(0).toUpperCase() + diff.slice(1)}
-                  </span>
-                )
-              })()}
+              <div className="flex items-center gap-2">
+                <button onClick={() => setTierPanel(tierPanel === u._id ? null : u._id)}
+                  title="Change subscription tier"
+                  aria-label="Change subscription tier"
+                  className={`text-[10px] font-bold px-2 py-1 rounded-full border transition-colors ${
+                    tierPanel === u._id
+                      ? `${TIER_BTN[u.subscriptionTier ?? 'free']} ring-2 ring-offset-1 ring-slate-400`
+                      : `${TIER_BTN[u.subscriptionTier ?? 'free']} opacity-70 hover:opacity-100`
+                  }`}>
+                  {TIER_LABELS[u.subscriptionTier ?? 'free'] ?? 'Free'} {tierPanel === u._id ? '▲' : '▼'}
+                </button>
+                {(() => {
+                  const diff = (u.difficultySetting ?? 'easy')
+                  const DIFF_COLORS = { easy: 'bg-green-100 text-green-700', medium: 'bg-amber-100 text-amber-700', hard: 'bg-red-100 text-red-600' }
+                  return (
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${DIFF_COLORS[diff] ?? DIFF_COLORS.easy}`}>
+                      {diff.charAt(0).toUpperCase() + diff.slice(1)}
+                    </span>
+                  )
+                })()}
+              </div>
             </div>
 
             {/* Stats row */}
@@ -2121,35 +2142,50 @@ function UsersTab({ API }) {
               )}
               {u._id !== currentUser?._id && (
                 <button onClick={() => action(`${u.isBanned ? 'Unban' : 'Ban'} — Agent ${u.agentNumber}`, u.isBanned ? `/api/admin/users/${u._id}/unban` : `/api/admin/users/${u._id}/ban`)}
-                  className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors
+                  title={u.isBanned ? 'Unban user' : 'Ban user'}
+                  aria-label={u.isBanned ? 'Unban user' : 'Ban user'}
+                  className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors
                     ${u.isBanned
                       ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
                       : 'border-red-200 text-red-600 hover:bg-red-50'
                     }`}>
-                  {u.isBanned ? 'Unban' : 'Ban'}
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="m14.5 12.5-8 8a2.119 2.119 0 1 1-3-3l8-8" />
+                    <path d="m16 16 6-6" />
+                    <path d="m8 8 6-6" />
+                    <path d="m9 7 8 8" />
+                    <path d="m21 11-8-8" />
+                    <path d="M5 21h14" />
+                  </svg>
                 </button>
               )}
               {u._id !== currentUser?._id && (
                 <button onClick={() => action(`Delete account — Agent ${u.agentNumber}`, `/api/admin/users/${u._id}`, 'DELETE')}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors">
-                  Delete
+                  title="Delete account"
+                  aria-label="Delete account"
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 6h18" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <line x1="10" x2="10" y1="11" y2="17" />
+                    <line x1="14" x2="14" y1="11" y2="17" />
+                  </svg>
                 </button>
               )}
-              <button onClick={() => setTierPanel(tierPanel === u._id ? null : u._id)}
-                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
-                  tierPanel === u._id
-                    ? `${TIER_BTN[u.subscriptionTier ?? 'free']} ring-2 ring-offset-1 ring-slate-400`
-                    : `${TIER_BTN[u.subscriptionTier ?? 'free']} opacity-70 hover:opacity-100`
-                }`}>
-                Tier {tierPanel === u._id ? '▲' : '▼'}
-              </button>
               <button onClick={() => { setAwardPanel(awardPanel === u._id ? null : u._id); setAwardAmount('') }}
-                className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
+                title="Award Airstars"
+                aria-label="Award Airstars"
+                className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${
                   awardPanel === u._id
-                    ? 'border-amber-300 text-amber-700 bg-amber-50'
-                    : 'border-amber-200 text-amber-700 hover:bg-amber-50'
+                    ? 'border-amber-300 bg-amber-50'
+                    : 'border-amber-200 hover:bg-amber-50'
                 }`}>
-                ⬡ Award Airstars {awardPanel === u._id ? '▲' : '▼'}
+                <span className="star-silver text-base leading-none" aria-hidden="true">⭐</span>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="absolute -top-1 -right-1 w-3.5 h-3.5 text-emerald-500 drop-shadow">
+                  <path d="M12 5v14" />
+                  <path d="M5 12h14" />
+                </svg>
               </button>
               {(() => {
                 const progressHasData = (
@@ -2177,7 +2213,9 @@ function UsersTab({ API }) {
                       setResetChecks(defaults)
                       setResetPanel(u._id)
                     }}
-                    className={`text-xs px-3 py-1.5 rounded-lg border font-semibold transition-colors ${
+                    title={isOpen ? 'Close reset panel' : 'Reset user'}
+                    aria-label={isOpen ? 'Close reset panel' : 'Reset user'}
+                    className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${
                       isOpen
                         ? 'border-slate-300 text-slate-600 bg-slate-50'
                         : anyHasData
@@ -2185,7 +2223,10 @@ function UsersTab({ API }) {
                           : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'
                     }`}
                   >
-                    ↺ Reset {isOpen ? '▲' : '▼'}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                      <path d="M3 3v5h5" />
+                    </svg>
                   </button>
                 )
               })()}

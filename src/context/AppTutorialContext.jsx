@@ -66,7 +66,7 @@ export const TUTORIAL_STEPS = {
     { emoji: '🏆', title: 'Leaderboard Tab',
       body: 'Switch to the Leaderboard tab to see how you rank against other learners by total Airstars.' },
     { emoji: '🎯', title: 'Step Up Your Difficulty',
-      body: 'Find the "Quiz Difficulty" section below — tap Advanced to unlock tougher, interview-level questions and bigger Airstars rewards. You can switch back to Standard at any time.', highlightDifficulty: true },
+      body: 'Open the Settings tab and tap Advanced under "Quiz Difficulty" for tougher, interview-level questions and bigger Airstars rewards. You can switch back to Standard at any time.', highlightDifficulty: true },
   ],
   rankings: [
     { emoji: '🎖️', title: 'Level Progression',
@@ -87,7 +87,7 @@ export const TUTORIAL_STEPS = {
   'learn-priority': [
     { emoji: '🗺️', title: 'Welcome to the Pathway',
       body: 'This is your guided learning path. Follow the stepping stones in order to build your knowledge systematically — arranged from the most essential topics first.' },
-    { emoji: '🪨', title: 'Stepping Stones',
+    { emoji: '👣', title: 'Stepping Stones',
       body: 'Each stone represents an Intel Brief. Tap it to open and read it. Completed stones are marked with a tick — work through them in order for the best results.' },
     { emoji: '🔓', title: 'Unlock More Paths',
       body: 'Level up to unlock new learning pathways covering Aircrafts, Ranks, Squadrons, and more. Some pathways also require a Silver or Gold subscription.' },

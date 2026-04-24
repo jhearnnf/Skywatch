@@ -18,11 +18,14 @@ function effectiveTier(user) {
   return user.subscriptionTier ?? 'free';
 }
 
-// Returns null (all categories) or string[] of accessible category names
+// Returns null (all categories) or string[] of accessible category names.
+// Tier arrays are inclusive — silverCategories contains everything silver can see
+// (guest + free + silver categories); freeCategories contains guest + free, etc.
 function getAccessibleCategories(tier, settings) {
   if (tier === 'gold') return null;
   if (tier === 'silver' || tier === 'trial') return settings.silverCategories ?? [];
-  return settings.freeCategories ?? [];
+  if (tier === 'free') return settings.freeCategories ?? [];
+  return settings.guestCategories ?? [];
 }
 
 // Returns true if the user can access this category (subscription tier check only)

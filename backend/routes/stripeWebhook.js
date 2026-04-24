@@ -1,5 +1,7 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const User   = require('../models/User');
+const { effectiveTier } = require('../utils/subscription');
+const { grantSubscriptionUnlocks } = require('../utils/subscriptionUnlocks');
 
 const tierByPrice = () => ({
   [process.env.STRIPE_SILVER_PRICE_ID]: 'silver',
@@ -30,6 +32,8 @@ module.exports = async function stripeWebhook(req, res) {
         const user = await User.findById(userId);
         if (!user) break;
 
+        const oldTier = effectiveTier(user);
+
         user.stripeCustomerId     = session.customer;
         user.stripeSubscriptionId = session.subscription;
 
@@ -43,6 +47,7 @@ module.exports = async function stripeWebhook(req, res) {
         }
 
         await user.save();
+        await grantSubscriptionUnlocks(user._id, oldTier);
         console.log(`Stripe checkout complete: user ${userId} → ${isTrial === 'true' ? 'trial' : tier}`);
         break;
       }
@@ -61,11 +66,13 @@ module.exports = async function stripeWebhook(req, res) {
         if (subscription.status === 'active' && newTier) {
           // Handles: trial → paid conversion, and silver ↔ gold switches
           if (newTier !== user.subscriptionTier) {
+            const oldTier = effectiveTier(user);
             user.subscriptionTier      = newTier;
             user.subscriptionStartDate = subscription.current_period_start
               ? new Date(subscription.current_period_start * 1000)
               : new Date();
             await user.save();
+            await grantSubscriptionUnlocks(user._id, oldTier);
             console.log(`Stripe subscription updated: user ${userId} → ${newTier}`);
           }
         }

@@ -44,9 +44,7 @@ export default function Home() {
   const navigate       = useNavigate()
   const { levels: liveLevels } = useAppSettings()
   const [latestBriefs,      setLatestBriefs]      = useState([])
-  const [showCROFlow,       setShowCROFlow]       = useState(
-    () => !!sessionStorage.getItem(PENDING_ONBOARDING_KEY)
-  )
+  const [showCROFlow,       setShowCROFlow]       = useState(false)
   const [missionLoading,    setMissionLoading]    = useState(false)
   const [showFlashcard,     setShowFlashcard]     = useState(false)
   const [jumpBackBrief,     setJumpBackBrief]     = useState(null)
@@ -180,10 +178,15 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingRetract, notifQueue.length])
 
-  // Consume the onboarding flag (CRO state was already initialised above)
+  // Clean up legacy onboarding session flag — CRO is now driven by the
+  // first-mission card for signed-in zero-read users, not a one-shot flag.
   useEffect(() => {
     sessionStorage.removeItem(PENDING_ONBOARDING_KEY)
   }, [])
+
+  // Signed-in user who has never completed a brief (no streak ever set).
+  // Drives the first-mission card variant that opens the CRO picker.
+  const isZeroRead = !!user && !user.lastStreakDate
 
   // Start tutorial on first visit — skip when the CRO modal is showing
   useEffect(() => {
@@ -454,22 +457,26 @@ export default function Home() {
                       scale:    { duration: 0.6, delay: 0.15, times: [0, 0.55, 1], ease: 'easeOut' },
                     }
                   : { duration: 0.35, delay: 0 }}
-                onClick={missionPhase === 'available' && !missionLoading ? async () => {
-                  setMissionLoading(true)
-                  try {
-                    const res = await apiFetch(`${API}/api/briefs/next-pathway-brief`, { credentials: 'include' })
-                    const data = await res.json()
-                    if (data.status === 'success') {
-                      navigate(`/brief/${data.data.briefId}`)
-                    } else {
-                      navigate('/learn-priority')
-                    }
-                  } catch {
-                    navigate('/learn-priority')
-                  } finally {
-                    setMissionLoading(false)
-                  }
-                } : undefined}
+                onClick={missionPhase === 'available' && !missionLoading
+                  ? (isZeroRead
+                      ? () => setShowCROFlow(true)
+                      : async () => {
+                          setMissionLoading(true)
+                          try {
+                            const res = await apiFetch(`${API}/api/briefs/next-pathway-brief`, { credentials: 'include' })
+                            const data = await res.json()
+                            if (data.status === 'success') {
+                              navigate(`/brief/${data.data.briefId}`)
+                            } else {
+                              navigate('/learn-priority')
+                            }
+                          } catch {
+                            navigate('/learn-priority')
+                          } finally {
+                            setMissionLoading(false)
+                          }
+                        })
+                  : undefined}
                 className={`relative z-10 rounded-2xl flex items-center gap-3 border transition-colors card-shadow
                   ${levelInfo ? '-mt-3 mx-3 px-4 pt-7 pb-4' : 'p-4'}
                   ${missionPhase === 'complete'
@@ -484,14 +491,37 @@ export default function Home() {
                     : 'linear-gradient(135deg, #2d2000 0%, #1a1200 100%)',
                 }}
               >
-                <span className={`text-2xl w-7 text-center shrink-0${missionPhase === 'available' && !missionLoading ? ' target-amber' : ''}`}>
-                  {missionPhase === 'complete' ? '✅' : missionLoading ? '…' : '🎯'}
+                <span className={`text-2xl w-7 flex items-center justify-center shrink-0${missionPhase === 'available' && !missionLoading ? ' target-amber' : ''}`}>
+                  {missionPhase === 'complete' ? (
+                    /* Emerald reticle — mirrors the read-receipt tick used on
+                       completed items in the Latest Intel list below, scaled
+                       up so it keeps the banner's visual weight. */
+                    <span
+                      className="relative flex items-center justify-center rounded-full"
+                      style={{
+                        width:      30,
+                        height:     30,
+                        background: 'rgba(16,185,129,0.9)',
+                        boxShadow:  '0 0 0 2px rgba(16,185,129,0.25), 0 0 12px rgba(16,185,129,0.35)',
+                      }}
+                      aria-label="Mission complete"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="5 13 10 18 19 7" />
+                      </svg>
+                    </span>
+                  ) : missionLoading ? '…' : '🎯'}
                 </span>
                 <div className="flex-1 min-w-0">
                   {missionPhase === 'complete' ? (
                     <>
                       <p className="text-sm font-bold text-emerald-800">Mission complete!</p>
                       <p className="text-xs text-emerald-600">You've read a brief today — streak secured. Keep it up!</p>
+                    </>
+                  ) : isZeroRead ? (
+                    <>
+                      <p className="text-sm font-bold text-amber-800">Choose your first mission area</p>
+                      <p className="text-xs text-amber-600">Pick a subject to begin — your training starts here.</p>
                     </>
                   ) : (
                     <>
@@ -502,7 +532,7 @@ export default function Home() {
                 </div>
                 {missionPhase === 'available' && (
                   <span className="shrink-0 text-xs font-bold bg-amber-500 text-white px-3 py-1.5 rounded-xl">
-                    {missionLoading ? '…' : 'Go →'}
+                    {missionLoading ? '…' : isZeroRead ? 'Start →' : 'Go →'}
                   </span>
                 )}
               </motion.div>

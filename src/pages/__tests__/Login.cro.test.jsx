@@ -50,7 +50,10 @@ function makeExistingUserResponse() {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('Login — CRO onboarding flag (sw_pending_onboarding)', () => {
+// The legacy `sw_pending_onboarding` session flag used to trigger a one-shot
+// CRO modal on Home after signup. Home now drives CRO off `user.lastStreakDate`
+// directly (zero-read → show first-mission card), so the flag must never be set.
+describe('Login — no longer sets the legacy sw_pending_onboarding flag', () => {
   beforeEach(() => {
     setupAuth()
     mockNavigate.mockClear()
@@ -63,7 +66,7 @@ describe('Login — CRO onboarding flag (sw_pending_onboarding)', () => {
 
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('sets sw_pending_onboarding when new email user has never seen the CRO flow', async () => {
+  it('new email signup does NOT set sw_pending_onboarding (legacy flag removed)', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeNewUserResponse()) // register
       .mockResolvedValueOnce({ ok: true, json: async () => ({}) }) // difficulty PATCH
@@ -75,7 +78,7 @@ describe('Login — CRO onboarding flag (sw_pending_onboarding)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }))
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/home'))
-    expect(sessionStorage.getItem('sw_pending_onboarding')).toBe('1')
+    expect(sessionStorage.getItem('sw_pending_onboarding')).toBeNull()
   })
 
   it('does NOT set sw_pending_onboarding when skywatch_onboarded is already in localStorage', async () => {
@@ -95,7 +98,7 @@ describe('Login — CRO onboarding flag (sw_pending_onboarding)', () => {
     expect(sessionStorage.getItem('sw_pending_onboarding')).toBeNull()
   })
 
-  it('sets sw_pending_onboarding when new Google user has never seen the CRO flow', async () => {
+  it('new Google signup does NOT set sw_pending_onboarding (legacy flag removed)', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeNewUserResponse())  // /api/auth/google
       .mockResolvedValueOnce({ ok: true, json: async () => ({}) }) // difficulty PATCH
@@ -123,7 +126,7 @@ describe('Login — CRO onboarding flag (sw_pending_onboarding)', () => {
     if (registeredCallback) {
       await registeredCallback({ credential: 'fake-token' })
       await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/home'))
-      expect(sessionStorage.getItem('sw_pending_onboarding')).toBe('1')
+      expect(sessionStorage.getItem('sw_pending_onboarding')).toBeNull()
     } else {
       // Google client ID not set in test env — skip assertion
       expect(true).toBe(true)

@@ -284,11 +284,15 @@ export default function BOOBriefsList() {
                       }`}
                   >
                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
-                      ${completed ? 'bg-emerald-100' : 'bg-slate-800 group-hover:bg-slate-700 transition-colors'}`}
+                      ${completed ? 'bg-emerald-500' : 'bg-slate-800 group-hover:bg-slate-700 transition-colors'}`}
                     >
-                      <span className={`font-bold text-xs ${completed ? 'text-emerald-600' : 'text-white'}`}>
-                        {completed ? '✓' : '⊞'}
-                      </span>
+                      {completed ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="5 13 10 18 19 7" />
+                        </svg>
+                      ) : (
+                        <span className="font-bold text-xs text-white">⊞</span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>

@@ -209,7 +209,8 @@ describe('GET /api/briefs/:id/reward-preview', () => {
     it('predicts the pathways that will unlock when the combined reward crosses a level threshold', async () => {
       // 95 + (5 brief + 5 daily) = 105 → crosses level-2 threshold (100)
       // Rank-1 L2 pathways: Aircrafts, Heritage, Ranks
-      const user   = await createUser({ rank: rank1._id, totalAirstars: 95, cycleAirstars: 95 });
+      // Gold tier so the subscription filter doesn't strip Heritage (a gold-only category by default).
+      const user   = await createUser({ rank: rank1._id, subscriptionTier: 'gold', totalAirstars: 95, cycleAirstars: 95 });
       const brief  = await createBrief({ category: 'News' });
       const cookie = authCookie(user._id);
 

@@ -6,7 +6,7 @@ const AppSettings = require('../models/AppSettings');
 const User = require('../models/User');
 const AirstarLog = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold } = require('../utils/awardCoins');
-const { effectiveTier, getAccessibleCategories, isPathwayUnlocked, getPathwayAccessibleCategories, buildCumulativeThresholds } = require('../utils/subscription');
+const { effectiveTier, getAccessibleCategories, isPathwayUnlocked, getPathwayAccessibleCategories, buildCumulativeThresholds, canAccessCategory } = require('../utils/subscription');
 const { enrichWithMatchTerms } = require('../utils/mentionedBriefs');
 const { normalizeSections, sectionBody } = require('../utils/descriptionSections');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
@@ -884,7 +884,10 @@ router.get('/:id/reward-preview', protect, async (req, res) => {
 
       const before = getPathwayAccessibleCategories(beforeUser, settings, thresholds) ?? [];
       const after  = getPathwayAccessibleCategories(afterUser,  settings, thresholds) ?? [];
-      unlockedCategories = after.filter(c => !before.includes(c));
+      const tier   = effectiveTier(req.user);
+      unlockedCategories = after
+        .filter(c => !before.includes(c))
+        .filter(c => canAccessCategory(c, tier, settings));
     } catch (_) {
       // Projection is best-effort — never fail the preview if settings/levels lookup fails.
     }

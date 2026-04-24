@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Profile from '../Profile'
 
@@ -68,6 +68,11 @@ function mockFetch() {
   })
 }
 
+// Subscription card now lives on the Settings tab — tests must open it first.
+function openSettingsTab() {
+  fireEvent.click(screen.getByRole('button', { name: /settings/i }))
+}
+
 function setupUser(overrides = {}) {
   mockUseAuth.mockReturnValue({
     user: {
@@ -98,54 +103,63 @@ describe('Profile — trial tier display', () => {
   it('active trial user sees "Trial (Silver)" as plan label', async () => {
     setupUser({ subscriptionTier: 'trial', isTrialActive: true })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Trial (Silver)')).toBeDefined())
   })
 
   it('expired trial user sees "Trial (expired)" as plan label', async () => {
     setupUser({ subscriptionTier: 'trial', isTrialActive: false })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Trial (expired)')).toBeDefined())
   })
 
   it('free user sees "Free" as plan label', async () => {
     setupUser({ subscriptionTier: 'free' })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Free')).toBeDefined())
   })
 
   it('silver user sees "Silver" as plan label', async () => {
     setupUser({ subscriptionTier: 'silver' })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Silver')).toBeDefined())
   })
 
   it('gold user sees "Gold" as plan label', async () => {
     setupUser({ subscriptionTier: 'gold' })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Gold')).toBeDefined())
   })
 
   it('active trial user sees "Manage →" CTA (same as paid tiers)', async () => {
     setupUser({ subscriptionTier: 'trial', isTrialActive: true })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Manage →')).toBeDefined())
   })
 
   it('expired trial user sees "Upgrade →" CTA', async () => {
     setupUser({ subscriptionTier: 'trial', isTrialActive: false })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Upgrade →')).toBeDefined())
   })
 
   it('free user sees "Upgrade →" CTA', async () => {
     setupUser({ subscriptionTier: 'free' })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Upgrade →')).toBeDefined())
   })
 
   it('active trial shows silver medal icon (🥈)', async () => {
     setupUser({ subscriptionTier: 'trial', isTrialActive: true })
     render(<Profile />)
+    openSettingsTab()
     // Find the subscription section — the icon span should contain the silver medal
     await waitFor(() => {
       const subscriptionSection = screen.getByText('Current Plan').closest('div').parentElement
@@ -156,6 +170,7 @@ describe('Profile — trial tier display', () => {
   it('gold user shows gold medal icon (🥇)', async () => {
     setupUser({ subscriptionTier: 'gold' })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => {
       const subscriptionSection = screen.getByText('Current Plan').closest('div').parentElement
       expect(subscriptionSection.textContent).toContain('🥇')

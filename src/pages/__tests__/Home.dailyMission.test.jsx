@@ -40,13 +40,16 @@ vi.mock('framer-motion', () => ({
 
 const SETTINGS = { guestCategories: ['News'], freeCategories: ['News'], silverCategories: ['News'] }
 
+// User has read at least one brief previously (lastStreakDate set) so Home
+// renders the recurring "Daily mission available" card rather than the
+// first-mission CRO card.
 const LOGGED_IN_USER = {
   _id: 'u1',
   displayName: 'Agent Test',
   subscriptionTier: 'gold',
   cycleAirstars: 0,
-  loginStreak: 0,
-  lastStreakDate: null,
+  loginStreak: 1,
+  lastStreakDate: new Date('2026-04-20').toISOString(),
 }
 
 function makeFetch({ inProgress, nextPathway }) {

@@ -170,7 +170,7 @@ describe('Admin — Users tab: ban / unban routing', () => {
     await navigateToUsers()
     await waitFor(() => screen.getByText('banned@test.com'))
 
-    fireEvent.click(screen.getByRole('button', { name: /^unban$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^unban user$/i }))
     await submitModal()
 
     const calls = global.fetch.mock.calls
@@ -194,7 +194,7 @@ describe('Admin — Users tab: ban / unban routing', () => {
     await navigateToUsers()
     await waitFor(() => screen.getByText('agent@test.com'))
 
-    fireEvent.click(screen.getByRole('button', { name: /^ban$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^ban user$/i }))
     await submitModal()
 
     const banCall = global.fetch.mock.calls.find(([url, opts]) =>
@@ -230,8 +230,8 @@ describe('Admin — Users tab: self-action buttons hidden on own row', () => {
     await waitFor(() => screen.getByText('admin@test.com'))
 
     // The self row should not expose any destructive self-actions
-    expect(screen.queryByRole('button', { name: /^delete$/i })).toBeNull()
-    expect(screen.queryByRole('button', { name: /^ban$/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^delete account$/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^ban user$/i })).toBeNull()
     expect(screen.queryByRole('button', { name: /^remove admin$/i })).toBeNull()
   })
 
@@ -249,8 +249,8 @@ describe('Admin — Users tab: self-action buttons hidden on own row', () => {
     await navigateToUsers()
     await waitFor(() => screen.getByText('other-admin@test.com'))
 
-    expect(screen.getByRole('button', { name: /^delete$/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /^ban$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^delete account$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^ban user$/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /^remove admin$/i })).toBeDefined()
   })
 })

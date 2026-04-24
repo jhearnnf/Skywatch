@@ -71,7 +71,7 @@ export default function Profile() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
   const isHighlightingDifficulty = visible && !!step?.highlightDifficulty
   const [masterVol,   setMasterVol]   = useState(() => isIOS ? 100 : getMasterVolume())
-  const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'tutorials'
+  const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'settings' | 'tutorials'
   const [resetDone,   setResetDone]   = useState(false)
 
   // Tutorial on first visit
@@ -79,6 +79,12 @@ export default function Profile() {
     const t = setTimeout(() => start('profile'), 600)
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When the difficulty-highlight tutorial step fires, jump to the Settings tab
+  // so the highlighted card is actually on screen.
+  useEffect(() => {
+    if (isHighlightingDifficulty) setTab('settings')
+  }, [isHighlightingDifficulty])
 
   useEffect(() => {
     apiFetch(`${API}/api/users/settings`).then(r => r.json())
@@ -210,12 +216,13 @@ export default function Profile() {
         {[
           { key: 'stats',       label: '📊 Stats' },
           { key: 'leaderboard', label: '🏆 Ranks' },
+          { key: 'settings',    label: '⚙️ Settings' },
           { key: 'tutorials',   label: '💡 Help' },
         ].map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`flex-1 py-2 rounded-xl text-sm font-bold transition-all
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all
               ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-surface border border-slate-200 text-slate-500 hover:border-brand-300'}`}
           >
             {t.label}
@@ -225,142 +232,141 @@ export default function Profile() {
 
       {/* Stats tab */}
       {tab === 'stats' && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-
-          {/* Stats grid */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <div className={`grid grid-cols-2 gap-3 ${!user ? 'opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
             <StatCard loading={user && statsLoading} label="Briefs Read"  value={stats.brifsRead}           icon="📋" onClick={user ? () => navigate('/intel-brief-history') : undefined} badge={stats.flashcardsCollected} badgeLabel="flashcards" />
             <StatCard loading={user && statsLoading} label="Games Played" value={stats.gamesPlayed} icon="🎯" badge={stats.abandonedGames} onClick={user ? () => navigate('/game-history') : undefined} />
             <StatCard loading={user && statsLoading} label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />
             <StatCard loading={user && statsLoading} label="Airstars"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/airstar-history') : undefined} />
           </div>
+        </motion.div>
+      )}
 
-          {user && (
-            <>
-              {/* Difficulty */}
-              <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${isHighlightingDifficulty ? ' tutorial-grid-highlight' : ''}`}>
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quiz Difficulty</p>
-                <div className="flex gap-2">
-                  {/* Standard — always available */}
-                  <button
-                    onClick={() => changeDifficulty('easy')}
-                    disabled={diffBusy}
-                    className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
-                      ${(user.difficultySetting ?? 'easy') === 'easy'
-                        ? 'bg-brand-600 text-white'
-                        : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
-                      }`}
-                  >
-                    🌱 Standard
-                  </button>
+      {/* Settings tab */}
+      {tab === 'settings' && user && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
 
-                  {/* Advanced — locked for free users */}
-                  {isFreeUser(user) ? (
-                    <button
-                      onClick={() => navigate('/subscribe')}
-                      title="Upgrade to Silver to unlock Advanced difficulty"
-                      className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-slate-50 border border-slate-200 text-slate-400 opacity-60 hover:opacity-80 transition-opacity"
-                    >
-                      🔒 Advanced
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => changeDifficulty('medium')}
-                      disabled={diffBusy}
-                      className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
-                        ${(user.difficultySetting ?? 'easy') === 'medium'
-                          ? 'bg-brand-600 text-white'
-                          : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
-                        }`}
-                    >
-                      <span className="flame-blue">🔥</span> Advanced
-                    </button>
-                  )}
-                </div>
-                {isFreeUser(user) && (
-                  <p className="text-xs text-slate-400 mt-2">
-                    <button onClick={() => navigate('/subscribe')} className="text-brand-500 font-semibold hover:underline">
-                      Upgrade to Silver
-                    </button>{' '}to unlock Advanced difficulty.
-                  </p>
-                )}
-              </div>
+          {/* Difficulty */}
+          <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${isHighlightingDifficulty ? ' tutorial-grid-highlight' : ''}`}>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quiz Difficulty</p>
+            <div className="flex gap-2">
+              {/* Standard — always available */}
+              <button
+                onClick={() => changeDifficulty('easy')}
+                disabled={diffBusy}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                  ${(user.difficultySetting ?? 'easy') === 'easy'
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                  }`}
+              >
+                🌱 Standard
+              </button>
 
-              {/* Volume */}
-              <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${isIOS ? ' opacity-50' : ''}`}>
-                <div className="flex justify-between items-center mb-3">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Skywatch Volume</p>
-                  {isIOS
-                    ? <span className="text-xs text-slate-400">Use device buttons</span>
-                    : <span className="text-sm font-bold text-brand-600">{masterVol}%</span>
-                  }
-                </div>
-                <input
-                  type="range"
-                  className="w-full accent-brand-500 cursor-pointer disabled:cursor-not-allowed"
-                  min={0} max={100}
-                  value={masterVol}
-                  disabled={isIOS}
-                  onChange={e => {
-                    const v = Number(e.target.value)
-                    setMasterVol(v)
-                    setMasterVolume(v)
-                  }}
-                  aria-label="App volume"
-                />
-                <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-                  {isIOS
-                    ? <span className="w-full text-center">Volume is controlled by your device buttons on iOS</span>
-                    : <><span>Mute</span><span>Max</span></>
-                  }
-                </div>
-              </div>
+              {/* Advanced — locked for free users */}
+              {isFreeUser(user) ? (
+                <button
+                  onClick={() => navigate('/subscribe')}
+                  title="Upgrade to Silver to unlock Advanced difficulty"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-slate-50 border border-slate-200 text-slate-400 opacity-60 hover:opacity-80 transition-opacity"
+                >
+                  🔒 Advanced
+                </button>
+              ) : (
+                <button
+                  onClick={() => changeDifficulty('medium')}
+                  disabled={diffBusy}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                    ${(user.difficultySetting ?? 'easy') === 'medium'
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                    }`}
+                >
+                  <span className="flame-blue">🔥</span> Advanced
+                </button>
+              )}
+            </div>
+            {isFreeUser(user) && (
+              <p className="text-xs text-slate-400 mt-2">
+                <button onClick={() => navigate('/subscribe')} className="text-brand-500 font-semibold hover:underline">
+                  Upgrade to Silver
+                </button>{' '}to unlock Advanced difficulty.
+              </p>
+            )}
+          </div>
 
-              {/* Subscription — hidden while beta tester auto-gold is active */}
-              {!appSettings?.betaTesterAutoGold && (() => {
-                const tier        = user.subscriptionTier ?? 'free'
-                const isGold      = tier === 'gold'
-                const isSilver    = tier === 'silver'
-                const isActiveTrial = tier === 'trial' && user.isTrialActive
-                const hasPaidPerks  = isGold || isSilver || isActiveTrial
-                const icon = isGold ? '🥇' : (isSilver || isActiveTrial) ? '🥈' : '🆓'
-                const badgeClass = isGold
-                  ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-200'
-                  : (isSilver || isActiveTrial)
-                    ? 'bg-brand-100 text-brand-700 group-hover:bg-brand-200'
-                    : 'bg-slate-100 text-slate-600 group-hover:bg-brand-100 group-hover:text-brand-700'
-                return (
-                  <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Subscription</p>
-                    <Link
-                      to="/subscribe"
-                      className="flex items-center justify-between hover:bg-slate-50 rounded-xl px-1 py-1 -mx-1 transition-colors group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xl">{icon}</span>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-700">Current Plan</p>
-                          <p className="text-xs text-slate-400">{displayTier(user)}</p>
-                        </div>
-                      </div>
-                      <span className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-colors ${badgeClass}`}>
-                        {hasPaidPerks ? 'Manage →' : 'Upgrade →'}
-                      </span>
-                    </Link>
-                  </div>
-                )
-              })()}
+          {/* Volume */}
+          <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${isIOS ? ' opacity-50' : ''}`}>
+            <div className="flex justify-between items-center mb-3">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Skywatch Volume</p>
+              {isIOS
+                ? <span className="text-xs text-slate-400">Use device buttons</span>
+                : <span className="text-sm font-bold text-brand-600">{masterVol}%</span>
+              }
+            </div>
+            <input
+              type="range"
+              className="w-full accent-brand-500 cursor-pointer disabled:cursor-not-allowed"
+              min={0} max={100}
+              value={masterVol}
+              disabled={isIOS}
+              onChange={e => {
+                const v = Number(e.target.value)
+                setMasterVol(v)
+                setMasterVolume(v)
+              }}
+              aria-label="App volume"
+            />
+            <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+              {isIOS
+                ? <span className="w-full text-center">Volume is controlled by your device buttons on iOS</span>
+                : <><span>Mute</span><span>Max</span></>
+              }
+            </div>
+          </div>
 
-              {/* Links */}
+          {/* Subscription — hidden while beta tester auto-gold is active */}
+          {!appSettings?.betaTesterAutoGold && (() => {
+            const tier        = user.subscriptionTier ?? 'free'
+            const isGold      = tier === 'gold'
+            const isSilver    = tier === 'silver'
+            const isActiveTrial = tier === 'trial' && user.isTrialActive
+            const hasPaidPerks  = isGold || isSilver || isActiveTrial
+            const icon = isGold ? '🥇' : (isSilver || isActiveTrial) ? '🥈' : '🆓'
+            const badgeClass = isGold
+              ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-200'
+              : (isSilver || isActiveTrial)
+                ? 'bg-brand-100 text-brand-700 group-hover:bg-brand-200'
+                : 'bg-slate-100 text-slate-600 group-hover:bg-brand-100 group-hover:text-brand-700'
+            return (
               <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
-                <Link to="/rankings" className="flex items-center justify-between py-2 px-1 text-sm font-semibold text-slate-700 hover:text-brand-600 transition-colors">
-                  <span>🏅 View Progression & Ranks</span>
-                  <span className="text-slate-400">→</span>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Subscription</p>
+                <Link
+                  to="/subscribe"
+                  className="flex items-center justify-between hover:bg-slate-50 rounded-xl px-1 py-1 -mx-1 transition-colors group"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{icon}</span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">Current Plan</p>
+                      <p className="text-xs text-slate-400">{displayTier(user)}</p>
+                    </div>
+                  </div>
+                  <span className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-colors ${badgeClass}`}>
+                    {hasPaidPerks ? 'Manage →' : 'Upgrade →'}
+                  </span>
                 </Link>
               </div>
-            </>
-          )}
+            )
+          })()}
         </motion.div>
+      )}
+
+      {/* Settings tab — signed-out state */}
+      {tab === 'settings' && !user && (
+        <div className="bg-surface rounded-2xl border border-slate-200 p-6 text-center card-shadow">
+          <p className="text-sm text-slate-500">Sign in to adjust your settings.</p>
+        </div>
       )}
 
       {/* Leaderboard tab */}

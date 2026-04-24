@@ -453,33 +453,32 @@ describe('GET /api/briefs/public-stats', () => {
 });
 
 // ── Guest brief access (GET /api/briefs/:id) ──────────────────────────────
-// Guests share the free-tier category list — there is no separate guest gate
-// on brief reading. Guests are blocked at game endpoints (quiz, BOO, etc.)
-// instead.
+// Guests have their own category list (guestCategories) distinct from
+// freeCategories. A category set to the 'free' tier requires sign-in.
 describe('GET /api/briefs/:id — guest brief access', () => {
   beforeEach(async () => {
     await createSettings();
   });
 
-  it('guest can read a brief in a free-tier category', async () => {
+  it('guest can read a brief in a guest-tier category', async () => {
     const brief = await createBrief({ category: 'News' });
     const res   = await request(app).get(`/api/briefs/${brief._id}`);
     expect(res.status).toBe(200);
   });
 
-  it('guest can read a brief in any category the free tier allows', async () => {
-    // Aircrafts is in the default freeCategories list, so guests can read it too.
-    const brief = await createBrief({ category: 'Aircrafts' });
-    const res   = await request(app).get(`/api/briefs/${brief._id}`);
-    expect(res.status).toBe(200);
-  });
-
-  it('guest is blocked from a brief in a category NOT in freeCategories', async () => {
-    // Tighten freeCategories to ['News'] only — guests follow the same list.
-    await createSettings({ freeCategories: ['News'] });
+  it('guest is blocked from a brief in a free-tier-only category (sign-in required)', async () => {
+    // Factory defaults: guestCategories=['News'], freeCategories includes 'Aircrafts'.
+    // Aircrafts is not in guestCategories, so guests cannot read it.
     const brief = await createBrief({ category: 'Aircrafts' });
     const res   = await request(app).get(`/api/briefs/${brief._id}`);
     expect(res.status).toBe(403);
+  });
+
+  it('guest can read a brief when the category is in guestCategories', async () => {
+    await createSettings({ guestCategories: ['News', 'Aircrafts'] });
+    const brief = await createBrief({ category: 'Aircrafts' });
+    const res   = await request(app).get(`/api/briefs/${brief._id}`);
+    expect(res.status).toBe(200);
   });
 
   it('authenticated free-tier user can read a News brief', async () => {

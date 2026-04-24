@@ -115,11 +115,16 @@ describe('GET /api/admin/stats — users section', () => {
     expect(res.body.data.users.totalUsers).toBe(3);
   });
 
-  it('counts users by subscription tier', async () => {
+  it('counts users by subscription tier — only paying Stripe subscribers', async () => {
     const admin = await createAdminUser();
     await createUser({ subscriptionTier: 'free' });
+    // Silver/gold without a Stripe subscription (e.g. beta-tester-auto-gold
+    // or admin-granted) should NOT count towards subscribedUsers.
     await createUser({ subscriptionTier: 'silver' });
     await createUser({ subscriptionTier: 'gold' });
+    // Only these two are real paying customers.
+    await createUser({ subscriptionTier: 'silver', stripeCustomerId: 'cus_s', stripeSubscriptionId: 'sub_s' });
+    await createUser({ subscriptionTier: 'gold',   stripeCustomerId: 'cus_g', stripeSubscriptionId: 'sub_g' });
 
     const res  = await request(app)
       .get('/api/admin/stats')
@@ -127,7 +132,7 @@ describe('GET /api/admin/stats — users section', () => {
     const { users } = res.body.data;
 
     expect(users.freeUsers).toBeGreaterThanOrEqual(1);
-    expect(users.subscribedUsers).toBeGreaterThanOrEqual(2); // silver + gold
+    expect(users.subscribedUsers).toBe(2); // only the two with stripeSubscriptionId
   });
 
   it('returns 0 logins and streaks when DB is empty of game data', async () => {

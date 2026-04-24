@@ -19,6 +19,8 @@ const GameSessionWhereAircraftResult      = require('../models/GameSessionWhereA
 const { CBAT_GAMES }                      = require('../constants/cbatGames');
 const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
+const { effectiveTier } = require('../utils/subscription');
+const { grantSubscriptionUnlocks } = require('../utils/subscriptionUnlocks');
 const Rank  = require('../models/Rank');
 const Level = require('../models/Level');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
@@ -354,8 +356,11 @@ router.get('/stats', async (_req, res) => {
       User.countDocuments(),
       User.countDocuments({ subscriptionTier: 'free' }),
       User.countDocuments({ subscriptionTier: 'trial' }),
-      User.countDocuments({ subscriptionTier: 'silver' }),
-      User.countDocuments({ subscriptionTier: 'gold' }),
+      // Silver/gold counts are restricted to real Stripe payers — excludes
+      // beta-tester-auto-gold and admin-granted comps so `subscribedUsers`
+      // reflects paying revenue only.
+      User.countDocuments({ subscriptionTier: 'silver', stripeSubscriptionId: { $type: 'string', $ne: '' } }),
+      User.countDocuments({ subscriptionTier: 'gold',   stripeSubscriptionId: { $type: 'string', $ne: '' } }),
       User.countDocuments({ difficultySetting: 'easy' }),
       User.countDocuments({ difficultySetting: 'medium' }),
       IntelligenceBriefRead.countDocuments({ completed: true }),
@@ -963,6 +968,8 @@ router.patch('/users/:id/subscription', requireReason, async (req, res) => {
       gold:   9999,
     };
 
+    const oldTier = effectiveTier(target);
+
     const tierUpdate = { subscriptionTier: tier };
     if (tier === 'trial') {
       tierUpdate.trialStartDate    = new Date();
@@ -973,6 +980,8 @@ router.patch('/users/:id/subscription', requireReason, async (req, res) => {
       User.findByIdAndUpdate(req.params.id, tierUpdate, { returnDocument: 'after' }).select('-password').populate('rank'),
       IntelligenceBriefRead.updateMany({ userId: req.params.id }, { ammunitionRemaining: ammoMap[tier] }),
     ]);
+
+    await grantSubscriptionUnlocks(req.params.id, oldTier);
 
     await AdminAction.create({
       userId:       req.user._id,
@@ -1009,11 +1018,15 @@ router.patch('/self/subscription', async (req, res) => {
       tierUpdate.trialDurationDays = settings.trialDurationDays ?? 7;
     }
 
+    const oldTier = effectiveTier(req.user);
+
     // Update tier and reset all read record ammo counts for this user
     const [user] = await Promise.all([
       User.findByIdAndUpdate(req.user._id, tierUpdate, { returnDocument: 'after' }).select('-password').populate('rank'),
       IntelligenceBriefRead.updateMany({ userId: req.user._id }, { ammunitionRemaining: ammoMap[tier] }),
     ]);
+
+    await grantSubscriptionUnlocks(req.user._id, oldTier);
 
     res.json({ status: 'success', data: { user } });
   } catch (err) {

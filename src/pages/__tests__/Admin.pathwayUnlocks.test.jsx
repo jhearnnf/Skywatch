@@ -186,4 +186,81 @@ describe('Admin — Pathway Unlock Requirements', () => {
 
     await waitFor(() => expect(input.value).toBe('3'))
   })
+
+  it('setting tier to "free" cascades into silverCategories (and strips from guest)', async () => {
+    const fetchSpy = setupFetch()
+    global.fetch = fetchSpy
+    global.Audio = class { constructor() { this.play = vi.fn().mockResolvedValue(undefined) } }
+    render(<Admin />)
+
+    const settingsTab = await screen.findByRole('button', { name: /settings/i })
+    fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Pathway Access & Unlock Requirements'))
+    fireEvent.click(screen.getByText('Pathway Access & Unlock Requirements'))
+    await waitFor(() => screen.getByText('Aircrafts'))
+
+    // Aircrafts starts in nothing → tier=gold. Change to free.
+    const row    = screen.getByText('Aircrafts').closest('tr')
+    const select = row.querySelector('select')
+    fireEvent.change(select, { target: { value: 'free' } })
+
+    // Save the section
+    const saveBtns = screen.getAllByRole('button', { name: /^save$/i })
+    fireEvent.click(saveBtns[0])
+    const confirmBtn = await screen.findByRole('button', { name: /save changes/i })
+    fireEvent.click(confirmBtn)
+
+    // Find the PATCH body
+    await waitFor(() => {
+      const patchCall = fetchSpy.mock.calls.find(
+        ([url, opts]) => url.includes('/api/admin/settings') && opts?.method === 'PATCH'
+      )
+      expect(patchCall).toBeDefined()
+    })
+    const patchCall = fetchSpy.mock.calls.find(
+      ([url, opts]) => url.includes('/api/admin/settings') && opts?.method === 'PATCH'
+    )
+    const body = JSON.parse(patchCall[1].body)
+
+    expect(body.freeCategories).toContain('Aircrafts')
+    expect(body.silverCategories).toContain('Aircrafts')
+    expect(body.guestCategories ?? []).not.toContain('Aircrafts')
+  })
+
+  it('setting tier to "guest" cascades into all three arrays', async () => {
+    const fetchSpy = setupFetch()
+    global.fetch = fetchSpy
+    global.Audio = class { constructor() { this.play = vi.fn().mockResolvedValue(undefined) } }
+    render(<Admin />)
+
+    const settingsTab = await screen.findByRole('button', { name: /settings/i })
+    fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Pathway Access & Unlock Requirements'))
+    fireEvent.click(screen.getByText('Pathway Access & Unlock Requirements'))
+    await waitFor(() => screen.getByText('Bases'))
+
+    const row    = screen.getByText('Bases').closest('tr')
+    const select = row.querySelector('select')
+    fireEvent.change(select, { target: { value: 'guest' } })
+
+    const saveBtns = screen.getAllByRole('button', { name: /^save$/i })
+    fireEvent.click(saveBtns[0])
+    const confirmBtn = await screen.findByRole('button', { name: /save changes/i })
+    fireEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      const patchCall = fetchSpy.mock.calls.find(
+        ([url, opts]) => url.includes('/api/admin/settings') && opts?.method === 'PATCH'
+      )
+      expect(patchCall).toBeDefined()
+    })
+    const patchCall = fetchSpy.mock.calls.find(
+      ([url, opts]) => url.includes('/api/admin/settings') && opts?.method === 'PATCH'
+    )
+    const body = JSON.parse(patchCall[1].body)
+
+    expect(body.guestCategories).toContain('Bases')
+    expect(body.freeCategories).toContain('Bases')
+    expect(body.silverCategories).toContain('Bases')
+  })
 })

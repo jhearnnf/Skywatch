@@ -436,11 +436,15 @@ export default function Play() {
                             }`}
                         >
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
-                            ${passed ? 'bg-emerald-100' : 'bg-brand-100'}`}
+                            ${passed ? 'bg-emerald-500' : 'bg-brand-100'}`}
                           >
-                            <span className={`font-bold text-xs ${passed ? 'text-emerald-600' : 'text-brand-600'}`}>
-                              {passed ? '✓' : 'Q'}
-                            </span>
+                            {passed ? (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="5 13 10 18 19 7" />
+                              </svg>
+                            ) : (
+                              <span className="font-bold text-xs text-brand-600">Q</span>
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-bold text-slate-800 truncate">{brief.title}</p>

@@ -237,6 +237,21 @@ appSettingsSchema.statics.getSettings = async function () {
       updates.freeCategories = ['News'];
     if (!settings.silverCategories || settings.silverCategories.length === 0)
       updates.silverCategories = ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'];
+
+    // Cascade heal — tier arrays are inclusive, but legacy data (and older
+    // admin UI saves) could leave them exclusive. Anything in guestCategories
+    // must also be in freeCategories + silverCategories; anything in
+    // freeCategories must also be in silverCategories.
+    {
+      const guest  = updates.guestCategories  ?? settings.guestCategories  ?? [];
+      const free   = updates.freeCategories   ?? settings.freeCategories   ?? [];
+      const silver = updates.silverCategories ?? settings.silverCategories ?? [];
+      const dedupe = arr => Array.from(new Set(arr));
+      const healedFree   = dedupe([...free,   ...guest]);
+      const healedSilver = dedupe([...silver, ...free, ...guest]);
+      if (healedFree.length !== free.length)       updates.freeCategories   = healedFree;
+      if (healedSilver.length !== silver.length)   updates.silverCategories = healedSilver;
+    }
     // Migration: add any pathway categories that are missing from an older document
     const REQUIRED_PATHWAYS = [
       { category: 'News',        levelRequired: 1, rankRequired: 1 },

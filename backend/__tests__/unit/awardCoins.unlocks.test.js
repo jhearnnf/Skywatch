@@ -60,14 +60,14 @@ describe('awardCoins — categoryUnlocks diff', () => {
   });
 
   it('returns empty unlockedCategories when no threshold is crossed', async () => {
-    const user = await createUser({ rank: rank1._id, totalAirstars: 200, cycleAirstars: 200 });
+    const user = await createUser({ rank: rank1._id, subscriptionTier: 'gold', totalAirstars: 200, cycleAirstars: 200 });
     const result = await awardCoins(user._id, 50, 'test', 'Test');
     expect(result.unlockedCategories).toEqual([]);
     expect(result.categoryUnlocksGranted).toEqual([]);
   });
 
   it('detects a level-only unlock and persists to user.categoryUnlocks', async () => {
-    const user = await createUser({ rank: rank1._id, totalAirstars: 50, cycleAirstars: 50 });
+    const user = await createUser({ rank: rank1._id, subscriptionTier: 'gold', totalAirstars: 50, cycleAirstars: 50 });
     const result = await awardCoins(user._id, 60, 'test', 'Test');
     // 50 + 60 = 110 → crosses level 2 threshold, unlocks Aircraft
     expect(result.unlockedCategories).toContain('Aircraft');
@@ -82,14 +82,14 @@ describe('awardCoins — categoryUnlocks diff', () => {
   });
 
   it('detects multiple unlocks when one award crosses two level thresholds', async () => {
-    const user = await createUser({ rank: rank1._id, totalAirstars: 0, cycleAirstars: 0 });
+    const user = await createUser({ rank: rank1._id, subscriptionTier: 'gold', totalAirstars: 0, cycleAirstars: 0 });
     const result = await awardCoins(user._id, 400, 'test', 'Test');
     // 0 → 400 crosses level 2 (100) AND level 3 (350) → unlocks Aircraft AND Tech
     expect(result.unlockedCategories).toEqual(expect.arrayContaining(['Aircraft', 'Tech']));
   });
 
   it('detects rank-gated unlock when an award triggers rank promotion', async () => {
-    const user = await createUser({ rank: rank1._id, totalAirstars: 14600, cycleAirstars: 14600 });
+    const user = await createUser({ rank: rank1._id, subscriptionTier: 'gold', totalAirstars: 14600, cycleAirstars: 14600 });
     const result = await awardCoins(user._id, 200, 'test', 'Test');
     // 14600 + 200 = 14800 → crosses cycleThreshold 14700 → rank 1 → 2
     // Missions is rank-2 gated → newly unlocked.
@@ -99,7 +99,7 @@ describe('awardCoins — categoryUnlocks diff', () => {
   });
 
   it('does not re-fire for categories already unlocked', async () => {
-    const user = await createUser({ rank: rank1._id, totalAirstars: 200, cycleAirstars: 200 });
+    const user = await createUser({ rank: rank1._id, subscriptionTier: 'gold', totalAirstars: 200, cycleAirstars: 200 });
     // First award persists Aircraft (was crossed before this user existed at L2).
     // Pre-seed: simulate that the user was already at L2 BEFORE the award by setting totalAirstars high.
     // Now award more coins — Aircraft was already accessible, so should NOT re-unlock.
@@ -108,7 +108,7 @@ describe('awardCoins — categoryUnlocks diff', () => {
   });
 
   it('writes nothing to categoryUnlocks when nothing is newly unlocked', async () => {
-    const user = await createUser({ rank: rank1._id, totalAirstars: 200, cycleAirstars: 200 });
+    const user = await createUser({ rank: rank1._id, subscriptionTier: 'gold', totalAirstars: 200, cycleAirstars: 200 });
     await awardCoins(user._id, 50, 'test', 'Test');
     const persisted = await User.findById(user._id).select('categoryUnlocks');
     // Map exists but empty
@@ -124,12 +124,28 @@ describe('awardCoins — categoryUnlocks diff', () => {
         ],
       },
     });
-    const user = await createUser({ rank: rank1._id, totalAirstars: 50, cycleAirstars: 50 });
+    const user = await createUser({ rank: rank1._id, subscriptionTier: 'gold', totalAirstars: 50, cycleAirstars: 50 });
     const result = await awardCoins(user._id, 60, 'test', 'Test');
     // The diff includes 'has.dot.name' but it should NOT be persisted (skipped).
     const persisted = await User.findById(user._id).select('categoryUnlocks');
     expect(persisted.categoryUnlocks.get('has.dot.name')).toBeUndefined();
     // categoryUnlocksGranted excludes the skipped one
     expect(result.categoryUnlocksGranted.find(e => e.category === 'has.dot.name')).toBeUndefined();
+  });
+
+  it('does not grant categoryUnlocks for categories the user cannot access on their current tier', async () => {
+    // Silver user: freeCategories/silverCategories default to ['News','Aircrafts','Bases',
+    // 'Ranks','Squadrons','Training','Threats','Allies'] (note: singular 'Aircraft' and
+    // 'Tech' are NOT in that set, so they are effectively gold-only).
+    const user = await createUser({ rank: rank1._id, subscriptionTier: 'silver', totalAirstars: 0, cycleAirstars: 0 });
+    const result = await awardCoins(user._id, 400, 'test', 'Test');
+    // Pathway would allow Aircraft + Tech at L3, but silver can't access either.
+    expect(result.unlockedCategories).not.toContain('Aircraft');
+    expect(result.unlockedCategories).not.toContain('Tech');
+    expect(result.categoryUnlocksGranted.find(e => e.category === 'Aircraft')).toBeUndefined();
+    expect(result.categoryUnlocksGranted.find(e => e.category === 'Tech')).toBeUndefined();
+    const persisted = await User.findById(user._id).select('categoryUnlocks');
+    expect(persisted.categoryUnlocks.get('Aircraft')).toBeUndefined();
+    expect(persisted.categoryUnlocks.get('Tech')).toBeUndefined();
   });
 });

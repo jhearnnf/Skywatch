@@ -6,8 +6,7 @@ import { Capacitor } from '@capacitor/core'
 import { storeNativeToken } from '../context/AuthContext'
 import { useAuth } from '../context/AuthContext'
 import { consumePendingBrief } from '../utils/pendingBrief'
-import { ONBOARDING_KEY } from '../components/onboarding/WelcomeAgentFlow'
-import { PENDING_BRIEF_KEY, PENDING_ONBOARDING_KEY, POST_LOGIN_DEST_KEY } from '../utils/storageKeys'
+import { PENDING_BRIEF_KEY, POST_LOGIN_DEST_KEY } from '../utils/storageKeys'
 import { resolveLoginDest } from '../utils/loginRedirect'
 import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
@@ -161,10 +160,10 @@ export default function LoginPage() {
         body: JSON.stringify({ difficulty: 'easy' }),
       })
     } catch { /* non-fatal — default is already easy on the backend */ }
-    // If the user never went through the landing-page CRO flow, flag Home to show it
-    if (!localStorage.getItem(ONBOARDING_KEY)) {
-      sessionStorage.setItem(PENDING_ONBOARDING_KEY, '1')
-    }
+    // Home shows the first-mission card automatically when lastStreakDate is
+    // unset (zero reads), so no session flag is needed here. Guests who went
+    // through the landing-page CRO still have ONBOARDING_KEY set as a marker
+    // for future UX hooks, but it no longer gates Home's onboarding.
     const briefId = await consumePendingBrief({ API, setUser, navigate })
     const dest = resolveLoginDest(briefId)
     // Store destination so LoginRoute uses it even if the navigate below loses

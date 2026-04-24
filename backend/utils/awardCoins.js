@@ -3,7 +3,7 @@ const AirstarLog  = require('../models/AirstarLog');
 const Rank        = require('../models/Rank');
 const Level       = require('../models/Level');
 const AppSettings = require('../models/AppSettings');
-const { buildCumulativeThresholds, getPathwayAccessibleCategories } = require('./subscription');
+const { buildCumulativeThresholds, getPathwayAccessibleCategories, effectiveTier, canAccessCategory } = require('./subscription');
 
 // Deprecated — use getCycleThreshold() for the live value from Level docs.
 const CYCLE_THRESHOLD = 14700;
@@ -129,7 +129,13 @@ async function awardCoins(userId, amount, reason, label, briefId = null) {
     const beforeCategories = getPathwayAccessibleCategories(beforeUser, settings, thresholds) ?? [];
     const afterCategories  = getPathwayAccessibleCategories(afterUser,  settings, thresholds) ?? [];
 
-    unlockedCategories = afterCategories.filter(c => !beforeCategories.includes(c));
+    // Gate by subscription tier too — a silver user who pathway-unlocks a gold-only category
+    // cannot actually access it yet, so firing a "NEW" badge for it would point at locked content.
+    // If they later upgrade, the subscription-upgrade path handles surfacing newly-accessible ones.
+    const tier = effectiveTier(incremented);
+    unlockedCategories = afterCategories
+      .filter(c => !beforeCategories.includes(c))
+      .filter(c => canAccessCategory(c, tier, settings));
 
     if (unlockedCategories.length) {
       const now    = new Date();

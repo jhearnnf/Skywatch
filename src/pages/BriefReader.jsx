@@ -18,7 +18,7 @@ import FlashcardDeckNotification from '../components/FlashcardDeckNotification'
 import SEO from '../components/SEO'
 import CategoryHeader from '../components/CategoryHeader'
 import { MOCK_RANKS } from '../data/mockData'
-import { PENDING_BRIEF_KEY, BRIEF_COINS_KEY, BRIEF_JUST_COMPLETED_KEY, tutorialKey } from '../utils/storageKeys'
+import { PENDING_BRIEF_KEY, BRIEF_COINS_KEY, BRIEF_JUST_COMPLETED_KEY, tutorialKey, isCroFirstBriefActive, clearCroFirstBrief } from '../utils/storageKeys'
 import { normalizeSections, sectionBody } from '../utils/descriptionSections'
 
 // Render **bold** markdown syntax as <strong> spans
@@ -33,11 +33,12 @@ function renderBoldMarkdown(text) {
 }
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
-function KeywordSheet({ kw, onClose, navigate }) {
+function KeywordSheet({ kw, onClose, navigate, disableLinkedBriefNav = false }) {
   const isLinked = !!kw?.linkedBriefId
   const hasDesc  = !!kw?.generatedDescription
 
   const handleOpenBrief = () => {
+    if (disableLinkedBriefNav) return
     onClose()
     navigate(`/brief/${kw.linkedBriefId?._id ?? kw.linkedBriefId}`)
   }
@@ -86,6 +87,30 @@ function KeywordSheet({ kw, onClose, navigate }) {
                   const title    = linked?.title
                   const nickname = linked?.nickname
                   const category = linked?.category ?? kw.linkedBriefCategory
+                  if (disableLinkedBriefNav) {
+                    return (
+                      <div
+                        className="w-full text-left rounded-2xl overflow-hidden border border-slate-200"
+                        aria-disabled="true"
+                      >
+                        <div className="px-4 pt-4 pb-3 bg-slate-50">
+                          {category && (
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{category}</p>
+                          )}
+                          <p className="text-base font-extrabold text-slate-900 leading-snug">
+                            {title || kw.keyword}
+                          </p>
+                          {nickname && (
+                            <p className="text-xs text-slate-500 italic mt-0.5">"{nickname}"</p>
+                          )}
+                        </div>
+                        <div className="px-4 py-3 bg-slate-100 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-500">Has its own Intel Brief</span>
+                          <span className="text-[11px] text-slate-400">Available after this brief</span>
+                        </div>
+                      </div>
+                    )
+                  }
                   return (
                     <button
                       onClick={handleOpenBrief}
@@ -1427,6 +1452,10 @@ export default function BriefReader() {
   const [activeKw, setActiveKw]     = useState(null)
   const [activeStat, setActiveStat] = useState(null)
   const [learnedKws, setLearned]    = useState(new Set())
+  // CRO funnel guard — read once on mount. While this is true, the keyword
+  // dossier popup hides its "open linked brief" navigation so the first-brief
+  // read isn't derailed. Cleared when the brief completes (handleContinue).
+  const [croFirstBrief, setCroFirstBrief] = useState(() => isCroFirstBriefActive())
   const [readRecord, setReadRecord] = useState(null)
   // 'unavailable' | 'no-game-data' | 'locked-aircraft-reads' | 'locked-bases-reads' | 'locked-quiz' | 'available' | 'completed'
   const [booState, setBooState]   = useState('unavailable')
@@ -1966,6 +1995,12 @@ export default function BriefReader() {
       if (!user) playSound('first_brief_complete')
       markRead()
       localStorage.removeItem(`sw_brief_sec_${briefId}`)
+      // CRO funnel guard: first-brief read is done — re-enable in-brief navigation
+      // for any subsequent reads in the same session.
+      if (croFirstBrief) {
+        clearCroFirstBrief()
+        setCroFirstBrief(false)
+      }
       setDone(true)
       // Award coins now that the user has finished reading
       if (user) {
@@ -2296,7 +2331,7 @@ export default function BriefReader() {
     <>
       <SEO title={brief?.title} description={brief?.summary || brief?.subtitle || 'Read this RAF intel brief on SkyWatch.'} ogType="article" />
       <TutorialModal />
-      <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} navigate={navigate} />
+      <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} navigate={navigate} disableLinkedBriefNav={croFirstBrief} />
       <StatMnemonicSheet stat={activeStat} onClose={() => setActiveStat(null)} />
       {flashcardNotifRect && (
         <FlashcardDeckNotification

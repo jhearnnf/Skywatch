@@ -502,6 +502,76 @@ describe('POST /api/games/quiz/start — complete tier matrix', () => {
   });
 });
 
+// ── Guest vs free separation (unauthenticated callers) ───────────────────
+// Categories in freeCategories but NOT guestCategories must be locked for
+// unauthenticated users. Regression guard for a bug where the backend
+// getAccessibleCategories() returned freeCategories for guests, leaking
+// free-tier categories to users who hadn't signed up.
+describe('Unauthenticated callers — guest tier is distinct from free', () => {
+  beforeEach(() => createSettings({
+    guestCategories:  ['News'],                          // only News visible to guests
+    freeCategories:   ['News', 'Aircrafts', 'Bases'],    // Aircrafts requires sign-in
+    silverCategories: ['News', 'Aircrafts', 'Bases', 'Ranks'],
+  }));
+
+  it('GET /api/briefs/:id — unauthenticated + free-only category → 403', async () => {
+    const brief = await createBrief({ category: 'Aircrafts' });
+    const res   = await request(app).get(`/api/briefs/${brief._id}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /api/briefs/:id — unauthenticated + guest category → 200', async () => {
+    const brief = await createBrief({ category: 'News' });
+    const res   = await request(app).get(`/api/briefs/${brief._id}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('GET /api/briefs/unread-categories — unauthenticated sees only guest categories', async () => {
+    await createBrief({ category: 'News' });
+    await createBrief({ category: 'Aircrafts' });
+
+    const res = await request(app).get('/api/briefs/unread-categories');
+    expect(res.status).toBe(200);
+    const names = res.body.data.categories.map(c => c.name);
+    expect(names).toContain('News');
+    expect(names).not.toContain('Aircrafts');   // free-tier-only, not visible to guest
+  });
+
+  it('GET /api/briefs?category=X — unauthenticated + free-only category → isLocked:true', async () => {
+    await createBrief({ category: 'Aircrafts' });
+    const res = await request(app).get('/api/briefs?category=Aircrafts');
+    expect(res.status).toBe(200);
+    res.body.data.briefs.forEach(b => expect(b.isLocked).toBe(true));
+  });
+
+  it('free user — can still access Aircrafts (signed-in free tier)', async () => {
+    const user  = await createUser({ subscriptionTier: 'free' });
+    const brief = await createBrief({ category: 'Aircrafts' });
+    const res   = await request(app)
+      .get(`/api/briefs/${brief._id}`)
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(200);
+  });
+});
+
+// ── AppSettings cascade heal on startup ──────────────────────────────────
+describe('AppSettings.getSettings() heals exclusive tier arrays into inclusive ones', () => {
+  it('categories in guestCategories are auto-added to free+silver on load', async () => {
+    // Simulate a legacy/broken state: News only in guestCategories.
+    await AppSettings.create({
+      _singleton: 'settings',
+      guestCategories:  ['News'],
+      freeCategories:   ['Bases'],       // does NOT contain News
+      silverCategories: ['Aircrafts'],   // does NOT contain News or Bases
+      pathwayUnlocks:   [{ category: 'News', levelRequired: 1, rankRequired: 1 }],
+    });
+
+    const settings = await AppSettings.getSettings();
+    expect(settings.freeCategories).toContain('News');
+    expect(settings.silverCategories).toEqual(expect.arrayContaining(['News', 'Bases', 'Aircrafts']));
+  });
+});
+
 // ── Settings change propagates immediately ────────────────────────────────
 describe('Settings changes propagate to access control immediately', () => {
   it('revoking a category from freeCategories blocks access on next request', async () => {

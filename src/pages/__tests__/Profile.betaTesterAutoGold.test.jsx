@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Profile from '../Profile'
 
@@ -50,6 +50,11 @@ vi.mock('framer-motion', () => ({
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
+// Subscription card now lives on the Settings tab — tests must open it first.
+function openSettingsTab() {
+  fireEvent.click(screen.getByRole('button', { name: /settings/i }))
+}
+
 function mockFetch() {
   global.fetch = vi.fn().mockResolvedValue({
     ok: true,
@@ -99,6 +104,7 @@ describe('Profile — betaTesterAutoGold hides subscription card', () => {
     setupUser()
     setupSettings({ betaTesterAutoGold: false })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Subscription')).toBeDefined())
     expect(screen.getByText('Current Plan')).toBeDefined()
   })
@@ -107,6 +113,7 @@ describe('Profile — betaTesterAutoGold hides subscription card', () => {
     setupUser()
     setupSettings({})
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Subscription')).toBeDefined())
   })
 
@@ -114,6 +121,7 @@ describe('Profile — betaTesterAutoGold hides subscription card', () => {
     setupUser()
     setupSettings({ betaTesterAutoGold: true })
     render(<Profile />)
+    openSettingsTab()
     // Wait for any async effects to settle before asserting absence
     await waitFor(() => expect(screen.getByText('Agent Test')).toBeDefined())
     expect(screen.queryByText('Subscription')).toBeNull()
@@ -124,6 +132,7 @@ describe('Profile — betaTesterAutoGold hides subscription card', () => {
     setupUser({ subscriptionTier: 'gold' })
     setupSettings({ betaTesterAutoGold: true })
     render(<Profile />)
+    openSettingsTab()
     await waitFor(() => expect(screen.getByText('Agent Test')).toBeDefined())
     expect(screen.queryByText('Subscription')).toBeNull()
   })
