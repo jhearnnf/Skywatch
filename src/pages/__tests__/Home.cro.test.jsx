@@ -41,9 +41,14 @@ vi.mock('../../components/onboarding/WelcomeAgentFlow', () => ({
 vi.mock('framer-motion', () => ({
   motion: {
     div:    ({ children, className, style }) => <div className={className} style={style}>{children}</div>,
+    svg:    ({ children, className, style }) => <svg className={className} style={style}>{children}</svg>,
+    h2:     ({ children, className, style }) => <h2 className={className} style={style}>{children}</h2>,
     button: ({ children, className, onClick }) => <button className={className} onClick={onClick}>{children}</button>,
   },
   AnimatePresence: ({ children }) => <>{children}</>,
+  useReducedMotion: () => false,
+  useScroll:        () => ({ scrollY: 0 }),
+  useTransform:     () => 0,
 }))
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

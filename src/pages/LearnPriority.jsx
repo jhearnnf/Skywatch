@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useAnimationControls } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
@@ -947,7 +947,6 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
   const [openSyncId, setOpenSyncId] = useState(null)
   const [revealedStubId, setRevealedStubId] = useState(null)
   const [hoveredStubId, setHoveredStubId] = useState(null)
-  const listRef     = useRef(null)
   const sentinelRef = useRef(null)
 
   const [renderLimit, setRenderLimit] = useState(() => {
@@ -987,18 +986,47 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
     if (didAutoScrollRef.current) return
     if (!pathwayUnlocked || briefs.length === 0) return
     didAutoScrollRef.current = true
-    const targetIdx = briefs.findIndex(b => !readSet.has(b._id) && b.status !== 'stub')
-    if (targetIdx <= 0) {
-      window.scrollTo(0, 0)
-      return
+
+    // Reapply across several frames. On back/forward nav the document height
+    // fluctuates while the page-level enter animation plays and AnimatePresence
+    // swaps subtrees — our first scrollTo can be clamped by a briefly-short
+    // document. Retrying keeps reapplying once the full list is laid out.
+    let cancelled = false
+    const MAX_ATTEMPTS = 20
+
+    const computeTarget = () => {
+      const targetIdx = briefs.findIndex(b => !readSet.has(b._id) && b.status !== 'stub')
+      if (targetIdx <= 0) return 0
+      // Query the document, not a ref — the matching motion.div instance can
+      // be torn down and replaced by AnimatePresence swaps while we tick.
+      const listEl = document.querySelector('[data-pathway-list="true"]')
+      if (!listEl) return null
+      const targetEl = listEl.querySelector(`[data-brief-index="${targetIdx}"]`)
+      if (!targetEl) return null
+      const headerOffset = listEl.getBoundingClientRect().top + window.scrollY
+      const targetTop = targetEl.getBoundingClientRect().top + window.scrollY
+      return Math.max(0, targetTop - headerOffset)
     }
-    const listEl = listRef.current
-    if (!listEl) return
-    const targetEl = listEl.querySelector(`[data-brief-index="${targetIdx}"]`)
-    if (!targetEl) return
-    const headerOffset = listEl.getBoundingClientRect().top + window.scrollY
-    const targetTop = targetEl.getBoundingClientRect().top + window.scrollY
-    window.scrollTo(0, Math.max(0, targetTop - headerOffset))
+
+    let attempts = 0
+    let rafId = 0
+    const tick = () => {
+      if (cancelled) return
+      const target = computeTarget()
+      if (target != null && Math.abs(window.scrollY - target) > 1) {
+        window.scrollTo(0, target)
+      }
+      attempts += 1
+      if (attempts < MAX_ATTEMPTS) {
+        rafId = requestAnimationFrame(tick)
+      }
+    }
+    tick()
+
+    return () => {
+      cancelled = true
+      if (rafId) cancelAnimationFrame(rafId)
+    }
   }, [briefs, pathwayUnlocked]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const variants = {
@@ -1066,7 +1094,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
 
   return (
     <motion.div
-      ref={listRef}
+      data-pathway-list="true"
       key={category}
       custom={direction}
       variants={variants}
@@ -1274,6 +1302,7 @@ export default function LearnPriority() {
   const { user, API, apiFetch } = useAuth()
   const navigate      = useNavigate()
   const location      = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { start, visible, hasSeen } = useAppTutorial()
 
   const [levels,         setLevels]         = useState(null)
@@ -1397,6 +1426,13 @@ export default function LearnPriority() {
   useEffect(() => {
     if (!settingsLoaded) return
     if (sequenceStartedRef.current) return
+    // URL `?category=` takes precedence — this is what browser back/forward
+    // restores. Deep links and in-page swipes both land here.
+    const urlCat = searchParams.get('category')
+    if (urlCat) {
+      const idx = pathways.findIndex(p => p.category === urlCat)
+      if (idx !== -1) { setActiveCatIndex(idx); return }
+    }
     const cat = location.state?.category
     if (cat) {
       const idx = pathways.findIndex(p => p.category === cat)
@@ -1522,6 +1558,18 @@ export default function LearnPriority() {
       swipeControls.start({ x: 0, transition: { type: 'spring', stiffness: 350, damping: 28 } })
     }
   }, [showSwipeHint]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Keep `?category=` in sync so browser back/forward restores the pathway
+  //    the user was viewing. `replace: true` avoids piling history entries.
+  useEffect(() => {
+    if (activeCatIndex == null) return
+    const cat = pathways[activeCatIndex]?.category
+    if (!cat) return
+    if (searchParams.get('category') === cat) return
+    const next = new URLSearchParams(searchParams)
+    next.set('category', cat)
+    setSearchParams(next, { replace: true })
+  }, [activeCatIndex, pathways]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch briefs for the active pathway ────────────────────────────────────
   const activePathway = activeCatIndex != null ? pathways[activeCatIndex] : null
@@ -1650,25 +1698,6 @@ export default function LearnPriority() {
   return (
     <>
       <SEO title="Learn Priority" description="See your recommended learning path and priority briefs for RAF aptitude preparation." />
-      <style>{`
-        @keyframes lp-preview-flicker {
-          0%, 100% { opacity: 0.92; }
-          42%      { opacity: 0.92; }
-          44%      { opacity: 0.62; }
-          46%      { opacity: 0.92; }
-          78%      { opacity: 0.92; }
-          80%      { opacity: 0.72; }
-          82%      { opacity: 0.92; }
-        }
-        @keyframes lp-preview-dot {
-          0%, 100% { opacity: 1;   transform: scale(1);    }
-          50%      { opacity: 0.3; transform: scale(0.85); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          @keyframes lp-preview-flicker { 0%,100% { opacity: 0.92; } }
-          @keyframes lp-preview-dot     { 0%,100% { opacity: 1; transform: none; } }
-        }
-      `}</style>
       <TutorialModal />
 
       {/* Flying "NEW" badge — nav Learn button → category header card */}

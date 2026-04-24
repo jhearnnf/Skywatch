@@ -17,6 +17,7 @@ import { NewGameUnlockProvider }           from './context/NewGameUnlockContext'
 import { NewCategoryUnlockProvider }       from './context/NewCategoryUnlockContext'
 import { UnsolvedReportsProvider }          from './context/UnsolvedReportsContext'
 import AppShell                            from './components/layout/AppShell'
+import ScrollToTop                         from './components/ScrollToTop'
 import AirstarNotification                 from './components/AirstarNotification'
 import LevelUpNotification                 from './components/LevelUpNotification'
 import RankPromotionNotification           from './components/RankPromotionNotification'
@@ -190,6 +191,7 @@ function AppRoutes() {
 
   return (
     <AppShell>
+      <ScrollToTop />
       <AnimatePresence mode="wait" initial={false}>
         <Routes location={location} key={location.pathname}>
 

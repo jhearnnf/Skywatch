@@ -57,32 +57,46 @@ router.get('/', optionalAuth, async (req, res) => {
     const readSet    = new Set(readIds.map(id => id.toString()));
     const startedSet = new Set(startedIds.map(id => id.toString()));
 
-    const [briefs, total] = await Promise.all([
-      IntelligenceBrief.aggregate([
-        { $match: filter },
-        { $addFields: {
-          _priority: {
-            $switch: {
-              branches: [
-                { case: { $eq: ['$status', 'stub'] },                              then: 5 },
-                { case: { $in: ['$_id', startedIds] },                             then: 1 },
-                { case: { $and: [
-                  { $not: { $in: ['$_id', readIds] } },
-                  { $ne:  ['$status', 'stub'] },
-                ]},                                                                 then: 2 },
-                { case: { $and: [
-                  { $in:  ['$_id', readIds] },
-                  { $not: { $in: ['$_id', quizIds] } },
-                ]},                                                                 then: 3 },
-              ],
-              default: 4,
+    // News briefs surface newest-event-first (matches the News pathway handler).
+    // All other categories use the read-priority sort so in-progress items
+    // bubble up for the user to resume.
+    const isNews = filter.category === 'News';
+    const pipeline = isNews
+      ? [
+          { $match: filter },
+          { $sort: { eventDate: -1, dateAdded: -1 } },
+          { $skip: (pageNum - 1) * limitNum },
+          { $limit: limitNum },
+        ]
+      : [
+          { $match: filter },
+          { $addFields: {
+            _priority: {
+              $switch: {
+                branches: [
+                  { case: { $eq: ['$status', 'stub'] },                              then: 5 },
+                  { case: { $in: ['$_id', startedIds] },                             then: 1 },
+                  { case: { $and: [
+                    { $not: { $in: ['$_id', readIds] } },
+                    { $ne:  ['$status', 'stub'] },
+                  ]},                                                                 then: 2 },
+                  { case: { $and: [
+                    { $in:  ['$_id', readIds] },
+                    { $not: { $in: ['$_id', quizIds] } },
+                  ]},                                                                 then: 3 },
+                ],
+                default: 4,
+              },
             },
-          },
-        }},
-        { $sort: { _priority: 1, dateAdded: -1 } },
-        { $skip: (pageNum - 1) * limitNum },
-        { $limit: limitNum },
-      ]).then(docs => IntelligenceBrief.populate(docs, { path: 'media' })),
+          }},
+          { $sort: { _priority: 1, dateAdded: -1 } },
+          { $skip: (pageNum - 1) * limitNum },
+          { $limit: limitNum },
+        ];
+
+    const [briefs, total] = await Promise.all([
+      IntelligenceBrief.aggregate(pipeline)
+        .then(docs => IntelligenceBrief.populate(docs, { path: 'media', select: 'mediaType mediaUrl' })),
       IntelligenceBrief.countDocuments(filter),
     ]);
 
@@ -96,6 +110,10 @@ router.get('/', optionalAuth, async (req, res) => {
       isRead:    readSet.has(b._id.toString()),
       isStarted: startedSet.has(b._id.toString()),
       isLocked:  (accessible !== null && !accessible.includes(b.category)) || !isPathwayUnlocked(b.category, req.user, settings, levelThresholds),
+      images:    (Array.isArray(b.media) ? b.media : [])
+        .filter(m => m && m.mediaType === 'picture' && m.mediaUrl)
+        .slice(0, 3)
+        .map(m => m.mediaUrl),
     }));
 
     const totalPages = Math.ceil(total / limitNum);

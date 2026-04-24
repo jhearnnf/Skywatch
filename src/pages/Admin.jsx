@@ -4775,12 +4775,24 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       <span className="flex gap-1 items-center">
         <span
           className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${priorityNA ? 'bg-slate-100 text-slate-400 line-through decoration-red-500 decoration-2' : hasPriority ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}
-          title={priorityNA ? 'Priority not applicable for News briefs' : undefined}
+          title={`Priority — ${priorityNA ? 'not applicable for News briefs' : hasPriority ? `set (#${brief.priorityNumber})` : 'not set'}`}
         >P</span>
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasDescription ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>D</span>
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasKeywords ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>K</span>
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasQuiz ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>Q</span>
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasMedia ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>M</span>
+        <span
+          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasDescription ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}
+          title={`Description — ${hasDescription ? 'complete (4 sections)' : 'incomplete (needs 4 sections)'}`}
+        >D</span>
+        <span
+          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasKeywords ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}
+          title={`Keywords — ${(brief.keywords?.length ?? 0)}/${keywordsPerBrief} ${hasKeywords ? 'complete' : 'required'}`}
+        >K</span>
+        <span
+          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasQuiz ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}
+          title={`Quiz — easy ${(brief.quizQuestionsEasy?.length ?? 0)}/${questionsPerDifficulty}, medium ${(brief.quizQuestionsMedium?.length ?? 0)}/${questionsPerDifficulty}${hasQuiz ? ' (complete)' : ''}`}
+        >Q</span>
+        <span
+          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasMedia ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}
+          title={`Media — ${hasMedia ? 'attached' : 'missing'}`}
+        >M</span>
       </span>
     )
   }

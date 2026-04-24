@@ -8,3 +8,4 @@ export const BRIEF_JUST_COMPLETED_KEY = 'sw_brief_just_completed'
 export const briefSectionKey    = (briefId) => `sw_brief_sec_${briefId}`
 export const tutorialKey        = (userId, name) => `sw_tut_v2_${userId}_${name}`
 export const tutorialClearedKey = (userId) => `sw_tut_cleared_at_${userId}`
+export const lastSeenStreakKey  = (userId) => `sw_last_seen_streak_${userId}`

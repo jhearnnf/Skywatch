@@ -7,6 +7,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
   useLocation: () => ({ state: null, pathname: '/learn-priority', search: '', hash: '' }),
+  useSearchParams: () => [new URLSearchParams(''), vi.fn()],
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 

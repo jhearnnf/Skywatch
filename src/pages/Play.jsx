@@ -203,7 +203,7 @@ export default function Play() {
       setWtaSpawn(null)
       return
     }
-    apiFetch(`${API}/api/games/quiz/recommended-briefs?limit=6`)
+    apiFetch(`${API}/api/games/quiz/recommended-briefs?limit=4`)
       .then(r => r.json())
       .then(data => {
         const briefs = data?.data?.briefs ?? []
@@ -211,7 +211,7 @@ export default function Play() {
         if (briefs.some(b => b.quizState === 'active')) markUnlockFromServer('quiz')
       })
       .catch(() => {})
-    apiFetch(`${API}/api/games/battle-of-order/recommended-briefs?limit=6`)
+    apiFetch(`${API}/api/games/battle-of-order/recommended-briefs?limit=4`)
       .then(r => r.json())
       .then(data => {
         const briefs = data?.data?.briefs ?? []

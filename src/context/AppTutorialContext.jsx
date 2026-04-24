@@ -160,12 +160,16 @@ export function AppTutorialProvider({ children }) {
     return user?._id ? `sw_tut_v2_${user._id}_${name}` : `sw_tut_v2_anon_${name}`
   }, [user?._id])
 
-  // Check both user-scoped key AND anon key — so "seen as guest" counts when logged in
+  // Check both user-scoped key AND anon key — so "seen as guest" counts when logged in.
+  // Fall back to the server's user.tutorials state so a fresh browser with empty
+  // localStorage still respects tutorials already viewed/skipped on another device.
   const hasSeen = useCallback((name) => {
     if (user?._id && localStorage.getItem(`sw_tut_v2_${user._id}_${name}`)) return true
     if (localStorage.getItem(`sw_tut_v2_anon_${name}`)) return true
+    const serverStatus = user?.tutorials?.[name.replace(/-/g, '_')]
+    if (serverStatus && serverStatus !== 'unseen') return true
     return false
-  }, [user?._id])
+  }, [user?._id, user?.tutorials])
 
   // When admin resets tutorials, clear localStorage entries so they show again
   useEffect(() => {
@@ -181,6 +185,18 @@ export function AppTutorialProvider({ children }) {
       localStorage.setItem(clearedAtKey, String(resetAt))
     }
   }, [user?._id, user?.tutorialsResetAt])
+
+  // Backfill localStorage from the server's tutorials state — so fresh browsers
+  // don't re-show tutorials the user already completed on another device.
+  useEffect(() => {
+    if (!user?._id || !user?.tutorials) return
+    for (const name of Object.keys(TUTORIAL_STEPS)) {
+      const status = user.tutorials[name.replace(/-/g, '_')]
+      if (status === 'viewed' || status === 'skipped') {
+        localStorage.setItem(`sw_tut_v2_${user._id}_${name}`, '1')
+      }
+    }
+  }, [user?._id, user?.tutorials])
 
   // Keep ref in sync so route-change effect can read latest content without a dep
   useEffect(() => { tutContentRef.current = tutorialContent }, [tutorialContent])

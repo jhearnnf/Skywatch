@@ -105,6 +105,96 @@ describe('GET /api/briefs', () => {
   });
 });
 
+// ── GET /api/briefs — News sort order ──────────────────────────────────────
+describe('GET /api/briefs — News sort order', () => {
+  it('sorts News briefs by eventDate descending (newest first)', async () => {
+    await createBrief({ title: 'Older',  category: 'News', eventDate: new Date('2025-01-01') });
+    await createBrief({ title: 'Newest', category: 'News', eventDate: new Date('2026-04-01') });
+    await createBrief({ title: 'Middle', category: 'News', eventDate: new Date('2025-06-15') });
+
+    const res = await request(app).get('/api/briefs?category=News');
+
+    expect(res.status).toBe(200);
+    const titles = res.body.data.briefs.map(b => b.title);
+    expect(titles).toEqual(['Newest', 'Middle', 'Older']);
+  });
+
+  it('does not bump in-progress News above newer News items', async () => {
+    const user = await createUser();
+    const cookie = authCookie(user._id);
+    const olderInProgress = await createBrief({ title: 'Older In-Progress', category: 'News', eventDate: new Date('2025-01-01') });
+    await createBrief({ title: 'Newer Unread', category: 'News', eventDate: new Date('2026-04-01') });
+
+    // Open the older brief so it's in-progress for this user
+    await openBrief(olderInProgress._id, cookie);
+
+    const res = await request(app).get('/api/briefs?category=News').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const titles = res.body.data.briefs.map(b => b.title);
+    // Newest by eventDate must still come first even though the older one is in-progress
+    expect(titles[0]).toBe('Newer Unread');
+  });
+});
+
+// ── GET /api/briefs — images field ─────────────────────────────────────────
+describe('GET /api/briefs — images field', () => {
+  const Media = require('../../models/Media');
+  const IntelligenceBrief = require('../../models/IntelligenceBrief');
+
+  it('returns picture URLs from populated media in an images[] field', async () => {
+    const brief = await createBrief({ title: 'With Media', category: 'News' });
+    const pic1 = await Media.create({ mediaType: 'picture', mediaUrl: 'https://example.com/a.jpg', cloudinaryPublicId: 'a', name: 'A' });
+    const pic2 = await Media.create({ mediaType: 'picture', mediaUrl: 'https://example.com/b.jpg', cloudinaryPublicId: 'b', name: 'B' });
+    await IntelligenceBrief.findByIdAndUpdate(brief._id, { $push: { media: { $each: [pic1._id, pic2._id] } } });
+
+    const res = await request(app).get('/api/briefs?category=News');
+
+    expect(res.status).toBe(200);
+    const found = res.body.data.briefs.find(b => b._id === brief._id.toString());
+    expect(found).toBeDefined();
+    expect(Array.isArray(found.images)).toBe(true);
+    expect(found.images).toEqual(expect.arrayContaining(['https://example.com/a.jpg', 'https://example.com/b.jpg']));
+  });
+
+  it('filters out non-picture media types from images[]', async () => {
+    const brief = await createBrief({ title: 'Mixed Media', category: 'News' });
+    const pic   = await Media.create({ mediaType: 'picture', mediaUrl: 'https://example.com/p.jpg', cloudinaryPublicId: 'p', name: 'P' });
+    const vid   = await Media.create({ mediaType: 'video',   mediaUrl: 'https://example.com/v.mp4', cloudinaryPublicId: 'v', name: 'V' });
+    await IntelligenceBrief.findByIdAndUpdate(brief._id, { $push: { media: { $each: [pic._id, vid._id] } } });
+
+    const res = await request(app).get('/api/briefs?category=News');
+
+    const found = res.body.data.briefs.find(b => b._id === brief._id.toString());
+    expect(found.images).toEqual(['https://example.com/p.jpg']);
+  });
+
+  it('returns an empty array when the brief has no media', async () => {
+    await createBrief({ title: 'No Media', category: 'News' });
+
+    const res = await request(app).get('/api/briefs?category=News');
+
+    const found = res.body.data.briefs[0];
+    expect(Array.isArray(found.images)).toBe(true);
+    expect(found.images.length).toBe(0);
+  });
+
+  it('caps images[] at 3 URLs', async () => {
+    const brief = await createBrief({ title: 'Many Media', category: 'News' });
+    const ids = [];
+    for (let i = 0; i < 5; i++) {
+      const m = await Media.create({ mediaType: 'picture', mediaUrl: `https://example.com/${i}.jpg`, cloudinaryPublicId: `p${i}`, name: `P${i}` });
+      ids.push(m._id);
+    }
+    await IntelligenceBrief.findByIdAndUpdate(brief._id, { $push: { media: { $each: ids } } });
+
+    const res = await request(app).get('/api/briefs?category=News');
+
+    const found = res.body.data.briefs.find(b => b._id === brief._id.toString());
+    expect(found.images.length).toBe(3);
+  });
+});
+
 // ── GET /api/briefs — isLocked per tier ───────────────────────────────────
 describe('GET /api/briefs — isLocked by subscription tier', () => {
   beforeEach(async () => {
