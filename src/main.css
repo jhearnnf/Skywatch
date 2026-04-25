@@ -160,6 +160,36 @@ body::before {
   box-shadow: 0 4px 12px rgba(0,0,0,.6), 0 8px 28px rgba(91,170,255,.16);
 }
 
+/* ── Immersive game chrome (mobile only) ─────────────────────────────── */
+/* When a CBAT game enters its playing phase, slide TopBar up and BottomNav
+   down to give the game more screen real estate. Mobile-only: desktop keeps
+   navbars visible because horizontal space is plentiful and BottomNav is
+   already hidden via Tailwind's md:hidden. */
+.app-topbar,
+.app-bottomnav {
+  transition: transform 300ms ease-out;
+  will-change: transform;
+}
+.app-shell-body,
+.app-shell-main,
+.app-shell-content {
+  transition: padding 300ms ease-out;
+}
+
+/* CBAT pages: tighten the "← CBAT GAMENAME" header spacing.
+   Tailwind's py-6 on .app-shell-content adds 1.5rem top padding by default;
+   for /cbat/* routes we collapse it to 0.5rem so the header sits close to
+   (but not flush with) the navbar, matching the bottom gap on the header div. */
+.cbat-route .app-shell-content { padding-top: 0.75rem; }
+
+@media (max-width: 600px) {
+  .chrome-immersive .app-topbar    { transform: translateY(-100%); pointer-events: none; }
+  .chrome-immersive .app-bottomnav { transform: translateY(100%);  pointer-events: none; }
+  .chrome-immersive .app-shell-body { padding-top: 0; }
+  .chrome-immersive .app-shell-main { padding-bottom: 0; }
+  .chrome-immersive .app-shell-content { padding-bottom: 0; }
+}
+
 /* ── Intel / spy aesthetic utilities ─────────────────────────────────── */
 
 /* Monospace tactical label */

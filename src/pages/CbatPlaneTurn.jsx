@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 
@@ -195,6 +196,12 @@ export default function CbatPlaneTurn() {
 
   // Game state
   const [phase, setPhase] = useState('select') // select | playing | over | finished
+  const { enterImmersive, exitImmersive } = useGameChrome()
+  useEffect(() => {
+    if (phase === 'playing' || phase === 'over') enterImmersive()
+    else exitImmersive()
+    return exitImmersive
+  }, [phase, enterImmersive, exitImmersive])
   const [plane, setPlane] = useState({ r: 5, c: 5, dir: 0, angle: 0 })
   const [pkg, setPkg] = useState({ r: 0, c: 0 })
   const [collected, setCollected] = useState(0)
@@ -438,9 +445,9 @@ export default function CbatPlaneTurn() {
       <SEO title="Plane Turn — CBAT" description="Navigate your aircraft to collect care packages." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-2">
         <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-        <h1 className="text-xl font-extrabold text-slate-900">Plane Turn</h1>
+        <h1 className="text-sm font-extrabold text-slate-900">Plane Turn</h1>
       </div>
 
       {/* Not logged in */}

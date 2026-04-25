@@ -104,9 +104,9 @@ export default function CbatLeaderboard() {
       <SEO title={`${cfg.title} Leaderboard — CBAT`} description={`Top scores for ${cfg.title}`} />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-2">
         <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-        <h1 className="text-xl font-extrabold text-slate-900">{cfg.emoji} {cfg.title} Leaderboard</h1>
+        <h1 className="text-sm font-extrabold text-slate-900">{cfg.emoji} {cfg.title} Leaderboard</h1>
       </div>
 
       {loading ? (

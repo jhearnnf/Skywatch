@@ -16,6 +16,7 @@ import { AppTutorialProvider }             from './context/AppTutorialContext'
 import { NewGameUnlockProvider }           from './context/NewGameUnlockContext'
 import { NewCategoryUnlockProvider }       from './context/NewCategoryUnlockContext'
 import { UnsolvedReportsProvider }          from './context/UnsolvedReportsContext'
+import { GameChromeProvider }                from './context/GameChromeContext'
 import AppShell                            from './components/layout/AppShell'
 import ScrollToTop                         from './components/ScrollToTop'
 import AirstarNotification                 from './components/AirstarNotification'
@@ -328,9 +329,11 @@ export default function App() {
             <NewGameUnlockProvider>
              <NewCategoryUnlockProvider>
               <UnsolvedReportsProvider>
-                <AppRoutes />
-                <NotifLayer />
-                <ReportNotifBanner />
+                <GameChromeProvider>
+                  <AppRoutes />
+                  <NotifLayer />
+                  <ReportNotifBanner />
+                </GameChromeProvider>
               </UnsolvedReportsProvider>
              </NewCategoryUnlockProvider>
             </NewGameUnlockProvider>

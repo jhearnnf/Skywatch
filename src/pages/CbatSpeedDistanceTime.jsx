@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import {
   buildRound,
@@ -291,6 +292,12 @@ export default function CbatSpeedDistanceTime() {
   const { user, apiFetch, API } = useAuth()
 
   const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
+  const { enterImmersive, exitImmersive } = useGameChrome()
+  useEffect(() => {
+    if (phase === 'playing' || phase === 'feedback') enterImmersive()
+    else exitImmersive()
+    return exitImmersive
+  }, [phase, enterImmersive, exitImmersive])
   const [round, setRound] = useState(null)
   const [answers, setAnswers] = useState([])
   const [roundIndex, setRoundIndex] = useState(0)
@@ -455,9 +462,9 @@ export default function CbatSpeedDistanceTime() {
       <SEO title="Speed Distance Time — CBAT" description="Calculate arrival time, distance, fuel and speed under pressure." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-2">
         <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-        <h1 className="text-xl font-extrabold text-slate-900">Speed Distance Time</h1>
+        <h1 className="text-sm font-extrabold text-slate-900">Speed Distance Time</h1>
       </div>
 
       {/* Not logged in */}

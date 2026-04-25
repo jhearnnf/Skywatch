@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
+import { useGameChrome } from '../context/GameChromeContext'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import SEO from '../components/SEO'
 
@@ -742,6 +743,12 @@ export default function CbatTarget() {
   const shapeScale = useShapeScale()
 
   const [phase, setPhase] = useState('intro')         // intro | playing | results
+  const { enterImmersive, exitImmersive } = useGameChrome()
+  useEffect(() => {
+    if (phase === 'playing') enterImmersive()
+    else exitImmersive()
+    return exitImmersive
+  }, [phase, enterImmersive, exitImmersive])
   const [elapsedMs, setElapsedMs] = useState(0)
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
@@ -1174,12 +1181,15 @@ export default function CbatTarget() {
         </div>
       )}
 
+      {user && (
+        <div className="flex items-center gap-2 mb-2">
+          <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+          <h1 className="text-sm font-extrabold text-slate-900">Target</h1>
+        </div>
+      )}
+
       {user && (phase === 'intro' || phase === 'results') && (
         <div className="flex flex-col items-center">
-          <div className="flex items-center gap-2 mb-4 self-start">
-            <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-            <h1 className="text-xl font-extrabold text-slate-900">Target</h1>
-          </div>
           {phase === 'intro' && (
             <Intro onStart={startGame} personalBest={personalBest} aircraftReady={aircraftList.length > 0} />
           )}
@@ -1199,12 +1209,6 @@ export default function CbatTarget() {
             <span className="font-mono text-xs text-slate-400">
               Score: <span className={stats.totalScore >= 0 ? 'text-brand-300' : 'text-red-400'}>{stats.totalScore}</span>
             </span>
-            <button
-              onClick={() => { setPhase('intro') }}
-              className="text-xs text-slate-500 hover:text-red-400 transition-colors"
-            >
-              Abort
-            </button>
           </div>
 
           <div className="cbat-target-grid">

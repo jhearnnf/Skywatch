@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -258,6 +259,12 @@ export default function CbatAngles() {
   const { user, apiFetch, API } = useAuth()
 
   const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
+  const { enterImmersive, exitImmersive } = useGameChrome()
+  useEffect(() => {
+    if (phase === 'playing' || phase === 'feedback') enterImmersive()
+    else exitImmersive()
+    return exitImmersive
+  }, [phase, enterImmersive, exitImmersive])
   const [questions, setQuestions] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [answers, setAnswers] = useState([])
@@ -371,9 +378,9 @@ export default function CbatAngles() {
       <SEO title="Angles — CBAT" description="Judge bearing angles quickly and accurately." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-2">
         <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-        <h1 className="text-xl font-extrabold text-slate-900">Angles</h1>
+        <h1 className="text-sm font-extrabold text-slate-900">Angles</h1>
       </div>
 
       {/* Not logged in */}

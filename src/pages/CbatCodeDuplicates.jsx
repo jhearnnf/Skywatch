@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -124,6 +125,12 @@ export default function CbatCodeDuplicates() {
 
   // phase: intro | displaying | answering | feedback | results
   const [phase, setPhase] = useState('intro')
+  const { enterImmersive, exitImmersive } = useGameChrome()
+  useEffect(() => {
+    if (phase === 'displaying' || phase === 'answering' || phase === 'feedback') enterImmersive()
+    else exitImmersive()
+    return exitImmersive
+  }, [phase, enterImmersive, exitImmersive])
   const [round, setRound] = useState(1)
   const [sequence, setSequence] = useState([])
   const [queryDigit, setQueryDigit] = useState(null)
@@ -293,9 +300,9 @@ export default function CbatCodeDuplicates() {
       <SEO title="Code Duplicates — CBAT" description="Count how many times a digit appeared in a sequence." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-2">
         <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-        <h1 className="text-xl font-extrabold text-slate-900">Code Duplicates</h1>
+        <h1 className="text-sm font-extrabold text-slate-900">Code Duplicates</h1>
       </div>
 
       {/* Not logged in */}
