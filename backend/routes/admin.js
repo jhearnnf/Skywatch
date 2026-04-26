@@ -2420,11 +2420,18 @@ router.delete('/briefs/:id/questions', requireReason, async (req, res) => {
 // ── OpenRouter AI Proxies ──────────────────────────────────────────────────
 // All OpenRouter calls are made server-side so OPENROUTER_KEY never reaches the browser.
 
-async function openRouterChat(messages, model, maxTokens = 2048) {
+async function openRouterChat(messages, model, maxTokens = 2048, extraBody = {}) {
   return callOpenRouter({
     key:  'main',
-    body: { model, messages, max_tokens: maxTokens },
+    body: { model, messages, max_tokens: maxTokens, ...extraBody },
   });
+}
+
+// Format a Date for Perplexity's search_after/before_date_filter (MM/DD/YYYY).
+function pplxDate(d) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${m}/${day}/${d.getFullYear()}`;
 }
 
 function extractBalanced(str, open, close) {
@@ -2490,6 +2497,24 @@ function repairJson(str) {
     s += stack.pop() === '{' ? '}' : ']';
   }
   return s;
+}
+
+// Best-effort JSON-array parser for AI responses. Tries cleanJson first, then a
+// repaired version if the model truncated its output. Returns [] on total failure
+// but logs a warning so the cause is visible — the prior silent fallback hid bugs
+// where every headline call was returning empty.
+function parseAiJsonArray(raw, label = 'ai') {
+  const cleaned = cleanJson(raw);
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    try {
+      return JSON.parse(repairJson(cleaned));
+    } catch (err2) {
+      console.warn(`[${label}] failed to parse AI JSON: ${err2.message}; raw start: ${String(raw).slice(0, 200)}`);
+      return [];
+    }
+  }
 }
 
 // Normalize quiz question answers: models sometimes collapse [{title:a},{title:b},...] into
@@ -2763,37 +2788,61 @@ router.post('/ai/news-headlines', featureMiddleware('news-headlines'), async (re
     const targetDate = (!date || date === todayStr) ? todayStr : date;
     const isToday    = targetDate === todayStr;
     const aiSettings = await AppSettings.getSettings();
+    const RAF_SOURCE_HINT = 'Search individual articles on raf.mod.uk, gov.uk/government/news, BBC News, UK Defence Journal (ukdefencejournal.org.uk), Janes, Defence News, Reuters defence pages, Forces News, Breaking Defense, and Air Force Technology.';
     const userContent = isToday
-      ? `The current date is ${todayStr}. Search the web right now for real UK Royal Air Force (RAF) news stories published in the last 24 hours only. Return ONLY a JSON array of up to 6 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the date the story was published — must be ${todayStr} or yesterday). Only include a story if you can confirm its publication date from the source. If you cannot verify the exact date, omit the story. No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from the last 24 hours, return an empty array []. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`
-      : `The target date is ${targetDate}. Search the web for real UK Royal Air Force (RAF) news stories published on ${targetDate} (acceptable range: up to 3 days either side). Return ONLY a JSON array of up to 6 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the actual confirmed publication date of the story). Only include a story if you can verify its publication date from the source. If you cannot verify the date, omit the story entirely — do not guess. No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If no real RAF stories exist from around that date, return an empty array []. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`;
+      ? `Today is ${todayStr}. Find UK Royal Air Force (RAF) news articles published in the last 24-48 hours. ${RAF_SOURCE_HINT} Look for individual news articles, not compiled lists. Return up to 6.\n\nReturn ONLY a JSON array, no prose, no markdown, no citation markers. Each object: {"headline": "...", "eventDate": "YYYY-MM-DD"}. If exact publication date is unclear, use ${todayStr}.`
+      : `Target date: ${targetDate}. Find UK Royal Air Force (RAF) news articles published on or within a week of ${targetDate}. ${RAF_SOURCE_HINT} Look for individual news articles, not compiled lists. Return up to 6.\n\nReturn ONLY a JSON array, no prose, no markdown, no citation markers. Each object: {"headline": "...", "eventDate": "YYYY-MM-DD"}. If exact publication date is unclear, use ${targetDate}.`;
+    const targetDateObj = new Date(targetDate);
+    const searchAfter  = pplxDate(new Date(targetDateObj.getTime() - 14 * 24 * 60 * 60 * 1000));
+    const searchBefore = pplxDate(new Date(targetDateObj.getTime() + 14 * 24 * 60 * 60 * 1000));
     const data = await openRouterChat([{
       role: 'system',
       content: getPrompt(aiSettings, 'newsHeadlines'),
     }, {
       role: 'user',
       content: userContent,
-    }], 'perplexity/sonar');
+    }], 'perplexity/sonar-pro', 2048, {
+      web_search_options: { search_context_size: 'high' },
+      search_after_date_filter:  searchAfter,
+      search_before_date_filter: searchBefore,
+    });
     const raw = data.choices?.[0]?.message?.content ?? '[]';
-    let parsed;
-    try {
-      parsed = JSON.parse(cleanJson(raw));
-    } catch {
-      parsed = [];
-    }
+    console.log(`[news-headlines] raw AI response for ${targetDate} (${raw.length} chars):\n${raw.slice(0, 1000)}${raw.length > 1000 ? '\n…(truncated)' : ''}`);
+    const parsed = parseAiJsonArray(raw, '/ai/news-headlines');
     // Normalise: accept plain strings (legacy fallback) and {headline, eventDate} objects.
-    // Then filter out any item whose eventDate falls more than 3 days outside the target date.
+    // Tolerate missing/unparseable dates by defaulting to the target date so a useful
+    // headline isn't silently dropped just because the model didn't return a perfect date.
+    // Filter out any item whose eventDate falls more than 7 days outside the target date.
     const targetMs = new Date(targetDate).getTime();
-    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
-    const headlines = (Array.isArray(parsed) ? parsed : [])
-      .map(h => typeof h === 'string' ? { headline: h, eventDate: targetDate } : h)
-      .filter(h => {
-        if (!h.headline) return false;
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const rawList = Array.isArray(parsed) ? parsed : [];
+    const headlines = rawList
+      .map(h => typeof h === 'string' ? { headline: h, eventDate: targetDate } : { ...h })
+      .filter(h => Boolean(h.headline))
+      .map(h => {
         const d = new Date(h.eventDate);
-        if (isNaN(d.getTime())) return false; // drop unparseable dates
-        return Math.abs(d.getTime() - targetMs) <= THREE_DAYS_MS;
+        if (!h.eventDate || isNaN(d.getTime())) {
+          h.eventDate = targetDate; // fall back rather than drop
+        }
+        return h;
+      })
+      .filter(h => {
+        const d = new Date(h.eventDate);
+        return Math.abs(d.getTime() - targetMs) <= SEVEN_DAYS_MS;
       });
-    res.json({ status: 'success', data: { headlines } });
+    if (rawList.length && !headlines.length) {
+      console.warn(`[news-headlines] AI returned ${rawList.length} item(s) but all were filtered out for ${targetDate}`);
+    }
+    res.json({
+      status: 'success',
+      data: {
+        headlines,
+        rawCount: rawList.length,
+        rawSample: headlines.length ? undefined : raw.slice(0, 800),
+      },
+    });
   } catch (err) {
+    console.error('[news-headlines] error:', err.message);
     res.status(500).json({ message: err.message });
   }
 });
@@ -2810,27 +2859,63 @@ router.post('/ai/news-headlines-month', featureMiddleware('news-headlines-month'
     const [year, mon] = month.split('-').map(Number);
     const monthName = new Date(year, mon - 1, 1).toLocaleString('en-GB', { month: 'long', year: 'numeric' });
     const aiSettings = await AppSettings.getSettings();
+    const RAF_SOURCE_HINT = 'Search individual articles on raf.mod.uk, gov.uk/government/news, BBC News, UK Defence Journal (ukdefencejournal.org.uk), Janes, Defence News, Reuters defence pages, Forces News, Breaking Defense, and Air Force Technology.';
+    const monthStartDate = new Date(year, mon - 1, 1);
+    const monthEndDate   = new Date(year, mon, 0);
     const data = await openRouterChat([{
       role: 'system',
       content: getPrompt(aiSettings, 'newsHeadlines'),
     }, {
       role: 'user',
-      content: `Search the web for the top 10 most significant real UK Royal Air Force (RAF) news stories published during ${monthName}. Return ONLY a JSON array of up to 10 objects, each with "headline" (string, verbatim or closely paraphrased from the actual published source) and "eventDate" (YYYY-MM-DD, the confirmed publication date of the story — must fall within ${monthName}). Only include a story if you can verify its publication date from the source. If you cannot confirm the date falls within ${monthName}, omit the story entirely — do not guess. No fabricated headlines, no citation markers like [1], no markdown, no code blocks, no extra text. If fewer than 10 real RAF stories exist for that month, return what you find. Format: [{"headline": "Headline one", "eventDate": "YYYY-MM-DD"}]`,
-    }], 'perplexity/sonar');
+      content: `Find 10 different UK Royal Air Force (RAF) news articles published in ${monthName}. ${RAF_SOURCE_HINT} Look for individual news articles from across the month, not someone else's compiled "top 10" list. Anything aviation/RAF-related counts: deployments, exercises, procurement, accidents, personnel announcements, base news, ministerial statements, etc. Return whatever you find — even 3-4 articles is useful.\n\nReturn ONLY a JSON array, no prose, no markdown, no citation markers. Each object: {"headline": "...", "eventDate": "YYYY-MM-DD"}. If a publication date is unclear, give your best estimate within ${monthName}.`,
+    }], 'perplexity/sonar-pro', 2048, {
+      web_search_options: { search_context_size: 'high' },
+      search_after_date_filter:  pplxDate(monthStartDate),
+      search_before_date_filter: pplxDate(monthEndDate),
+    });
     const raw = data.choices?.[0]?.message?.content ?? '[]';
-    let parsed;
-    try { parsed = JSON.parse(cleanJson(raw)); } catch { parsed = []; }
-    // Normalise then filter: only keep items whose eventDate falls within the requested month.
+    console.log(`[news-headlines-month] raw AI response for ${month} (${raw.length} chars):\n${raw.slice(0, 1500)}${raw.length > 1500 ? '\n…(truncated)' : ''}`);
+    const parsed = parseAiJsonArray(raw, '/ai/news-headlines-month');
+    // Normalise then accept items by parsed Date — tolerate any format the model returns
+    // (ISO with timestamp, locale strings, single-digit month/day) rather than relying on
+    // a strict YYYY-MM string prefix. Out-of-month dates are clamped to mid-month.
     const fallbackDate = `${month}-15`;
-    const headlines = (Array.isArray(parsed) ? parsed : [])
-      .map(h => typeof h === 'string' ? { headline: h, eventDate: fallbackDate } : h)
-      .filter(h => {
-        if (!h.headline) return false;
-        if (!h.eventDate || typeof h.eventDate !== 'string') return false;
-        return h.eventDate.startsWith(month); // ensures YYYY-MM prefix matches
+    const monthStartMs = new Date(year, mon - 1, 1).getTime();
+    const monthEndMs   = new Date(year, mon, 0, 23, 59, 59, 999).getTime();
+    const rawList = Array.isArray(parsed) ? parsed : [];
+    const headlines = rawList
+      .map(h => typeof h === 'string' ? { headline: h, eventDate: fallbackDate } : { ...h })
+      .filter(h => Boolean(h.headline))
+      .map(h => {
+        const d = new Date(h.eventDate);
+        if (!h.eventDate || isNaN(d.getTime())) {
+          h.eventDate = fallbackDate;
+          return h;
+        }
+        // If the date parses but lies outside the requested month, clamp to mid-month so
+        // downstream consumers (which expect dates within ${month}) still work.
+        const ms = d.getTime();
+        if (ms < monthStartMs || ms > monthEndMs) {
+          h.eventDate = fallbackDate;
+        } else {
+          // Normalise to YYYY-MM-DD
+          h.eventDate = d.toISOString().slice(0, 10);
+        }
+        return h;
       });
-    res.json({ status: 'success', data: { headlines } });
+    if (rawList.length && !headlines.length) {
+      console.warn(`[news-headlines-month] AI returned ${rawList.length} item(s) but all were filtered out for ${month}`);
+    }
+    res.json({
+      status: 'success',
+      data: {
+        headlines,
+        rawCount: rawList.length,
+        rawSample: headlines.length ? undefined : raw.slice(0, 800),
+      },
+    });
   } catch (err) {
+    console.error('[news-headlines-month] error:', err.message);
     res.status(500).json({ message: err.message });
   }
 });

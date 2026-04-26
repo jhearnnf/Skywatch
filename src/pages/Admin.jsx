@@ -3192,6 +3192,12 @@ function NewsModal({ API, onClose, onGenerate }) {
       }
       const items = data.data.headlines ?? []
       setBulkNewsHeadlines(items)
+      if (!items.length) {
+        const sample = data.data.rawSample
+          ? `\n\nWhat the AI actually returned:\n\n${data.data.rawSample}`
+          : ''
+        alert(`The AI returned ${data.data.rawCount ?? 0} headline(s) for ${bulkNewsMonth}, none usable.${sample}`)
+      }
       // Default: select all non-duplicates
       const defaultSelected = new Set(
         items.reduce((acc, item, i) => {

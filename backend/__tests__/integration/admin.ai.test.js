@@ -71,7 +71,7 @@ function installAiFetchMock({ brief, quiz, headlines, keywords, mnemonics } = {}
       return mockFetchResponse({});
     }
     const bodyStr = typeof opts?.body === 'string' ? opts.body : JSON.stringify(opts?.body ?? '');
-    if (headlines && bodyStr.includes('RAF news stories')) return mockOpenRouter(headlines);
+    if (headlines && bodyStr.includes('RAF) news articles')) return mockOpenRouter(headlines);
     if (quiz     && bodyStr.includes('easyQuestions') && bodyStr.includes('mediumQuestions')) return mockOpenRouter(quiz);
     if (mnemonics && bodyStr.includes('mnemonic'))    return mockOpenRouter(mnemonics);
     if (keywords && bodyStr.includes('keywords')    && bodyStr.includes('generatedDescription') && !bodyStr.includes('descriptionSections')) return mockOpenRouter(keywords);
@@ -129,6 +129,166 @@ describe('POST /api/admin/ai/news-headlines', () => {
       .set('Cookie', authCookie(user._id))
       .send({ timestamp: new Date().toISOString() });
     expect(res.status).toBe(403);
+  });
+
+  it('keeps headline with unparseable date by falling back to target date', async () => {
+    // Previously the route silently dropped any item with an invalid eventDate,
+    // which caused frequent empty results when the model returned non-ISO formats.
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(
+      mockOpenRouter(`[{"headline":"RAF Typhoons scrambled","eventDate":"not a date"}]`)
+    );
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines')
+      .set('Cookie', authCookie(admin._id))
+      .send({ date: '2026-04-15' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.headlines).toHaveLength(1);
+    expect(res.body.data.headlines[0].headline).toBe('RAF Typhoons scrambled');
+    expect(res.body.data.headlines[0].eventDate).toBe('2026-04-15');
+  });
+
+  it('exposes rawCount so frontend can distinguish "AI returned nothing" vs "all filtered"', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter('[]'));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines')
+      .set('Cookie', authCookie(admin._id))
+      .send({ date: '2026-04-15' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.rawCount).toBe(0);
+  });
+});
+
+// ── POST /api/admin/ai/news-headlines-month ──────────────────────────────────
+
+describe('POST /api/admin/ai/news-headlines-month', () => {
+  it('returns headlines for ISO-formatted dates within the month', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(JSON.stringify([
+      { headline: 'RAF F-35 IOC declared', eventDate: '2026-04-05' },
+      { headline: 'Typhoons in Estonia',   eventDate: '2026-04-22' },
+    ])));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines-month')
+      .set('Cookie', authCookie(admin._id))
+      .send({ month: '2026-04' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.headlines).toHaveLength(2);
+  });
+
+  it('accepts ISO timestamps that the old startsWith filter would have dropped', async () => {
+    // The previous filter required eventDate.startsWith("YYYY-MM"), which failed
+    // for valid ISO timestamps like "2026-04-15T00:00:00Z".
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(JSON.stringify([
+      { headline: 'Sentinel R1 retired', eventDate: '2026-04-15T00:00:00Z' },
+    ])));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines-month')
+      .set('Cookie', authCookie(admin._id))
+      .send({ month: '2026-04' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.headlines).toHaveLength(1);
+    expect(res.body.data.headlines[0].eventDate).toBe('2026-04-15');
+  });
+
+  it('clamps an out-of-month date to mid-month rather than dropping the item', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(JSON.stringify([
+      { headline: 'Story whose date the model got wrong', eventDate: '2026-03-30' },
+    ])));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines-month')
+      .set('Cookie', authCookie(admin._id))
+      .send({ month: '2026-04' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.headlines).toHaveLength(1);
+    expect(res.body.data.headlines[0].eventDate).toBe('2026-04-15');
+  });
+
+  it('falls back to mid-month when eventDate is missing or unparseable', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(JSON.stringify([
+      { headline: 'Story with bad date', eventDate: 'sometime in April' },
+      { headline: 'Story with no date' },
+    ])));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines-month')
+      .set('Cookie', authCookie(admin._id))
+      .send({ month: '2026-04' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.headlines).toHaveLength(2);
+    expect(res.body.data.headlines.every(h => h.eventDate === '2026-04-15')).toBe(true);
+  });
+
+  it('drops items missing a headline string', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(JSON.stringify([
+      { headline: 'Real headline', eventDate: '2026-04-10' },
+      { eventDate: '2026-04-11' }, // no headline → drop
+    ])));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines-month')
+      .set('Cookie', authCookie(admin._id))
+      .send({ month: '2026-04' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.headlines).toHaveLength(1);
+    expect(res.body.data.headlines[0].headline).toBe('Real headline');
+  });
+
+  it('rejects malformed month parameter', async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines-month')
+      .set('Cookie', authCookie(admin._id))
+      .send({ month: '2026-4' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 401 for unauthenticated request', async () => {
+    const res = await request(app)
+      .post('/api/admin/ai/news-headlines-month')
+      .send({ month: '2026-04' });
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for non-admin user', async () => {
+    const user = await createUser();
+    const res  = await request(app)
+      .post('/api/admin/ai/news-headlines-month')
+      .set('Cookie', authCookie(user._id))
+      .send({ month: '2026-04' });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns empty headlines when AI returns []', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter('[]'));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/news-headlines-month')
+      .set('Cookie', authCookie(admin._id))
+      .send({ month: '2026-04' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.headlines).toEqual([]);
+    expect(res.body.data.rawCount).toBe(0);
   });
 });
 

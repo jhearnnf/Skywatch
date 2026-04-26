@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
+import { captureEvent } from '../lib/posthog'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import SocialLinks from '../components/SocialLinks'
 import SEO from '../components/SEO'
@@ -72,6 +74,7 @@ function CornerBrackets({ size = 18, color = '#5baaff', opacity = 0.4 }) {
 
 export default function Landing() {
   const { user, API } = useAuth()
+  const { settings } = useAppSettings()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [liveStats, setLiveStats] = useState(null)
 
@@ -134,11 +137,28 @@ export default function Landing() {
             <span className="text-gradient">RAF Knowledge</span>
           </motion.h1>
 
-          <motion.p variants={fadeUp} custom={2} className="text-lg sm:text-xl text-slate-600 mb-10 max-w-xl mx-auto leading-relaxed">
+          <motion.p variants={fadeUp} custom={2} className="text-lg sm:text-xl text-slate-600 mb-6 max-w-xl mx-auto leading-relaxed">
             Not a Wikipedia article. A structured, gamified path through RAF aircraft, operations, doctrine, and more.
           </motion.p>
 
-          <motion.div variants={fadeUp} custom={3} className="flex flex-col sm:flex-row gap-3 justify-center">
+          {settings?.cbatEnabled && (
+            <motion.div variants={fadeUp} custom={3} className="flex justify-center mb-10">
+              <Link
+                to="/cbat"
+                onClick={() => captureEvent('landing_cbat_badge_clicked')}
+                className="group inline-flex items-center gap-2.5 rounded-full pl-1.5 pr-4 py-1.5 border border-amber-500/50 bg-amber-500/[0.08] hover:bg-amber-500/[0.14] hover:border-amber-500/80 transition-colors"
+              >
+                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-amber-500 text-slate-50">
+                  <span className="text-xs leading-none">🎯</span>
+                  PRACTICE
+                </span>
+                <span className="text-sm font-semibold text-slate-800">Here for CBAT practice games?</span>
+                <span className="text-amber-500 text-base leading-none group-hover:translate-x-0.5 transition-transform">→</span>
+              </Link>
+            </motion.div>
+          )}
+
+          <motion.div variants={fadeUp} custom={4} className="flex flex-col sm:flex-row gap-3 justify-center">
             {user ? (
               <Link
                 to="/home"
