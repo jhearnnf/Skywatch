@@ -31,6 +31,28 @@ const UNLOCK_TO_MODE_KEY = Object.fromEntries(
   Object.entries(MODE_TO_UNLOCK_KEY).map(([m, u]) => [u, m])
 )
 
+// Renders the WTA hero icon. When a random aircraft cutout is available we
+// show that with the duotone-blue treatment used by profile badges; otherwise
+// we fall back to the ✈️ emoji so the layout never goes empty.
+function AircraftEmoji({ cutout, sizePx, emojiClass = '', wrapClass = '' }) {
+  if (cutout?.cutoutUrl) {
+    return (
+      <span
+        className={`profile-badge-cutout-wrap profile-badge-cutout-wrap--no-scan shrink-0 ${wrapClass}`.trim()}
+        style={{ width: sizePx, height: sizePx }}
+      >
+        <img
+          src={cutout.cutoutUrl}
+          alt={cutout.title || 'Aircraft'}
+          className="profile-badge-cutout-img"
+          draggable={false}
+        />
+      </span>
+    )
+  }
+  return <span className={emojiClass}>✈️</span>
+}
+
 function PadlockIcon({ unlocked }) {
   return unlocked ? (
     <svg width="13" height="15" viewBox="0 0 13 15" fill="none" aria-hidden="true">
@@ -80,6 +102,37 @@ const GAME_MODES = [
   },
 ]
 
+// Per-game visual identity. Each game gets a distinct accent (left
+// stripe + hover glow + stat-line dot) so the four primary tiles read
+// as four distinct destinations rather than four cards in a row. Full
+// class strings (not template-built) so Tailwind's JIT picks them up.
+const ACCENT = {
+  'quiz': {
+    bar:  'bg-brand-500',
+    dot:  'bg-brand-500',
+    text: 'text-brand-400',
+    glow: 'group-hover:shadow-[0_0_28px_-6px_rgba(91,170,255,0.55)]',
+  },
+  'flashcard': {
+    bar:  'bg-amber-500',
+    dot:  'bg-amber-500',
+    text: 'text-amber-500',
+    glow: 'group-hover:shadow-[0_0_28px_-6px_rgba(245,158,11,0.55)]',
+  },
+  'wheres-that-aircraft': {
+    bar:  'bg-red-500',
+    dot:  'bg-red-500',
+    text: 'text-red-500',
+    glow: 'group-hover:shadow-[0_0_28px_-6px_rgba(239,68,68,0.55)]',
+  },
+  'battle-order': {
+    bar:  'bg-violet-400',
+    dot:  'bg-violet-400',
+    text: 'text-violet-400',
+    glow: 'group-hover:shadow-[0_0_28px_-6px_rgba(167,139,250,0.55)]',
+  },
+}
+
 export default function Play() {
   const { user, API, apiFetch } = useAuth()
   const { settings } = useAppSettings()
@@ -94,6 +147,10 @@ export default function Play() {
   const [showFlashcard,  setShowFlashcard]  = useState(false)
   const [flashcardAvail, setFlashcardAvail] = useState(null)
   const [wtaSpawn,       setWtaSpawn]       = useState(null)
+  // One random aircraft cutout per page visit, used to liven up the WTA card.
+  // Picked once on mount after the public pool fetch settles; re-rolls on the
+  // next visit (fresh mount). null falls back to the ✈️ emoji.
+  const [randomAircraft, setRandomAircraft] = useState(null)
 
   // Per-section ready flags — sections stay hidden until their fetch settles
   // so the user never sees a half-loaded "Start Drill" button or a misleading
@@ -283,12 +340,61 @@ export default function Play() {
       })
       .catch(() => {})
       .finally(() => setWtaReady(true))
+    // Public endpoint — no auth, runs for guests too. Pick once after fetch.
+    apiFetch(`${API}/api/briefs/aircraft-cutouts`)
+      .then(r => r.json())
+      .then(data => {
+        const pool = data?.data?.cutouts ?? []
+        if (pool.length === 0) return
+        setRandomAircraft(pool[Math.floor(Math.random() * pool.length)])
+      })
+      .catch(() => {})
     // Depend on user._id rather than the user object — setUser produces a new
     // reference on every state update (unlock applied, airstars awarded, etc.)
     // and rerunning the fetch chain resets the *Ready flags, which unmounts
     // and remounts the sections so the swipe-in cascade plays a second time.
     // _id only flips on login/logout, which is when we actually want to refetch.
   }, [user?._id, API]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Per-tile stat line ─────────────────────────────────────────────────
+  // Concrete, current-state copy ("3 quizzes ready", "Mission ready",
+  // "5 more briefs to unlock") drives returns better than generic
+  // taglines. Returns null when there's nothing meaningful to say —
+  // guests, or logged-in users whose fetches haven't settled.
+  function getStat(modeKey) {
+    if (!user) return null
+    switch (modeKey) {
+      case 'quiz': {
+        if (!quizReady) return null
+        const ready = quizBriefs.filter(b => b.quizState === 'active').length
+        if (ready > 0) return `${ready} quiz${ready === 1 ? '' : 'zes'} ready`
+        if (quizBriefs.length > 0 && quizBriefs.every(b => b.quizState === 'passed')) return 'All caught up'
+        return 'Read briefs to unlock'
+      }
+      case 'flashcard': {
+        if (flashcardAvail === null) return null
+        if (flashcardAvail < 5) {
+          const need = 5 - flashcardAvail
+          return `${need} more brief${need === 1 ? '' : 's'} to unlock`
+        }
+        return `${flashcardAvail} flashcard${flashcardAvail === 1 ? '' : 's'} ready`
+      }
+      case 'wheres-that-aircraft': {
+        if (!wtaSpawn) return null
+        if (!wtaSpawn.prereqsMet) return 'Read aircrafts & bases to unlock'
+        if ((wtaSpawn.remaining ?? 0) === 0) return 'Mission ready'
+        return `${wtaSpawn.remaining} read${wtaSpawn.remaining === 1 ? '' : 's'} to next mission`
+      }
+      case 'battle-order': {
+        if (!booReady) return null
+        const ready = booBriefs.filter(b => BOO_ACCESSIBLE_STATES.includes(b.booState)).length
+        if (ready > 0) return `${ready} game${ready === 1 ? '' : 's'} ready`
+        if (booBriefs.length > 0 && booBriefs.every(b => b.booState === 'completed')) return 'All caught up'
+        return 'Read briefs to unlock'
+      }
+      default: return null
+    }
+  }
 
   // ── Card / scroll ─────────────────────────────────────────────────────────
 
@@ -346,17 +452,44 @@ export default function Play() {
       </AnimatePresence>
 
       <div className="play-page">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-extrabold text-slate-900">Play</h1>
-          {settings?.cbatEnabled && (
-            <Link to="/cbat" className="text-[10px] font-semibold tracking-wide uppercase text-slate-500 border border-slate-700 rounded px-1.5 py-0.5 hover:text-brand-400 hover:border-brand-500 transition-colors">Play CBAT</Link>
-          )}
-        </div>
+        <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Play</h1>
         <p className="text-sm text-slate-500 mb-6">Test your aviation knowledge with training games.</p>
 
+        {/* CBAT entry. Sits at the top of the page (below the header) on
+            every screen size so CBAT is clearly framed as a separate
+            aptitude-practice offer that lives alongside — not below —
+            the four main game modes. On desktop it spans the full grid
+            width as a single row above the 2-column tile layout. Amber/
+            gold treatment (matching the Flashcard Drill accent) sets it
+            apart from the blue main-suite rows below. */}
+        {settings?.cbatEnabled && (
+          <div className="mb-6">
+            <Link
+              to="/cbat"
+              className="relative flex items-center gap-3 rounded-2xl px-4 py-3 border-2 border-amber-500/60 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/15 hover:border-amber-500 transition-colors group"
+            >
+              <span className="absolute -top-2 left-3 text-[9px] font-extrabold tracking-wider px-1.5 py-0.5 rounded bg-amber-500 text-slate-900">
+                PRACTICE
+              </span>
+              <span className="text-2xl shrink-0">🎯</span>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-slate-800 text-sm leading-tight">CBAT Aptitude Practice</p>
+                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Real pilot-aptitude test drills</p>
+              </div>
+              <span className="text-amber-500 group-hover:translate-x-0.5 transition-transform shrink-0 text-lg">→</span>
+            </Link>
+          </div>
+        )}
+
         {/* ── Game mode grid ─────────────────────────────────────────── */}
-        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8${isHighlightingGrid ? ' tutorial-grid-highlight' : ''}`}>
-          {GAME_MODES.map((mode, i) => (
+        {/* Mobile (≤600px): single-column stack of 4 row buttons sized
+            to fill the remaining viewport (~88svh after header + CBAT
+            banner). The next launcher section peeks in as a scroll cue. */}
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6 max-[600px]:min-h-[calc(100svh-280px)]${isHighlightingGrid ? ' tutorial-grid-highlight' : ''}`}>
+          {GAME_MODES.map((mode, i) => {
+            const accent = ACCENT[mode.key]
+            const stat   = getStat(mode.key)
+            return (
             <motion.div
               key={mode.key}
               initial={{ opacity: 0, y: 14 }}
@@ -370,19 +503,32 @@ export default function Play() {
                 tabIndex={0}
                 onClick={() => handleCardClick(mode.key)}
                 onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && handleCardClick(mode.key)}
-                className={`relative flex items-start gap-4 bg-surface rounded-2xl p-4 border transition-all card-shadow cursor-pointer h-full
+                className={`relative flex items-start gap-4 bg-surface rounded-2xl p-4 pl-5 border transition-all card-shadow cursor-pointer h-full overflow-hidden
                   ${mode.available
-                    ? 'border-slate-200 hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5'
+                    ? `border-slate-200 hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5 ${accent.glow}`
                     : 'border-slate-100 opacity-60'
                   }${flashingCards.has(MODE_TO_UNLOCK_KEY[mode.key]) ? ' game-card--flash' : ''}`}
               >
+                {/* Per-game accent stripe — full-height bar on the left
+                    edge that gives each tile a distinct identity. */}
+                <span className={`absolute left-0 top-0 bottom-0 w-1 ${accent.bar}`} aria-hidden="true" />
+
                 {/* Padlock — top-right corner */}
                 <span className="absolute top-3 right-3 opacity-70">
                   <PadlockIcon unlocked={isCardUnlocked(mode.key)} />
                 </span>
 
-                <span className="text-3xl shrink-0 group-hover:scale-110 transition-transform">{mode.emoji}</span>
-                <div className="min-w-0 pr-4">
+                {mode.key === 'wheres-that-aircraft' ? (
+                  <AircraftEmoji
+                    cutout={randomAircraft}
+                    sizePx={36}
+                    emojiClass="text-3xl shrink-0 group-hover:scale-110 transition-transform"
+                    wrapClass="group-hover:scale-110 transition-transform"
+                  />
+                ) : (
+                  <span className="text-3xl shrink-0 group-hover:scale-110 transition-transform">{mode.emoji}</span>
+                )}
+                <div className="min-w-0 pr-4 flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
                     <p className="font-bold text-slate-800">{mode.title}</p>
                     {mode.badge && (
@@ -397,10 +543,16 @@ export default function Play() {
                     )}
                   </div>
                   <p className="text-xs text-slate-400">{mode.desc}</p>
+                  {stat && (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <span className={`w-1.5 h-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
+                      <span className={`intel-mono ${accent.text}`}>{stat}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>
-          ))}
+          )})}
         </div>
 
         {/* ── Launcher sections ──────────────────────────────────────── */}
@@ -409,7 +561,7 @@ export default function Play() {
         <div className="space-y-4 overflow-x-clip">
 
           {/* Intel Quiz */}
-          <div ref={quizRef}>
+          <div ref={quizRef} className="launcher-dim">
           {allSectionsReady && (
           <motion.div {...swipeProps(0)} className={sectionClass('quiz')}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -545,7 +697,7 @@ export default function Play() {
           </div>
 
           {/* Flashcard Recall */}
-          <div ref={flashcardRef}>
+          <div ref={flashcardRef} className="launcher-dim">
           {allSectionsReady && (
           <motion.div {...swipeProps(1)} className={sectionClass('flashcard')}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -608,33 +760,47 @@ export default function Play() {
           </div>
 
           {/* Where's that Aircraft? */}
-          <div ref={aircraftRef}>
+          <div ref={aircraftRef} className="launcher-dim">
           {allSectionsReady && (
           <motion.div {...swipeProps(2)} className={sectionClass('wheres-that-aircraft')}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-lg">✈️</span>
+                <AircraftEmoji
+                  cutout={randomAircraft}
+                  sizePx={22}
+                  emojiClass="text-lg"
+                />
                 <h2 className="font-bold text-slate-800">Where's that Aircraft?</h2>
               </div>
             </div>
             <div className="p-5">
-              <Link to="/learn-priority" className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group mb-3">
-                <span className="text-xl shrink-0">✈️</span>
-                <p className="text-sm font-semibold text-slate-700 leading-snug">
-                  Learn about aircrafts for these random missions to appear
-                </p>
-                <span className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto shrink-0">→</span>
-              </Link>
-              <p className="text-xs text-slate-400 px-1">
-                Bases knowledge is also required — missions won't appear without it.
-              </p>
-              {!user && (
-                <Link
-                  to="/login"
-                  className="inline-flex w-full justify-center px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors mt-4"
-                >
-                  Sign In to Play
-                </Link>
+              {!user ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-slate-500 mb-4">Sign in to play Where's that Aircraft? and earn Airstars.</p>
+                  <Link
+                    to="/login"
+                    className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+                  >
+                    Sign In
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <Link to="/learn-priority" className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group mb-3">
+                    <AircraftEmoji
+                      cutout={randomAircraft}
+                      sizePx={26}
+                      emojiClass="text-xl shrink-0"
+                    />
+                    <p className="text-sm font-semibold text-slate-700 leading-snug">
+                      Learn about aircrafts for these random missions to appear
+                    </p>
+                    <span className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto shrink-0">→</span>
+                  </Link>
+                  <p className="text-xs text-slate-400 px-1">
+                    Bases knowledge is also required — missions won't appear without it.
+                  </p>
+                </>
               )}
             </div>
           </motion.div>
@@ -642,7 +808,7 @@ export default function Play() {
           </div>
 
           {/* Battle of Order */}
-          <div ref={battleRef}>
+          <div ref={battleRef} className="launcher-dim">
           {allSectionsReady && (
           <motion.div {...swipeProps(3)} className={sectionClass('battle-order')}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -804,7 +970,7 @@ export default function Play() {
                           className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all group
                             ${played
                               ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
-                              : 'bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50'
+                              : 'bg-slate-50 border-slate-200 hover:border-violet-400 hover:bg-violet-500/10'
                             }`}
                         >
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
@@ -820,7 +986,7 @@ export default function Play() {
                           </div>
                           {played
                             ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Played</span>
-                            : <span className="text-[10px] font-bold bg-brand-100 text-brand-600 px-2 py-0.5 rounded-full shrink-0">Play now</span>
+                            : <span className="text-[10px] font-bold bg-violet-500/15 text-violet-300 px-2 py-0.5 rounded-full shrink-0">Play now</span>
                           }
                         </Link>
                       </motion.div>

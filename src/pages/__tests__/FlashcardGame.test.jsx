@@ -81,9 +81,12 @@ function setupAuth() {
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────
+// Default to real timers — fake timers + waitFor's polling interleave badly
+// under parallel CPU pressure and produce flaky timeouts on the typeahead.
+// The single test that needs fake timers (the 30s card-timeout case) opts in
+// locally below.
 
 beforeEach(() => {
-  vi.useFakeTimers({ shouldAdvanceTime: true })
   setupFetch()
   setupAuth()
 })
@@ -303,6 +306,11 @@ describe('FlashcardGameModal — sounds', () => {
   })
 
   it('plays flashcard_incorrect exactly once on timeout', async () => {
+    // Fake timers must be installed BEFORE render, otherwise the modal's
+    // setInterval is scheduled in real time and advanceTimersByTime can't
+    // fire it. shouldAdvanceTime keeps wall clock ticking so waitFor's
+    // polling still works.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     render(<FlashcardGameModal onClose={vi.fn()} />)
     await waitFor(() => screen.getByTestId('flashcard-start-btn'))
     fireEvent.click(screen.getByTestId('flashcard-start-btn'))
@@ -311,5 +319,5 @@ describe('FlashcardGameModal — sounds', () => {
     act(() => { vi.advanceTimersByTime(31000) })
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('flashcard_incorrect'))
     expect(playSound).toHaveBeenCalledTimes(1)
-  })
+  }, 15000)
 })

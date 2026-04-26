@@ -104,13 +104,13 @@ function RouletteScreen({ options, briefTitle, difficulty, onDone }) {
           transition={{ duration: 0.06 }}
           className={`rounded-2xl border-2 p-5 transition-all
             ${phase === 'done'
-              ? 'border-brand-500 bg-brand-50 shadow-lg shadow-brand-100'
+              ? 'border-violet-500 bg-violet-500/10 shadow-lg shadow-violet-500/20'
               : 'border-slate-200 bg-slate-50'
             }`}
         >
           <div className="text-4xl mb-2">{meta.emoji}</div>
           <p className={`font-bold text-sm leading-snug
-            ${phase === 'done' ? 'text-brand-800' : 'text-slate-700'}`}
+            ${phase === 'done' ? 'text-violet-300' : 'text-slate-700'}`}
           >
             {meta.label}
           </p>
@@ -126,7 +126,7 @@ function RouletteScreen({ options, briefTitle, difficulty, onDone }) {
             <div
               key={i}
               className={`h-1.5 rounded-full transition-all duration-100
-                ${i === displayIdx ? 'bg-brand-500 w-4' : 'bg-slate-200 w-1.5'}`}
+                ${i === displayIdx ? 'bg-violet-500 w-4' : 'bg-slate-200 w-1.5'}`}
             />
           ))}
         </div>
@@ -267,10 +267,10 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
               data-testid={`choice-item-${i}`}
               className={`flex items-center gap-3 p-3 rounded-xl border-2 transition-all select-none
                 ${dragIdx === i
-                  ? 'opacity-40 border-brand-300 bg-brand-50 cursor-grabbing'
+                  ? 'opacity-40 border-violet-400 bg-violet-500/15 cursor-grabbing'
                   : overIdx === i
-                  ? 'border-brand-400 bg-brand-50 scale-[1.01]'
-                  : 'border-slate-200 bg-slate-50 hover:border-brand-400 hover:bg-brand-50 cursor-grab'
+                  ? 'border-violet-400 bg-violet-500/20 scale-[1.01]'
+                  : 'border-slate-200 bg-slate-50 hover:border-violet-400 hover:bg-violet-500/15 cursor-grab'
                 }`}
             >
               <span className={`w-6 h-6 rounded-full text-xs font-extrabold flex items-center justify-center shrink-0 ${badgeColor(i)}`}>
@@ -312,10 +312,10 @@ function GameScreen({ orderType, choices: initialChoices, difficulty, onSubmit, 
         whileTap={!submitting ? { scale: 0.97 } : {}}
         onClick={handleSubmit}
         disabled={submitting}
-        className={`w-full py-4 font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200
+        className={`w-full py-4 font-bold rounded-2xl text-base transition-colors shadow-lg shadow-violet-900/40
           ${submitting
-            ? 'bg-brand-500 text-white/80 cursor-wait'
-            : 'bg-brand-600 hover:bg-brand-700 text-white'
+            ? 'bg-violet-500 text-white/80 cursor-wait'
+            : 'bg-violet-600 hover:bg-violet-500 text-white'
           }`}
       >
         {submitting ? (
@@ -512,7 +512,7 @@ function ResultsScreen({ won, airstarsEarned, alreadyCompleted, correctReveal, u
       <div className="space-y-3">
         <button
           onClick={onRetry}
-          className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors"
+          className="w-full py-4 bg-violet-600 hover:bg-violet-500 text-white font-bold rounded-2xl text-base transition-colors"
         >
           🔄 Try Again
         </button>

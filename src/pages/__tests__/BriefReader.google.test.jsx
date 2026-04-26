@@ -122,6 +122,10 @@ describe('BriefReader CompletionScreen — Google sign-in awards coins', () => {
     const swipeBtn = await waitFor(() => screen.getByTestId('swipe-left'))
     fireEvent.click(swipeBtn)
     await waitFor(() => screen.getByText('Brief Complete'))
+    // Google init runs in an effect after the completion screen mounts; under
+    // parallel CPU pressure it can lag behind the "Brief Complete" text. Wait
+    // for the callback to be wired up before any test relies on invoking it.
+    await waitFor(() => expect(googleCallback).not.toBeNull())
   }
 
   it('calls /complete and awardAirstars after Google sign-in on completion screen', async () => {

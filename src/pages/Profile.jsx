@@ -10,6 +10,7 @@ import { displayTier, isFreeUser } from '../utils/subscription'
 import { getLevelInfo } from '../utils/levelUtils'
 import { useAppSettings } from '../context/AppSettingsContext'
 import ProfileBadge from '../components/ProfileBadge'
+import SocialLinks from '../components/SocialLinks'
 import SEO from '../components/SEO'
 
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
@@ -242,6 +243,7 @@ export default function Profile() {
             <StatCard loading={user && statsLoading} label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />
             <StatCard loading={user && statsLoading} label="Airstars"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/airstar-history') : undefined} />
           </div>
+          <SocialLinks source="profile" className="mt-6 pt-4 border-t border-slate-200" />
         </motion.div>
       )}
 

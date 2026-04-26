@@ -168,6 +168,34 @@ router.get('/category-counts', async (req, res) => {
   }
 });
 
+// GET /api/briefs/aircraft-cutouts — every published Aircraft brief that has
+// an extracted Media cutout. Public (no auth) so guests get the random
+// cutout treatment on the Play page too. Frontend picks one at random per
+// page visit; the response is deliberately small (briefId + title + URL).
+router.get('/aircraft-cutouts', async (_req, res) => {
+  try {
+    const briefs = await IntelligenceBrief.find({
+      category: 'Aircrafts',
+      status:   'published',
+    })
+      .select('title media')
+      .populate('media')
+      .lean();
+
+    const cutouts = briefs
+      .map(b => {
+        const m = (b.media || []).find(x => x?.cutoutUrl);
+        if (!m) return null;
+        return { briefId: b._id, title: b.title, cutoutUrl: m.cutoutUrl };
+      })
+      .filter(Boolean);
+
+    res.json({ status: 'success', data: { cutouts } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/briefs/category-stats — total + done (read) count per category for the current user
 router.get('/category-stats', optionalAuth, async (req, res) => {
   try {

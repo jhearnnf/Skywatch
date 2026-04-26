@@ -10,6 +10,8 @@ const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createBrief, createSettings, authCookie } = require('../helpers/factories');
+const Media   = require('../../models/Media');
+const IntelligenceBrief = require('../../models/IntelligenceBrief');
 
 beforeAll(async () => {
   await db.connect();
@@ -449,6 +451,63 @@ describe('GET /api/briefs/public-stats', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.totalBriefs).toBe(2);
     expect(res.body.data.totalQuestions).toBe(3 + 2 + 1 + 4);
+  });
+});
+
+// ── GET /api/briefs/aircraft-cutouts ───────────────────────────────────────
+describe('GET /api/briefs/aircraft-cutouts', () => {
+  async function attachMedia(brief, mediaOverrides) {
+    const media = await Media.create({
+      mediaType: 'picture',
+      mediaUrl:  'https://example.com/img.jpg',
+      ...mediaOverrides,
+    });
+    await IntelligenceBrief.findByIdAndUpdate(brief._id, { $push: { media: media._id } });
+    return media;
+  }
+
+  it('is a public endpoint — no cookie required', async () => {
+    const res = await request(app).get('/api/briefs/aircraft-cutouts');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data.cutouts)).toBe(true);
+  });
+
+  it('returns Aircraft briefs that have a Media with a cutoutUrl', async () => {
+    const brief = await createBrief({ title: 'Typhoon', category: 'Aircrafts' });
+    await attachMedia(brief, { cutoutUrl: 'https://example.com/typhoon-cutout.png' });
+
+    const res = await request(app).get('/api/briefs/aircraft-cutouts');
+    expect(res.status).toBe(200);
+    expect(res.body.data.cutouts).toHaveLength(1);
+    expect(res.body.data.cutouts[0]).toMatchObject({
+      title:     'Typhoon',
+      cutoutUrl: 'https://example.com/typhoon-cutout.png',
+    });
+    expect(res.body.data.cutouts[0].briefId).toBeDefined();
+  });
+
+  it('excludes Aircraft briefs whose Media has no cutoutUrl', async () => {
+    const brief = await createBrief({ title: 'No-Cutout Aircraft', category: 'Aircrafts' });
+    await attachMedia(brief, { cutoutUrl: null });
+
+    const res = await request(app).get('/api/briefs/aircraft-cutouts');
+    expect(res.body.data.cutouts).toHaveLength(0);
+  });
+
+  it('excludes non-Aircraft briefs even if they have a cutoutUrl', async () => {
+    const brief = await createBrief({ title: 'Lossiemouth', category: 'Bases' });
+    await attachMedia(brief, { cutoutUrl: 'https://example.com/should-not-show.png' });
+
+    const res = await request(app).get('/api/briefs/aircraft-cutouts');
+    expect(res.body.data.cutouts).toHaveLength(0);
+  });
+
+  it('excludes unpublished Aircraft briefs even if they have a cutoutUrl', async () => {
+    const brief = await createBrief({ title: 'Stub Aircraft', category: 'Aircrafts', status: 'stub' });
+    await attachMedia(brief, { cutoutUrl: 'https://example.com/stub-cutout.png' });
+
+    const res = await request(app).get('/api/briefs/aircraft-cutouts');
+    expect(res.body.data.cutouts).toHaveLength(0);
   });
 });
 

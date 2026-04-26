@@ -189,14 +189,19 @@ describe('Play page — launcher sections', () => {
     expect(screen.getByText(/sign in to run flashcard drills/i)).toBeDefined()
   })
 
-  it("Where's that Aircraft? section prompts user to learn about aircrafts", () => {
+  it("Where's that Aircraft? section shows sign-in prompt for guests", () => {
     renderAsGuest()
-    expect(screen.getByText(/learn about aircrafts for these random missions to appear/i)).toBeDefined()
+    expect(screen.getByText(/sign in to play where's that aircraft/i)).toBeDefined()
   })
 
-  it("Where's that Aircraft? section shows bases hint", () => {
-    renderAsGuest()
-    expect(screen.getByText(/bases knowledge is also required/i)).toBeDefined()
+  it("Where's that Aircraft? section prompts logged-in users to learn about aircrafts", async () => {
+    renderAsUser({})
+    await waitFor(() => screen.getByText(/learn about aircrafts for these random missions to appear/i))
+  })
+
+  it("Where's that Aircraft? section shows bases hint for logged-in users", async () => {
+    renderAsUser({})
+    await waitFor(() => screen.getByText(/bases knowledge is also required/i))
   })
 
   it('Battle of Order section shows sign-in prompt for guests', () => {
@@ -506,7 +511,8 @@ describe('Play page — Battle of Order states', () => {
     const booBriefs = [{ _id: 'b1', title: 'Future Brief', category: 'Training', booState: 'needs-training-reads' }]
     renderAsUser({ booBriefs })
     await waitFor(() => screen.getByText('Future Brief'))
-    expect(screen.getByText(/read more briefs/i)).toBeDefined()
+    // ≥1 match: the launcher section's locked CTA, and (for logged-in users) the entry tile's stat line both surface this copy.
+    expect(screen.getAllByText(/read more briefs/i).length).toBeGreaterThan(0)
     expect(screen.queryByText('Play now')).toBeNull()
     const booLinks = screen.queryAllByRole('link').filter(l => l.getAttribute('href') === '/battle-of-order/b1')
     expect(booLinks.length).toBe(0)

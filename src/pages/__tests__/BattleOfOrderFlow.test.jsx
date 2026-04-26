@@ -109,16 +109,23 @@ function setupFetch({ options = OPTIONS_MULTI, won = true, airstarsEarned = 8, a
 
 /**
  * Render and advance through the roulette animation to the game screen.
- * Requires fake timers to be active before calling.
+ *
+ * Fake timers are installed locally so callers don't have to remember to set
+ * them up — and switched back to real timers as soon as the roulette is past.
+ * Mixing fake timers with waitFor's polling under parallel CPU pressure was
+ * the main source of flakiness; keeping fake timers' window as narrow as
+ * possible avoids it.
  */
 async function renderAndReachGame(fetchMock) {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
   global.fetch = fetchMock
   render(<BattleOfOrderFlow />)
   // Wait for the roulette screen to appear
   await waitFor(() => screen.getByText('Battle of Order'))
   // Advance past all roulette ticks + 900ms post-spin pause
   await act(async () => { vi.advanceTimersByTime(20000) })
-  // Wait for game screen
+  vi.useRealTimers()
+  // Wait for game screen on real timers — deterministic
   await waitFor(() => screen.getByText('Submit Order →'))
 }
 
@@ -134,7 +141,6 @@ describe('BattleOfOrderFlow — roulette / selection screen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
-    vi.useFakeTimers({ shouldAdvanceTime: true })
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -202,22 +208,26 @@ describe('BattleOfOrderFlow — roulette / selection screen', () => {
   })
 
   it('advances to game screen after roulette spin completes (multi-option)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     global.fetch = setupFetch({ options: OPTIONS_MULTI })
     render(<BattleOfOrderFlow />)
 
     await waitFor(() => screen.getByText('Battle of Order'))
     await act(async () => { vi.advanceTimersByTime(20000) })
+    vi.useRealTimers()
 
     await waitFor(() => screen.getByText('Submit Order →'))
     expect(screen.queryByText('Selecting challenge')).toBeNull()
   })
 
   it('advances to game screen after roulette spin completes (single-option)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     global.fetch = setupFetch({ options: OPTIONS_SINGLE })
     render(<BattleOfOrderFlow />)
 
     await waitFor(() => screen.getByText('Battle of Order'))
     await act(async () => { vi.advanceTimersByTime(20000) })
+    vi.useRealTimers()
 
     await waitFor(() => screen.getByText('Submit Order →'))
   })
@@ -227,7 +237,6 @@ describe('BattleOfOrderFlow — game screen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
-    vi.useFakeTimers({ shouldAdvanceTime: true })
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -296,7 +305,6 @@ describe('BattleOfOrderFlow — results screen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
-    vi.useFakeTimers({ shouldAdvanceTime: true })
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -375,7 +383,9 @@ describe('BattleOfOrderFlow — results screen', () => {
 
     // Advance through the second roulette spin
     await waitFor(() => screen.getByText('Battle of Order'))
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     await act(async () => { vi.advanceTimersByTime(20000) })
+    vi.useRealTimers()
     await waitFor(() => screen.getByText('Submit Order →'))
 
     const calls = fetchMock.mock.calls.map(c => c[0])
@@ -443,7 +453,6 @@ describe('BattleOfOrderFlow — Training order types', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
-    vi.useFakeTimers({ shouldAdvanceTime: true })
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -451,21 +460,25 @@ describe('BattleOfOrderFlow — Training order types', () => {
   })
 
   it('shows roulette and advances to game screen when both Training order types are available', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     global.fetch = setupTrainingFetch(TRAINING_OPTIONS_BOTH, TRAINING_GENERATE_DURATION)
     render(<BattleOfOrderFlow />)
 
     await waitFor(() => screen.getByText('Battle of Order'))
     await act(async () => { vi.advanceTimersByTime(20000) })
+    vi.useRealTimers()
     // Roulette picks one of the two options and proceeds to game screen
     await waitFor(() => screen.getByText('Submit Order →'))
   })
 
   it('advances to game screen for training_duration orderType', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     global.fetch = setupTrainingFetch(TRAINING_OPTIONS_DURATION_ONLY, TRAINING_GENERATE_DURATION)
     render(<BattleOfOrderFlow />)
 
     await waitFor(() => screen.getByText('Battle of Order'))
     await act(async () => { vi.advanceTimersByTime(20000) })
+    vi.useRealTimers()
 
     await waitFor(() => screen.getByText('Submit Order →'))
   })

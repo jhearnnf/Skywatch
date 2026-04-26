@@ -1353,7 +1353,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
               <button
                 onClick={onBattleOrder}
                 disabled={syncingReward}
-                className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white disabled:hover:bg-transparent disabled:hover:text-brand-600 disabled:cursor-wait disabled:opacity-60 font-bold rounded-2xl text-base transition-colors"
+                className="w-full py-4 border-2 border-violet-500 text-violet-300 hover:bg-violet-500 hover:text-white disabled:hover:bg-transparent disabled:hover:text-violet-300 disabled:cursor-wait disabled:opacity-60 font-bold rounded-2xl text-base transition-colors"
               >
                 🗺️ Battle of Order — Earn Airstars
               </button>
@@ -1362,7 +1362,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
               <button
                 onClick={onBattleOrder}
                 disabled={syncingReward}
-                className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white disabled:hover:bg-transparent disabled:hover:text-brand-600 disabled:cursor-wait disabled:opacity-60 font-bold rounded-2xl text-base transition-colors"
+                className="w-full py-4 border-2 border-violet-500 text-violet-300 hover:bg-violet-500 hover:text-white disabled:hover:bg-transparent disabled:hover:text-violet-300 disabled:cursor-wait disabled:opacity-60 font-bold rounded-2xl text-base transition-colors"
               >
                 🗺️ Replay Battle of Order
               </button>
@@ -1573,16 +1573,16 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, qu
           ) : booState === 'available' ? (
             <button
               onClick={() => navigate(`/battle-of-order/${brief._id}`)}
-              className="w-full text-left flex items-center gap-4 p-4 rounded-2xl border bg-surface border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group card-shadow hover:card-shadow-hover cursor-pointer"
+              className="w-full text-left flex items-center gap-4 p-4 rounded-2xl border bg-surface border-slate-200 hover:border-violet-400 hover:bg-violet-500/10 transition-all group card-shadow hover:card-shadow-hover cursor-pointer"
             >
-              <div className="w-11 h-11 rounded-xl bg-brand-100 flex items-center justify-center shrink-0 text-xl">
+              <div className="w-11 h-11 rounded-xl bg-violet-500/15 flex items-center justify-center shrink-0 text-xl">
                 🗺️
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-sm text-slate-800">Battle of Order</p>
                 <p className="text-xs text-slate-400 mt-0.5">Rank and order {brief.category.toLowerCase()} by performance data</p>
               </div>
-              <span className="text-sm font-bold text-brand-600 group-hover:text-brand-700 shrink-0">Play →</span>
+              <span className="text-sm font-bold text-violet-300 group-hover:text-violet-200 shrink-0">Play →</span>
             </button>
           ) : (
             <div className="flex items-center gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50 opacity-60">

@@ -93,7 +93,10 @@ describe('BriefReader — immersive chrome', () => {
       json: async () => ({ data: { brief: TRAINING_BRIEF, readRecord: FRESH_READ_RECORD, ammoMax: 3 } }),
     })
     render(<BriefReader />)
-    await waitFor(() => screen.getByText('RAF Typhoon'))
-    expect(enterImmersive).toHaveBeenCalled()
+    // Wait for enterImmersive directly — under parallel load, the title can
+    // render before the effect that calls enterImmersive has flushed, so
+    // asserting on the effect's signal is more reliable than asserting on
+    // the title and assuming the effect has already run.
+    await waitFor(() => expect(enterImmersive).toHaveBeenCalled())
   })
 })

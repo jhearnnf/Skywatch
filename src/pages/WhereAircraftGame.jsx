@@ -56,7 +56,7 @@ function Round1({ data, onCorrect, onWrong }) {
 
   return (
     <div>
-      <p className="text-xs font-bold tracking-[0.2em] text-brand-600 uppercase mb-1">Round 1 of 2</p>
+      <p className="text-xs font-bold tracking-[0.2em] text-red-500 uppercase mb-1">Round 1 of 2</p>
       <h2 className="text-xl font-extrabold text-slate-900 mb-1">Identify the Aircraft</h2>
       <p className="text-sm text-slate-500 mb-5">Select the correct aircraft name from the options below.</p>
 
@@ -143,9 +143,9 @@ function Round1Complete({ aircraftTitle, round1Coins, correctBaseCount, onContin
         </div>
       )}
 
-      <div className="bg-brand-50 border border-brand-200 rounded-2xl p-4 mb-8 text-left max-w-xs mx-auto">
-        <p className="text-sm font-bold text-brand-800 mb-1">🗺️ Round 2 — Find the Base</p>
-        <p className="text-xs text-brand-700 leading-relaxed">
+      <div className="bg-red-500/10 border border-red-500/40 rounded-2xl p-4 mb-8 text-left max-w-xs mx-auto">
+        <p className="text-sm font-bold text-red-400 mb-1">🗺️ Round 2 — Find the Base</p>
+        <p className="text-xs text-slate-300 leading-relaxed">
           Now locate where this aircraft is based. Select its RAF home base{correctBaseCount > 1 ? 's' : ''} on the map to complete the mission.
         </p>
       </div>
@@ -231,12 +231,12 @@ function Round2({ data, aircraftTitle, onSubmit }) {
 
   return (
     <div>
-      <p className="text-xs font-bold tracking-[0.2em] text-brand-600 uppercase mb-1">Round 2 of 2</p>
+      <p className="text-xs font-bold tracking-[0.2em] text-red-500 uppercase mb-1">Round 2 of 2</p>
       <h2 className="text-xl font-extrabold text-slate-900 mb-1">Find the Home Base</h2>
       <p className="text-sm text-slate-500 mb-4">
         Select the RAF base(s) where <span className="font-semibold text-slate-700">{aircraftTitle}</span> is based.
         {data.correctBaseCount > 1 && (
-          <span className="text-brand-600 font-semibold"> ({data.correctBaseCount} bases)</span>
+          <span className="text-red-500 font-semibold"> ({data.correctBaseCount} bases)</span>
         )}
       </p>
 
@@ -271,12 +271,12 @@ function Round2({ data, aircraftTitle, onSubmit }) {
       <button
         onClick={handleSubmit}
         disabled={submitted || selected.size === 0}
-        className={`w-full py-4 font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200
+        className={`w-full py-4 font-bold rounded-2xl text-base transition-colors shadow-lg shadow-red-900/40
           ${submitted
-            ? 'bg-brand-500 text-white/80 cursor-wait'
+            ? 'bg-red-500 text-white/80 cursor-wait'
             : selected.size === 0
             ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
-            : 'bg-brand-600 hover:bg-brand-700 text-white'
+            : 'bg-red-600 hover:bg-red-500 text-white'
           }`}
       >
         {submitted ? (
@@ -701,7 +701,7 @@ export default function WhereAircraftGame() {
           </button>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-brand-100 flex items-center justify-center text-base">✈️</div>
+              <div className="w-8 h-8 rounded-xl bg-red-100 flex items-center justify-center text-base">✈️</div>
               <span className="text-sm font-extrabold text-slate-900 hidden sm:block">Where's That Aircraft?</span>
             </div>
           </div>
@@ -718,7 +718,7 @@ export default function WhereAircraftGame() {
             ← Back
           </button>
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-2xl bg-brand-100 flex items-center justify-center text-xl">✈️</div>
+            <div className="w-10 h-10 rounded-2xl bg-red-100 flex items-center justify-center text-xl">✈️</div>
             <div>
               <h1 className="text-xl font-extrabold text-slate-900">Where's That Aircraft?</h1>
               <p className="text-xs text-slate-400">Two-round identification mission</p>

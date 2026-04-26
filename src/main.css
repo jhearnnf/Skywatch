@@ -306,6 +306,26 @@ body.play-mode::before {
 
 .play-page { /* no background needed — glow lives on body now */ }
 
+/* Mobile launcher-section dimming: when a section is below the fold the
+   wrapper renders dim, then brightens to full opacity as it scrolls into
+   view. Scroll-driven CSS animation (no JS, no scroll listener). Wrapped
+   in @supports so browsers without scroll-timeline (older Firefox) just
+   see full brightness — no half-broken state. Outer wrapper only, so the
+   inner framer-motion entry slide-in still plays normally on top. */
+@supports (animation-timeline: view()) {
+  @media (max-width: 600px) {
+    .launcher-dim {
+      animation: launcher-brighten linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 100%;
+    }
+    @keyframes launcher-brighten {
+      from { opacity: 0.2; }
+      to   { opacity: 1; }
+    }
+  }
+}
+
 /* Tutorial highlight: lifts the game-mode grid above the backdrop + ambient glow */
 .tutorial-grid-highlight {
   position: relative;
@@ -698,6 +718,11 @@ body.play-mode .card-shadow {
     rgba(91, 170, 255, 0.09) 0 1px,
     transparent 1px 3px
   );
+}
+/* Used by the WTA hero cutout, where there's no surrounding badge container
+   to frame the scanline grid — without a border it reads as visual noise. */
+.profile-badge-cutout-wrap--no-scan::after {
+  display: none;
 }
 
 /* ── Radar-sweep placeholder — used for "pending" aircraft badge slots ──────

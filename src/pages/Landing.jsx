@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
+import SocialLinks from '../components/SocialLinks'
 import SEO from '../components/SEO'
 
 const FEATURES = [
@@ -320,6 +321,7 @@ export default function Landing() {
       {/* ── Footer ────────────────────────────────────────── */}
       <footer className="py-8 px-5 border-t border-slate-200 text-center">
         <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR THOSE WHO TAKE THE RAF SERIOUSLY</p>
+        <SocialLinks source="landing" className="mt-4" />
       </footer>
 
       {/* ── Onboarding overlay ────────────────────────────── */}
