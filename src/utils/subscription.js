@@ -68,8 +68,9 @@ export function buildCumulativeThresholds(levels) {
   return result
 }
 
-export function getUserLevel(totalAirstars, levelThresholds) {
-  const coins = totalAirstars ?? 0
+// Pathway gating uses cycleAirstars so the gate matches the level the user sees in the UI.
+export function getUserLevel(cycleAirstars, levelThresholds) {
+  const coins = cycleAirstars ?? 0
   const thresholds = levelThresholds ?? LEVEL_THRESHOLDS_FALLBACK
   let level = 1
   for (let i = 1; i < thresholds.length; i++) {
@@ -81,13 +82,14 @@ export function getUserLevel(totalAirstars, levelThresholds) {
 
 // Returns true if the user meets the pathway (level + rank) requirements for a category.
 // Guests always pass. If userRank > rankRequired, the level check is bypassed —
-// having surpassed the unlock rank means level resets from prior cycles are irrelevant.
+// having surpassed the unlock rank means cycle-level resets from prior cycles are irrelevant
+// and prior unlocks stay sticky across rank promotions.
 export function isPathwayUnlocked(category, user, settings, levelThresholds) {
   if (!user) return true
   if (!settings?.pathwayUnlocks) return true
   const unlock = settings.pathwayUnlocks.find(p => p.category === category)
   if (!unlock) return true
-  const userLevel = getUserLevel(user.totalAirstars, levelThresholds)
+  const userLevel = getUserLevel(user.cycleAirstars, levelThresholds)
   const userRank  = user.rank?.rankNumber ?? 1
   return userRank > unlock.rankRequired || (userRank >= unlock.rankRequired && userLevel >= unlock.levelRequired)
 }

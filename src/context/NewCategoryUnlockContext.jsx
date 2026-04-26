@@ -1,13 +1,15 @@
-import { createContext, useContext, useCallback, useMemo } from 'react'
+import { createContext, useContext, useCallback, useMemo, useState } from 'react'
 import { useAuth } from './AuthContext'
 
 const NewCategoryUnlockContext = createContext({
-  newCategories:    new Set(),
-  hasAnyNew:        false,
-  firstNewCategory: null,
-  markSeen:         () => {},
-  markAllSeen:      () => {},
-  applyUnlocks:     () => {},
+  newCategories:           new Set(),
+  hasAnyNew:               false,
+  firstNewCategory:        null,
+  markSeen:                () => {},
+  markAllSeen:             () => {},
+  applyUnlocks:            () => {},
+  pendingLearnNavFlash:    false,
+  consumeLearnNavFlash:    () => {},
 })
 
 // Mongoose Map serializes to a plain object over JSON, so categoryUnlocks is always a plain object on the wire.
@@ -17,6 +19,12 @@ function entriesOf(unlocks) {
 
 export function NewCategoryUnlockProvider({ children }) {
   const { user, setUser, API, apiFetch } = useAuth()
+
+  // Flag set when applyUnlocks lands a non-empty grant; consumed by BottomNav
+  // once the global notifQueue has drained, so the Learn nav button flashes
+  // AFTER any airstar/levelup/rankpromotion/categoryUnlock notifs have played.
+  const [pendingLearnNavFlash, setPendingLearnNavFlash] = useState(false)
+  const consumeLearnNavFlash = useCallback(() => setPendingLearnNavFlash(false), [])
 
   const categoryUnlocks = user?.categoryUnlocks ?? {}
 
@@ -80,10 +88,11 @@ export function NewCategoryUnlockProvider({ children }) {
       }
       return { ...prev, categoryUnlocks: next }
     })
+    setPendingLearnNavFlash(true)
   }, [user?._id, setUser])
 
   return (
-    <NewCategoryUnlockContext.Provider value={{ newCategories, hasAnyNew, firstNewCategory, markSeen, markAllSeen, applyUnlocks }}>
+    <NewCategoryUnlockContext.Provider value={{ newCategories, hasAnyNew, firstNewCategory, markSeen, markAllSeen, applyUnlocks, pendingLearnNavFlash, consumeLearnNavFlash }}>
       {children}
     </NewCategoryUnlockContext.Provider>
   )

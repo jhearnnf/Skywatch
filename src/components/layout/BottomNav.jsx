@@ -1,9 +1,16 @@
+import { useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
+import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
+
+// Slightly longer than the 300ms slide-in transition in main.css so the flash
+// starts after the BottomNav is on-screen.
+const FLASH_SLIDE_DELAY_MS = 320
+const FLASH_DURATION_MS    = 1200
 
 const NAV_ITEMS = [
   { to: '/home',     emoji: '🏠', label: 'Home'    },
@@ -24,6 +31,24 @@ export default function BottomNav() {
   const items = user?.isAdmin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS
   const location = useLocation()
   const navigate = useNavigate()
+
+  const { immersive, pendingPlayNavFlash, consumePlayNavFlash } = useGameChrome()
+  const playBtnRef = useRef(null)
+
+  // Consume a deferred play-nav flash queued while BottomNav was off-screen
+  // (immersive gameplay). Wait for the slide-in transition before flashing.
+  useEffect(() => {
+    if (immersive || !pendingPlayNavFlash) return
+    const slideTimer = setTimeout(() => {
+      const el = playBtnRef.current
+      if (el) {
+        el.classList.add('play-nav-flash')
+        setTimeout(() => el.classList.remove('play-nav-flash'), FLASH_DURATION_MS)
+      }
+      consumePlayNavFlash()
+    }, FLASH_SLIDE_DELAY_MS)
+    return () => clearTimeout(slideTimer)
+  }, [immersive, pendingPlayNavFlash, consumePlayNavFlash])
 
   // Hide on full-screen pages
   const hide = ['/', '/login', '/register'].includes(location.pathname)
@@ -49,6 +74,7 @@ export default function BottomNav() {
           return (
             <NavLink
               key={to}
+              ref={to === '/play' ? playBtnRef : undefined}
               data-nav={to === '/play' ? 'play' : isLearn ? 'learn' : undefined}
               to={user || to === '/home' || to === '/rankings' ? to : '/login'}
               onClick={handleLearnClick}

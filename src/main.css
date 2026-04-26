@@ -119,6 +119,15 @@ body {
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: contain;
   overscroll-behavior-x: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input, textarea, [contenteditable="true"], [contenteditable=""] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 /* Subtle tactical grid overlay */
@@ -391,6 +400,17 @@ body.play-mode::before {
 
 .play-nav-flash {
   animation: playNavFlash 1.2s ease-out !important;
+  border-radius: 12px;
+}
+
+@keyframes learnNavFlash {
+  0%   { background: rgba(29, 78, 216, 0.00); box-shadow: none; }
+  20%  { background: rgba(29, 78, 216, 0.22); box-shadow: 0 0 0 3px rgba(29,78,216,0.18); }
+  100% { background: rgba(29, 78, 216, 0.00); box-shadow: none; }
+}
+
+.learn-nav-flash {
+  animation: learnNavFlash 1.2s ease-out !important;
   border-radius: 12px;
 }
 

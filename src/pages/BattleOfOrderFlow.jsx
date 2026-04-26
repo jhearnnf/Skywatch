@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
+import { useGameChrome } from '../context/GameChromeContext'
 import { playSound } from '../utils/sound'
 import SEO from '../components/SEO'
 
@@ -557,6 +558,14 @@ export default function BattleOfOrderFlow() {
   const gameStartTimeRef = useRef(null)
   const gameIdRef        = useRef(null)
   const storedOptions    = useRef([])
+
+  // Hide TopBar / BottomNav on mobile while the player is arranging the order.
+  const { enterImmersive, exitImmersive } = useGameChrome()
+  useEffect(() => {
+    if (screen === 'game') enterImmersive()
+    else exitImmersive()
+    return exitImmersive
+  }, [screen, enterImmersive, exitImmersive])
 
   const generateGame = useCallback(async (selectedOrderType) => {
     setScreen('generating')

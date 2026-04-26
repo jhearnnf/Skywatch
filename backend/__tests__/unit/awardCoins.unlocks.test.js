@@ -88,6 +88,17 @@ describe('awardCoins — categoryUnlocks diff', () => {
     expect(result.unlockedCategories).toEqual(expect.arrayContaining(['Aircraft', 'Tech']));
   });
 
+  it('detects unlocks when cycleAirstars jumps even though totalAirstars already covered them', async () => {
+    // Repro of the admin-test-airstars bug: a user whose totalAirstars are high from
+    // prior awards but whose cycleAirstars are low (e.g. fresh cycle, or admin who's
+    // been testing). A single award that crosses multiple cycle-level thresholds
+    // should still surface every newly cycle-unlocked category in one diff.
+    const user = await createUser({ rank: rank1._id, subscriptionTier: 'gold', totalAirstars: 50000, cycleAirstars: 0 });
+    const result = await awardCoins(user._id, 400, 'test', 'Test');
+    expect(result.unlockedCategories).toEqual(expect.arrayContaining(['Aircraft', 'Tech']));
+    expect(result.categoryUnlocksGranted.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('detects rank-gated unlock when an award triggers rank promotion', async () => {
     const user = await createUser({ rank: rank1._id, subscriptionTier: 'gold', totalAirstars: 14600, cycleAirstars: 14600 });
     const result = await awardCoins(user._id, 200, 'test', 'Test');

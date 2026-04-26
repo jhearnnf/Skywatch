@@ -51,10 +51,13 @@ function buildCumulativeThresholds(levels) {
   return result;
 }
 
-// Returns the user's current level (1–10) based on total airstars and live thresholds.
+// Returns the user's current level (1–10) from cycle airstars and live thresholds.
+// Pathway gating uses cycleAirstars so the gate matches the level the user sees in
+// the UI. Cycle resets only happen alongside total resets (rank promotion clears
+// cycle but past unlocks stay sticky via the userRank > rankRequired bypass below).
 // levelThresholds: cumulative array built by buildCumulativeThresholds()
-function getUserLevel(totalAirstars, levelThresholds) {
-  const coins      = totalAirstars ?? 0;
+function getUserLevel(cycleAirstars, levelThresholds) {
+  const coins      = cycleAirstars ?? 0;
   const thresholds = levelThresholds;
   let level = 1;
   for (let i = 1; i < thresholds.length; i++) {
@@ -68,13 +71,14 @@ function getUserLevel(totalAirstars, levelThresholds) {
 // Guests always pass — pathway gating only applies to authenticated users.
 // If no entry exists in pathwayUnlocks for the category, access is granted.
 // Rule: if userRank > rankRequired, the level check is bypassed (they've already surpassed
-// the rank at which this category first unlocks, so level resets are irrelevant).
+// the rank at which this category first unlocks, so cycle-level resets are irrelevant
+// and prior unlocks stay sticky across rank promotions).
 // If userRank === rankRequired, both level and rank must be met.
 function isPathwayUnlocked(category, user, settings, levelThresholds) {
   if (!user) return true;
   const unlock = (settings.pathwayUnlocks ?? []).find(p => p.category === category);
   if (!unlock) return true;
-  const userLevel = getUserLevel(user.totalAirstars, levelThresholds);
+  const userLevel = getUserLevel(user.cycleAirstars, levelThresholds);
   const userRank  = user.rank?.rankNumber ?? 1;
   return userRank > unlock.rankRequired || (userRank >= unlock.rankRequired && userLevel >= unlock.levelRequired);
 }
@@ -84,7 +88,7 @@ function isPathwayUnlocked(category, user, settings, levelThresholds) {
 // Useful for building DB query $in filters.
 function getPathwayAccessibleCategories(user, settings, levelThresholds) {
   if (!user) return null;
-  const userLevel = getUserLevel(user.totalAirstars, levelThresholds);
+  const userLevel = getUserLevel(user.cycleAirstars, levelThresholds);
   const userRank  = user.rank?.rankNumber ?? 1;
   return (settings.pathwayUnlocks ?? [])
     .filter(p => userRank > p.rankRequired || (userRank >= p.rankRequired && userLevel >= p.levelRequired))

@@ -170,10 +170,13 @@ export default function Profile() {
               <ProfileBadge user={user} size={user?.selectedBadge?.cutoutUrl ? 48 : 38} />
             </button>
             <div className="flex-1 min-w-0">
-              <p className="font-extrabold text-lg text-slate-800 leading-tight truncate">{user.displayName || 'Agent'}</p>
+              <p className="font-extrabold text-lg text-slate-800 leading-tight truncate">
+                {user.displayName || `Agent #${user.agentNumber ?? '———'}`}
+              </p>
               <p className="text-slate-600 text-sm">{rankDisplay}</p>
-              <p className="text-slate-500 text-xs mt-0.5 intel-mono">Agent #{user.agentNumber ?? '———'}</p>
-              <p className="text-slate-400 text-xs mt-0.5 truncate">{user.email}</p>
+              {user.displayName && (
+                <p className="text-slate-500 text-xs mt-0.5 intel-mono">#{user.agentNumber ?? '———'}</p>
+              )}
             </div>
             <div className="text-right shrink-0">
               <p className="text-xs text-slate-500 intel-mono">Streak</p>
@@ -423,6 +426,16 @@ export default function Profile() {
       {/* Tutorials tab */}
       {tab === 'tutorials' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+          <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden divide-y divide-slate-100">
+            <Link to="/share" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
+              <span>📤 Share SkyWatch</span>
+              <span className="text-slate-400">→</span>
+            </Link>
+            <Link to="/report" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
+              <span>⚠️ Report a Problem</span>
+              <span className="text-slate-400">→</span>
+            </Link>
+          </div>
           <p className="text-sm text-slate-500 mb-1">Replay any tutorial to revisit how a feature works.</p>
           <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
             {TUTORIAL_LABELS.map((tut, i) => (
@@ -447,16 +460,6 @@ export default function Profile() {
           >
             {resetDone ? '✓ Tutorials reset — they\'ll show again as you navigate' : '🔄 Reset All Tutorials'}
           </button>
-          <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden divide-y divide-slate-100">
-            <Link to="/share" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
-              <span>📤 Share SkyWatch</span>
-              <span className="text-slate-400">→</span>
-            </Link>
-            <Link to="/report" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
-              <span>⚠️ Report a Problem</span>
-              <span className="text-slate-400">→</span>
-            </Link>
-          </div>
         </motion.div>
       )}
 

@@ -12,6 +12,7 @@ import { playSound } from '../utils/sound'
 import SEO from '../components/SEO'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
+import { useGameChrome } from '../context/GameChromeContext'
 
 // ── Related briefs strip ─────────────────────────────────────────────────
 function RelatedBriefs({ brief, navigate }) {
@@ -382,6 +383,14 @@ export default function QuizFlow() {
   const [isFirstAttempt, setFirstAttempt] = useState(true)
   const [booAvailable,   setBooAvailable] = useState(false)
   const [finishing,      setFinishing]   = useState(false)
+
+  // Hide TopBar / BottomNav on mobile while questions are being answered.
+  const { enterImmersive, exitImmersive } = useGameChrome()
+  useEffect(() => {
+    if (!loading && !error && !done) enterImmersive()
+    else exitImmersive()
+    return exitImmersive
+  }, [loading, error, done, enterImmersive, exitImmersive])
 
   const questionStartRef = useRef(Date.now())
   const finishedRef      = useRef(false)

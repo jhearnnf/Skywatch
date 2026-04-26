@@ -1384,6 +1384,11 @@ export default function LearnPriority() {
       .catch(() => {})
   }, [user, API])
 
+  // Tracks which user the brief caches were populated for. When the logged-in
+  // user changes, the fetch effect below uses this to drop stale isRead /
+  // isInProgress flags before refetching with the new auth state.
+  const cacheUserIdRef = useRef(user?._id)
+
   // ── Check if this user can access AptitudeSync ──────────────────────────────
   const aptitudeSyncEnabled = useMemo(() => {
     if (!aptSyncSettings.enabled) return false
@@ -1493,12 +1498,17 @@ export default function LearnPriority() {
       // where the persistent pill will appear — avoids a visual snap on arrival.
       const pillEl   = document.querySelector(`[data-testid="new-pill-${targetCat}"]`)
       const pillRect = pillEl?.getBoundingClientRect()
+      // Page-relative coords (FlyingNewBadge uses position: absolute) so the
+      // badge stays anchored to the target if the user scrolls during/after
+      // the fly-in animation.
+      const sx = window.scrollX
+      const sy = window.scrollY
       setFlyingBadge({
         category: targetCat,
-        from: { x: navRect.left + navRect.width / 2 - 18, y: navRect.top },
+        from: { x: navRect.left + navRect.width / 2 - 18 + sx, y: navRect.top + sy },
         to:   pillRect
-          ? { x: pillRect.left,      y: pillRect.top      }
-          : { x: cardRect.right - 34, y: cardRect.top - 6 },
+          ? { x: pillRect.left + sx,      y: pillRect.top + sy      }
+          : { x: cardRect.right - 34 + sx, y: cardRect.top - 6 + sy },
       })
     }, 250)
     return () => clearTimeout(t)
@@ -1578,7 +1588,16 @@ export default function LearnPriority() {
     if (!activePathway) return
     if (!activePathway.unlocked) return // locked pathway renders synchronously — skip fetch
     const cat = activePathway.category
-    if (briefsCache[cat]) return // already loaded
+    // Cache was populated for a different user (sign in/out). Drop it so
+    // isRead / isInProgress flags reflect the active account, then refetch.
+    const userChanged = cacheUserIdRef.current !== user?._id
+    if (userChanged) {
+      cacheUserIdRef.current = user?._id
+      setBriefsCache({})
+      setNextBriefCache({})
+    } else if (briefsCache[cat]) {
+      return // already loaded for this user
+    }
     setLoading(true)
     apiFetch(`${API}/api/briefs/pathway/${encodeURIComponent(cat)}`)
       .then(r => r.ok ? r.json() : null)
@@ -1592,7 +1611,7 @@ export default function LearnPriority() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [activeCatIndex, activePathway?.category, activePathway?.unlocked, API]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeCatIndex, activePathway?.category, activePathway?.unlocked, API, user?._id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Prefetch adjacent unlocked pathways so swipes feel instant ────────────
   // Fires after the active pathway settles. Fills briefsCache in the background

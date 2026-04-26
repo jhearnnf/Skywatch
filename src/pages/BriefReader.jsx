@@ -3,10 +3,11 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useTransform, useAnimationControls, LayoutGroup } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
+import { useGameChrome } from '../context/GameChromeContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import LockedCategoryModal from '../components/LockedCategoryModal'
 import MissionDetectedModal from '../components/MissionDetectedModal'
-import { requiredTier } from '../utils/subscription'
+import { requiredTier, lockReason as computeLockReason, getPathwayRequirements } from '../utils/subscription'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
@@ -33,12 +34,47 @@ function renderBoldMarkdown(text) {
 }
 
 // ── Keyword bottom-sheet ──────────────────────────────────────────────────
-function KeywordSheet({ kw, onClose, navigate, disableLinkedBriefNav = false }) {
+function KeywordSheet({ kw, onClose, navigate, disableLinkedBriefNav = false, isAdmin = false, user = null, settings = null, levelThresholds = null }) {
   const isLinked = !!kw?.linkedBriefId
   const hasDesc  = !!kw?.generatedDescription
+  const linkedStatus = typeof kw?.linkedBriefId === 'object' ? kw.linkedBriefId?.status : null
+  const isUnpublished = isLinked && linkedStatus && linkedStatus !== 'published'
+  const linkedCategory = (typeof kw?.linkedBriefId === 'object' ? kw.linkedBriefId?.category : null) ?? kw?.linkedBriefCategory ?? null
+  // Detect whether the user can actually access the linked brief — guards against
+  // bouncing them out of their current reading session via a 403 on the next page.
+  // Admins keep their existing override path (unpublished reveal) but otherwise
+  // see the same lock prompt as users so the upsell still makes sense in admin
+  // sessions.
+  const lockReason = (isLinked && linkedCategory && !disableLinkedBriefNav)
+    ? computeLockReason(linkedCategory, user, settings, levelThresholds)
+    : null
+  const isLocked = !!lockReason
+  const pathwayReq = (lockReason === 'pathway' && settings) ? getPathwayRequirements(linkedCategory, settings) : null
+  const [adminRevealed, setAdminRevealed] = useState(false)
+  const [showLockModal, setShowLockModal] = useState(false)
+
+  // Reset the admin reveal + nested lock modal whenever the sheet opens for a different keyword.
+  useEffect(() => {
+    setAdminRevealed(false)
+    setShowLockModal(false)
+  }, [kw?.keyword, kw?.linkedBriefId?._id ?? kw?.linkedBriefId])
+
+  // Auto-collapse the admin override after 2s if the admin doesn't press it —
+  // covers mobile (no mouseleave) and idle desktop hovers.
+  useEffect(() => {
+    if (!adminRevealed) return
+    const t = setTimeout(() => setAdminRevealed(false), 2000)
+    return () => clearTimeout(t)
+  }, [adminRevealed])
 
   const handleOpenBrief = () => {
     if (disableLinkedBriefNav) return
+    if (isLocked) return
+    if (isUnpublished && !isAdmin) return
+    if (isUnpublished && isAdmin && !adminRevealed) {
+      setAdminRevealed(true)
+      return
+    }
     onClose()
     navigate(`/brief/${kw.linkedBriefId?._id ?? kw.linkedBriefId}`)
   }
@@ -111,6 +147,135 @@ function KeywordSheet({ kw, onClose, navigate, disableLinkedBriefNav = false }) 
                       </div>
                     )
                   }
+                  if (isLocked) {
+                    // Inline lock card — keeps the user in their current brief instead of
+                    // navigating into a 403 and bouncing them to /learn-priority.
+                    if (lockReason === 'pathway') {
+                      const userRankNum = user?.rank?.rankNumber ?? 1
+                      const rankNeeded  = pathwayReq?.rankRequired ?? 1
+                      const rankShort   = rankNeeded > userRankNum
+                        ? (MOCK_RANKS.find(r => r.rankNumber === rankNeeded)?.rankName ?? `Rank ${rankNeeded}`)
+                        : null
+                      const levelNeeded = pathwayReq?.levelRequired ?? null
+                      const summary     = rankShort
+                        ? `Unlocks at ${rankShort}`
+                        : levelNeeded
+                          ? `Reach Agent Level ${levelNeeded}`
+                          : 'Keep levelling up to unlock'
+                      return (
+                        <div
+                          className="w-full text-left rounded-2xl overflow-hidden border border-slate-200"
+                          aria-disabled="true"
+                        >
+                          <div className="px-4 pt-4 pb-3 bg-slate-50">
+                            {category && (
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{category}</p>
+                            )}
+                            <p className="text-base font-extrabold text-slate-900 leading-snug">
+                              {title || kw.keyword}
+                            </p>
+                            {nickname && (
+                              <p className="text-xs text-slate-500 italic mt-0.5">"{nickname}"</p>
+                            )}
+                          </div>
+                          <div className="px-4 py-3 bg-slate-100 flex items-center justify-between gap-3">
+                            <span className="text-xs font-semibold text-slate-500">🔒 {summary}</span>
+                            <span className="text-[11px] text-slate-400">Pathway locked</span>
+                          </div>
+                        </div>
+                      )
+                    }
+                    // 'upgrade' or 'signin' — clickable to open the standard upsell modal.
+                    const tier = lockReason === 'upgrade'
+                      ? requiredTier(linkedCategory, settings)
+                      : 'silver'
+                    const ctaLabel = lockReason === 'signin'
+                      ? 'Sign in to access'
+                      : tier === 'gold'
+                        ? '🥇 Requires Gold'
+                        : '🥈 Requires Silver'
+                    return (
+                      <button
+                        onClick={() => setShowLockModal(true)}
+                        className="w-full text-left rounded-2xl overflow-hidden border border-slate-200 hover:border-brand-600 active:opacity-80 transition-all group"
+                      >
+                        <div className="px-4 pt-4 pb-3 bg-slate-50">
+                          {category && (
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{category}</p>
+                          )}
+                          <p className="text-base font-extrabold text-slate-900 leading-snug">
+                            {title || kw.keyword}
+                          </p>
+                          {nickname && (
+                            <p className="text-xs text-slate-500 italic mt-0.5">"{nickname}"</p>
+                          )}
+                        </div>
+                        <div className="px-4 py-3 bg-slate-100 group-hover:bg-slate-200 transition-colors flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-600">{ctaLabel}</span>
+                          <span className="text-[11px] text-slate-500">Tap to learn more →</span>
+                        </div>
+                      </button>
+                    )
+                  }
+                  if (isUnpublished && !(isAdmin && adminRevealed)) {
+                    // Disabled state shown to all users (and to admins before they reveal).
+                    // Admins get hover/first-tap to unlock the admin-only "open anyway" CTA.
+                    return (
+                      <button
+                        type="button"
+                        onClick={isAdmin ? handleOpenBrief : undefined}
+                        onMouseEnter={isAdmin ? () => setAdminRevealed(true) : undefined}
+                        disabled={!isAdmin}
+                        aria-disabled={!isAdmin}
+                        aria-label={isAdmin
+                          ? 'Intel still being prepared — tap to reveal admin override'
+                          : 'Intel still being prepared'}
+                        className="w-full text-left rounded-2xl overflow-hidden border border-slate-200 disabled:cursor-not-allowed"
+                      >
+                        <div className="px-4 pt-4 pb-3 bg-slate-50">
+                          {category && (
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-0.5">{category}</p>
+                          )}
+                          <p className="text-base font-extrabold text-slate-900 leading-snug">
+                            {title || kw.keyword}
+                          </p>
+                          {nickname && (
+                            <p className="text-xs text-slate-500 italic mt-0.5">"{nickname}"</p>
+                          )}
+                        </div>
+                        <div className="px-4 py-3 bg-slate-100 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-500">Intel still being prepared</span>
+                          <span className="text-[11px] text-slate-400">Check back soon</span>
+                        </div>
+                      </button>
+                    )
+                  }
+                  if (isUnpublished && isAdmin && adminRevealed) {
+                    // Admin override: amber styling so it's unmistakably admin-only.
+                    return (
+                      <button
+                        onClick={handleOpenBrief}
+                        onMouseLeave={() => setAdminRevealed(false)}
+                        className="w-full text-left rounded-2xl overflow-hidden border-2 border-amber-500 hover:border-amber-400 active:opacity-80 transition-all group"
+                      >
+                        <div className="px-4 pt-4 pb-3 bg-amber-50">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700 mb-0.5">
+                            {category ? `${category} · Admin only` : 'Admin only'}
+                          </p>
+                          <p className="text-base font-extrabold text-slate-900 leading-snug">
+                            {title || kw.keyword}
+                          </p>
+                          {nickname && (
+                            <p className="text-xs text-slate-500 italic mt-0.5">"{nickname}"</p>
+                          )}
+                        </div>
+                        <div className="px-4 py-3 bg-amber-500 group-hover:bg-amber-400 transition-colors flex items-center justify-between">
+                          <span className="text-sm font-bold text-white">Open Non-Published Brief</span>
+                          <span className="text-white text-lg leading-none">→</span>
+                        </div>
+                      </button>
+                    )
+                  }
                   return (
                     <button
                       onClick={handleOpenBrief}
@@ -150,6 +315,15 @@ function KeywordSheet({ kw, onClose, navigate, disableLinkedBriefNav = false }) 
               </button>
             )}
           </motion.div>
+          {showLockModal && isLocked && lockReason !== 'pathway' && linkedCategory && (
+            <LockedCategoryModal
+              category={linkedCategory}
+              tier={lockReason === 'upgrade' ? requiredTier(linkedCategory, settings) : 'silver'}
+              user={user}
+              pendingBriefId={kw.linkedBriefId?._id ?? kw.linkedBriefId}
+              onClose={() => setShowLockModal(false)}
+            />
+          )}
         </>
       )}
     </AnimatePresence>
@@ -1033,6 +1207,20 @@ function ContinueLearning({ brief, navigate, fallbackCards }) {
   )
 }
 
+// Themed transmission indicator — flickering binary digits in brand blue
+function BinaryStream({ length = 8 }) {
+  const [bits, setBits] = useState(() =>
+    Array.from({ length }, () => (Math.random() < 0.5 ? '0' : '1')).join('')
+  )
+  useEffect(() => {
+    const id = setInterval(() => {
+      setBits(Array.from({ length }, () => (Math.random() < 0.5 ? '0' : '1')).join(''))
+    }, 110)
+    return () => clearInterval(id)
+  }, [length])
+  return <span className="font-mono tracking-[0.15em] opacity-90 tabular-nums">{bits}</span>
+}
+
 // ── Completion screen ─────────────────────────────────────────────────────
 function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onReRead, user, isFirstCompletion, coinReward, navigate, quizPassed, quizAvailable, syncingReward }) {
   const { API, apiFetch, setUser, awardAirstars } = useAuth()
@@ -1128,21 +1316,6 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
       <h2 className="text-2xl font-extrabold text-slate-900 mb-2">{heading}</h2>
       <p className="text-slate-500 mb-8">{subheading}</p>
 
-      <AnimatePresence>
-        {syncingReward && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.25 }}
-            className="flex items-center justify-center gap-2 text-xs text-slate-400 -mt-6 mb-6"
-          >
-            <span className="inline-block w-3 h-3 rounded-full border-2 border-slate-300 border-t-brand-500 animate-spin" />
-            <span>Syncing rewards…</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <div className="space-y-3">
         {user ? (
           <>
@@ -1150,9 +1323,19 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             {quizAvailable ? (
               <button
                 onClick={onQuiz}
-                className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200"
+                disabled={syncingReward}
+                aria-busy={syncingReward}
+                className="w-full py-4 bg-brand-600 hover:bg-brand-700 disabled:hover:bg-brand-600 disabled:cursor-wait text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200 relative overflow-hidden"
               >
-                🧠 {quizPassed ? 'Retake Quiz' : 'Take the Quiz → Earn Airstars'}
+                {syncingReward ? (
+                  <span className="flex items-center justify-center gap-3">
+                    <BinaryStream length={6} />
+                    <span className="tracking-wider">TRANSMITTING REWARDS…</span>
+                    <BinaryStream length={6} />
+                  </span>
+                ) : (
+                  <>🧠 {quizPassed ? 'Retake Quiz' : 'Take the Quiz → Earn Airstars'}</>
+                )}
               </button>
             ) : (
               <div className="quiz-unavailable-block">
@@ -1169,7 +1352,8 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             {booState === 'available' && (
               <button
                 onClick={onBattleOrder}
-                className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
+                disabled={syncingReward}
+                className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white disabled:hover:bg-transparent disabled:hover:text-brand-600 disabled:cursor-wait disabled:opacity-60 font-bold rounded-2xl text-base transition-colors"
               >
                 🗺️ Battle of Order — Earn Airstars
               </button>
@@ -1177,7 +1361,8 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             {booState === 'completed' && (
               <button
                 onClick={onBattleOrder}
-                className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white font-bold rounded-2xl text-base transition-colors"
+                disabled={syncingReward}
+                className="w-full py-4 border-2 border-brand-600 text-brand-600 hover:bg-brand-600 hover:text-white disabled:hover:bg-transparent disabled:hover:text-brand-600 disabled:cursor-wait disabled:opacity-60 font-bold rounded-2xl text-base transition-colors"
               >
                 🗺️ Replay Battle of Order
               </button>
@@ -1436,7 +1621,7 @@ export default function BriefReader() {
   const { start, visible, activeName, hasSeen } = useAppTutorial()
   const startRef = useRef(start)
   useEffect(() => { startRef.current = start }, [start])
-  const { settings }            = useAppSettings()
+  const { settings, levelThresholds } = useAppSettings()
   const { applyUnlocks }        = useNewGameUnlock()
   const { applyUnlocks: applyCategoryUnlocks } = useNewCategoryUnlock()
   const [brief, setBrief]         = useState(null)
@@ -1804,6 +1989,24 @@ export default function BriefReader() {
   const sections   = normalizeSections(brief?.descriptionSections)
   const total      = sections.length
   const isLast     = sectionIdx >= total - 1
+
+  // Hide TopBar / BottomNav on mobile while the user is actively reading
+  // a brief — i.e. not on loading, locked, surveillance-pending, already-read,
+  // or completion screens. Mirrors the CBAT immersive pattern.
+  const { enterImmersive, exitImmersive, enterFlashcardCollect, exitFlashcardCollect } = useGameChrome()
+  // Tracks whether THIS reader has entered the flashcardCollect ref count.
+  // The window opens at startCollectAnimation (before FDN mounts) so the
+  // PlayNavFlasher defers its unlock-driven flash even during the 1.8s
+  // pre-glow + glow phase, then closes once FDN unmounts (FDN's own
+  // 1200ms tail-down keeps the count > 0 for the trailing flash).
+  const collectActiveRef = useRef(false)
+  const onAlreadyReadScreen = !!(readRecord?.completed && user && !reReadMode && !done)
+  const isReadingSections   = !loading && !locked && !done && !onAlreadyReadScreen && total > 0
+  useEffect(() => {
+    if (isReadingSections) enterImmersive()
+    else exitImmersive()
+    return exitImmersive
+  }, [isReadingSections, enterImmersive, exitImmersive])
   // News-category briefs hide the flashcard UI entirely when the admin setting is off.
   // The reached-flashcard POST still fires so records persist silently (re-enabling
   // the setting makes them immediately available), but no FlashCard layout, no collect
@@ -1862,6 +2065,10 @@ export default function BriefReader() {
 
   function startCollectAnimation() {
     if (!flashcardCardRef.current) return
+    if (!collectActiveRef.current) {
+      enterFlashcardCollect()
+      collectActiveRef.current = true
+    }
     collectTimer1Ref.current = setTimeout(() => {
       playSound('flashcard_collect')
       setFlashcardGlowing(true)
@@ -1953,6 +2160,10 @@ export default function BriefReader() {
     setFlashcardGlowing(false)
     setFlashcardNotifRect(null)
     stopAllSounds()
+    if (collectActiveRef.current) {
+      exitFlashcardCollect()
+      collectActiveRef.current = false
+    }
   }
 
   // Cancel collect animation on unmount
@@ -2331,7 +2542,7 @@ export default function BriefReader() {
     <>
       <SEO title={brief?.title} description={brief?.summary || brief?.subtitle || 'Read this RAF intel brief on SkyWatch.'} ogType="article" />
       <TutorialModal />
-      <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} navigate={navigate} disableLinkedBriefNav={croFirstBrief} />
+      <KeywordSheet kw={activeKw} onClose={() => { playSound('stand_down'); setActiveKw(null) }} navigate={navigate} disableLinkedBriefNav={croFirstBrief} isAdmin={!!user?.isAdmin} user={user} settings={settings} levelThresholds={levelThresholds} />
       <StatMnemonicSheet stat={activeStat} onClose={() => setActiveStat(null)} />
       {flashcardNotifRect && (
         <FlashcardDeckNotification
@@ -2340,6 +2551,10 @@ export default function BriefReader() {
             setTimeout(() => setSwipePromptReady(true), 3000)
             if (badgePendingRef.current) { applyUnlocks(['flashcard']); badgePendingRef.current = false }
             setFlashcardNotifRect(null)
+            if (collectActiveRef.current) {
+              exitFlashcardCollect()
+              collectActiveRef.current = false
+            }
           }}
         />
       )}

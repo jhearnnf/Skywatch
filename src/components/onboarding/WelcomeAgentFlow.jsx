@@ -5,7 +5,7 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import { useAuth } from '../../context/AuthContext'
 import { CATEGORY_ICONS, CATEGORY_DESCRIPTIONS } from '../../data/mockData'
 import { setCroFirstBrief } from '../../utils/storageKeys'
-import { getAccessibleCategories } from '../../utils/subscription'
+import { getAccessibleCategories, isPathwayUnlocked } from '../../utils/subscription'
 
 export const ONBOARDING_KEY = 'skywatch_onboarded'
 
@@ -14,10 +14,10 @@ export function markOnboarded() {
 }
 
 export default function WelcomeAgentFlow({ onClose }) {
-  const navigate     = useNavigate()
-  const { settings } = useAppSettings()
-  const { user }     = useAuth() ?? {}
-  const isSignedIn   = !!user
+  const navigate                       = useNavigate()
+  const { settings, levelThresholds }  = useAppSettings()
+  const { user }                       = useAuth() ?? {}
+  const isSignedIn                     = !!user
 
   // Close on Escape
   useEffect(() => {
@@ -42,10 +42,16 @@ export default function WelcomeAgentFlow({ onClose }) {
   // Guests see guest-tier categories only; signed-in users see whatever
   // their effective subscription tier can access (gold → null → fall back
   // to silverCategories so we still render picks).
-  const accessible = getAccessibleCategories(user, settings)
-  const pickable   = accessible === null
+  const accessible   = getAccessibleCategories(user, settings)
+  const tierPickable = accessible === null
     ? (settings?.silverCategories ?? settings?.freeCategories ?? ['News'])
     : (accessible.length ? accessible : (settings?.guestCategories ?? ['News']))
+  // Drop pathway-locked categories so the user's first mission is always
+  // achievable — no point showing a card that lands on a lock screen.
+  const unlocked = tierPickable.filter(cat =>
+    isPathwayUnlocked(cat, user, settings, levelThresholds)
+  )
+  const pickable = unlocked.length ? unlocked : ['News']
 
   return (
     <AnimatePresence>

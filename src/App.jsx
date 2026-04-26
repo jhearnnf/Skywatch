@@ -23,6 +23,8 @@ import AirstarNotification                 from './components/AirstarNotificatio
 import LevelUpNotification                 from './components/LevelUpNotification'
 import RankPromotionNotification           from './components/RankPromotionNotification'
 import CategoryUnlockNotification          from './components/CategoryUnlockNotification'
+import LearnNavFlasher                     from './components/LearnNavFlasher'
+import PlayNavFlasher                      from './components/PlayNavFlasher'
 import { captureLoginReturn, resolveLoginDest } from './utils/loginRedirect'
 
 // v2 pages
@@ -332,6 +334,8 @@ export default function App() {
                 <GameChromeProvider>
                   <AppRoutes />
                   <NotifLayer />
+                  <LearnNavFlasher />
+                  <PlayNavFlasher />
                   <ReportNotifBanner />
                 </GameChromeProvider>
               </UnsolvedReportsProvider>

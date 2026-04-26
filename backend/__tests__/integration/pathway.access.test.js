@@ -83,25 +83,25 @@ afterAll(async () => db.closeDatabase());
 // User who passes all pathway requirements for Aircrafts (level 2, rank 1)
 async function userLevel2Rank1() {
   const rank = await createRankDoc(1);
-  return createUser({ subscriptionTier: 'free', totalAirstars: LEVEL_2_COINS, rank: rank._id });
+  return createUser({ subscriptionTier: 'free', totalAirstars: LEVEL_2_COINS, cycleAirstars: LEVEL_2_COINS, rank: rank._id });
 }
 
 // User who passes all pathway requirements for Bases (level 1, rank 2)
 async function userLevel1Rank2() {
   const rank = await createRankDoc(2);
-  return createUser({ subscriptionTier: 'free', totalAirstars: 0, rank: rank._id });
+  return createUser({ subscriptionTier: 'free', totalAirstars: 0, cycleAirstars: 0, rank: rank._id });
 }
 
 // User who fails Aircrafts level gate (level 1, rank 1)
 async function userLevel1Rank1() {
   const rank = await createRankDoc(1);
-  return createUser({ subscriptionTier: 'free', totalAirstars: 0, rank: rank._id });
+  return createUser({ subscriptionTier: 'free', totalAirstars: 0, cycleAirstars: 0, rank: rank._id });
 }
 
 // User who fails Bases rank gate (level 2, rank 1)
 async function userLevel2WrongRank() {
   const rank = await createRankDoc(1);
-  return createUser({ subscriptionTier: 'free', totalAirstars: LEVEL_2_COINS, rank: rank._id });
+  return createUser({ subscriptionTier: 'free', totalAirstars: LEVEL_2_COINS, cycleAirstars: LEVEL_2_COINS, rank: rank._id });
 }
 
 // ── GET /api/briefs/:id — pathway gate ───────────────────────────────────────
@@ -154,7 +154,7 @@ describe('GET /api/briefs/:id — pathway gating', () => {
 
   it('user with higher rank than required satisfies lower requirement → 200', async () => {
     const rank = await createRankDoc(3);
-    const user = await createUser({ subscriptionTier: 'free', totalAirstars: 0, rank: rank._id });
+    const user = await createUser({ subscriptionTier: 'free', totalAirstars: 0, cycleAirstars: 0, rank: rank._id });
     const brief = await createBrief({ category: 'Bases' }); // rankRequired: 2
     const res  = await request(app)
       .get(`/api/briefs/${brief._id}`)
@@ -511,7 +511,7 @@ describe('Pathway and subscription checks are independent (both must pass)', () 
   it('silver user at level 1 cannot open a level-2 brief → 403 pathway', async () => {
     await createSettings(S);
     const rank  = await createRankDoc(1);
-    const user  = await createUser({ subscriptionTier: 'silver', totalAirstars: 0, rank: rank._id });
+    const user  = await createUser({ subscriptionTier: 'silver', totalAirstars: 0, cycleAirstars: 0, rank: rank._id });
     const brief = await createBrief({ category: 'Aircrafts' });
     const res   = await request(app)
       .get(`/api/briefs/${brief._id}`)
@@ -529,7 +529,7 @@ describe('Pathway and subscription checks are independent (both must pass)', () 
       ],
     });
     const rank  = await createRankDoc(1);
-    const user  = await createUser({ subscriptionTier: 'free', totalAirstars: LEVEL_2_COINS, rank: rank._id });
+    const user  = await createUser({ subscriptionTier: 'free', totalAirstars: LEVEL_2_COINS, cycleAirstars: LEVEL_2_COINS, rank: rank._id });
     const brief = await createBrief({ category: 'Treaties' });
     const res   = await request(app)
       .get(`/api/briefs/${brief._id}`)

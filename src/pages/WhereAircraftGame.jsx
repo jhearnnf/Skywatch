@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
+import { useGameChrome } from '../context/GameChromeContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import { playSound } from '../utils/sound'
 import RafBasesMap from '../components/RafBasesMap'
@@ -409,6 +410,15 @@ export default function WhereAircraftGame() {
 
   const round1CorrectRef = useRef(false)
   const round1ElapsedRef = useRef(0)
+
+  // Hide TopBar / BottomNav on mobile during active play (rounds 1, R1-complete
+  // interstitial, round 2). Loading / fail / result screens keep chrome visible.
+  const { enterImmersive, exitImmersive } = useGameChrome()
+  useEffect(() => {
+    if (ACTIVE_PHASES.has(phase)) enterImmersive()
+    else exitImmersive()
+    return exitImmersive
+  }, [phase, enterImmersive, exitImmersive])
 
   // ── Timer ───────────────────────────────────────────────────────────────
   useEffect(() => {

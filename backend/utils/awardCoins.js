@@ -123,8 +123,11 @@ async function awardCoins(userId, amount, reason, label, briefId = null) {
     const finalRankDoc    = rankPromotion?.to ?? startingRankDoc;
     const finalRankNum    = finalRankDoc?.rankNumber ?? startingRankNum;
 
-    const beforeUser = { totalAirstars: newTotal - amount, rank: { rankNumber: startingRankNum } };
-    const afterUser  = { totalAirstars: newTotal,          rank: { rankNumber: finalRankNum    } };
+    // Pathway gating is cycle-based, so diff cycle before/after.
+    // `incremented.cycleAirstars` is the post-$inc value; subtracting `amount` gives the pre-award cycle.
+    // `finalCycle` is the post-promotion remainder when the award crossed the cycle threshold.
+    const beforeUser = { cycleAirstars: incremented.cycleAirstars - amount, rank: { rankNumber: startingRankNum } };
+    const afterUser  = { cycleAirstars: finalCycle,                          rank: { rankNumber: finalRankNum    } };
 
     const beforeCategories = getPathwayAccessibleCategories(beforeUser, settings, thresholds) ?? [];
     const afterCategories  = getPathwayAccessibleCategories(afterUser,  settings, thresholds) ?? [];

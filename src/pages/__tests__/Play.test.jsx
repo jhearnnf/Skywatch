@@ -209,9 +209,10 @@ describe('Play page — launcher sections', () => {
     await waitFor(() => screen.getByText(/identify briefs from their content alone/i))
   })
 
-  it('Battle of Order section shows eligible categories hint for logged-in users with no BOO briefs', async () => {
+  it('Battle of Order section shows the locked CTA + eligible categories caveat for logged-in users with no BOO briefs', async () => {
     renderAsUser({ quizBriefs: [], booBriefs: [] })
-    await waitFor(() => screen.getByText(/Read briefs in eligible categories/i))
+    await waitFor(() => screen.getByText(/Read more briefs to unlock Battle of Order/i))
+    expect(screen.getByText(/Eligible categories: Aircrafts, Ranks, Training/i)).toBeDefined()
   })
 
   it('Intel Quiz section "Browse intel quizzes" link points to /play/quiz', () => {
@@ -265,7 +266,9 @@ describe('Play page — Intel Quiz section', () => {
 
   it('shows game history link for logged-in users', async () => {
     renderAsUser({})
-    await waitFor(() => screen.getByText(/view game history/i))
+    // History link is mounted ~1.4s after the launcher cascade settles, so we
+    // need a longer waitFor than the default 1000ms.
+    await waitFor(() => screen.getByText(/view game history/i), { timeout: 2500 })
   })
 })
 
@@ -593,7 +596,7 @@ describe('Play page — BOO client-side unlock detection', () => {
     renderAsUser({ booBriefs: [] })
 
     // Give enough time for the fetch to settle
-    await waitFor(() => screen.getByText(/sign in to play battle of order|read briefs in eligible categories/i))
+    await waitFor(() => screen.getByText(/sign in to play battle of order|read more briefs to unlock battle of order/i))
     expect(markUnlockFromServer).not.toHaveBeenCalledWith('boo')
   })
 })

@@ -95,6 +95,35 @@ export default function Play() {
   const [flashcardAvail, setFlashcardAvail] = useState(null)
   const [wtaSpawn,       setWtaSpawn]       = useState(null)
 
+  // Per-section ready flags — sections stay hidden until their fetch settles
+  // so the user never sees a half-loaded "Start Drill" button or a misleading
+  // "Read briefs first" empty state. Guests have no fetches, so ready=true.
+  const [quizReady,      setQuizReady]      = useState(() => !user)
+  const [flashcardReady, setFlashcardReady] = useState(() => !user)
+  const [wtaReady,       setWtaReady]       = useState(() => !user)
+  const [booReady,       setBooReady]       = useState(() => !user)
+
+  // Sections only mount once *all* fetches have settled — this guarantees a
+  // deterministic top-to-bottom cascade regardless of which endpoint finishes
+  // first. With per-section flags, a slow Quiz fetch could let BOO swipe in
+  // first, which looks chaotic.
+  const allSectionsReady = quizReady && flashcardReady && wtaReady && booReady
+
+  // "View game history" mounts strictly after the four-section cascade is
+  // visibly finished. The cascade settles around 1.21s after allSectionsReady
+  // (BOO = index 3 × 0.22s delay + 0.55s duration). We wait a beat longer so
+  // there's a clear gap before History sweeps in — otherwise it overlaps the
+  // tail of BOO and stops feeling like the "final" entry.
+  const [historyReady, setHistoryReady] = useState(false)
+  useEffect(() => {
+    if (!user || !allSectionsReady) {
+      setHistoryReady(false)
+      return
+    }
+    const t = setTimeout(() => setHistoryReady(true), 1400)
+    return () => clearTimeout(t)
+  }, [user, allSectionsReady])
+
   // Badge fly animation state
   const [flyingBadges,  setFlyingBadges]  = useState([]) // [{ key, from:{x,y}, to:{x,y} }]
   const [flashingCards, setFlashingCards] = useState(new Set())
@@ -156,10 +185,15 @@ export default function Play() {
         }
         const navRect  = navEl.getBoundingClientRect()
         const cardRect = cardEl.getBoundingClientRect()
+        // Page-relative coords (FlyingNewBadge uses position: absolute) so the
+        // badge stays anchored to the card if the user scrolls during/after
+        // the fly-in animation.
+        const sx = window.scrollX
+        const sy = window.scrollY
         badges.push({
           key,
-          from: { x: navRect.left + navRect.width / 2 - 18, y: navRect.top  },
-          to:   { x: cardRect.right - 52,                   y: cardRect.top + 4 },
+          from: { x: navRect.left + navRect.width / 2 - 18 + sx, y: navRect.top + sy },
+          to:   { x: cardRect.right - 52 + sx,                   y: cardRect.top + 4 + sy },
         })
       }
       if (badges.length) setFlyingBadges(prev => [...prev, ...badges])
@@ -201,8 +235,16 @@ export default function Play() {
       setBooBriefs([])
       setFlashcardAvail(null)
       setWtaSpawn(null)
+      setQuizReady(true)
+      setFlashcardReady(true)
+      setWtaReady(true)
+      setBooReady(true)
       return
     }
+    setQuizReady(false)
+    setFlashcardReady(false)
+    setWtaReady(false)
+    setBooReady(false)
     apiFetch(`${API}/api/games/quiz/recommended-briefs?limit=4`)
       .then(r => r.json())
       .then(data => {
@@ -211,6 +253,7 @@ export default function Play() {
         if (briefs.some(b => b.quizState === 'active')) markUnlockFromServer('quiz')
       })
       .catch(() => {})
+      .finally(() => setQuizReady(true))
     apiFetch(`${API}/api/games/battle-of-order/recommended-briefs?limit=4`)
       .then(r => r.json())
       .then(data => {
@@ -221,6 +264,7 @@ export default function Play() {
         }
       })
       .catch(() => {})
+      .finally(() => setBooReady(true))
     apiFetch(`${API}/api/games/flashcard-recall/available-briefs`)
       .then(r => r.json())
       .then(data => {
@@ -229,6 +273,7 @@ export default function Play() {
         if (count >= 5) markUnlockFromServer('flashcard')
       })
       .catch(() => setFlashcardAvail(0))
+      .finally(() => setFlashcardReady(true))
     apiFetch(`${API}/api/users/me/wta-spawn`)
       .then(r => r.json())
       .then(data => {
@@ -237,7 +282,13 @@ export default function Play() {
         if (spawn?.prereqsMet === true) markUnlockFromServer('wta')
       })
       .catch(() => {})
-  }, [user, API]) // eslint-disable-line react-hooks/exhaustive-deps
+      .finally(() => setWtaReady(true))
+    // Depend on user._id rather than the user object — setUser produces a new
+    // reference on every state update (unlock applied, airstars awarded, etc.)
+    // and rerunning the fetch chain resets the *Ready flags, which unmounts
+    // and remounts the sections so the swipe-in cascade plays a second time.
+    // _id only flips on login/logout, which is when we actually want to refetch.
+  }, [user?._id, API]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Card / scroll ─────────────────────────────────────────────────────────
 
@@ -259,6 +310,20 @@ export default function Play() {
       'bg-surface rounded-2xl border card-shadow transition-all duration-500',
       isActive ? 'border-brand-400' : 'border-slate-200',
     ].join(' ')
+  }
+
+  // Alternating swipe-in animation for launcher sections.
+  // Even indices swipe from the left, odd from the right; sections start fully
+  // off-screen (one full viewport width away). The 0.22s per-index delay
+  // gives a clear sequential cascade — each section starts shortly before the
+  // previous one finishes, so the user perceives them as distinct entries.
+  function swipeProps(index) {
+    const fromLeft = index % 2 === 0
+    return {
+      initial:    { opacity: 0, x: fromLeft ? '-100vw' : '100vw' },
+      animate:    { opacity: 1, x: 0 },
+      transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: index * 0.22 },
+    }
   }
 
   return (
@@ -339,10 +404,14 @@ export default function Play() {
         </div>
 
         {/* ── Launcher sections ──────────────────────────────────────── */}
-        <div className="space-y-4">
+        {/* overflow-x-clip prevents the off-screen swipe-in from creating
+            a horizontal scrollbar while the animation is in flight */}
+        <div className="space-y-4 overflow-x-clip">
 
           {/* Intel Quiz */}
-          <div ref={quizRef} className={sectionClass('quiz')}>
+          <div ref={quizRef}>
+          {allSectionsReady && (
+          <motion.div {...swipeProps(0)} className={sectionClass('quiz')}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">🧠</span>
@@ -471,10 +540,14 @@ export default function Play() {
                 </div>
               )}
             </div>
+          </motion.div>
+          )}
           </div>
 
           {/* Flashcard Recall */}
-          <div ref={flashcardRef} className={sectionClass('flashcard')}>
+          <div ref={flashcardRef}>
+          {allSectionsReady && (
+          <motion.div {...swipeProps(1)} className={sectionClass('flashcard')}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">⚡</span>
@@ -506,32 +579,38 @@ export default function Play() {
                     )}
                   </p>
                   {flashcardAvail !== null && flashcardAvail < 5 ? (
-                    <div className="flex items-center gap-3 bg-amber-50 rounded-xl px-4 py-3 border border-amber-200 mb-3">
-                      <span className="text-base shrink-0">📖</span>
-                      <p className="text-sm text-amber-800 font-medium">
-                        Read at least 5 briefs to unlock Flashcard Round.
+                    <Link
+                      to="/learn-priority"
+                      data-testid="flashcard-locked-cta"
+                      className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group mb-3"
+                    >
+                      <span className="text-xl shrink-0">📖</span>
+                      <p className="text-sm font-semibold text-slate-700 leading-snug">
+                        Read at least 5 briefs to unlock Flashcard Round
                       </p>
-                    </div>
-                  ) : null}
-                  <button
-                    onClick={() => setShowFlashcard(true)}
-                    disabled={flashcardAvail !== null && flashcardAvail < 5}
-                    data-testid="flashcard-launch-btn"
-                    className="w-full py-2.5 font-extrabold rounded-xl text-sm transition-all"
-                    style={flashcardAvail !== null && flashcardAvail < 5
-                      ? { background: '#f1f5f9', color: '#94a3b8', cursor: 'not-allowed' }
-                      : { background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#0f172a', cursor: 'pointer' }
-                    }
-                  >
-                    {flashcardAvail !== null && flashcardAvail < 5 ? 'Read more briefs to unlock' : 'Start Drill ⚡'}
-                  </button>
+                      <span className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto shrink-0">→</span>
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => setShowFlashcard(true)}
+                      data-testid="flashcard-launch-btn"
+                      className="w-full py-2.5 font-extrabold rounded-xl text-sm transition-all"
+                      style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#0f172a', cursor: 'pointer' }}
+                    >
+                      Start Drill ⚡
+                    </button>
+                  )}
                 </>
               )}
             </div>
+          </motion.div>
+          )}
           </div>
 
           {/* Where's that Aircraft? */}
-          <div ref={aircraftRef} className={sectionClass('wheres-that-aircraft')}>
+          <div ref={aircraftRef}>
+          {allSectionsReady && (
+          <motion.div {...swipeProps(2)} className={sectionClass('wheres-that-aircraft')}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">✈️</span>
@@ -558,10 +637,14 @@ export default function Play() {
                 </Link>
               )}
             </div>
+          </motion.div>
+          )}
           </div>
 
           {/* Battle of Order */}
-          <div ref={battleRef} className={sectionClass('battle-order')}>
+          <div ref={battleRef}>
+          {allSectionsReady && (
+          <motion.div {...swipeProps(3)} className={sectionClass('battle-order')}>
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">🗺️</span>
@@ -745,26 +828,42 @@ export default function Play() {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-4">
-                  <p className="text-sm text-slate-500 mb-4">
-                    Read briefs in eligible categories (Aircrafts, Ranks, Training, Missions, Tech, Treaties) to unlock Battle of Order.
-                  </p>
+                <>
                   <Link
                     to="/learn-priority"
-                    className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+                    data-testid="boo-locked-cta"
+                    className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group mb-3"
                   >
-                    Explore Subjects
+                    <span className="text-xl shrink-0">🗺️</span>
+                    <p className="text-sm font-semibold text-slate-700 leading-snug">
+                      Read more briefs to unlock Battle of Order
+                    </p>
+                    <span className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto shrink-0">→</span>
                   </Link>
-                </div>
+                  <p className="text-xs text-slate-400 px-1">
+                    Eligible categories: Aircrafts, Ranks, Training, Missions, Tech, Treaties.
+                  </p>
+                </>
               )}
             </div>
+          </motion.div>
+          )}
           </div>
 
         </div>
 
         {/* ── Game history ───────────────────────────────────────────── */}
-        {user && (
-          <div className="mt-4">
+        {/* historyReady is set 1.4s after the launcher cascade starts, so
+            History only mounts after the four sections have visibly settled.
+            This avoids the "halfway-through" overlap that the framer-motion
+            `delay` alone produced. */}
+        {historyReady && (
+          <motion.div
+            initial={{ opacity: 0, x: '-100vw' }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-4"
+          >
             <Link
               to="/game-history"
               className="flex items-center justify-between bg-surface rounded-2xl px-4 py-3 border border-slate-200 hover:border-brand-300 transition-all card-shadow text-sm font-semibold text-slate-700"
@@ -772,7 +871,7 @@ export default function Play() {
               <span>📜 View game history</span>
               <span className="text-slate-400">→</span>
             </Link>
-          </div>
+          </motion.div>
         )}
       </div>
     </>

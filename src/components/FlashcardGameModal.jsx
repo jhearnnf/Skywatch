@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
+import { useGameChrome } from '../context/GameChromeContext'
 import { playSound } from '../utils/sound'
 
 const COUNT_OPTIONS = [5, 10, 15, 20]
@@ -131,6 +132,14 @@ export default function FlashcardGameModal({ onClose }) {
   const gameFinished  = useRef(false)  // true once finishGame resolves or game reaches result screen
   const abandonSent   = useRef(false)  // guard against double-sending
   const timeoutFired  = useRef(false)  // guard against React double-invoking state updaters
+
+  // Hide TopBar / BottomNav on mobile while a card is being recalled.
+  const { enterImmersive, exitImmersive } = useGameChrome()
+  useEffect(() => {
+    if (screen === 'game') enterImmersive()
+    else exitImmersive()
+    return exitImmersive
+  }, [screen, enterImmersive, exitImmersive])
 
   // Fetch available brief count on mount
   useEffect(() => {
@@ -352,7 +361,7 @@ export default function FlashcardGameModal({ onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
       style={{ background: 'rgba(8, 14, 30, 0.88)' }}
       data-testid="flashcard-modal"
     >

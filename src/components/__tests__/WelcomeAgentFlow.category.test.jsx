@@ -185,6 +185,53 @@ describe('WelcomeAgentFlow — copy varies by auth state', () => {
     expect(screen.getByText('Roles')).toBeInTheDocument()
   })
 
+  it('hides categories the user is tier-eligible for but level/rank-locked from', () => {
+    // Silver/L1 user — tier grants ['News','Aviation','Cyber'] but Cyber
+    // requires level 5, so it should be filtered out of the first-mission picker.
+    mockUseSettings.mockReturnValue({
+      settings: {
+        guestCategories:  ['News'],
+        freeCategories:   ['News'],
+        silverCategories: ['News', 'Aviation', 'Cyber'],
+        pathwayUnlocks: [
+          { category: 'Cyber', rankRequired: 1, levelRequired: 5 },
+        ],
+      },
+      levelThresholds: [0, 100, 350, 850, 1700, 3000],
+    })
+    mockUseAuth.mockReturnValue({
+      user: { _id: 'u1', subscriptionTier: 'silver', cycleAirstars: 0, rank: { rankNumber: 1 } },
+    })
+    render(<WelcomeAgentFlow onClose={vi.fn()} />)
+
+    expect(screen.getByText('News')).toBeInTheDocument()
+    expect(screen.getByText('Aviation')).toBeInTheDocument()
+    expect(screen.queryByText('Cyber')).not.toBeInTheDocument()
+  })
+
+  it('falls back to News when every tier-eligible category is pathway-locked', () => {
+    mockUseSettings.mockReturnValue({
+      settings: {
+        guestCategories:  ['News'],
+        freeCategories:   ['News'],
+        silverCategories: ['Cyber'],
+        pathwayUnlocks: [
+          { category: 'Cyber', rankRequired: 1, levelRequired: 5 },
+          { category: 'News',  rankRequired: 1, levelRequired: 5 },
+        ],
+      },
+      levelThresholds: [0, 100, 350, 850, 1700, 3000],
+    })
+    mockUseAuth.mockReturnValue({
+      user: { _id: 'u1', subscriptionTier: 'silver', cycleAirstars: 0, rank: { rankNumber: 1 } },
+    })
+    render(<WelcomeAgentFlow onClose={vi.fn()} />)
+
+    // News is the always-available fallback when filtering empties the list
+    expect(screen.getByText('News')).toBeInTheDocument()
+    expect(screen.queryByText('Cyber')).not.toBeInTheDocument()
+  })
+
   it('shows signed-in copy and hides the "Create account first" CTA when a user is present', () => {
     setup(['News'], { user: { _id: 'u1', displayName: 'Test Agent' } })
 

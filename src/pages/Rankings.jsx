@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -30,9 +30,9 @@ const C = {
 const VALID_TABS = ['levels', 'ranks']
 
 function NumberCircle({ number, isCurrent, isAbove, isSelected, children }) {
-  const bg    = isCurrent ? C.brand  : isSelected ? C.border : isAbove ? C.deep : C.surface
+  const bg    = isCurrent ? C.brand  : isSelected ? C.border : isAbove ? 'transparent' : C.surface
   const color = isCurrent ? C.deep   : isSelected ? C.brand  : isAbove ? C.dim  : C.brand
-  const bdr   = isCurrent ? C.brand  : isSelected ? 'rgba(91,170,255,0.4)' : C.border
+  const bdr   = isCurrent ? C.brand  : isSelected ? 'rgba(91,170,255,0.4)' : isAbove ? 'rgba(61,90,122,0.5)' : C.border
   const glow  = isCurrent ? '0 0 14px rgba(91,170,255,0.5)' : 'none'
   return (
     <span
@@ -57,13 +57,15 @@ function YouBadge() {
 
 // ── Level row ────────────────────────────────────────────────────────────────
 
-function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathwayUnlocks, onSubscriptionLocked }) {
+function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathwayUnlocks, onSubscriptionLocked, rowRef }) {
   const isCurrent  = lvl.levelNumber === userLevel
   const isAbove    = lvl.levelNumber > userLevel
+  const isBelow    = userLevel != null && lvl.levelNumber < userLevel
   const isMax      = lvl.levelNumber === 10
   const lvlUnlocks = pathwayUnlocks.filter(u => u.levelRequired === lvl.levelNumber && (u.rankRequired ?? 1) === userRankNumber)
   return (
     <motion.div
+      ref={rowRef}
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: i * 0.04 }}
@@ -71,25 +73,38 @@ function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathway
       style={{
         background:   isCurrent ? 'rgba(91,170,255,0.07)' : 'transparent',
         borderBottom: isLast ? 'none' : `1px solid ${C.border}`,
-        opacity:      isAbove ? 0.45 : 1,
+        borderLeft:   isBelow ? `2px solid rgba(91,170,255,0.35)` : '2px solid transparent',
+        opacity:      isAbove ? 0.4 : 1,
       }}
     >
       <div className="flex items-center gap-3">
-        <NumberCircle number={lvl.levelNumber} isCurrent={isCurrent} isAbove={isAbove} />
+        <NumberCircle number={lvl.levelNumber} isCurrent={isCurrent} isAbove={isAbove}>
+          {isAbove ? <span style={{ fontSize: '12px' }}>🔒</span> : lvl.levelNumber}
+        </NumberCircle>
         <div className="flex-1">
           <p className="text-sm font-bold" style={{ color: isCurrent ? C.text : isAbove ? C.dim : C.subtle }}>
-            Level {lvl.levelNumber}{isMax && <span className="ml-1.5 text-white"><span className="star-silver">⭐</span> MAX</span>}
+            {isBelow && <span className="mr-1" style={{ color: C.brand, opacity: 0.75 }}>✓</span>}
+            Level {lvl.levelNumber}
           </p>
           <p className="text-xs intel-mono" style={{ color: C.dim }}>
             {lvl.cumulativeAirstars.toLocaleString()} Airstars required
           </p>
         </div>
         {isCurrent && <YouBadge />}
-        {isMax && !isCurrent && <span className="text-xs font-semibold shrink-0 text-white">Rank Up</span>}
-        {isAbove && !isCurrent && <span className="text-base shrink-0" style={{ opacity: 0.4 }}>🔒</span>}
+        {isCurrent && isMax && (
+          <span
+            className="text-xs font-bold px-2 py-0.5 rounded-full shrink-0 intel-mono"
+            style={{ background: 'rgba(91,170,255,0.15)', color: C.brand, border: '1px solid rgba(91,170,255,0.3)' }}
+          >
+            RANK UP
+          </span>
+        )}
       </div>
       {lvlUnlocks.length > 0 && (
-        <div className="ml-11">
+        <div
+          className="ml-11"
+          style={{ filter: isAbove ? 'grayscale(0.6)' : 'none' }}
+        >
           <UnlockBadges
             unlocks={lvlUnlocks}
             userLevel={userLevel}
@@ -105,7 +120,8 @@ function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathway
 
 // ── Rank row ─────────────────────────────────────────────────────────────────
 
-function RankRow({ rank, i, isLast, isUser, isAbove, isSelected, onClick, rowRef }) {
+function RankRow({ rank, i, isLast, isUser, isAbove, isBelow, isSelected, onClick, rowRef }) {
+  const dimBadge = isAbove && !isSelected
   return (
     <motion.div
       ref={rowRef}
@@ -117,13 +133,17 @@ function RankRow({ rank, i, isLast, isUser, isAbove, isSelected, onClick, rowRef
       style={{
         background:   isSelected ? 'rgba(91,170,255,0.09)' : 'transparent',
         borderBottom: isLast ? 'none' : `1px solid ${C.border}`,
-        borderLeft:   isSelected ? '2px solid rgba(91,170,255,0.5)' : '2px solid transparent',
+        borderLeft:   isSelected
+          ? '2px solid rgba(91,170,255,0.5)'
+          : isBelow ? '2px solid rgba(91,170,255,0.35)' : '2px solid transparent',
         opacity:      isAbove && !isSelected ? 0.45 : 1,
       }}
     >
       <NumberCircle number={rank.rankNumber} isCurrent={isUser} isAbove={isAbove} isSelected={isSelected}>
         {rank.rankNumber > 1
-          ? <RankBadge rankNumber={rank.rankNumber} size={18} color={isUser ? C.deep : C.brand} />
+          ? <span style={{ filter: dimBadge ? 'grayscale(0.4)' : 'none', display: 'inline-flex' }}>
+              <RankBadge rankNumber={rank.rankNumber} size={18} color={isUser ? C.deep : C.brand} />
+            </span>
           : (rank.rankAbbreviation ?? 'AC')}
       </NumberCircle>
       <div className="flex-1 min-w-0">
@@ -131,6 +151,7 @@ function RankRow({ rank, i, isLast, isUser, isAbove, isSelected, onClick, rowRef
           className="text-sm font-bold truncate"
           style={{ color: isUser || isSelected ? C.text : isAbove ? C.dim : C.subtle }}
         >
+          {isBelow && <span className="mr-1" style={{ color: C.brand, opacity: 0.75 }}>✓</span>}
           {rank.rankAbbreviation ?? rank.abbreviation}
         </p>
         <p className="text-xs truncate" style={{ color: C.dim }}>
@@ -201,17 +222,52 @@ export default function Rankings() {
     : null
   const userRankNumber = user ? (userRank?.rankNumber ?? 1) : null
 
-  const userRankRowRef    = useRef(null)
-  const rankListScrollRef = useRef(null)
-  const levelsListRef     = useRef(null)
-  const [levelsListH, setLevelsListH] = useState(null)
+  const userRankRowRef       = useRef(null)
+  const rankListScrollRef    = useRef(null)
+  const levelsListScrollRef  = useRef(null)
+  const currentLevelRowRef   = useRef(null)
+  const [listMaxH, setListMaxH] = useState(null)
 
-  // Measure levels list height so ranks container can match
+  // Hard-lock outer page scroll while on this route — the inner list has its own
+  // overflow:auto, and locking here side-steps mobile URL-bar / safe-area math entirely
   useEffect(() => {
-    if (tab === 'levels' && levelsListRef.current) {
-      setLevelsListH(levelsListRef.current.offsetHeight)
+    const html = document.documentElement
+    const body = document.body
+    const prevHtml = html.style.overflow
+    const prevBody = body.style.overflow
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    return () => {
+      html.style.overflow = prevHtml
+      body.style.overflow = prevBody
     }
-  }, [tab, sortedLevels])
+  }, [])
+
+  // Fit the active list to remaining viewport height so the visible content fills it.
+  // Walks ancestor padding-bottom (e.g. AppShell's pb-20 + py-6) so the list ends right
+  // at the page's natural content bottom — bottom nav overlap is already covered by
+  // those paddings on mobile.
+  useEffect(() => {
+    function measure() {
+      const node = tab === 'levels' ? levelsListScrollRef.current : rankListScrollRef.current
+      if (!node) return
+      const top = node.getBoundingClientRect().top
+      let paddingBelow = 0
+      let el = node.parentElement
+      while (el && el !== document.body) {
+        paddingBelow += parseFloat(getComputedStyle(el).paddingBottom) || 0
+        el = el.parentElement
+      }
+      const max = window.innerHeight - top - paddingBelow
+      setListMaxH(Math.max(240, Math.round(max)))
+    }
+    const id = requestAnimationFrame(measure)
+    window.addEventListener('resize', measure)
+    return () => {
+      cancelAnimationFrame(id)
+      window.removeEventListener('resize', measure)
+    }
+  }, [tab, user])
 
   const [selectedRankNum, setSelectedRankNum] = useState(userRankNumber)
   useEffect(() => { setSelectedRankNum(userRankNumber) }, [userRankNumber])
@@ -228,7 +284,23 @@ export default function Rankings() {
       // No user — scroll to bottom (lowest ranks, where newcomers start)
       container.scrollTop = container.scrollHeight
     }
-  }, [ranks, userRankNumber, tab])
+  }, [ranks, userRankNumber, tab, listMaxH])
+
+  // Center the user's current level in view on the Levels tab
+  useEffect(() => {
+    if (tab !== 'levels') return
+    const container = levelsListScrollRef.current
+    if (!container) return
+    const row = currentLevelRowRef.current
+    if (row) {
+      const containerH = container.clientHeight
+      const rowH       = row.offsetHeight
+      container.scrollTop = row.offsetTop - containerH / 2 + rowH / 2
+    } else {
+      // Not signed in — scroll to bottom (Level 1, the start)
+      container.scrollTop = container.scrollHeight
+    }
+  }, [tab, levels, userLevel, listMaxH])
 
   const selectedRank        = ranks.find(r => r.rankNumber === selectedRankNum) ?? null
   const previewRankUnlocks  = pathwayUnlocks.filter(u => (u.rankRequired ?? 1) === selectedRankNum)
@@ -345,20 +417,43 @@ export default function Rankings() {
           )}
 
           {/* Level list */}
-          <div ref={levelsListRef} className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
-            {sortedLevels.map((lvl, i) => (
-              <LevelRow
-                key={lvl.levelNumber}
-                lvl={lvl}
-                i={i}
-                isLast={i === sortedLevels.length - 1}
-                userLevel={userLevel}
-                userRankNumber={userRankNumber}
-                userTier={userTier}
-                pathwayUnlocks={pathwayUnlocks}
-                onSubscriptionLocked={handleSubscriptionLocked}
-              />
-            ))}
+          <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+            <div
+              ref={levelsListScrollRef}
+              style={{ height: listMaxH ?? 540, overflowY: 'auto', scrollbarWidth: 'none' }}
+            >
+              {sortedLevels.map((lvl, i) => {
+                const isCurrentRow  = lvl.levelNumber === userLevel
+                const showLockLabel = isCurrentRow && i > 0
+                return (
+                  <Fragment key={lvl.levelNumber}>
+                    {showLockLabel && (
+                      <div
+                        className="px-4 py-1.5 text-center text-[10px] uppercase tracking-[0.2em] font-bold"
+                        style={{
+                          background:   'rgba(0,0,0,0.25)',
+                          color:        C.muted,
+                          borderBottom: `1px solid ${C.border}`,
+                        }}
+                      >
+                        ↑ Locked
+                      </div>
+                    )}
+                    <LevelRow
+                      lvl={lvl}
+                      i={i}
+                      isLast={i === sortedLevels.length - 1}
+                      userLevel={userLevel}
+                      userRankNumber={userRankNumber}
+                      userTier={userTier}
+                      pathwayUnlocks={pathwayUnlocks}
+                      onSubscriptionLocked={handleSubscriptionLocked}
+                      rowRef={isCurrentRow ? currentLevelRowRef : undefined}
+                    />
+                  </Fragment>
+                )
+              })}
+            </div>
           </div>
         </motion.div>
       )}
@@ -440,28 +535,43 @@ export default function Rankings() {
                   )}
                 </div>
               </motion.div>
-              <p className="text-xs mt-2" style={{ color: C.dim }}>
-                Tap a rank below to preview its unlocks
-              </p>
             </div>
           </div>
 
           {/* Rank list */}
           <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
-            <div ref={rankListScrollRef} style={{ height: levelsListH ?? 540, overflowY: 'auto', scrollbarWidth: 'none' }}>
-              {sortedRanks.map((rank, i) => (
-                <RankRow
-                  key={rank.rankNumber}
-                  rank={rank}
-                  i={i}
-                  isLast={i === sortedRanks.length - 1}
-                  isUser={rank.rankNumber === userRankNumber}
-                  isAbove={rank.rankNumber > userRankNumber}
-                  isSelected={rank.rankNumber === selectedRankNum}
-                  onClick={() => setSelectedRankNum(rank.rankNumber)}
-                  rowRef={rank.rankNumber === userRankNumber ? userRankRowRef : undefined}
-                />
-              ))}
+            <div ref={rankListScrollRef} style={{ height: listMaxH ?? 540, overflowY: 'auto', scrollbarWidth: 'none' }}>
+              {sortedRanks.map((rank, i) => {
+                const isUserRow     = rank.rankNumber === userRankNumber
+                const showLockLabel = isUserRow && i > 0
+                return (
+                  <Fragment key={rank.rankNumber}>
+                    {showLockLabel && (
+                      <div
+                        className="px-4 py-1.5 text-center text-[10px] uppercase tracking-[0.2em] font-bold"
+                        style={{
+                          background:   'rgba(0,0,0,0.25)',
+                          color:        C.muted,
+                          borderBottom: `1px solid ${C.border}`,
+                        }}
+                      >
+                        ↑ Locked · Tap to preview
+                      </div>
+                    )}
+                    <RankRow
+                      rank={rank}
+                      i={i}
+                      isLast={i === sortedRanks.length - 1}
+                      isUser={isUserRow}
+                      isAbove={rank.rankNumber > userRankNumber}
+                      isBelow={userRankNumber != null && rank.rankNumber < userRankNumber}
+                      isSelected={rank.rankNumber === selectedRankNum}
+                      onClick={() => setSelectedRankNum(rank.rankNumber)}
+                      rowRef={isUserRow ? userRankRowRef : undefined}
+                    />
+                  </Fragment>
+                )
+              })}
               {sortedRanks.length === 0 && (
                 <div className="px-4 py-6 text-center text-sm" style={{ color: C.dim }}>
                   No rank data available.

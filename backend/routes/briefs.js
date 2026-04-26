@@ -794,7 +794,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
       if (linkedIds.length) {
         const linkedBriefs = await IntelligenceBrief.find(
           { _id: { $in: linkedIds } },
-          '_id title nickname category'
+          '_id title nickname category status'
         ).lean();
 const idToLinked = new Map(linkedBriefs.map(b => [String(b._id), b]));
         briefObj.keywords = briefObj.keywords.map(k => {
@@ -861,7 +861,6 @@ router.get('/:id/reward-preview', protect, async (req, res) => {
       const thresholds = buildCumulativeThresholds(levelsList);
       const cycleThreshold = await getCycleThreshold();
 
-      const startingTotal    = req.user.totalAirstars ?? 0;
       const startingCycle    = req.user.cycleAirstars ?? 0;
       const startingRankNum  = req.user.rank?.rankNumber ?? 0;
 
@@ -879,8 +878,8 @@ router.get('/:id/reward-preview', protect, async (req, res) => {
         }
       }
 
-      const beforeUser = { totalAirstars: startingTotal,                rank: { rankNumber: startingRankNum  } };
-      const afterUser  = { totalAirstars: startingTotal + totalEarned, rank: { rankNumber: projectedRankNum } };
+      const beforeUser = { cycleAirstars: startingCycle,   rank: { rankNumber: startingRankNum  } };
+      const afterUser  = { cycleAirstars: projectedCycle,  rank: { rankNumber: projectedRankNum } };
 
       const before = getPathwayAccessibleCategories(beforeUser, settings, thresholds) ?? [];
       const after  = getPathwayAccessibleCategories(afterUser,  settings, thresholds) ?? [];

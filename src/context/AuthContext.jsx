@@ -149,10 +149,10 @@ export function AuthProvider({ children }) {
       if (rankPromotion) {
         // Skip level-up notifs — rank promotion supersedes them
         items.push({ id: `${ts}-rp`, type: 'rankpromotion', rank: rankPromotion.to })
-      } else {
-        for (let lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
-          items.push({ id: `${ts}-lu-${lvl}`, type: 'levelup', level: lvl })
-        }
+      } else if (newLevel > oldLevel) {
+        // One notif per award regardless of how many levels were crossed —
+        // shows the highest level reached so big jumps don't spam the queue.
+        items.push({ id: `${ts}-lu-${newLevel}`, type: 'levelup', level: newLevel })
       }
       // Category unlock fires LAST in the queue — grand-finale "you've unlocked new pathways" notif.
       if (Array.isArray(unlockedCategories) && unlockedCategories.length) {

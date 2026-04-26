@@ -92,9 +92,16 @@ export default function Home() {
     const currentStreak = user.loginStreak ?? 0
 
     if (!missionDone) {
-      setMissionPhase('available')
       setDisplayStreak(currentStreak)
-      return
+      // Hold off mounting the drawer so Quick Actions sits directly below the
+      // XP card on first render with no reserved slot above it. Once Quick
+      // Actions has finished its slide-in, the drawer mounts and Quick
+      // Actions layout-animates downward to make room.
+      const availableDelay = prefersReducedMotion ? 0 : 600
+      const availableTimer = setTimeout(() => {
+        setMissionPhase('available')
+      }, availableDelay)
+      return () => clearTimeout(availableTimer)
     }
 
     if (streakAnimRan.current) return
@@ -545,10 +552,7 @@ export default function Home() {
       {user && (
         <motion.div
           layout
-          initial={{ opacity: 0, x: -12 }}
-          animate={{ opacity: 1, x: 0 }}
           transition={{
-            delay: 0.3,
             // Smoothly slide into the space freed when the mission drawer
             // exits via AnimatePresence mode="popLayout" — without this the
             // card would snap to its new position.
@@ -556,8 +560,13 @@ export default function Home() {
           }}
           className="mb-6"
         >
-          {/* Eyebrow heading — echoes the NEWS hero / greeting treatment */}
-          <div className="flex items-center gap-3 mb-3">
+          {/* Eyebrow heading — fades in first to cue the cascade below */}
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            className="flex items-center gap-3 mb-3"
+          >
             <div className="h-px w-8" style={{ background: 'rgba(91,170,255,0.35)' }} />
             <span
               className="text-[10px] font-bold uppercase tracking-[0.35em]"
@@ -566,24 +575,30 @@ export default function Home() {
               Quick Actions
             </span>
             <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, rgba(91,170,255,0.25), transparent)' }} />
-          </div>
+          </motion.div>
           <div className="space-y-2">
             {jumpBackBrief && (
-              <button
-                type="button"
-                onClick={() => navigate(`/brief/${jumpBackBrief.briefId}`)}
-                className="w-full flex items-center gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 cursor-pointer border-brand-300/40 hover:border-brand-400/60"
-                style={{ background: 'linear-gradient(135deg, #0c2042 0%, #0a1a30 100%)' }}
+              <motion.div
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.12, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
               >
-                <span className="text-2xl w-7 text-center shrink-0 text-brand-600">◑</span>
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-bold text-white truncate">{jumpBackBrief.title}</p>
-                  <p className="text-xs text-brand-600">{jumpBackBrief.category} · In Progress</p>
-                </div>
-                <span className="text-xs font-bold bg-brand-600 text-slate-900 px-3 py-1.5 rounded-xl shrink-0">
-                  Resume →
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/brief/${jumpBackBrief.briefId}`)}
+                  className="w-full flex items-center gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 cursor-pointer border-brand-300/40 hover:border-brand-400/60"
+                  style={{ background: 'linear-gradient(135deg, #0c2042 0%, #0a1a30 100%)' }}
+                >
+                  <span className="text-2xl w-7 text-center shrink-0 text-brand-600">◑</span>
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="text-sm font-bold text-white truncate">{jumpBackBrief.title}</p>
+                    <p className="text-xs text-brand-600">{jumpBackBrief.category} · In Progress</p>
+                  </div>
+                  <span className="text-xs font-bold bg-brand-600 text-slate-900 px-3 py-1.5 rounded-xl shrink-0">
+                    Resume →
+                  </span>
+                </button>
+              </motion.div>
             )}
             {(() => {
               // Hide until we know the lock state (prevents unlocked→locked flash for logged-in users)
@@ -610,39 +625,49 @@ export default function Home() {
                   unlockReadBusyRef.current = false
                 }
               }
+              // Second card in the stagger if Resume is showing, otherwise
+              // first — keeps the cascade tight when the user has no
+              // in-progress brief.
+              const flashcardDelay = jumpBackBrief ? 0.24 : 0.12
               return (
-                <button
-                  onClick={locked ? handleLockedClick : () => setShowFlashcard(true)}
-                  data-testid="home-flashcard-btn"
-                  title={locked ? `Complete ${needed} more brief${needed === 1 ? '' : 's'} to unlock — tap to start reading` : undefined}
-                  className={
-                    locked
-                      ? 'w-full flex items-center gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 cursor-pointer border-amber-200/40 hover:border-amber-200/70'
-                      : 'w-full flex items-center gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 cursor-pointer border-amber-200 hover:border-amber-400'
-                  }
-                  style={{
-                    background: locked
-                      ? 'linear-gradient(135deg, #1a1407 0%, #0f0b04 100%)'
-                      : 'linear-gradient(135deg, #2d2000 0%, #1a1200 100%)',
-                  }}
+                <motion.div
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: flashcardDelay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  <span className={`text-2xl w-7 text-center shrink-0 ${locked ? 'grayscale' : ''}`}>
-                    {locked ? '🔒' : '⚡'}
-                  </span>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className={`text-sm font-bold ${locked ? 'text-amber-900/80' : 'text-amber-900'}`}>
-                      Flashcard Round
-                    </p>
-                    <p className={`text-xs ${locked ? 'text-amber-600/80' : 'text-amber-600'}`}>
-                      {locked
-                        ? `Complete ${needed} more brief${needed === 1 ? '' : 's'} to unlock`
-                        : 'Identify briefs from content alone — title hidden'}
-                    </p>
-                  </div>
-                  <span className="text-xs font-bold px-3 py-1.5 rounded-xl shrink-0 bg-amber-500 text-white">
-                    {locked ? 'Read →' : 'Play →'}
-                  </span>
-                </button>
+                  <button
+                    onClick={locked ? handleLockedClick : () => setShowFlashcard(true)}
+                    data-testid="home-flashcard-btn"
+                    title={locked ? `Complete ${needed} more brief${needed === 1 ? '' : 's'} to unlock — tap to start reading` : undefined}
+                    className={
+                      locked
+                        ? 'w-full flex items-center gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 cursor-pointer border-amber-200/40 hover:border-amber-200/70'
+                        : 'w-full flex items-center gap-3 rounded-2xl p-4 border transition-all card-shadow hover:card-shadow-hover hover:-translate-y-0.5 cursor-pointer border-amber-200 hover:border-amber-400'
+                    }
+                    style={{
+                      background: locked
+                        ? 'linear-gradient(135deg, #1a1407 0%, #0f0b04 100%)'
+                        : 'linear-gradient(135deg, #2d2000 0%, #1a1200 100%)',
+                    }}
+                  >
+                    <span className={`text-2xl w-7 text-center shrink-0 ${locked ? 'grayscale' : ''}`}>
+                      {locked ? '🔒' : '⚡'}
+                    </span>
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className={`text-sm font-bold ${locked ? 'text-amber-900/80' : 'text-amber-900'}`}>
+                        Flashcard Round
+                      </p>
+                      <p className={`text-xs ${locked ? 'text-amber-600/80' : 'text-amber-600'}`}>
+                        {locked
+                          ? `Complete ${needed} more brief${needed === 1 ? '' : 's'} to unlock`
+                          : 'Identify briefs from content alone — title hidden'}
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold px-3 py-1.5 rounded-xl shrink-0 bg-amber-500 text-white">
+                      {locked ? 'Read →' : 'Play →'}
+                    </span>
+                  </button>
+                </motion.div>
               )
             })()}
           </div>

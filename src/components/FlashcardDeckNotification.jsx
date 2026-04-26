@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
+import { useGameChrome } from '../context/GameChromeContext'
 
 const NOTIF_W   = 280
 const NOTIF_H   = 64
@@ -15,11 +16,28 @@ function getPlayNavElement() {
   return null
 }
 
+// CSS transforms keep the bounding box dimensions intact, so a translated-off-screen
+// BottomNav still has width/height. Check whether the rect actually overlaps the
+// viewport — if not, the flash would happen invisibly and needs to be deferred.
+function elementIsOnScreen(el) {
+  const r = el.getBoundingClientRect()
+  return r.bottom > 0 && r.top < window.innerHeight
+}
+
 export default function FlashcardDeckNotification({ cardRect, onDone }) {
   // phase: 'flying-in' | 'showing' | 'flying-out'
   const [phase,       setPhase]   = useState('flying-in')
   const playNavRectRef            = useRef(null)
   const doneSentRef               = useRef(false)
+  const { requestPlayNavFlash, enterFlashcardCollect, exitFlashcardCollect } = useGameChrome()
+
+  // Hold flashcardCollectActive=true from mount until 1200ms after unmount, so
+  // PlayNavFlasher waits for THIS animation's play-nav-flash to finish before
+  // firing its own unlock-driven flash (avoids two overlapping pulses).
+  useEffect(() => {
+    enterFlashcardCollect()
+    return () => { setTimeout(exitFlashcardCollect, 1200) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const notifLeft = Math.round((window.innerWidth - NOTIF_W) / 2)
 
@@ -59,9 +77,13 @@ export default function FlashcardDeckNotification({ cardRect, onDone }) {
       setPhase('showing')
     } else if (phase === 'flying-out') {
       const el = getPlayNavElement()
-      if (el) {
+      if (el && elementIsOnScreen(el)) {
         el.classList.add('play-nav-flash')
         setTimeout(() => el.classList.remove('play-nav-flash'), 1200)
+      } else {
+        // Element exists but is off-screen (BottomNav translated for immersive
+        // gameplay) — defer the flash until BottomNav slides back into view.
+        requestPlayNavFlash()
       }
       callDone()
     }
