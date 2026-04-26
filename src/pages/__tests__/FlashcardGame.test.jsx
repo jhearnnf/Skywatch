@@ -316,7 +316,11 @@ describe('FlashcardGameModal — sounds', () => {
     fireEvent.click(screen.getByTestId('flashcard-start-btn'))
     await waitFor(() => screen.getByTestId('blurred-title'))
     playSound.mockClear()
-    act(() => { vi.advanceTimersByTime(31000) })
+    // advanceTimersByTimeAsync yields to microtasks between each setInterval
+    // tick so the React state updates from setTimeLeft can commit and the
+    // t<=1 branch runs handleTimeout — sync advance batches everything and
+    // the timeout never fires.
+    await act(async () => { await vi.advanceTimersByTimeAsync(31000) })
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('flashcard_incorrect'))
     expect(playSound).toHaveBeenCalledTimes(1)
   }, 15000)

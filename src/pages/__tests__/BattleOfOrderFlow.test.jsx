@@ -122,8 +122,10 @@ async function renderAndReachGame(fetchMock) {
   render(<BattleOfOrderFlow />)
   // Wait for the roulette screen to appear
   await waitFor(() => screen.getByText('Battle of Order'))
-  // Advance past all roulette ticks + 900ms post-spin pause
-  await act(async () => { vi.advanceTimersByTime(20000) })
+  // Advance past all roulette ticks + 900ms post-spin pause.
+  // advanceTimersByTimeAsync yields to microtasks between chained setTimeouts
+  // so the parent's /generate fetch + state update settle before we proceed.
+  await act(async () => { await vi.advanceTimersByTimeAsync(20000) })
   vi.useRealTimers()
   // Wait for game screen on real timers — deterministic
   await waitFor(() => screen.getByText('Submit Order →'))
@@ -213,12 +215,12 @@ describe('BattleOfOrderFlow — roulette / selection screen', () => {
     render(<BattleOfOrderFlow />)
 
     await waitFor(() => screen.getByText('Battle of Order'))
-    await act(async () => { vi.advanceTimersByTime(20000) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(20000) })
     vi.useRealTimers()
 
     await waitFor(() => screen.getByText('Submit Order →'))
     expect(screen.queryByText('Selecting challenge')).toBeNull()
-  })
+  }, 15000)
 
   it('advances to game screen after roulette spin completes (single-option)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -226,11 +228,11 @@ describe('BattleOfOrderFlow — roulette / selection screen', () => {
     render(<BattleOfOrderFlow />)
 
     await waitFor(() => screen.getByText('Battle of Order'))
-    await act(async () => { vi.advanceTimersByTime(20000) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(20000) })
     vi.useRealTimers()
 
     await waitFor(() => screen.getByText('Submit Order →'))
-  })
+  }, 15000)
 })
 
 describe('BattleOfOrderFlow — game screen', () => {
