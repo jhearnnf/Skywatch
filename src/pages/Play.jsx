@@ -413,9 +413,22 @@ export default function Play() {
   function sectionClass(key) {
     const isActive = activeGame === key
     return [
-      'bg-surface rounded-2xl border card-shadow transition-all duration-500',
+      'relative overflow-hidden bg-surface rounded-2xl border card-shadow transition-all duration-500',
       isActive ? 'border-brand-400' : 'border-slate-200',
     ].join(' ')
+  }
+
+  // Top-edge accent stripe for launcher sections — mirrors the per-game
+  // tile stripe so a click on the red WTA tile lands on a red-striped
+  // section. List-item state colors (amber/emerald/brand/grey) are left
+  // alone so they keep their semantic meaning.
+  function SectionAccent({ modeKey }) {
+    return (
+      <span
+        className={`absolute left-0 right-0 top-0 h-1 ${ACCENT[modeKey].bar}`}
+        aria-hidden="true"
+      />
+    )
   }
 
   // Alternating swipe-in animation for launcher sections.
@@ -564,6 +577,7 @@ export default function Play() {
           <div ref={quizRef} className="launcher-dim">
           {allSectionsReady && (
           <motion.div {...swipeProps(0)} className={sectionClass('quiz')}>
+            <SectionAccent modeKey="quiz" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">🧠</span>
@@ -700,6 +714,7 @@ export default function Play() {
           <div ref={flashcardRef} className="launcher-dim">
           {allSectionsReady && (
           <motion.div {...swipeProps(1)} className={sectionClass('flashcard')}>
+            <SectionAccent modeKey="flashcard" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">⚡</span>
@@ -763,6 +778,7 @@ export default function Play() {
           <div ref={aircraftRef} className="launcher-dim">
           {allSectionsReady && (
           <motion.div {...swipeProps(2)} className={sectionClass('wheres-that-aircraft')}>
+            <SectionAccent modeKey="wheres-that-aircraft" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AircraftEmoji
@@ -811,6 +827,7 @@ export default function Play() {
           <div ref={battleRef} className="launcher-dim">
           {allSectionsReady && (
           <motion.div {...swipeProps(3)} className={sectionClass('battle-order')}>
+            <SectionAccent modeKey="battle-order" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">🗺️</span>
