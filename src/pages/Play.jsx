@@ -152,34 +152,53 @@ export default function Play() {
   // next visit (fresh mount). null falls back to the ✈️ emoji.
   const [randomAircraft, setRandomAircraft] = useState(null)
 
-  // Per-section ready flags — sections stay hidden until their fetch settles
-  // so the user never sees a half-loaded "Start Drill" button or a misleading
-  // "Read briefs first" empty state. Guests have no fetches, so ready=true.
+  // Per-section ready flags — body content stays as a skeleton until the
+  // section's own fetch settles. Guests have no fetches, so ready=true.
   const [quizReady,      setQuizReady]      = useState(() => !user)
   const [flashcardReady, setFlashcardReady] = useState(() => !user)
   const [wtaReady,       setWtaReady]       = useState(() => !user)
   const [booReady,       setBooReady]       = useState(() => !user)
 
-  // Sections only mount once *all* fetches have settled — this guarantees a
-  // deterministic top-to-bottom cascade regardless of which endpoint finishes
-  // first. With per-section flags, a slow Quiz fetch could let BOO swipe in
-  // first, which looks chaotic.
-  const allSectionsReady = quizReady && flashcardReady && wtaReady && booReady
+  // Sections fade in independently when EITHER (a) their own fetch settles or
+  // (b) the user clicks the card before the fetch lands — in which case the
+  // section appears immediately with a skeleton body and swaps to real
+  // content when the fetch arrives. This keeps clicks instantly responsive
+  // instead of silently queueing them behind a global gate.
+  const [visibleSections, setVisibleSections] = useState(() => new Set())
+  useEffect(() => {
+    setVisibleSections(prev => {
+      const next = new Set(prev)
+      if (quizReady)      next.add('quiz')
+      if (flashcardReady) next.add('flashcard')
+      if (wtaReady)       next.add('wheres-that-aircraft')
+      if (booReady)       next.add('battle-order')
+      return next.size === prev.size ? prev : next
+    })
+  }, [quizReady, flashcardReady, wtaReady, booReady])
 
-  // "View game history" mounts strictly after the four-section cascade is
-  // visibly finished. The cascade settles around 1.21s after allSectionsReady
-  // (BOO = index 3 × 0.22s delay + 0.55s duration). We wait a beat longer so
-  // there's a clear gap before History sweeps in — otherwise it overlaps the
-  // tail of BOO and stops feeling like the "final" entry.
+  // Per-card ready lookup — used by the entry-tile stat-line placeholder so
+  // logged-in users see a tinted pulsing bar in the stat slot while the
+  // matching fetch is in flight, instead of an empty slot that pops a real
+  // stat in (and grows the card) the instant data lands.
+  const cardReady = {
+    'quiz':                 quizReady,
+    'flashcard':            flashcardReady,
+    'wheres-that-aircraft': wtaReady,
+    'battle-order':         booReady,
+  }
+
+  // "View game history" mounts shortly after the slowest fetch settles, so
+  // it always feels like the "final" entry once the page has fully resolved.
+  const allReady = quizReady && flashcardReady && wtaReady && booReady
   const [historyReady, setHistoryReady] = useState(false)
   useEffect(() => {
-    if (!user || !allSectionsReady) {
+    if (!user || !allReady) {
       setHistoryReady(false)
       return
     }
-    const t = setTimeout(() => setHistoryReady(true), 1400)
+    const t = setTimeout(() => setHistoryReady(true), 400)
     return () => clearTimeout(t)
-  }, [user, allSectionsReady])
+  }, [user, allReady])
 
   // Badge fly animation state
   const [flyingBadges,  setFlyingBadges]  = useState([]) // [{ key, from:{x,y}, to:{x,y} }]
@@ -400,6 +419,9 @@ export default function Play() {
 
   function handleCardClick(key) {
     if (isHighlightingGrid) tutorialNext()
+    // Force the section to render *now* even if its fetch hasn't settled —
+    // body will show a skeleton, swap to real content when the fetch lands.
+    setVisibleSections(prev => prev.has(key) ? prev : new Set(prev).add(key))
     const ref = sectionRefs[key]
     if (!ref?.current) return
     const OFFSET = 56 + 16
@@ -431,18 +453,37 @@ export default function Play() {
     )
   }
 
-  // Alternating swipe-in animation for launcher sections.
-  // Even indices swipe from the left, odd from the right; sections start fully
-  // off-screen (one full viewport width away). The 0.22s per-index delay
-  // gives a clear sequential cascade — each section starts shortly before the
-  // previous one finishes, so the user perceives them as distinct entries.
-  function swipeProps(index) {
-    const fromLeft = index % 2 === 0
-    return {
-      initial:    { opacity: 0, x: fromLeft ? '-100vw' : '100vw' },
-      animate:    { opacity: 1, x: 0 },
-      transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: index * 0.22 },
-    }
+  // Quick fade-in for a section as it becomes visible — either because its
+  // fetch settled or because the user clicked the card to summon it. We
+  // dropped the off-screen swipe cascade so each section can appear
+  // independently the moment its data lands, rather than waiting for the
+  // slowest fetch.
+  const fadeProps = {
+    initial:    { opacity: 0, y: 6 },
+    animate:    { opacity: 1, y: 0 },
+    transition: { duration: 0.2, ease: [0.22, 1, 0.36, 1] },
+  }
+
+  // Skeleton body shown while a section's fetch is in flight. Three shimmer
+  // rows match the visual rhythm of brief-row lists (Quiz/BOO) and read as
+  // "content arriving here" for the simpler Flashcard/WTA sections too.
+  function SectionSkeleton({ rows = 3 }) {
+    return (
+      <div className="space-y-2" aria-hidden="true">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200"
+          >
+            <div className="w-8 h-8 rounded-xl skeleton-shimmer shrink-0" />
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="h-3 rounded skeleton-shimmer" style={{ width: `${55 + (i * 15) % 30}%` }} />
+              <div className="h-2 rounded skeleton-shimmer" style={{ width: '38%' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
   }
 
   return (
@@ -556,12 +597,30 @@ export default function Play() {
                     )}
                   </div>
                   <p className="text-xs text-slate-400">{mode.desc}</p>
-                  {stat && (
+                  {user && (stat ? (
                     <div className="flex items-center gap-1.5 mt-2">
                       <span className={`w-1.5 h-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
                       <span className={`intel-mono ${accent.text}`}>{stat}</span>
                     </div>
-                  )}
+                  ) : !cardReady[mode.key] ? (
+                    <div
+                      className="flex items-center gap-1.5 mt-2 animate-pulse"
+                      data-testid={`card-stat-loading-${mode.key}`}
+                      aria-hidden="true"
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${accent.dot} opacity-50`} />
+                      {/* Bar shares `intel-mono` so its line-box height matches
+                          the eventual stat text exactly — eliminates the
+                          tile-height jump when real content lands. Invisible
+                          NBSP forces line-height; bg is what reads as the bar. */}
+                      <span
+                        className={`intel-mono inline-block rounded ${accent.dot} opacity-30`}
+                        style={{ width: '7rem', color: 'transparent' }}
+                      >
+                        &nbsp;
+                      </span>
+                    </div>
+                  ) : null)}
                 </div>
               </div>
             </motion.div>
@@ -575,8 +634,8 @@ export default function Play() {
 
           {/* Intel Quiz */}
           <div ref={quizRef} className="launcher-dim">
-          {allSectionsReady && (
-          <motion.div {...swipeProps(0)} className={sectionClass('quiz')}>
+          {visibleSections.has('quiz') && (
+          <motion.div {...fadeProps} className={sectionClass('quiz')}>
             <SectionAccent modeKey="quiz" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -588,7 +647,9 @@ export default function Play() {
               </Link>
             </div>
             <div className="p-5">
-              {!user ? (
+              {!quizReady ? (
+                <SectionSkeleton rows={3} />
+              ) : !user ? (
                 <div className="text-center py-4">
                   <p className="text-sm text-slate-500 mb-4">Sign in to take quizzes and earn Airstars.</p>
                   <Link
@@ -712,8 +773,8 @@ export default function Play() {
 
           {/* Flashcard Recall */}
           <div ref={flashcardRef} className="launcher-dim">
-          {allSectionsReady && (
-          <motion.div {...swipeProps(1)} className={sectionClass('flashcard')}>
+          {visibleSections.has('flashcard') && (
+          <motion.div {...fadeProps} className={sectionClass('flashcard')}>
             <SectionAccent modeKey="flashcard" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -727,7 +788,9 @@ export default function Play() {
               </div>
             </div>
             <div className="p-5">
-              {!user ? (
+              {!flashcardReady ? (
+                <SectionSkeleton rows={2} />
+              ) : !user ? (
                 <div className="text-center py-4">
                   <p className="text-sm text-slate-500 mb-4">Sign in to run Flashcard drills and earn Airstars.</p>
                   <Link
@@ -776,8 +839,8 @@ export default function Play() {
 
           {/* Where's that Aircraft? */}
           <div ref={aircraftRef} className="launcher-dim">
-          {allSectionsReady && (
-          <motion.div {...swipeProps(2)} className={sectionClass('wheres-that-aircraft')}>
+          {visibleSections.has('wheres-that-aircraft') && (
+          <motion.div {...fadeProps} className={sectionClass('wheres-that-aircraft')}>
             <SectionAccent modeKey="wheres-that-aircraft" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -790,7 +853,9 @@ export default function Play() {
               </div>
             </div>
             <div className="p-5">
-              {!user ? (
+              {!wtaReady ? (
+                <SectionSkeleton rows={2} />
+              ) : !user ? (
                 <div className="text-center py-4">
                   <p className="text-sm text-slate-500 mb-4">Sign in to play Where's that Aircraft? and earn Airstars.</p>
                   <Link
@@ -825,8 +890,8 @@ export default function Play() {
 
           {/* Battle of Order */}
           <div ref={battleRef} className="launcher-dim">
-          {allSectionsReady && (
-          <motion.div {...swipeProps(3)} className={sectionClass('battle-order')}>
+          {visibleSections.has('battle-order') && (
+          <motion.div {...fadeProps} className={sectionClass('battle-order')}>
             <SectionAccent modeKey="battle-order" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -838,7 +903,9 @@ export default function Play() {
               </Link>
             </div>
             <div className="p-5">
-              {!user ? (
+              {!booReady ? (
+                <SectionSkeleton rows={3} />
+              ) : !user ? (
                 <div className="text-center py-4">
                   <p className="text-sm text-slate-500 mb-4">Sign in to play Battle of Order and earn Airstars.</p>
                   <Link
@@ -1036,15 +1103,14 @@ export default function Play() {
         </div>
 
         {/* ── Game history ───────────────────────────────────────────── */}
-        {/* historyReady is set 1.4s after the launcher cascade starts, so
-            History only mounts after the four sections have visibly settled.
-            This avoids the "halfway-through" overlap that the framer-motion
-            `delay` alone produced. */}
+        {/* historyReady is set 400ms after the slowest section fetch settles,
+            so History always feels like the final entry once the page has
+            fully resolved (matches the per-section fade-in cadence). */}
         {historyReady && (
           <motion.div
-            initial={{ opacity: 0, x: '-100vw' }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             className="mt-4"
           >
             <Link

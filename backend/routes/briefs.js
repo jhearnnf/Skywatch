@@ -24,6 +24,29 @@ function getTierAmmo(tier, settings) {
   return settings.ammoFree ?? 3;
 }
 
+// Read state (rows in IntelligenceBriefRead — lastReadAt, timeSpentSeconds,
+// currentSection, reachedFlashcard, completed, ammo, mnemonicsViewed) is only
+// allowed to mutate when the brief is published AND the user can actually
+// access it via subscription tier + pathway gates. A stub brief or a gated
+// brief should leave no trace in read history just because the user landed
+// on /brief/:id (e.g. an admin previewing pre-publish, or a clicked link to
+// a level-locked category).
+function isTrackable(brief, user, settings, levelThresholds) {
+  if (!brief || brief.status !== 'published') return false;
+  const tier = user ? effectiveTier(user) : 'guest';
+  if (!canAccessCategory(brief.category, tier, settings)) return false;
+  if (!isPathwayUnlocked(brief.category, user, settings, levelThresholds)) return false;
+  return true;
+}
+
+async function loadAccessContext() {
+  const [settings, rawLevels] = await Promise.all([
+    AppSettings.getSettings(),
+    Level.find().sort({ levelNumber: 1 }).lean(),
+  ]);
+  return { settings, levelThresholds: buildCumulativeThresholds(rawLevels) };
+}
+
 // GET /api/briefs — list all accessible briefs, sorted by read-priority then dateAdded
 router.get('/', optionalAuth, async (req, res) => {
   try {
@@ -332,14 +355,39 @@ router.get('/random-unlocked', optionalAuth, async (req, res) => {
 
 // GET /api/briefs/random-in-progress — returns the in-progress brief with the
 // lowest priorityNumber (most foundational first). Null priorities sort last;
-// ties break by most recent lastReadAt.
+// ties break by most recent lastReadAt. Read records for categories the user
+// no longer has access to (tier downgrade, cycle reset after rank promotion)
+// are filtered out so Jump Back In never surfaces a locked brief — the next
+// accessible in-progress brief takes its place.
 router.get('/random-in-progress', protect, async (req, res) => {
   try {
-    const reads = await IntelligenceBriefRead.find({ userId: req.user._id, completed: false })
-      .populate('intelBriefId', 'title category _id status priorityNumber')
-      .lean();
+    const [settings, rawLevels, reads] = await Promise.all([
+      AppSettings.getSettings(),
+      Level.find().sort({ levelNumber: 1 }).lean(),
+      IntelligenceBriefRead.find({ userId: req.user._id, completed: false })
+        .populate('intelBriefId', 'title category _id status priorityNumber')
+        .lean(),
+    ]);
 
-    const valid = reads.filter(r => r.intelBriefId && r.intelBriefId.status === 'published');
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
+    const tier       = effectiveTier(req.user);
+    const accessible = getAccessibleCategories(tier, settings);
+    const pathway    = getPathwayAccessibleCategories(req.user, settings, levelThresholds);
+
+    let finalCategories = null;
+    if (accessible !== null && pathway !== null) {
+      finalCategories = accessible.filter(c => pathway.includes(c));
+    } else if (accessible !== null) {
+      finalCategories = accessible;
+    } else if (pathway !== null) {
+      finalCategories = pathway;
+    }
+
+    const valid = reads.filter(r => {
+      if (!r.intelBriefId || r.intelBriefId.status !== 'published') return false;
+      if (finalCategories !== null && !finalCategories.includes(r.intelBriefId.category)) return false;
+      return true;
+    });
     if (!valid.length) return res.json({ status: 'success', data: null });
 
     valid.sort((a, b) => {
@@ -512,15 +560,16 @@ router.get('/history', protect, async (req, res) => {
 
     const reads = records.map(r => {
       const base = {
-        _id:              r._id,
-        briefId:          r.intelBriefId?._id ?? null,
-        title:            r.intelBriefId?.title    ?? 'Unknown Brief',
-        category:         r.intelBriefId?.category ?? '',
-        subcategory:      r.intelBriefId?.subcategory ?? '',
-        timeSpentSeconds: r.timeSpentSeconds,
-        completedAt:      r.completedAt,
-        firstReadAt:      r.firstReadAt,
-        lastReadAt:       r.lastReadAt,
+        _id:                 r._id,
+        briefId:             r.intelBriefId?._id ?? null,
+        title:               r.intelBriefId?.title    ?? 'Unknown Brief',
+        category:            r.intelBriefId?.category ?? '',
+        subcategory:         r.intelBriefId?.subcategory ?? '',
+        timeSpentSeconds:    r.timeSpentSeconds,
+        completedAt:         r.completedAt,
+        firstReadAt:         r.firstReadAt,
+        lastReadAt:          r.lastReadAt,
+        flashcardUnlockedAt: r.flashcardUnlockedAt ?? null,
       };
       if (flashcard) {
         const sections = normalizeSections(r.intelBriefId?.descriptionSections);
@@ -741,7 +790,10 @@ router.get('/:id', optionalAuth, async (req, res) => {
       });
     }
 
-    if (req.user) {
+    // Stub briefs render their shell but leave no read-history footprint —
+    // a user who lands on /brief/:id while the AI hasn't generated content
+    // shouldn't be recorded as "having read" anything.
+    if (req.user && brief.status === 'published') {
       tierAmmo = getTierAmmo(tier, settings);
 
       readRecord = await IntelligenceBriefRead.findOne({
@@ -932,7 +984,10 @@ router.post('/:id/complete', protect, async (req, res) => {
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
     if (brief.status === 'stub' || !brief.descriptionSections?.length) return res.status(400).json({ message: 'Brief has no content yet' });
 
-    const settings = await AppSettings.getSettings();
+    const { settings, levelThresholds } = await loadAccessContext();
+    if (!isTrackable(brief, req.user, settings, levelThresholds)) {
+      return res.status(403).json({ message: 'Brief is not accessible for this user' });
+    }
 
     // Idempotency: look up the read record to check if coins already awarded
     let readRecord = await IntelligenceBriefRead.findOne({
@@ -1076,9 +1131,12 @@ router.post('/:id/complete', protect, async (req, res) => {
 router.patch('/:id/time', protect, async (req, res) => {
   try {
     const { seconds, currentSection } = req.body;
-    const brief = await IntelligenceBrief.findById(req.params.id).select('status');
+    const brief = await IntelligenceBrief.findById(req.params.id).select('status category');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
-    if (brief.status === 'stub') return res.status(400).json({ message: 'Brief is not yet available' });
+    const { settings, levelThresholds } = await loadAccessContext();
+    if (!isTrackable(brief, req.user, settings, levelThresholds)) {
+      return res.status(400).json({ message: 'Brief is not trackable for this user' });
+    }
     const update = { $inc: { timeSpentSeconds: seconds }, $set: { lastReadAt: new Date() } };
     if (typeof currentSection === 'number') update.$set.currentSection = currentSection;
     await IntelligenceBriefRead.findOneAndUpdate(
@@ -1094,9 +1152,12 @@ router.patch('/:id/time', protect, async (req, res) => {
 // POST /api/briefs/:id/use-ammo — decrement ammo by 1 on keyword click
 router.post('/:id/use-ammo', protect, async (req, res) => {
   try {
-    const stubCheck = await IntelligenceBrief.findById(req.params.id).select('status');
+    const stubCheck = await IntelligenceBrief.findById(req.params.id).select('status category');
     if (!stubCheck) return res.status(404).json({ message: 'Brief not found' });
-    if (stubCheck.status === 'stub') return res.status(400).json({ message: 'Brief is not yet available' });
+    const { settings, levelThresholds } = await loadAccessContext();
+    if (!isTrackable(stubCheck, req.user, settings, levelThresholds)) {
+      return res.status(400).json({ message: 'Brief is not trackable for this user' });
+    }
     const record = await IntelligenceBriefRead.findOne({
       userId: req.user._id,
       intelBriefId: req.params.id,
@@ -1139,10 +1200,19 @@ router.post('/:id/mnemonic-viewed', protect, async (req, res) => {
   try {
     const { statKey } = req.body;
     if (!statKey) return res.status(400).json({ message: 'statKey required' });
+    const brief = await IntelligenceBrief.findById(req.params.id).select('status category');
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+    const { settings, levelThresholds } = await loadAccessContext();
+    if (!isTrackable(brief, req.user, settings, levelThresholds)) {
+      return res.status(400).json({ message: 'Brief is not trackable for this user' });
+    }
+    // No upsert — row is created lazily by GET /:id and only when the brief
+    // is published and accessible. Mnemonic viewing without a prior read row
+    // shouldn't happen in normal UX flow, and silently materialising one would
+    // re-introduce the stub-row leak this guard exists to prevent.
     await IntelligenceBriefRead.findOneAndUpdate(
       { userId: req.user._id, intelBriefId: req.params.id },
-      { $addToSet: { mnemonicsViewed: statKey } },
-      { upsert: true }
+      { $addToSet: { mnemonicsViewed: statKey } }
     );
     res.json({ status: 'success' });
   } catch (err) {
@@ -1153,7 +1223,26 @@ router.post('/:id/mnemonic-viewed', protect, async (req, res) => {
 // Shared logic used by both the POST commit and the GET preview so the two
 // can't drift. `commit: true` writes state (reach flag + unlock); `commit: false`
 // returns the projected outcome as if the reach had just happened.
-async function computeFlashcardReachOutcome(user, briefId, { commit }) {
+//
+// Refuses to write when:
+//   - the brief is a stub or otherwise not trackable (Fix 4 — no row should exist
+//     for unaccessible briefs in the first place)
+//   - the brief has < 4 description sections (Fix 2 — the on-mount fire path
+//     can hit this endpoint for half-built briefs where total <= 1; the user
+//     hasn't actually reached anything because there's nothing to reach)
+//
+// The eligibility count for the 5-brief flashcard-game unlock gate filters
+// validBriefIds by the user's pathway/tier (Fix 1) so a category that's
+// since been level-locked stops contributing to the gate.
+async function computeFlashcardReachOutcome(user, briefId, { commit, brief, settings, levelThresholds }) {
+  if (!isTrackable(brief, user, settings, levelThresholds)) {
+    return { wasNew: false };
+  }
+  const sectionCount = brief.descriptionSections?.length ?? 0;
+  if (sectionCount < 4) {
+    return { wasNew: false };
+  }
+
   const existing = await IntelligenceBriefRead.findOne({
     userId:       user._id,
     intelBriefId: briefId,
@@ -1163,20 +1252,36 @@ async function computeFlashcardReachOutcome(user, briefId, { commit }) {
     return { wasNew: false };
   }
 
+  const now = new Date();
   if (commit) {
+    // Upsert is safe here: isTrackable + sections >= 4 + no existing row with
+    // reachedFlashcard already set. If GET /:id hasn't run yet (e.g. a direct
+    // POST without a prior page view), we still record the unlock — the brief
+    // is published and accessible, so the row is legitimate.
     await IntelligenceBriefRead.findOneAndUpdate(
       { userId: user._id, intelBriefId: briefId },
-      { $set: { reachedFlashcard: true } },
+      { $set: { reachedFlashcard: true, flashcardUnlockedAt: now } },
       { upsert: true }
     );
   }
 
-  // When News flashcards are disabled, exclude News-category briefs from the
-  // unlock count so the gate mirrors what the user actually sees on the Play page.
-  const settings   = await AppSettings.getSettings();
+  // Eligible-brief set for the 5-brief unlock gate:
+  //  - status: published
+  //  - News excluded when newsFlashcardsEnabled is off (matches Play page)
+  //  - filtered by the *current* user's pathway + tier so categories the user
+  //    has lost access to (level reset, tier downgrade) don't count.
   const briefFilter = { status: 'published' };
   if (!settings.newsFlashcardsEnabled) briefFilter.category = { $ne: 'News' };
-  const validBriefIds = await IntelligenceBrief.distinct('_id', briefFilter);
+  const candidateBriefs = await IntelligenceBrief.find(briefFilter)
+    .select('_id category')
+    .lean();
+  const tier = user ? effectiveTier(user) : 'guest';
+  const validBriefIds = candidateBriefs
+    .filter(b =>
+      canAccessCategory(b.category, tier, settings) &&
+      isPathwayUnlocked(b.category, user, settings, levelThresholds)
+    )
+    .map(b => b._id);
 
   // Projected count after this reach: when committing, the write above has landed;
   // when previewing, add 1 iff the target brief qualifies under the filter.
@@ -1194,7 +1299,7 @@ async function computeFlashcardReachOutcome(user, briefId, { commit }) {
   const gameUnlocksGranted = [];
   if (flashcardCount >= 5 && !user.gameUnlocks?.flashcard?.unlockedAt) {
     if (commit) {
-      await User.findByIdAndUpdate(user._id, { 'gameUnlocks.flashcard.unlockedAt': new Date() });
+      await User.findByIdAndUpdate(user._id, { 'gameUnlocks.flashcard.unlockedAt': now });
     }
     gameUnlocksGranted.push('flashcard');
   }
@@ -1202,16 +1307,23 @@ async function computeFlashcardReachOutcome(user, briefId, { commit }) {
   return { wasNew: true, flashcardCount, gameUnlocksGranted };
 }
 
+async function loadFlashcardReachContext(briefId) {
+  const brief = await IntelligenceBrief.findById(briefId).select('status category descriptionSections');
+  if (!brief) return { brief: null };
+  const { settings, levelThresholds } = await loadAccessContext();
+  return { brief, settings, levelThresholds };
+}
+
 // GET /api/briefs/:id/reached-flashcard-preview — read-only projection of the POST
 // so the client can pre-fetch the outcome on section 3 and start the collect
 // animation the instant the user swipes to section 4, with no network wait.
 router.get('/:id/reached-flashcard-preview', protect, async (req, res) => {
   try {
-    const brief = await IntelligenceBrief.findById(req.params.id).select('status');
-    if (!brief) return res.status(404).json({ message: 'Brief not found' });
-    if (brief.status === 'stub') return res.status(400).json({ message: 'Brief has no content yet' });
+    const ctx = await loadFlashcardReachContext(req.params.id);
+    if (!ctx.brief) return res.status(404).json({ message: 'Brief not found' });
+    if (ctx.brief.status === 'stub') return res.status(400).json({ message: 'Brief has no content yet' });
 
-    const outcome = await computeFlashcardReachOutcome(req.user, req.params.id, { commit: false });
+    const outcome = await computeFlashcardReachOutcome(req.user, req.params.id, { commit: false, ...ctx });
     res.json({ status: 'success', ...outcome });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1223,7 +1335,9 @@ router.get('/:id/reached-flashcard-preview', protect, async (req, res) => {
 // Returns wasNew: true only the first time (drives the deck notification on the client).
 router.post('/:id/reached-flashcard', protect, async (req, res) => {
   try {
-    const outcome = await computeFlashcardReachOutcome(req.user, req.params.id, { commit: true });
+    const ctx = await loadFlashcardReachContext(req.params.id);
+    if (!ctx.brief) return res.status(404).json({ message: 'Brief not found' });
+    const outcome = await computeFlashcardReachOutcome(req.user, req.params.id, { commit: true, ...ctx });
     res.json({ status: 'success', ...outcome });
   } catch (err) {
     res.status(500).json({ message: err.message });

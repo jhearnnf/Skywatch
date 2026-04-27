@@ -559,15 +559,14 @@ describe('BriefReader — BOO button on completion screen', () => {
 
   const WTA_SPAWN_EMPTY = { ok: true, json: async () => ({ data: null }) }
 
-  // QUIZ_BRIEF has 1 section so isLast=true on mount, which fires POST /reached-flashcard
-  // and GET /reward-preview before the swipe. Both extras must be mocked before /complete.
-  const REACHED_FLASHCARD_EMPTY = { ok: true, json: async () => ({ status: 'success', wasNew: false }) }
+  // QUIZ_BRIEF has 1 section so isLast=true on mount. The reached-flashcard
+  // POST is gated on total >= 4 (so a half-built brief can't auto-unlock),
+  // so it does NOT fire here — only the reward-preview GET runs before /complete.
   const PREVIEW_EMPTY           = { ok: true, json: async () => ({ data: { airstarsEarned: 0, dailyCoinsEarned: 0 } }) }
 
   it('shows active BOO button when BOO available and quiz passed', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(QUIZ_BRIEF))
-      .mockResolvedValueOnce(REACHED_FLASHCARD_EMPTY)  // reached-flashcard fires on mount
       .mockResolvedValueOnce(PREVIEW_EMPTY)             // reward-preview fires on mount (isLast)
       .mockResolvedValueOnce(makeCompleteResponse())
       .mockResolvedValueOnce(makeQuizStatusResponse(true))
@@ -588,7 +587,6 @@ describe('BriefReader — BOO button on completion screen', () => {
     // Uses QUIZ_BRIEF so quizAvailable=true — locked-quiz state shows "🔒 Pass the quiz first"
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeGetResponse(QUIZ_BRIEF))
-      .mockResolvedValueOnce(REACHED_FLASHCARD_EMPTY)  // reached-flashcard fires on mount
       .mockResolvedValueOnce(PREVIEW_EMPTY)             // reward-preview fires on mount (isLast)
       .mockResolvedValueOnce(makeCompleteResponse())
       .mockResolvedValueOnce(makeQuizStatusResponse(false))

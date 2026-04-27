@@ -823,3 +823,128 @@ describe('Play page — persistent unlock detection', () => {
     })
   })
 })
+
+describe('Play page — click-to-summon section + skeleton', () => {
+  /**
+   * Mocks fetch so the Intel Quiz endpoint is deferred (resolves only when
+   * the returned `resolveQuiz()` is called) while every other endpoint
+   * settles immediately. Lets us observe the "section not yet ready" UI.
+   */
+  function mockWithDeferredQuiz(quizBriefs = []) {
+    let resolveQuiz
+    const quizPromise = new Promise(r => { resolveQuiz = r })
+    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('quiz/recommended-briefs'))
+        return quizPromise.then(() => ({ json: async () => ({ data: { briefs: quizBriefs } }) }))
+      if (url.includes('flashcard-recall/available-briefs'))
+        return Promise.resolve({ json: async () => ({ data: { count: 0 } }) })
+      return Promise.resolve({ json: async () => ({ data: { briefs: [] } }) })
+    })
+    return { resolveQuiz: () => resolveQuiz() }
+  }
+
+  it('Intel Quiz section header is not in the DOM before its fetch settles', async () => {
+    mockWithDeferredQuiz()
+    render(<Play />)
+    // Wait for the other (immediately-resolved) sections to appear so we know
+    // visibleSections has run at least once.
+    await waitFor(() => screen.getByRole('heading', { level: 2, name: 'Battle of Order' }))
+    expect(screen.queryByRole('heading', { level: 2, name: 'Intel Quiz' })).toBeNull()
+  })
+
+  it('clicking the Intel Quiz card before its fetch settles renders the section immediately with a skeleton', async () => {
+    mockWithDeferredQuiz()
+    render(<Play />)
+    await waitFor(() => screen.getByRole('heading', { level: 2, name: 'Battle of Order' }))
+
+    fireEvent.click(screen.getByTestId('card-quiz'))
+
+    // Section header now visible even though quizReady is still false
+    expect(screen.getByRole('heading', { level: 2, name: 'Intel Quiz' })).toBeDefined()
+    // Skeleton shimmer rows present in place of real content
+    expect(document.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0)
+  })
+
+  it('skeleton swaps to real content once the fetch resolves', async () => {
+    const { resolveQuiz } = mockWithDeferredQuiz([
+      { _id: 'b1', title: 'Late Brief', category: 'Bases', quizState: 'active' },
+    ])
+    render(<Play />)
+    await waitFor(() => screen.getByRole('heading', { level: 2, name: 'Battle of Order' }))
+    fireEvent.click(screen.getByTestId('card-quiz'))
+    expect(document.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0)
+
+    resolveQuiz()
+    await waitFor(() => screen.getByText('Late Brief'))
+    expect(document.querySelectorAll('.skeleton-shimmer').length).toBe(0)
+  })
+
+  it('Battle of Order section appears independently of Intel Quiz (no global ready gate)', async () => {
+    // Quiz deferred, BOO returns a brief immediately. With the old
+    // allSectionsReady gate the BOO section would be invisible until the
+    // Quiz fetch resolved; with per-section visibility it appears straight away.
+    let resolveQuiz
+    const quizPromise = new Promise(r => { resolveQuiz = r })
+    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('quiz/recommended-briefs'))
+        return quizPromise.then(() => ({ json: async () => ({ data: { briefs: [] } }) }))
+      if (url.includes('battle-of-order/recommended-briefs'))
+        return Promise.resolve({ json: async () => ({ data: { briefs: [{ _id: 'boo1', title: 'Early BOO Brief', category: 'Aircrafts', booState: 'active' }] } }) })
+      if (url.includes('flashcard-recall/available-briefs'))
+        return Promise.resolve({ json: async () => ({ data: { count: 0 } }) })
+      return Promise.resolve({ json: async () => ({ data: { briefs: [] } }) })
+    })
+    render(<Play />)
+
+    // BOO content should appear without waiting for the Quiz fetch
+    await waitFor(() => screen.getByText('Early BOO Brief'))
+    // Quiz section still hidden
+    expect(screen.queryByRole('heading', { level: 2, name: 'Intel Quiz' })).toBeNull()
+
+    resolveQuiz()
+  })
+})
+
+describe('Play page — entry-tile stat-line placeholder', () => {
+  it('logged-in user sees a pulsing stat placeholder on the Intel Quiz card while the quiz fetch is pending', async () => {
+    let resolveQuiz
+    const quizPromise = new Promise(r => { resolveQuiz = r })
+    useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('quiz/recommended-briefs'))
+        return quizPromise.then(() => ({ json: async () => ({ data: { briefs: [] } }) }))
+      if (url.includes('flashcard-recall/available-briefs'))
+        return Promise.resolve({ json: async () => ({ data: { count: 0 } }) })
+      return Promise.resolve({ json: async () => ({ data: { briefs: [] } }) })
+    })
+    render(<Play />)
+    // Placeholder visible on the Quiz card while its fetch is deferred
+    expect(screen.getByTestId('card-stat-loading-quiz')).toBeDefined()
+    // Wait for the Flashcard card placeholder to disappear (its fetch resolves
+    // immediately) — this confirms visibleSections / per-card ready flips work
+    await waitFor(() => expect(screen.queryByTestId('card-stat-loading-flashcard')).toBeNull())
+    // Quiz placeholder still present (its fetch is still pending)
+    expect(screen.queryByTestId('card-stat-loading-quiz')).not.toBeNull()
+    resolveQuiz()
+    // After fetch settles, placeholder is gone and real stat appears in its place
+    await waitFor(() => expect(screen.queryByTestId('card-stat-loading-quiz')).toBeNull())
+  })
+
+  it('guests see no stat placeholder (stats are user-only)', () => {
+    renderAsGuest()
+    expect(screen.queryByTestId('card-stat-loading-quiz')).toBeNull()
+    expect(screen.queryByTestId('card-stat-loading-flashcard')).toBeNull()
+    expect(screen.queryByTestId('card-stat-loading-wheres-that-aircraft')).toBeNull()
+    expect(screen.queryByTestId('card-stat-loading-battle-order')).toBeNull()
+  })
+
+  it('placeholder is replaced by real stat once data lands (no card-height jump)', async () => {
+    const quizBriefs = [{ _id: 'b1', title: 'Ready Brief', category: 'Bases', quizState: 'active' }]
+    renderAsUser({ quizBriefs })
+    // Before fetch resolves we briefly see the placeholder; afterwards it is replaced by the stat
+    await waitFor(() => screen.getByText(/1 quiz ready/i))
+    expect(screen.queryByTestId('card-stat-loading-quiz')).toBeNull()
+  })
+})

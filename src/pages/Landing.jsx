@@ -11,10 +11,17 @@ import SEO from '../components/SEO'
 const FEATURES = [
   { icon: '✈️', title: 'Learn About the RAF',        body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — designed for aspiring aviators.' },
   { icon: '🧠', title: 'Section-by-Section Reading', body: 'Each brief is broken into short, clear sections. Read at your own pace and build genuine knowledge.' },
-  { icon: '🎮', title: 'Test Yourself',              body: 'After each brief, take a quiz to reinforce what you\'ve learned and earn Airstars.', badge: 'Now includes CBAT games!' },
+  { icon: '🎙️', title: 'Live Debrief Sessions',       body: 'Step into a one-on-one debrief — targeted recall questions, follow-ups on what you missed, and an instant feedback report when you wrap.', badge: 'New format' },
   { icon: '🔥', title: 'Daily Streaks',              body: 'Return every day to keep your streak alive. Consistent learning beats last-minute cramming every time.' },
   { icon: '🏆', title: 'Climb the Rankings',         body: 'Compete with other learners on the leaderboard as you progress through subjects.' },
   { icon: '📰', title: 'Daily RAF News',             body: 'Stay up to date with real RAF news — automatically sourced and formatted as intel briefs.' },
+]
+
+const GAMES = [
+  { key: 'quiz',                 icon: '🧠',  bar: 'bg-brand-500',  title: 'Intel Quiz',             hook: 'Standard or Advanced — answer questions tied to a specific brief.' },
+  { key: 'flashcard',            icon: '⚡',  bar: 'bg-amber-500',  title: 'Flashcard Recall',       hook: 'Title hidden. Read the content, then name the brief from memory.' },
+  { key: 'wheres-that-aircraft', icon: '✈️',  bar: 'bg-red-500',    title: "Where's That Aircraft?", hook: 'Spot the aircraft, then pinpoint its home base on the map.' },
+  { key: 'battle-order',         icon: '🗺️',  bar: 'bg-violet-400', title: 'Battle of Order',        hook: 'Sequence aircraft, ranks, and missions in the correct order.' },
 ]
 
 const PREVIEW_CATEGORIES = [
@@ -77,12 +84,25 @@ export default function Landing() {
   const { settings } = useAppSettings()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [liveStats, setLiveStats] = useState(null)
+  // One random aircraft cutout per page visit, used to liven up the WTA
+  // showcase tile — mirrors the Play page hero treatment so returning users
+  // recognise the same tile when they click through.
+  const [randomAircraft, setRandomAircraft] = useState(null)
 
   useEffect(() => {
     let aborted = false
     fetch(`${API}/api/briefs/public-stats`)
       .then(r => r.ok ? r.json() : null)
       .then(j => { if (!aborted && j?.data) setLiveStats(j.data) })
+      .catch(() => {})
+    fetch(`${API}/api/briefs/aircraft-cutouts`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (aborted) return
+        const pool = j?.data?.cutouts ?? []
+        if (pool.length === 0) return
+        setRandomAircraft(pool[Math.floor(Math.random() * pool.length)])
+      })
       .catch(() => {})
     return () => { aborted = true }
   }, [API])
@@ -195,7 +215,7 @@ export default function Landing() {
           {[
             { value: '15',                                                 label: 'Subject Areas'  },
             { value: briefCount    != null ? briefCount.toLocaleString()    : '—', label: 'Intel Briefs',   caption: 'Expanding daily' },
-            { value: questionCount != null ? questionCount.toLocaleString() : '—', label: 'Quiz Questions', caption: 'Every brief covered' },
+            { value: questionCount != null ? questionCount.toLocaleString() : '—', label: 'Practice Questions', caption: 'Every brief covered' },
             { value: 'Daily',                                              label: 'Streak System'  },
           ].map(({ value, label, caption }) => (
             <div key={label} className="relative px-4 py-3" style={{ border: '1px solid rgba(91,170,255,0.12)', borderRadius: 8 }}>
@@ -291,6 +311,61 @@ export default function Landing() {
               <p className="text-sm text-slate-500 leading-relaxed">{body}</p>
             </motion.div>
           ))}
+        </div>
+      </section>
+
+      {/* ── Test Yourself — game showcase ─────────────────── */}
+      <section className="py-16 px-5 max-w-5xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="text-center mb-10"
+        >
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <span className="intel-tag">RANGE TIME</span>
+          </div>
+          <h2 className="text-3xl font-bold text-slate-900 mb-3">Four Ways to Test Yourself</h2>
+          <p className="text-slate-500 max-w-lg mx-auto">Every brief unlocks new ways to play — each one drilling a different way of knowing the material.</p>
+        </motion.div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {GAMES.map(({ key, icon, bar, title, hook }, i) => {
+            const showCutout = key === 'wheres-that-aircraft' && randomAircraft?.cutoutUrl
+            return (
+              <motion.div
+                key={title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.07, duration: 0.4 }}
+                className="relative card-intel rounded-2xl p-5 text-center overflow-hidden"
+              >
+                <span className={`absolute left-0 right-0 top-0 h-1 ${bar}`} aria-hidden="true" />
+                <CornerBrackets size={10} />
+                <span className="inline-flex items-center justify-center" style={{ height: 40 }}>
+                  {showCutout ? (
+                    <span
+                      className="profile-badge-cutout-wrap profile-badge-cutout-wrap--no-scan"
+                      style={{ width: 56, height: 40 }}
+                    >
+                      <img
+                        src={randomAircraft.cutoutUrl}
+                        alt={randomAircraft.title || 'Aircraft'}
+                        className="profile-badge-cutout-img"
+                        draggable={false}
+                      />
+                    </span>
+                  ) : (
+                    <span className="text-3xl leading-none">{icon}</span>
+                  )}
+                </span>
+                <h3 className="font-bold text-slate-900 mt-3 mb-1.5">{title}</h3>
+                <p className="text-sm text-slate-500 leading-relaxed">{hook}</p>
+              </motion.div>
+            )
+          })}
         </div>
       </section>
 

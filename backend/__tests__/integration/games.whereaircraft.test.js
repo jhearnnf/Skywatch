@@ -205,6 +205,96 @@ describe('POST /api/games/wheres-aircraft/spawn-check', () => {
   });
 });
 
+// ── POST /api/games/wheres-aircraft/spawn-decision ────────────────────────
+describe('POST /api/games/wheres-aircraft/spawn-decision', () => {
+  const endpoint = '/api/games/wheres-aircraft/spawn-decision';
+  const User    = require('../../models/User');
+
+  it('returns spawn: false without mutating counter when prereqs not met', async () => {
+    await User.findByIdAndUpdate(user._id, { whereAircraftReadsSinceLastGame: 0, whereAircraftSpawnThreshold: 1 });
+    // No reads yet — prereqs fail
+
+    const res = await request(app)
+      .post(endpoint)
+      .set('Cookie', cookie)
+      .send({ briefId: aircraftBrief._id });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.spawn).toBe(false);
+
+    const fresh = await User.findById(user._id).select('whereAircraftReadsSinceLastGame whereAircraftSpawnThreshold');
+    expect(fresh.whereAircraftReadsSinceLastGame).toBe(0); // unchanged
+    expect(fresh.whereAircraftSpawnThreshold).toBe(1);     // unchanged
+  });
+
+  it('returns spawn: true without mutating counter or threshold', async () => {
+    await User.findByIdAndUpdate(user._id, { whereAircraftReadsSinceLastGame: 0, whereAircraftSpawnThreshold: 1 });
+    await satisfyPrereqs();
+
+    const res = await request(app)
+      .post(endpoint)
+      .set('Cookie', cookie)
+      .send({ briefId: aircraftBrief._id });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.spawn).toBe(true);
+    expect(res.body.data.aircraftBriefId).toBeDefined();
+    expect(res.body.data.aircraftTitle).toBe('Eurofighter Typhoon');
+
+    const fresh = await User.findById(user._id).select('whereAircraftReadsSinceLastGame whereAircraftSpawnThreshold');
+    expect(fresh.whereAircraftReadsSinceLastGame).toBe(0); // NOT reset
+    expect(fresh.whereAircraftSpawnThreshold).toBe(1);     // NOT re-randomized
+  });
+
+  it('is idempotent — multiple calls leave state unchanged', async () => {
+    await User.findByIdAndUpdate(user._id, { whereAircraftReadsSinceLastGame: 2, whereAircraftSpawnThreshold: 5 });
+    await satisfyPrereqs();
+
+    for (let i = 0; i < 3; i++) {
+      await request(app)
+        .post(endpoint)
+        .set('Cookie', cookie)
+        .send({ briefId: aircraftBrief._id });
+    }
+
+    const fresh = await User.findById(user._id).select('whereAircraftReadsSinceLastGame whereAircraftSpawnThreshold');
+    expect(fresh.whereAircraftReadsSinceLastGame).toBe(2);
+    expect(fresh.whereAircraftSpawnThreshold).toBe(5);
+  });
+
+  it('decision and subsequent commit agree on spawn boolean', async () => {
+    await User.findByIdAndUpdate(user._id, { whereAircraftReadsSinceLastGame: 0, whereAircraftSpawnThreshold: 1 });
+    await satisfyPrereqs();
+
+    const decision = await request(app)
+      .post('/api/games/wheres-aircraft/spawn-decision')
+      .set('Cookie', cookie)
+      .send({ briefId: aircraftBrief._id });
+
+    const commit = await request(app)
+      .post('/api/games/wheres-aircraft/spawn-check')
+      .set('Cookie', cookie)
+      .send({ briefId: aircraftBrief._id });
+
+    expect(decision.body.data.spawn).toBe(true);
+    expect(commit.body.data.spawn).toBe(true);
+
+    // Commit reset the counter and re-randomized the threshold
+    const fresh = await User.findById(user._id).select('whereAircraftReadsSinceLastGame whereAircraftSpawnThreshold');
+    expect(fresh.whereAircraftReadsSinceLastGame).toBe(0);
+    expect(fresh.whereAircraftSpawnThreshold).toBeGreaterThanOrEqual(2);
+    expect(fresh.whereAircraftSpawnThreshold).toBeLessThanOrEqual(5);
+  });
+
+  it('returns 401 when not authenticated', async () => {
+    const res = await request(app)
+      .post(endpoint)
+      .send({ briefId: aircraftBrief._id });
+
+    expect(res.status).toBe(401);
+  });
+});
+
 // ── POST /api/games/wheres-aircraft/round1 ────────────────────────────────
 describe('POST /api/games/wheres-aircraft/round1', () => {
   const endpoint = '/api/games/wheres-aircraft/round1';

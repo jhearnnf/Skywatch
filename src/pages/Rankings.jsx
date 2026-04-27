@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, Fragment } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -57,7 +57,7 @@ function YouBadge() {
 
 // ── Level row ────────────────────────────────────────────────────────────────
 
-function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathwayUnlocks, onSubscriptionLocked, rowRef }) {
+function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathwayUnlocks, userNextRank, onNextRankClick, onSubscriptionLocked }) {
   const isCurrent  = lvl.levelNumber === userLevel
   const isAbove    = lvl.levelNumber > userLevel
   const isBelow    = userLevel != null && lvl.levelNumber < userLevel
@@ -65,7 +65,7 @@ function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathway
   const lvlUnlocks = pathwayUnlocks.filter(u => u.levelRequired === lvl.levelNumber && (u.rankRequired ?? 1) === userRankNumber)
   return (
     <motion.div
-      ref={rowRef}
+      data-current-level={isCurrent ? 'true' : undefined}
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: i * 0.04 }}
@@ -91,13 +91,28 @@ function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathway
           </p>
         </div>
         {isCurrent && <YouBadge />}
-        {isCurrent && isMax && (
-          <span
-            className="text-xs font-bold px-2 py-0.5 rounded-full shrink-0 intel-mono"
-            style={{ background: 'rgba(91,170,255,0.15)', color: C.brand, border: '1px solid rgba(91,170,255,0.3)' }}
+        {isMax && userNextRank && (
+          <button
+            type="button"
+            onClick={onNextRankClick}
+            className="text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 intel-mono inline-flex items-center gap-1 transition-all cursor-pointer"
+            style={{
+              background: isCurrent ? 'rgba(91,170,255,0.18)' : 'rgba(91,170,255,0.08)',
+              color:      C.brand,
+              border:     `1px solid rgba(91,170,255,${isCurrent ? 0.4 : 0.25})`,
+              boxShadow:  isCurrent ? '0 0 10px rgba(91,170,255,0.25)' : 'none',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = isCurrent ? 'rgba(91,170,255,0.28)' : 'rgba(91,170,255,0.18)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = isCurrent ? 'rgba(91,170,255,0.18)' : 'rgba(91,170,255,0.08)'
+            }}
+            title={`View ${userNextRank.rankName} in RAF Ranks`}
           >
-            RANK UP
-          </span>
+            <span style={{ opacity: 0.7 }}>→</span>
+            {userNextRank.rankAbbreviation ?? userNextRank.abbreviation}
+          </button>
         )}
       </div>
       {lvlUnlocks.length > 0 && (
@@ -120,11 +135,11 @@ function LevelRow({ lvl, i, isLast, userLevel, userRankNumber, userTier, pathway
 
 // ── Rank row ─────────────────────────────────────────────────────────────────
 
-function RankRow({ rank, i, isLast, isUser, isAbove, isBelow, isSelected, onClick, rowRef }) {
+function RankRow({ rank, i, isLast, isUser, isAbove, isBelow, isSelected, onClick }) {
   const dimBadge = isAbove && !isSelected
   return (
     <motion.div
-      ref={rowRef}
+      data-user-rank={isUser ? 'true' : undefined}
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: i * 0.025 }}
@@ -222,11 +237,38 @@ export default function Rankings() {
     : null
   const userRankNumber = user ? (userRank?.rankNumber ?? 1) : null
 
-  const userRankRowRef       = useRef(null)
   const rankListScrollRef    = useRef(null)
   const levelsListScrollRef  = useRef(null)
-  const currentLevelRowRef   = useRef(null)
-  const [listMaxH, setListMaxH] = useState(null)
+  const cardRef              = useRef(null)
+  const cardContentRef       = useRef(null)
+  const [listMaxH,        setListMaxH]        = useState(null)
+  const [selectedRankNum, setSelectedRankNum] = useState(userRankNumber)
+  const [cardHeight,      setCardHeight]      = useState(0)
+
+  useEffect(() => { setSelectedRankNum(userRankNumber) }, [userRankNumber])
+
+  const selectedRank        = ranks.find(r => r.rankNumber === selectedRankNum) ?? null
+  const previewRankUnlocks  = pathwayUnlocks.filter(u => (u.rankRequired ?? 1) === selectedRankNum)
+  const isPreviewing        = selectedRankNum !== userRankNumber
+
+  const nextUnlockLevel = [...(levels ?? [])]
+    .sort((a, b) => a.levelNumber - b.levelNumber)
+    .find(lvl =>
+      lvl.levelNumber > userLevel &&
+      pathwayUnlocks.some(u => u.levelRequired === lvl.levelNumber && (u.rankRequired ?? 1) === userRankNumber)
+    )
+
+  const userNextRank = userRankNumber != null
+    ? ranks.find(r => r.rankNumber === userRankNumber + 1) ?? null
+    : null
+
+  const handleSubscriptionLocked = (cat, t) => setUpgradeModal({ category: cat, tier: t })
+
+  const handleNextRankClick = () => {
+    if (!userNextRank) return
+    setSelectedRankNum(userNextRank.rankNumber)
+    setTab('ranks')
+  }
 
   // Hard-lock outer page scroll while on this route — the inner list has its own
   // overflow:auto, and locking here side-steps mobile URL-bar / safe-area math entirely
@@ -243,10 +285,27 @@ export default function Rankings() {
     }
   }, [])
 
+  // Measure the card's inner content height so the parent can tween its height
+  // during tab swaps. ResizeObserver picks up content changes (tab swap, rank
+  // selection, sign-in state) without us having to re-trigger manually.
+  useLayoutEffect(() => {
+    const node = cardContentRef.current
+    if (!node) return
+    setCardHeight(node.offsetHeight)
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      const n = cardContentRef.current
+      if (n) setCardHeight(n.offsetHeight)
+    })
+    ro.observe(node)
+    return () => ro.disconnect()
+  }, [])
+
   // Fit the active list to remaining viewport height so the visible content fills it.
   // Walks ancestor padding-bottom (e.g. AppShell's pb-20 + py-6) so the list ends right
   // at the page's natural content bottom — bottom nav overlap is already covered by
-  // those paddings on mobile.
+  // those paddings on mobile. Re-runs on selection/badge changes and observes the
+  // preview card so the list shrinks (rather than overflowing) when the card grows.
   useEffect(() => {
     function measure() {
       const node = tab === 'levels' ? levelsListScrollRef.current : rankListScrollRef.current
@@ -259,70 +318,58 @@ export default function Rankings() {
         el = el.parentElement
       }
       const max = window.innerHeight - top - paddingBelow
-      setListMaxH(Math.max(240, Math.round(max)))
+      setListMaxH(Math.max(120, Math.round(max)))
     }
     const id = requestAnimationFrame(measure)
     window.addEventListener('resize', measure)
+    const card = cardRef.current
+    let ro
+    if (card && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => measure())
+      ro.observe(card)
+    }
     return () => {
       cancelAnimationFrame(id)
       window.removeEventListener('resize', measure)
+      if (ro) ro.disconnect()
     }
-  }, [tab, user])
+  }, [tab, user, selectedRankNum])
 
-  const [selectedRankNum, setSelectedRankNum] = useState(userRankNumber)
-  useEffect(() => { setSelectedRankNum(userRankNumber) }, [userRankNumber])
+  // Center the user's row in view. Look up the row by data attribute (sidesteps
+  // motion.div ref-forwarding quirks) and use bounding rects rather than offsetTop —
+  // offsetTop is relative to offsetParent, not the scroll container, so it gives
+  // wrong results unless the container is explicitly positioned. Defer one frame
+  // so layout / listMaxH have settled before reading.
+  function centerRowInContainer(container, row) {
+    const cRect = container.getBoundingClientRect()
+    const rRect = row.getBoundingClientRect()
+    const offsetWithin = (rRect.top - cRect.top) + container.scrollTop
+    container.scrollTop = offsetWithin - container.clientHeight / 2 + rRect.height / 2
+  }
 
   useEffect(() => {
-    const container = rankListScrollRef.current
-    if (!container) return
-    const row = userRankRowRef.current
-    if (row) {
-      const containerH = container.clientHeight
-      const rowH       = row.offsetHeight
-      container.scrollTop = row.offsetTop - containerH / 2 + rowH / 2
-    } else {
-      // No user — scroll to bottom (lowest ranks, where newcomers start)
-      container.scrollTop = container.scrollHeight
-    }
-  }, [ranks, userRankNumber, tab, listMaxH])
+    if (tab !== 'ranks') return
+    const id = requestAnimationFrame(() => {
+      const container = rankListScrollRef.current
+      if (!container) return
+      const row = container.querySelector('[data-user-rank="true"]')
+      if (!row) return
+      centerRowInContainer(container, row)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [tab, sortedRanks.length, userRankNumber, listMaxH])
 
-  // Center the user's current level in view on the Levels tab
   useEffect(() => {
     if (tab !== 'levels') return
-    const container = levelsListScrollRef.current
-    if (!container) return
-    const row = currentLevelRowRef.current
-    if (row) {
-      const containerH = container.clientHeight
-      const rowH       = row.offsetHeight
-      container.scrollTop = row.offsetTop - containerH / 2 + rowH / 2
-    } else {
-      // Not signed in — scroll to bottom (Level 1, the start)
-      container.scrollTop = container.scrollHeight
-    }
-  }, [tab, levels, userLevel, listMaxH])
-
-  const selectedRank        = ranks.find(r => r.rankNumber === selectedRankNum) ?? null
-  const previewRankUnlocks  = pathwayUnlocks.filter(u => (u.rankRequired ?? 1) === selectedRankNum)
-  const isPreviewing        = selectedRankNum !== userRankNumber
-
-  const nextUnlockLevel = [...(levels ?? [])]
-    .sort((a, b) => a.levelNumber - b.levelNumber)
-    .find(lvl =>
-      lvl.levelNumber > userLevel &&
-      pathwayUnlocks.some(u => u.levelRequired === lvl.levelNumber && (u.rankRequired ?? 1) === userRankNumber)
-    )
-
-  const handleSubscriptionLocked = (cat, t) => setUpgradeModal({ category: cat, tier: t })
-
-  // Measure badge content height for smooth card resize
-  const badgeContentRef = useRef(null)
-  const [badgeHeight, setBadgeHeight] = useState('auto')
-  useEffect(() => {
-    if (badgeContentRef.current) {
-      setBadgeHeight(badgeContentRef.current.scrollHeight)
-    }
-  }, [selectedRankNum, previewRankUnlocks])
+    const id = requestAnimationFrame(() => {
+      const container = levelsListScrollRef.current
+      if (!container) return
+      const row = container.querySelector('[data-current-level="true"]')
+      if (!row) return
+      centerRowInContainer(container, row)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [tab, sortedLevels.length, userLevel, listMaxH])
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -372,55 +419,171 @@ export default function Rankings() {
         ))}
       </div>
 
-      {/* ── LEVELS TAB ────────────────────────────────────────────────────── */}
-      {tab === 'levels' && (
-        <motion.div key="levels" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-
-          {/* XP card — only for signed-in users */}
-          {user && (
-            <div
-              className="rounded-2xl p-4"
-              style={{
-                background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)',
-                border: '1px solid rgba(91,170,255,0.2)',
-              }}
+      {/* ── Shared card — animates height between tabs ────────────────────── */}
+      <motion.div
+        ref={cardRef}
+        animate={{ height: cardHeight }}
+        transition={{ height: { duration: 0.55, ease: 'easeInOut' } }}
+        className="rounded-2xl mb-3"
+        style={{
+          overflow: 'hidden',
+          background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)',
+          border: `1px solid ${tab === 'ranks' && isPreviewing ? 'rgba(91,170,255,0.35)' : 'rgba(91,170,255,0.2)'}`,
+          transition: 'border-color 0.5s ease',
+        }}
+      >
+        <div ref={cardContentRef} className="p-4">
+        <AnimatePresence mode="wait" initial={false}>
+          {tab === 'levels' ? (
+            <motion.div
+              key="levels-content"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.3 }}
             >
-              <div className="flex items-baseline justify-between mb-2">
-                <p className="text-sm font-extrabold intel-mono" style={{ color: C.brand }}>
-                  LEVEL {userLevel}
-                </p>
-                <p className="text-xs intel-mono" style={{ color: C.muted }}>
-                  {coinsInLevel.toLocaleString()} / {coinsNeeded?.toLocaleString() ?? '—'} AC
-                </p>
-              </div>
-              <div className="h-2 rounded-full overflow-hidden" style={{ background: C.border }}>
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: C.brand }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${lvlProgress}%` }}
-                  transition={{ duration: 0.9, ease: 'easeOut' }}
-                />
-              </div>
-              <p className="text-xs mt-1.5" style={{ color: coinsNeeded ? C.muted : '#ffffff' }}>
-                {coinsNeeded
-                  ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} Airstars to Level ${userLevel + 1}`
-                  : <><span className="star-silver">⭐</span> Max level — RAF Rank Promotion on next cycle</>
-                }
-              </p>
-              {nextUnlockLevel && (
-                <p className="text-xs mt-1.5 font-semibold" style={{ color: 'rgba(91,170,255,0.7)' }}>
-                  ↓ Next pathway unlock at Level {nextUnlockLevel.levelNumber}
-                </p>
+              {user ? (
+                <>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <p className="text-sm font-extrabold intel-mono" style={{ color: C.brand }}>
+                      LEVEL {userLevel}
+                    </p>
+                    <p className="text-xs intel-mono" style={{ color: C.muted }}>
+                      {coinsInLevel.toLocaleString()} / {coinsNeeded?.toLocaleString() ?? '—'} AC
+                    </p>
+                  </div>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: C.border }}>
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ background: C.brand }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${lvlProgress}%` }}
+                      transition={{ duration: 0.9, ease: 'easeOut' }}
+                    />
+                  </div>
+                  <p className="text-xs mt-1.5" style={{ color: coinsNeeded ? C.muted : '#ffffff' }}>
+                    {coinsNeeded
+                      ? `${Math.max(0, coinsNeeded - coinsInLevel).toLocaleString()} Airstars to Level ${userLevel + 1}`
+                      : <><span className="star-silver">⭐</span> Max level — RAF Rank Promotion on next cycle</>
+                    }
+                  </p>
+                  {nextUnlockLevel && (
+                    <p className="text-xs mt-1.5 font-semibold" style={{ color: 'rgba(91,170,255,0.7)' }}>
+                      ↓ Next pathway unlock at Level {nextUnlockLevel.levelNumber}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-extrabold intel-mono mb-1" style={{ color: C.brand }}>
+                      AGENT LEVELS
+                    </p>
+                    <p className="text-xs" style={{ color: C.muted }}>
+                      Sign in to earn Airstars and level up your agent.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/login')}
+                    className="text-xs font-bold px-3 py-2 rounded-lg shrink-0 intel-mono transition-colors"
+                    style={{
+                      color: C.brand,
+                      background: 'rgba(91,170,255,0.12)',
+                      border: '1px solid rgba(91,170,255,0.3)',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(91,170,255,0.22)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(91,170,255,0.12)' }}
+                  >
+                    Sign In
+                  </button>
+                </div>
               )}
-            </div>
-          )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="ranks-content"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.3 }}
+            >
+              {/* Rank identity */}
+              <div className="flex items-center gap-3 mb-3">
+                <div
+                  className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ background: C.deep, border: '1.5px solid rgba(91,170,255,0.2)' }}
+                >
+                  {selectedRank && selectedRank.rankNumber > 1
+                    ? <RankBadge rankNumber={selectedRank.rankNumber} size={32} />
+                    : <span className="text-sm font-extrabold intel-mono" style={{ color: C.brand }}>
+                        {selectedRank?.rankAbbreviation ?? '—'}
+                      </span>
+                  }
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-base font-extrabold truncate leading-tight" style={{ color: C.text }}>
+                    {selectedRank?.rankName ?? 'Unranked'}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: C.muted }}>
+                    {isPreviewing ? 'Previewing' : 'Your Rank'}
+                    {selectedRank?.rankAbbreviation ? ` · ${selectedRank.rankAbbreviation}` : ''}
+                    {selectedRank?.rankType ? ` · ${selectedRank.rankType.replace(/_/g, ' ')}` : ''}
+                  </p>
+                </div>
+                {user && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/profile/badge')}
+                    className="text-[10px] uppercase tracking-wider font-bold px-2.5 py-1.5 rounded-lg shrink-0 intel-mono transition-colors"
+                    style={{
+                      color: C.brand,
+                      background: 'rgba(91,170,255,0.1)',
+                      border: '1px solid rgba(91,170,255,0.3)',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(91,170,255,0.18)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(91,170,255,0.1)' }}
+                  >
+                    Change Badge
+                  </button>
+                )}
+              </div>
 
-          {/* Level list */}
+              {/* Pathway unlocks */}
+              <div className="pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+                <p className="text-xs uppercase tracking-widest font-bold mb-1.5" style={{ color: C.muted }}>
+                  Pathway Unlocks
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {previewRankUnlocks.length > 0 ? (
+                    <UnlockBadges
+                      unlocks={previewRankUnlocks}
+                      bare
+                      userLevel={userLevel}
+                      userRankNumber={userRankNumber}
+                      userTier={userTier}
+                      onSubscriptionLocked={handleSubscriptionLocked}
+                    />
+                  ) : (
+                    <p className="text-xs" style={{ color: C.dim }}>
+                      No pathway unlocks at this rank.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        </div>
+      </motion.div>
+
+      {/* ── LEVELS LIST ────────────────────────────────────────────────────── */}
+      {tab === 'levels' && (
+        <motion.div key="levels-list" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
             <div
               ref={levelsListScrollRef}
-              style={{ height: listMaxH ?? 540, overflowY: 'auto', scrollbarWidth: 'none' }}
+              style={{ maxHeight: listMaxH ?? 540, overflowY: 'auto', scrollbarWidth: 'none' }}
             >
               {sortedLevels.map((lvl, i) => {
                 const isCurrentRow  = lvl.levelNumber === userLevel
@@ -447,8 +610,9 @@ export default function Rankings() {
                       userRankNumber={userRankNumber}
                       userTier={userTier}
                       pathwayUnlocks={pathwayUnlocks}
+                      userNextRank={userNextRank}
+                      onNextRankClick={handleNextRankClick}
                       onSubscriptionLocked={handleSubscriptionLocked}
-                      rowRef={isCurrentRow ? currentLevelRowRef : undefined}
                     />
                   </Fragment>
                 )
@@ -458,89 +622,11 @@ export default function Rankings() {
         </motion.div>
       )}
 
-      {/* ── RANKS TAB ─────────────────────────────────────────────────────── */}
+      {/* ── RANKS LIST ─────────────────────────────────────────────────────── */}
       {tab === 'ranks' && (
-        <motion.div key="ranks" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-
-          {user && (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => navigate('/profile/badge')}
-                className="text-xs intel-mono font-bold hover:underline"
-                style={{ color: C.brand }}
-              >
-                Change profile badge →
-              </button>
-            </div>
-          )}
-
-          {/* Rank preview card */}
-          <div
-            className="rounded-2xl p-4"
-            style={{
-              background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)',
-              border: `1px solid ${isPreviewing ? 'rgba(91,170,255,0.35)' : 'rgba(91,170,255,0.2)'}`,
-            }}
-          >
-            {/* Rank identity */}
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
-                style={{ background: C.deep, border: '1.5px solid rgba(91,170,255,0.2)' }}
-              >
-                {selectedRank && selectedRank.rankNumber > 1
-                  ? <RankBadge rankNumber={selectedRank.rankNumber} size={32} />
-                  : <span className="text-sm font-extrabold intel-mono" style={{ color: C.brand }}>
-                      {selectedRank?.rankAbbreviation ?? '—'}
-                    </span>
-                }
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-base font-extrabold truncate leading-tight" style={{ color: C.text }}>
-                  {selectedRank?.rankName ?? 'Unranked'}
-                </p>
-                <p className="text-xs mt-0.5" style={{ color: C.muted }}>
-                  {isPreviewing ? 'Previewing' : 'Your Rank'}
-                  {selectedRank?.rankAbbreviation ? ` · ${selectedRank.rankAbbreviation}` : ''}
-                  {selectedRank?.rankType ? ` · ${selectedRank.rankType.replace(/_/g, ' ')}` : ''}
-                </p>
-              </div>
-            </div>
-
-            {/* Pathway unlocks — animated on rank change */}
-            <div className="pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
-              <p className="text-xs uppercase tracking-widest font-bold mb-1.5" style={{ color: C.muted }}>
-                Pathway Unlocks
-              </p>
-              <motion.div
-                animate={{ height: badgeHeight }}
-                transition={{ duration: 0.25, ease: 'easeInOut' }}
-                style={{ overflow: 'hidden' }}
-              >
-                <div ref={badgeContentRef} className="flex flex-wrap gap-1">
-                  {previewRankUnlocks.length > 0 ? (
-                    <UnlockBadges
-                      unlocks={previewRankUnlocks}
-                      bare
-                      userLevel={userLevel}
-                      userRankNumber={userRankNumber}
-                      userTier={userTier}
-                      onSubscriptionLocked={handleSubscriptionLocked}
-                    />
-                  ) : (
-                    <p className="text-xs" style={{ color: C.dim }}>
-                      No pathway unlocks at this rank.
-                    </p>
-                  )}
-                </div>
-              </motion.div>
-            </div>
-          </div>
-
-          {/* Rank list */}
+        <motion.div key="ranks-list" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
           <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
-            <div ref={rankListScrollRef} style={{ height: listMaxH ?? 540, overflowY: 'auto', scrollbarWidth: 'none' }}>
+            <div ref={rankListScrollRef} style={{ maxHeight: listMaxH ?? 540, overflowY: 'auto', scrollbarWidth: 'none' }}>
               {sortedRanks.map((rank, i) => {
                 const isUserRow     = rank.rankNumber === userRankNumber
                 const showLockLabel = isUserRow && i > 0
@@ -567,7 +653,6 @@ export default function Rankings() {
                       isBelow={userRankNumber != null && rank.rankNumber < userRankNumber}
                       isSelected={rank.rankNumber === selectedRankNum}
                       onClick={() => setSelectedRankNum(rank.rankNumber)}
-                      rowRef={isUserRow ? userRankRowRef : undefined}
                     />
                   </Fragment>
                 )

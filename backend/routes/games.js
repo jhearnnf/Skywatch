@@ -1304,12 +1304,31 @@ router.post('/wheres-that-aircraft/result', protect, async (req, res) => {
 
 // GET /api/games/flashcard-recall/available-briefs
 // Returns the count of completed briefs available for flashcard rounds.
+//
+// Eligible briefs are filtered by the *current* user's pathway/tier (Fix 1)
+// so a brief that's since been level-locked or moved to a tier the user no
+// longer has stops counting. Read rows that were created when the user had
+// access remain — they're just no longer eligible for the deck.
 router.get('/flashcard-recall/available-briefs', protect, async (req, res) => {
   try {
-    const settings = await AppSettings.getSettings();
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
+    const [settings, rawLevels] = await Promise.all([
+      AppSettings.getSettings(),
+      Level.find().sort({ levelNumber: 1 }).lean(),
+    ]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
+    const tier = effectiveTier(req.user);
+
     const briefFilter = { status: 'published' };
     if (!settings.newsFlashcardsEnabled) briefFilter.category = { $ne: 'News' };
-    const validBriefIds = await IntelligenceBrief.distinct('_id', briefFilter);
+    const candidateBriefs = await IntelligenceBrief.find(briefFilter).select('_id category').lean();
+    const validBriefIds = candidateBriefs
+      .filter(b =>
+        canAccessCategory(b.category, tier, settings) &&
+        isPathwayUnlocked(b.category, req.user, settings, levelThresholds)
+      )
+      .map(b => b._id);
+
     const count = await IntelligenceBriefRead.countDocuments({
       userId: req.user._id,
       intelBriefId: { $in: validBriefIds },
@@ -1330,11 +1349,27 @@ router.post('/flashcard-recall/start', protect, async (req, res) => {
 
     const gameType = await require('../models/GameType').findOne({ key: 'flashcard_recall' }).lean();
 
-    // All valid published brief IDs — exclude News when News flashcards are disabled
-    const settings = await AppSettings.getSettings();
+    // All valid published brief IDs — exclude News when News flashcards are
+    // disabled, and filter by the user's current pathway/tier so a brief that
+    // was unlocked when first read but is now level/tier-locked stops being
+    // dealt into the deck (Fix 1).
+    const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
+    const [settings, rawLevels] = await Promise.all([
+      AppSettings.getSettings(),
+      Level.find().sort({ levelNumber: 1 }).lean(),
+    ]);
+    const levelThresholds = buildCumulativeThresholds(rawLevels);
+    const tier = effectiveTier(req.user);
+
     const briefFilter = { status: 'published' };
     if (!settings.newsFlashcardsEnabled) briefFilter.category = { $ne: 'News' };
-    const validBriefIds = await IntelligenceBrief.distinct('_id', briefFilter);
+    const candidateBriefs = await IntelligenceBrief.find(briefFilter).select('_id category').lean();
+    const validBriefIds = candidateBriefs
+      .filter(b =>
+        canAccessCategory(b.category, tier, settings) &&
+        isPathwayUnlocked(b.category, req.user, settings, levelThresholds)
+      )
+      .map(b => b._id);
 
     // User's eligible read records — completed briefs OR briefs where they reached section 4
     const readRecords = await IntelligenceBriefRead.find({
@@ -1500,97 +1535,130 @@ router.post('/flashcard-recall/abandon', protect, async (req, res) => {
 
 // ── Where's That Aircraft ─────────────────────────────────────────────────
 
+// Pure decision helper used by both /spawn-decision (read-only preview) and
+// /spawn-check (commit). Performs no DB writes — callers are responsible for
+// persisting counter/threshold changes based on the returned `action`.
+async function computeWtaSpawnDecision(userId) {
+  // Prerequisites: ≥2 completed Bases reads AND ≥2 completed Aircrafts reads
+  const [basesCount, aircraftCount] = await Promise.all([
+    IntelligenceBriefRead.countDocuments({ userId, completed: true,
+      intelBriefId: { $in: await IntelligenceBrief.distinct('_id', { category: 'Bases' }) },
+    }),
+    IntelligenceBriefRead.countDocuments({ userId, completed: true,
+      intelBriefId: { $in: await IntelligenceBrief.distinct('_id', { category: 'Aircrafts' }) },
+    }),
+  ]);
+
+  if (basesCount < 2 || aircraftCount < 2) {
+    return { spawn: false, action: 'noop' };
+  }
+
+  const user = await User.findById(userId).select('whereAircraftReadsSinceLastGame whereAircraftSpawnThreshold');
+  const newCount = (user.whereAircraftReadsSinceLastGame ?? 0) + 1;
+  const threshold = user.whereAircraftSpawnThreshold ?? 3;
+
+  if (newCount < threshold) {
+    return { spawn: false, action: 'increment', newCount };
+  }
+
+  // Spawn candidate pool:
+  // - user has read the aircraft brief
+  // - brief has ≥1 associatedBaseBriefIds
+  // - user has also read at least one of those base briefs
+  const readAircraftIds = (await IntelligenceBriefRead.find({ userId, completed: true })
+    .distinct('intelBriefId'));
+
+  const eligibleAircraft = await IntelligenceBrief.find({
+    _id: { $in: readAircraftIds },
+    category: 'Aircrafts',
+    'associatedBaseBriefIds.0': { $exists: true },
+  }).select('_id title associatedBaseBriefIds media').populate('media', 'mediaUrl').lean();
+
+  const readBaseIds = new Set(
+    (await IntelligenceBriefRead.distinct('intelBriefId', { userId, completed: true,
+      intelBriefId: { $in: await IntelligenceBrief.distinct('_id', { category: 'Bases' }) },
+    })).map(id => id.toString())
+  );
+
+  const eligible = eligibleAircraft.filter(b =>
+    b.associatedBaseBriefIds.some(id => readBaseIds.has(id.toString()))
+  );
+
+  if (eligible.length === 0) {
+    return { spawn: false, action: 'increment', newCount };
+  }
+
+  // Exclude aircraft the user has already won, unless they've cleared all eligible ones
+  const wonAircraftIds = new Set(
+    (await GameSessionWhereAircraftResult.distinct('aircraftBriefId', { userId, won: true }))
+      .map(id => id.toString())
+  );
+  const unplayed = eligible.filter(b => !wonAircraftIds.has(b._id.toString()));
+  const pool = unplayed.length > 0 ? unplayed : eligible;
+
+  const aircraft = pool[Math.floor(Math.random() * pool.length)];
+  const mediaUrl = aircraft.media?.[0]?.mediaUrl ?? null;
+  const newThreshold = 2 + Math.floor(Math.random() * 4);
+
+  const eligibleBaseIds = aircraft.associatedBaseBriefIds.filter(id => readBaseIds.has(id.toString()));
+  const baseBriefs = await IntelligenceBrief.find(
+    { _id: { $in: eligibleBaseIds } }
+  ).select('_id title').lean();
+
+  return {
+    spawn: true,
+    action: 'spawn',
+    aircraftBriefId: aircraft._id,
+    aircraftTitle:   aircraft.title,
+    mediaUrl,
+    baseBriefCount:  baseBriefs.length,
+    newThreshold,
+  };
+}
+
+function spawnDecisionPayload(decision) {
+  if (!decision.spawn) return { spawn: false };
+  return {
+    spawn: true,
+    aircraftBriefId: decision.aircraftBriefId,
+    aircraftTitle:   decision.aircraftTitle,
+    mediaUrl:        decision.mediaUrl,
+    baseBriefCount:  decision.baseBriefCount,
+  };
+}
+
+// POST /api/games/wheres-aircraft/spawn-decision
+// Read-only preview of the spawn outcome. Called from the brief reader while
+// the user is still on the flashcard so the MissionDetectedModal can render
+// instantly on completion. Does NOT mutate counter/threshold — those updates
+// only happen via the /spawn-check commit.
+router.post('/wheres-aircraft/spawn-decision', protect, async (req, res) => {
+  try {
+    const decision = await computeWtaSpawnDecision(req.user._id);
+    res.json({ status: 'success', data: spawnDecisionPayload(decision) });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/games/wheres-aircraft/spawn-check
-// Called after an Aircraft brief read is completed.
+// Commit endpoint. Called after an Aircraft brief read is completed.
 // Increments the user's counter; spawns a game if prerequisites are met.
 router.post('/wheres-aircraft/spawn-check', protect, async (req, res) => {
   try {
     const userId = req.user._id;
+    const decision = await computeWtaSpawnDecision(userId);
 
-    // Prerequisites: ≥2 completed Bases reads AND ≥2 completed Aircrafts reads
-    const [basesCount, aircraftCount] = await Promise.all([
-      IntelligenceBriefRead.countDocuments({ userId, completed: true,
-        intelBriefId: { $in: await IntelligenceBrief.distinct('_id', { category: 'Bases' }) },
-      }),
-      IntelligenceBriefRead.countDocuments({ userId, completed: true,
-        intelBriefId: { $in: await IntelligenceBrief.distinct('_id', { category: 'Aircrafts' }) },
-      }),
-    ]);
-
-    if (basesCount < 2 || aircraftCount < 2) {
-      return res.json({ status: 'success', data: { spawn: false } });
+    if (decision.action === 'increment') {
+      await User.findByIdAndUpdate(userId, { whereAircraftReadsSinceLastGame: decision.newCount });
+    } else if (decision.action === 'spawn') {
+      await User.findByIdAndUpdate(userId, {
+        whereAircraftReadsSinceLastGame: 0,
+        whereAircraftSpawnThreshold:     decision.newThreshold,
+      });
     }
 
-    // Fetch current spawn state
-    const user = await User.findById(userId).select('whereAircraftReadsSinceLastGame whereAircraftSpawnThreshold');
-    const newCount = (user.whereAircraftReadsSinceLastGame ?? 0) + 1;
-
-    if (newCount < (user.whereAircraftSpawnThreshold ?? 3)) {
-      await User.findByIdAndUpdate(userId, { whereAircraftReadsSinceLastGame: newCount });
-      return res.json({ status: 'success', data: { spawn: false } });
-    }
-
-    // Spawn! Find eligible aircraft briefs:
-    // - user has read the aircraft brief
-    // - brief has ≥1 associatedBaseBriefIds
-    // - user has also read at least one of those base briefs
-    const readAircraftIds = (await IntelligenceBriefRead.find({ userId, completed: true })
-      .distinct('intelBriefId'));
-
-    const eligibleAircraft = await IntelligenceBrief.find({
-      _id: { $in: readAircraftIds },
-      category: 'Aircrafts',
-      'associatedBaseBriefIds.0': { $exists: true },
-    }).select('_id title associatedBaseBriefIds media').populate('media', 'mediaUrl').lean();
-
-    const readBaseIds = new Set(
-      (await IntelligenceBriefRead.distinct('intelBriefId', { userId, completed: true,
-        intelBriefId: { $in: await IntelligenceBrief.distinct('_id', { category: 'Bases' }) },
-      })).map(id => id.toString())
-    );
-
-    const eligible = eligibleAircraft.filter(b =>
-      b.associatedBaseBriefIds.some(id => readBaseIds.has(id.toString()))
-    );
-
-    if (eligible.length === 0) {
-      // No eligible briefs yet — increment counter but don't spawn
-      await User.findByIdAndUpdate(userId, { whereAircraftReadsSinceLastGame: newCount });
-      return res.json({ status: 'success', data: { spawn: false } });
-    }
-
-    // Exclude aircraft the user has already won, unless they've cleared all eligible ones
-    const wonAircraftIds = new Set(
-      (await GameSessionWhereAircraftResult.distinct('aircraftBriefId', { userId, won: true }))
-        .map(id => id.toString())
-    );
-    const unplayed = eligible.filter(b => !wonAircraftIds.has(b._id.toString()));
-    const pool = unplayed.length > 0 ? unplayed : eligible; // fall back to all if all won
-
-    // Pick a random aircraft from the pool
-    const aircraft = pool[Math.floor(Math.random() * pool.length)];
-    const mediaUrl = aircraft.media?.[0]?.mediaUrl ?? null;
-
-    // Reset counter; set new random threshold 2–5
-    const newThreshold = 2 + Math.floor(Math.random() * 4);
-    await User.findByIdAndUpdate(userId, {
-      whereAircraftReadsSinceLastGame: 0,
-      whereAircraftSpawnThreshold: newThreshold,
-    });
-
-    // Fetch base brief names for the eligible bases
-    const eligibleBaseIds = aircraft.associatedBaseBriefIds.filter(id => readBaseIds.has(id.toString()));
-    const baseBriefs = await IntelligenceBrief.find(
-      { _id: { $in: eligibleBaseIds } }
-    ).select('_id title').lean();
-
-    res.json({ status: 'success', data: {
-      spawn: true,
-      aircraftBriefId: aircraft._id,
-      aircraftTitle:   aircraft.title,
-      mediaUrl,
-      baseBriefCount:  baseBriefs.length,
-    }});
+    res.json({ status: 'success', data: spawnDecisionPayload(decision) });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -326,6 +326,28 @@ body.play-mode::before {
   }
 }
 
+/* Skeleton shimmer for Play launcher sections — shown while a section's
+   fetch is in flight or while a clicked-but-not-yet-loaded section is
+   waiting for its data. Uses a soft sweep on a low-opacity surface so it
+   reads as "content arriving" without competing with the real UI. */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(186, 217, 255, 0.05) 0%,
+    rgba(186, 217, 255, 0.14) 50%,
+    rgba(186, 217, 255, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-sweep {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer { animation: none; opacity: 0.6; }
+}
+
 /* Tutorial highlight: lifts the game-mode grid above the backdrop + ambient glow */
 .tutorial-grid-highlight {
   position: relative;

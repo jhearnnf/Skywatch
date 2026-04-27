@@ -15,9 +15,13 @@ const intelligenceBriefReadSchema = new mongoose.Schema({
 
   briefDeletedNote: { type: String, default: null }, // set when the linked brief is deleted or re-created
 
-  firstReadAt:  { type: Date, default: Date.now },
-  lastReadAt:   { type: Date, default: Date.now },
-  completedAt:  { type: Date, default: null },
+  firstReadAt:         { type: Date, default: Date.now },
+  lastReadAt:          { type: Date, default: Date.now },
+  completedAt:         { type: Date, default: null },
+  // Stamped once when reachedFlashcard first flips to true. Distinct from
+  // lastReadAt (which moves on every brief view) so the profile's flashcard
+  // history can show the actual unlock moment rather than the most-recent visit.
+  flashcardUnlockedAt: { type: Date, default: null },
 
   // Stat keys where this user has opened the mnemonic sheet for this brief
   mnemonicsViewed: { type: [String], default: [] },

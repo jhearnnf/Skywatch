@@ -288,4 +288,96 @@ describe('GET /api/briefs/random-in-progress — priority ordering', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toBeNull();
   });
+
+  it('falls back to the next accessible in-progress brief when the top pick is tier-locked', async () => {
+    await createSettings({
+      freeCategories:   ['News'],
+      silverCategories: ['News', 'Aircrafts'],
+    });
+    const rank = await createRankDoc(1);
+    const user = await createUser({ subscriptionTier: 'free', totalAirstars: 0, rank: rank._id });
+
+    // Heritage brief has the lowest priority but free tier can't access it
+    const heritage = await createBrief({ category: 'Heritage', title: 'RAF Core Values', priorityNumber: 1 });
+    const news     = await createBrief({ category: 'News',     title: 'News',            priorityNumber: 5 });
+    await createReadRecord(user._id, heritage._id, { completed: false });
+    await createReadRecord(user._id, news._id,     { completed: false });
+
+    const res = await request(app)
+      .get('/api/briefs/random-in-progress')
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(200);
+    expect(String(res.body.data.briefId)).toBe(String(news._id));
+  });
+
+  it('falls back when the top pick is pathway-locked even though tier allows it', async () => {
+    await createSettings({
+      freeCategories:   ['News', 'Aircrafts'],
+      silverCategories: ['News', 'Aircrafts'],
+      pathwayUnlocks: [
+        { category: 'News',      levelRequired: 1, rankRequired: 1 },
+        { category: 'Aircrafts', levelRequired: 5, rankRequired: 1 }, // locked at L1
+      ],
+    });
+    const rank = await createRankDoc(1);
+    const user = await createUser({ subscriptionTier: 'silver', totalAirstars: 0, rank: rank._id });
+
+    const ac   = await createBrief({ category: 'Aircrafts', title: 'AC', priorityNumber: 1 });
+    const news = await createBrief({ category: 'News',      title: 'News', priorityNumber: 5 });
+    await createReadRecord(user._id, ac._id,   { completed: false });
+    await createReadRecord(user._id, news._id, { completed: false });
+
+    const res = await request(app)
+      .get('/api/briefs/random-in-progress')
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(200);
+    expect(String(res.body.data.briefId)).toBe(String(news._id));
+  });
+
+  it('returns null when every in-progress brief is in a locked category', async () => {
+    await createSettings({
+      freeCategories:   ['News'],
+      silverCategories: ['News', 'Aircrafts'],
+    });
+    const rank = await createRankDoc(1);
+    const user = await createUser({ subscriptionTier: 'free', totalAirstars: 0, rank: rank._id });
+
+    const heritage = await createBrief({ category: 'Heritage', title: 'RAF Core Values', priorityNumber: 1 });
+    await createReadRecord(user._id, heritage._id, { completed: false });
+
+    const res = await request(app)
+      .get('/api/briefs/random-in-progress')
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data).toBeNull();
+  });
+
+  it('does not delete the read record for a locked brief — it reappears once access is restored', async () => {
+    await createSettings({
+      freeCategories:   ['News'],
+      silverCategories: ['News', 'Aircrafts'],
+    });
+    const rank = await createRankDoc(1);
+    const user = await createUser({ subscriptionTier: 'free', totalAirstars: 0, rank: rank._id });
+
+    const ac = await createBrief({ category: 'Aircrafts', title: 'AC', priorityNumber: 1 });
+    await createReadRecord(user._id, ac._id, { completed: false });
+
+    // While tier is free, Aircrafts is locked → null
+    let res = await request(app)
+      .get('/api/briefs/random-in-progress')
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data).toBeNull();
+
+    // User upgrades — read record persists, and Jump Back In re-surfaces it
+    const User = require('../../models/User');
+    await User.findByIdAndUpdate(user._id, { subscriptionTier: 'silver' });
+
+    res = await request(app)
+      .get('/api/briefs/random-in-progress')
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(200);
+    expect(String(res.body.data.briefId)).toBe(String(ac._id));
+  });
 });

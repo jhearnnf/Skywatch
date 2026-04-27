@@ -1207,22 +1207,8 @@ function ContinueLearning({ brief, navigate, fallbackCards }) {
   )
 }
 
-// Themed transmission indicator — flickering binary digits in brand blue
-function BinaryStream({ length = 8 }) {
-  const [bits, setBits] = useState(() =>
-    Array.from({ length }, () => (Math.random() < 0.5 ? '0' : '1')).join('')
-  )
-  useEffect(() => {
-    const id = setInterval(() => {
-      setBits(Array.from({ length }, () => (Math.random() < 0.5 ? '0' : '1')).join(''))
-    }, 110)
-    return () => clearInterval(id)
-  }, [length])
-  return <span className="font-mono tracking-[0.15em] opacity-90 tabular-nums">{bits}</span>
-}
-
 // ── Completion screen ─────────────────────────────────────────────────────
-function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onReRead, user, isFirstCompletion, coinReward, navigate, quizPassed, quizAvailable, syncingReward }) {
+function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onReRead, user, isFirstCompletion, coinReward, navigate, quizPassed, quizAvailable }) {
   const { API, apiFetch, setUser, awardAirstars } = useAuth()
   const [email, setEmail]             = useState('')
   const [showEmailInput, setShowEmailInput] = useState(false)
@@ -1323,19 +1309,9 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             {quizAvailable ? (
               <button
                 onClick={onQuiz}
-                disabled={syncingReward}
-                aria-busy={syncingReward}
-                className="w-full py-4 bg-brand-600 hover:bg-brand-700 disabled:hover:bg-brand-600 disabled:cursor-wait text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200 relative overflow-hidden"
+                className="w-full py-4 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-2xl text-base transition-colors shadow-lg shadow-brand-200"
               >
-                {syncingReward ? (
-                  <span className="flex items-center justify-center gap-3">
-                    <BinaryStream length={6} />
-                    <span className="tracking-wider">TRANSMITTING REWARDS…</span>
-                    <BinaryStream length={6} />
-                  </span>
-                ) : (
-                  <>🧠 {quizPassed ? 'Retake Quiz' : 'Take the Quiz → Earn Airstars'}</>
-                )}
+                🧠 {quizPassed ? 'Retake Quiz' : 'Take the Quiz → Earn Airstars'}
               </button>
             ) : (
               <div className="quiz-unavailable-block">
@@ -1352,8 +1328,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             {booState === 'available' && (
               <button
                 onClick={onBattleOrder}
-                disabled={syncingReward}
-                className="w-full py-4 border-2 border-violet-500 text-violet-300 hover:bg-violet-500 hover:text-white disabled:hover:bg-transparent disabled:hover:text-violet-300 disabled:cursor-wait disabled:opacity-60 font-bold rounded-2xl text-base transition-colors"
+                className="w-full py-4 border-2 border-violet-500 text-violet-300 hover:bg-violet-500 hover:text-white font-bold rounded-2xl text-base transition-colors"
               >
                 🗺️ Battle of Order — Earn Airstars
               </button>
@@ -1361,8 +1336,7 @@ function CompletionScreen({ brief, onQuiz, booState, onBattleOrder, onBack, onRe
             {booState === 'completed' && (
               <button
                 onClick={onBattleOrder}
-                disabled={syncingReward}
-                className="w-full py-4 border-2 border-violet-500 text-violet-300 hover:bg-violet-500 hover:text-white disabled:hover:bg-transparent disabled:hover:text-violet-300 disabled:cursor-wait disabled:opacity-60 font-bold rounded-2xl text-base transition-colors"
+                className="w-full py-4 border-2 border-violet-500 text-violet-300 hover:bg-violet-500 hover:text-white font-bold rounded-2xl text-base transition-colors"
               >
                 🗺️ Replay Battle of Order
               </button>
@@ -1648,8 +1622,9 @@ export default function BriefReader() {
   const [gameStatusLoading, setGameStatusLoading] = useState(true) // true until quiz+BOO status resolved
   const [reReadMode, setReReadMode] = useState(false)
   const [missionData,       setMissionData]       = useState(null)  // spawn-check result when spawn: true
-  const [spawnCheckPending, setSpawnCheckPending] = useState(false) // true while spawn-check is in-flight
+  const [spawnCheckPending, setSpawnCheckPending] = useState(false) // true while spawn-check is in-flight (fallback only)
   const [wtaSpawn,          setWtaSpawn]          = useState(null)  // { remaining, prereqsMet } from API
+  const [wtaDecision,       setWtaDecision]       = useState(null)  // pre-fetched /spawn-decision result — { spawn, aircraftBriefId?, aircraftTitle?, mediaUrl? }
   const [navDir, setNavDir]        = useState(1) // 1 = forward, -1 = backward
   const [showTutorial, setShowTutorial]         = useState(false)
   const [showStatTutorial, setShowStatTutorial] = useState(false)
@@ -1662,10 +1637,10 @@ export default function BriefReader() {
   const [swipePromptReady, setSwipePromptReady]     = useState(false)
   const [topFaded, setTopFaded] = useState(false)
   const [rewardPreview, setRewardPreview]           = useState(null) // { airstarsEarned, dailyCoinsEarned } — pre-fetched on flashcard
-  const [syncingReward, setSyncingReward]           = useState(false) // true from optimistic notify until commit resolves
   const [flashcardPreview, setFlashcardPreview]     = useState(null) // { wasNew, flashcardCount, gameUnlocksGranted } — pre-fetched on section 3
   const previewNotifiedRef         = useRef(false) // set when awardAirstars has already been fired optimistically
   const flashcardPreviewFetchedRef = useRef(false) // prevents duplicate preview GETs per brief
+  const wtaDecisionFetchedRef      = useRef(false) // prevents duplicate /spawn-decision POSTs per brief
   const collectFiredRef            = useRef(false) // prevents optimistic animation replay on 4 → 3 → 4 oscillation
   const markingRef                 = useRef(false)
   const contentRef                 = useRef(null)
@@ -2033,7 +2008,36 @@ export default function BriefReader() {
     setFlashcardPreview(null)
     flashcardPreviewFetchedRef.current = false
     collectFiredRef.current = false
+    setWtaDecision(null)
+    wtaDecisionFetchedRef.current = false
   }, [brief?._id])
+
+  // Lazy-load the WTA spawn decision once the user reaches the flashcard so
+  // the MissionDetectedModal can render instantly on completion without
+  // waiting on the spawn-check round trip. /spawn-decision is read-only — the
+  // counter/threshold commit still happens via /spawn-check after completion.
+  useEffect(() => {
+    if (wtaDecisionFetchedRef.current) return
+    if (!user || !brief) return
+    if (!isLast) return
+    if (brief.category !== 'Aircrafts') return
+    if (!wtaSpawn?.prereqsMet || wtaSpawn?.remaining !== 1) return
+    if (readRecord?.completed) return
+    wtaDecisionFetchedRef.current = true
+    let cancelled = false
+    apiFetch(`${API}/api/games/wheres-aircraft/spawn-decision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ briefId }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (cancelled || !d?.data) return
+        setWtaDecision(d.data)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [isLast, brief?._id, user, wtaSpawn?.prereqsMet, wtaSpawn?.remaining, readRecord?.completed]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazy-load the reached-flashcard outcome on section 3 so the collect animation
   // can fire instantly on section 4 without waiting on the POST round-trip. The
@@ -2042,7 +2046,7 @@ export default function BriefReader() {
   useEffect(() => {
     if (flashcardPreviewFetchedRef.current) return
     if (!user || !brief) return
-    if (total < 2) return
+    if (total < 4) return
     if (sectionIdx !== total - 2) return
     if (readRecord?.reachedFlashcard || readRecord?.completed) return
     if (isNewsFlashcardHidden) return
@@ -2085,8 +2089,14 @@ export default function BriefReader() {
   // Fast path: preview was pre-fetched on section 3 — start the animation
   // immediately and fire the POST in the background. Slow path (no preview, e.g.
   // rapid swipe or direct link to the last section): await the POST then animate.
+  //
+  // Guard: a brief that's still being generated can render with total <= 1, in
+  // which case isLast is true on mount with sectionIdx === 0 — without the
+  // total >= 4 gate the POST would commit reachedFlashcard for a brief the
+  // user has not actually read.
   useEffect(() => {
     if (!isLast) return
+    if (total < 4) return
     setSwipePromptReady(false)
     if (!user || !brief) { setSwipePromptReady(true); return }
     if (readRecord?.reachedFlashcard || readRecord?.completed) { setSwipePromptReady(true); return }
@@ -2228,7 +2238,6 @@ export default function BriefReader() {
           })
           previewNotifiedRef.current = true
         }
-        setSyncingReward(true)
         apiFetch(`${API}/api/briefs/${briefId}/complete`, {
           method: 'POST',
           credentials: 'include',
@@ -2275,10 +2284,36 @@ export default function BriefReader() {
             if (data?.data?.gameUnlocksGranted?.length) applyUnlocks(data.data.gameUnlocksGranted)
             if (data?.data?.categoryUnlocksGranted?.length) applyCategoryUnlocks(data.data.categoryUnlocksGranted)
           })
-          .finally(() => { setSyncingReward(false) })
+          // Microtask boundary: lets React flush the post-/complete state updates
+          // before the spawn-check fires its own fetch (keeps fetch ordering predictable).
+          .finally(() => {})
           .then(() => {
             // Spawn-check for Where's That Aircraft (Aircrafts category only)
             if (brief?.category !== 'Aircrafts') return
+
+            // Fast path: /spawn-decision was prefetched on the flashcard, so we
+            // already know the outcome. Open the modal synchronously and fire
+            // the commit POST in the background — the user never sees a spinner.
+            if (wtaDecision) {
+              if (wtaDecision.spawn) {
+                const data = {
+                  aircraftBriefId: wtaDecision.aircraftBriefId,
+                  aircraftTitle:   wtaDecision.aircraftTitle,
+                  mediaUrl:        wtaDecision.mediaUrl,
+                }
+                localStorage.setItem('pendingWtaGame', JSON.stringify(data))
+                setMissionData(data)
+              }
+              apiFetch(`${API}/api/games/wheres-aircraft/spawn-check`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ briefId }),
+              }).catch(() => {})
+              return
+            }
+
+            // Fallback: prefetch missed (rapid swipe past flashcard, prereqs
+            // flipped, network failure). Original spinner-then-modal flow.
             const willSpawn = wtaSpawn?.prereqsMet && wtaSpawn?.remaining === 1
             if (willSpawn) setSpawnCheckPending(true)
             apiFetch(`${API}/api/games/wheres-aircraft/spawn-check`, {
@@ -2655,7 +2690,6 @@ export default function BriefReader() {
           navigate={navigate}
           quizPassed={quizPassed}
           quizAvailable={quizAvailable}
-          syncingReward={syncingReward}
         />
       ) : (
         <>
