@@ -91,12 +91,15 @@ describe('Play page — lazy launcher sections', () => {
     expect(titles).toContain('Battle of Order')
   })
 
-  it('hides all 4 launcher sections for logged-in user before fetches resolve', () => {
+  it('renders all 4 launcher sections with skeleton bodies for logged-in user before fetches resolve', () => {
     const { fetchImpl } = makeDeferredFetch()
     useAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch: fetchImpl })
     render(<Play />)
-    // Synchronous check: fetches have not resolved, sections must not be rendered
-    expect(getLauncherHeadings().length).toBe(0)
+    // Sections always mount so the page is full-height immediately and the
+    // launcher refs have real positions for click-to-scroll. The body of each
+    // section shows a shimmer skeleton until its fetch resolves.
+    expect(getLauncherHeadings().length).toBe(4)
+    expect(document.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0)
   })
 
   it('reveals all 4 launcher sections after fetches resolve', async () => {
@@ -114,11 +117,10 @@ describe('Play page — lazy launcher sections', () => {
     })
   })
 
-  it('keeps all sections hidden while ANY fetch is still pending, then reveals them together', async () => {
-    // We want a deterministic top-to-bottom cascade. That requires waiting
-    // for every fetch to settle before mounting any section — otherwise the
-    // section whose fetch finishes first would visually swipe in first,
-    // regardless of its position.
+  it('each section swaps its skeleton for real content as its own fetch resolves (no global gate)', async () => {
+    // Sections all mount immediately with skeleton bodies. As each fetch
+    // resolves, that section's skeleton is replaced by real content — there
+    // is no global "wait for everything" gate.
     const deferreds = {
       quiz:      newDeferred(),
       boo:       newDeferred(),
@@ -137,24 +139,20 @@ describe('Play page — lazy launcher sections', () => {
 
     render(<Play />)
 
-    // Initially: no launcher sections rendered (only the top game-mode cards)
-    expect(getLauncherHeadings().length).toBe(0)
+    // All 4 launcher sections render synchronously, each with a skeleton body
+    expect(getLauncherHeadings().length).toBe(4)
+    expect(document.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0)
 
-    // Resolve three of the four fetches — sections must STILL be hidden,
-    // because we want them all to enter together in a clean cascade.
+    // Resolving fetches one by one drops skeletons progressively
     deferreds.flashcard.resolve({ json: async () => ({ data: { count: 0 } }) })
     deferreds.quiz.resolve({     json: async () => ({ data: { briefs: [] } }) })
     deferreds.wta.resolve({      json: async () => ({ data: { prereqsMet: false } }) })
+    deferreds.boo.resolve({      json: async () => ({ data: { briefs: [] } }) })
 
-    // Flush microtasks so the .finally callbacks have run
-    await Promise.resolve(); await Promise.resolve()
-    expect(getLauncherHeadings().length).toBe(0)
-
-    // Resolve the final fetch → all 4 sections appear in one go
-    deferreds.boo.resolve({ json: async () => ({ data: { briefs: [] } }) })
     await waitFor(() => {
-      expect(getLauncherHeadings().length).toBe(4)
+      expect(document.querySelectorAll('.skeleton-shimmer').length).toBe(0)
     })
+    expect(getLauncherHeadings().length).toBe(4)
   })
 
   it('section still appears when its fetch errors (so user is never left staring at a blank slot)', async () => {

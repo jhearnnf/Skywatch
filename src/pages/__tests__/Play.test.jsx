@@ -844,25 +844,11 @@ describe('Play page — click-to-summon section + skeleton', () => {
     return { resolveQuiz: () => resolveQuiz() }
   }
 
-  it('Intel Quiz section header is not in the DOM before its fetch settles', async () => {
+  it('Intel Quiz section header renders immediately with a skeleton body before its fetch settles', async () => {
     mockWithDeferredQuiz()
     render(<Play />)
-    // Wait for the other (immediately-resolved) sections to appear so we know
-    // visibleSections has run at least once.
-    await waitFor(() => screen.getByRole('heading', { level: 2, name: 'Battle of Order' }))
-    expect(screen.queryByRole('heading', { level: 2, name: 'Intel Quiz' })).toBeNull()
-  })
-
-  it('clicking the Intel Quiz card before its fetch settles renders the section immediately with a skeleton', async () => {
-    mockWithDeferredQuiz()
-    render(<Play />)
-    await waitFor(() => screen.getByRole('heading', { level: 2, name: 'Battle of Order' }))
-
-    fireEvent.click(screen.getByTestId('card-quiz'))
-
-    // Section header now visible even though quizReady is still false
+    // Header is in the DOM straight away — body shows a skeleton shimmer
     expect(screen.getByRole('heading', { level: 2, name: 'Intel Quiz' })).toBeDefined()
-    // Skeleton shimmer rows present in place of real content
     expect(document.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0)
   })
 
@@ -871,8 +857,6 @@ describe('Play page — click-to-summon section + skeleton', () => {
       { _id: 'b1', title: 'Late Brief', category: 'Bases', quizState: 'active' },
     ])
     render(<Play />)
-    await waitFor(() => screen.getByRole('heading', { level: 2, name: 'Battle of Order' }))
-    fireEvent.click(screen.getByTestId('card-quiz'))
     expect(document.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0)
 
     resolveQuiz()
@@ -880,10 +864,10 @@ describe('Play page — click-to-summon section + skeleton', () => {
     expect(document.querySelectorAll('.skeleton-shimmer').length).toBe(0)
   })
 
-  it('Battle of Order section appears independently of Intel Quiz (no global ready gate)', async () => {
-    // Quiz deferred, BOO returns a brief immediately. With the old
-    // allSectionsReady gate the BOO section would be invisible until the
-    // Quiz fetch resolved; with per-section visibility it appears straight away.
+  it('each section reveals its real content independently as its own fetch resolves', async () => {
+    // Quiz deferred, BOO returns a brief immediately. Both section headers
+    // are present from the start; their bodies swap from skeleton to real
+    // content independently as each fetch settles.
     let resolveQuiz
     const quizPromise = new Promise(r => { resolveQuiz = r })
     useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })
@@ -900,10 +884,14 @@ describe('Play page — click-to-summon section + skeleton', () => {
 
     // BOO content should appear without waiting for the Quiz fetch
     await waitFor(() => screen.getByText('Early BOO Brief'))
-    // Quiz section still hidden
-    expect(screen.queryByRole('heading', { level: 2, name: 'Intel Quiz' })).toBeNull()
+    // Quiz section header is present, but its body is still a skeleton
+    expect(screen.getByRole('heading', { level: 2, name: 'Intel Quiz' })).toBeDefined()
+    expect(document.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0)
 
     resolveQuiz()
+    await waitFor(() => {
+      expect(document.querySelectorAll('.skeleton-shimmer').length).toBe(0)
+    })
   })
 })
 

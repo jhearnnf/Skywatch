@@ -159,23 +159,6 @@ export default function Play() {
   const [wtaReady,       setWtaReady]       = useState(() => !user)
   const [booReady,       setBooReady]       = useState(() => !user)
 
-  // Sections fade in independently when EITHER (a) their own fetch settles or
-  // (b) the user clicks the card before the fetch lands — in which case the
-  // section appears immediately with a skeleton body and swaps to real
-  // content when the fetch arrives. This keeps clicks instantly responsive
-  // instead of silently queueing them behind a global gate.
-  const [visibleSections, setVisibleSections] = useState(() => new Set())
-  useEffect(() => {
-    setVisibleSections(prev => {
-      const next = new Set(prev)
-      if (quizReady)      next.add('quiz')
-      if (flashcardReady) next.add('flashcard')
-      if (wtaReady)       next.add('wheres-that-aircraft')
-      if (booReady)       next.add('battle-order')
-      return next.size === prev.size ? prev : next
-    })
-  }, [quizReady, flashcardReady, wtaReady, booReady])
-
   // Per-card ready lookup — used by the entry-tile stat-line placeholder so
   // logged-in users see a tinted pulsing bar in the stat slot while the
   // matching fetch is in flight, instead of an empty slot that pops a real
@@ -304,7 +287,13 @@ export default function Play() {
     }
   }
 
-  // Fetch recommended briefs for each game type
+  // Fetch recommended briefs for each game type.
+  //
+  // The `cancelled` flag is essential: StrictMode in dev mounts → unmounts →
+  // remounts every component, which fires this effect twice. Without
+  // cancellation, the first fetch resolves and paints the list, then the
+  // second effect resets *Ready to false (skeleton flashes back) and the
+  // second fetch resolves, repainting the list. Visible as a "list reload".
   useEffect(() => {
     if (!user) {
       setQuizBriefs([])
@@ -317,6 +306,7 @@ export default function Play() {
       setBooReady(true)
       return
     }
+    let cancelled = false
     setQuizReady(false)
     setFlashcardReady(false)
     setWtaReady(false)
@@ -324,15 +314,17 @@ export default function Play() {
     apiFetch(`${API}/api/games/quiz/recommended-briefs?limit=4`)
       .then(r => r.json())
       .then(data => {
+        if (cancelled) return
         const briefs = data?.data?.briefs ?? []
         setQuizBriefs(briefs)
         if (briefs.some(b => b.quizState === 'active')) markUnlockFromServer('quiz')
       })
       .catch(() => {})
-      .finally(() => setQuizReady(true))
+      .finally(() => { if (!cancelled) setQuizReady(true) })
     apiFetch(`${API}/api/games/battle-of-order/recommended-briefs?limit=4`)
       .then(r => r.json())
       .then(data => {
+        if (cancelled) return
         const briefs = data?.data?.briefs ?? []
         setBooBriefs(briefs)
         if (briefs.some(b => BOO_ACCESSIBLE_STATES.includes(b.booState))) {
@@ -340,34 +332,38 @@ export default function Play() {
         }
       })
       .catch(() => {})
-      .finally(() => setBooReady(true))
+      .finally(() => { if (!cancelled) setBooReady(true) })
     apiFetch(`${API}/api/games/flashcard-recall/available-briefs`)
       .then(r => r.json())
       .then(data => {
+        if (cancelled) return
         const count = data?.data?.count ?? 0
         setFlashcardAvail(count)
         if (count >= 5) markUnlockFromServer('flashcard')
       })
-      .catch(() => setFlashcardAvail(0))
-      .finally(() => setFlashcardReady(true))
+      .catch(() => { if (!cancelled) setFlashcardAvail(0) })
+      .finally(() => { if (!cancelled) setFlashcardReady(true) })
     apiFetch(`${API}/api/users/me/wta-spawn`)
       .then(r => r.json())
       .then(data => {
+        if (cancelled) return
         const spawn = data?.data ?? null
         setWtaSpawn(spawn)
         if (spawn?.prereqsMet === true) markUnlockFromServer('wta')
       })
       .catch(() => {})
-      .finally(() => setWtaReady(true))
+      .finally(() => { if (!cancelled) setWtaReady(true) })
     // Public endpoint — no auth, runs for guests too. Pick once after fetch.
     apiFetch(`${API}/api/briefs/aircraft-cutouts`)
       .then(r => r.json())
       .then(data => {
+        if (cancelled) return
         const pool = data?.data?.cutouts ?? []
         if (pool.length === 0) return
         setRandomAircraft(pool[Math.floor(Math.random() * pool.length)])
       })
       .catch(() => {})
+    return () => { cancelled = true }
     // Depend on user._id rather than the user object — setUser produces a new
     // reference on every state update (unlock applied, airstars awarded, etc.)
     // and rerunning the fetch chain resets the *Ready flags, which unmounts
@@ -402,7 +398,7 @@ export default function Play() {
         if (!wtaSpawn) return null
         if (!wtaSpawn.prereqsMet) return 'Read aircrafts & bases to unlock'
         if ((wtaSpawn.remaining ?? 0) === 0) return 'Mission ready'
-        return `${wtaSpawn.remaining} read${wtaSpawn.remaining === 1 ? '' : 's'} to next mission`
+        return `${wtaSpawn.remaining} aircraft read${wtaSpawn.remaining === 1 ? '' : 's'} to next mission`
       }
       case 'battle-order': {
         if (!booReady) return null
@@ -419,14 +415,12 @@ export default function Play() {
 
   function handleCardClick(key) {
     if (isHighlightingGrid) tutorialNext()
-    // Force the section to render *now* even if its fetch hasn't settled —
-    // body will show a skeleton, swap to real content when the fetch lands.
-    setVisibleSections(prev => prev.has(key) ? prev : new Set(prev).add(key))
     const ref = sectionRefs[key]
-    if (!ref?.current) return
-    const OFFSET = 56 + 16
-    const y = ref.current.getBoundingClientRect().top + window.scrollY - OFFSET
-    window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
+    if (ref?.current) {
+      const OFFSET = 56 + 16
+      const y = ref.current.getBoundingClientRect().top + window.scrollY - OFFSET
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' })
+    }
     setActiveGame(key)
     clearTimeout(highlightTimerRef.current)
     highlightTimerRef.current = setTimeout(() => setActiveGame(null), 1500)
@@ -634,7 +628,6 @@ export default function Play() {
 
           {/* Intel Quiz */}
           <div ref={quizRef} className="launcher-dim">
-          {visibleSections.has('quiz') && (
           <motion.div {...fadeProps} className={sectionClass('quiz')}>
             <SectionAccent modeKey="quiz" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -768,12 +761,10 @@ export default function Play() {
               )}
             </div>
           </motion.div>
-          )}
           </div>
 
           {/* Flashcard Recall */}
           <div ref={flashcardRef} className="launcher-dim">
-          {visibleSections.has('flashcard') && (
           <motion.div {...fadeProps} className={sectionClass('flashcard')}>
             <SectionAccent modeKey="flashcard" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -834,12 +825,10 @@ export default function Play() {
               )}
             </div>
           </motion.div>
-          )}
           </div>
 
           {/* Where's that Aircraft? */}
           <div ref={aircraftRef} className="launcher-dim">
-          {visibleSections.has('wheres-that-aircraft') && (
           <motion.div {...fadeProps} className={sectionClass('wheres-that-aircraft')}>
             <SectionAccent modeKey="wheres-that-aircraft" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -885,12 +874,10 @@ export default function Play() {
               )}
             </div>
           </motion.div>
-          )}
           </div>
 
           {/* Battle of Order */}
           <div ref={battleRef} className="launcher-dim">
-          {visibleSections.has('battle-order') && (
           <motion.div {...fadeProps} className={sectionClass('battle-order')}>
             <SectionAccent modeKey="battle-order" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -1097,7 +1084,6 @@ export default function Play() {
               )}
             </div>
           </motion.div>
-          )}
           </div>
 
         </div>
