@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
@@ -24,11 +24,16 @@ function TimerBar({ seconds, total }) {
 }
 
 // ── Typeahead input ─────────────────────────────────────────────────────────
-function TitleSearch({ allTitles, onSelect, disabled }) {
+const TitleSearch = forwardRef(function TitleSearch({ allTitles, onSelect, disabled }, ref) {
   const [query,       setQuery]       = useState('')
   const [suggestions, setSuggestions] = useState([])
   const [open,        setOpen]        = useState(false)
   const inputRef = useRef(null)
+
+  useImperativeHandle(ref, () => ({
+    blur:  () => inputRef.current?.blur(),
+    focus: () => inputRef.current?.focus(),
+  }), [])
 
   useEffect(() => { setQuery(''); setSuggestions([]); setOpen(false) }, [allTitles])
   useEffect(() => { if (!disabled && inputRef.current) inputRef.current.focus() }, [disabled])
@@ -79,6 +84,7 @@ function TitleSearch({ allTitles, onSelect, disabled }) {
             transition={{ duration: 0.12 }}
             className="absolute z-50 left-0 right-0 mt-1 rounded-2xl overflow-hidden shadow-2xl"
             style={{ background: '#0f2850', border: '1px solid rgba(245,158,11,0.3)' }}
+            onTouchMove={() => inputRef.current?.blur()}
             data-testid="flashcard-suggestions"
           >
             {suggestions.map(item => (
@@ -99,7 +105,7 @@ function TitleSearch({ allTitles, onSelect, disabled }) {
       </AnimatePresence>
     </div>
   )
-}
+})
 
 // ── Main modal ──────────────────────────────────────────────────────────────
 export default function FlashcardGameModal({ onClose }) {
@@ -132,6 +138,56 @@ export default function FlashcardGameModal({ onClose }) {
   const gameFinished  = useRef(false)  // true once finishGame resolves or game reaches result screen
   const abandonSent   = useRef(false)  // guard against double-sending
   const timeoutFired  = useRef(false)  // guard against React double-invoking state updaters
+  const searchRef     = useRef(null)   // exposes blur() on the typeahead input
+
+  // Visual viewport (height + offsetTop) while in 'game' screen — keeps the
+  // game card flush with the top of the visible area when the mobile keyboard
+  // opens, instead of the browser auto-scrolling the page too far up.
+  const [vv, setVv] = useState(null)
+  useLayoutEffect(() => {
+    if (screen !== 'game') { setVv(null); return }
+    const visualVp = typeof window !== 'undefined' ? window.visualViewport : null
+    if (!visualVp) return
+    const update = () => setVv({ height: visualVp.height, offsetTop: visualVp.offsetTop })
+    update()
+    visualVp.addEventListener('resize', update)
+    visualVp.addEventListener('scroll', update)
+    return () => {
+      visualVp.removeEventListener('resize', update)
+      visualVp.removeEventListener('scroll', update)
+    }
+  }, [screen])
+
+  // Lock the page (body) scroll for the duration of the game screen so the
+  // browser cannot scroll past the top-anchored modal even after the keyboard
+  // closes. Restore on cleanup.
+  useEffect(() => {
+    if (screen !== 'game' || typeof document === 'undefined') return
+    const body = document.body
+    const scrollY = window.scrollY
+    const prev = {
+      position:           body.style.position,
+      top:                body.style.top,
+      left:               body.style.left,
+      right:              body.style.right,
+      width:              body.style.width,
+      overflow:           body.style.overflow,
+      touchAction:        body.style.touchAction,
+      overscrollBehavior: body.style.overscrollBehavior,
+    }
+    body.style.position           = 'fixed'
+    body.style.top                = `-${scrollY}px`
+    body.style.left               = '0'
+    body.style.right              = '0'
+    body.style.width              = '100%'
+    body.style.overflow           = 'hidden'
+    body.style.touchAction        = 'none'
+    body.style.overscrollBehavior = 'none'
+    return () => {
+      Object.assign(body.style, prev)
+      window.scrollTo(0, scrollY)
+    }
+  }, [screen])
 
   // Hide TopBar / BottomNav on mobile while a card is being recalled.
   const { enterImmersive, exitImmersive } = useGameChrome()
@@ -359,11 +415,38 @@ export default function FlashcardGameModal({ onClose }) {
 
   const currentCard = cards[cardIdx]
 
+  const anchored = screen === 'game' && vv
+  const overlayStyle = anchored
+    ? {
+        background:    'rgba(8, 14, 30, 0.88)',
+        position:      'fixed',
+        top:           vv.offsetTop,
+        left:          0,
+        right:         0,
+        height:        vv.height,
+        paddingLeft:   '1rem',
+        paddingRight:  '1rem',
+        paddingTop:    '0.5rem',
+        paddingBottom: '0.5rem',
+      }
+    : { background: 'rgba(8, 14, 30, 0.88)' }
+  const overlayClassName = anchored
+    ? 'z-[1100] flex justify-center items-start'
+    : 'fixed inset-0 z-[1100] flex items-center justify-center p-4'
+
+  function handleOverlayPointerDown(e) {
+    if (screen !== 'game') return
+    if (e.target.closest('[data-testid="flashcard-search"]')) return
+    if (e.target.closest('[data-testid="flashcard-suggestion-item"]')) return
+    searchRef.current?.blur()
+  }
+
   return (
     <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
-      style={{ background: 'rgba(8, 14, 30, 0.88)' }}
+      className={overlayClassName}
+      style={overlayStyle}
       data-testid="flashcard-modal"
+      onPointerDown={handleOverlayPointerDown}
     >
       <AnimatePresence mode="wait">
 
@@ -465,7 +548,8 @@ export default function FlashcardGameModal({ onClose }) {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -40 }}
             transition={{ duration: 0.22 }}
-            className="w-full max-w-sm"
+            className="w-full max-w-sm max-h-full overflow-y-auto"
+            style={{ overscrollBehavior: 'contain' }}
           >
             {/* Progress header */}
             <div className="flex items-center justify-between mb-3 px-1">
@@ -545,6 +629,7 @@ export default function FlashcardGameModal({ onClose }) {
             {/* Search input */}
             {!feedback && (
               <TitleSearch
+                ref={searchRef}
                 allTitles={allTitles}
                 onSelect={handleSelect}
                 disabled={!!feedback}
