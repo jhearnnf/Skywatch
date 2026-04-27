@@ -398,7 +398,7 @@ export default function Play() {
         if (!wtaSpawn) return null
         if (!wtaSpawn.prereqsMet) return 'Read aircrafts & bases to unlock'
         if ((wtaSpawn.remaining ?? 0) === 0) return 'Mission ready'
-        return `${wtaSpawn.remaining} aircraft read${wtaSpawn.remaining === 1 ? '' : 's'} to next mission`
+        return `${wtaSpawn.remaining} aircraft read${wtaSpawn.remaining === 1 ? '' : 's'} to play`
       }
       case 'battle-order': {
         if (!booReady) return null
@@ -510,24 +510,40 @@ export default function Play() {
             width as a single row above the 2-column tile layout. Amber/
             gold treatment (matching the Flashcard Drill accent) sets it
             apart from the blue main-suite rows below. */}
-        {settings?.cbatEnabled && (
-          <div className="mb-6">
-            <Link
-              to="/cbat"
-              className="relative flex items-center gap-3 rounded-2xl px-4 py-3 border-2 border-amber-500/60 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/15 hover:border-amber-500 transition-colors group"
+        {/* AppSettings is async, so cbatEnabled flips from undefined → true
+            after first paint. Animate height/opacity so siblings below slide
+            smoothly into their new position instead of jumping when the card
+            mounts. overflow:hidden + inner pt-2 keeps the protruding
+            PRACTICE badge inside the animated box. */}
+        <AnimatePresence initial={false}>
+          {settings?.cbatEnabled && (
+            <motion.div
+              key="cbat-banner"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              style={{ overflow: 'hidden' }}
             >
-              <span className="absolute -top-2 left-3 text-[9px] font-extrabold tracking-wider px-1.5 py-0.5 rounded bg-amber-500 text-slate-900">
-                PRACTICE
-              </span>
-              <span className="text-2xl shrink-0">🎯</span>
-              <div className="min-w-0 flex-1">
-                <p className="font-bold text-slate-800 text-sm leading-tight">CBAT Aptitude Practice</p>
-                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Real pilot-aptitude test drills</p>
+              <div className="pt-2 pb-6">
+                <Link
+                  to="/cbat"
+                  className="relative flex items-center gap-3 rounded-2xl px-4 py-3 border-2 border-amber-500/60 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/15 hover:border-amber-500 transition-colors group"
+                >
+                  <span className="absolute -top-2 left-3 text-[9px] font-extrabold tracking-wider px-1.5 py-0.5 rounded bg-amber-500 text-slate-900">
+                    PRACTICE
+                  </span>
+                  <span className="text-2xl shrink-0">🎯</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-800 text-sm leading-tight">CBAT Aptitude Practice</p>
+                    <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Real pilot-aptitude test drills</p>
+                  </div>
+                  <span className="text-amber-500 group-hover:translate-x-0.5 transition-transform shrink-0 text-lg">→</span>
+                </Link>
               </div>
-              <span className="text-amber-500 group-hover:translate-x-0.5 transition-transform shrink-0 text-lg">→</span>
-            </Link>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Game mode grid ─────────────────────────────────────────── */}
         {/* Mobile (≤600px): single-column stack of 4 row buttons sized

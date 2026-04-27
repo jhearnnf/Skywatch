@@ -391,6 +391,22 @@ body.play-mode::before {
   80%      { opacity: 0.72; }
   82%      { opacity: 0.92; }
 }
+@keyframes lp-stone-appear {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+@keyframes lp-skel-fade {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes lp-stone-appear {
+    from, to { opacity: 1; transform: none; }
+  }
+  @keyframes lp-skel-fade {
+    from, to { opacity: 0; }
+  }
+}
 @keyframes lp-preview-dot {
   0%, 100% { opacity: 1;   transform: scale(1);    }
   50%      { opacity: 0.3; transform: scale(0.85); }

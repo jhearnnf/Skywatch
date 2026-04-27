@@ -580,7 +580,7 @@ function formatEventDate(dateStr) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, aptitudeSyncEnabled, index, openSyncId, onCardOpen, onCardClose, nextBriefImages, revealedStubId, onStubReveal, hoveredStubId, onStubHover, prevStubExpanded }) {
+function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, aptitudeSyncEnabled, index, openSyncId, onCardOpen, onCardClose, nextBriefImages, revealedStubId, onStubReveal, hoveredStubId, onStubHover, prevStubExpanded, appearDelay = 0 }) {
   const size         = milestone ? 72 : 60
   const isNext       = state === 'next'
   const isRead       = state === 'read'
@@ -663,12 +663,24 @@ function Stone({ brief, state, colors, milestone, onTap, onSyncTap, quizPassed, 
 
   const xOffset = ZIGZAG[index % ZIGZAG.length]
 
+  // CSS animation rather than framer-motion's initial/animate — AnimatePresence
+  // initial={false} on the ancestor suppresses descendant motion-component
+  // initial animations through context, which was preventing the stagger from
+  // firing. CSS keyframes are independent of that context.
+  const appearStyle = appearDelay >= 0 ? {
+    animation: `lp-stone-appear 0.35s ease-out ${appearDelay}s both`,
+  } : null
+
   return (
     <motion.div
       ref={containerRef}
       data-brief-index={index}
       className="flex flex-col items-center"
-      style={{ paddingLeft: `calc(50% + ${xOffset}px - ${size / 2}px)`, alignItems: 'flex-start' }}
+      style={{
+        paddingLeft: `calc(50% + ${xOffset}px - ${size / 2}px)`,
+        alignItems: 'flex-start',
+        ...appearStyle,
+      }}
     >
       {/* Connector dot strip above (except first) — per-dot marginTop grows/
           shrinks to mirror the sliding distance when the previous stub
@@ -942,7 +954,7 @@ function PathwayHeader({ category, colors }) {
 const INITIAL_RENDER_COUNT = 12
 const RENDER_BATCH_SIZE    = 20
 
-function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction, nextBriefImages, nextBriefId }) {
+function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction, nextBriefImages, nextBriefId, loading }) {
   const navigate = useNavigate()
   const [openSyncId, setOpenSyncId] = useState(null)
   const [revealedStubId, setRevealedStubId] = useState(null)
@@ -953,6 +965,71 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
     const firstUnread = briefs.findIndex(b => !readSet.has(b._id) && b.status !== 'stub')
     return Math.max(INITIAL_RENDER_COUNT, firstUnread + 10)
   })
+
+  // Skeleton → real handoff is a two-stage transition that mimics the existing
+  // stub-hover dot animation:
+  //   1. `loading=true`: skeleton stones with normal (6px) connector dot spacing.
+  //   2. `loading` flips false → enter "expanding" stage. Briefs are present,
+  //      but the skeleton stays mounted while the connector dots animate their
+  //      marginTop outward by exactly the per-stone height delta between the
+  //      skeleton stone and the eventual real stone. This makes room for the
+  //      taller real stone before it appears.
+  //   3. After SKELETON_EXPAND_MS, `showReal` flips and the real Stone list
+  //      replaces the skeleton in the same DOM positions. Real stones'
+  //      connector dots return to their default 6px because the larger stone
+  //      now occupies the space the expanded dots were holding.
+  const SKELETON_EXPAND_MS = 280
+  const [showReal, setShowReal] = useState(!loading)
+  useEffect(() => {
+    if (loading) {
+      setShowReal(false)
+      return
+    }
+    const id = setTimeout(() => setShowReal(true), SKELETON_EXPAND_MS)
+    return () => clearTimeout(id)
+  }, [loading])
+  const showSkeleton = !showReal
+  const isExpanding  = !loading && !showReal
+
+  // Stagger reveal: when skeleton was shown at some point during this mount,
+  // each real Stone fades in on a CSS animation-delay of `i * STAGGER_STEP_MS`,
+  // and a skeleton overlay sits on top of the same row fading OUT at the same
+  // delay. The two cross-fade pair-wise so each row swaps "one in, one out".
+  // All Stones mount in a single React render so per-stone JS work can't
+  // interrupt the running fade — the GPU handles the stagger via animation-delay
+  // and the timing is frame-aligned (no setTimeout drift).
+  const STAGGER_STEP_MS  = 120
+  const APPEAR_DURATION_MS = 350
+  const skeletonWasShownRef = useRef(loading)
+  useEffect(() => {
+    if (loading) skeletonWasShownRef.current = true
+  }, [loading])
+
+  // `cascading` gates the per-row skeleton overlay. Flips true the first frame
+  // showReal becomes true after a skeleton was shown, then false once the
+  // longest cascade animation has finished.
+  const [cascading, setCascading] = useState(false)
+  useEffect(() => {
+    if (!showReal || !skeletonWasShownRef.current) return
+    setCascading(true)
+    const lastIdx = Math.max(0, Math.min(briefs.length, INITIAL_RENDER_COUNT) - 1)
+    const totalMs = lastIdx * STAGGER_STEP_MS + APPEAR_DURATION_MS
+    const id = setTimeout(() => setCascading(false), totalMs)
+    return () => clearTimeout(id)
+  }, [showReal]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When briefs go from empty (loading) to non-empty, the renderLimit init
+  // (which ran with empty briefs) has no idea where the first-unread sits.
+  // Recompute once briefs arrive so the auto-scroll target is in the DOM.
+  const recomputedRenderLimitRef = useRef(false)
+  useEffect(() => {
+    if (recomputedRenderLimitRef.current) return
+    if (briefs.length === 0) return
+    recomputedRenderLimitRef.current = true
+    const firstUnread = briefs.findIndex(b => !readSet.has(b._id) && b.status !== 'stub')
+    const target = Math.max(INITIAL_RENDER_COUNT, firstUnread + 10)
+    setRenderLimit(prev => Math.max(prev, target))
+  }, [briefs.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll-gated rendering: grow `renderLimit` when a sentinel near the tail of
   // the currently-rendered list enters the viewport. Bounds DOM size on long
@@ -981,10 +1058,15 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
   // `key` in the parent, so this also covers category swaps. readSet/inProgressSet
   // are NOT deps (they are new refs every parent render); including them would make
   // the scroll re-fire and fight the user's own scrolling.
+  // Gated on `showReal`: when briefs first arrive after a fetch, the skeleton is
+  // still rendering (real Stones with [data-brief-index] are not in the DOM until
+  // showReal flips ~280ms later). Without this gate, the rAF retries below race
+  // the SKELETON_EXPAND_MS timer and frequently exhaust before the target exists.
   const didAutoScrollRef = useRef(false)
   useLayoutEffect(() => {
     if (didAutoScrollRef.current) return
     if (!pathwayUnlocked || briefs.length === 0) return
+    if (!showReal) return
     didAutoScrollRef.current = true
 
     // Reapply across several frames. On back/forward nav the document height
@@ -1027,7 +1109,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
       cancelled = true
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [briefs, pathwayUnlocked]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [briefs, pathwayUnlocked, showReal]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const variants = {
     enter:  (d) => ({ opacity: 0, x: d > 0 ? 80 : -80 }),
@@ -1035,17 +1117,20 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
     exit:   (d) => ({ opacity: 0, x: d > 0 ? -80 : 80 }),
   }
 
+  // Single outer motion.div carries the slide-on-category-swap animation. The
+  // skeleton/empty/list/locked states all render INSIDE this same wrapper, so
+  // when `loading` flips false the skeleton stones are simply replaced by the
+  // real Stone components in the same DOM positions — no fade-out/fade-in,
+  // no AnimatePresence swap. The slide only fires when `key` changes (i.e. on
+  // a real category swipe).
+
+  // Find the first unread brief index (used by the list branch only)
+  const firstUnreadIdx = briefs.findIndex(b => !readSet.has(b._id) && b.status !== 'stub')
+
+  let inner
   if (!pathwayUnlocked) {
-    return (
-      <motion.div
-        key={category}
-        custom={direction}
-        variants={variants}
-        initial="enter"
-        animate="center"
-        exit="exit"
-        transition={{ duration: 0.15, ease: 'easeOut' }}
-      >
+    inner = (
+      <>
         <PathwayHeader category={category} colors={colors} />
         <div className="flex flex-col items-center justify-center py-12 text-center px-6">
           <div
@@ -1064,33 +1149,202 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
             How to Unlock
           </button>
         </div>
-      </motion.div>
+      </>
     )
-  }
-
-  if (briefs.length === 0) {
-    return (
-      <motion.div
-        key={category}
-        custom={direction}
-        variants={variants}
-        initial="enter"
-        animate="center"
-        exit="exit"
-        transition={{ duration: 0.15, ease: 'easeOut' }}
-      >
+  } else if (showSkeleton) {
+    // Pre-allocate the full real-stone row height on each skeleton row so
+    // there's no layout jump when the real stones cascade in. Row height
+    // mirrors the real Stone layout: optional dot column (i > 0) + circle +
+    // mt-1.5 + label minHeight (text-xs, 2.5em ≈ 30px), plus an extra
+    // event-date row for News pathways. Dots still animate apart during
+    // `isExpanding` for the visual flourish — minHeight makes that purely
+    // cosmetic (the row's footprint is already at its final value).
+    const labelArea = 30 + (category === 'News' ? 13 : 0)
+    // Skeleton count mirrors the real-list count so the page height (and
+    // therefore every row's vertical position) stays constant across the
+    // phase 2 → phase 3 swap. Falls back to INITIAL_RENDER_COUNT when
+    // briefs haven't arrived yet (phase 1).
+    const skeletonCount = briefs.length > 0
+      ? Math.min(briefs.length, renderLimit)
+      : INITIAL_RENDER_COUNT
+    inner = (
+      <>
+        <PathwayHeader category={category} colors={colors} />
+        {Array.from({ length: skeletonCount }, (_, i) => i).map(i => {
+          const xOffset      = ZIGZAG[i % ZIGZAG.length]
+          const skeletonSize = 52
+          const milestone    = (i + 1) % 5 === 0
+          const realSize     = milestone ? 72 : 60
+          const sizeDelta    = realSize - skeletonSize
+          const dotMarginTop = isExpanding ? 6 + sizeDelta : 6
+          const dotsHeight   = i > 0 ? 30 + 6 : 0  // 3 dots + 2 gaps + mb-1.5
+          const rowMinHeight = dotsHeight + realSize + 6 + labelArea
+          return (
+            <div
+              key={`skel-${i}`}
+              className="flex flex-col"
+              style={{
+                paddingLeft: `calc(50% + ${xOffset}px - ${skeletonSize / 2}px)`,
+                alignItems: 'flex-start',
+                minHeight: rowMinHeight,
+              }}
+            >
+              {i > 0 && (
+                <div className="flex flex-col items-center mb-1.5" style={{ marginLeft: skeletonSize / 2 - 3 }}>
+                  {[0,1,2].map(j => (
+                    <motion.div
+                      key={j}
+                      className="w-1.5 h-1.5 rounded-full"
+                      animate={{ marginTop: j === 0 ? 0 : dotMarginTop }}
+                      transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+                      style={{ background: '#243650', opacity: 0.4 }}
+                    />
+                  ))}
+                </div>
+              )}
+              <div
+                className="rounded-full animate-pulse"
+                style={{
+                  width: skeletonSize, height: skeletonSize,
+                  background: colors.stone + '18',
+                  border: `2px solid ${colors.stone}22`,
+                }}
+              />
+              <div
+                className="mt-1.5 rounded animate-pulse"
+                style={{ width: 60 + (i % 2) * 20, height: 10, background: '#172236', marginLeft: 2 }}
+              />
+            </div>
+          )
+        })}
+      </>
+    )
+  } else if (briefs.length === 0) {
+    inner = (
+      <>
         <PathwayHeader category={category} colors={colors} />
         <div className="flex flex-col items-center justify-center py-12 text-center px-6">
           <span className="text-4xl mb-4">{CATEGORY_ICONS[category] ?? '📄'}</span>
           <p className="text-base font-bold text-slate-700 mb-1">No pathway briefs yet</p>
           <p className="text-sm text-slate-500">{category === 'News' ? 'No news briefs available yet. Check back soon.' : `Priority numbers haven't been assigned to ${category} briefs yet. Check back soon.`}</p>
         </div>
-      </motion.div>
+      </>
+    )
+  } else {
+    inner = (
+      <>
+        <PathwayHeader category={category} colors={colors} />
+      {briefs.slice(0, renderLimit).map((brief, i) => {
+        const isStub       = brief.status === 'stub'
+        const isRead       = !isStub && readSet.has(brief._id)
+        const isInProgress = !isStub && !isRead && inProgressSet.has(brief._id)
+        const isNext       = !isStub && !isRead && !isInProgress && i === firstUnreadIdx
+        const state        = isStub ? 'stub' : isRead ? 'read' : isInProgress ? 'inprogress' : isNext ? 'next' : 'unread'
+        const milestone = (i + 1) % 5 === 0
+        const prevBrief = i > 0 ? briefs[i - 1] : null
+        const prevStubExpanded = !!(prevBrief && prevBrief.status === 'stub'
+          && (hoveredStubId === prevBrief._id || revealedStubId === prevBrief._id))
+
+        const isCascadeRow = i < INITIAL_RENDER_COUNT
+        const stoneDelay   = skeletonWasShownRef.current && isCascadeRow
+          ? i * (STAGGER_STEP_MS / 1000)
+          : -1
+        const showSkelOverlay = cascading && isCascadeRow
+
+        const stoneProps = {
+          brief,
+          state,
+          colors,
+          milestone,
+          index: i,
+          onTap: () => navigate(`/brief/${brief._id}`),
+          onSyncTap: () => navigate(`/aptitude-sync/${brief._id}`, { state: { briefTitle: brief.title, category: brief.category } }),
+          quizPassed: quizPassedSet.has(brief._id),
+          aptitudeSyncEnabled,
+          openSyncId,
+          onCardOpen: setOpenSyncId,
+          onCardClose: () => setOpenSyncId(null),
+          nextBriefImages: i === firstUnreadIdx && String(brief._id) === String(nextBriefId) ? nextBriefImages : null,
+          revealedStubId,
+          onStubReveal: setRevealedStubId,
+          hoveredStubId,
+          onStubHover: setHoveredStubId,
+          prevStubExpanded,
+          appearDelay: stoneDelay,
+        }
+
+        // Non-cascade rows render the stone directly. Cascade rows wrap it in
+        // a relative container so the skeleton overlay stacks over the real
+        // stone. The wrapper is stable across the cascading→done flip so the
+        // Stone's internal state isn't lost when the overlay unmounts.
+        if (!isCascadeRow) {
+          return <Stone key={brief._id} {...stoneProps} />
+        }
+
+        const xOffset      = ZIGZAG[i % ZIGZAG.length]
+        const skeletonSize = 52
+        const realSize     = milestone ? 72 : 60
+        const sizeDelta    = realSize - skeletonSize
+        // Match the inline skeleton's expanded dot spacing so the skeleton
+        // circle doesn't jump y when phase 2 (inline skeleton) hands off
+        // to phase 3 (overlay over real stone) at showReal flip.
+        const dotMarginTop = 6 + sizeDelta
+        const skelDelay    = i * (STAGGER_STEP_MS / 1000)
+
+        return (
+          <div key={brief._id} style={{ position: 'relative' }}>
+            <Stone {...stoneProps} />
+            {showSkelOverlay && (
+              <div
+                aria-hidden="true"
+                className="flex flex-col"
+                style={{
+                  position: 'absolute',
+                  top: 0, left: 0, right: 0,
+                  paddingLeft: `calc(50% + ${xOffset}px - ${skeletonSize / 2}px)`,
+                  alignItems: 'flex-start',
+                  pointerEvents: 'none',
+                  animation: `lp-skel-fade ${APPEAR_DURATION_MS}ms ease-out ${skelDelay}s both`,
+                }}
+              >
+                {i > 0 && (
+                  <div className="flex flex-col items-center mb-1.5" style={{ marginLeft: skeletonSize / 2 - 3 }}>
+                    {[0,1,2].map(j => (
+                      <div
+                        key={j}
+                        className="w-1.5 h-1.5 rounded-full"
+                        style={{
+                          background: '#243650',
+                          opacity: 0.4,
+                          marginTop: j === 0 ? 0 : dotMarginTop,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+                <div
+                  className="rounded-full animate-pulse"
+                  style={{
+                    width: skeletonSize, height: skeletonSize,
+                    background: colors.stone + '18',
+                    border: `2px solid ${colors.stone}22`,
+                  }}
+                />
+                <div
+                  className="mt-1.5 rounded animate-pulse"
+                  style={{ width: 60 + (i % 2) * 20, height: 10, background: '#172236', marginLeft: 2 }}
+                />
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {renderLimit < briefs.length && (
+        <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
+      )}
+      </>
     )
   }
-
-  // Find the first unread brief index
-  const firstUnreadIdx = briefs.findIndex(b => !readSet.has(b._id) && b.status !== 'stub')
 
   return (
     <motion.div
@@ -1104,45 +1358,7 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
       transition={{ duration: 0.25, ease: 'easeOut' }}
       className="pb-8"
     >
-      <PathwayHeader category={category} colors={colors} />
-      {briefs.slice(0, renderLimit).map((brief, i) => {
-        const isStub       = brief.status === 'stub'
-        const isRead       = !isStub && readSet.has(brief._id)
-        const isInProgress = !isStub && !isRead && inProgressSet.has(brief._id)
-        const isNext       = !isStub && !isRead && !isInProgress && i === firstUnreadIdx
-        const state        = isStub ? 'stub' : isRead ? 'read' : isInProgress ? 'inprogress' : isNext ? 'next' : 'unread'
-        const milestone = (i + 1) % 5 === 0
-        const prevBrief = i > 0 ? briefs[i - 1] : null
-        const prevStubExpanded = !!(prevBrief && prevBrief.status === 'stub'
-          && (hoveredStubId === prevBrief._id || revealedStubId === prevBrief._id))
-
-        return (
-          <Stone
-            key={brief._id}
-            brief={brief}
-            state={state}
-            colors={colors}
-            milestone={milestone}
-            index={i}
-            onTap={() => navigate(`/brief/${brief._id}`)}
-            onSyncTap={() => navigate(`/aptitude-sync/${brief._id}`, { state: { briefTitle: brief.title, category: brief.category } })}
-            quizPassed={quizPassedSet.has(brief._id)}
-            aptitudeSyncEnabled={aptitudeSyncEnabled}
-            openSyncId={openSyncId}
-            onCardOpen={setOpenSyncId}
-            onCardClose={() => setOpenSyncId(null)}
-            nextBriefImages={i === firstUnreadIdx && String(brief._id) === String(nextBriefId) ? nextBriefImages : null}
-            revealedStubId={revealedStubId}
-            onStubReveal={setRevealedStubId}
-            hoveredStubId={hoveredStubId}
-            onStubHover={setHoveredStubId}
-            prevStubExpanded={prevStubExpanded}
-          />
-        )
-      })}
-      {renderLimit < briefs.length && (
-        <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
-      )}
+      {inner}
     </motion.div>
   )
 }
@@ -1870,66 +2086,29 @@ export default function LearnPriority() {
           onDragEnd={handleDragEnd}
           className="touch-pan-y cursor-grab active:cursor-grabbing min-h-[300px]"
         >
-          <AnimatePresence mode="wait" custom={direction}>
-            {loading ? (
-              <motion.div
-                key="loading"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex flex-col items-center gap-4 py-4"
-              >
-                {[0,1,2,3].map(i => {
-                  const xOffset = ZIGZAG[i % ZIGZAG.length]
-                  const size = 52
-                  return (
-                    <div key={i} className="flex flex-col items-center" style={{ paddingLeft: `calc(50% + ${xOffset}px - ${size / 2}px)`, alignItems: 'flex-start' }}>
-                      {i > 0 && (
-                        <div className="flex flex-col items-center gap-1.5 mb-1.5" style={{ marginLeft: size / 2 - 3 }}>
-                          {[0,1,2].map(j => (
-                            <div key={j} className="w-1.5 h-1.5 rounded-full" style={{ background: '#243650', opacity: 0.4 }} />
-                          ))}
-                        </div>
-                      )}
-                      <div
-                        className="rounded-full animate-pulse"
-                        style={{
-                          width: size, height: size,
-                          background: activePathway.colors.stone + '18',
-                          border: `2px solid ${activePathway.colors.stone}22`,
-                        }}
-                      />
-                      <div
-                        className="mt-1.5 rounded animate-pulse"
-                        style={{ width: 60 + (i % 2) * 20, height: 10, background: '#172236', marginLeft: 2 }}
-                      />
-                    </div>
-                  )
-                })}
-              </motion.div>
-            ) : (
-              <PathwayView
-                key={`${activePathway.category}-${activeCatIndex}`}
-                category={activePathway.category}
-                briefs={activeBriefs}
-                colors={activePathway.colors}
-                pathwayUnlocked={activePathway.unlocked}
-                lockReason={getLockReason(activePathway)}
-                readSet={readSet}
-                inProgressSet={inProgressSet}
-                quizPassedSet={quizPassedSet}
-                aptitudeSyncEnabled={aptitudeSyncEnabled}
-                nextBriefImages={nextBriefCache[activePathway.category]?.images ?? null}
-                nextBriefId={nextBriefCache[activePathway.category]?.id ?? null}
-                direction={direction}
-                onStoneTap={() => {}}
-                onLockedTap={() => setUnlockModal({
-                  unlock:   activePathway,
-                  category: activePathway.category,
-                  colors:   activePathway.colors,
-                })}
-              />
-            )}
+          <AnimatePresence mode="wait" custom={direction} initial={false}>
+            <PathwayView
+              key={`${activePathway.category}-${activeCatIndex}`}
+              category={activePathway.category}
+              briefs={activeBriefs}
+              colors={activePathway.colors}
+              pathwayUnlocked={activePathway.unlocked}
+              lockReason={getLockReason(activePathway)}
+              readSet={readSet}
+              inProgressSet={inProgressSet}
+              quizPassedSet={quizPassedSet}
+              aptitudeSyncEnabled={aptitudeSyncEnabled}
+              nextBriefImages={nextBriefCache[activePathway.category]?.images ?? null}
+              nextBriefId={nextBriefCache[activePathway.category]?.id ?? null}
+              direction={direction}
+              loading={loading}
+              onStoneTap={() => {}}
+              onLockedTap={() => setUnlockModal({
+                unlock:   activePathway,
+                category: activePathway.category,
+                colors:   activePathway.colors,
+              })}
+            />
           </AnimatePresence>
         </motion.div>
 

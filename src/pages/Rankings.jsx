@@ -241,9 +241,13 @@ export default function Rankings() {
   const levelsListScrollRef  = useRef(null)
   const cardRef              = useRef(null)
   const cardContentRef       = useRef(null)
+  const levelsListWrapRef    = useRef(null)
+  const ranksListWrapRef     = useRef(null)
   const [listMaxH,        setListMaxH]        = useState(null)
   const [selectedRankNum, setSelectedRankNum] = useState(userRankNumber)
   const [cardHeight,      setCardHeight]      = useState(0)
+  const [levelsListH,     setLevelsListH]     = useState(0)
+  const [ranksListH,      setRanksListH]      = useState(0)
 
   useEffect(() => { setSelectedRankNum(userRankNumber) }, [userRankNumber])
 
@@ -298,6 +302,22 @@ export default function Rankings() {
       if (n) setCardHeight(n.offsetHeight)
     })
     ro.observe(node)
+    return () => ro.disconnect()
+  }, [])
+
+  // Measure each list's natural height so the parent container can tween
+  // between them on tab swap. Both lists are mounted (for crossfade) so we
+  // can observe both simultaneously; the active one drives the parent height.
+  useLayoutEffect(() => {
+    const update = () => {
+      if (levelsListWrapRef.current) setLevelsListH(levelsListWrapRef.current.offsetHeight)
+      if (ranksListWrapRef.current)  setRanksListH(ranksListWrapRef.current.offsetHeight)
+    }
+    update()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(update)
+    if (levelsListWrapRef.current) ro.observe(levelsListWrapRef.current)
+    if (ranksListWrapRef.current)  ro.observe(ranksListWrapRef.current)
     return () => ro.disconnect()
   }, [])
 
@@ -577,9 +597,24 @@ export default function Rankings() {
         </div>
       </motion.div>
 
-      {/* ── LEVELS LIST ────────────────────────────────────────────────────── */}
-      {tab === 'levels' && (
-        <motion.div key="levels-list" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+      {/* ── LISTS — crossfade contents AND tween height between tabs ──────── */}
+      <motion.div
+        initial={false}
+        animate={{ height: (tab === 'levels' ? levelsListH : ranksListH) || (listMaxH ?? 540) }}
+        transition={{ height: { duration: 0.55, ease: 'easeInOut' } }}
+        style={{ position: 'relative', overflow: 'hidden' }}
+      >
+        <motion.div
+          ref={levelsListWrapRef}
+          initial={false}
+          animate={{ opacity: tab === 'levels' ? 1 : 0 }}
+          transition={{ duration: 0.45, ease: 'easeInOut' }}
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0,
+            pointerEvents: tab === 'levels' ? 'auto' : 'none',
+          }}
+        >
           <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
             <div
               ref={levelsListScrollRef}
@@ -620,11 +655,18 @@ export default function Rankings() {
             </div>
           </div>
         </motion.div>
-      )}
 
-      {/* ── RANKS LIST ─────────────────────────────────────────────────────── */}
-      {tab === 'ranks' && (
-        <motion.div key="ranks-list" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        <motion.div
+          ref={ranksListWrapRef}
+          initial={false}
+          animate={{ opacity: tab === 'ranks' ? 1 : 0 }}
+          transition={{ duration: 0.45, ease: 'easeInOut' }}
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0,
+            pointerEvents: tab === 'ranks' ? 'auto' : 'none',
+          }}
+        >
           <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
             <div ref={rankListScrollRef} style={{ maxHeight: listMaxH ?? 540, overflowY: 'auto', scrollbarWidth: 'none' }}>
               {sortedRanks.map((rank, i) => {
@@ -665,7 +707,7 @@ export default function Rankings() {
             </div>
           </div>
         </motion.div>
-      )}
+      </motion.div>
 
     </div>
 
