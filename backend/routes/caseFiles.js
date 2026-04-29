@@ -19,17 +19,35 @@ const INTERROGATION_MAX_TOKENS = 200;
 const INTERROGATION_TEMPERATURE = 0.3;
 
 // ── Access + daily-limit helpers ─────────────────────────────────────────────
-// Mirror the APTITUDE_SYNC pattern: trial maps to silver for tier checks; admin
-// always bypasses both gates. Unauthenticated callers (optionalAuth) only need
-// the enabled gate — tier restrictions don't apply until they sign in.
-function canAccessCaseFiles(user, settings) {
-  if (user?.isAdmin) return true;             // admin bypasses both flags
-  if (!settings.caseFilesEnabled) return false;
-  if (!user) return true; // public list still browsable when feature is on
+
+// Feature on/off only. Admin bypasses (matches existing behaviour).
+function caseFilesFeatureEnabled(user, settings) {
+  if (user?.isAdmin) return true;
+  return !!settings.caseFilesEnabled;
+}
+
+// Per-case tier gate. Admin always bypasses. Trial maps to silver.
+// Returns true if user is allowed to access the given case.
+//
+// Anonymous (logged-out) callers can never access a case — playing requires
+// an account. "Free tier" means a logged-in user on the free subscription;
+// it is NOT synonymous with guest. Guests get 403 here so the frontend can
+// surface a sign-in upsell.
+function canAccessCase(user, caseDoc) {
+  if (user?.isAdmin) return true;
+  if (!user) return false;
+  if (!caseDoc) return false;
+  const tiers = Array.isArray(caseDoc.tiers) ? caseDoc.tiers : [];
   const tier = effectiveTier(user);
   const checkTier = tier === 'trial' ? 'silver' : tier;
-  const allowed = settings.caseFilesTiers ?? [];
-  return allowed.includes(checkTier) || allowed.includes('admin');
+  return tiers.includes(checkTier);
+}
+
+// Pick a sensible "minimum tier required" for the upsell modal copy
+function minTierForCase(caseDoc) {
+  const tiers = Array.isArray(caseDoc?.tiers) ? caseDoc.tiers : [];
+  if (tiers.includes('silver')) return 'silver';
+  return 'gold';
 }
 
 function getDailyLimit(user, settings) {
@@ -53,11 +71,8 @@ router.get('/status', optionalAuth, async (req, res) => {
   try {
     const settings = await AppSettings.getSettings();
 
-    if (!settings.caseFilesEnabled && !req.user?.isAdmin) {
+    if (!caseFilesFeatureEnabled(req.user, settings)) {
       return res.json({ data: { canPlay: false, reason: 'disabled', usedToday: 0, limitToday: 0 } });
-    }
-    if (req.user && !canAccessCaseFiles(req.user, settings)) {
-      return res.json({ data: { canPlay: false, reason: 'tier', usedToday: 0, limitToday: 0 } });
     }
 
     if (!req.user) {
@@ -91,11 +106,8 @@ router.get('/status', optionalAuth, async (req, res) => {
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const settings = await AppSettings.getSettings();
-    if (!settings.caseFilesEnabled && !req.user?.isAdmin) {
+    if (!caseFilesFeatureEnabled(req.user, settings)) {
       return res.status(403).json({ reason: 'disabled' });
-    }
-    if (req.user && !canAccessCaseFiles(req.user, settings)) {
-      return res.status(403).json({ reason: 'tier' });
     }
 
     const cases = await GameCaseFile.find({ status: { $in: ['published', 'locked'] } })
@@ -127,6 +139,7 @@ router.get('/', optionalAuth, async (req, res) => {
       coverImageUrl: c.coverImageUrl,
       status:        c.status,
       tags:          c.tags,
+      tiers:         c.tiers,
       chapterCount:  (slugsByCase[c.slug] || []).length,
       chapterSlugs:  slugsByCase[c.slug] || [],
     }));
@@ -142,16 +155,17 @@ router.get('/', optionalAuth, async (req, res) => {
 router.get('/:caseSlug', optionalAuth, async (req, res) => {
   try {
     const settings = await AppSettings.getSettings();
-    if (!settings.caseFilesEnabled && !req.user?.isAdmin) {
+    if (!caseFilesFeatureEnabled(req.user, settings)) {
       return res.status(403).json({ reason: 'disabled' });
-    }
-    if (req.user && !canAccessCaseFiles(req.user, settings)) {
-      return res.status(403).json({ reason: 'tier' });
     }
 
     const caseDoc = await GameCaseFile.findOne({ slug: req.params.caseSlug }).lean();
     if (!caseDoc || caseDoc.status === 'draft') {
       return res.status(404).json({ message: 'Case not found' });
+    }
+
+    if (!canAccessCase(req.user, caseDoc)) {
+      return res.status(403).json({ reason: 'tier', minTier: minTierForCase(caseDoc) });
     }
 
     // For locked cases return no chapters
@@ -179,6 +193,11 @@ router.get('/:caseSlug', optionalAuth, async (req, res) => {
 router.get('/:caseSlug/chapters/:chapterSlug/best', protect, async (req, res) => {
   try {
     const { caseSlug, chapterSlug } = req.params;
+
+    const caseDoc = await GameCaseFile.findOne({ slug: caseSlug }).lean();
+    if (!canAccessCase(req.user, caseDoc)) {
+      return res.status(403).json({ reason: 'tier', minTier: minTierForCase(caseDoc) });
+    }
 
     const best = await GameSessionCaseFileResult.findOne({
       userId:      req.user._id,
@@ -211,16 +230,17 @@ router.get('/:caseSlug/chapters/:chapterSlug/best', protect, async (req, res) =>
 router.get('/:caseSlug/chapters/:chapterSlug', protect, async (req, res) => {
   try {
     const settings = await AppSettings.getSettings();
-    if (!settings.caseFilesEnabled && !req.user.isAdmin) {
+    if (!caseFilesFeatureEnabled(req.user, settings)) {
       return res.status(403).json({ reason: 'disabled' });
-    }
-    if (!canAccessCaseFiles(req.user, settings)) {
-      return res.status(403).json({ reason: 'tier' });
     }
 
     const caseDoc = await GameCaseFile.findOne({ slug: req.params.caseSlug }).lean();
     if (!caseDoc || caseDoc.status === 'draft' || caseDoc.status === 'locked') {
       return res.status(404).json({ message: 'Case not found' });
+    }
+
+    if (!canAccessCase(req.user, caseDoc)) {
+      return res.status(403).json({ reason: 'tier', minTier: minTierForCase(caseDoc) });
     }
 
     const chapter = await GameCaseFileChapter.findOne({
@@ -245,11 +265,17 @@ router.post('/:caseSlug/chapters/:chapterSlug/sessions', protect, async (req, re
 
     // ── Gate checks ──────────────────────────────────────────────────────────
     const settings = await AppSettings.getSettings();
-    if (!settings.caseFilesEnabled && !req.user.isAdmin) {
+    if (!caseFilesFeatureEnabled(req.user, settings)) {
       return res.status(403).json({ reason: 'disabled' });
     }
-    if (!canAccessCaseFiles(req.user, settings)) {
-      return res.status(403).json({ reason: 'tier' });
+
+    const caseDoc = await GameCaseFile.findOne({ slug: caseSlug }).lean();
+    if (!caseDoc || caseDoc.status !== 'published') {
+      return res.status(404).json({ message: 'Case not found or not published' });
+    }
+
+    if (!canAccessCase(req.user, caseDoc)) {
+      return res.status(403).json({ reason: 'tier', minTier: minTierForCase(caseDoc) });
     }
 
     // ── Daily limit — counts new sessions started today (UTC) ────────────────
@@ -264,11 +290,6 @@ router.post('/:caseSlug/chapters/:chapterSlug/sessions', protect, async (req, re
       if (usedToday >= limit) {
         return res.status(429).json({ reason: 'limit', usedToday, limitToday: limit });
       }
-    }
-
-    const caseDoc = await GameCaseFile.findOne({ slug: caseSlug }).lean();
-    if (!caseDoc || caseDoc.status !== 'published') {
-      return res.status(404).json({ message: 'Case not found or not published' });
     }
 
     const chapter = await GameCaseFileChapter.findOne({ caseSlug, chapterSlug }).lean();

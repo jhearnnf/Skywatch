@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import CaseFileCard from '../components/caseFiles/CaseFileCard'
 import CaseFilesGate from '../components/caseFiles/CaseFilesGate'
+import LockedCategoryModal from '../components/LockedCategoryModal'
 import SEO from '../components/SEO'
 
 // Inline mock — used as fallback when the API is unreachable.
@@ -49,13 +50,22 @@ function SkeletonCard() {
 }
 
 export default function CaseFiles() {
-  const navigate      = useNavigate()
-  const { API }       = useAuth()
+  const navigate           = useNavigate()
+  const { API, user }      = useAuth()
 
-  const [cases,   setCases]   = useState([])
-  const [loading, setLoading] = useState(true)
+  const [cases,      setCases]      = useState([])
+  const [loading,    setLoading]    = useState(true)
   // gate is { reason } when access is blocked; null otherwise
-  const [gate,    setGate]    = useState(null)
+  const [gate,       setGate]       = useState(null)
+  const [upsellCase, setUpsellCase] = useState(null)
+
+  // Guests have no tier — playing requires an account. Locked cards open
+  // the upsell modal, which surfaces sign-in for guests.
+  const effectiveTier = user
+    ? (user.subscriptionTier === 'trial'
+        ? (user.isTrialActive ? 'silver' : 'free')
+        : (user.subscriptionTier ?? 'free'))
+    : null
 
   useEffect(() => {
     let cancelled = false
@@ -88,9 +98,14 @@ export default function CaseFiles() {
     return () => { cancelled = true }
   }, [API])
 
-  function handleCardClick(caseFile) {
+  function handleCardClick(caseFile, tierLocked) {
+    if (caseFile.status === 'locked') return
+    if (tierLocked) {
+      setUpsellCase(caseFile)
+      return
+    }
     const firstChapter = caseFile.chapterSlugs?.[0]
-    if (!firstChapter) return // no playable chapter yet (locked or unseeded)
+    if (!firstChapter) return // no playable chapter yet (unseeded)
     navigate(`/case-files/${caseFile.slug}/${firstChapter}`)
   }
 
@@ -121,16 +136,33 @@ export default function CaseFiles() {
           <p className="text-slate-500 text-sm">No case files available yet.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-[600px]:grid-cols-1">
-            {cases.map(cf => (
-              <CaseFileCard
-                key={cf.slug}
-                caseFile={cf}
-                onClick={cf.status === 'published' ? handleCardClick : undefined}
-              />
-            ))}
+            {cases.map(cf => {
+              const tiers      = Array.isArray(cf.tiers) ? cf.tiers : []
+              // Guests + any non-admin user whose tier isn't in the allowlist see a padlock.
+              const tierLocked = !user?.isAdmin && (!effectiveTier || !tiers.includes(effectiveTier))
+              const minTier    = tiers.includes('silver') ? 'silver' : 'gold'
+              return (
+                <CaseFileCard
+                  key={cf.slug}
+                  caseFile={cf}
+                  tierLocked={tierLocked}
+                  minTier={minTier}
+                  onClick={(c) => handleCardClick(c, tierLocked)}
+                />
+              )
+            })}
           </div>
         )}
       </div>
+
+      {upsellCase && (
+        <LockedCategoryModal
+          category="Case Files"
+          tier={(Array.isArray(upsellCase.tiers) && upsellCase.tiers.includes('silver')) ? 'silver' : 'gold'}
+          user={user}
+          onClose={() => setUpsellCase(null)}
+        />
+      )}
     </>
   )
 }

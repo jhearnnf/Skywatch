@@ -26,6 +26,7 @@ const CASE_FILES = [
     status:      'published',
     tags:        ['Russia', 'Ukraine', 'NATO', 'OSINT'],
     chapterSlugs: ['road-to-invasion'],
+    tiers:        ['admin', 'gold', 'silver', 'free'],
   },
   {
     slug:        'israel-iran',
@@ -35,6 +36,7 @@ const CASE_FILES = [
     status:      'locked',
     tags:        ['Israel', 'Iran', 'Hormuz', 'Proxy'],
     chapterSlugs: [],
+    tiers:        ['admin', 'gold', 'silver'],
   },
 ];
 
@@ -62,6 +64,11 @@ async function seedCaseFiles() {
           status:      cf.status,
           tags:        cf.tags,
           chapterSlugs: cf.chapterSlugs,
+        },
+        $setOnInsert: {
+          // Tiers are admin-editable post-seed; only set on first insert so
+          // an admin's later changes aren't overwritten on every server boot.
+          tiers: cf.tiers,
         },
       },
       { upsert: true }

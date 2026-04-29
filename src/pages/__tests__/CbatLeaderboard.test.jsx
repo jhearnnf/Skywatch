@@ -167,4 +167,51 @@ describe('CbatLeaderboard — admin email display', () => {
 
     await waitFor(() => expect(screen.getByText('Agent A999')).toBeDefined())
   })
+
+  it('renders a hover tooltip with the formatted achievedAt on admin rows', async () => {
+    const achievedAt = '2026-04-29T13:45:00.000Z'
+    setupAuth(mockApiFetch({
+      leaderboard: [
+        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', email: 'ace@skywatch.test', achievedAt },
+        { _id: 'e2', userId: 'u2',    rank: 2, bestScore: 14, bestTime: 31, agentNumber: 'A998', email: 'demo', isFake: true },
+      ],
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    const realCell = await waitFor(() => screen.getByText('ace@skywatch.test'))
+    expect(realCell.getAttribute('title')).toBe(new Date(achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }))
+
+    // Fakes (no achievedAt) carry no tooltip
+    const fakeCell = screen.getByText('demo')
+    expect(fakeCell.getAttribute('title')).toBeNull()
+  })
+
+  it('renders a hover tooltip on the myBest row when achievedAt is present', async () => {
+    const achievedAt = '2026-04-28T09:15:00.000Z'
+    setupAuth(mockApiFetch({
+      leaderboard: [
+        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', email: 'ace@skywatch.test' },
+      ],
+      myBest: { userId: 'u1', rank: 42, bestScore: 8, bestTime: 55, agentNumber: 'A001', email: 'boss@skywatch.test', achievedAt },
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    const myCell = await waitFor(() => screen.getByText('boss@skywatch.test (you)'))
+    expect(myCell.getAttribute('title')).toBe(new Date(achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }))
+  })
+
+  it('does NOT render a tooltip when achievedAt is absent (non-admin view)', async () => {
+    setupAuth(mockApiFetch({
+      leaderboard: [
+        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999' },
+      ],
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    const cell = await waitFor(() => screen.getByText('Agent A999'))
+    expect(cell.getAttribute('title')).toBeNull()
+  })
 })

@@ -18,6 +18,7 @@ const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashc
 const GameSessionWhereAircraftResult      = require('../models/GameSessionWhereAircraftResult');
 const { CBAT_GAMES }                      = require('../constants/cbatGames');
 const GameSessionCbatStart                = require('../models/GameSessionCbatStart');
+const GameCaseFile                        = require('../models/GameCaseFile');
 const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const { effectiveTier } = require('../utils/subscription');
@@ -742,6 +743,39 @@ router.patch('/settings', requireReason, async (req, res) => {
     });
 
     res.json({ status: 'success', data: { settings } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/admin/case-files/:slug — update tier gating for a single case
+router.patch('/case-files/:slug', requireReason, async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const { tiers, reason } = req.body;
+
+    if (!Array.isArray(tiers)) {
+      return res.status(400).json({ message: 'tiers must be an array' });
+    }
+    const VALID = new Set(['free', 'silver', 'gold', 'admin']);
+    if (!tiers.every(t => VALID.has(t))) {
+      return res.status(400).json({ message: 'tiers must contain only free, silver, gold, or admin' });
+    }
+
+    const caseDoc = await GameCaseFile.findOneAndUpdate(
+      { slug },
+      { $set: { tiers } },
+      { new: true },
+    );
+    if (!caseDoc) return res.status(404).json({ message: 'Case file not found' });
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'change_app_settings',
+      reason,
+    });
+
+    res.json({ status: 'success', data: { caseFile: caseDoc } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

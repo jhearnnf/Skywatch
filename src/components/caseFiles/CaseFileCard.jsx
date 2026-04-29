@@ -18,7 +18,7 @@ function PadlockIcon() {
   )
 }
 
-export default function CaseFileCard({ caseFile, onClick }) {
+export default function CaseFileCard({ caseFile, onClick, tierLocked, minTier }) {
   const {
     title       = 'Untitled',
     affairLabel = '',
@@ -28,7 +28,9 @@ export default function CaseFileCard({ caseFile, onClick }) {
     chapterCount = 0,
   } = caseFile
 
-  const isLocked = status === 'locked'
+  const isLocked     = status === 'locked'
+  // Tier-lock only applies when the card isn't already coming-soon
+  const isTierLocked = !!tierLocked && !isLocked
 
   function handleClick() {
     if (isLocked) return
@@ -53,13 +55,15 @@ export default function CaseFileCard({ caseFile, onClick }) {
         'transition-transform duration-200',
         isLocked
           ? 'opacity-55 cursor-not-allowed'
-          : 'cursor-pointer hover:-translate-y-1 hover:border-brand-400 border-slate-200',
-        !isLocked && 'border-slate-200',
+          : isTierLocked
+            ? 'opacity-55 cursor-pointer hover:-translate-y-1 hover:border-brand-400 border-slate-200'
+            : 'cursor-pointer hover:-translate-y-1 hover:border-brand-400 border-slate-200',
+        !isLocked && !isTierLocked && 'border-slate-200',
       ]
         .filter(Boolean)
         .join(' ')}
     >
-      {/* Locked overlay badges */}
+      {/* Status-locked (coming soon) overlay badges */}
       {isLocked && (
         <>
           {/* Coming Soon pill — top-right */}
@@ -69,11 +73,18 @@ export default function CaseFileCard({ caseFile, onClick }) {
           >
             Coming Soon
           </span>
-          {/* Padlock — bottom-right of cover */}
+          {/* Padlock — top-left */}
           <span className="absolute top-2 left-2 z-10">
             <PadlockIcon />
           </span>
         </>
+      )}
+
+      {/* Tier-locked padlock — top-left (only when not coming-soon) */}
+      {isTierLocked && (
+        <span className="absolute top-2 left-2 z-10">
+          <PadlockIcon />
+        </span>
       )}
 
       {/* Cover image — 16:9 */}
@@ -111,6 +122,12 @@ export default function CaseFileCard({ caseFile, onClick }) {
             <span className="text-xs text-slate-500 flex items-center gap-1">
               <PadlockIcon />
               Locked
+            </span>
+          )}
+          {isTierLocked && (
+            <span className="text-xs text-slate-500 flex items-center gap-1">
+              <PadlockIcon />
+              Premium
             </span>
           )}
         </div>

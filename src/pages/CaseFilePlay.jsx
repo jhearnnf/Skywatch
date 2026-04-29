@@ -159,6 +159,7 @@ export default function CaseFilePlay() {
         reason={gate.reason}
         usedToday={gate.usedToday}
         limitToday={gate.limitToday}
+        minTier={gate.minTier}
       />
     )
   }

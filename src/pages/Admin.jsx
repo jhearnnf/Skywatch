@@ -1442,6 +1442,33 @@ function SettingsTab({ API }) {
   const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false, cbat: false, caseFiles: false, flashcards: false })
   const toggleGameGroup = (key) => setGameGroupsOpen(p => ({ ...p, [key]: !p[key] }))
 
+  const [caseFilesList, setCaseFilesList] = useState(null) // null = loading, [] = empty, [...] = loaded
+  const [caseFilesDraft, setCaseFilesDraft] = useState({}) // { [slug]: ['free','silver',...] }
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${API}/api/case-files`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(list => {
+        if (cancelled) return
+        const arr = Array.isArray(list) ? list : []
+        setCaseFilesList(arr)
+        setCaseFilesDraft(Object.fromEntries(arr.map(c => [c.slug, Array.isArray(c.tiers) ? [...c.tiers] : []])))
+      })
+      .catch(() => { if (!cancelled) setCaseFilesList([]) })
+    return () => { cancelled = true }
+  }, [API])
+
+  function toggleCaseTier(slug, tier) {
+    setCaseFilesDraft(prev => {
+      const current = prev[slug] ?? []
+      const next = current.includes(tier)
+        ? current.filter(t => t !== tier)
+        : [...current, tier]
+      return { ...prev, [slug]: next }
+    })
+  }
+
   const load = useCallback(() => {
     apiFetch(`${API}/api/admin/settings`, { credentials: 'include' })
       .then(r => r.json())
@@ -1638,25 +1665,48 @@ function SettingsTab({ API }) {
       <AirstarsEconomy API={API} onToast={setToast} />
 
       {/* ── Game Options ────────────────────────────────────── */}
-      <Section title="Game Options" collapsible onSave={() => save('Update Game Options', [
-        'easyAnswerCount', 'mediumAnswerCount',
-        'passThresholdEasy', 'passThresholdMedium',
-        'aiQuestionsPerDifficulty',
-        'aptitudeSyncEnabled',
-        'aptitudeSyncTiers',
-        'aptitudeSyncMaxRounds',
-        'aptitudeSyncDailyLimitFree',
-        'aptitudeSyncDailyLimitSilver',
-        'aptitudeSyncDailyLimitGold',
-        'cbatEnabled',
-        'cbatTargetAircraftBriefIds',
-        'caseFilesEnabled',
-        'caseFilesTiers',
-        'caseFilesDailyLimitFree',
-        'caseFilesDailyLimitSilver',
-        'caseFilesDailyLimitGold',
-        'newsFlashcardsEnabled',
-      ])}>
+      <Section title="Game Options" collapsible onSave={async () => {
+        // PATCH dirty per-case tier rows first
+        if (Array.isArray(caseFilesList)) {
+          const dirtyRows = caseFilesList.filter(cf => {
+            const saved = new Set(Array.isArray(cf.tiers) ? cf.tiers : [])
+            const draft = new Set(caseFilesDraft[cf.slug] ?? [])
+            if (saved.size !== draft.size) return true
+            for (const t of draft) if (!saved.has(t)) return true
+            return false
+          })
+          await Promise.all(dirtyRows.map(cf =>
+            fetch(`${API}/api/admin/case-files/${cf.slug}`, {
+              method: 'PATCH',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tiers: caseFilesDraft[cf.slug] ?? [], reason: 'Update Case Files tier access' }),
+            })
+          ))
+          if (dirtyRows.length > 0) {
+            // Reflect saved tiers back into caseFilesList so subsequent dirty checks are accurate
+            setCaseFilesList(prev => prev.map(c => dirtyRows.some(d => d.slug === c.slug) ? { ...c, tiers: caseFilesDraft[c.slug] ?? [] } : c))
+          }
+        }
+        save('Update Game Options', [
+          'easyAnswerCount', 'mediumAnswerCount',
+          'passThresholdEasy', 'passThresholdMedium',
+          'aiQuestionsPerDifficulty',
+          'aptitudeSyncEnabled',
+          'aptitudeSyncTiers',
+          'aptitudeSyncMaxRounds',
+          'aptitudeSyncDailyLimitFree',
+          'aptitudeSyncDailyLimitSilver',
+          'aptitudeSyncDailyLimitGold',
+          'cbatEnabled',
+          'cbatTargetAircraftBriefIds',
+          'caseFilesEnabled',
+          'caseFilesDailyLimitFree',
+          'caseFilesDailyLimitSilver',
+          'caseFilesDailyLimitGold',
+          'newsFlashcardsEnabled',
+        ])
+      }}>
         <button
           type="button"
           onClick={() => toggleGameGroup('quiz')}
@@ -1894,32 +1944,40 @@ function SettingsTab({ API }) {
               onChange={v => set('caseFilesEnabled', v)}
             />
 
-            {/* Tier access */}
+            {/* Tier access per case */}
             <div className="py-2.5 border-b border-slate-100">
-              <p className="text-sm font-semibold text-slate-700 mb-1">Tier access</p>
-              <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access regardless of this setting</p>
-              <div className="flex flex-wrap gap-3">
-                {['gold', 'silver', 'free'].map(tier => {
-                  const tiers   = draft.caseFilesTiers ?? ['admin']
-                  const checked = tiers.includes(tier)
-                  return (
-                    <label key={tier} className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => {
-                          const next = checked
-                            ? tiers.filter(t => t !== tier)
-                            : [...tiers, tier]
-                          set('caseFilesTiers', next)
-                        }}
-                        className="w-4 h-4 accent-brand-600"
-                      />
-                      <span className="text-sm font-medium text-slate-700 capitalize">{tier}</span>
-                    </label>
-                  )
-                })}
-              </div>
+              <p className="text-sm font-semibold text-slate-700 mb-1">Tier access per case</p>
+              <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access. Each case can be enabled for a subset of subscription tiers.</p>
+              {caseFilesList === null ? (
+                <p className="text-xs text-slate-400">Loading…</p>
+              ) : caseFilesList.length === 0 ? (
+                <p className="text-xs text-slate-400">No case files in catalogue.</p>
+              ) : (
+                <div className="space-y-2">
+                  {caseFilesList.map(cf => {
+                    const tiers = caseFilesDraft[cf.slug] ?? []
+                    return (
+                      <div key={cf.slug} className="flex flex-wrap items-center gap-3 py-1.5 border-b border-slate-100 last:border-0">
+                        <span className="text-sm font-semibold text-slate-700 min-w-[12rem]">{cf.title}</span>
+                        <div className="flex flex-wrap gap-3">
+                          {['free', 'silver', 'gold'].map(tier => (
+                            <label key={tier} className="flex items-center gap-1.5 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={tiers.includes(tier)}
+                                onChange={() => toggleCaseTier(cf.slug, tier)}
+                                className="w-4 h-4 accent-brand-600"
+                                data-testid={`case-tier-${cf.slug}-${tier}`}
+                              />
+                              <span className="text-sm font-medium text-slate-700 capitalize">{tier}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
             <NumInput

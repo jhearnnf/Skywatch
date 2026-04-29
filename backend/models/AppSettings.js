@@ -159,8 +159,7 @@ const appSettingsSchema = new mongoose.Schema({
 
   // Case Files feature
   caseFilesEnabled:           { type: Boolean,  default: false },
-  // Which subscription tiers can access Case Files (admin always unlimited regardless)
-  caseFilesTiers:             { type: [String], default: ['admin'] },
+  // Per-case tier gating lives on each GameCaseFile.tiers (admin always bypasses).
   // Daily session limits per tier (admin = unlimited, enforced in route).
   // One use = one POST /sessions call (a fresh playthrough). Limits AI-call cost
   // from the interrogation stage; replays count as separate uses.

@@ -55,6 +55,51 @@ describe('CaseFileCard — published card', () => {
   })
 })
 
+describe('CaseFileCard — tier-locked card (published status, tierLocked=true)', () => {
+  const TIER_LOCKED_CASE = {
+    slug:          'russia-ukraine',
+    title:         'Russia / Ukraine',
+    affairLabel:   'Eastern Europe · Active Conflict',
+    summary:       'An ongoing full-scale invasion reshaping European security.',
+    coverImageUrl: null,
+    status:        'published',
+    tags:          ['Russia', 'Ukraine'],
+    chapterCount:  3,
+  }
+
+  it('renders the padlock icon', () => {
+    render(<CaseFileCard caseFile={TIER_LOCKED_CASE} tierLocked={true} onClick={vi.fn()} />)
+    // The Premium badge text is the reliable assertion for the tier-locked state
+    expect(screen.getByText('Premium')).toBeDefined()
+  })
+
+  it('calls onClick when clicked (not blocked)', () => {
+    const onClick = vi.fn()
+    render(<CaseFileCard caseFile={TIER_LOCKED_CASE} tierLocked={true} onClick={onClick} />)
+    fireEvent.click(screen.getByTestId('case-file-card-russia-ukraine'))
+    expect(onClick).toHaveBeenCalledTimes(1)
+    expect(onClick).toHaveBeenCalledWith(TIER_LOCKED_CASE)
+  })
+
+  it('does NOT show the Coming Soon badge', () => {
+    render(<CaseFileCard caseFile={TIER_LOCKED_CASE} tierLocked={true} onClick={vi.fn()} />)
+    expect(screen.queryByTestId('coming-soon-badge')).toBeNull()
+  })
+
+  it('uses cursor-pointer (not cursor-not-allowed)', () => {
+    render(<CaseFileCard caseFile={TIER_LOCKED_CASE} tierLocked={true} onClick={vi.fn()} />)
+    const card = screen.getByTestId('case-file-card-russia-ukraine')
+    expect(card.className).toMatch(/cursor-pointer/)
+    expect(card.className).not.toMatch(/cursor-not-allowed/)
+  })
+
+  it('is not aria-disabled', () => {
+    render(<CaseFileCard caseFile={TIER_LOCKED_CASE} tierLocked={true} onClick={vi.fn()} />)
+    const card = screen.getByTestId('case-file-card-russia-ukraine')
+    expect(card.getAttribute('aria-disabled')).toBeNull()
+  })
+})
+
 describe('CaseFileCard — locked card', () => {
   it('renders title, affair label, summary', () => {
     render(<CaseFileCard caseFile={LOCKED_CASE} onClick={undefined} />)

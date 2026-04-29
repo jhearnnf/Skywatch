@@ -46,6 +46,22 @@ describe('CBAT leaderboard — admin email exposure', () => {
     expect(fakes.every(e => e.email === 'demo')).toBe(true);
   });
 
+  it('includes achievedAt on real rows for admins, and omits it on fakes', async () => {
+    const res = await request(app).get(LEADERBOARD_URL).set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+
+    const { leaderboard } = res.body.data;
+    const real = leaderboard.filter(e => !e.isFake);
+    expect(real).toHaveLength(2);
+    real.forEach(entry => {
+      expect(entry.achievedAt).toBeDefined();
+      // ISO date string parses to a real timestamp
+      expect(Number.isNaN(new Date(entry.achievedAt).getTime())).toBe(false);
+    });
+    const fakes = leaderboard.filter(e => e.isFake);
+    expect(fakes.every(e => e.achievedAt === undefined)).toBe(true);
+  });
+
   it('does NOT include email for any row when requester is a regular user', async () => {
     const res = await request(app).get(LEADERBOARD_URL).set('Cookie', playerCookie);
     expect(res.status).toBe(200);
@@ -54,11 +70,12 @@ describe('CBAT leaderboard — admin email exposure', () => {
     expect(leaderboard).toHaveLength(20);
     leaderboard.forEach(entry => {
       expect(entry.email).toBeUndefined();
+      expect(entry.achievedAt).toBeUndefined();
       expect(entry.agentNumber).toBeDefined();
     });
   });
 
-  it('includes email on myBest when admin lands outside the top 20', async () => {
+  it('includes email and achievedAt on myBest when admin lands outside the top 20', async () => {
     // Fill 20 higher-scoring rows from 20 distinct users so admin falls to #21
     for (let i = 0; i < 20; i++) {
       const u = await createUser({ email: `filler${i}@test.com`, agentNumber: `800000${i}` });
@@ -75,9 +92,11 @@ describe('CBAT leaderboard — admin email exposure', () => {
     expect(myBest).toBeTruthy();
     expect(myBest.userId.toString()).toBe(admin._id.toString());
     expect(myBest.email).toBe('boss@skywatch.test');
+    expect(myBest.achievedAt).toBeDefined();
+    expect(Number.isNaN(new Date(myBest.achievedAt).getTime())).toBe(false);
   });
 
-  it('does NOT include email on myBest for a regular user outside the top 20', async () => {
+  it('does NOT include email or achievedAt on myBest for a regular user outside the top 20', async () => {
     for (let i = 0; i < 20; i++) {
       const u = await createUser({ email: `filler${i}@test.com`, agentNumber: `800000${i}` });
       await request(app).post(RESULT_URL).set('Cookie', authCookie(u._id))
@@ -91,5 +110,6 @@ describe('CBAT leaderboard — admin email exposure', () => {
     expect(myBest).toBeTruthy();
     expect(myBest.userId.toString()).toBe(player._id.toString());
     expect(myBest.email).toBeUndefined();
+    expect(myBest.achievedAt).toBeUndefined();
   });
 });

@@ -46,6 +46,10 @@ async function createCase(overrides = {}) {
     summary:     overrides.summary     ?? 'Test summary',
     status:      overrides.status      ?? 'published',
     tags:        overrides.tags        ?? [],
+    // Default to permissive tier list so non-admin users pass the per-case gate
+    // in tests that don't explicitly test tier gating. Tests that need to gate
+    // should pass tiers: ['gold'] (or another restricted set) explicitly.
+    tiers:       overrides.tiers       ?? ['admin', 'gold', 'silver', 'free'],
     ...overrides,
   });
 }
@@ -146,7 +150,7 @@ describe('GET /api/case-files/:caseSlug', () => {
     await createChapter(caseDoc.slug, { chapterSlug: 'ch-1', status: 'published' });
     await createChapter(caseDoc.slug, { chapterSlug: 'ch-2', chapterNumber: 2, status: 'draft' });
 
-    const res = await request(app).get(`/api/case-files/${caseDoc.slug}`);
+    const res = await request(app).get(`/api/case-files/${caseDoc.slug}`).set('Cookie', cookie);
     expect(res.status).toBe(200);
     // Only published chapter included
     expect(res.body.chapters).toHaveLength(1);
@@ -160,9 +164,16 @@ describe('GET /api/case-files/:caseSlug', () => {
     const caseDoc = await createCase({ slug: 'locked-detail', status: 'locked' });
     await createChapter(caseDoc.slug, { chapterSlug: 'ch-x', status: 'published' });
 
-    const res = await request(app).get(`/api/case-files/${caseDoc.slug}`);
+    const res = await request(app).get(`/api/case-files/${caseDoc.slug}`).set('Cookie', cookie);
     expect(res.status).toBe(200);
     expect(res.body.chapters).toEqual([]);
+  });
+
+  it('returns 403 reason=tier for an unauthenticated guest (free is a tier, guest is not)', async () => {
+    const caseDoc = await createCase({ slug: 'guest-detail', status: 'published', tiers: ['free', 'silver', 'gold'] });
+    const res = await request(app).get(`/api/case-files/${caseDoc.slug}`); // no cookie
+    expect(res.status).toBe(403);
+    expect(res.body.reason).toBe('tier');
   });
 });
 
@@ -955,43 +966,55 @@ describe('Access gating', () => {
     });
   });
 
-  describe('caseFilesTiers', () => {
-    it('returns 403 tier when user tier not in caseFilesTiers', async () => {
-      await createSettings({ caseFilesEnabled: true, caseFilesTiers: ['gold'] });
-      // Default user is free → gold-only allowlist excludes them
-      await createCase({ slug: 'tier-list', status: 'published' });
-
+  describe('per-case tier gating', () => {
+    it('list endpoint returns each case with its tiers array', async () => {
+      await createCase({ slug: 'tier-list', status: 'published', tiers: ['gold'] });
       const res = await request(app).get('/api/case-files').set('Cookie', cookie);
+      expect(res.status).toBe(200);
+      const found = res.body.find(c => c.slug === 'tier-list');
+      expect(found.tiers).toEqual(['gold']);
+    });
+
+    it('detail endpoint returns 403 reason=tier when user tier is blocked', async () => {
+      // Gold-only case; default test user is free
+      const caseDoc = await createCase({ slug: 'tier-detail-blocked', status: 'published', tiers: ['gold'] });
+      const res = await request(app).get(`/api/case-files/${caseDoc.slug}`).set('Cookie', cookie);
       expect(res.status).toBe(403);
       expect(res.body.reason).toBe('tier');
+      expect(res.body.minTier).toBe('gold');
     });
 
-    it('allows users whose tier is in the allowlist', async () => {
-      await createSettings({ caseFilesEnabled: true, caseFilesTiers: ['silver'] });
+    it('detail endpoint passes when user tier is in the case allowlist', async () => {
       const silverUser   = await createUser({ subscriptionTier: 'silver' });
       const silverCookie = authCookie(silverUser._id);
-      await createCase({ slug: 'tier-allow', status: 'published' });
-
-      const res = await request(app).get('/api/case-files').set('Cookie', silverCookie);
+      const caseDoc = await createCase({ slug: 'tier-detail-allowed', status: 'published', tiers: ['silver'] });
+      const res = await request(app).get(`/api/case-files/${caseDoc.slug}`).set('Cookie', silverCookie);
       expect(res.status).toBe(200);
     });
 
-    it('admin bypasses tier restriction', async () => {
-      await createSettings({ caseFilesEnabled: true, caseFilesTiers: ['gold'] });
+    it('admin bypasses per-case tier restriction on detail endpoint', async () => {
       const admin       = await createUser({ isAdmin: true, subscriptionTier: 'free' });
       const adminCookie = authCookie(admin._id);
-      await createCase({ slug: 'tier-admin', status: 'published' });
-
-      const res = await request(app).get('/api/case-files').set('Cookie', adminCookie);
+      const caseDoc = await createCase({ slug: 'tier-admin-bypass', status: 'published', tiers: ['gold'] });
+      const res = await request(app).get(`/api/case-files/${caseDoc.slug}`).set('Cookie', adminCookie);
       expect(res.status).toBe(200);
     });
 
-    it('GET /status reports reason=tier when blocked', async () => {
-      await createSettings({ caseFilesEnabled: true, caseFilesTiers: ['gold'] });
-      const res = await request(app).get('/api/case-files/status').set('Cookie', cookie);
-      expect(res.status).toBe(200);
-      expect(res.body.data.reason).toBe('tier');
-      expect(res.body.data.canPlay).toBe(false);
+    it('chapter detail and POST sessions return 403 reason=tier for a blocked user', async () => {
+      const caseDoc = await createCase({ slug: 'tier-chapter-blocked', status: 'published', tiers: ['gold'] });
+      const chapter = await createChapter(caseDoc.slug, { chapterSlug: 'tier-ch-blocked' });
+
+      const chRes = await request(app)
+        .get(`/api/case-files/${caseDoc.slug}/chapters/${chapter.chapterSlug}`)
+        .set('Cookie', cookie);
+      expect(chRes.status).toBe(403);
+      expect(chRes.body.reason).toBe('tier');
+
+      const sessRes = await request(app)
+        .post(`/api/case-files/${caseDoc.slug}/chapters/${chapter.chapterSlug}/sessions`)
+        .set('Cookie', cookie);
+      expect(sessRes.status).toBe(403);
+      expect(sessRes.body.reason).toBe('tier');
     });
   });
 
@@ -999,10 +1022,10 @@ describe('Access gating', () => {
     it('returns 429 limit on the (N+1)th session of the day', async () => {
       await createSettings({
         caseFilesEnabled:          true,
-        caseFilesTiers:            ['free'],
         caseFilesDailyLimitFree:   2,
       });
-      const caseDoc = await createCase({ slug: 'limit-case', status: 'published' });
+      // Explicitly allow free users through the per-case tier gate
+      const caseDoc = await createCase({ slug: 'limit-case', status: 'published', tiers: ['free'] });
       const ch      = await createChapter(caseDoc.slug, { chapterSlug: 'limit-ch' });
       const url     = `/api/case-files/${caseDoc.slug}/chapters/${ch.chapterSlug}/sessions`;
 
@@ -1021,12 +1044,12 @@ describe('Access gating', () => {
     it('admin is not subject to daily limit', async () => {
       await createSettings({
         caseFilesEnabled:          true,
-        caseFilesTiers:            ['admin', 'free'],
         caseFilesDailyLimitFree:   1,
       });
       const admin       = await createUser({ isAdmin: true });
       const adminCookie = authCookie(admin._id);
-      const caseDoc = await createCase({ slug: 'limit-admin', status: 'published' });
+      // Admin bypasses the per-case tier gate regardless of tiers value
+      const caseDoc = await createCase({ slug: 'limit-admin', status: 'published', tiers: ['free'] });
       const ch      = await createChapter(caseDoc.slug, { chapterSlug: 'limit-admin-ch' });
       const url     = `/api/case-files/${caseDoc.slug}/chapters/${ch.chapterSlug}/sessions`;
 
@@ -1042,10 +1065,10 @@ describe('Access gating', () => {
     it('GET /status reports reason=limit with usedToday/limitToday', async () => {
       await createSettings({
         caseFilesEnabled:          true,
-        caseFilesTiers:            ['free'],
         caseFilesDailyLimitFree:   1,
       });
-      const caseDoc = await createCase({ slug: 'limit-status', status: 'published' });
+      // Explicitly allow free users through the per-case tier gate
+      const caseDoc = await createCase({ slug: 'limit-status', status: 'published', tiers: ['free'] });
       const ch      = await createChapter(caseDoc.slug, { chapterSlug: 'limit-status-ch' });
       // Burn the slot
       await request(app)

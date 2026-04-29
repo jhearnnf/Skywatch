@@ -58,9 +58,9 @@ async function createSettings(overrides = {}) {
     mediumAnswerCount:          5,
     emailConfirmationEnabled:   false,
     // Permissive Case Files defaults so existing fixtures don't have to opt in;
-    // gating-specific tests override these explicitly.
+    // gating-specific tests override these explicitly. Per-case tier gating now
+    // lives on each GameCaseFile.tiers — set per case in tests that need to gate.
     caseFilesEnabled:           true,
-    caseFilesTiers:             ['admin', 'gold', 'silver', 'free'],
     caseFilesDailyLimitFree:    100,
     caseFilesDailyLimitSilver:  100,
     caseFilesDailyLimitGold:    100,

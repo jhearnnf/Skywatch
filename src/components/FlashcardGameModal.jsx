@@ -78,12 +78,18 @@ const TitleSearch = forwardRef(function TitleSearch({ allTitles, onSelect, disab
       <AnimatePresence>
         {open && (
           <motion.ul
-            initial={{ opacity: 0, y: -4 }}
+            initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
+            exit={{ opacity: 0, y: 4 }}
             transition={{ duration: 0.12 }}
-            className="absolute z-50 left-0 right-0 mt-1 rounded-2xl overflow-hidden shadow-2xl"
-            style={{ background: '#0f2850', border: '1px solid rgba(245,158,11,0.3)' }}
+            className="absolute z-50 left-0 right-0 mb-1 rounded-2xl shadow-2xl overflow-y-auto"
+            style={{
+              background: '#0f2850',
+              border: '1px solid rgba(245,158,11,0.3)',
+              bottom: '100%',
+              maxHeight: '14rem',
+              overscrollBehavior: 'contain',
+            }}
             onTouchMove={() => inputRef.current?.blur()}
             data-testid="flashcard-suggestions"
           >
@@ -569,7 +575,7 @@ export default function FlashcardGameModal({ onClose }) {
               className="rounded-3xl overflow-hidden shadow-2xl mb-4"
               style={{ background: 'linear-gradient(160deg, #0d1f3c 0%, #091529 100%)', border: '1px solid rgba(245,158,11,0.2)' }}
             >
-              {/* Blurred title area */}
+              {/* Title area — blurred until feedback fires, then revealed */}
               <div
                 className="px-5 pt-5 pb-3"
                 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
@@ -578,12 +584,25 @@ export default function FlashcardGameModal({ onClose }) {
                   {currentCard.category}
                   {currentCard.subcategory ? ` · ${currentCard.subcategory}` : ''}
                 </p>
-                <div
-                  className="h-5 rounded-lg select-none"
-                  style={{ background: 'rgba(245,158,11,0.15)', filter: 'blur(4px)', width: '70%' }}
-                  aria-hidden="true"
-                  data-testid="blurred-title"
-                />
+                {feedback ? (
+                  <div data-testid="revealed-title">
+                    <p className="text-lg font-extrabold leading-tight" style={{ color: '#f8fafc' }}>
+                      {feedback.correctTitle}
+                    </p>
+                    {currentCard.subtitle && (
+                      <p className="text-xs mt-1" style={{ color: '#94a3b8' }}>
+                        {currentCard.subtitle}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className="h-5 rounded-lg select-none"
+                    style={{ background: 'rgba(245,158,11,0.15)', filter: 'blur(4px)', width: '70%' }}
+                    aria-hidden="true"
+                    data-testid="blurred-title"
+                  />
+                )}
               </div>
 
               {/* Content — section 4 of description (name-free summary) */}
@@ -617,11 +636,6 @@ export default function FlashcardGameModal({ onClose }) {
                   <p className="font-extrabold text-sm" style={{ color: feedback.correct ? '#10b981' : '#ef4444' }}>
                     {feedback.correct ? '✓ CORRECT' : '✗ INCORRECT'}
                   </p>
-                  {!feedback.correct && feedback.correctTitle && (
-                    <p className="text-xs mt-1" style={{ color: '#94a3b8' }}>
-                      Answer: <span style={{ color: '#e2e8f0' }}>{feedback.correctTitle}</span>
-                    </p>
-                  )}
                 </motion.div>
               )}
             </AnimatePresence>

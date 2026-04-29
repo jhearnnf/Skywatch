@@ -42,9 +42,10 @@ export function pathwayTierRequired(category, settings) {
   return 'gold'
 }
 
-// Returns true if the user cannot access Advanced (medium) difficulty
+// True only for logged-in users on the free plan (or expired trial).
+// Guests are NOT free users — they need to sign in, not upgrade.
 export function isFreeUser(user) {
-  if (!user) return true
+  if (!user) return false
   const tier = user.subscriptionTier ?? 'free'
   if (tier === 'trial') return !user.isTrialActive
   return tier === 'free'

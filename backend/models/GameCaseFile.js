@@ -34,6 +34,9 @@ const gameCaseFileSchema = new mongoose.Schema(
     tags: [String],
     // Ordered list of chapterSlugs belonging to this case file
     chapterSlugs: [String],
+    // Subscription tiers permitted to access this case. Admin always bypasses
+    // regardless of contents. Valid values: 'free' | 'silver' | 'gold' | 'admin'.
+    tiers: { type: [String], default: ['admin'] },
   },
   { timestamps: true }
 );

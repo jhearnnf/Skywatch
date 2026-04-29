@@ -45,7 +45,13 @@ const FAKE_TUNING = {
     scoreSequence: [42, 45, 48, 52, 55, 58, 62, 65, 68, 72, 75, 78, 82, 85, 88, 92, 95, 98, 102, 107],
   },
   'angles':          { floor: 1,  ceiling: 19,  seedScore: 18,  seedTime: 38, scoreStep: 1,  timeStep: 2.5 },
-  'code-duplicates': { floor: 1,  ceiling: 14,  seedScore: 13,  seedTime: 110, scoreStep: 1, timeStep: 4   },
+  'code-duplicates': {
+    floor: 7, ceiling: 14, seedTime: 88, timeStep: 3,
+    // 20 values, monotonically non-increasing, max 13, min 7 (out of 15).
+    // Times run 88s → 163s — bracketing realistic user runs (15 rounds ×
+    // 5s display + answer time ≈ 85s fast / 160s slow).
+    scoreSequence: [13, 13, 12, 12, 12, 11, 11, 11, 10, 10, 10, 9, 9, 9, 8, 8, 8, 7, 7, 7],
+  },
   'symbols':         { floor: 1,  ceiling: 14,  seedScore: 13,  seedTime: 30, scoreStep: 1,  timeStep: 2   },
   'target': {
     floor: 15, ceiling: 580, seedTime: 95, timeStep: 6,
@@ -61,10 +67,10 @@ const FAKE_TUNING = {
     scoreSequence: [10, 9, 9, 8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 1],
   },
   'ant': {
-    floor: 5, ceiling: 75, seedTime: 210, timeStep: 9,
-    // 20 multiples-of-5 values, monotonically non-increasing, max 75, min 5.
+    floor: 15, ceiling: 75, seedTime: 210, timeStep: 9,
+    // 20 multiples-of-5 values, monotonically non-increasing, max 70, min 15.
     // Every ANT total is a multiple of 5 (10 exact / 5 partial / 0 miss × 8 rounds).
-    scoreSequence: [70, 65, 60, 55, 50, 45, 45, 40, 35, 30, 30, 25, 20, 15, 15, 10, 10, 5, 5, 5],
+    scoreSequence: [70, 65, 60, 55, 50, 50, 45, 45, 40, 40, 35, 35, 30, 30, 25, 25, 20, 20, 15, 15],
   },
 };
 
@@ -118,7 +124,12 @@ function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
   }
 
   const lowerBetter = cfg.sortDir === 1;
-  const needed = limit - real.length;
+  // ANT and code-duplicates: always generate the full demo sequence so the
+  // visible top 20 keeps a per-game min-score floor (15 for ANT, 7 for
+  // code-duplicates) even when real entries with sub-floor scores exist.
+  // Other games keep gap-fill padding (limit - real.length).
+  const FULL_SEQUENCE_GAMES = new Set(['ant', 'code-duplicates']);
+  const needed = FULL_SEQUENCE_GAMES.has(gameKey) ? tuning.scoreSequence.length : (limit - real.length);
   const fakes = generateFakes(gameKey, needed, { lowerBetter, tuning, isAdmin });
 
   // Merge real + fakes, then sort by points-priority, time-on-ties.
@@ -129,8 +140,9 @@ function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
     return a.bestTime - b.bestTime;
   });
 
-  merged.forEach((e, i) => { e.rank = i + 1; });
-  return merged;
+  const trimmed = merged.slice(0, limit);
+  trimmed.forEach((e, i) => { e.rank = i + 1; });
+  return trimmed;
 }
 
 module.exports = { padLeaderboard, FAKE_AGENTS, FAKE_TUNING };

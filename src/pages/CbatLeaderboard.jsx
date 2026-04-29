@@ -146,6 +146,9 @@ export default function CbatLeaderboard() {
               <div className="divide-y divide-[#1a3a5c]/50">
                 {leaderboard.map((entry) => {
                   const isMe = user && entry.userId === user._id
+                  const achievedAtTitle = entry.achievedAt
+                    ? new Date(entry.achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+                    : null
                   return (
                     <div
                       key={entry._id}
@@ -156,7 +159,10 @@ export default function CbatLeaderboard() {
                       <span className="font-mono font-bold text-slate-400">
                         {entry.rank <= 3 ? ['🥇', '🥈', '🥉'][entry.rank - 1] : `#${entry.rank}`}
                       </span>
-                      <span className={`truncate ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}>
+                      <span
+                        className={`truncate ${achievedAtTitle ? 'cursor-help' : ''} ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}
+                        {...(achievedAtTitle ? { title: achievedAtTitle } : {})}
+                      >
                         {entry.email ? entry.email : `Agent ${entry.agentNumber || '???'}`}{isMe ? ' (you)' : ''}
                       </span>
                       <span className="text-right font-mono font-bold text-brand-600">
@@ -178,7 +184,10 @@ export default function CbatLeaderboard() {
                   <div className="px-4 py-1 text-center text-[10px] text-slate-500">···</div>
                   <div className={`grid ${cfg.hideTime ? 'grid-cols-[3rem_1fr_5rem]' : 'grid-cols-[3rem_1fr_5rem_4.5rem]'} gap-2 px-4 py-2.5 text-sm bg-brand-600/10 border-l-2 border-l-brand-400 border-t border-[#1a3a5c]`}>
                     <span className="font-mono font-bold text-slate-400">#{myBest.rank}</span>
-                    <span className="truncate text-brand-600 font-bold">{myBest.email ? myBest.email : `Agent ${myBest.agentNumber || '???'}`} (you)</span>
+                    <span
+                      className={`truncate text-brand-600 font-bold ${myBest.achievedAt ? 'cursor-help' : ''}`}
+                      {...(myBest.achievedAt ? { title: new Date(myBest.achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) } : {})}
+                    >{myBest.email ? myBest.email : `Agent ${myBest.agentNumber || '???'}`} (you)</span>
                     <span className="text-right font-mono font-bold text-brand-600">
                       {cfg.formatScore(myBest.bestScore)}
                     </span>

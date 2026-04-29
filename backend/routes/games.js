@@ -1426,7 +1426,7 @@ router.post('/flashcard-recall/start', protect, async (req, res) => {
     // Fetch the full brief data for the picked IDs
     // descriptionSections[3] = section 4: name-free 1–2 sentence summary designed for flashcard recall
     const briefs = await IntelligenceBrief.find({ _id: { $in: picked } })
-      .select('_id title category subcategory descriptionSections')
+      .select('_id title subtitle category subcategory descriptionSections')
       .lean();
 
     // All published brief titles for typeahead (client-side filtering)
@@ -1441,6 +1441,7 @@ router.post('/flashcard-recall/start', protect, async (req, res) => {
       intelBriefId:   brief._id,
       category:       brief.category,
       subcategory:    brief.subcategory ?? '',
+      subtitle:       brief.subtitle ?? '',
       contentSnippet: sectionBody(normalizeSections(brief.descriptionSections)[3]),
     }));
 
@@ -2348,7 +2349,7 @@ async function cbatLeaderboard(req, res, gameKey) {
           _id: 1,
           userId: 1,
           agentNumber: '$user.agentNumber',
-          ...(isAdmin ? { email: '$user.email' } : {}),
+          ...(isAdmin ? { email: '$user.email', achievedAt: '$createdAt' } : {}),
           bestScore: `$${cfg.primaryField}`,
           bestTime: '$totalTime',
         },
@@ -2396,7 +2397,7 @@ async function cbatLeaderboard(req, res, gameKey) {
             _id: best._id,
             userId: req.user._id,
             agentNumber: req.user.agentNumber,
-            ...(isAdmin ? { email: req.user.email } : {}),
+            ...(isAdmin ? { email: req.user.email, achievedAt: best.createdAt } : {}),
             bestScore: scoreVal,
             bestTime: timeVal,
             rank: countBetter + 1,

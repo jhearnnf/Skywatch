@@ -409,8 +409,6 @@ export default function CbatInstruments() {
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
                   <p className="text-lg font-mono font-bold text-brand-300">
                     {personalBest.bestScore} correct
-                    <span className="text-slate-500 mx-1">{'\u00b7'}</span>
-                    {personalBest.bestTime.toFixed(1)}s
                   </p>
                   <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                 </div>

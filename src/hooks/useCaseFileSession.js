@@ -60,7 +60,7 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
         )
         if (chapterRes.status === 403) {
           const body = await chapterRes.json().catch(() => ({}))
-          if (!cancelled) setGate({ reason: body?.reason ?? 'disabled' })
+          if (!cancelled) setGate({ reason: body?.reason ?? 'disabled', minTier: body?.minTier })
           return
         }
         if (!chapterRes.ok) throw new Error(`Failed to load chapter (${chapterRes.status})`)
@@ -86,6 +86,7 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
             reason:     body?.reason ?? (sessionRes.status === 429 ? 'limit' : 'disabled'),
             usedToday:  body?.usedToday,
             limitToday: body?.limitToday,
+            minTier:    body?.minTier,
           })
           return
         }

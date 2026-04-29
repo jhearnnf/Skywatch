@@ -11,7 +11,6 @@
 
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { useAppSettings } from '../../context/AppSettingsContext'
 import LockedCategoryModal from '../LockedCategoryModal'
 import SEO from '../SEO'
 
@@ -30,10 +29,9 @@ function TerminalCard({ headline, body }) {
   )
 }
 
-export default function CaseFilesGate({ reason, usedToday, limitToday }) {
+export default function CaseFilesGate({ reason, usedToday, limitToday, minTier }) {
   const navigate         = useNavigate()
   const { user }         = useAuth()
-  const { settings }     = useAppSettings()
 
   if (reason === 'disabled') {
     return (
@@ -64,14 +62,14 @@ export default function CaseFilesGate({ reason, usedToday, limitToday }) {
   // 'tier' — show the standard upsell. The modal sits on top of an otherwise
   // blank page; closing it returns the user to /play (where the locked card
   // would also surface the same upsell).
-  const minTier = (settings?.caseFilesTiers ?? []).includes('silver') ? 'silver' : 'gold'
+  const tier = minTier === 'silver' ? 'silver' : 'gold'
   return (
     <>
       <SEO title="Case Files — Skywatch" />
       <div className="min-h-[40vh]" />
       <LockedCategoryModal
         category="Case Files"
-        tier={minTier}
+        tier={tier}
         user={user}
         onClose={() => navigate('/play')}
       />

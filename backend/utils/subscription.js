@@ -8,8 +8,11 @@ function _isTrialActive(user) {
   return new Date() < trialEnd;
 }
 
+// Logged-out callers return 'guest' — they have no subscription tier.
+// 'free' means a logged-in user on the free plan; guest is a separate state
+// with its own gating (typically blocked or steered to a sign-in upsell).
 function effectiveTier(user) {
-  if (!user) return 'free';
+  if (!user) return 'guest';
   if (user.subscriptionTier === 'trial') {
     // isTrialActive is a Mongoose virtual — not present on .lean() objects, so compute it
     const active = user.isTrialActive ?? _isTrialActive(user);

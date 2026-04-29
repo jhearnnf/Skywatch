@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CaseFiles from '../CaseFiles'
 
@@ -10,12 +10,28 @@ vi.mock('react-router-dom', () => ({
 }))
 
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: null, API: '', apiFetch: (...args) => fetch(...args) }),
+  useAuth: vi.fn(() => ({ user: null, API: '', apiFetch: (...args) => fetch(...args) })),
 }))
 
 vi.mock('../../components/SEO', () => ({
   default: () => null,
 }))
+
+vi.mock('../../components/LockedCategoryModal', () => ({
+  default: ({ category, tier, onClose }) => (
+    <div data-testid="locked-modal" data-category={category} data-tier={tier}>
+      <button onClick={onClose}>Close</button>
+    </div>
+  ),
+}))
+
+vi.mock('../../components/caseFiles/CaseFilesGate', () => ({
+  default: () => <div data-testid="case-files-gate" />,
+}))
+
+// ── Import mocked hook ────────────────────────────────────────────────────
+
+import { useAuth } from '../../context/AuthContext'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -45,6 +61,7 @@ const API_CASES = [
 // ── Setup ─────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  useAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args) })
   global.fetch = vi.fn().mockResolvedValue({
     ok:   true,
     json: async () => API_CASES,
@@ -118,5 +135,63 @@ describe('CaseFiles page', () => {
     // Published card must have role="button"
     const publishedCard = screen.getByTestId('case-file-card-russia-ukraine')
     expect(publishedCard.getAttribute('role')).toBe('button')
+  })
+})
+
+describe('CaseFiles page — tier gating', () => {
+  const GOLD_ONLY_CASE = {
+    slug:          'gold-only-case',
+    title:         'Gold Only Case',
+    affairLabel:   'Test · Tier Gating',
+    summary:       'Only gold subscribers can access this.',
+    coverImageUrl: null,
+    status:        'published',
+    tiers:         ['gold'],
+    tags:          [],
+    chapterCount:  1,
+    chapterSlugs:  ['chapter-1'],
+  }
+
+  beforeEach(() => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok:   true,
+      json: async () => [GOLD_ONLY_CASE],
+    })
+  })
+
+  it('renders card as tier-locked for a free-tier user (tiers: gold)', async () => {
+    useAuth.mockReturnValue({ user: { _id: 'u1', isAdmin: false, subscriptionTier: 'free' }, API: '', apiFetch: (...args) => fetch(...args) })
+    render(<CaseFiles />)
+    await waitFor(() => screen.getByTestId('case-file-card-gold-only-case'))
+    // The Premium badge appears only on tier-locked cards
+    expect(screen.getByText('Premium')).toBeDefined()
+  })
+
+  it('clicking a tier-locked card opens the upsell modal with correct tier', async () => {
+    useAuth.mockReturnValue({ user: { _id: 'u1', isAdmin: false, subscriptionTier: 'free' }, API: '', apiFetch: (...args) => fetch(...args) })
+    render(<CaseFiles />)
+    await waitFor(() => screen.getByTestId('case-file-card-gold-only-case'))
+
+    // Modal should not be visible before click
+    expect(screen.queryByTestId('locked-modal')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('case-file-card-gold-only-case'))
+    const modal = await screen.findByTestId('locked-modal')
+    expect(modal.getAttribute('data-category')).toBe('Case Files')
+    expect(modal.getAttribute('data-tier')).toBe('gold')
+  })
+
+  it('does not tier-lock the card for a gold user (tiers: gold)', async () => {
+    useAuth.mockReturnValue({ user: { _id: 'u2', isAdmin: false, subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })
+    render(<CaseFiles />)
+    await waitFor(() => screen.getByTestId('case-file-card-gold-only-case'))
+    expect(screen.queryByText('Premium')).toBeNull()
+  })
+
+  it('does not tier-lock the card for an admin regardless of tiers', async () => {
+    useAuth.mockReturnValue({ user: { _id: 'admin1', isAdmin: true, subscriptionTier: 'free' }, API: '', apiFetch: (...args) => fetch(...args) })
+    render(<CaseFiles />)
+    await waitFor(() => screen.getByTestId('case-file-card-gold-only-case'))
+    expect(screen.queryByText('Premium')).toBeNull()
   })
 })

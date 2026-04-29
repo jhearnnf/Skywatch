@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Play from '../Play'
 
@@ -24,12 +24,6 @@ vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: vi.fn(() => ({
     settings: {}, levels: [], levelThresholds: [], loading: false, refreshSettings: vi.fn(),
   })),
-}))
-
-vi.mock('../../components/LockedCategoryModal', () => ({
-  default: ({ category, tier }) => (
-    <div data-testid="locked-modal" data-category={category} data-tier={tier} />
-  ),
 }))
 
 vi.mock('../../components/tutorial/TutorialModal', () => ({
@@ -90,7 +84,7 @@ afterEach(() => {
 
 describe('Play page — Case Files entry', () => {
   it('hides the Case Files link when caseFilesEnabled is false (admin too)', () => {
-    setSettings({ caseFilesEnabled: false, caseFilesTiers: ['admin'] })
+    setSettings({ caseFilesEnabled: false })
     useAuth.mockReturnValue({
       user:      { _id: 'admin1', isAdmin: true, subscriptionTier: 'gold' },
       API:       '',
@@ -100,8 +94,15 @@ describe('Play page — Case Files entry', () => {
     expect(screen.queryByTestId('case-files-link')).toBeNull()
   })
 
+  it('hides the link entirely when caseFilesEnabled is false for a guest', () => {
+    setSettings({ caseFilesEnabled: false })
+    useAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args) })
+    render(<Play />)
+    expect(screen.queryByTestId('case-files-link')).toBeNull()
+  })
+
   it('renders the Case Files link as a navigable link for an admin when enabled', () => {
-    setSettings({ caseFilesEnabled: true, caseFilesTiers: ['admin'] })
+    setSettings({ caseFilesEnabled: true })
     useAuth.mockReturnValue({
       user:      { _id: 'admin1', isAdmin: true, subscriptionTier: 'gold' },
       API:       '',
@@ -114,21 +115,8 @@ describe('Play page — Case Files entry', () => {
     expect(link.tagName.toLowerCase()).toBe('a')
   })
 
-  it('renders an unlocked link for a user whose tier is in the allowlist', () => {
-    setSettings({ caseFilesEnabled: true, caseFilesTiers: ['silver', 'gold'] })
-    useAuth.mockReturnValue({
-      user:      { _id: 'u1', isAdmin: false, subscriptionTier: 'gold' },
-      API:       '',
-      apiFetch:  (...args) => fetch(...args),
-    })
-    render(<Play />)
-    const link = screen.getByTestId('case-files-link')
-    expect(link.tagName.toLowerCase()).toBe('a')
-    expect(link.getAttribute('href')).toBe('/case-files')
-  })
-
-  it('renders a locked button for a tier-gated user, opening the upsell on click', async () => {
-    setSettings({ caseFilesEnabled: true, caseFilesTiers: ['gold'] })
+  it('renders the Case Files link for any signed-in user when enabled', () => {
+    setSettings({ caseFilesEnabled: true })
     useAuth.mockReturnValue({
       user:      { _id: 'u1', isAdmin: false, subscriptionTier: 'free' },
       API:       '',
@@ -136,20 +124,8 @@ describe('Play page — Case Files entry', () => {
     })
     render(<Play />)
     const link = screen.getByTestId('case-files-link')
-    expect(link.tagName.toLowerCase()).toBe('button')
-    expect(link.getAttribute('data-locked')).toBe('true')
-
-    expect(screen.queryByTestId('locked-modal')).toBeNull()
-    fireEvent.click(link)
-    const modal = await screen.findByTestId('locked-modal')
-    expect(modal.getAttribute('data-category')).toBe('Case Files')
-    expect(modal.getAttribute('data-tier')).toBe('gold')
-  })
-
-  it('hides the link entirely when caseFilesEnabled is false for a guest', () => {
-    setSettings({ caseFilesEnabled: false, caseFilesTiers: ['admin'] })
-    useAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args) })
-    render(<Play />)
-    expect(screen.queryByTestId('case-files-link')).toBeNull()
+    expect(link.tagName.toLowerCase()).toBe('a')
+    expect(link.getAttribute('href')).toBe('/case-files')
+    expect(link.getAttribute('data-locked')).toBeNull()
   })
 })
