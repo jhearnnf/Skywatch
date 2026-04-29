@@ -11,6 +11,7 @@
 process.env.JWT_SECRET     = 'test_secret';
 process.env.OPENROUTER_KEY = 'test_main_key';
 process.env.OPENROUTER_KEY_APTITUDE = 'test_aptitude_key';
+process.env.OPENROUTER_KEY_SOCIALS  = 'test_socials_key';
 
 const request = require('supertest');
 const app     = require('../../app');
@@ -31,11 +32,12 @@ function mockFetchJson(body, ok = true, status = 200) {
 
 // Install a fetch mock that answers OpenRouter's /api/v1/key with
 // per-key lifetime usage, driven by the bearer token on the request.
-function installKeyUsageMock({ main = 12.34, aptitude = 5.67 } = {}) {
+function installKeyUsageMock({ main = 12.34, aptitude = 5.67, socials = 1.23 } = {}) {
   return jest.spyOn(global, 'fetch').mockImplementation((url, opts) => {
     const auth = opts?.headers?.Authorization || '';
     if (String(url).endsWith('/api/v1/key')) {
       if (auth.includes('test_aptitude_key')) return mockFetchJson({ data: { usage: aptitude, limit: null, label: 'SkyWatch.aptitude' } });
+      if (auth.includes('test_socials_key'))  return mockFetchJson({ data: { usage: socials,  limit: null, label: 'SkyWatch.socials' } });
       return mockFetchJson({ data: { usage: main, limit: null, label: 'SkyWatch.main' } });
     }
     return mockFetchJson({});
@@ -73,13 +75,14 @@ describe('OpenRouter admin endpoints — auth', () => {
 
 describe('GET /api/admin/openrouter/summary', () => {
   it('returns lifetime (from OpenRouter) and today (from logs) per key', async () => {
-    installKeyUsageMock({ main: 20, aptitude: 3 });
+    installKeyUsageMock({ main: 20, aptitude: 3, socials: 7 });
 
     const today = new Date();
     await OpenRouterUsageLog.create([
       { key: 'main',     feature: 'generate-brief', costUsd: 0.10, totalTokens: 100, createdAt: today },
       { key: 'main',     feature: 'generate-quiz',  costUsd: 0.05, totalTokens: 50,  createdAt: today },
       { key: 'aptitude', feature: 'aptitude-sync',  costUsd: 0.02, totalTokens: 20,  createdAt: today },
+      { key: 'socials',  feature: 'social-draft-x', costUsd: 0.03, totalTokens: 30,  createdAt: today },
     ]);
 
     const admin = await createAdminUser();
@@ -94,6 +97,10 @@ describe('GET /api/admin/openrouter/summary', () => {
     expect(res.body.data.main.todayByFeature['generate-brief'].cost).toBeCloseTo(0.10, 5);
     expect(res.body.data.aptitude.lifetime).toBe(3);
     expect(res.body.data.aptitude.today).toBeCloseTo(0.02, 5);
+    expect(res.body.data.socials.lifetime).toBe(7);
+    expect(res.body.data.socials.today).toBeCloseTo(0.03, 5);
+    expect(res.body.data.socials.todayCalls).toBe(1);
+    expect(res.body.data.socials.todayByFeature['social-draft-x'].cost).toBeCloseTo(0.03, 5);
   });
 
   it('excludes yesterday from today but includes it in last7Days', async () => {
@@ -155,6 +162,23 @@ describe('GET /api/admin/openrouter/logs', () => {
 
     expect(res.body.data.rows).toHaveLength(1);
     expect(res.body.data.totalCost).toBeCloseTo(0.04, 5);
+    expect(res.body.data.totalCalls).toBe(1);
+  });
+
+  it('filters by key=socials', async () => {
+    const HOUR = 3600 * 1000;
+    await OpenRouterUsageLog.create({
+      key: 'socials', feature: 'social-draft-x', costUsd: 0.07, totalTokens: 70,
+      createdAt: new Date(Date.now() - 1 * HOUR),
+    });
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .get('/api/admin/openrouter/logs?key=socials')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.rows).toHaveLength(1);
+    expect(res.body.data.rows[0].key).toBe('socials');
+    expect(res.body.data.totalCost).toBeCloseTo(0.07, 5);
     expect(res.body.data.totalCalls).toBe(1);
   });
 

@@ -492,6 +492,77 @@ describe('POST /api/admin/ai/generate-brief', () => {
     expect(res.body.data.brief.staleSourceWarning).toBe(false);
   });
 
+  it('drops sources older than the supplied eventDate but keeps fresh ones', async () => {
+    const eventDate = '2026-04-20';
+    const json = JSON.stringify({
+      title: 'RAF Typhoon', subtitle: 'Multi-role fast jet',
+      descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
+      keywords: [{ keyword: 'Typhoon', generatedDescription: 'A fast jet' }],
+      sources: [
+        { url: 'https://old.example.com',   siteName: 'Old',   articleDate: '2024-06-15' },
+        { url: 'https://fresh.example.com', siteName: 'Fresh', articleDate: '2026-04-22' },
+      ],
+    });
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(json));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ headline: 'RAF Typhoons deployed overseas', eventDate });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.brief.sources).toHaveLength(1);
+    expect(res.body.data.brief.sources[0].url).toBe('https://fresh.example.com');
+  });
+
+  it('returns 422 when no sources survive the eventDate floor', async () => {
+    const eventDate = '2026-04-20';
+    const json = JSON.stringify({
+      title: 'RAF Typhoon', subtitle: 'Multi-role fast jet',
+      descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
+      keywords: [{ keyword: 'Typhoon', generatedDescription: 'A fast jet' }],
+      sources: [{ url: 'https://old.example.com', siteName: 'Old', articleDate: '2024-06-15' }],
+    });
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter(json));
+
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ headline: 'RAF Typhoons deployed overseas', eventDate });
+
+    expect(res.status).toBe(422);
+    expect(res.body.message).toMatch(/2026-04-20/);
+  });
+
+  it('passes search_after_date_filter to Perplexity when eventDate is supplied', async () => {
+    const eventDate = '2026-04-20';
+    const json = JSON.stringify({
+      title: 'RAF Typhoon', subtitle: 'Multi-role fast jet',
+      descriptionSections: ['The Typhoon is operated at RAF Coningsby.'],
+      keywords: [{ keyword: 'Typhoon', generatedDescription: 'A fast jet' }],
+      sources: [{ url: 'https://fresh.example.com', siteName: 'Fresh', articleDate: '2026-04-22' }],
+    });
+    let capturedBody = '';
+    jest.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+      if (String(url).includes('openrouter.ai')) {
+        capturedBody = String(opts?.body ?? '');
+        return mockOpenRouter(json);
+      }
+      return mockFetchResponse({});
+    });
+
+    const admin = await createAdminUser();
+    await request(app)
+      .post('/api/admin/ai/generate-brief')
+      .set('Cookie', authCookie(admin._id))
+      .send({ headline: 'RAF Typhoons deployed overseas', eventDate });
+
+    expect(capturedBody).toContain('search_after_date_filter');
+    expect(capturedBody).toContain('04/20/2026');
+  });
+
   it('returns 401 for unauthenticated request', async () => {
     const res = await request(app)
       .post('/api/admin/ai/generate-brief')

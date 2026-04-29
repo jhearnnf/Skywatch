@@ -41,6 +41,12 @@ function resolveKeyAndHeader(key) {
       title:  'SkyWatch APTITUDE_SYNC',
     };
   }
+  if (key === 'socials') {
+    return {
+      apiKey: process.env.OPENROUTER_KEY_SOCIALS || process.env.OPENROUTER_KEY,
+      title:  'SkyWatch Socials',
+    };
+  }
   return {
     apiKey: process.env.OPENROUTER_KEY,
     title:  'SkyWatch',

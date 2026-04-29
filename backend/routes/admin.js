@@ -40,6 +40,13 @@ const { scanMentionedBriefIds } = require('../utils/mentionedBriefs');
 const { autoLinkKeywords, buildTitleRejectCheck } = require('../utils/keywordLinking');
 const { validateBriefTitleForCategory } = require('../utils/airframeValidation');
 const { reprioritizeCategory } = require('../utils/priorityRanking');
+const { lookupRankOrderByTitle } = require('../constants/rankOrder');
+const {
+  compactRankOrder,
+  setRankOrder: setLeadRankOrder,
+  appendRank: appendLeadRank,
+  removeRank: removeLeadRank,
+} = require('../utils/rankOrdering');
 const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
@@ -234,6 +241,8 @@ async function syncLeadFromBrief(brief) {
     return { matched: true, changed: true, changedFields: ['__created__'], created: true, leadId: created._id };
   }
 
+  const wasRanks = match.category === 'Ranks';
+
   const updates = {};
   for (const f of LEAD_SYNC_FIELDS) {
     const next = brief[f] ?? '';
@@ -266,7 +275,25 @@ async function syncLeadFromBrief(brief) {
   const newCategory = brief.category;
   if (categoryChanged) updates.priorityNumber = null;
 
+  // Ranks-specific: if leaving Ranks, close the rank gap before any category
+  // mutation. removeRank reads the current rankOrder, shifts everyone above,
+  // and clears it — so we run it BEFORE the updateOne writes the new category.
+  const isLeavingRanks = categoryChanged && wasRanks && newCategory !== 'Ranks';
+  if (isLeavingRanks) {
+    try { await removeLeadRank(match._id); }
+    catch (err) { console.error(`[syncLeadFromBrief] removeRank failed:`, err.message); }
+  }
+
   await IntelLead.updateOne({ _id: match._id }, updates);
+
+  // Ranks-specific: if entering Ranks, append at the bottom so the lead has a
+  // valid rankOrder. Admin can re-slot it via the brief's rankHierarchyOrder
+  // input (which routes through setRankOrder).
+  const isEnteringRanks = categoryChanged && newCategory === 'Ranks';
+  if (isEnteringRanks) {
+    try { await appendLeadRank(match._id); }
+    catch (err) { console.error(`[syncLeadFromBrief] appendRank failed:`, err.message); }
+  }
 
   if (categoryChanged) {
     const sourceTitle = `lead-category-move:${match._id}`;
@@ -276,7 +303,7 @@ async function syncLeadFromBrief(brief) {
       .catch(err => console.error(`[syncLeadFromBrief] reprioritize new category "${newCategory}" failed:`, err.message));
   }
 
-  return { matched: true, changed: true, changedFields, created: false };
+  return { matched: true, changed: true, changedFields, created: false, leadId: match._id };
 }
 
 // POST /api/admin/loading-time — open (no auth), accumulates frontend fetch durations
@@ -520,11 +547,12 @@ async function getLifetimeUsage() {
   if (lifetimeCache.data && (Date.now() - lifetimeCache.fetchedAt) < LIFETIME_CACHE_MS) {
     return lifetimeCache.data;
   }
-  const [main, aptitude] = await Promise.all([
+  const [main, aptitude, socials] = await Promise.all([
     fetchOpenRouterKeyUsage('main'),
     fetchOpenRouterKeyUsage('aptitude'),
+    fetchOpenRouterKeyUsage('socials'),
   ]);
-  const data = { main, aptitude };
+  const data = { main, aptitude, socials };
   lifetimeCache.data = data;
   lifetimeCache.fetchedAt = Date.now();
   return data;
@@ -556,7 +584,11 @@ router.get('/openrouter/summary', async (_req, res) => {
       ]),
     ]);
 
-    const today = { main: { cost: 0, calls: 0, byFeature: {} }, aptitude: { cost: 0, calls: 0, byFeature: {} } };
+    const today = {
+      main:     { cost: 0, calls: 0, byFeature: {} },
+      aptitude: { cost: 0, calls: 0, byFeature: {} },
+      socials:  { cost: 0, calls: 0, byFeature: {} },
+    };
     for (const row of todayAgg) {
       const k = row._id.key;
       if (!today[k]) continue;
@@ -564,7 +596,11 @@ router.get('/openrouter/summary', async (_req, res) => {
       today[k].calls += row.calls;
       today[k].byFeature[row._id.feature] = { cost: row.cost, calls: row.calls };
     }
-    const last7Days = { main: { cost: 0, calls: 0 }, aptitude: { cost: 0, calls: 0 } };
+    const last7Days = {
+      main:     { cost: 0, calls: 0 },
+      aptitude: { cost: 0, calls: 0 },
+      socials:  { cost: 0, calls: 0 },
+    };
     for (const row of weekAgg) {
       if (last7Days[row._id]) last7Days[row._id] = { cost: row.cost, calls: row.calls };
     }
@@ -590,6 +626,15 @@ router.get('/openrouter/summary', async (_req, res) => {
           todayByFeature: today.aptitude.byFeature,
           last7Days: last7Days.aptitude.cost,
         },
+        socials: {
+          lifetime:  lifetime.socials.usage,
+          lifetimeLabel: lifetime.socials.label,
+          lifetimeError: lifetime.socials.error,
+          today:     today.socials.cost,
+          todayCalls: today.socials.calls,
+          todayByFeature: today.socials.byFeature,
+          last7Days: last7Days.socials.cost,
+        },
       },
     });
   } catch (err) {
@@ -608,7 +653,7 @@ router.get('/openrouter/logs', async (req, res) => {
     const cursor = req.query.cursor;
 
     const match = {};
-    if (key === 'main' || key === 'aptitude') match.key = key;
+    if (key === 'main' || key === 'aptitude' || key === 'socials') match.key = key;
     if (feature) {
       const list = Array.isArray(feature) ? feature : String(feature).split(',').map(s => s.trim()).filter(Boolean);
       if (list.length) match.feature = { $in: list };
@@ -1809,6 +1854,22 @@ router.patch('/briefs/:id', requireReason, async (req, res) => {
       console.error('[PATCH briefs] lead sync failed (non-fatal):', syncErr.message);
     }
 
+    // Ranks-specific: if the admin edited gameData.rankHierarchyOrder via the
+    // brief form, propagate that to the matching lead. setRankOrder shifts the
+    // rest of the Ranks list and re-mirrors all matching briefs, so the brief
+    // we just patched gets re-stamped with the canonical value.
+    const newRankOrder = fields?.gameData?.rankHierarchyOrder;
+    if (brief.category === 'Ranks' && Number.isInteger(newRankOrder)) {
+      try {
+        const lead = await IntelLead.findOne({ category: 'Ranks', title: brief.title }).select('_id rankOrder');
+        if (lead && lead.rankOrder !== newRankOrder) {
+          await setLeadRankOrder(lead._id, newRankOrder);
+        }
+      } catch (rankErr) {
+        console.error('[PATCH briefs] rank order sync failed (non-fatal):', rankErr.message);
+      }
+    }
+
     await AdminAction.create({ userId: req.user._id, actionType: 'edit_brief', reason });
     res.json({ status: 'success', data: { brief } });
   } catch (err) {
@@ -2640,41 +2701,26 @@ async function ensureQuizQuality(easyQuestions, mediumQuestions, description, br
 
 const BOO_CATEGORIES = ['Aircrafts', 'Ranks', 'Training', 'Missions', 'Tech', 'Treaties', 'Bases', 'Squadrons', 'Threats'];
 
-// Ranks are looked up deterministically — never generated by AI to avoid errors/duplicates
-const RANK_HIERARCHY = {
-  'Marshal of the Royal Air Force': 1,
-  'Air Chief Marshal':              2,
-  'Air Marshal':                    3,
-  'Air Vice-Marshal':               4,
-  'Air Commodore':                  5,
-  'Group Captain':                  6,
-  'Wing Commander':                 7,
-  'Squadron Leader':                8,
-  'Flight Lieutenant':              9,
-  'Flying Officer':                 10,
-  'Pilot Officer':                  11,
-  'Warrant Officer':                12,
-  'Master Aircrew':                 13,
-  'Flight Sergeant':                14,
-  'Chief Technician':               15,
-  'Sergeant':                       16,
-  'Corporal':                       17,
-  'Junior Technician':              18,
-  'Senior Aircraftman':             19,
-  'Leading Aircraftman':            20,
-  'Aircraftman':                    21,
-};
+// Ranks are ordered deterministically — never generated by AI.
+//
+// Source of truth is IntelLead.rankOrder (managed by backend/utils/rankOrdering.js).
+// Brief title is matched to a lead first; if no matching Ranks lead has a
+// rankOrder set, we fall back to the canonical constants list — this keeps
+// stub flows working before the backfill has run, and acts as a safety net
+// for any rank that's missing from the lead collection.
+async function lookupRankHierarchy(title) {
+  if (!title) return null;
 
-// Fuzzy lookup: longest-key-first substring match (case-insensitive).
-// Handles titles like "Sergeant (RAF)", "Warrant Officer (RAF)",
-// "Senior Aircraftman / Senior Aircraftwoman", etc.
-function lookupRankHierarchy(title) {
-  const t = (title || '').toLowerCase();
-  const entries = Object.entries(RANK_HIERARCHY).sort((a, b) => b[0].length - a[0].length);
-  for (const [name, order] of entries) {
-    if (t.includes(name.toLowerCase())) return order;
+  const lead = await IntelLead.findOne({ category: 'Ranks', title })
+    .select('rankOrder')
+    .lean();
+  if (lead?.rankOrder != null) return lead.rankOrder;
+
+  const fromConstants = lookupRankOrderByTitle(title);
+  if (fromConstants != null) {
+    console.warn(`[lookupRankHierarchy] no lead.rankOrder for "${title}" — using canonical fallback (${fromConstants})`);
   }
-  return null;
+  return fromConstants;
 }
 
 // ── Mnemonic helpers ───────────────────────────────────────────────────────
@@ -2750,8 +2796,14 @@ async function generateMnemonicsForBrief(title, category, gameData, systemPrompt
   }
 }
 
-function hasStaleSource(sources) {
+// Flags sources that violate temporal expectations. When `eventDate` is given,
+// any source dated before it is stale (the event predates the source — wrong
+// story). Without an eventDate we fall back to the legacy 24h-from-now check.
+function hasStaleSource(sources, eventDate) {
   if (!Array.isArray(sources) || sources.length === 0) return false;
+  if (eventDate) {
+    return sources.some(s => s.articleDate && s.articleDate < eventDate);
+  }
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   return sources.some(s => {
     if (!s.articleDate) return true;
@@ -2938,13 +2990,25 @@ router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news
     const SHARED_RULES = `\nCRITICAL RULES:\n1. ${dsCountRule} ${dsRuleTail}\n${LIST_FORMAT_RULE}`;
     const JSON_SHAPE = `Return ONLY valid JSON — no markdown, no code blocks, no extra text, no citation markers like [1]:\n{\n  "title": "concise factual title, max 70 characters",\n  ${SHARED_SECTIONS},\n  "sources": [\n    {"url": "https://full-url-of-actual-source.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"},\n    {"url": "https://second-source-url.com", "siteName": "Publication Name", "articleDate": "YYYY-MM-DD"}\n  ]\n}${SHARED_RULES}`;
 
+    // eventDate is the floor: the event must have happened on or before any
+    // source's publication date, so we restrict Perplexity's search at the API
+    // level AND remind the model in-prompt. Sources older than eventDate are
+    // filtered out post-hoc; if none survive, the request fails (we don't save
+    // a sourceless or temporally-wrong brief).
+    const dateFloorPrompt = eventDate
+      ? `\n\nThis story occurred on ${eventDate}. Cite ONLY sources published on or after ${eventDate} — a source cannot predate the event it reports on.`
+      : '';
+    const dateFilterBody = eventDate
+      ? { search_after_date_filter: pplxDate(new Date(eventDate)) }
+      : {};
+
     const contentData = await openRouterChat([{
       role: 'system',
       content: getPrompt(aiSettings, 'brief.news'),
     }, {
       role: 'user',
-      content: `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources, return a JSON object for an RAF news intelligence brief. Be as informative as possible about the current RAF affairs covered by this story.\n\n${JSON_SHAPE}`,
-    }], 'perplexity/sonar', 2048);
+      content: `Search the web for this specific RAF news story: "${headline}"${dateFloorPrompt}\n\nUsing only verified facts from published sources, return a JSON object for an RAF news intelligence brief. Be as informative as possible about the current RAF affairs covered by this story.\n\n${JSON_SHAPE}`,
+    }], 'perplexity/sonar', 2048, dateFilterBody);
 
     const contentRaw = contentData.choices?.[0]?.message?.content ?? '{}';
     let briefContent;
@@ -2959,15 +3023,18 @@ router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news
       briefContent.sources = await enrichSourceDates(briefContent.sources);
     }
 
-    // ── Step 2: Event date clamping ────────────────────────────────────────────
-    let resolvedEventDate = eventDate || null;
+    // ── Step 2: Enforce eventDate floor on sources ─────────────────────────────
+    const resolvedEventDate = eventDate || null;
     if (resolvedEventDate && briefContent.sources?.length) {
-      const sourceDates = briefContent.sources.map(s => s.articleDate).filter(Boolean).sort();
-      const oldestSource = sourceDates[0];
-      if (oldestSource && resolvedEventDate > oldestSource) {
-        warnings.push(`eventDate clamped: ${resolvedEventDate} → ${oldestSource} (oldest source)`);
-        resolvedEventDate = oldestSource;
-      }
+      const before = briefContent.sources.length;
+      briefContent.sources = briefContent.sources.filter(s => !s.articleDate || s.articleDate >= resolvedEventDate);
+      const dropped = before - briefContent.sources.length;
+      if (dropped > 0) warnings.push(`Dropped ${dropped} source(s) older than eventDate ${resolvedEventDate}`);
+    }
+    if (resolvedEventDate && (!briefContent.sources || briefContent.sources.length === 0)) {
+      return res.status(422).json({
+        message: `No sources published on or after ${resolvedEventDate} for "${headline}" — try a different headline or date.`,
+      });
     }
 
     // ── Step 3: Keywords ───────────────────────────────────────────────────────
@@ -3149,9 +3216,17 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
     // path) has no pre-existing lead at generation time — skip grounding there.
     const grounding = topic ? buildGroundingBlock(await getLeadGrounding(topic)) : '';
 
+    // For news headlines, eventDate is the floor: the event can't postdate any
+    // of its sources. We push the constraint into the prompt AND into
+    // Perplexity's native date filter so the model can't return 2024 reporting
+    // for a 2026 headline. Topic briefs have no such floor.
+    const newsDateFloorPrompt = (headline && eventDate)
+      ? `\n\nThis story occurred on ${eventDate}. Cite ONLY sources published on or after ${eventDate} — a source cannot predate the event it reports on.`
+      : '';
+
     const userContent = topic
       ? `Write a comprehensive intelligence brief about this subject: "${topic}"\n\n${grounding}${buildTopicUserGuidance(shape)}\n\n${TOPIC_JSON_SHAPE}`
-      : `Search the web for this specific RAF news story: "${headline}"\n\nUsing only verified facts from published sources, return a JSON object for an RAF news intelligence brief. Be as informative as possible about the current RAF affairs covered by this story.\n\n${JSON_SHAPE}`;
+      : `Search the web for this specific RAF news story: "${headline}"${newsDateFloorPrompt}\n\nUsing only verified facts from published sources, return a JSON object for an RAF news intelligence brief. Be as informative as possible about the current RAF affairs covered by this story.\n\n${JSON_SHAPE}`;
 
     const isNews = !!headline;
     const briefAiSettings = await AppSettings.getSettings();
@@ -3159,13 +3234,17 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
       ? getPrompt(briefAiSettings, 'brief.news')
       : getTopicPrompt(briefAiSettings, category);
 
+    const dateFilterBody = (isNews && eventDate)
+      ? { search_after_date_filter: pplxDate(new Date(eventDate)) }
+      : {};
+
     const data = await openRouterChat([{
       role: 'system',
       content: systemPrompt,
     }, {
       role: 'user',
       content: userContent,
-    }], 'perplexity/sonar', 2048);
+    }], 'perplexity/sonar', 2048, dateFilterBody);
     const raw = data.choices?.[0]?.message?.content ?? '{}';
     let brief;
     try {
@@ -3188,22 +3267,26 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
 
     // For Ranks briefs, apply deterministic hierarchy lookup instead of relying on AI
     if (!headline && category === 'Ranks' && brief.title) {
-      const rankOrder = lookupRankHierarchy(brief.title);
+      const rankOrder = await lookupRankHierarchy(brief.title);
       if (rankOrder !== null) brief.gameData = { rankHierarchyOrder: rankOrder };
     }
-    const staleSourceWarning = isNews && hasStaleSource(brief.sources);
+    const staleSourceWarning = isNews && hasStaleSource(brief.sources, eventDate);
     if (isNews) {
       if (isHistoric) brief.historic = true;
       if (eventDate)  brief.eventDate = eventDate;
-      // Clamp eventDate so it's never newer than the oldest source articleDate —
-      // a source can't exist before the event it describes, so the event must have
-      // happened on or before the earliest source publication date.
-      if (brief.eventDate && brief.sources?.length) {
-        const sourceDates = brief.sources.map(s => s.articleDate).filter(Boolean).sort();
-        const oldestSource = sourceDates[0];
-        if (oldestSource && brief.eventDate > oldestSource) {
-          brief.eventDate = oldestSource;
-        }
+      // eventDate is authoritative: drop any source that predates it. Sources
+      // can't predate the event they report on, so a 2024-dated source for a
+      // 2026 headline means the model retrieved the wrong story — don't keep it.
+      if (eventDate && brief.sources?.length) {
+        const before = brief.sources.length;
+        brief.sources = brief.sources.filter(s => !s.articleDate || s.articleDate >= eventDate);
+        const dropped = before - brief.sources.length;
+        if (dropped > 0) console.warn(`[generate-brief] dropped ${dropped} source(s) older than eventDate ${eventDate}`);
+      }
+      if (eventDate && (!brief.sources || brief.sources.length === 0)) {
+        return res.status(422).json({
+          message: `No sources published on or after ${eventDate} for "${headline}" — try a different headline or date.`,
+        });
       }
     }
     res.json({ status: 'success', data: { brief: { ...brief, staleSourceWarning } } });
@@ -3235,6 +3318,19 @@ router.get('/intel-leads', async (req, res) => {
     }));
 
     res.json({ status: 'success', data: { leads: enriched } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/intel-leads/recompact-rank-order
+// Idempotent self-heal for IntelLead.rankOrder + brief gameData.rankHierarchyOrder.
+// Safe to run any time — re-numbers Ranks leads to a contiguous 1..N preserving
+// current relative order, then re-mirrors every value to all matching briefs.
+router.post('/intel-leads/recompact-rank-order', async (req, res) => {
+  try {
+    const result = await compactRankOrder();
+    res.json({ status: 'success', data: result });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -4034,7 +4130,7 @@ async function generateBriefContent(brief, aiSettings) {
     : null;
 
   if (brief.category === 'Ranks') {
-    const rankOrder = lookupRankHierarchy(brief.title);
+    const rankOrder = await lookupRankHierarchy(brief.title);
     if (rankOrder !== null) gameData = { rankHierarchyOrder: rankOrder };
   }
 
@@ -4582,7 +4678,7 @@ router.post('/ai/generate-rank-data/:id', featureMiddleware('generate-rank-data'
     if (brief.category !== 'Ranks')
       return res.status(400).json({ message: 'Brief is not a Ranks category' });
 
-    const rankHierarchyOrder = lookupRankHierarchy(brief.title);
+    const rankHierarchyOrder = await lookupRankHierarchy(brief.title);
     if (rankHierarchyOrder === null)
       return res.status(422).json({ message: `Could not determine rank order from title: "${brief.title}"` });
 

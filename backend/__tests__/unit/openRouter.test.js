@@ -10,6 +10,7 @@
 
 process.env.OPENROUTER_KEY          = 'test_main_key';
 process.env.OPENROUTER_KEY_APTITUDE = 'test_aptitude_key';
+process.env.OPENROUTER_KEY_SOCIALS  = 'test_socials_key';
 
 const db = require('../helpers/setupDb');
 const OpenRouterUsageLog = require('../../models/OpenRouterUsageLog');
@@ -75,6 +76,32 @@ describe('callOpenRouter', () => {
 
     const rows = await OpenRouterUsageLog.find().lean();
     expect(rows[0].key).toBe('aptitude');
+  });
+
+  it('tags the log with the key resolved from the socials env var', async () => {
+    jest.spyOn(global, 'fetch').mockImplementationOnce((url, opts) => {
+      expect(opts.headers.Authorization).toBe('Bearer test_socials_key');
+      expect(opts.headers['X-Title']).toBe('SkyWatch Socials');
+      return mockFetchJson({ choices: [], usage: { cost: 0 } });
+    });
+
+    await callOpenRouter({ key: 'socials', feature: 'social-draft-x', body: { model: 'x', messages: [] } });
+    await _flushPendingLogWrites();
+
+    const rows = await OpenRouterUsageLog.find().lean();
+    expect(rows[0].key).toBe('socials');
+  });
+
+  it('falls back to OPENROUTER_KEY when OPENROUTER_KEY_SOCIALS is unset', async () => {
+    const saved = process.env.OPENROUTER_KEY_SOCIALS;
+    delete process.env.OPENROUTER_KEY_SOCIALS;
+    jest.spyOn(global, 'fetch').mockImplementationOnce((url, opts) => {
+      expect(opts.headers.Authorization).toBe('Bearer test_main_key');
+      return mockFetchJson({ choices: [], usage: { cost: 0 } });
+    });
+
+    await callOpenRouter({ key: 'socials', feature: 'social-draft-x', body: { model: 'x', messages: [] } });
+    process.env.OPENROUTER_KEY_SOCIALS = saved;
   });
 
   it('injects usage:{ include: true } into the outbound body', async () => {

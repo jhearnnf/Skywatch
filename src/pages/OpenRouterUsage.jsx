@@ -179,13 +179,13 @@ export default function OpenRouterUsage() {
         <div>
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">API Key</p>
           <div className="flex gap-2 flex-wrap">
-            {['all', 'main', 'aptitude'].map(k => (
+            {['all', 'main', 'aptitude', 'socials'].map(k => (
               <button
                 key={k}
                 onClick={() => setKey(k)}
                 className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${keyFilter === k ? 'bg-brand-600 border-brand-600 text-white' : 'bg-surface border-slate-200 text-slate-600 hover:bg-slate-50'}`}
               >
-                {k === 'all' ? 'All keys' : k === 'main' ? 'SkyWatch.main' : 'SkyWatch.aptitude'}
+                {k === 'all' ? 'All keys' : k === 'main' ? 'SkyWatch.main' : k === 'aptitude' ? 'SkyWatch.aptitude' : 'SkyWatch.socials'}
               </button>
             ))}
           </div>
@@ -255,7 +255,7 @@ export default function OpenRouterUsage() {
               {rows.map(r => (
                 <tr key={r._id} className="border-t border-slate-100">
                   <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDateTime(r.createdAt)}</td>
-                  <td className="px-3 py-2"><span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${r.key === 'aptitude' ? 'bg-amber-50 text-amber-700' : 'bg-brand-50 text-brand-700'}`}>{r.key}</span></td>
+                  <td className="px-3 py-2"><span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${r.key === 'aptitude' ? 'bg-amber-50 text-amber-700' : r.key === 'socials' ? 'bg-emerald-50 text-emerald-700' : 'bg-brand-50 text-brand-700'}`}>{r.key}</span></td>
                   <td className="px-3 py-2 text-slate-700">{r.feature}</td>
                   <td className="px-3 py-2 text-slate-600 truncate max-w-[200px]">
                     {r.briefId && r.briefId.title ? (

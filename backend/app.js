@@ -34,6 +34,7 @@ app.use('/api/admin',  require('./routes/admin'));
 app.use('/api/users',  require('./routes/users'));
 app.use('/api/stripe',        require('./routes/stripe'));
 app.use('/api/aptitude-sync', require('./routes/aptitudeSync'));
+app.use('/api/admin/social', require('./routes/social'));
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 

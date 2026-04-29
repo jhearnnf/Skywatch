@@ -7,6 +7,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
 import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } from '../utils/sound'
 import RankBadge from '../components/RankBadge'
+import SocialsSection from '../components/admin/SocialsSection'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 import SEO from '../components/SEO'
 import { has3DModel } from '../data/aircraftModels'
@@ -20,9 +21,7 @@ const fmtNum = (n) => (n ?? 0).toLocaleString()
 
 const fmtUSD = (n) => {
   const v = typeof n === 'number' ? n : 0
-  if (v >= 100) return `$${v.toFixed(0)}`
-  if (v >= 1)   return `$${v.toFixed(2)}`
-  return `$${v.toFixed(4)}`
+  return `$${v.toFixed(2)}`
 }
 
 function fmtUptime(s) {
@@ -165,9 +164,9 @@ function StatCard({ label, value, sub, color = 'slate' }) {
   }
   return (
     <div className={`rounded-2xl border p-4 ${colors[color] ?? colors.slate}`}>
-      <p className="text-2xl font-extrabold mb-0.5">{value ?? '—'}</p>
+      <p className="text-xl font-extrabold mb-0.5">{value ?? '—'}</p>
       <p className="text-xs font-semibold uppercase tracking-wider opacity-70">{label}</p>
-      {sub && <p className="text-[10px] opacity-50 mt-0.5">{sub}</p>}
+      {sub && <p className="text-[10px] opacity-50 mt-0.5 whitespace-nowrap">{sub}</p>}
     </div>
   )
 }
@@ -269,54 +268,76 @@ function StatsTab({ API, onViewEmailLog }) {
         {!openRouter ? (
           <div className="py-4 text-center text-slate-400 text-xs animate-pulse">Loading OpenRouter usage…</div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <button type="button" onClick={() => openRouterNav('main', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
               <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>SkyWatch.main</>}
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>main</>}
                 value={fmtUSD(openRouter.main?.today)}
                 sub={`${fmtNum(openRouter.main?.todayCalls)} calls today`}
-                color="red"
+                color="emerald"
               />
             </button>
             <button type="button" onClick={() => openRouterNav('main', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
               <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>SkyWatch.main</>}
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>main</>}
                 value={fmtUSD(openRouter.main?.lifetime)}
                 sub={openRouter.main?.lifetimeError || 'all-time spend'}
-                color="amber"
+                color="emerald"
               />
             </button>
             <button type="button" onClick={() => openRouterNav('aptitude', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
               <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>SkyWatch.aptitude</>}
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>aptitude</>}
                 value={fmtUSD(openRouter.aptitude?.today)}
                 sub={`${fmtNum(openRouter.aptitude?.todayCalls)} calls today`}
-                color="red"
+                color="emerald"
               />
             </button>
             <button type="button" onClick={() => openRouterNav('aptitude', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
               <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>SkyWatch.aptitude</>}
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>aptitude</>}
                 value={fmtUSD(openRouter.aptitude?.lifetime)}
                 sub={openRouter.aptitude?.lifetimeError || 'all-time spend'}
-                color="amber"
+                color="emerald"
+              />
+            </button>
+            <button type="button" onClick={() => openRouterNav('socials', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
+              <StatCard
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>socials</>}
+                value={fmtUSD(openRouter.socials?.today)}
+                sub={`${fmtNum(openRouter.socials?.todayCalls)} calls today`}
+                color="emerald"
+              />
+            </button>
+            <button type="button" onClick={() => openRouterNav('socials', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
+              <StatCard
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>socials</>}
+                value={fmtUSD(openRouter.socials?.lifetime)}
+                sub={openRouter.socials?.lifetimeError || 'all-time spend'}
+                color="emerald"
               />
             </button>
           </div>
         )}
       </StatsSection>
 
+      {/* Server / Performance */}
+      <StatsSection title="Server & Performance" defaultOpen>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Uptime Since Deploy"  value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="brand" />
+          <StatCard label="Total Loading Time"  value={fmtSeconds(Math.round((server?.totalLoadingMs ?? 0) / 1000))} color="brand" sub="cumulative user fetch wait" />
+        </div>
+      </StatsSection>
+
       {/* Airstars + Briefs + Tutorials */}
-      <StatsSection title="Economy & Content" defaultOpen>
+      <StatsSection title="Economy & Content">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="Airstars in System" value={fmtNum(games.totalAirstarsEarned)}       color="amber" />
-          <StatCard label="Briefs Read"        value={fmtNum(briefs.totalBrifsRead)}           color="brand" />
+          <StatCard label="Briefs Read"        value={fmtNum(briefs.totalBrifsRead)}           color="slate" />
           <StatCard label="Briefs Opened"      value={fmtNum(briefs.totalBrifsOpened)}         color="slate" />
-          <StatCard label="Time Reading"       value={fmtSeconds(briefs.totalReadSeconds ?? 0)} color="brand" />
+          <StatCard label="Time Reading"       value={fmtSeconds(briefs.totalReadSeconds ?? 0)} color="slate" />
           <StatCard label="Tutorials Viewed"   value={fmtNum(tutorials.viewed)}                color="slate" />
           <StatCard label="Tutorials Skipped"  value={fmtNum(tutorials.skipped)}               color="slate" />
-          <StatCard label="Uptime Since Deploy"  value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="emerald" />
-          <StatCard label="Total Loading Time"  value={fmtSeconds(Math.round((server?.totalLoadingMs ?? 0) / 1000))} color="brand" sub="cumulative user fetch wait" />
         </div>
       </StatsSection>
 
@@ -1627,6 +1648,7 @@ function SettingsTab({ API }) {
         'aptitudeSyncDailyLimitFree',
         'aptitudeSyncDailyLimitSilver',
         'aptitudeSyncDailyLimitGold',
+        'cbatEnabled',
         'cbatTargetAircraftBriefIds',
         'newsFlashcardsEnabled',
       ])}>
@@ -1780,6 +1802,13 @@ function SettingsTab({ API }) {
         </button>
         {gameGroupsOpen.cbat && (
           <>
+            <Toggle
+              label="CBAT Games enabled"
+              hint="Show the Play CBAT button on the Play page"
+              checked={draft.cbatEnabled ?? false}
+              onChange={v => set('cbatEnabled', v)}
+            />
+
             <p className="text-sm font-bold text-slate-700 uppercase tracking-wide pt-2 pb-1">Target</p>
             <div className="py-2.5 border-b border-slate-100">
               <p className="text-sm font-semibold text-slate-700 mb-1">Aircraft in scan panels</p>
@@ -1897,18 +1926,12 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'cbatEnabled', 'mnemonicsClickEnabled'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
           checked={draft.useLiveLeaderboard ?? false}
           onChange={v => set('useLiveLeaderboard', v)}
-        />
-        <Toggle
-          label="CBAT Games"
-          hint="Show the Play CBAT button on the Play page"
-          checked={draft.cbatEnabled ?? false}
-          onChange={v => set('cbatEnabled', v)}
         />
         <Toggle
           label="Mnemonic Memory Aids"
@@ -2885,6 +2908,9 @@ function ContentTab({ API }) {
 
       {/* ── AI Prompts ────────────────────────────────────────────── */}
       <AiPromptsSection API={API} />
+
+      {/* ── Socials ──────────────────────────────────────────────── */}
+      <SocialsSection API={API} />
     </div>
   )
 }
@@ -6575,8 +6601,10 @@ function TrainingDataSection({ draft, setDraft, briefId, API }) {
 
 function RankDataField({ draft, setDraft, briefId, API }) {
   const { apiFetch } = useAuth()
-  const [busy, setBusy] = useState(false)
-  const [err,  setErr]  = useState(null)
+  const [busy,        setBusy]        = useState(false)
+  const [err,         setErr]         = useState(null)
+  const [recompactBusy, setRecompactBusy] = useState(false)
+  const [recompactMsg,  setRecompactMsg]  = useState(null)
 
   const lookup = async () => {
     if (!briefId) return
@@ -6596,6 +6624,27 @@ function RankDataField({ draft, setDraft, briefId, API }) {
       setErr('Lookup failed')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const recompact = async () => {
+    setRecompactBusy(true)
+    setRecompactMsg(null)
+    try {
+      const res = await apiFetch(`${API}/api/admin/intel-leads/recompact-rank-order`, {
+        method: 'POST', credentials: 'include',
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        const { leadsCompacted, briefsUpdated } = data.data ?? {}
+        setRecompactMsg(`Recompacted ${leadsCompacted ?? 0} lead(s), ${briefsUpdated ?? 0} brief(s) updated.`)
+      } else {
+        setRecompactMsg(data.message ?? 'Recompact failed')
+      }
+    } catch {
+      setRecompactMsg('Recompact failed')
+    } finally {
+      setRecompactBusy(false)
     }
   }
 
@@ -6632,6 +6681,18 @@ function RankDataField({ draft, setDraft, briefId, API }) {
         )}
       </div>
       {err && <p className="text-xs text-red-500 mt-1">{err}</p>}
+      <div className="flex items-center gap-2 mt-2">
+        <button
+          type="button"
+          onClick={recompact}
+          disabled={recompactBusy}
+          className="text-xs px-3 py-1.5 rounded-xl border border-slate-300 bg-slate-50 text-slate-600 hover:bg-slate-100 disabled:opacity-40"
+          title="Re-number every Ranks lead 1..N (idempotent self-heal)"
+        >
+          {recompactBusy ? 'Recompacting…' : 'Recompact rank order'}
+        </button>
+        {recompactMsg && <span className="text-xs text-slate-500">{recompactMsg}</span>}
+      </div>
       <MnemonicField mnemonicKey="rankHierarchyOrder" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
       <GenerateAllMnemonicsButton draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
     </div>

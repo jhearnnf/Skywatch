@@ -12,6 +12,10 @@ const intelLeadSchema = new mongoose.Schema({
   isPublished:    { type: Boolean, default: false },
   isHistoric:     { type: Boolean, default: false }, // true = retired/concluded/no current RAF relevance
   priorityNumber: { type: Number, default: null }, // advised learning order within category
+  // RAF seniority order — Ranks category only. 1 = most senior. Compacted to a
+  // contiguous 1..N sequence by backend/utils/rankOrdering.js whenever a Ranks
+  // lead is added, removed, or reslotted.
+  rankOrder:      { type: Number, default: null },
   // Date of the news event this lead represents (News category only). Mirrors
   // IntelligenceBrief.eventDate so the AI can reference the event date when
   // generating full content from the lead later.

@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 // One entry per OpenRouter API call — powers the admin OpenRouter usage page
 // and the "today's spend" tiles on the stats dashboard.
 const openRouterUsageLogSchema = new mongoose.Schema({
-  key:              { type: String, enum: ['main', 'aptitude'], required: true },
+  key:              { type: String, enum: ['main', 'aptitude', 'socials'], required: true },
   feature:          { type: String, required: true },
   briefId:          { type: mongoose.Schema.Types.ObjectId, ref: 'IntelligenceBrief', default: null },
   model:            { type: String, default: '' },
