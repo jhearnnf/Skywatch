@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import {
@@ -20,6 +21,10 @@ import {
 const ROUND_COUNT = 8
 const ROUND_TIME = 60            // seconds per round
 const FEEDBACK_MS = 1500
+
+const IS_TOUCH = typeof window !== 'undefined'
+  && typeof window.matchMedia === 'function'
+  && window.matchMedia('(hover: none) and (pointer: coarse)').matches
 
 // ── Map ───────────────────────────────────────────────────────────────────────
 function JourneyMap({ round }) {
@@ -377,7 +382,9 @@ export default function CbatSpeedDistanceTime() {
     setRoundElapsed(0)
     roundStartRef.current = Date.now()
     setPhase('playing')
-    setTimeout(() => { inputRef.current?.focus() }, 50)
+    if (!IS_TOUCH) {
+      setTimeout(() => { inputRef.current?.focus() }, 50)
+    }
   }, [])
 
   // Round timer
@@ -436,12 +443,13 @@ export default function CbatSpeedDistanceTime() {
   }, [phase, round, answerInput, startRound, endGame])
 
   const startGame = useCallback(() => {
+    recordCbatStart('sdt', apiFetch, API)
     setAnswers([])
     answersRef.current = []
     setTotalElapsed(0)
     setScoreSaved(false)
     startRound(0)
-  }, [startRound])
+  }, [startRound, apiFetch, API])
 
   const timeLeft = Math.max(0, ROUND_TIME - roundElapsed)
   const timePct = (timeLeft / ROUND_TIME) * 100
@@ -649,7 +657,7 @@ export default function CbatSpeedDistanceTime() {
                               ref={inputRef}
                               type="text"
                               inputMode="numeric"
-                              autoFocus
+                              autoFocus={!IS_TOUCH}
                               value={answerInput}
                               onChange={(e) => setAnswerInput(e.target.value)}
                               onKeyDown={(e) => {
