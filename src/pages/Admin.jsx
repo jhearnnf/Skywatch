@@ -2131,14 +2131,13 @@ function UsersTab({ API }) {
             </div>
 
             {/* Stats row */}
-            <div className="grid grid-cols-4 sm:grid-cols-8 divide-x divide-slate-100 border-b border-slate-100">
+            <div className="grid grid-cols-4 sm:grid-cols-7 divide-x divide-slate-100 border-b border-slate-100">
               {[
                 ['Coins', (u.totalAirstars ?? 0).toLocaleString()],
                 ['Streak', u.loginStreak ?? 0],
-                ['Logins', u.logins?.length ?? 0],
                 ['Briefs Read', u.profileStats?.brifsRead ?? 0],
                 ['Games', (u.profileStats?.quizzesPlayed ?? 0) + (u.profileStats?.booPlayed ?? 0) + (u.profileStats?.wtaPlayed ?? 0) + (u.profileStats?.wherePlayed ?? 0) + (u.profileStats?.flashcardsPlayed ?? 0)],
-                ['CBAT', u.profileStats?.cbatPlayed ?? 0],
+                ['CBAT Games Finished', `${u.profileStats?.cbatPlayed ?? 0}/${Math.max(u.profileStats?.cbatPlayed ?? 0, u.profileStats?.cbatStarted ?? 0)}`],
                 ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1)],
                 ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })],
               ].map(([l, v]) => (

@@ -13,8 +13,9 @@ const db       = require('../helpers/setupDb');
 const {
   createUser, createAdminUser, createSettings, authCookie,
 } = require('../helpers/factories');
-const IntelligenceBriefRead = require('../../models/IntelligenceBriefRead');
-const { CBAT_GAMES }        = require('../../constants/cbatGames');
+const IntelligenceBriefRead  = require('../../models/IntelligenceBriefRead');
+const { CBAT_GAMES }         = require('../../constants/cbatGames');
+const GameSessionCbatStart   = require('../../models/GameSessionCbatStart');
 const mongoose = require('mongoose');
 
 // Minimal payload satisfying the union of required fields across every CBAT
@@ -160,6 +161,72 @@ describe('GET /api/admin/users — profileStats.cbatPlayed', () => {
 
     expect(aRow.profileStats.cbatPlayed).toBe(2);
     expect(bRow.profileStats.cbatPlayed).toBe(1);
+  });
+});
+
+// ── profileStats.cbatStarted ─────────────────────────────────────────────────
+
+describe('GET /api/admin/users — profileStats.cbatStarted', () => {
+  it('returns 0 when the user has no CBAT start docs', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    expect(u.profileStats.cbatStarted).toBe(0);
+  });
+
+  it('sums starts across multiple gameKeys for a user', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+    const gameKeys = Object.keys(CBAT_GAMES);
+
+    await Promise.all(gameKeys.map(k => GameSessionCbatStart.create({ userId: user._id, gameKey: k })));
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    expect(u.profileStats.cbatStarted).toBe(gameKeys.length);
+  });
+
+  it('cbatPlayed and cbatStarted are independent — starts without finishes', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    await GameSessionCbatStart.create({ userId: user._id, gameKey: 'target' });
+    await GameSessionCbatStart.create({ userId: user._id, gameKey: 'angles' });
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    expect(u.profileStats.cbatStarted).toBe(2);
+    expect(u.profileStats.cbatPlayed).toBe(0);
+  });
+
+  it('isolates cbatStarted counts per user', async () => {
+    const admin = await createAdminUser();
+    const userA = await createUser();
+    const userB = await createUser();
+
+    await GameSessionCbatStart.create({ userId: userA._id, gameKey: 'target' });
+    await GameSessionCbatStart.create({ userId: userA._id, gameKey: 'target' });
+    await GameSessionCbatStart.create({ userId: userB._id, gameKey: 'symbols' });
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const aRow = res.body.data.users.find(x => x._id.toString() === userA._id.toString());
+    const bRow = res.body.data.users.find(x => x._id.toString() === userB._id.toString());
+    expect(aRow.profileStats.cbatStarted).toBe(2);
+    expect(bRow.profileStats.cbatStarted).toBe(1);
   });
 });
 

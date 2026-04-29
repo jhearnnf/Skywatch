@@ -17,6 +17,7 @@ const GameFlashcardRecall                 = require('../models/GameFlashcardReca
 const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashcardRecallResult');
 const GameSessionWhereAircraftResult      = require('../models/GameSessionWhereAircraftResult');
 const { CBAT_GAMES }                      = require('../constants/cbatGames');
+const GameSessionCbatStart                = require('../models/GameSessionCbatStart');
 const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const { effectiveTier } = require('../utils/subscription');
@@ -824,7 +825,7 @@ async function enrichUsersWithStats(users) {
   const userIds = users.map(u => u._id);
 
   const cbatConfigs = Object.values(CBAT_GAMES);
-  const [briefCounts, quizCounts, booCounts, wtaCounts, whereCounts, flashCounts, ...cbatCountsPerGame] = await Promise.all([
+  const [briefCounts, quizCounts, booCounts, wtaCounts, whereCounts, flashCounts, cbatStartCounts, ...cbatCountsPerGame] = await Promise.all([
     IntelligenceBriefRead.aggregate([
       { $match: { userId: { $in: userIds }, completed: true } },
       { $group: { _id: '$userId', count: { $sum: 1 } } },
@@ -857,18 +858,23 @@ async function enrichUsersWithStats(users) {
       { $match: { userId: { $in: userIds } } },
       { $group: { _id: '$userId', total: { $sum: 1 } } },
     ]),
+    GameSessionCbatStart.aggregate([
+      { $match: { userId: { $in: userIds } } },
+      { $group: { _id: '$userId', count: { $sum: 1 } } },
+    ]),
     ...cbatConfigs.map(cfg => cfg.Model.aggregate([
       { $match: { userId: { $in: userIds } } },
       { $group: { _id: '$userId', count: { $sum: 1 } } },
     ])),
   ]);
 
-  const briefMap = Object.fromEntries(briefCounts.map(b  => [b._id.toString(), b.count]));
-  const quizMap  = Object.fromEntries(quizCounts.map(q   => [q._id.toString(), q]));
-  const booMap   = Object.fromEntries(booCounts.map(b    => [b._id.toString(), b]));
-  const wtaMap   = Object.fromEntries(wtaCounts.map(w    => [w._id.toString(), w.total]));
-  const whereMap = Object.fromEntries(whereCounts.map(w  => [w._id.toString(), w.total]));
-  const flashMap = Object.fromEntries(flashCounts.map(f  => [f._id.toString(), f.total]));
+  const briefMap       = Object.fromEntries(briefCounts.map(b  => [b._id.toString(), b.count]));
+  const quizMap        = Object.fromEntries(quizCounts.map(q   => [q._id.toString(), q]));
+  const booMap         = Object.fromEntries(booCounts.map(b    => [b._id.toString(), b]));
+  const wtaMap         = Object.fromEntries(wtaCounts.map(w    => [w._id.toString(), w.total]));
+  const whereMap       = Object.fromEntries(whereCounts.map(w  => [w._id.toString(), w.total]));
+  const flashMap       = Object.fromEntries(flashCounts.map(f  => [f._id.toString(), f.total]));
+  const cbatStartedMap = Object.fromEntries(cbatStartCounts.map(s => [s._id.toString(), s.count]));
 
   const cbatMap = {};
   cbatCountsPerGame.forEach(gameCounts => {
@@ -895,6 +901,7 @@ async function enrichUsersWithStats(users) {
         wherePlayed:      whereMap[uid]          ?? 0,
         flashcardsPlayed: flashMap[uid]          ?? 0,
         cbatPlayed:       cbatMap[uid]           ?? 0,
+        cbatStarted:      cbatStartedMap[uid]    ?? 0,
       },
     };
   });
@@ -2732,7 +2739,7 @@ function buildMnemonicStats(category, gameData) {
   const stats = [];
   if (category === 'Aircrafts') {
     if (gd.topSpeedKph != null)
-      stats.push({ key: 'topSpeedKph', label: 'Top Speed', value: `${gd.topSpeedKph.toLocaleString()} km/h · ${Math.round(gd.topSpeedKph * 0.621).toLocaleString()} mph` });
+      stats.push({ key: 'topSpeedKph', label: 'Top Speed', value: `${gd.topSpeedKph.toLocaleString()} km/h · ${Math.round(gd.topSpeedKph * 0.621).toLocaleString()} mph · ${Math.round(gd.topSpeedKph * 0.540).toLocaleString()} kt` });
     if (gd.yearIntroduced != null)
       stats.push({ key: 'yearIntroduced', label: 'Introduced', value: String(gd.yearIntroduced) });
     if (gd.yearRetired != null)
