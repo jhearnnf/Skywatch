@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 
@@ -263,6 +264,7 @@ export default function CbatSymbols() {
   }, [])
 
   const startGame = useCallback(() => {
+    recordCbatStart('symbols', apiFetch, API)
     setRounds(buildRounds())
     setCurrentIdx(0)
     setAnswers([])
@@ -272,7 +274,7 @@ export default function CbatSymbols() {
     setElapsed(0)
     roundStartRef.current = 0
     setPhase('playing')
-  }, [])
+  }, [apiFetch, API])
 
   // Reset round-start timestamp when a new round begins
   useEffect(() => {

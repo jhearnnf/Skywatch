@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 
@@ -257,10 +258,11 @@ export default function CbatCodeDuplicates() {
   }, [])
 
   const startGame = useCallback(() => {
+    recordCbatStart('code-duplicates', apiFetch, API)
     setRoundResults([])
     setElapsed(0)
     startRound(1)
-  }, [startRound])
+  }, [startRound, apiFetch, API])
 
   const handleSubmit = () => {
     if (phase !== 'answering' || userAnswer === '') return

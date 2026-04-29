@@ -91,13 +91,14 @@ describe('BriefReader — BOO stats: Aircrafts', () => {
   beforeEach(() => { sessionStorage.clear(); localStorage.clear() })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('shows Top Speed (km/h and mph) on section 0', async () => {
+  it('shows Top Speed (km/h, mph and kt) on section 0', async () => {
     // stats[0] = topSpeed — visible at section 0 (default start)
     setupFetch(makeBrief('Aircrafts', { topSpeedKph: 2200, yearIntroduced: 2003, yearRetired: null }))
     render(<BriefReader />)
     await waitFor(() => screen.getByText('Test Brief'))
     expect(screen.getByText(/2,200 km\/h/)).toBeDefined()
     expect(screen.getByText(/1,366 mph/)).toBeDefined()
+    expect(screen.getByText(/1,188 kt/)).toBeDefined()
   })
 
   it('shows Introduced year on section 1', async () => {

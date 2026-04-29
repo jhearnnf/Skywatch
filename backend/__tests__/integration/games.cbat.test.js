@@ -11,7 +11,7 @@ const GameSessionCbatCodeDuplicatesResult = require('../../models/GameSessionCba
 const GameSessionCbatSymbolsResult        = require('../../models/GameSessionCbatSymbolsResult');
 const GameSessionCbatTargetResult         = require('../../models/GameSessionCbatTargetResult');
 const GameSessionCbatInstrumentsResult    = require('../../models/GameSessionCbatInstrumentsResult');
-const GameSessionCbatSdtResult            = require('../../models/GameSessionCbatSdtResult');
+const GameSessionCbatAntResult            = require('../../models/GameSessionCbatAntResult');
 
 let user, cookie, user2, cookie2;
 
@@ -606,11 +606,11 @@ describe('CBAT Instruments', () => {
   });
 });
 
-// ── Speed Distance Time ──────────────────────────────────────────────────────
-describe('CBAT Speed Distance Time', () => {
-  const RESULT_URL = '/api/games/cbat/sdt/result';
-  const LEADERBOARD_URL = '/api/games/cbat/sdt/leaderboard';
-  const PB_URL = '/api/games/cbat/sdt/personal-best';
+// ── Airborne Numerical Test ─────────────────────────────────────────────────
+describe('CBAT Airborne Numerical Test', () => {
+  const RESULT_URL = '/api/games/cbat/ant/result';
+  const LEADERBOARD_URL = '/api/games/cbat/ant/leaderboard';
+  const PB_URL = '/api/games/cbat/ant/personal-best';
 
   describe('POST /result', () => {
     it('saves a result and returns 201', async () => {
@@ -635,7 +635,7 @@ describe('CBAT Speed Distance Time', () => {
       expect(res.body.data.missCount).toBe(1);
       expect(res.body.data.grade).toBe('Good');
 
-      const count = await GameSessionCbatSdtResult.countDocuments();
+      const count = await GameSessionCbatAntResult.countDocuments();
       expect(count).toBe(1);
     });
 

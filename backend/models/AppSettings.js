@@ -157,6 +157,17 @@ const appSettingsSchema = new mongoose.Schema({
   // until an admin explicitly enables them via the Game Options → CBAT → Target section.
   cbatTargetAircraftBriefIds: { type: [String], default: [] },
 
+  // Case Files feature
+  caseFilesEnabled:           { type: Boolean,  default: false },
+  // Which subscription tiers can access Case Files (admin always unlimited regardless)
+  caseFilesTiers:             { type: [String], default: ['admin'] },
+  // Daily session limits per tier (admin = unlimited, enforced in route).
+  // One use = one POST /sessions call (a fresh playthrough). Limits AI-call cost
+  // from the interrogation stage; replays count as separate uses.
+  caseFilesDailyLimitFree:    { type: Number,   default: 0, min: 0 },
+  caseFilesDailyLimitSilver:  { type: Number,   default: 1, min: 0 },
+  caseFilesDailyLimitGold:    { type: Number,   default: 5, min: 0 },
+
   // Pathway unlock requirements — each entry gates a category behind level + rank.
   // levelRequired: Agent Level (1–10). rankRequired: RAF Rank number (1–19).
   // Subscription tier is derived from freeCategories/silverCategories — not stored here.

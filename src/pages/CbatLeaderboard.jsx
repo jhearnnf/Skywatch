@@ -56,13 +56,13 @@ const GAME_CONFIG = {
     backPath: '/cbat/instruments',
     hideTime: true,
   },
-  'sdt': {
-    title: 'Speed Distance Time',
+  'ant': {
+    title: 'ANT',
     emoji: '\u{1F4E1}',
     scoreLabel: 'Points',
     lowerIsBetter: false,
     formatScore: (s) => `${s}`,
-    backPath: '/cbat/sdt',
+    backPath: '/cbat/ant',
   },
 }
 

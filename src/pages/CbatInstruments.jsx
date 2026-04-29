@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import InstrumentPanel from '../components/cbat/InstrumentPanel'
@@ -312,13 +313,14 @@ export default function CbatInstruments() {
   }, [])
 
   const startGame = useCallback(() => {
+    recordCbatStart('instruments', apiFetch, API)
     setAnswers([])
     answersRef.current = []
     setElapsed(0)
     setScoreSaved(false)
     setRoundIndex(0)
     startCalibration()
-  }, [startCalibration])
+  }, [startCalibration, apiFetch, API])
 
   const handlePick = useCallback((idx) => {
     if (phase !== 'playing' || !round) return

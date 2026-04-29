@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
@@ -369,6 +370,7 @@ export default function CbatPlaneTurn() {
 
   // Handlers
   const handleSelect = (a) => {
+    recordCbatStart('plane-turn', apiFetch, API)
     const modelUrl = getModelUrl(a.briefId, a.title)
     setSelected({ ...a, modelUrl })
     setUse3D(true)
@@ -414,6 +416,7 @@ export default function CbatPlaneTurn() {
   }
 
   const handlePlayAgain = () => {
+    recordCbatStart('plane-turn', apiFetch, API)
     setTotalRotations(0)
     setTotalTime(0)
     setScoreSaved(false)

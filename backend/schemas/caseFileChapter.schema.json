@@ -1,0 +1,540 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://skywatch.app/schemas/caseFileChapter.schema.json",
+  "title": "CaseFileChapter",
+  "description": "Shape of a GameCaseFileChapter seed/AI-output document.",
+  "type": "object",
+  "required": [
+    "caseSlug",
+    "chapterSlug",
+    "chapterNumber",
+    "title",
+    "dateRangeLabel",
+    "summary",
+    "stages"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "caseSlug":        { "type": "string", "minLength": 1 },
+    "chapterSlug":     { "type": "string", "minLength": 1 },
+    "chapterNumber":   { "type": "integer", "minimum": 1 },
+    "title":           { "type": "string", "minLength": 1 },
+    "dateRangeLabel":  { "type": "string", "minLength": 1 },
+    "summary":         { "type": "string", "minLength": 1 },
+    "estimatedMinutes":{ "type": "integer", "minimum": 1 },
+    "status":          { "type": "string", "enum": ["draft", "published"] },
+    "sourcesJsonPath": { "type": "string" },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/stage" }
+    }
+  },
+  "$defs": {
+    "stage": {
+      "type": "object",
+      "required": ["id", "type", "payload"],
+      "properties": {
+        "id":      { "type": "string", "minLength": 1 },
+        "type":    {
+          "type": "string",
+          "enum": [
+            "cold_open",
+            "evidence_wall",
+            "map_predictive",
+            "actor_interrogations",
+            "decision_point",
+            "phase_reveal",
+            "map_live",
+            "debrief"
+          ]
+        },
+        "payload": { "type": "object" },
+        "scoring": { "type": "object" }
+      },
+      "oneOf": [
+        { "$ref": "#/$defs/stageColdOpen" },
+        { "$ref": "#/$defs/stageEvidenceWall" },
+        { "$ref": "#/$defs/stageMapPredictive" },
+        { "$ref": "#/$defs/stageActorInterrogations" },
+        { "$ref": "#/$defs/stageDecisionPoint" },
+        { "$ref": "#/$defs/stagePhaseReveal" },
+        { "$ref": "#/$defs/stageMapLive" },
+        { "$ref": "#/$defs/stageDebrief" }
+      ]
+    },
+
+    "evidenceItem": {
+      "type": "object",
+      "required": ["id", "title", "type", "description"],
+      "properties": {
+        "id":          { "type": "string" },
+        "title":       { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["satellite", "transcript", "photo", "document", "osint", "map_overlay"]
+        },
+        "description":  { "type": "string" },
+        "imageUrl":     { "type": "string" },
+        "imageCredit":  { "type": "string" },
+        "sourceUrl":    { "type": "string" },
+        "category":     {
+          "type": "string",
+          "description": "Optional plain-language tag shown on the card so players can spot themes (e.g. 'Military build-up', 'Diplomatic signal', 'Logistics', 'Intelligence warning')."
+        },
+        "whyItMatters": {
+          "type": "string",
+          "description": "Optional one-line plain-English note explaining why this evidence is significant — surfaced under the description for knowledge-light readers."
+        }
+      }
+    },
+
+    "mapBounds": {
+      "type": "object",
+      "required": ["south", "west", "north", "east"],
+      "properties": {
+        "south": { "type": "number" },
+        "west":  { "type": "number" },
+        "north": { "type": "number" },
+        "east":  { "type": "number" }
+      }
+    },
+
+    "hotspot": {
+      "type": "object",
+      "required": ["id", "label", "lat", "lng", "kind"],
+      "properties": {
+        "id":      { "type": "string" },
+        "label":   { "type": "string" },
+        "lat":     { "type": "number" },
+        "lng":     { "type": "number" },
+        "kind": {
+          "type": "string",
+          "enum": ["staging", "capital", "logistics", "naval", "border"]
+        },
+        "tooltip": {
+          "type": "string",
+          "description": "Optional plain-English one-liner describing why this place matters (e.g. distance from capital, role in supply chain). Shown on hover/focus."
+        }
+      }
+    },
+
+    "stageColdOpen": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "cold_open" },
+        "payload": {
+          "type": "object",
+          "required": ["dateLabel", "directorBriefing", "startingItems"],
+          "properties": {
+            "dateLabel":        { "type": "string" },
+            "directorBriefing": { "type": "string" },
+            "backgroundPrimer": {
+              "type": "array",
+              "description": "Optional plain-English context bullets shown before the briefing — gives knowledge-light players just enough to follow what's being asked.",
+              "items": {
+                "type": "object",
+                "required": ["label", "text"],
+                "properties": {
+                  "label": { "type": "string" },
+                  "text":  { "type": "string" }
+                }
+              }
+            },
+            "startingItems": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "title"],
+                "properties": {
+                  "id":            { "type": "string" },
+                  "title":         { "type": "string" },
+                  "thumbnailUrl":  { "type": "string" },
+                  "imageCredit":   { "type": "string" },
+                  "oneLineHint":   { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "scoring": {
+          "type": "object"
+        }
+      },
+      "required": ["type", "payload"]
+    },
+
+    "stageEvidenceWall": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "evidence_wall" },
+        "payload": {
+          "type": "object",
+          "required": ["items"],
+          "properties": {
+            "phaseLabel": { "type": "string" },
+            "items": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/evidenceItem" }
+            }
+          }
+        },
+        "scoring": {
+          "type": "object",
+          "properties": {
+            "signalWeights": {
+              "type": "object",
+              "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+            },
+            "validConnectionPairs": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            },
+            "maxScore": { "type": "number" }
+          }
+        }
+      },
+      "required": ["type", "payload"]
+    },
+
+    "stageMapPredictive": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "map_predictive" },
+        "payload": {
+          "type": "object",
+          "required": ["mapBounds", "hotspots", "tokenCount", "prompt"],
+          "properties": {
+            "mapBounds":   { "$ref": "#/$defs/mapBounds" },
+            "hotspots": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/hotspot" }
+            },
+            "tokenCount": { "type": "integer", "minimum": 1 },
+            "prompt":     { "type": "string" }
+          }
+        },
+        "scoring": {
+          "type": "object",
+          "properties": {
+            "correctAxes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["fromHotspotId", "toHotspotId"],
+                "properties": {
+                  "fromHotspotId": { "type": "string" },
+                  "toHotspotId":   { "type": "string" },
+                  "isMain":        { "type": "boolean" }
+                }
+              }
+            },
+            "maxScore": { "type": "number" }
+          }
+        }
+      },
+      "required": ["type", "payload"]
+    },
+
+    "stageActorInterrogations": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "actor_interrogations" },
+        "payload": {
+          "type": "object",
+          "required": ["actors"],
+          "properties": {
+            "actors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "name", "role", "faction"],
+                "properties": {
+                  "id":               { "type": "string" },
+                  "name":             { "type": "string" },
+                  "role":             { "type": "string" },
+                  "faction":          { "type": "string" },
+                  "portraitUrl":      { "type": "string" },
+                  "portraitCredit":   { "type": "string" },
+                  "systemPromptKey":  { "type": "string" },
+                  "knowsAbout": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Optional plain-English tags (max ~3) describing what this person is well placed to comment on. Shown under the portrait so players know who to ask."
+                  },
+                  "suggestedQuestions": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Optional sample questions surfaced in the interrogation panel as a starting point. Players can edit or ignore them."
+                  }
+                }
+              }
+            },
+            "relationships": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["fromActorId", "toActorId", "label"],
+                "properties": {
+                  "fromActorId": { "type": "string" },
+                  "toActorId":   { "type": "string" },
+                  "label":       { "type": "string" }
+                }
+              }
+            },
+            "maxQuestionsPerActor": { "type": "integer", "minimum": 1, "default": 3 },
+            "contextDateLabel":     { "type": "string" }
+          }
+        },
+        "scoring": {
+          "type": "object",
+          "properties": {
+            "baseEngagementScore": { "type": "number" },
+            "signalKeywords":      { "type": "array", "items": { "type": "string" } },
+            "maxScore":            { "type": "number" }
+          }
+        }
+      },
+      "required": ["type", "payload"]
+    },
+
+    "stageDecisionPoint": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "decision_point" },
+        "payload": {
+          "type": "object",
+          "required": ["prompt", "options"],
+          "properties": {
+            "prompt":           { "type": "string" },
+            "contextDateLabel": { "type": "string" },
+            "options": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["id", "text"],
+                "properties": {
+                  "id":   { "type": "string" },
+                  "text": { "type": "string" },
+                  "hint": { "type": "string" }
+                }
+              }
+            },
+            "signalsRecap": {
+              "type": "array",
+              "description": "Optional 'what you've seen so far' bullets pinned above the options — a brief reminder of the key signals from earlier stages.",
+              "items": {
+                "type": "object",
+                "required": ["takeaway"],
+                "properties": {
+                  "stageRef":  { "type": "string", "description": "Optional human label e.g. 'Evidence wall', 'Map prediction'." },
+                  "takeaway":  { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "scoring": {
+          "type": "object",
+          "properties": {
+            "optionRealityScores": {
+              "type": "object",
+              "additionalProperties": { "type": "number", "minimum": 0, "maximum": 100 }
+            },
+            "optionSupportingEvidenceIds": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "maxScore": { "type": "number" }
+          }
+        }
+      },
+      "required": ["type", "payload"]
+    },
+
+    "stagePhaseReveal": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "phase_reveal" },
+        "payload": {
+          "type": "object",
+          "required": ["newPhaseLabel"],
+          "properties": {
+            "newPhaseLabel": { "type": "string" },
+            "newItems": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/evidenceItem" }
+            },
+            "connectionResolutions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["pairItemIds", "verdict", "explanation"],
+                "properties": {
+                  "pairItemIds": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "verdict":     { "type": "string", "enum": ["confirmed", "refuted"] },
+                  "explanation": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "scoring": {
+          "type": "object",
+          "properties": {
+            "maxScore": { "type": "number" }
+          }
+        }
+      },
+      "required": ["type", "payload"]
+    },
+
+    "stageMapLive": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "map_live" },
+        "payload": {
+          "type": "object",
+          "required": ["mapBounds", "hotspots", "phases"],
+          "properties": {
+            "mapBounds": { "$ref": "#/$defs/mapBounds" },
+            "hotspots": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/hotspot" }
+            },
+            "phases": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "timeLabel", "units"],
+                "properties": {
+                  "id":        { "type": "string" },
+                  "timeLabel": { "type": "string" },
+                  "units": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["side", "kind", "fromHotspotId", "toHotspotId"],
+                      "properties": {
+                        "side": { "type": "string", "enum": ["ru", "ua"] },
+                        "kind": { "type": "string" },
+                        "fromHotspotId": { "type": "string" },
+                        "toHotspotId":   { "type": "string" },
+                        "animationMs":   { "type": "integer", "minimum": 0 }
+                      }
+                    }
+                  },
+                  "subDecision": {
+                    "oneOf": [
+                      { "type": "null" },
+                      {
+                        "type": "object",
+                        "required": ["id", "prompt", "options", "selectionMode"],
+                        "properties": {
+                          "id":     { "type": "string" },
+                          "prompt": { "type": "string" },
+                          "options": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": ["id", "text"],
+                              "properties": {
+                                "id":   { "type": "string" },
+                                "text": { "type": "string" }
+                              }
+                            }
+                          },
+                          "selectionMode": {
+                            "type": "string",
+                            "enum": ["single", "multi"]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "scoring": {
+          "type": "object",
+          "properties": {
+            "subDecisionAnswers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["correctOptionIds", "maxScore"],
+                "properties": {
+                  "correctOptionIds": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "maxScore": { "type": "number" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "required": ["type", "payload"]
+    },
+
+    "stageDebrief": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "debrief" },
+        "payload": {
+          "type": "object",
+          "required": ["annotatedReplayBeats"],
+          "properties": {
+            "annotatedReplayBeats": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["refStageIndex", "headline", "body", "takeaway"],
+                "properties": {
+                  "refStageIndex": { "type": "integer", "minimum": 0 },
+                  "headline":      { "type": "string" },
+                  "body":          { "type": "string" },
+                  "takeaway":      { "type": "string" }
+                }
+              }
+            },
+            "teaserNextChapter": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "required": ["title", "blurb"],
+                  "properties": {
+                    "title": { "type": "string" },
+                    "blurb": { "type": "string" }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "scoring": {
+          "type": "object"
+        }
+      },
+      "required": ["type", "payload"]
+    }
+  }
+}

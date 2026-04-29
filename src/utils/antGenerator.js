@@ -1,11 +1,12 @@
-// ── CBAT Speed-Distance-Time round generator ─────────────────────────────────
+// ── CBAT Airborne Numerical Test (ANT) round generator ───────────────────────
 // Pure helpers: generate randomised journey rounds, grade user answers.
 // Kept side-effect free so it can be tested in isolation.
+// Game content covers speed, distance and time calculations.
 
-export const SDT_NODES = ['Victor', 'Xray', 'Yankee', 'Zulu', 'Whiskey', 'Tango', 'Romeo', 'Papa']
+export const ANT_NODES = ['Victor', 'Xray', 'Yankee', 'Zulu', 'Whiskey', 'Tango', 'Romeo', 'Papa']
 
 // Undirected edges — every node has at least two neighbours so start→via→dest works.
-export const SDT_EDGES = [
+export const ANT_EDGES = [
   ['Victor', 'Xray'],
   ['Victor', 'Yankee'],
   ['Victor', 'Whiskey'],
@@ -23,8 +24,8 @@ export const SDT_EDGES = [
 
 // Fixed screen coordinates for the map (viewBox -50 0 580 420).
 // Positions are spaced to leave a clear gap between every distance pill and every
-// place-name label, at the sizes used in CbatSpeedDistanceTime.jsx.
-export const SDT_NODE_POS = {
+// place-name label, at the sizes used in CbatAnt.jsx.
+export const ANT_NODE_POS = {
   Tango:   { x: 84,  y: 60 },
   Victor:  { x: 252, y: 60 },
   Romeo:   { x: 420, y: 60 },
@@ -39,7 +40,7 @@ export const SDT_NODE_POS = {
 //   top row (Tango/Victor/Romeo): label above the circle
 //   middle row sides (Xray/Yankee/Whiskey/Zulu): label beside the circle (outward)
 //   centre bottom (Papa):        label below the circle
-export const SDT_LABEL_OFFSETS = {
+export const ANT_LABEL_OFFSETS = {
   Tango:   { dx: 0,   dy: -36, anchor: 'middle' },
   Victor:  { dx: 0,   dy: -36, anchor: 'middle' },
   Romeo:   { dx: 0,   dy: -36, anchor: 'middle' },
@@ -50,9 +51,9 @@ export const SDT_LABEL_OFFSETS = {
   Papa:    { dx: 0,   dy: 46,  anchor: 'middle' },
 }
 
-const adj = Object.fromEntries(SDT_NODES.map(n => [n, []]))
-SDT_EDGES.forEach(([a, b]) => { adj[a].push(b); adj[b].push(a) })
-export const SDT_ADJ = adj
+const adj = Object.fromEntries(ANT_NODES.map(n => [n, []]))
+ANT_EDGES.forEach(([a, b]) => { adj[a].push(b); adj[b].push(a) })
+export const ANT_ADJ = adj
 
 // Weight (kg) → miles-per-minute & gallons-per-hour
 export const WEIGHT_TABLE = [
@@ -110,9 +111,9 @@ export function parseHHMM(str) {
 
 // ── round builder ─────────────────────────────────────────────────────────────
 export function buildRound(forceType = null) {
-  const start = pick(SDT_NODES)
-  const via = pick(SDT_ADJ[start])
-  const destOptions = SDT_ADJ[via].filter(n => n !== start)
+  const start = pick(ANT_NODES)
+  const via = pick(ANT_ADJ[start])
+  const destOptions = ANT_ADJ[via].filter(n => n !== start)
   const destination = pick(destOptions)
 
   const seg1 = randInt(30, 120)

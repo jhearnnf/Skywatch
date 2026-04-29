@@ -109,12 +109,11 @@ describe('Admin — Stats tab: collapsible sections', () => {
   beforeEach(() => { global.fetch = setupFetch() })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('renders Users, OpenRouter, and Economy sections open by default', async () => {
+  it('renders Users and OpenRouter sections open by default', async () => {
     render(<Admin />)
 
     await waitFor(() => expect(screen.getByText('Total Users')).toBeInTheDocument())
-    expect(screen.getByText('Airstars in System')).toBeInTheDocument()             // Economy row
-    expect(screen.getAllByText(/SkyWatch\.main/).length).toBeGreaterThan(0)        // OpenRouter row
+    await waitFor(() => expect(screen.getByText('$12.34')).toBeInTheDocument())     // OpenRouter lifetime main
   })
 
   it('renders Quiz/BOO/WTA/Flashcard/Aptitude sections closed by default', async () => {

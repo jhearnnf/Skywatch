@@ -92,6 +92,46 @@ export const TUTORIAL_STEPS = {
     { emoji: '🔓', title: 'Unlock More Paths',
       body: 'Level up to unlock new learning pathways covering Aircrafts, Ranks, Squadrons, and more. Some pathways also require a Silver or Gold subscription.' },
   ],
+  caseFile_coldOpen: [
+    { emoji: '📂', title: 'Scene Briefing',
+      body: 'Read the situation. Tap Continue when you\'re ready to proceed to the first stage.' },
+  ],
+  caseFile_evidenceWall: [
+    { emoji: '🔍', title: 'Inspect the Evidence',
+      body: 'Click any evidence card to examine it. Look for connections between items.' },
+    { emoji: '🧵', title: 'Link & Remove',
+      body: 'Click two cards to draw a link between them. Click an existing string to remove it. Submit when your links are placed.' },
+  ],
+  caseFile_actorInterrogations: [
+    { emoji: '🎙️', title: 'Question Key Actors',
+      body: 'Select a question to put to each actor. You have 3 questions per actor — choose carefully.' },
+    { emoji: '📝', title: 'Answers Carry Forward',
+      body: 'What actors tell you informs the stages ahead. You can\'t revisit questions once submitted.' },
+  ],
+  caseFile_decisionPoint: [
+    { emoji: '⚖️', title: 'Make Your Call',
+      body: 'Pick the outcome you think will occur, then lock it in. You can\'t change your answer after submitting.' },
+  ],
+  caseFile_mapPredictive: [
+    { emoji: '📍', title: 'Place Your Pins',
+      body: 'Drag pins onto the map to mark where you predict forces will appear or move.' },
+    { emoji: '✅', title: 'Submit Your Forecast',
+      body: 'Confirm your pin placements and submit. Your accuracy is scored against the real outcome.' },
+  ],
+  caseFile_phaseReveal: [
+    { emoji: '📡', title: 'Reality Check',
+      body: 'This is what actually happened. Compare the outcome against your earlier predictions.' },
+  ],
+  caseFile_mapLive: [
+    { emoji: '🗺️', title: 'Contested Zones',
+      body: 'Tap each highlighted zone on the map to see the situation there.' },
+    { emoji: '🎯', title: 'Choose Your Response',
+      body: 'For each zone, select how to respond. Submit all decisions when ready.' },
+  ],
+  caseFile_debrief: [
+    { emoji: '🏁', title: 'Mission Summary',
+      body: 'Your score breakdown and Airstars earned are shown here. Review what you got right and wrong.' },
+  ],
   // pathway_swipe is an inline mini-tutorial — the modal is never triggered for this key.
   // It lives here solely so the admin reset loop clears its localStorage entry.
   pathway_swipe: [

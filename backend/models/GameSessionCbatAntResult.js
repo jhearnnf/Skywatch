@@ -15,4 +15,4 @@ const schema = new mongoose.Schema({
 schema.index({ userId: 1, createdAt: -1 });
 schema.index({ totalScore: -1, totalTime: 1 });
 
-module.exports = mongoose.model('GameSessionCbatSdtResult', schema);
+module.exports = mongoose.model('GameSessionCbatAntResult', schema);

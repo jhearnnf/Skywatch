@@ -22,7 +22,7 @@ const GAME_OFFSET = {
   'symbols':        12,
   'target':         16,
   'instruments':    20,
-  'sdt':             2,
+  'ant':             2,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -31,12 +31,12 @@ const GAME_OFFSET = {
 // seedScore is the best-ranked fake when the pool is empty; the generator
 // walks from there toward the worse end using SCORE_STEPS / TIME_STEPS.
 // scoreSequence (optional) overrides the step generator when a game's real
-// scores can only take specific values (e.g. SDT awards 0/5/10 per round,
+// scores can only take specific values (e.g. ANT awards 0/5/10 per round,
 // so totals are always multiples of 5).
 // seedTime is the fastest fake's totalTime; timeStep scales the between-row
 // deltas. Both reflect what a real completion actually looks like for each
 // game (e.g. code-duplicates is 15 rounds × ~5s display + answer ≈ 100–200s,
-// instruments is capped at a 90-second timer, SDT runs 8×60s rounds ≈ 180–450s).
+// instruments is capped at a 90-second timer, ANT runs 8×60s rounds ≈ 180–450s).
 const FAKE_TUNING = {
   'plane-turn': {
     floor: 42, ceiling: 107, seedTime: 80, timeStep: 3,
@@ -60,10 +60,10 @@ const FAKE_TUNING = {
     // "Needs Work" (5–9) or "Failed" (<5). Grade bands: 15+ / 10+ / 5+.
     scoreSequence: [10, 9, 9, 8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 1],
   },
-  'sdt': {
+  'ant': {
     floor: 5, ceiling: 75, seedTime: 210, timeStep: 9,
     // 20 multiples-of-5 values, monotonically non-increasing, max 75, min 5.
-    // Every SDT total is a multiple of 5 (10 exact / 5 partial / 0 miss × 8 rounds).
+    // Every ANT total is a multiple of 5 (10 exact / 5 partial / 0 miss × 8 rounds).
     scoreSequence: [70, 65, 60, 55, 50, 45, 45, 40, 35, 30, 30, 25, 20, 15, 15, 10, 10, 5, 5, 5],
   },
 };
@@ -78,7 +78,7 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
   let runScore = tuning.seedScore;
   let runTime = tuning.seedTime;
   for (let i = 0; i < count; i++) {
-    // If the game defines an explicit score sequence (e.g. SDT's multiples
+    // If the game defines an explicit score sequence (e.g. ANT's multiples
     // of 5), use it directly. Otherwise walk from seedScore with deltas.
     if (tuning.scoreSequence) {
       runScore = tuning.scoreSequence[i % tuning.scoreSequence.length];

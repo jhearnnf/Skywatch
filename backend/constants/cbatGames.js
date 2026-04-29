@@ -4,7 +4,7 @@ const GameSessionCbatCodeDuplicatesResult = require('../models/GameSessionCbatCo
 const GameSessionCbatSymbolsResult        = require('../models/GameSessionCbatSymbolsResult');
 const GameSessionCbatTargetResult         = require('../models/GameSessionCbatTargetResult');
 const GameSessionCbatInstrumentsResult    = require('../models/GameSessionCbatInstrumentsResult');
-const GameSessionCbatSdtResult            = require('../models/GameSessionCbatSdtResult');
+const GameSessionCbatAntResult            = require('../models/GameSessionCbatAntResult');
 
 // Single source of truth for CBAT games. Adding a new CBAT game = add one entry
 // here and it automatically flows through submission routes, leaderboards,
@@ -52,12 +52,12 @@ const CBAT_GAMES = {
     bestOp: '$max',
     label: 'Instruments',
   },
-  'sdt': {
-    Model: GameSessionCbatSdtResult,
+  'ant': {
+    Model: GameSessionCbatAntResult,
     primaryField: 'totalScore',
     sortDir: -1,
     bestOp: '$max',
-    label: 'Speed Distance Time',
+    label: 'Airborne Numerical Test',
   },
 };
 

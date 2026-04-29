@@ -27,9 +27,10 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
-app.use('/api/auth',   require('./routes/auth'));
-app.use('/api/briefs', require('./routes/briefs'));
-app.use('/api/games',  require('./routes/games'));
+app.use('/api/auth',       require('./routes/auth'));
+app.use('/api/briefs',     require('./routes/briefs'));
+app.use('/api/case-files', require('./routes/caseFiles'));
+app.use('/api/games',      require('./routes/games'));
 app.use('/api/admin',  require('./routes/admin'));
 app.use('/api/users',  require('./routes/users'));
 app.use('/api/stripe',        require('./routes/stripe'));

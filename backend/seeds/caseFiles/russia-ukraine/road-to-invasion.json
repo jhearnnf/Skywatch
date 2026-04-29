@@ -1,0 +1,608 @@
+{
+  "caseSlug": "russia-ukraine",
+  "chapterSlug": "road-to-invasion",
+  "chapterNumber": 1,
+  "title": "Road to Invasion",
+  "dateRangeLabel": "Sept 2021 – Feb 24 2022",
+  "summary": "It's late 2021. Russia has gathered a huge force on three sides of Ukraine and says it's only training. Western intelligence says it's the build-up to an invasion. Read the evidence, decide what Russia is really planning — then watch what actually happens, from the first cruise missiles to the convoy that stalled outside Kyiv.",
+  "estimatedMinutes": 35,
+  "status": "published",
+  "sourcesJsonPath": "seeds/caseFiles/russia-ukraine/road-to-invasion.sources.json",
+  "stages": [
+    {
+      "id": "stage_co_1",
+      "type": "cold_open",
+      "payload": {
+        "dateLabel": "28 September 2021",
+        "directorBriefing": "Russia has moved a lot of soldiers and equipment close to Ukraine. We need to work out whether this is sabre-rattling — or the real thing. Pin the evidence to the wall and look for patterns.",
+        "backgroundPrimer": [
+          {
+            "label": "The setup",
+            "text": "Russia and Ukraine have been on bad terms since 2014, when Russia took Crimea and started a low-level war in eastern Ukraine."
+          },
+          {
+            "label": "What's new",
+            "text": "From summer 2021, satellite photos show Russia moving huge numbers of troops and tanks into bases close to Ukraine's borders."
+          },
+          {
+            "label": "The question",
+            "text": "Is this a bluff to scare NATO into making concessions, or are they actually about to attack?"
+          }
+        ],
+        "startingItems": [
+          {
+            "id": "ev_yelnya_armor",
+            "title": "Hundreds of tanks parked at Yelnya",
+            "thumbnailUrl": null,
+            "imageCredit": "Maxar Technologies, via AP",
+            "oneLineHint": "Far more tanks than a normal exercise — 250km from the border"
+          },
+          {
+            "id": "ev_putin_essay",
+            "title": "Putin: 'Ukraine isn't a real country'",
+            "thumbnailUrl": null,
+            "imageCredit": "kremlin.ru, July 2021",
+            "oneLineHint": "Long article saying Ukraine has no right to exist separately from Russia"
+          },
+          {
+            "id": "ev_field_hospitals",
+            "title": "Field hospitals being built near the border",
+            "thumbnailUrl": null,
+            "imageCredit": "OSINT analysis, Konrad Muzyka",
+            "oneLineHint": "The size and number suggest preparing for real combat injuries"
+          }
+        ]
+      },
+      "scoring": {}
+    },
+    {
+      "id": "stage_ew_1",
+      "type": "evidence_wall",
+      "payload": {
+        "phaseLabel": "Phase 1: Sept – Dec 2021",
+        "items": [
+          {
+            "id": "ev_yelnya_armor",
+            "title": "Hundreds of tanks parked at Yelnya",
+            "type": "satellite",
+            "category": "Military build-up",
+            "description": "Satellite photos from Maxar Technologies show roughly 800 Russian tanks and armoured vehicles parked at the Yelnya training base, around 250km north of the Ukrainian border. That is far more equipment than a normal training exercise needs.",
+            "whyItMatters": "Armies don't park this much kit unless they're getting ready to actually use it.",
+            "imageUrl": null,
+            "imageCredit": "Maxar Technologies, via AP",
+            "sourceUrl": "https://apnews.com/"
+          },
+          {
+            "id": "ev_putin_essay",
+            "title": "Putin: 'Ukraine isn't a real country'",
+            "type": "transcript",
+            "category": "Political signal",
+            "description": "President Putin publishes a 5,000-word article on the Kremlin website arguing that Russians and Ukrainians are 'one people' and that Ukraine has no historical right to exist as a separate country.",
+            "whyItMatters": "Leaders write essays like this to set up the public reasoning for what comes next, not to talk themselves out of it.",
+            "imageUrl": null,
+            "imageCredit": "kremlin.ru, 12 July 2021",
+            "sourceUrl": "http://en.kremlin.ru/events/president/news/66181"
+          },
+          {
+            "id": "ev_pogonovo_buildup",
+            "title": "Second pile of tanks at Pogonovo",
+            "type": "satellite",
+            "category": "Military build-up",
+            "description": "In November 2021, satellite photos show a second large concentration of tanks and vehicles at the Pogonovo training area in Russia's Voronezh region. Combined with Yelnya, that is two big bases stacked with equipment pointed at Ukraine.",
+            "whyItMatters": "Two big build-ups in different places suggests Russia is preparing to attack from more than one direction at once.",
+            "imageUrl": null,
+            "imageCredit": "Maxar Technologies / Reuters",
+            "sourceUrl": "https://www.reuters.com/"
+          },
+          {
+            "id": "ev_field_hospitals",
+            "title": "Field hospitals being built near the border",
+            "type": "osint",
+            "category": "Logistics",
+            "description": "Open-source analysts spot newly built field-hospital sites near the Russian–Ukrainian border. Their size and number suggest they're meant for real combat casualties, not training injuries.",
+            "whyItMatters": "You only build this many medical facilities when you expect a lot of wounded — i.e. real fighting.",
+            "imageUrl": null,
+            "imageCredit": "Konrad Muzyka, Rochan Consulting",
+            "sourceUrl": "https://www.rochan-consulting.com/"
+          },
+          {
+            "id": "ev_security_demands",
+            "title": "Russia's list of demands to NATO",
+            "type": "document",
+            "category": "Diplomatic signal",
+            "description": "On 17 December 2021, Russia's Foreign Ministry publishes a draft 'Treaty on Security Guarantees', demanding NATO pulls back forces from Eastern Europe and promises never to admit Ukraine.",
+            "whyItMatters": "The demands are written so NATO almost has to refuse — which then gives Russia a public 'reason' for whatever it does next.",
+            "imageUrl": null,
+            "imageCredit": "Russian MFA, 17 December 2021",
+            "sourceUrl": "https://mid.ru/en/"
+          },
+          {
+            "id": "ev_haines_declass",
+            "title": "US warns: invasion possible by Jan–Feb",
+            "type": "document",
+            "category": "Intelligence warning",
+            "description": "The US Director of National Intelligence and other senior US officials publicly share declassified intelligence in November 2021. They assess that Russia is preparing a multi-front invasion of Ukraine as early as January or February 2022.",
+            "whyItMatters": "Governments rarely declassify intelligence — they did it here to take away Russia's element of surprise.",
+            "imageUrl": null,
+            "imageCredit": "US Director of National Intelligence, Nov 2021",
+            "sourceUrl": "https://www.dni.gov/"
+          },
+          {
+            "id": "ev_allied_resolve",
+            "title": "Russia–Belarus joint exercise in February",
+            "type": "document",
+            "category": "Military build-up",
+            "description": "Russia and Belarus announce a joint military exercise called 'Allied Resolve 2022' on Belarusian soil, scheduled for February 2022. The number of Russian troops involved is far larger than in previous years.",
+            "whyItMatters": "An 'exercise' is the perfect cover story for moving large forces into position right next door to Ukraine.",
+            "imageUrl": null,
+            "imageCredit": "Belarus MoD",
+            "sourceUrl": "https://www.mod.gov.by/"
+          },
+          {
+            "id": "ev_train_movements",
+            "title": "Trains full of tanks heading west",
+            "type": "osint",
+            "category": "Logistics",
+            "description": "Open-source researchers compile dozens of TikTok videos and rail-spotter posts showing Russian tanks and supporting vehicles being moved by train towards staging areas near Ukraine.",
+            "whyItMatters": "Single-direction rail flow over weeks looks like an army stockpiling for a fight, not rotating kit for an exercise.",
+            "imageUrl": null,
+            "imageCredit": "Konrad Muzyka, Rochan Consulting / OSINT collective",
+            "sourceUrl": "https://twitter.com/konrad_muzyka"
+          }
+        ]
+      },
+      "scoring": {
+        "signalWeights": {
+          "ev_yelnya_armor": 0.85,
+          "ev_putin_essay": 0.55,
+          "ev_pogonovo_buildup": 0.80,
+          "ev_field_hospitals": 0.90,
+          "ev_security_demands": 0.45,
+          "ev_haines_declass": 0.95,
+          "ev_allied_resolve": 0.75,
+          "ev_train_movements": 0.80
+        },
+        "validConnectionPairs": [
+          ["ev_yelnya_armor", "ev_field_hospitals"],
+          ["ev_field_hospitals", "ev_train_movements"],
+          ["ev_putin_essay", "ev_security_demands"],
+          ["ev_haines_declass", "ev_allied_resolve"],
+          ["ev_yelnya_armor", "ev_train_movements"],
+          ["ev_pogonovo_buildup", "ev_yelnya_armor"],
+          ["ev_haines_declass", "ev_yelnya_armor"]
+        ],
+        "maxScore": 250
+      }
+    },
+    {
+      "id": "stage_mp_1",
+      "type": "map_predictive",
+      "payload": {
+        "mapBounds": { "south": 43.0, "west": 22.0, "north": 56.0, "east": 42.0 },
+        "hotspots": [
+          { "id": "hs_yelnya",   "label": "Yelnya",         "lat": 54.58, "lng": 33.18, "kind": "staging", "tooltip": "Russian base ~250km north of Kyiv. Major tank build-up in 2021." },
+          { "id": "hs_pogonovo", "label": "Pogonovo",       "lat": 51.42, "lng": 39.31, "kind": "staging", "tooltip": "Russian base in the Voronezh region. Second tank build-up spotted in November 2021." },
+          { "id": "hs_belarus",  "label": "Belarus border", "lat": 52.50, "lng": 30.50, "kind": "staging", "tooltip": "Belarus is allied with Russia and borders northern Ukraine — only ~100km from Kyiv." },
+          { "id": "hs_crimea",   "label": "Crimea",         "lat": 44.95, "lng": 34.10, "kind": "naval",   "tooltip": "Russia took Crimea from Ukraine in 2014. Home base for Russia's Black Sea fleet." },
+          { "id": "hs_kyiv",     "label": "Kyiv",           "lat": 50.45, "lng": 30.52, "kind": "capital", "tooltip": "Ukraine's capital. Whoever holds Kyiv controls the country's leadership." },
+          { "id": "hs_kharkiv",  "label": "Kharkiv",        "lat": 49.99, "lng": 36.23, "kind": "border",  "tooltip": "Ukraine's second-biggest city, in the east, near the Russian border." },
+          { "id": "hs_donbas",   "label": "Donbas",         "lat": 48.50, "lng": 38.00, "kind": "border",  "tooltip": "Eastern region where Russia has backed separatists since 2014." },
+          { "id": "hs_kherson",  "label": "Kherson",        "lat": 46.65, "lng": 32.62, "kind": "capital", "tooltip": "City in southern Ukraine. Controls the water supply that Crimea depends on." }
+        ],
+        "tokenCount": 3,
+        "prompt": "If Russia attacks, where do they go in? Click two places to draw a route. You have 3 routes — star the one you think is the main attack on the capital."
+      },
+      "scoring": {
+        "correctAxes": [
+          { "fromHotspotId": "hs_belarus", "toHotspotId": "hs_kyiv",    "isMain": true },
+          { "fromHotspotId": "hs_yelnya",  "toHotspotId": "hs_kharkiv", "isMain": false },
+          { "fromHotspotId": "hs_crimea",  "toHotspotId": "hs_kherson", "isMain": false }
+        ],
+        "maxScore": 150
+      }
+    },
+    {
+      "id": "stage_ai_1",
+      "type": "actor_interrogations",
+      "payload": {
+        "actors": [
+          {
+            "id": "a_putin",
+            "name": "Vladimir Putin",
+            "role": "President of Russia",
+            "faction": "RUS",
+            "portraitUrl": null,
+            "portraitCredit": null,
+            "systemPromptKey": "putin",
+            "knowsAbout": ["Russia's intentions", "Demands on NATO", "Ukraine policy"],
+            "suggestedQuestions": [
+              "Why is Russia making these demands of NATO right now?",
+              "Are you planning to attack Ukraine?",
+              "What outcome would make Russia pull its forces back?"
+            ]
+          },
+          {
+            "id": "a_lavrov",
+            "name": "Sergey Lavrov",
+            "role": "Foreign Minister, Russia",
+            "faction": "RUS",
+            "portraitUrl": null,
+            "portraitCredit": null,
+            "systemPromptKey": "lavrov",
+            "knowsAbout": ["Russia's diplomatic line", "What Moscow will accept", "Talks with the West"],
+            "suggestedQuestions": [
+              "What deal would Russia actually accept?",
+              "Why publish the security demands now, in public?",
+              "Are talks with the US going anywhere?"
+            ]
+          },
+          {
+            "id": "a_biden",
+            "name": "Joseph R. Biden",
+            "role": "President of the United States",
+            "faction": "USA",
+            "portraitUrl": null,
+            "portraitCredit": null,
+            "systemPromptKey": "biden",
+            "knowsAbout": ["US intelligence assessments", "Western response options", "NATO coordination"],
+            "suggestedQuestions": [
+              "How sure are you that Russia will invade?",
+              "What will the US actually do if it happens?",
+              "Why have you declassified this intelligence in public?"
+            ]
+          },
+          {
+            "id": "a_stoltenberg",
+            "name": "Jens Stoltenberg",
+            "role": "NATO Secretary General",
+            "faction": "NATO",
+            "portraitUrl": null,
+            "portraitCredit": null,
+            "systemPromptKey": "stoltenberg",
+            "knowsAbout": ["NATO's red lines", "How united NATO members are", "Forces in Eastern Europe"],
+            "suggestedQuestions": [
+              "Will NATO defend Ukraine if it's attacked?",
+              "Are NATO members really on the same page?",
+              "What is NATO doing right now to deter Russia?"
+            ]
+          },
+          {
+            "id": "a_zelensky",
+            "name": "Volodymyr Zelensky",
+            "role": "President of Ukraine",
+            "faction": "UKR",
+            "portraitUrl": null,
+            "portraitCredit": null,
+            "systemPromptKey": "zelensky",
+            "knowsAbout": ["How ready Ukraine is", "What Kyiv expects", "What help Ukraine needs"],
+            "suggestedQuestions": [
+              "How likely do you think an attack actually is?",
+              "What does Ukraine need from the West right now?",
+              "Are Ukrainian forces ready if Russia invades?"
+            ]
+          },
+          {
+            "id": "a_macron",
+            "name": "Emmanuel Macron",
+            "role": "President of France",
+            "faction": "EU",
+            "portraitUrl": null,
+            "portraitCredit": null,
+            "systemPromptKey": "macron",
+            "knowsAbout": ["Direct talks with Putin", "European mediation", "France's read on Moscow"],
+            "suggestedQuestions": [
+              "What does Putin actually want, in your view?",
+              "Is there still a diplomatic way out?",
+              "What is Europe willing to offer Russia?"
+            ]
+          },
+          {
+            "id": "a_scholz",
+            "name": "Olaf Scholz",
+            "role": "Chancellor of Germany (from 8 Dec 2021)",
+            "faction": "EU",
+            "portraitUrl": null,
+            "portraitCredit": null,
+            "systemPromptKey": "scholz",
+            "knowsAbout": ["Germany's energy ties to Russia", "Nord Stream 2 pipeline", "EU response"],
+            "suggestedQuestions": [
+              "Will Germany shut down Nord Stream 2 if Russia invades?",
+              "Can Europe replace Russian gas if it has to?",
+              "Where is Germany willing to draw the line?"
+            ]
+          },
+          {
+            "id": "a_xi",
+            "name": "Xi Jinping",
+            "role": "President of China",
+            "faction": "PRC",
+            "portraitUrl": null,
+            "portraitCredit": null,
+            "systemPromptKey": "xi",
+            "knowsAbout": ["China–Russia partnership", "Beijing's view on Ukraine", "What China will publicly support"],
+            "suggestedQuestions": [
+              "What did China and Russia agree at the recent summit?",
+              "Will China back Russia if it invades Ukraine?",
+              "Is China worried about a major war breaking out in Europe?"
+            ]
+          }
+        ],
+        "relationships": [
+          { "fromActorId": "a_putin",   "toActorId": "a_lavrov",      "label": "Same government" },
+          { "fromActorId": "a_lavrov",  "toActorId": "a_biden",       "label": "Diplomatic counterparts" },
+          { "fromActorId": "a_biden",   "toActorId": "a_zelensky",    "label": "Western support" },
+          { "fromActorId": "a_biden",   "toActorId": "a_stoltenberg", "label": "NATO ally" },
+          { "fromActorId": "a_macron",  "toActorId": "a_putin",       "label": "Talks with Moscow" },
+          { "fromActorId": "a_scholz",  "toActorId": "a_putin",       "label": "Energy leverage" },
+          { "fromActorId": "a_xi",      "toActorId": "a_putin",       "label": "Strategic partnership" }
+        ],
+        "maxQuestionsPerActor": 3,
+        "contextDateLabel": "Late December 2021"
+      },
+      "scoring": {
+        "baseEngagementScore": 15,
+        "signalKeywords": ["invasion", "Donbas", "NATO", "exercise", "concession", "deadline", "withdraw"],
+        "maxScore": 100
+      }
+    },
+    {
+      "id": "stage_dp_1",
+      "type": "decision_point",
+      "payload": {
+        "prompt": "Late December 2021. Russia has put forces around Ukraine, demanded NATO pull back, and refuses to give ground. What do you think Russia will actually do?",
+        "contextDateLabel": "December 2021",
+        "signalsRecap": [
+          { "stageRef": "Evidence wall", "takeaway": "Two huge tank build-ups, plus a third on Crimea, plus field hospitals — far bigger than any normal exercise." },
+          { "stageRef": "Map", "takeaway": "Three possible attack lines: Belarus → Kyiv, Yelnya → Kharkiv, and Crimea → southern Ukraine." },
+          { "stageRef": "Diplomacy", "takeaway": "An essay denying Ukraine's existence, plus demands on NATO that NATO can't accept — both look like setting up a public excuse." },
+          { "stageRef": "Allies", "takeaway": "The US has gone unusually public with its intelligence — a clear attempt to deter Russia by removing surprise." }
+        ],
+        "options": [
+          {
+            "id": "opt_diplomatic",
+            "text": "Just bluffing — Russia will pull back if NATO offers some concessions.",
+            "hint": "The demands could be a deliberate over-ask to force a smaller compromise. But this option ignores the size of the build-up and the field hospitals."
+          },
+          {
+            "id": "opt_donbas",
+            "text": "A small attack — Russia will only push into the Donbas region in eastern Ukraine.",
+            "hint": "Russia already has forces in the Donbas backing separatists. A push there would be the cheapest, least risky option — but it doesn't explain why so much kit is gathered near Belarus and Crimea too."
+          },
+          {
+            "id": "opt_full",
+            "text": "A full invasion from multiple directions, including aiming for Kyiv.",
+            "hint": "Three big build-ups (Yelnya, Belarus, Crimea) point at three different parts of Ukraine. The medical and logistics signs suggest something much bigger than a Donbas-only push."
+          },
+          {
+            "id": "opt_hybrid",
+            "text": "Recognises the breakaway eastern regions, sends in 'peacekeepers', then escalates into a full invasion.",
+            "hint": "This gives Russia a legal-sounding excuse for sending troops, then lets them keep going. It uses the political signals AND the military build-up — the most consistent with all the evidence so far."
+          }
+        ]
+      },
+      "scoring": {
+        "optionRealityScores": {
+          "opt_diplomatic": 15,
+          "opt_donbas": 35,
+          "opt_full": 75,
+          "opt_hybrid": 95
+        },
+        "optionSupportingEvidenceIds": {
+          "opt_diplomatic": ["ev_putin_essay", "ev_security_demands"],
+          "opt_donbas":     ["ev_pogonovo_buildup"],
+          "opt_full":       ["ev_yelnya_armor", "ev_field_hospitals", "ev_train_movements", "ev_haines_declass"],
+          "opt_hybrid":     ["ev_putin_essay", "ev_security_demands", "ev_yelnya_armor", "ev_field_hospitals", "ev_haines_declass", "ev_train_movements"]
+        },
+        "maxScore": 250
+      }
+    },
+    {
+      "id": "stage_pr_1",
+      "type": "phase_reveal",
+      "payload": {
+        "newPhaseLabel": "Phase 2: 21 – 24 February 2022",
+        "newItems": [
+          {
+            "id": "ev_recognition_speech",
+            "type": "transcript",
+            "title": "Putin recognises Donetsk and Luhansk as 'independent'",
+            "category": "Political signal",
+            "description": "President Putin gives an hour-long speech on Russian state TV recognising the two breakaway eastern Ukrainian regions as independent countries. This becomes the legal-sounding excuse for sending Russian troops in.",
+            "whyItMatters": "It's the first half of the hybrid play — make it look legal first, then send the troops.",
+            "imageUrl": null,
+            "imageCredit": "kremlin.ru, 21 Feb 2022",
+            "sourceUrl": "http://en.kremlin.ru/events/president/news/67828"
+          },
+          {
+            "id": "ev_smo_speech",
+            "type": "transcript",
+            "title": "Putin announces 'special military operation'",
+            "category": "Political signal",
+            "description": "In a pre-dawn televised speech on 24 February, President Putin announces what he calls a 'special military operation' to 'demilitarise' Ukraine. It is the public start of a full invasion.",
+            "whyItMatters": "The wording avoids the word 'war' — but the scale of what follows shows the real plan.",
+            "imageUrl": null,
+            "imageCredit": "kremlin.ru, 24 Feb 2022",
+            "sourceUrl": "http://en.kremlin.ru/events/president/news/67843"
+          },
+          {
+            "id": "ev_missile_strikes",
+            "type": "photo",
+            "title": "Cruise missiles hit airfields and command sites",
+            "category": "Military action",
+            "description": "Around 4am Kyiv time, cruise missiles and air strikes hit Ukrainian airfields, command centres, and air-defence radar sites across the country.",
+            "whyItMatters": "This is the standard opening move of a modern invasion — knock out the defender's air force before sending in ground troops.",
+            "imageUrl": null,
+            "imageCredit": "Reuters, 24 Feb 2022",
+            "sourceUrl": "https://www.reuters.com/"
+          },
+          {
+            "id": "ev_hostomel_assault",
+            "type": "satellite",
+            "title": "Russian paratroopers attack Hostomel airfield",
+            "category": "Military action",
+            "description": "Russian paratroopers fly in by helicopter to seize Hostomel airfield just outside Kyiv. The plan is to use it as an air bridge — landing more troops directly on the doorstep of the capital.",
+            "whyItMatters": "If Russia holds Hostomel, they can fly waves of soldiers straight into Kyiv. Whoever wins this fight shapes the early war.",
+            "imageUrl": null,
+            "imageCredit": "Maxar Technologies",
+            "sourceUrl": "https://www.maxar.com/"
+          }
+        ],
+        "connectionResolutions": [
+          {
+            "pairItemIds": ["ev_yelnya_armor", "ev_field_hospitals"],
+            "verdict": "confirmed",
+            "explanation": "Field hospitals plus a huge tank build-up = preparing for real combat, not training. This was the strongest single sign."
+          },
+          {
+            "pairItemIds": ["ev_putin_essay", "ev_security_demands"],
+            "verdict": "confirmed",
+            "explanation": "Both were the political setup for invasion — not alternatives to it. Russia wrote the public 'why' before doing the 'what'."
+          },
+          {
+            "pairItemIds": ["ev_haines_declass", "ev_allied_resolve"],
+            "verdict": "confirmed",
+            "explanation": "The US warning matched up exactly with the Belarus 'exercise' as cover for the northern push on Kyiv."
+          },
+          {
+            "pairItemIds": ["ev_yelnya_armor", "ev_train_movements"],
+            "verdict": "confirmed",
+            "explanation": "Trains kept feeding kit into Yelnya — a stockpile, not a normal exercise rotation."
+          },
+          {
+            "pairItemIds": ["ev_pogonovo_buildup", "ev_yelnya_armor"],
+            "verdict": "confirmed",
+            "explanation": "Two big bases stacked with kit confirmed Russia was preparing to attack from more than one direction."
+          },
+          {
+            "pairItemIds": ["ev_haines_declass", "ev_yelnya_armor"],
+            "verdict": "confirmed",
+            "explanation": "Western intelligence assessments were built directly on the satellite picture you saw at the start."
+          },
+          {
+            "pairItemIds": ["ev_field_hospitals", "ev_train_movements"],
+            "verdict": "confirmed",
+            "explanation": "Logistics plus medical readiness together signalled real war, not exercises."
+          }
+        ]
+      },
+      "scoring": { "maxScore": 50 }
+    },
+    {
+      "id": "stage_ml_1",
+      "type": "map_live",
+      "payload": {
+        "mapBounds": { "south": 43.0, "west": 22.0, "north": 56.0, "east": 42.0 },
+        "hotspots": [
+          { "id": "hs_yelnya",   "label": "Yelnya",         "lat": 54.58, "lng": 33.18, "kind": "staging", "tooltip": "Russian base ~250km north of Kyiv. Major tank build-up in 2021." },
+          { "id": "hs_pogonovo", "label": "Pogonovo",       "lat": 51.42, "lng": 39.31, "kind": "staging", "tooltip": "Russian base in the Voronezh region. Second tank build-up." },
+          { "id": "hs_belarus",  "label": "Belarus border", "lat": 52.50, "lng": 30.50, "kind": "staging", "tooltip": "Russia's ally — only ~100km from Kyiv." },
+          { "id": "hs_crimea",   "label": "Crimea",         "lat": 44.95, "lng": 34.10, "kind": "naval",   "tooltip": "Russia took Crimea from Ukraine in 2014." },
+          { "id": "hs_kyiv",     "label": "Kyiv",           "lat": 50.45, "lng": 30.52, "kind": "capital", "tooltip": "Ukraine's capital. The decisive target." },
+          { "id": "hs_kharkiv",  "label": "Kharkiv",        "lat": 49.99, "lng": 36.23, "kind": "border",  "tooltip": "Ukraine's second city, near the Russian border." },
+          { "id": "hs_donbas",   "label": "Donbas",         "lat": 48.50, "lng": 38.00, "kind": "border",  "tooltip": "Eastern region with Russian-backed separatists since 2014." },
+          { "id": "hs_kherson",  "label": "Kherson",        "lat": 46.65, "lng": 32.62, "kind": "capital", "tooltip": "Southern Ukrainian city near Crimea." }
+        ],
+        "phases": [
+          {
+            "id": "ph_strikes",
+            "timeLabel": "24 Feb 04:00 — Opening strikes",
+            "units": [
+              { "side": "ru", "kind": "missile", "fromHotspotId": "hs_crimea",  "toHotspotId": "hs_kherson", "animationMs": 1500 },
+              { "side": "ru", "kind": "missile", "fromHotspotId": "hs_belarus", "toHotspotId": "hs_kyiv",    "animationMs": 1500 },
+              { "side": "ru", "kind": "missile", "fromHotspotId": "hs_yelnya",  "toHotspotId": "hs_kharkiv", "animationMs": 1500 }
+            ],
+            "subDecision": {
+              "id": "sd_first_targets",
+              "prompt": "Russia is striking first. What would you expect them to hit in the opening hour? (Pick all that apply.)",
+              "options": [
+                { "id": "opt_airfields",     "text": "Airfields — so Ukrainian fighter jets can't take off." },
+                { "id": "opt_command_nodes", "text": "Command centres — so Ukrainian leadership can't coordinate." },
+                { "id": "opt_airdef",        "text": "Air-defence radars — so Russian planes can fly freely." },
+                { "id": "opt_civilian",      "text": "Civilian areas — apartment blocks, schools, hospitals." }
+              ],
+              "selectionMode": "multi"
+            }
+          },
+          {
+            "id": "ph_hostomel",
+            "timeLabel": "24 Feb 06:00 — Hostomel airfield assault",
+            "units": [
+              { "side": "ru", "kind": "airborne", "fromHotspotId": "hs_belarus", "toHotspotId": "hs_kyiv", "animationMs": 2200 }
+            ],
+            "subDecision": {
+              "id": "sd_hostomel_reinforce",
+              "prompt": "Russian paratroopers have just landed at Hostomel airfield, right outside Kyiv. As Ukraine, do you send forces to take it back immediately?",
+              "options": [
+                { "id": "opt_yes_reinforce",   "text": "Yes — if Russia keeps Hostomel, they can fly more troops straight into Kyiv." },
+                { "id": "opt_no_focus_donbas", "text": "No — focus on the Donbas, that's the bigger threat." }
+              ],
+              "selectionMode": "single"
+            }
+          },
+          {
+            "id": "ph_convoy",
+            "timeLabel": "28 Feb — 40-mile Russian convoy stalls",
+            "units": [
+              { "side": "ru", "kind": "convoy", "fromHotspotId": "hs_belarus", "toHotspotId": "hs_kyiv", "animationMs": 3000 }
+            ],
+            "subDecision": {
+              "id": "sd_convoy_diagnose",
+              "prompt": "A 40-mile-long Russian convoy is stalled north of Kyiv, not moving. Why has it stopped?",
+              "options": [
+                { "id": "opt_ambushes",  "text": "Ukrainian forces are ambushing it from the woods." },
+                { "id": "opt_logistics", "text": "Logistics failure — running out of fuel, tyres, food." },
+                { "id": "opt_command",   "text": "Russian commanders aren't coordinating well." },
+                { "id": "opt_all",       "text": "All of the above." }
+              ],
+              "selectionMode": "single"
+            }
+          }
+        ]
+      },
+      "scoring": {
+        "subDecisionAnswers": {
+          "sd_first_targets":      { "correctOptionIds": ["opt_airfields", "opt_command_nodes", "opt_airdef"], "maxScore": 70 },
+          "sd_hostomel_reinforce": { "correctOptionIds": ["opt_yes_reinforce"],                                "maxScore": 70 },
+          "sd_convoy_diagnose":    { "correctOptionIds": ["opt_all"],                                          "maxScore": 60 }
+        }
+      }
+    },
+    {
+      "id": "stage_db_1",
+      "type": "debrief",
+      "payload": {
+        "annotatedReplayBeats": [
+          {
+            "refStageIndex": 1,
+            "headline": "What armies need behind the front line",
+            "body": "Field hospitals, blood supplies, and tanks parked in huge numbers don't show up for an exercise — they show up when an army is getting ready for real fighting. This was the strongest sign of what was coming.",
+            "takeaway": "Look at supplies, not just troops."
+          },
+          {
+            "refStageIndex": 2,
+            "headline": "The main attack came from Belarus",
+            "body": "Most people guessed the main target would be the Donbas, in the east. The real main target was Kyiv, attacked from Belarus to the north. The Russia–Belarus 'joint exercise' was actually the cover story for moving the forces that would go for Kyiv.",
+            "takeaway": "Cover stories often tell you exactly what's about to happen."
+          },
+          {
+            "refStageIndex": 4,
+            "headline": "The two-step move",
+            "body": "On 21 February, Russia 'recognised' the breakaway eastern regions, giving itself a legal-sounding excuse to send troops. Three days later, on 24 February, it launched a full invasion. The combination of fake diplomacy plus full invasion was the actual plan — not one or the other.",
+            "takeaway": "When you can't pick between two options, the real answer often uses ALL the signals."
+          },
+          {
+            "refStageIndex": 6,
+            "headline": "Hostomel airfield decided a lot",
+            "body": "Russian paratroopers tried to seize Hostomel airfield outside Kyiv to fly more troops straight into the capital. Ukrainian forces denied it to them. With Hostomel lost, plus a 40-mile convoy stuck in mud and ambushes, Russia's plan to take Kyiv quickly fell apart.",
+            "takeaway": "One denied target can change the whole war."
+          }
+        ],
+        "teaserNextChapter": {
+          "title": "Battle of Kyiv: Russia's plan falls apart",
+          "blurb": "March 2022. Russian forces are stuck north of Kyiv. Ukrainian troops hunt Russian tanks down country roads. Will Kyiv hold?"
+        }
+      },
+      "scoring": {}
+    }
+  ]
+}

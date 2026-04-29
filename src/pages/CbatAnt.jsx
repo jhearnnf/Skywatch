@@ -10,13 +10,13 @@ import {
   scoreAnswer,
   gradeForScore,
   formatHHMM,
-  SDT_NODES,
-  SDT_EDGES,
-  SDT_NODE_POS,
-  SDT_LABEL_OFFSETS,
+  ANT_NODES,
+  ANT_EDGES,
+  ANT_NODE_POS,
+  ANT_LABEL_OFFSETS,
   WEIGHT_TABLE,
   QUESTION_META,
-} from '../utils/sdtGenerator'
+} from '../utils/antGenerator'
 
 const ROUND_COUNT = 8
 const ROUND_TIME = 60            // seconds per round
@@ -36,11 +36,11 @@ function JourneyMap({ round }) {
   return (
     <svg viewBox="-50 0 580 420" preserveAspectRatio="xMidYMid meet" className="w-full h-auto md:h-full md:flex-1 md:min-h-0" aria-label="Journey map">
       {/* Edges */}
-      {SDT_EDGES.map(([a, b]) => {
+      {ANT_EDGES.map(([a, b]) => {
         const key = [a, b].sort().join('-')
         const active = activeEdges.has(key)
-        const pa = SDT_NODE_POS[a]
-        const pb = SDT_NODE_POS[b]
+        const pa = ANT_NODE_POS[a]
+        const pb = ANT_NODE_POS[b]
         return (
           <line
             key={key}
@@ -61,9 +61,9 @@ function JourneyMap({ round }) {
       )}
 
       {/* Nodes */}
-      {SDT_NODES.map(name => {
-        const p = SDT_NODE_POS[name]
-        const off = SDT_LABEL_OFFSETS[name]
+      {ANT_NODES.map(name => {
+        const p = ANT_NODE_POS[name]
+        const off = ANT_LABEL_OFFSETS[name]
         const isStart = name === round.start
         const isVia = name === round.via
         const isDest = name === round.destination
@@ -109,8 +109,8 @@ function JourneyMap({ round }) {
 }
 
 function DistanceLabel({ a, b, miles }) {
-  const pa = SDT_NODE_POS[a]
-  const pb = SDT_NODE_POS[b]
+  const pa = ANT_NODE_POS[a]
+  const pb = ANT_NODE_POS[b]
   const mx = (pa.x + pb.x) / 2
   const my = (pa.y + pb.y) / 2
   return (
@@ -210,8 +210,8 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
   const maxScore = ROUND_COUNT * 10
   const pct = Math.round((totalScore / maxScore) * 100)
   const gradeStyle =
-    grade === 'Outstanding' ? { emoji: '\u{1F396}\uFE0F', color: 'text-green-400' }
-    : grade === 'Good' ? { emoji: '\u2708\uFE0F', color: 'text-brand-300' }
+    grade === 'Outstanding' ? { emoji: '\u{1F396}️', color: 'text-green-400' }
+    : grade === 'Good' ? { emoji: '✈️', color: 'text-brand-300' }
     : grade === 'Needs Work' ? { emoji: '\u{1F527}', color: 'text-amber-400' }
     : { emoji: '\u{1F4A5}', color: 'text-red-400' }
 
@@ -223,7 +223,7 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
     >
       <p className="text-5xl mb-3">{gradeStyle.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${gradeStyle.color}`}>{grade}</p>
-      <p className="text-sm text-slate-400 mb-6">Speed Distance Time Complete</p>
+      <p className="text-sm text-slate-400 mb-6">ANT Complete</p>
 
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
@@ -240,11 +240,11 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
         </div>
         <p className="text-xs text-slate-500 mt-3">
           Exact <span className="text-green-400 font-mono">{exact}</span>
-          <span className="text-slate-600 mx-2">{'\u00b7'}</span>
+          <span className="text-slate-600 mx-2">{'·'}</span>
           Close <span className="text-amber-400 font-mono">{partial}</span>
-          <span className="text-slate-600 mx-2">{'\u00b7'}</span>
+          <span className="text-slate-600 mx-2">{'·'}</span>
           Miss <span className="text-red-400 font-mono">{miss}</span>
-          <span className="text-slate-600 mx-2">{'\u00b7'}</span>
+          <span className="text-slate-600 mx-2">{'·'}</span>
           Total <span className="text-brand-300 font-mono">{totalTime.toFixed(1)}s</span>
         </p>
       </div>
@@ -255,7 +255,7 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
           {answers.map((a, i) => {
             const label = QUESTION_META[a.type].short
             const color = a.exact ? 'text-green-400' : a.partial ? 'text-amber-400' : 'text-red-400'
-            const icon = a.exact ? '\u2713' : a.partial ? '\u223C' : '\u2717'
+            const icon = a.exact ? '✓' : a.partial ? '∼' : '✗'
             return (
               <div key={i} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${color}`}>
                 <span className="text-slate-500 w-6 text-left">#{i + 1}</span>
@@ -271,7 +271,7 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
       </div>
 
       {scoreSaved && (
-        <p className="text-xs text-green-400 mb-4">{'\u2713'} Score saved</p>
+        <p className="text-xs text-green-400 mb-4">{'✓'} Score saved</p>
       )}
 
       <div className="flex flex-wrap gap-3 justify-center">
@@ -282,7 +282,7 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
           Play Again
         </button>
         <Link
-          to="/cbat/sdt/leaderboard"
+          to="/cbat/ant/leaderboard"
           className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
         >
           {'\u{1F3C6}'} Leaderboard
@@ -293,7 +293,7 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function CbatSpeedDistanceTime() {
+export default function CbatAnt() {
   const { user, apiFetch, API } = useAuth()
 
   const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
@@ -326,7 +326,7 @@ export default function CbatSpeedDistanceTime() {
   // Fetch personal best
   useEffect(() => {
     if (!user) return
-    apiFetch(`${API}/api/games/cbat/sdt/personal-best`)
+    apiFetch(`${API}/api/games/cbat/ant/personal-best`)
       .then(r => r.json())
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
@@ -339,7 +339,7 @@ export default function CbatSpeedDistanceTime() {
     const missCount = finalAnswers.length - exactCount - partialCount
     const grade = gradeForScore(totalScore)
     setScoreSaved(false)
-    apiFetch(`${API}/api/games/cbat/sdt/result`, {
+    apiFetch(`${API}/api/games/cbat/ant/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -355,7 +355,7 @@ export default function CbatSpeedDistanceTime() {
       .then(r => r.json())
       .then(() => {
         setScoreSaved(true)
-        apiFetch(`${API}/api/games/cbat/sdt/personal-best`)
+        apiFetch(`${API}/api/games/cbat/ant/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
           .catch(() => {})
@@ -443,7 +443,7 @@ export default function CbatSpeedDistanceTime() {
   }, [phase, round, answerInput, startRound, endGame])
 
   const startGame = useCallback(() => {
-    recordCbatStart('sdt', apiFetch, API)
+    recordCbatStart('ant', apiFetch, API)
     setAnswers([])
     answersRef.current = []
     setTotalElapsed(0)
@@ -466,13 +466,13 @@ export default function CbatSpeedDistanceTime() {
   }
 
   return (
-    <div className="cbat-sdt-page">
-      <SEO title="Speed Distance Time — CBAT" description="Calculate arrival time, distance, fuel and speed under pressure." />
+    <div className="cbat-ant-page">
+      <SEO title="ANT — CBAT" description="Airborne Numerical Test: speed, distance and time calculations under pressure." />
 
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
         <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-        <h1 className="text-sm font-extrabold text-slate-900">Speed Distance Time</h1>
+        <h1 className="text-sm font-extrabold text-slate-900">ANT</h1>
       </div>
 
       {/* Not logged in */}
@@ -498,15 +498,17 @@ export default function CbatSpeedDistanceTime() {
               className="w-full max-w-xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
             >
               <p className="text-4xl mb-3">{'\u{1F4E1}'}</p>
-              <p className="text-xl font-extrabold text-white mb-2">Speed Distance Time</p>
+              <p className="text-xl font-extrabold text-white mb-1">ANT</p>
+              <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Airborne Numerical Test</p>
               <p className="text-sm text-slate-400 mb-5">
-                Deliver a parcel across a five-node network. Each round one value is missing —
-                Arrival Time, Total Distance, Fuel, or Speed. Calculate it from the given data.
+                Speed, distance and time under pressure. Deliver a parcel across an eight-node network — each
+                round one value is missing (Arrival Time, Total Distance, Fuel, or Speed). Calculate it from
+                the data shown.
               </p>
 
               <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4 text-left space-y-2">
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">{'\u23F1'}</span>
+                  <span className="text-brand-300 font-bold shrink-0">{'⏱'}</span>
                   <span>{ROUND_COUNT} rounds, {ROUND_TIME} seconds each</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
@@ -519,7 +521,7 @@ export default function CbatSpeedDistanceTime() {
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
                   <span className="text-brand-300 font-bold shrink-0">{'\u{1F4CF}'}</span>
-                  <span>Round up if decimal {'\u2265'} 0.5, else round down. Times entered as HHMM (e.g. 1430).</span>
+                  <span>Round up if decimal {'≥'} 0.5, else round down. Times entered as HHMM (e.g. 1430).</span>
                 </div>
               </div>
 
@@ -533,7 +535,7 @@ export default function CbatSpeedDistanceTime() {
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
                   <p className="text-lg font-mono font-bold text-brand-300">
                     {personalBest.bestScore} pts
-                    <span className="text-slate-500 mx-1">{'\u00b7'}</span>
+                    <span className="text-slate-500 mx-1">{'·'}</span>
                     {personalBest.bestTime.toFixed(1)}s
                   </p>
                   <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
@@ -541,8 +543,8 @@ export default function CbatSpeedDistanceTime() {
               )}
 
               <div className="text-center mb-4">
-                <Link to="/cbat/sdt/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
-                  {'View Leaderboard \u2192'}
+                <Link to="/cbat/ant/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                  {'View Leaderboard →'}
                 </Link>
               </div>
 
@@ -567,7 +569,7 @@ export default function CbatSpeedDistanceTime() {
                   Score <span className="text-brand-300">{totalScoreSoFar}</span>
                 </span>
                 <span className="text-slate-400">
-                  {'\u23F1'} <span className={timeLeft < 10 ? 'text-red-400' : 'text-brand-300'}>{timeLeft.toFixed(1)}s</span>
+                  {'⏱'} <span className={timeLeft < 10 ? 'text-red-400' : 'text-brand-300'}>{timeLeft.toFixed(1)}s</span>
                 </span>
               </div>
 
@@ -627,12 +629,12 @@ export default function CbatSpeedDistanceTime() {
                           : 'text-red-300'
                         }`}>
                           {feedback.exact
-                            ? `\u2713 Exact  +${feedback.points} pts`
+                            ? `✓ Exact  +${feedback.points} pts`
                             : feedback.partial
-                            ? `\u223C Close (within 5%)  +${feedback.points} pts`
+                            ? `∼ Close (within 5%)  +${feedback.points} pts`
                             : feedback.timedOut
-                            ? `\u23F1 Time up`
-                            : `\u2717 Off`}
+                            ? `⏱ Time up`
+                            : `✗ Off`}
                         </p>
                         {!feedback.exact && (
                           <p className="text-xs font-mono text-slate-300 mt-1">
@@ -641,7 +643,7 @@ export default function CbatSpeedDistanceTime() {
                             </span>
                             {feedback.user && !feedback.timedOut && (
                               <>
-                                <span className="text-slate-600 mx-2">{'\u00b7'}</span>
+                                <span className="text-slate-600 mx-2">{'·'}</span>
                                 You: <span className="text-slate-400">{feedback.user}</span>
                               </>
                             )}

@@ -1004,7 +1004,7 @@ function buildStats(brief) {
   const stats = []
   if (cat === 'Aircrafts') {
     if (gd.topSpeedKph != null)
-      stats.push(mk('topSpeedKph',    'Top Speed',  `${gd.topSpeedKph.toLocaleString()} km/h · ${Math.round(gd.topSpeedKph * 0.621).toLocaleString()} mph`))
+      stats.push(mk('topSpeedKph',    'Top Speed',  `${gd.topSpeedKph.toLocaleString()} km/h · ${Math.round(gd.topSpeedKph * 0.621).toLocaleString()} mph · ${Math.round(gd.topSpeedKph * 0.540).toLocaleString()} kt`))
     if (gd.yearIntroduced != null)
       stats.push(mk('yearIntroduced', 'Introduced', String(gd.yearIntroduced)))
     if (gd.yearIntroduced != null)

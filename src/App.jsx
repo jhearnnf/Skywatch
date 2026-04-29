@@ -44,6 +44,9 @@ import Profile        from './pages/Profile'
 import BadgePicker    from './pages/BadgePicker'
 import Rankings       from './pages/Rankings'
 import Play           from './pages/Play'
+import CaseFiles      from './pages/CaseFiles'
+import CaseFilePlay   from './pages/CaseFilePlay'
+import CaseFileDebrief from './pages/CaseFileDebrief'
 import Cbat           from './pages/Cbat'
 import CbatPlaneTurn  from './pages/CbatPlaneTurn'
 import CbatAngles     from './pages/CbatAngles'
@@ -51,7 +54,7 @@ import CbatCodeDuplicates from './pages/CbatCodeDuplicates'
 import CbatSymbols      from './pages/CbatSymbols'
 import CbatTarget       from './pages/CbatTarget'
 import CbatInstruments  from './pages/CbatInstruments'
-import CbatSpeedDistanceTime from './pages/CbatSpeedDistanceTime'
+import CbatAnt from './pages/CbatAnt'
 import CbatLeaderboard from './pages/CbatLeaderboard'
 import AirstarHistory from './pages/AirstarHistory'
 import GameHistory        from './pages/GameHistory'
@@ -216,6 +219,9 @@ function AppRoutes() {
           <Route path="/profile/badge"    element={<RequireAuth><PageWrapper><BadgePicker /></PageWrapper></RequireAuth>} />
           <Route path="/rankings"         element={<PageWrapper><Rankings /></PageWrapper>} />
           <Route path="/play"                   element={<PageWrapper><Play /></PageWrapper>} />
+          <Route path="/case-files"             element={<PageWrapper><CaseFiles /></PageWrapper>} />
+          <Route path="/case-files/:caseSlug/:chapterSlug" element={<RequireAuth><PageWrapper><CaseFilePlay /></PageWrapper></RequireAuth>} />
+          <Route path="/case-files/:caseSlug/:chapterSlug/debrief" element={<RequireAuth><PageWrapper><CaseFileDebrief /></PageWrapper></RequireAuth>} />
           <Route path="/play/quiz"              element={<RequireAuth><PageWrapper><QuizBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/play/battle-of-order"   element={<RequireAuth><PageWrapper><BOOBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/cbat"                   element={<PageWrapper><Cbat /></PageWrapper>} />
@@ -225,7 +231,7 @@ function AppRoutes() {
           <Route path="/cbat/symbols"          element={<RequireAuth><PageWrapper><CbatSymbols /></PageWrapper></RequireAuth>} />
           <Route path="/cbat/target"           element={<RequireAuth><PageWrapper><CbatTarget /></PageWrapper></RequireAuth>} />
           <Route path="/cbat/instruments"      element={<RequireAuth><PageWrapper><CbatInstruments /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/sdt"              element={<RequireAuth><PageWrapper><CbatSpeedDistanceTime /></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/ant"              element={<RequireAuth><PageWrapper><CbatAnt /></PageWrapper></RequireAuth>} />
           <Route path="/cbat/:gameKey/leaderboard" element={<RequireAuth><PageWrapper><CbatLeaderboard /></PageWrapper></RequireAuth>} />
 
           {/* v2 protected pages */}

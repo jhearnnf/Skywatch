@@ -25,6 +25,9 @@ mongoose
     await require('./seeds/seedBriefs')();
 await require('./models/Media').ensurePlaceholderForBriefs();
     await seedGameTypes();
+    await require('./seeds/caseFiles')();
+    // One-shot reversal of legacy Case File airstar awards. Idempotent.
+    await require('./migrations/reverseCaseFileAirstars')();
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })

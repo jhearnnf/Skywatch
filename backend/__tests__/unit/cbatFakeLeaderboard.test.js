@@ -8,7 +8,7 @@ const GAME_MAX = {
   'symbols':         15,
   'target':          null,   // accumulating score, no fixed ceiling (≥400 = Outstanding)
   'instruments':     null,   // time-limited, no fixed max
-  'sdt':             80,
+  'ant':             80,
 };
 const LOWER_BETTER = { 'plane-turn': true };
 
@@ -124,8 +124,8 @@ describe('padLeaderboard', () => {
     expect(padLeaderboard(real, 'nonsense')).toEqual(real);
   });
 
-  it('uses only multiples of 5 for SDT fakes (real game awards 0/5/10 per round)', () => {
-    const out = padLeaderboard([], 'sdt');
+  it('uses only multiples of 5 for ANT fakes (real game awards 0/5/10 per round)', () => {
+    const out = padLeaderboard([], 'ant');
     out.filter(e => e.isFake).forEach(f => {
       expect(f.bestScore % 5).toBe(0);
     });

@@ -7,9 +7,9 @@ import {
   parseHHMM,
   gradeForScore,
   WEIGHT_TABLE,
-  SDT_NODES,
-  SDT_ADJ,
-} from '../utils/sdtGenerator'
+  ANT_NODES,
+  ANT_ADJ,
+} from '../utils/antGenerator'
 
 describe('roundHalfUp', () => {
   it('rounds 0.5 up', () => expect(roundHalfUp(0.5)).toBe(1))
@@ -38,11 +38,11 @@ describe('buildRound', () => {
   it('produces valid start/via/destination on the graph', () => {
     for (let i = 0; i < 50; i++) {
       const r = buildRound()
-      expect(SDT_NODES).toContain(r.start)
-      expect(SDT_NODES).toContain(r.via)
-      expect(SDT_NODES).toContain(r.destination)
-      expect(SDT_ADJ[r.start]).toContain(r.via)
-      expect(SDT_ADJ[r.via]).toContain(r.destination)
+      expect(ANT_NODES).toContain(r.start)
+      expect(ANT_NODES).toContain(r.via)
+      expect(ANT_NODES).toContain(r.destination)
+      expect(ANT_ADJ[r.start]).toContain(r.via)
+      expect(ANT_ADJ[r.via]).toContain(r.destination)
       expect(r.destination).not.toBe(r.start)
     }
   })

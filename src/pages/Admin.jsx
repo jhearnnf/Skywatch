@@ -1439,7 +1439,7 @@ function SettingsTab({ API }) {
   const [toast,    setToast]    = useState('')
   const [wtaSpawn,   setWtaSpawn]   = useState(null)
   const [cbatAircraft, setCbatAircraft] = useState(null)   // aircraft with a 3D model available
-  const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false, cbat: false, flashcards: false })
+  const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false, cbat: false, caseFiles: false, flashcards: false })
   const toggleGameGroup = (key) => setGameGroupsOpen(p => ({ ...p, [key]: !p[key] }))
 
   const load = useCallback(() => {
@@ -1650,6 +1650,11 @@ function SettingsTab({ API }) {
         'aptitudeSyncDailyLimitGold',
         'cbatEnabled',
         'cbatTargetAircraftBriefIds',
+        'caseFilesEnabled',
+        'caseFilesTiers',
+        'caseFilesDailyLimitFree',
+        'caseFilesDailyLimitSilver',
+        'caseFilesDailyLimitGold',
         'newsFlashcardsEnabled',
       ])}>
         <button
@@ -1869,6 +1874,75 @@ function SettingsTab({ API }) {
                 </>
               )}
             </div>
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => toggleGameGroup('caseFiles')}
+          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-6 pb-2 mb-2 border-b-2 border-brand-600/40"
+        >
+          <span>Case Files</span>
+          <span className="text-brand-600 text-xs">{gameGroupsOpen.caseFiles ? '▲' : '▼'}</span>
+        </button>
+        {gameGroupsOpen.caseFiles && (
+          <>
+            <Toggle
+              label="Enable Case Files"
+              hint="Show the Case Files button on the Play page for qualifying users"
+              checked={draft.caseFilesEnabled ?? false}
+              onChange={v => set('caseFilesEnabled', v)}
+            />
+
+            {/* Tier access */}
+            <div className="py-2.5 border-b border-slate-100">
+              <p className="text-sm font-semibold text-slate-700 mb-1">Tier access</p>
+              <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access regardless of this setting</p>
+              <div className="flex flex-wrap gap-3">
+                {['gold', 'silver', 'free'].map(tier => {
+                  const tiers   = draft.caseFilesTiers ?? ['admin']
+                  const checked = tiers.includes(tier)
+                  return (
+                    <label key={tier} className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          const next = checked
+                            ? tiers.filter(t => t !== tier)
+                            : [...tiers, tier]
+                          set('caseFilesTiers', next)
+                        }}
+                        className="w-4 h-4 accent-brand-600"
+                      />
+                      <span className="text-sm font-medium text-slate-700 capitalize">{tier}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+
+            <NumInput
+              label="Daily sessions — Free tier"
+              hint="How many Case Files sessions a free user can play per day"
+              value={draft.caseFilesDailyLimitFree ?? 0}
+              min={0}
+              onChange={v => set('caseFilesDailyLimitFree', v)}
+            />
+            <NumInput
+              label="Daily sessions — Silver / Trial tier"
+              hint="How many Case Files sessions a silver or active-trial user can play per day"
+              value={draft.caseFilesDailyLimitSilver ?? 1}
+              min={0}
+              onChange={v => set('caseFilesDailyLimitSilver', v)}
+            />
+            <NumInput
+              label="Daily sessions — Gold tier"
+              hint="How many Case Files sessions a gold user can play per day"
+              value={draft.caseFilesDailyLimitGold ?? 5}
+              min={0}
+              onChange={v => set('caseFilesDailyLimitGold', v)}
+            />
           </>
         )}
 

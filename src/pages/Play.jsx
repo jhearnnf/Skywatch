@@ -8,6 +8,7 @@ import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import FlashcardGameModal from '../components/FlashcardGameModal'
 import FlyingNewBadge from '../components/FlyingNewBadge'
+import LockedCategoryModal from '../components/LockedCategoryModal'
 import SEO from '../components/SEO'
 
 // BOO states that trigger the unlock notification (game is actually playable)
@@ -151,6 +152,7 @@ export default function Play() {
   // Picked once on mount after the public pool fetch settles; re-rolls on the
   // next visit (fresh mount). null falls back to the ✈️ emoji.
   const [randomAircraft, setRandomAircraft] = useState(null)
+  const [showCaseFilesUpsell, setShowCaseFilesUpsell] = useState(false)
 
   // Per-section ready flags — body content stays as a skeleton until the
   // section's own fetch settles. Guests have no fetches, so ready=true.
@@ -485,6 +487,14 @@ export default function Play() {
       <SEO title="Play" description="Choose a game mode to test your aviation knowledge — quizzes, flashcards, and more." />
       <TutorialModal />
       {showFlashcard && <FlashcardGameModal onClose={() => setShowFlashcard(false)} />}
+      {showCaseFilesUpsell && (
+        <LockedCategoryModal
+          category="Case Files"
+          tier={(settings?.caseFilesTiers ?? []).includes('silver') ? 'silver' : 'gold'}
+          user={user}
+          onClose={() => setShowCaseFilesUpsell(false)}
+        />
+      )}
 
       {/* Flying "NEW GAME" badges — animate from nav Play button to game card */}
       <AnimatePresence>
@@ -501,7 +511,63 @@ export default function Play() {
 
       <div className="play-page">
         <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Play</h1>
-        <p className="text-sm text-slate-500 mb-6">Test your aviation knowledge with training games.</p>
+        <p className="text-sm text-slate-500 mb-2">Test your aviation knowledge with training games.</p>
+
+        {/* Case Files entry — three states:
+              · disabled  → hidden entirely (admin included; admin can re-enable in Admin)
+              · enabled + user in tier (or admin) → normal link to /case-files
+              · enabled + user out of tier        → visible-but-locked, click opens upsell modal
+            Mirrors the CBAT banner shape so the two promotional cards stack
+            cleanly above the main game grid. */}
+        {(() => {
+          if (!settings?.caseFilesEnabled) return null
+
+          const tier = user?.subscriptionTier === 'trial'
+            ? (user?.isTrialActive ? 'silver' : 'free')
+            : (user?.subscriptionTier ?? 'free')
+          const allowed = settings?.caseFilesTiers ?? []
+          const hasAccess = !!user?.isAdmin || allowed.includes(tier) || allowed.includes('admin')
+          const minTier = allowed.includes('silver') ? 'silver' : 'gold'
+
+          const cardInner = (
+            <>
+              <span className="text-2xl shrink-0">🗂️</span>
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-slate-800 text-sm leading-tight">Case Files</p>
+                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Investigative intel scenarios on active conflicts</p>
+              </div>
+              {hasAccess
+                ? <span className="text-slate-400 group-hover:translate-x-0.5 transition-transform shrink-0 text-lg">→</span>
+                : <span className="text-slate-400 shrink-0 text-lg" aria-hidden="true">🔒</span>}
+            </>
+          )
+
+          const cardCls = 'relative flex items-center gap-3 rounded-2xl px-4 py-3 border-2 border-slate-400/50 bg-gradient-to-r from-slate-500/12 via-slate-500/6 to-slate-500/12 hover:border-slate-400 transition-colors group w-full text-left'
+
+          return (
+            <div className="pt-2 pb-3">
+              {hasAccess ? (
+                <Link
+                  to="/case-files"
+                  data-testid="case-files-link"
+                  className={cardCls}
+                >
+                  {cardInner}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="case-files-link"
+                  data-locked="true"
+                  onClick={() => setShowCaseFilesUpsell(true)}
+                  className={cardCls}
+                >
+                  {cardInner}
+                </button>
+              )}
+            </div>
+          )
+        })()}
 
         {/* CBAT entry. Sits at the top of the page (below the header) on
             every screen size so CBAT is clearly framed as a separate

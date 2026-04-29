@@ -57,6 +57,13 @@ async function createSettings(overrides = {}) {
     easyAnswerCount:            3,
     mediumAnswerCount:          5,
     emailConfirmationEnabled:   false,
+    // Permissive Case Files defaults so existing fixtures don't have to opt in;
+    // gating-specific tests override these explicitly.
+    caseFilesEnabled:           true,
+    caseFilesTiers:             ['admin', 'gold', 'silver', 'free'],
+    caseFilesDailyLimitFree:    100,
+    caseFilesDailyLimitSilver:  100,
+    caseFilesDailyLimitGold:    100,
     freeCategories:        ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
     silverCategories:      ['News', 'Aircrafts', 'Bases', 'Ranks', 'Squadrons', 'Training', 'Threats', 'Allies'],
     guestCategories:       ['News'],

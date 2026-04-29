@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 
@@ -337,6 +338,7 @@ export default function CbatAngles() {
   }, [phase])
 
   const startGame = useCallback(() => {
+    recordCbatStart('angles', apiFetch, API)
     setQuestions(buildQuestions())
     setCurrentIdx(0)
     setAnswers([])
@@ -344,7 +346,7 @@ export default function CbatAngles() {
     setIsCorrect(null)
     setElapsed(0)
     setPhase('playing')
-  }, [])
+  }, [apiFetch, API])
 
   const handleAnswer = (option) => {
     if (phase !== 'playing') return

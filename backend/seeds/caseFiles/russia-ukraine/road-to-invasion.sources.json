@@ -1,0 +1,94 @@
+{
+  "evidenceCredits": [
+    {
+      "id": "ev_yelnya_armor",
+      "title": "Yelnya satellite imagery",
+      "credit": "Maxar Technologies, distributed via Associated Press, October 2021",
+      "url": "https://apnews.com/article/europe-russia-ukraine-business-c6cba8d80d39ac4f83a31fe96a6b75bd"
+    },
+    {
+      "id": "ev_putin_essay",
+      "title": "On the Historical Unity of Russians and Ukrainians",
+      "credit": "President of Russia, kremlin.ru, 12 July 2021",
+      "url": "http://en.kremlin.ru/events/president/news/66181"
+    },
+    {
+      "id": "ev_pogonovo_buildup",
+      "title": "Pogonovo training-area imagery",
+      "credit": "Maxar Technologies via Reuters, November 2021",
+      "url": "https://www.reuters.com/world/europe/"
+    },
+    {
+      "id": "ev_field_hospitals",
+      "title": "Field-hospital construction analysis",
+      "credit": "Konrad Muzyka, Rochan Consulting",
+      "url": "https://www.rochan-consulting.com/"
+    },
+    {
+      "id": "ev_security_demands",
+      "title": "Russian draft 'Treaty on Security Guarantees'",
+      "credit": "Russian Ministry of Foreign Affairs, 17 December 2021",
+      "url": "https://mid.ru/en/foreign_policy/news/1790818/"
+    },
+    {
+      "id": "ev_haines_declass",
+      "title": "Declassified intelligence assessment",
+      "credit": "Avril Haines, US Director of National Intelligence, late 2021",
+      "url": "https://www.dni.gov/"
+    },
+    {
+      "id": "ev_allied_resolve",
+      "title": "'Allied Resolve 2022' exercise announcement",
+      "credit": "Belarus Ministry of Defence, January 2022",
+      "url": "https://www.mod.gov.by/"
+    },
+    {
+      "id": "ev_train_movements",
+      "title": "Rail-movement OSINT analysis",
+      "credit": "Konrad Muzyka et al., open-source intelligence collective",
+      "url": "https://twitter.com/konrad_muzyka"
+    },
+    {
+      "id": "ev_recognition_speech",
+      "title": "Recognition of DNR/LNR address",
+      "credit": "President of Russia, kremlin.ru, 21 February 2022",
+      "url": "http://en.kremlin.ru/events/president/news/67828"
+    },
+    {
+      "id": "ev_smo_speech",
+      "title": "'Special military operation' address",
+      "credit": "President of Russia, kremlin.ru, 24 February 2022",
+      "url": "http://en.kremlin.ru/events/president/news/67843"
+    },
+    {
+      "id": "ev_missile_strikes",
+      "title": "Initial cruise-missile strikes",
+      "credit": "Reuters, 24 February 2022",
+      "url": "https://www.reuters.com/"
+    },
+    {
+      "id": "ev_hostomel_assault",
+      "title": "Hostomel airborne assault",
+      "credit": "Maxar Technologies, February 2022",
+      "url": "https://www.maxar.com/"
+    }
+  ],
+  "furtherReading": [
+    {
+      "title": "Institute for the Study of War — Daily assessments",
+      "url": "https://www.understandingwar.org/"
+    },
+    {
+      "title": "Bellingcat — investigations into Russian military activity",
+      "url": "https://www.bellingcat.com/"
+    },
+    {
+      "title": "Royal United Services Institute — preliminary lessons in conventional warfighting",
+      "url": "https://www.rusi.org/explore-our-research/publications/special-resources/preliminary-lessons-conventional-warfighting-russias-invasion-ukraine-february-july-2022"
+    },
+    {
+      "title": "ODNI — Annual Threat Assessment 2022",
+      "url": "https://www.dni.gov/files/ODNI/documents/assessments/ATA-2022-Unclassified-Report.pdf"
+    }
+  ]
+}
