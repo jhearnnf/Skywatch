@@ -2211,7 +2211,7 @@ function UsersTab({ API }) {
                 ['Streak', u.loginStreak ?? 0],
                 ['Briefs Read', u.profileStats?.brifsRead ?? 0],
                 ['Games', (u.profileStats?.quizzesPlayed ?? 0) + (u.profileStats?.booPlayed ?? 0) + (u.profileStats?.wtaPlayed ?? 0) + (u.profileStats?.wherePlayed ?? 0) + (u.profileStats?.flashcardsPlayed ?? 0)],
-                ['CBAT Games Finished', `${u.profileStats?.cbatPlayed ?? 0}/${Math.max(u.profileStats?.cbatPlayed ?? 0, u.profileStats?.cbatStarted ?? 0)}`],
+                ['CBAT Games Finished', `${u.profileStats?.cbatPlayed ?? 0}/${u.profileStats?.cbatStarted ?? 0}`],
                 ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1)],
                 ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })],
               ].map(([l, v]) => (
