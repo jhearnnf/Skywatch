@@ -1,7 +1,9 @@
 /**
- * Tutorial system for the redesigned UI.
- * Tutorial steps can be overridden via AppSettings.tutorialContent (admin-editable).
- * Falls back to hardcoded defaults when no override is set.
+ * Tutorial system.
+ * Steps are sourced from GET /api/tutorials (DB-backed Tutorial model, admin-editable).
+ * The hardcoded TUTORIAL_STEPS below is a fallback used until the fetch settles
+ * (and as a key registry for the localStorage reset/sync loops). It's kept in
+ * sync with backend/seeds/tutorialDefaults.js so the runtime works pre-fetch.
  */
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
@@ -11,10 +13,14 @@ import { useAppSettings } from './AppSettingsContext'
 const Ctx = createContext(null)
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+// Bumped to v2 when the cache shape changed from { id: stepsArray }
+// to { id: tutorialObject } (so showToGuests + name + inline travel with the steps).
+const TUTORIALS_CACHE_KEY = 'sw_tutorials_cache_v2'
 
-// ── Tutorial default definitions ───────────────────────────────────────────
-// Single source of truth for all tutorial keys.
-// When adding a new tutorial: add it here AND add the field to backend/models/User.js tutorials schema.
+// ── Tutorial fallback definitions ──────────────────────────────────────────
+// Mirrors backend/seeds/tutorialDefaults.js. Used until /api/tutorials returns
+// (warm-cache miss only) and as a key registry for reset/sync loops. The
+// runtime always prefers fetched data when available.
 export const TUTORIAL_STEPS = {
   home: [
     { emoji: '👋', title: 'Welcome to SkyWatch!',
@@ -37,6 +43,8 @@ export const TUTORIAL_STEPS = {
       body: 'Each section shows a key fact about the subject. If you see a 💡 next to a stat, tap it — a mnemonic memory aid will help you lock that fact in before your interview.' },
     { emoji: '🎮', title: 'Unlock the Quiz',
       body: 'Once you\'ve read all sections, a quiz becomes available. Complete it to test your knowledge, earn Airstars, and mark the brief as complete.' },
+    { emoji: '⚡', title: 'Speed-Read with RSVP',
+      body: 'Press and hold a section description for ~1 second to engage rapid serial reading. Slide right to advance, left to re-read, up to speed up, down to slow down. Release to exit.' },
   ],
   quiz: [
     { emoji: '🎯', title: 'Quiz Time!',
@@ -56,7 +64,8 @@ export const TUTORIAL_STEPS = {
     { emoji: '🗺️', title: 'Battle of Order',
       body: 'Live now! Arrange aircraft, ranks, and missions in the correct tactical sequence. Read the associated brief and pass its quiz first to unlock each Battle of Order game.' },
     { emoji: '👆', title: 'Choose Your Game',
-      body: 'Tap any of the game type cards to jump straight to that section below. Flashcard Recall is coming soon — the other three are live and ready to play!', highlightGrid: true },
+      body: 'Tap any of the game type cards to jump straight to that section below. Flashcard Recall is coming soon — the other three are live and ready to play!',
+      highlightSelector: '[data-tutorial-target="play-grid"]', highlightPage: '/play', advanceOnTargetClick: true },
   ],
   profile: [
     { emoji: '👤', title: 'Your Agent Profile',
@@ -65,8 +74,12 @@ export const TUTORIAL_STEPS = {
       body: 'The Stats tab shows briefs read, games played, average quiz score, and total Airstars. Tap any stat to see its history.' },
     { emoji: '🏆', title: 'Leaderboard Tab',
       body: 'Switch to the Leaderboard tab to see how you rank against other learners by total Airstars.' },
+    { emoji: '⚙️', title: 'Open Settings',
+      body: 'Tap the Settings tab to find quiz difficulty and other preferences.',
+      highlightSelector: '[data-tutorial-target="profile-tab-settings"]', highlightPage: '/profile', advanceOnTargetClick: true },
     { emoji: '🎯', title: 'Step Up Your Difficulty',
-      body: 'Open the Settings tab and tap Advanced under "Quiz Difficulty" for tougher, interview-level questions and bigger Airstars rewards. You can switch back to Standard at any time.', highlightDifficulty: true },
+      body: 'Tap Advanced under "Quiz Difficulty" for tougher, interview-level questions and bigger Airstars rewards. You can switch back to Standard at any time.',
+      highlightSelector: '[data-tutorial-target="profile-difficulty"]', highlightPage: '/profile', advanceOnTargetClick: true },
   ],
   rankings: [
     { emoji: '🎖️', title: 'Level Progression',
@@ -132,26 +145,20 @@ export const TUTORIAL_STEPS = {
     { emoji: '🏁', title: 'Mission Summary',
       body: 'Your score breakdown and Airstars earned are shown here. Review what you got right and wrong.' },
   ],
-  // pathway_swipe is an inline mini-tutorial — the modal is never triggered for this key.
-  // It lives here solely so the admin reset loop clears its localStorage entry.
+  // Inline mini-tutorials — modal never triggered. Kept here so the
+  // localStorage reset/sync loops can iterate every known tutorial key.
   pathway_swipe: [
     { emoji: '👆', title: 'Switch Pathways',
       body: 'Swipe left or right anywhere on the pathway to switch between your unlocked subjects.' },
   ],
-  // stat_mnemonic is an inline mini-tutorial — the modal is never triggered for this key.
-  // It lives here solely so the admin reset loop clears its localStorage entry.
   stat_mnemonic: [
     { emoji: '💡', title: 'Memory Aids',
       body: 'Press and hold the 💡 icon next to a stat to reveal a memory aid that helps you retain that fact.' },
   ],
-  // swipe is an inline mini-tutorial — the modal is never triggered for this key.
-  // It lives here solely so the admin reset loop clears its localStorage entry.
   swipe: [
     { emoji: '👆', title: 'Navigate Sections',
       body: 'Swipe left to advance to the next section, or swipe right to go back.' },
   ],
-  // quiz_difficulty_nudge is an inline card — the modal is never triggered for this key.
-  // It lives here solely so the admin reset loop clears its localStorage entry.
   quiz_difficulty_nudge: [
     { emoji: '🎚️', title: 'Difficulty Check',
       body: 'One-time nudge shown after a first-attempt win on easy difficulty — asks if the user wants to step up to Advanced.' },
@@ -161,39 +168,51 @@ export const TUTORIAL_STEPS = {
 // Derived key list — import this anywhere that needs to know all tutorial names.
 export const TUTORIAL_KEYS = Object.keys(TUTORIAL_STEPS)
 
-// Apply admin-configured overrides to the default steps.
-// tutorialContent shape: { 'home_0': { title, body }, 'learn_2': { body }, ... }
-function applyOverrides(steps, tutorialContent) {
-  if (!tutorialContent || typeof tutorialContent !== 'object') return steps
+// Convert the array shape returned by /api/tutorials into a {tutorialId: tutorialObject} map.
+// Stores the full tutorial so showToGuests / inline / name travel alongside the steps.
+function tutorialsArrayToMap(arr) {
   const out = {}
-  for (const [name, arr] of Object.entries(steps)) {
-    out[name] = arr.map((step, i) => {
-      const override = tutorialContent[`${name}_${i}`]
-      if (!override) return step
-      return {
-        ...step,
-        ...(override.title?.trim() ? { title: override.title } : {}),
-        ...(override.body?.trim()  ? { body:  override.body  } : {}),
-        ...(override.emoji?.trim() ? { emoji: override.emoji } : {}),
+  for (const t of arr || []) {
+    if (t?.tutorialId && Array.isArray(t.steps)) {
+      out[t.tutorialId] = {
+        tutorialId:   t.tutorialId,
+        name:         t.name,
+        inline:       !!t.inline,
+        showToGuests: t.showToGuests !== false, // default true
+        steps:        t.steps,
       }
-    })
+    }
   }
   return out
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────
 export function AppTutorialProvider({ children }) {
-  const [active,          setActive]          = useState(null) // { name, steps, stepIndex }
-  const [tutorialContent, setTutorialContent] = useState(null)
+  const [active,         setActive]         = useState(null) // { name, steps, stepIndex }
+  // tutorialsMap: { tutorialId: stepsArray } — DB-sourced via /api/tutorials.
+  // Initialised from localStorage so step content paints instantly on cold load.
+  const [tutorialsMap,   setTutorialsMap]   = useState(() => {
+    try {
+      const cached = localStorage.getItem(TUTORIALS_CACHE_KEY)
+      if (cached) return JSON.parse(cached)
+    } catch { /* corrupt cache — ignore */ }
+    return {}
+  })
   const location     = useLocation()
   const { user, loading: authLoading } = useAuth()
   const { settings } = useAppSettings()
   const mnemonicsEnabled = settings?.mnemonicsClickEnabled === true
   const mnemonicsEnabledRef = useRef(mnemonicsEnabled)
   useEffect(() => { mnemonicsEnabledRef.current = mnemonicsEnabled }, [mnemonicsEnabled])
-  const pendingRef        = useRef(null) // tutorial name waiting for auth to resolve
-  const pendingNavRef     = useRef(null) // { name, stepIndex } — fires after next route change
-  const tutContentRef     = useRef(null) // mirror of tutorialContent for use in effects
+  const rsvpEnabled = settings?.rsvpReaderEnabled === true
+  const rsvpEnabledRef = useRef(rsvpEnabled)
+  useEffect(() => { rsvpEnabledRef.current = rsvpEnabled }, [rsvpEnabled])
+  const isGuest = !user?._id
+  const isGuestRef = useRef(isGuest)
+  useEffect(() => { isGuestRef.current = isGuest }, [isGuest])
+  const pendingRef    = useRef(null) // tutorial name waiting for auth to resolve
+  const pendingNavRef = useRef(null) // { name, stepIndex } — fires after next route change
+  const tutorialsRef  = useRef(tutorialsMap) // mirror for use in route-change effect
 
   // Keys are user-scoped so tutorials seen on one account don't suppress them on another
   const storageKey = useCallback((name) => {
@@ -238,28 +257,63 @@ export function AppTutorialProvider({ children }) {
     }
   }, [user?._id, user?.tutorials])
 
-  // Keep ref in sync so route-change effect can read latest content without a dep
-  useEffect(() => { tutContentRef.current = tutorialContent }, [tutorialContent])
+  // Keep ref in sync so route-change effect can read latest map without a dep
+  useEffect(() => { tutorialsRef.current = tutorialsMap }, [tutorialsMap])
 
-  // Load tutorial content overrides from public settings on mount
-  const fetchContent = useCallback(() => {
-    return fetch(`${API}/api/settings`)
+  // Fetch tutorials from the DB on mount. Caches in localStorage so subsequent
+  // cold loads paint immediately without waiting for the round-trip.
+  const fetchTutorials = useCallback(() => {
+    return fetch(`${API}/api/tutorials`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.tutorialContent) setTutorialContent(d.tutorialContent) })
+      .then(d => {
+        const arr = d?.data?.tutorials
+        if (!Array.isArray(arr)) return
+        const map = tutorialsArrayToMap(arr)
+        setTutorialsMap(map)
+        try { localStorage.setItem(TUTORIALS_CACHE_KEY, JSON.stringify(map)) } catch { /* quota */ }
+      })
       .catch(() => {})
   }, [])
 
-  useEffect(() => { fetchContent() }, [fetchContent])
+  useEffect(() => { fetchTutorials() }, [fetchTutorials])
+
+  // Resolve the active step list for a tutorial: prefer DB-sourced data, fall
+  // back to hardcoded TUTORIAL_STEPS, then apply runtime filters in this order:
+  //   1. Tutorial-level showToGuests — if false and user is a guest, return null
+  //      so the tutorial never starts.
+  //   2. Step-level showToGuests — drop steps the admin marked as logged-in-only
+  //      when the current viewer is a guest.
+  //   3. Feature-flag filters for the briefReader tutorial (RSVP / mnemonics).
+  // `isGuest` is whether the current viewer is logged-out.
+  const resolveSteps = useCallback((name, { mnemonicsOn, rsvpOn, isGuest, map }) => {
+    const fromMap = map && map[name]
+    const fromCode = TUTORIAL_STEPS[name]
+    // map values are { steps, showToGuests, ... }; code values are stepsArray
+    let steps        = fromMap ? fromMap.steps : (Array.isArray(fromCode) ? fromCode : null)
+    const showGuests = fromMap ? fromMap.showToGuests !== false : true
+    if (!steps) return null
+    if (isGuest && !showGuests) return null
+    if (isGuest) steps = steps.filter(s => s?.showToGuests !== false)
+    if (name === 'briefReader' && !mnemonicsOn) {
+      steps = steps.filter(s => s.title !== 'Key Stats & Memory Aids')
+    }
+    if (name === 'briefReader' && !rsvpOn) {
+      steps = steps.filter(s => s.title !== 'Speed-Read with RSVP')
+    }
+    return steps
+  }, [])
 
   // On route change: fire any pending post-nav tutorial, otherwise clear active
   useEffect(() => {
     if (pendingNavRef.current) {
       const { name, stepIndex } = pendingNavRef.current
       pendingNavRef.current = null
-      let steps = applyOverrides(TUTORIAL_STEPS, tutContentRef.current)[name] ?? null
-      if (steps && name === 'briefReader' && !mnemonicsEnabledRef.current) {
-        steps = steps.filter(s => s.title !== 'Key Stats & Memory Aids')
-      }
+      const steps = resolveSteps(name, {
+        mnemonicsOn: mnemonicsEnabledRef.current,
+        rsvpOn:      rsvpEnabledRef.current,
+        isGuest:     isGuestRef.current,
+        map:         tutorialsRef.current,
+      })
       if (steps?.length) {
         const idx = Math.min(stepIndex, steps.length - 1)
         setActive({ name, steps, stepIndex: idx })
@@ -269,17 +323,10 @@ export function AppTutorialProvider({ children }) {
     }
   }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Returns steps for a named tutorial, with DB overrides applied
+  // Public API — returns live-resolved steps for a named tutorial
   const getSteps = useCallback((name) => {
-    const overridden = applyOverrides(TUTORIAL_STEPS, tutorialContent)
-    let steps = overridden[name] ?? null
-    // When the mnemonic feature flag is off, drop the "Key Stats & Memory Aids"
-    // step from the briefReader tutorial so users aren't taught a disabled feature.
-    if (steps && name === 'briefReader' && !mnemonicsEnabled) {
-      steps = steps.filter(s => s.title !== 'Key Stats & Memory Aids')
-    }
-    return steps
-  }, [tutorialContent, mnemonicsEnabled])
+    return resolveSteps(name, { mnemonicsOn: mnemonicsEnabled, rsvpOn: rsvpEnabled, isGuest, map: tutorialsMap })
+  }, [resolveSteps, tutorialsMap, mnemonicsEnabled, rsvpEnabled, isGuest])
 
   // When auth finishes loading, fire any tutorial that was queued during the loading window
   useEffect(() => {
@@ -360,8 +407,57 @@ export function AppTutorialProvider({ children }) {
   const activeName  = active?.name ?? null
   const canGoBack   = active ? active.stepIndex > 0            : false
 
+  // ── Universal spotlight ──────────────────────────────────────────────
+  // When the active step has a highlightSelector, find the matching DOM
+  // element, apply .tutorial-spotlight (lifts above the modal backdrop +
+  // glow), and (when advanceOnTargetClick) advance the tutorial when the
+  // user clicks the highlighted element. MutationObserver handles late-
+  // mounting targets (e.g. tab switch revealing a card) for up to 3s.
+  const selector       = step?.highlightSelector || null
+  const advanceOnClick = selector ? step?.advanceOnTargetClick !== false : false
+  useEffect(() => {
+    if (!selector) return
+    let cleanupTarget = null
+    let observer      = null
+    let observeTimer  = null
+
+    const tryFind = () => {
+      const el = document.querySelector(selector)
+      if (!el) return false
+
+      el.classList.add('tutorial-spotlight')
+      let removeListener = () => {}
+      if (advanceOnClick) {
+        const onClick = () => next()
+        el.addEventListener('click', onClick)
+        removeListener = () => el.removeEventListener('click', onClick)
+      }
+      cleanupTarget = () => {
+        el.classList.remove('tutorial-spotlight')
+        removeListener()
+      }
+
+      observer?.disconnect()
+      observer = null
+      clearTimeout(observeTimer)
+      return true
+    }
+
+    if (!tryFind()) {
+      observer = new MutationObserver(tryFind)
+      observer.observe(document.body, { childList: true, subtree: true })
+      observeTimer = setTimeout(() => observer?.disconnect(), 3000)
+    }
+
+    return () => {
+      observer?.disconnect()
+      clearTimeout(observeTimer)
+      cleanupTarget?.()
+    }
+  }, [selector, advanceOnClick, next])
+
   return (
-    <Ctx.Provider value={{ start, next, skip, back, canGoBack, startAfterNav, replay, resetAll, step, total, current, visible, activeName, hasSeen, tutorialContent, refreshContent: fetchContent }}>
+    <Ctx.Provider value={{ start, next, skip, back, canGoBack, startAfterNav, replay, resetAll, step, total, current, visible, activeName, hasSeen, refreshTutorials: fetchTutorials }}>
       {children}
     </Ctx.Provider>
   )

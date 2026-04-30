@@ -136,10 +136,8 @@ const ACCENT = {
 export default function Play() {
   const { user, API, apiFetch } = useAuth()
   const { settings } = useAppSettings()
-  const { start, step, visible, next: tutorialNext, hasSeen } = useAppTutorial()
+  const { start, visible, hasSeen } = useAppTutorial()
   const { newGames, isUnlocked, markSeen, markUnlockFromServer } = useNewGameUnlock()
-
-  const isHighlightingGrid = visible && !!step?.highlightGrid
 
   const [quizBriefs,     setQuizBriefs]     = useState([])
   const [booBriefs,      setBooBriefs]      = useState([])
@@ -413,7 +411,6 @@ export default function Play() {
   // ── Card / scroll ─────────────────────────────────────────────────────────
 
   function handleCardClick(key) {
-    if (isHighlightingGrid) tutorialNext()
     const ref = sectionRefs[key]
     if (ref?.current) {
       const OFFSET = 56 + 16
@@ -564,7 +561,7 @@ export default function Play() {
         {/* Mobile (≤600px): single-column stack of 4 row buttons sized
             to fill the remaining viewport (~88svh after header + CBAT
             banner). The next launcher section peeks in as a scroll cue. */}
-        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6 max-[600px]:min-h-[calc(100svh-280px)]${isHighlightingGrid ? ' tutorial-grid-highlight' : ''}`}>
+        <div data-tutorial-target="play-grid" className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6 max-[600px]:min-h-[calc(100svh-280px)]">
           {GAME_MODES.map((mode, i) => {
             const accent = ACCENT[mode.key]
             const stat   = getStat(mode.key)

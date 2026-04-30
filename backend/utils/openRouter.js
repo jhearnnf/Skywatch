@@ -47,6 +47,12 @@ function resolveKeyAndHeader(key) {
       title:  'SkyWatch Socials',
     };
   }
+  if (key === 'casefiles') {
+    return {
+      apiKey: process.env.OPENROUTER_KEY_CASEFILES || process.env.OPENROUTER_KEY,
+      title:  'SkyWatch Case Files',
+    };
+  }
   return {
     apiKey: process.env.OPENROUTER_KEY,
     title:  'SkyWatch',

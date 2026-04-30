@@ -60,7 +60,7 @@ vi.mock('framer-motion', () => ({
 const MOCK_STATS = {
   users: {
     totalUsers: 10, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
-    easyPlayers: 6, mediumPlayers: 4, totalLogins: 100, combinedStreaks: 20,
+    easyPlayers: 6, mediumPlayers: 4, combinedStreaks: 20,
     emailsSent: 42, emailsFailed: 7,
   },
   games: {
@@ -80,8 +80,10 @@ const MOCK_STATS = {
 const MOCK_OPENROUTER = {
   status: 'success',
   data: {
-    main:     { today: 0.5, todayCalls: 10, lifetime: 12.34 },
-    aptitude: { today: 0.1, todayCalls: 3,  lifetime: 1.23  },
+    main:      { today: 0.5,  todayCalls: 10, lifetime: 12.34 },
+    aptitude:  { today: 0.1,  todayCalls: 3,  lifetime: 1.23  },
+    socials:   { today: 0.05, todayCalls: 2,  lifetime: 0.75  },
+    casefiles: { today: 0.07, todayCalls: 4,  lifetime: 5.67  },
   },
 }
 
@@ -114,6 +116,15 @@ describe('Admin — Stats tab: collapsible sections', () => {
 
     await waitFor(() => expect(screen.getByText('Total Users')).toBeInTheDocument())
     await waitFor(() => expect(screen.getByText('$12.34')).toBeInTheDocument())     // OpenRouter lifetime main
+  })
+
+  it('renders TODAY and LIFETIME tiles for the casefiles key', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('$5.67')).toBeInTheDocument())     // casefiles lifetime
+    // Two casefiles tiles (TODAY + LIFETIME) — find them via the shared label
+    const labels = screen.getAllByText('casefiles')
+    expect(labels.length).toBe(2)
   })
 
   it('renders Quiz/BOO/WTA/Flashcard/Aptitude sections closed by default', async () => {

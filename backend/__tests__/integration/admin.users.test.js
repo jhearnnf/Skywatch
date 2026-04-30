@@ -54,6 +54,54 @@ describe('GET /api/admin/users — auth guards', () => {
   });
 });
 
+// ── sort order ────────────────────────────────────────────────────────────────
+
+describe('GET /api/admin/users — sort order', () => {
+  it('places admins before non-admins regardless of registration date', async () => {
+    // Seed three non-admins with old createdAt and one admin with new createdAt;
+    // admin must still appear ahead of all of them.
+    const oldDate = new Date('2020-01-01T00:00:00Z');
+    const newDate = new Date('2025-12-31T23:59:59Z');
+
+    const oldUser1 = await createUser({ createdAt: oldDate });
+    const oldUser2 = await createUser({ createdAt: oldDate });
+    const oldUser3 = await createUser({ createdAt: oldDate });
+    const newAdmin = await createAdminUser({ createdAt: newDate });
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(newAdmin._id));
+
+    expect(res.status).toBe(200);
+    const ids = res.body.data.users.map(u => u._id.toString());
+
+    const adminIdx = ids.indexOf(newAdmin._id.toString());
+    expect(adminIdx).toBe(0);
+    [oldUser1, oldUser2, oldUser3].forEach(u => {
+      expect(ids.indexOf(u._id.toString())).toBeGreaterThan(adminIdx);
+    });
+  });
+
+  it('orders non-admin users oldest first within their group', async () => {
+    const admin   = await createAdminUser({ createdAt: new Date('2020-01-01') });
+    const userOld = await createUser({ createdAt: new Date('2021-01-01') });
+    const userMid = await createUser({ createdAt: new Date('2022-01-01') });
+    const userNew = await createUser({ createdAt: new Date('2023-01-01') });
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const ids = res.body.data.users.map(u => u._id.toString());
+
+    expect(ids.indexOf(userOld._id.toString()))
+      .toBeLessThan(ids.indexOf(userMid._id.toString()));
+    expect(ids.indexOf(userMid._id.toString()))
+      .toBeLessThan(ids.indexOf(userNew._id.toString()));
+  });
+});
+
 // ── profileStats.brifsRead ────────────────────────────────────────────────────
 
 describe('GET /api/admin/users — profileStats.brifsRead', () => {

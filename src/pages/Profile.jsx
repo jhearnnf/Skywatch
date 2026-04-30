@@ -62,7 +62,7 @@ const TUTORIAL_LABELS = [
 export default function Profile() {
   const { user, setUser, API, apiFetch, logout } = useAuth()
   const navigate = useNavigate()
-  const { start, replay, resetAll, step, visible } = useAppTutorial()
+  const { start, replay, resetAll } = useAppTutorial()
 
   const { levels: liveLevels, settings: appSettings } = useAppSettings()
   const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0, flashcardsCollected: 0 })
@@ -70,7 +70,6 @@ export default function Profile() {
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
   const [diffBusy,    setDiffBusy]    = useState(false)
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-  const isHighlightingDifficulty = visible && !!step?.highlightDifficulty
   const [masterVol,   setMasterVol]   = useState(() => isIOS ? 100 : getMasterVolume())
   const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'settings' | 'tutorials'
   const [resetDone,   setResetDone]   = useState(false)
@@ -80,12 +79,6 @@ export default function Profile() {
     const t = setTimeout(() => start('profile'), 600)
     return () => clearTimeout(t)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // When the difficulty-highlight tutorial step fires, jump to the Settings tab
-  // so the highlighted card is actually on screen.
-  useEffect(() => {
-    if (isHighlightingDifficulty) setTab('settings')
-  }, [isHighlightingDifficulty])
 
   useEffect(() => {
     apiFetch(`${API}/api/users/settings`).then(r => r.json())
@@ -225,6 +218,7 @@ export default function Profile() {
         ].map(t => (
           <button
             key={t.key}
+            data-tutorial-target={t.key === 'settings' ? 'profile-tab-settings' : undefined}
             onClick={() => setTab(t.key)}
             className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all
               ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-surface border border-slate-200 text-slate-500 hover:border-brand-300'}`}
@@ -252,7 +246,7 @@ export default function Profile() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
 
           {/* Difficulty */}
-          <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${isHighlightingDifficulty ? ' tutorial-grid-highlight' : ''}`}>
+          <div data-tutorial-target="profile-difficulty" className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quiz Difficulty</p>
             <div className="flex gap-2">
               {/* Standard — always available */}

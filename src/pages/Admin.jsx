@@ -9,6 +9,7 @@ import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } fr
 import RankBadge from '../components/RankBadge'
 import SocialsSection from '../components/admin/SocialsSection'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
+import TutorialsEditor from './admin/TutorialsEditor'
 import SEO from '../components/SEO'
 import { has3DModel } from '../data/aircraftModels'
 import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } from '../../backend/constants/categories.json'
@@ -154,7 +155,7 @@ function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger = false, o
   )
 }
 
-function StatCard({ label, value, sub, color = 'slate' }) {
+function StatCard({ label, value, sub, color = 'slate', disabled = false }) {
   const colors = {
     slate:  'bg-slate-50  border-slate-200  text-slate-700',
     brand:  'bg-brand-50  border-brand-200  text-brand-700',
@@ -162,9 +163,13 @@ function StatCard({ label, value, sub, color = 'slate' }) {
     emerald:'bg-emerald-50 border-emerald-200 text-emerald-700',
     red:    'bg-red-50    border-red-200    text-red-700',
   }
+  const palette = disabled ? colors.slate : (colors[color] ?? colors.slate)
   return (
-    <div className={`rounded-2xl border p-4 ${colors[color] ?? colors.slate}`}>
-      <p className="text-xl font-extrabold mb-0.5">{value ?? '—'}</p>
+    <div
+      className={`rounded-2xl border p-4 ${palette} ${disabled ? 'opacity-50 grayscale pointer-events-none' : ''}`}
+      aria-disabled={disabled || undefined}
+    >
+      <p className="text-xl font-extrabold mb-0.5">{disabled ? '—' : (value ?? '—')}</p>
       <p className="text-xs font-semibold uppercase tracking-wider opacity-70">{label}</p>
       {sub && <p className="text-[10px] opacity-50 mt-0.5 whitespace-nowrap">{sub}</p>}
     </div>
@@ -242,8 +247,8 @@ function StatsTab({ API, onViewEmailLog }) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate" />
           <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate" />
-          <StatCard label="Total Logins"     value={fmtNum(users.totalLogins)}       color="slate" />
           <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate" />
+          <StatCard label="Users Online"     sub="not yet implemented"               color="slate" disabled />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           <button
@@ -268,7 +273,7 @@ function StatsTab({ API, onViewEmailLog }) {
         {!openRouter ? (
           <div className="py-4 text-center text-slate-400 text-xs animate-pulse">Loading OpenRouter usage…</div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             <button type="button" onClick={() => openRouterNav('main', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
               <StatCard
                 label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>main</>}
@@ -314,6 +319,22 @@ function StatsTab({ API, onViewEmailLog }) {
                 label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>socials</>}
                 value={fmtUSD(openRouter.socials?.lifetime)}
                 sub={openRouter.socials?.lifetimeError || 'all-time spend'}
+                color="emerald"
+              />
+            </button>
+            <button type="button" onClick={() => openRouterNav('casefiles', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
+              <StatCard
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>casefiles</>}
+                value={fmtUSD(openRouter.casefiles?.today)}
+                sub={`${fmtNum(openRouter.casefiles?.todayCalls)} calls today`}
+                color="emerald"
+              />
+            </button>
+            <button type="button" onClick={() => openRouterNav('casefiles', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
+              <StatCard
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>casefiles</>}
+                value={fmtUSD(openRouter.casefiles?.lifetime)}
+                sub={openRouter.casefiles?.lifetimeError || 'all-time spend'}
                 color="emerald"
               />
             </button>
@@ -1688,7 +1709,7 @@ function SettingsTab({ API }) {
             setCaseFilesList(prev => prev.map(c => dirtyRows.some(d => d.slug === c.slug) ? { ...c, tiers: caseFilesDraft[c.slug] ?? [] } : c))
           }
         }
-        save('Update Game Options', [
+        const gameOptionsFields = [
           'easyAnswerCount', 'mediumAnswerCount',
           'passThresholdEasy', 'passThresholdMedium',
           'aiQuestionsPerDifficulty',
@@ -1699,13 +1720,16 @@ function SettingsTab({ API }) {
           'aptitudeSyncDailyLimitSilver',
           'aptitudeSyncDailyLimitGold',
           'cbatEnabled',
-          'cbatTargetAircraftBriefIds',
           'caseFilesEnabled',
           'caseFilesDailyLimitFree',
           'caseFilesDailyLimitSilver',
           'caseFilesDailyLimitGold',
           'newsFlashcardsEnabled',
-        ])
+        ]
+        if (draft.cbatEnabled) {
+          gameOptionsFields.push('cbatTargetAircraftBriefIds', 'cbatFlagAircraftBriefIds')
+        }
+        save('Update Game Options', gameOptionsFields)
       }}>
         <button
           type="button"
@@ -1864,66 +1888,149 @@ function SettingsTab({ API }) {
               onChange={v => set('cbatEnabled', v)}
             />
 
-            <p className="text-sm font-bold text-slate-700 uppercase tracking-wide pt-2 pb-1">Target</p>
-            <div className="py-2.5 border-b border-slate-100">
-              <p className="text-sm font-semibold text-slate-700 mb-1">Aircraft in scan panels</p>
-              <p className="text-xs text-slate-400 mb-3">
-                Only ticked aircraft appear in the Target game's scan panels. New 3D models added to <code>/public/models/</code> start unticked until enabled here.
-              </p>
-              {cbatAircraft === null ? (
-                <p className="text-xs text-slate-400">Loading aircraft…</p>
-              ) : cbatAircraft.length === 0 ? (
-                <p className="text-xs text-slate-400">No aircraft with 3D models found.</p>
-              ) : (
+            {(() => {
+              const cbatLocked = !(draft.cbatEnabled ?? false)
+              if (cbatLocked) {
+                return (
+                  <p className="text-xs text-slate-400 italic pt-1 pb-2">
+                    Enable CBAT Games above to configure individual game settings.
+                  </p>
+                )
+              }
+              const targetEmpty = (draft.cbatTargetAircraftBriefIds ?? []).length === 0
+              const flagEmpty   = (draft.cbatFlagAircraftBriefIds   ?? []).length === 0
+              return (
                 <>
-                  <div className="flex gap-3 mb-2 text-xs">
-                    <button
-                      type="button"
-                      className="text-brand-600 hover:underline font-semibold"
-                      onClick={() => set('cbatTargetAircraftBriefIds', cbatAircraft.map(a => String(a.briefId)))}
-                    >
-                      Select all
-                    </button>
-                    <button
-                      type="button"
-                      className="text-slate-500 hover:underline font-semibold"
-                      onClick={() => set('cbatTargetAircraftBriefIds', [])}
-                    >
-                      Deselect all
-                    </button>
-                    <span className="ml-auto text-slate-400">
-                      {(draft.cbatTargetAircraftBriefIds ?? []).length}/{cbatAircraft.length} enabled
-                    </span>
+                  <p className="text-sm font-bold text-slate-700 uppercase tracking-wide pt-2 pb-1">Target</p>
+                  <div className="py-2.5 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-700 mb-1">Aircraft in scan panels</p>
+                    <p className="text-xs text-slate-400 mb-3">
+                      Only ticked aircraft appear in the Target game's scan panels. New 3D models added to <code>/public/models/</code> start unticked until enabled here.
+                    </p>
+                    {cbatAircraft === null ? (
+                      <p className="text-xs text-slate-400">Loading aircraft…</p>
+                    ) : cbatAircraft.length === 0 ? (
+                      <p className="text-xs text-slate-400">No aircraft with 3D models found.</p>
+                    ) : (
+                      <>
+                        <div className="flex gap-3 mb-2 text-xs">
+                          <button
+                            type="button"
+                            className="text-brand-600 hover:underline font-semibold"
+                            onClick={() => set('cbatTargetAircraftBriefIds', cbatAircraft.map(a => String(a.briefId)))}
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            className="text-slate-500 hover:underline font-semibold"
+                            onClick={() => set('cbatTargetAircraftBriefIds', [])}
+                          >
+                            Deselect all
+                          </button>
+                          <span className="ml-auto text-slate-400">
+                            {(draft.cbatTargetAircraftBriefIds ?? []).length}/{cbatAircraft.length} enabled
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {cbatAircraft.map(a => {
+                            const id      = String(a.briefId)
+                            const enabled = (draft.cbatTargetAircraftBriefIds ?? []).includes(id)
+                            return (
+                              <label key={id} className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 rounded px-2 py-1.5 border border-slate-200">
+                                <input
+                                  type="checkbox"
+                                  checked={enabled}
+                                  onChange={() => {
+                                    const current = draft.cbatTargetAircraftBriefIds ?? []
+                                    const next    = enabled
+                                      ? current.filter(x => x !== id)
+                                      : [...current, id]
+                                    set('cbatTargetAircraftBriefIds', next)
+                                  }}
+                                  className="w-4 h-4 accent-brand-600"
+                                />
+                                {a.cutoutUrl && (
+                                  <img src={a.cutoutUrl} alt="" className="w-8 h-8 object-contain flex-shrink-0" />
+                                )}
+                                <span className="text-sm font-medium text-slate-700 truncate">{a.title}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                        {targetEmpty && (
+                          <p className="text-xs text-red-500 mt-2">At least one aircraft must be enabled</p>
+                        )}
+                      </>
+                    )}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {cbatAircraft.map(a => {
-                      const id      = String(a.briefId)
-                      const enabled = (draft.cbatTargetAircraftBriefIds ?? []).includes(id)
-                      return (
-                        <label key={id} className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 rounded px-2 py-1.5 border border-slate-200">
-                          <input
-                            type="checkbox"
-                            checked={enabled}
-                            onChange={() => {
-                              const current = draft.cbatTargetAircraftBriefIds ?? []
-                              const next    = enabled
-                                ? current.filter(x => x !== id)
-                                : [...current, id]
-                              set('cbatTargetAircraftBriefIds', next)
-                            }}
-                            className="w-4 h-4 accent-brand-600"
-                          />
-                          {a.cutoutUrl && (
-                            <img src={a.cutoutUrl} alt="" className="w-8 h-8 object-contain flex-shrink-0" />
-                          )}
-                          <span className="text-sm font-medium text-slate-700 truncate">{a.title}</span>
-                        </label>
-                      )
-                    })}
+
+                  <p className="text-sm font-bold text-slate-700 uppercase tracking-wide pt-3 pb-1">FLAG</p>
+                  <div className="py-2.5 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-700 mb-1">Aircraft in scan panels</p>
+                    <p className="text-xs text-slate-400 mb-3">
+                      Only ticked aircraft are used in the FLAG game. New 3D models added to <code>/public/models/</code> start unticked until enabled here.
+                    </p>
+                    {cbatAircraft === null ? (
+                      <p className="text-xs text-slate-400">Loading aircraft…</p>
+                    ) : cbatAircraft.length === 0 ? (
+                      <p className="text-xs text-slate-400">No aircraft with 3D models found.</p>
+                    ) : (
+                      <>
+                        <div className="flex gap-3 mb-2 text-xs">
+                          <button
+                            type="button"
+                            className="text-brand-600 hover:underline font-semibold"
+                            onClick={() => set('cbatFlagAircraftBriefIds', cbatAircraft.map(a => String(a.briefId)))}
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            className="text-slate-500 hover:underline font-semibold"
+                            onClick={() => set('cbatFlagAircraftBriefIds', [])}
+                          >
+                            Deselect all
+                          </button>
+                          <span className="ml-auto text-slate-400">
+                            {(draft.cbatFlagAircraftBriefIds ?? []).length}/{cbatAircraft.length} enabled
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {cbatAircraft.map(a => {
+                            const id      = String(a.briefId)
+                            const enabled = (draft.cbatFlagAircraftBriefIds ?? []).includes(id)
+                            return (
+                              <label key={id} className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 rounded px-2 py-1.5 border border-slate-200">
+                                <input
+                                  type="checkbox"
+                                  checked={enabled}
+                                  onChange={() => {
+                                    const current = draft.cbatFlagAircraftBriefIds ?? []
+                                    const next    = enabled
+                                      ? current.filter(x => x !== id)
+                                      : [...current, id]
+                                    set('cbatFlagAircraftBriefIds', next)
+                                  }}
+                                  className="w-4 h-4 accent-brand-600"
+                                />
+                                {a.cutoutUrl && (
+                                  <img src={a.cutoutUrl} alt="" className="w-8 h-8 object-contain flex-shrink-0" />
+                                )}
+                                <span className="text-sm font-medium text-slate-700 truncate">{a.title}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                        {flagEmpty && (
+                          <p className="text-xs text-red-500 mt-2">At least one aircraft must be enabled</p>
+                        )}
+                      </>
+                    )}
                   </div>
                 </>
-              )}
-            </div>
+              )
+            })()}
           </>
         )}
 
@@ -2058,7 +2165,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'rsvpReaderEnabled'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -2070,6 +2177,12 @@ function SettingsTab({ API }) {
           hint="When off, the 💡 beside stats is hidden, stat taps do nothing, and the mnemonic tutorial is suppressed"
           checked={draft.mnemonicsClickEnabled ?? false}
           onChange={v => set('mnemonicsClickEnabled', v)}
+        />
+        <Toggle
+          label="RSVP Speed Reader"
+          hint="Hold-to-engage rapid serial reading on brief description sections. When off, holds do nothing and the RSVP tutorial step is hidden."
+          checked={draft.rsvpReaderEnabled ?? false}
+          onChange={v => set('rsvpReaderEnabled', v)}
         />
       </Section>
 
@@ -2152,6 +2265,7 @@ function UsersTab({ API }) {
   const [awardPanel,  setAwardPanel]  = useState(null) // user._id of open panel
   const [awardAmount, setAwardAmount] = useState('')
   const [tierPanel,   setTierPanel]   = useState(null) // user._id of open panel
+  const [expanded,    setExpanded]    = useState(() => new Set()) // user._ids expanded
 
   const loadAll = useCallback(async () => {
     setLoading(true); setSearch(false)
@@ -2162,6 +2276,37 @@ function UsersTab({ API }) {
   }, [API])
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  // Default expansion: only the current user's row when browsing; all rows when in search mode
+  useEffect(() => {
+    if (search) {
+      setExpanded(new Set(users.map(u => u._id)))
+    } else {
+      setExpanded(currentUser?._id ? new Set([currentUser._id]) : new Set())
+    }
+  }, [users, search, currentUser?._id])
+
+  const toggleExpanded = (id) => {
+    const isOpen = expanded.has(id)
+    if (isOpen) {
+      if (tierPanel === id)  setTierPanel(null)
+      if (awardPanel === id) setAwardPanel(null)
+      if (resetPanel === id) setResetPanel(null)
+    }
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const expandAll = () => setExpanded(new Set(users.map(u => u._id)))
+  const collapseAll = () => {
+    setExpanded(new Set())
+    setTierPanel(null)
+    setAwardPanel(null)
+    setResetPanel(null)
+  }
 
   const runSearch = async () => {
     if (!q.trim()) { loadAll(); return }
@@ -2226,11 +2371,29 @@ function UsersTab({ API }) {
         </div>
       )}
 
+      {!loading && users.length > 0 && (
+        <div className="flex items-center justify-end gap-3 mb-3 text-xs">
+          <button onClick={expandAll}   className="text-brand-600 hover:text-brand-500 font-semibold transition-colors">Expand all</button>
+          <span className="text-slate-500/60" aria-hidden="true">·</span>
+          <button onClick={collapseAll} className="text-slate-400 hover:text-slate-200 font-semibold transition-colors">Collapse all</button>
+        </div>
+      )}
+
       <div className="space-y-3">
-        {users.map(u => (
+        {users.map(u => {
+          const isExpanded = expanded.has(u._id)
+          return (
           <div key={u._id} className={`rounded-2xl border overflow-hidden ${u._id === currentUser?._id ? 'bg-red-950/40 border-red-900/50' : 'bg-surface border-slate-200'}`}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+            {/* Header (clickable — toggles expansion) */}
+            <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={isExpanded}
+              aria-label={`${isExpanded ? 'Collapse' : 'Expand'} Agent ${u.agentNumber}`}
+              onClick={() => toggleExpanded(u._id)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(u._id) } }}
+              className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-raised/40 transition-colors ${isExpanded ? 'border-b border-slate-100' : ''}`}
+            >
               <div>
                 <p className="font-bold text-slate-800 text-sm">
                   Agent {u.agentNumber}
@@ -2240,7 +2403,7 @@ function UsersTab({ API }) {
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={() => setTierPanel(tierPanel === u._id ? null : u._id)}
+                <button onClick={e => { e.stopPropagation(); setTierPanel(tierPanel === u._id ? null : u._id); if (!isExpanded) setExpanded(prev => new Set(prev).add(u._id)) }}
                   title="Change subscription tier"
                   aria-label="Change subscription tier"
                   className={`text-[10px] font-bold px-2 py-1 rounded-full border transition-colors ${
@@ -2259,9 +2422,24 @@ function UsersTab({ API }) {
                     </span>
                   )
                 })()}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  className={`w-4 h-4 ml-1 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
               </div>
             </div>
 
+            {isExpanded && (
+            <>
             {/* Stats row */}
             <div className="grid grid-cols-4 sm:grid-cols-7 divide-x divide-slate-100 border-b border-slate-100">
               {[
@@ -2476,8 +2654,11 @@ function UsersTab({ API }) {
                 </div>
               )
             })()}
+            </>
+            )}
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -2775,28 +2956,11 @@ const CR_DEFAULTS = {
   combatReadinessMediumLabel:  'Operative', combatReadinessMediumTag:  'MEDIUM', combatReadinessMediumStars:  '★★★★☆', combatReadinessMediumFlavor:  'Contextual, deeper questions.',
 }
 
-// Tutorial names in display order with friendly labels
-const TUTORIAL_META = [
-  { key: 'home',                  label: 'Home Page' },
-  { key: 'learn-priority',        label: 'Learn Pathway Page' },
-  { key: 'pathway_swipe',         label: 'Pathway Swipe Hint',          inline: true },
-  { key: 'briefReader',           label: 'Brief Reader' },
-  { key: 'quiz',                  label: 'Quiz' },
-  { key: 'play',                  label: 'Play Hub' },
-  { key: 'wheres_aircraft',       label: "Where's That Aircraft" },
-  { key: 'profile',               label: 'Profile Page' },
-  { key: 'rankings',              label: 'Progression Page' },
-  { key: 'quiz_difficulty_nudge', label: 'Post-Quiz Difficulty Nudge',  inline: true },
-]
-
 function ContentTab({ API }) {
   const [draft,       setDraft]       = useState({})
-  const [tutDraft,    setTutDraft]    = useState({}) // tutorialContent edits: { 'home_0': { title, body } }
   const [modal,       setModal]       = useState(null)
   const [toast,       setToast]       = useState('')
   const [emailBusy,   setEmailBusy]   = useState(false)
-  const [expandedTut, setExpandedTut] = useState(null)
-  const { refreshContent } = useAppTutorial()
   const { apiFetch } = useAuth()
 
   const load = useCallback(() => {
@@ -2811,18 +2975,6 @@ function ContentTab({ API }) {
             if (!merged[k]) merged[k] = v
           })
           setDraft(merged)
-          // Pre-populate tutorial fields from TUTORIAL_STEPS defaults where not yet overridden
-          const tut = { ...(s.tutorialContent ?? {}) }
-          TUTORIAL_META.forEach(({ key: tutKey }) => {
-            const steps = TUTORIAL_STEPS[tutKey] ?? []
-            steps.forEach((step, i) => {
-              const k = `${tutKey}_${i}`
-              if (!tut[k]?.title && !tut[k]?.body && !tut[k]?.emoji) {
-                tut[k] = { title: step.title ?? '', body: step.body ?? '', emoji: step.emoji ?? '' }
-              }
-            })
-          })
-          setTutDraft(tut)
         }
       })
   }, [API])
@@ -2844,18 +2996,6 @@ function ContentTab({ API }) {
     load()
   }
 
-  const confirmSaveTutorials = async (reason) => {
-    await apiFetch(`${API}/api/admin/settings`, {
-      method: 'PATCH', credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tutorialContent: tutDraft, reason }),
-    })
-    setModal(null)
-    setToast('✓ Tutorial text saved')
-    load()
-    refreshContent()
-  }
-
   const sendTestEmail = async () => {
     setEmailBusy(true)
     try {
@@ -2867,14 +3007,6 @@ function ContentTab({ API }) {
     } finally {
       setEmailBusy(false)
     }
-  }
-
-  const setTutField = (tutKey, stepIdx, field, value) => {
-    const key = `${tutKey}_${stepIdx}`
-    setTutDraft(p => ({
-      ...p,
-      [key]: { ...(p[key] ?? {}), [field]: value },
-    }))
   }
 
   const field = (key, label, placeholder, rows) => (
@@ -2895,7 +3027,7 @@ function ContentTab({ API }) {
   return (
     <div>
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
-      {modal && <ConfirmModal title={modal.label} onConfirm={modal.isTutorial ? confirmSaveTutorials : confirmSave} onCancel={() => setModal(null)} />}
+      {modal && <ConfirmModal title={modal.label} onConfirm={confirmSave} onCancel={() => setModal(null)} />}
 
       {/* ── Welcome Email ─────────────────────────────────────────── */}
       <Section title="Welcome Email" collapsible onSave={() => save('Update Welcome Email', ['emailWelcomeEnabled', 'welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
@@ -2943,99 +3075,12 @@ function ContentTab({ API }) {
       </Section>
 
       {/* ── Tutorials ─────────────────────────────────────────────── */}
-      <CollapsibleBox
-        bodyStyle={{ border: '1px solid #172236', background: '#0c1829' }}
-        headerStyle={{ borderColor: '#172236', background: '#102040' }}
-        headerContent={<>
-          <h3 className="font-bold text-slate-800">Tutorials</h3>
-          <p className="text-xs text-slate-400 ml-2">Leave a field blank to use the default text</p>
-        </>}
-      >
-        <div className="px-5 py-3">
-          {TUTORIAL_META.map(({ key: tutKey, label: tutLabel, inline: isInline }) => {
-            const steps    = TUTORIAL_STEPS[tutKey] ?? []
-            const isOpen   = expandedTut === tutKey
-            return (
-              <div key={tutKey} className="border-b border-slate-100 last:border-0">
-                {isInline ? (
-                  <div className="flex items-center justify-between py-3">
-                    <span className="text-sm font-semibold text-slate-700">{tutLabel}</span>
-                    <span className="text-xs text-slate-400 italic">inline visual hint — no text to edit</span>
-                  </div>
-                ) : (
-                <button
-                  onClick={() => setExpandedTut(isOpen ? null : tutKey)}
-                  className="w-full flex items-center justify-between py-3 text-left"
-                >
-                  <span className="text-sm font-semibold text-slate-700">{tutLabel}</span>
-                  <span className="text-slate-400 text-xs">{isOpen ? '▲ collapse' : `${steps.length} steps ▼`}</span>
-                </button>
-                )}
-                {!isInline && isOpen && (
-                  <div className="pb-4 space-y-5">
-                    {steps.map((defaultStep, idx) => {
-                      const overrideKey = `${tutKey}_${idx}`
-                      const override    = tutDraft[overrideKey] ?? {}
-                      return (
-                        <div key={idx} className="bg-slate-100 rounded-xl p-3">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className={`text-xl${(override.emoji || defaultStep.emoji) === '🔥' ? ' flame-blue' : ''}${(override.emoji || defaultStep.emoji) === '⭐' ? ' star-silver' : ''}`}>{override.emoji || defaultStep.emoji}</span>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Step {idx + 1}</span>
-                          </div>
-                          <div className="space-y-2">
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">
-                                Emoji <span className="text-slate-300 font-normal">(default: "{defaultStep.emoji}")</span>
-                              </label>
-                              <input
-                                type="text"
-                                placeholder={defaultStep.emoji}
-                                value={override.emoji ?? ''}
-                                onChange={e => setTutField(tutKey, idx, 'emoji', e.target.value)}
-                                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 bg-surface-raised text-slate-800 placeholder:text-slate-500"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">
-                                Title <span className="text-slate-300 font-normal">(default: "{defaultStep.title}")</span>
-                              </label>
-                              <input
-                                type="text"
-                                placeholder={defaultStep.title}
-                                value={override.title ?? ''}
-                                onChange={e => setTutField(tutKey, idx, 'title', e.target.value)}
-                                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand-200 bg-surface-raised text-slate-800 placeholder:text-slate-500"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[11px] font-semibold text-slate-500 mb-0.5">Body</label>
-                              <textarea
-                                rows={3}
-                                placeholder={defaultStep.body}
-                                value={override.body ?? ''}
-                                onChange={e => setTutField(tutKey, idx, 'body', e.target.value)}
-                                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-200 bg-surface-raised text-slate-800 placeholder:text-slate-500"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-        <div className="px-5 pb-4">
-          <button
-            onClick={() => setModal({ label: 'Update Tutorial Text', isTutorial: true })}
-            className="mt-1 px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors"
-          >
-            Save Tutorials
-          </button>
-        </div>
-      </CollapsibleBox>
+      <TutorialsEditor
+        API={API}
+        ConfirmModal={ConfirmModal}
+        Toast={Toast}
+        CollapsibleBox={CollapsibleBox}
+      />
 
       {/* ── AI Prompts ────────────────────────────────────────────── */}
       <AiPromptsSection API={API} />

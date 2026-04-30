@@ -1,0 +1,256 @@
+// Default tutorial content seeded on first server boot.
+// Mirrors the (now-removed) hardcoded TUTORIAL_STEPS from src/context/AppTutorialContext.jsx.
+// Idempotent — Tutorial.seedDefaults() only inserts tutorials that don't already exist,
+// so admin edits and runtime additions are preserved across deploys.
+
+module.exports = [
+  {
+    tutorialId: 'home',
+    name: 'Home Page',
+    inline: false,
+    steps: [
+      { emoji: '👋', title: 'Welcome to SkyWatch!',
+        body: "Your personal RAF intelligence platform. You'll learn about aircraft, bases, roles, and operations — one brief at a time. This is designed to help you build real aviation knowledge." },
+      { emoji: '✈️', title: 'Choose a Subject Area',
+        body: 'Each card below is a subject — like a school subject but for the RAF. Tap any card to see all the intel briefs inside it. Start with any subject that interests you!' },
+      { emoji: '📈', title: 'Track Your Progress',
+        body: "The progress bar on each subject card shows how many briefs you've read. Try to complete every brief in a subject to master it." },
+      { emoji: '🔥', title: 'Daily Streak',
+        body: 'Come back every day to keep your streak going! Consistent daily learning is the fastest way to build deep knowledge.' },
+      { emoji: '⭐', title: 'Earn Airstars',
+        body: 'Reading briefs and completing quizzes earns you Airstars. Collect enough Airstars to level up — the more you learn, the higher your level climbs.' },
+    ],
+  },
+  {
+    tutorialId: 'briefReader',
+    name: 'Brief Reader',
+    inline: false,
+    steps: [
+      { emoji: '📋', title: 'Reading Intel Briefs',
+        body: 'Each brief is split into short sections — swipe left or tap Continue to move forward, swipe right to go back. The counter in the top corner of each card shows where you are in the brief.' },
+      { emoji: '🔵', title: 'Keyword Hotspots',
+        body: 'Words highlighted in blue are important RAF terms. Tap any highlighted word to see a full explanation. Building this vocabulary is essential for mastering the subject.' },
+      { emoji: '📊', title: 'Key Stats & Memory Aids',
+        body: 'Each section shows a key fact about the subject. If you see a 💡 next to a stat, tap it — a mnemonic memory aid will help you lock that fact in before your interview.' },
+      { emoji: '🎮', title: 'Unlock the Quiz',
+        body: "Once you've read all sections, a quiz becomes available. Complete it to test your knowledge, earn Airstars, and mark the brief as complete." },
+      { emoji: '⚡', title: 'Speed-Read with RSVP',
+        body: 'Press and hold a section description for ~1 second to engage rapid serial reading. Slide right to advance, left to re-read, up to speed up, down to slow down. Release to exit.' },
+    ],
+  },
+  {
+    tutorialId: 'quiz',
+    name: 'Intel Quiz',
+    inline: false,
+    steps: [
+      { emoji: '🎯', title: 'Quiz Time!',
+        body: "All questions are based on the brief you just read. If you're unsure about something, think back to what you read — every answer is in there." },
+      { emoji: '✅', title: 'How It Works',
+        body: "Tap an answer to select it. You'll see immediately if it's right or wrong. Wrong answers show the correct answer so you learn from every mistake." },
+      { emoji: '⭐', title: 'Earn Airstars',
+        body: 'Every correct answer earns Airstars. Complete the quiz to lock in your score. You can retake quizzes to improve your understanding!' },
+    ],
+  },
+  {
+    tutorialId: 'play',
+    name: 'Play Hub',
+    inline: false,
+    steps: [
+      { emoji: '🎮', title: 'Play Hub',
+        body: 'This is your training games hub. Four game modes test your aviation knowledge in different ways — from quizzes to aircraft identification and tactical ordering.' },
+      { emoji: '🧠', title: 'Intel Quiz',
+        body: "Test yourself on briefs you've already read. Choose Standard for recall-based questions or Advanced for tougher contextual challenges. Earn Airstars for every correct answer." },
+      { emoji: '✈️', title: "Where's That Aircraft?",
+        body: 'Live now! Study RAF aircraft and their home bases, then random identification missions begin appearing. Spot the aircraft from an image, then locate its base on a UK map.' },
+      { emoji: '🗺️', title: 'Battle of Order',
+        body: 'Live now! Arrange aircraft, ranks, and missions in the correct tactical sequence. Read the associated brief and pass its quiz first to unlock each Battle of Order game.' },
+      { emoji: '👆', title: 'Choose Your Game',
+        body: 'Tap any of the game type cards to jump straight to that section below. Flashcard Recall is coming soon — the other three are live and ready to play!',
+        highlightSelector: '[data-tutorial-target="play-grid"]',
+        highlightPage: '/play',
+        advanceOnTargetClick: true },
+    ],
+  },
+  {
+    tutorialId: 'profile',
+    name: 'Profile Page',
+    inline: false,
+    steps: [
+      { emoji: '👤', title: 'Your Agent Profile',
+        body: 'This is your personal stats dashboard. Track your level, Airstars, reading streak, and quiz performance all in one place.' },
+      { emoji: '📊', title: 'Stats Tab',
+        body: 'The Stats tab shows briefs read, games played, average quiz score, and total Airstars. Tap any stat to see its history.' },
+      { emoji: '🏆', title: 'Leaderboard Tab',
+        body: 'Switch to the Leaderboard tab to see how you rank against other learners by total Airstars.' },
+      { emoji: '⚙️', title: 'Open Settings',
+        body: 'Tap the Settings tab to find quiz difficulty and other preferences.',
+        highlightSelector: '[data-tutorial-target="profile-tab-settings"]',
+        highlightPage: '/profile',
+        advanceOnTargetClick: true },
+      { emoji: '🎯', title: 'Step Up Your Difficulty',
+        body: 'Tap Advanced under "Quiz Difficulty" for tougher, interview-level questions and bigger Airstars rewards. You can switch back to Standard at any time.',
+        highlightSelector: '[data-tutorial-target="profile-difficulty"]',
+        highlightPage: '/profile',
+        advanceOnTargetClick: true },
+    ],
+  },
+  {
+    tutorialId: 'rankings',
+    name: 'Progression Page',
+    inline: false,
+    steps: [
+      { emoji: '🎖️', title: 'Level Progression',
+        body: 'The Agent Level tab shows your progress through Levels 1–10. Each level requires more Airstars than the last. Reach Level 10 to trigger a Rank Promotion!' },
+      { emoji: '🏅', title: 'RAF Ranks',
+        body: 'The RAF Ranks tab shows all real RAF rank designations. Earn rank promotions by reaching Level 10 repeatedly — working your way up from Aircraftman to Marshal of the RAF.' },
+      { emoji: '⭐', title: 'How to Level Up',
+        body: 'Earn Airstars by reading briefs and completing quizzes. Collect enough Airstars and your level increases automatically — the Airstars bar shows your progress to the next level.' },
+    ],
+  },
+  {
+    tutorialId: 'wheres_aircraft',
+    name: "Where's That Aircraft?",
+    inline: false,
+    steps: [
+      { emoji: '✈️', title: "Where's That Aircraft?",
+        body: "This mission has two rounds. First, you'll be shown an aircraft image and asked to identify it from 5 options. Stay sharp — one wrong move and the mission is over!" },
+      { emoji: '🗺️', title: 'Round 2 — Find the Base',
+        body: 'If you identify the aircraft correctly, Round 2 begins! A UK map appears with RAF bases marked. Select the home base(s) for that aircraft to complete the mission.' },
+      { emoji: '⭐', title: 'Earn Airstars',
+        body: 'Correct identification earns coins. A correct base selection earns more. Complete both rounds successfully for a full mission bonus. The more you read, the more missions become available!' },
+    ],
+  },
+  {
+    tutorialId: 'learn-priority',
+    name: 'Learn Pathway Page',
+    inline: false,
+    steps: [
+      { emoji: '🗺️', title: 'Welcome to the Pathway',
+        body: 'This is your guided learning path. Follow the stepping stones in order to build your knowledge systematically — arranged from the most essential topics first.' },
+      { emoji: '👣', title: 'Stepping Stones',
+        body: 'Each stone represents an Intel Brief. Tap it to open and read it. Completed stones are marked with a tick — work through them in order for the best results.' },
+      { emoji: '🔓', title: 'Unlock More Paths',
+        body: 'Level up to unlock new learning pathways covering Aircrafts, Ranks, Squadrons, and more. Some pathways also require a Silver or Gold subscription.' },
+    ],
+  },
+  {
+    tutorialId: 'caseFile_coldOpen',
+    name: 'Case File — Cold Open',
+    inline: false,
+    steps: [
+      { emoji: '📂', title: 'Scene Briefing',
+        body: "Read the situation. Tap Continue when you're ready to proceed to the first stage." },
+    ],
+  },
+  {
+    tutorialId: 'caseFile_evidenceWall',
+    name: 'Case File — Evidence Wall',
+    inline: false,
+    steps: [
+      { emoji: '🔍', title: 'Inspect the Evidence',
+        body: 'Click any evidence card to examine it. Look for connections between items.' },
+      { emoji: '🧵', title: 'Link & Remove',
+        body: 'Click two cards to draw a link between them. Click an existing string to remove it. Submit when your links are placed.' },
+    ],
+  },
+  {
+    tutorialId: 'caseFile_actorInterrogations',
+    name: 'Case File — Actor Interrogations',
+    inline: false,
+    steps: [
+      { emoji: '🎙️', title: 'Question Key Actors',
+        body: 'Select a question to put to each actor. You have 3 questions per actor — choose carefully.' },
+      { emoji: '📝', title: 'Answers Carry Forward',
+        body: "What actors tell you informs the stages ahead. You can't revisit questions once submitted." },
+    ],
+  },
+  {
+    tutorialId: 'caseFile_decisionPoint',
+    name: 'Case File — Decision Point',
+    inline: false,
+    steps: [
+      { emoji: '⚖️', title: 'Make Your Call',
+        body: "Pick the outcome you think will occur, then lock it in. You can't change your answer after submitting." },
+    ],
+  },
+  {
+    tutorialId: 'caseFile_mapPredictive',
+    name: 'Case File — Predictive Map',
+    inline: false,
+    steps: [
+      { emoji: '📍', title: 'Place Your Pins',
+        body: 'Drag pins onto the map to mark where you predict forces will appear or move.' },
+      { emoji: '✅', title: 'Submit Your Forecast',
+        body: 'Confirm your pin placements and submit. Your accuracy is scored against the real outcome.' },
+    ],
+  },
+  {
+    tutorialId: 'caseFile_phaseReveal',
+    name: 'Case File — Phase Reveal',
+    inline: false,
+    steps: [
+      { emoji: '📡', title: 'Reality Check',
+        body: 'This is what actually happened. Compare the outcome against your earlier predictions.' },
+    ],
+  },
+  {
+    tutorialId: 'caseFile_mapLive',
+    name: 'Case File — Live Map',
+    inline: false,
+    steps: [
+      { emoji: '🗺️', title: 'Contested Zones',
+        body: 'Tap each highlighted zone on the map to see the situation there.' },
+      { emoji: '🎯', title: 'Choose Your Response',
+        body: 'For each zone, select how to respond. Submit all decisions when ready.' },
+    ],
+  },
+  {
+    tutorialId: 'caseFile_debrief',
+    name: 'Case File — Debrief',
+    inline: false,
+    steps: [
+      { emoji: '🏁', title: 'Mission Summary',
+        body: 'Your score breakdown and Airstars earned are shown here. Review what you got right and wrong.' },
+    ],
+  },
+  // ── Inline mini-tutorials ──────────────────────────────────────────────
+  // Hidden from the main admin editor (inline: true). The modal is never
+  // triggered for these — they exist so the reset/sync loops know which
+  // localStorage keys to clear and so the tutorial registry stays complete.
+  {
+    tutorialId: 'pathway_swipe',
+    name: 'Pathway Swipe Hint',
+    inline: true,
+    steps: [
+      { emoji: '👆', title: 'Switch Pathways',
+        body: 'Swipe left or right anywhere on the pathway to switch between your unlocked subjects.' },
+    ],
+  },
+  {
+    tutorialId: 'stat_mnemonic',
+    name: 'Stat Mnemonic Hint',
+    inline: true,
+    steps: [
+      { emoji: '💡', title: 'Memory Aids',
+        body: 'Press and hold the 💡 icon next to a stat to reveal a memory aid that helps you retain that fact.' },
+    ],
+  },
+  {
+    tutorialId: 'swipe',
+    name: 'Section Swipe Hint',
+    inline: true,
+    steps: [
+      { emoji: '👆', title: 'Navigate Sections',
+        body: 'Swipe left to advance to the next section, or swipe right to go back.' },
+    ],
+  },
+  {
+    tutorialId: 'quiz_difficulty_nudge',
+    name: 'Post-Quiz Difficulty Nudge',
+    inline: true,
+    steps: [
+      { emoji: '🎚️', title: 'Difficulty Check',
+        body: 'One-time nudge shown after a first-attempt win on easy difficulty — asks if the user wants to step up to Advanced.' },
+    ],
+  },
+];

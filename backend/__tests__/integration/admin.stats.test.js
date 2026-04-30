@@ -135,15 +135,28 @@ describe('GET /api/admin/stats — users section', () => {
     expect(users.subscribedUsers).toBe(2); // only the two with stripeSubscriptionId
   });
 
-  it('returns 0 logins and streaks when DB is empty of game data', async () => {
+  it('returns 0 combinedStreaks when no users have a loginStreak', async () => {
     const admin = await createAdminUser();
     const res   = await request(app)
       .get('/api/admin/stats')
       .set('Cookie', authCookie(admin._id));
     const { users } = res.body.data;
 
-    expect(users.totalLogins).toBe(0);
     expect(users.combinedStreaks).toBe(0);
+    expect(users.totalLogins).toBeUndefined();
+  });
+
+  it('sums loginStreak across all users for combinedStreaks', async () => {
+    const admin = await createAdminUser();
+    await createUser({ loginStreak: 1 });
+    await createUser({ loginStreak: 4 });
+    await createUser({ loginStreak: 0 });
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.users.combinedStreaks).toBe(5);
   });
 
   it('returns 0 emailsSent and emailsFailed when no email log entries exist', async () => {

@@ -25,6 +25,7 @@ const ACTION_TYPES = [
   'update_economy_apply',
   'reset_category_badges',
   'change_app_settings',
+  'edit_tutorial_content',
 ];
 
 const adminActionSchema = new mongoose.Schema({

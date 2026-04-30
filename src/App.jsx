@@ -17,6 +17,7 @@ import { NewGameUnlockProvider }           from './context/NewGameUnlockContext'
 import { NewCategoryUnlockProvider }       from './context/NewCategoryUnlockContext'
 import { UnsolvedReportsProvider }          from './context/UnsolvedReportsContext'
 import { GameChromeProvider }                from './context/GameChromeContext'
+import TutorialPickerOverlay                  from './components/TutorialPickerOverlay'
 import AppShell                            from './components/layout/AppShell'
 import ScrollToTop                         from './components/ScrollToTop'
 import AirstarNotification                 from './components/AirstarNotification'
@@ -55,6 +56,7 @@ import CbatSymbols      from './pages/CbatSymbols'
 import CbatTarget       from './pages/CbatTarget'
 import CbatInstruments  from './pages/CbatInstruments'
 import CbatAnt from './pages/CbatAnt'
+import CbatFlag from './pages/CbatFlag'
 import CbatLeaderboard from './pages/CbatLeaderboard'
 import AirstarHistory from './pages/AirstarHistory'
 import GameHistory        from './pages/GameHistory'
@@ -232,6 +234,7 @@ function AppRoutes() {
           <Route path="/cbat/target"           element={<RequireAuth><PageWrapper><CbatTarget /></PageWrapper></RequireAuth>} />
           <Route path="/cbat/instruments"      element={<RequireAuth><PageWrapper><CbatInstruments /></PageWrapper></RequireAuth>} />
           <Route path="/cbat/ant"              element={<RequireAuth><PageWrapper><CbatAnt /></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/flag"             element={<RequireAuth><PageWrapper><CbatFlag /></PageWrapper></RequireAuth>} />
           <Route path="/cbat/:gameKey/leaderboard" element={<RequireAuth><PageWrapper><CbatLeaderboard /></PageWrapper></RequireAuth>} />
 
           {/* v2 protected pages */}
@@ -343,6 +346,7 @@ export default function App() {
                   <LearnNavFlasher />
                   <PlayNavFlasher />
                   <ReportNotifBanner />
+                  <TutorialPickerOverlay />
                 </GameChromeProvider>
               </UnsolvedReportsProvider>
              </NewCategoryUnlockProvider>

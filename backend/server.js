@@ -21,6 +21,7 @@ mongoose
   .then(async () => {
     console.log('Connected to MongoDB');
     await require('./models/Level').seedLevels();
+    await require('./models/Tutorial').seedDefaults();
     await require('./seeds/seedRanks')();
     await require('./seeds/seedBriefs')();
 await require('./models/Media').ensurePlaceholderForBriefs();

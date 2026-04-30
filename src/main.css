@@ -153,6 +153,13 @@ body::before {
 /* prevent layout shift when bottom-sheet open */
 .no-scroll { overflow: hidden; }
 
+/* ── RSVP speed-reader blur/dim ──────────────────────────────────────── */
+body[data-rsvp-active] > *:not(.rsvp-overlay) {
+  filter: blur(2px);
+  transition: filter 200ms ease-out;
+}
+.rsvp-overlay { filter: none !important; }
+
 /* ── Core utilities ───────────────────────────────────────────────────── */
 .text-gradient {
   background: linear-gradient(135deg, var(--color-brand-600), #38bdf8);
@@ -348,8 +355,10 @@ body.play-mode::before {
   .skeleton-shimmer { animation: none; opacity: 0.6; }
 }
 
-/* Tutorial highlight: lifts the game-mode grid above the backdrop + ambient glow */
-.tutorial-grid-highlight {
+/* Universal tutorial spotlight: applied to any element a tutorial step targets
+   via its highlightSelector. Lifts the element above the modal backdrop (z-48)
+   so it "pops" while everything else stays dimmed. */
+.tutorial-spotlight {
   position: relative;
   z-index: 49;
   animation: tutorialGlowPulse 2.2s ease-in-out infinite;

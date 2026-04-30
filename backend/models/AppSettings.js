@@ -135,6 +135,7 @@ const appSettingsSchema = new mongoose.Schema({
   betaTesterAutoGold:    { type: Boolean, default: false },
   cbatEnabled:           { type: Boolean, default: false },
   mnemonicsClickEnabled: { type: Boolean, default: false },
+  rsvpReaderEnabled:     { type: Boolean, default: false },
 
   // Flashcards feature — when false, News-category briefs skip the flashcard
   // layout on section 4, are excluded from the flashcard deck and overall count,
@@ -156,6 +157,12 @@ const appSettingsSchema = new mongoose.Schema({
   // Empty = no aircraft enabled. New 3D models added to /public/models/ start unticked
   // until an admin explicitly enables them via the Game Options → CBAT → Target section.
   cbatTargetAircraftBriefIds: { type: [String], default: [] },
+
+  // CBAT FLAG — strict allowlist of aircraft (briefIds) usable by the FLAG game.
+  // Same shape as cbatTargetAircraftBriefIds. When cbatEnabled is true, the admin
+  // PATCH route enforces a minimum of one entry per game; when CBAT is disabled,
+  // the admin UI omits these keys from PATCH so the previously-saved values persist.
+  cbatFlagAircraftBriefIds: { type: [String], default: [] },
 
   // Case Files feature
   caseFilesEnabled:           { type: Boolean,  default: false },

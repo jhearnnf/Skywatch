@@ -8,9 +8,10 @@
  *   - fetchOpenRouterKeyUsage() parses the /api/v1/key response
  */
 
-process.env.OPENROUTER_KEY          = 'test_main_key';
-process.env.OPENROUTER_KEY_APTITUDE = 'test_aptitude_key';
-process.env.OPENROUTER_KEY_SOCIALS  = 'test_socials_key';
+process.env.OPENROUTER_KEY           = 'test_main_key';
+process.env.OPENROUTER_KEY_APTITUDE  = 'test_aptitude_key';
+process.env.OPENROUTER_KEY_SOCIALS   = 'test_socials_key';
+process.env.OPENROUTER_KEY_CASEFILES = 'test_casefiles_key';
 
 const db = require('../helpers/setupDb');
 const OpenRouterUsageLog = require('../../models/OpenRouterUsageLog');
@@ -102,6 +103,33 @@ describe('callOpenRouter', () => {
 
     await callOpenRouter({ key: 'socials', feature: 'social-draft-x', body: { model: 'x', messages: [] } });
     process.env.OPENROUTER_KEY_SOCIALS = saved;
+  });
+
+  it('tags the log with the key resolved from the casefiles env var', async () => {
+    jest.spyOn(global, 'fetch').mockImplementationOnce((url, opts) => {
+      expect(opts.headers.Authorization).toBe('Bearer test_casefiles_key');
+      expect(opts.headers['X-Title']).toBe('SkyWatch Case Files');
+      return mockFetchJson({ choices: [], usage: { cost: 0 } });
+    });
+
+    await callOpenRouter({ key: 'casefiles', feature: 'case_file_interrogation', body: { model: 'x', messages: [] } });
+    await _flushPendingLogWrites();
+
+    const rows = await OpenRouterUsageLog.find({ key: 'casefiles' }).lean();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].key).toBe('casefiles');
+  });
+
+  it('falls back to OPENROUTER_KEY when OPENROUTER_KEY_CASEFILES is unset', async () => {
+    const saved = process.env.OPENROUTER_KEY_CASEFILES;
+    delete process.env.OPENROUTER_KEY_CASEFILES;
+    jest.spyOn(global, 'fetch').mockImplementationOnce((url, opts) => {
+      expect(opts.headers.Authorization).toBe('Bearer test_main_key');
+      return mockFetchJson({ choices: [], usage: { cost: 0 } });
+    });
+
+    await callOpenRouter({ key: 'casefiles', feature: 'case_file_interrogation', body: { model: 'x', messages: [] } });
+    process.env.OPENROUTER_KEY_CASEFILES = saved;
   });
 
   it('injects usage:{ include: true } into the outbound body', async () => {

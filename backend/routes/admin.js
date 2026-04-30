@@ -371,7 +371,7 @@ router.get('/stats', async (_req, res) => {
       totalGamesPlayed, totalGamesCompleted, totalPerfectScores, totalGamesWon,
       easyLost, mediumLost,
       totalGamesAbandoned,
-      airstarAgg, loginAgg,
+      airstarAgg, streakAgg,
       quizTimeAgg,
       booTotal, booWon, booDefeated, booAbandoned, booTimeAgg,
       wtaTotal, wtaWon, wtaAbandoned, wtaRound1Correct, wtaRound2Correct, wtaTimeAgg,
@@ -403,7 +403,7 @@ router.get('/stats', async (_req, res) => {
       GameSessionQuizAttempt.countDocuments({ status: 'completed', difficulty: 'medium', percentageCorrect: { $lt: passThresholdMedium } }),
       GameSessionQuizAttempt.countDocuments({ status: 'abandoned' }),
       User.aggregate([{ $group: { _id: null, total: { $sum: '$totalAirstars' } } }]),
-      User.aggregate([{ $group: { _id: null, total: { $sum: { $size: { $ifNull: ['$logins', []] } } } } }]),
+      User.aggregate([{ $group: { _id: null, total: { $sum: { $ifNull: ['$loginStreak', 0] } } } }]),
       // Quiz: sum time for attempts that have both timeStarted and timeFinished
       GameSessionQuizAttempt.aggregate([
         { $match: { timeFinished: { $ne: null } } },
@@ -464,10 +464,6 @@ router.get('/stats', async (_req, res) => {
 
     const aptitudeSyncAbandoned = aptitudeSyncTotal - aptitudeSyncCompleted;
 
-    // Combined login streaks — requires virtual, so fetch all users
-    const allUsers      = await User.find({}).select('logins');
-    const combinedStreaks = allUsers.reduce((sum, u) => sum + (u.loginStreak ?? 0), 0);
-
     res.json({
       status: 'success',
       data: {
@@ -475,8 +471,7 @@ router.get('/stats', async (_req, res) => {
           totalUsers, freeUsers, trialUsers,
           subscribedUsers: silverUsers + goldUsers,
           easyPlayers, mediumPlayers,
-          totalLogins:      loginAgg[0]?.total ?? 0,
-          combinedStreaks,
+          combinedStreaks:  streakAgg[0]?.total ?? 0,
           emailsSent, emailsFailed,
         },
         games: {
@@ -549,12 +544,13 @@ async function getLifetimeUsage() {
   if (lifetimeCache.data && (Date.now() - lifetimeCache.fetchedAt) < LIFETIME_CACHE_MS) {
     return lifetimeCache.data;
   }
-  const [main, aptitude, socials] = await Promise.all([
+  const [main, aptitude, socials, casefiles] = await Promise.all([
     fetchOpenRouterKeyUsage('main'),
     fetchOpenRouterKeyUsage('aptitude'),
     fetchOpenRouterKeyUsage('socials'),
+    fetchOpenRouterKeyUsage('casefiles'),
   ]);
-  const data = { main, aptitude, socials };
+  const data = { main, aptitude, socials, casefiles };
   lifetimeCache.data = data;
   lifetimeCache.fetchedAt = Date.now();
   return data;
@@ -587,9 +583,10 @@ router.get('/openrouter/summary', async (_req, res) => {
     ]);
 
     const today = {
-      main:     { cost: 0, calls: 0, byFeature: {} },
-      aptitude: { cost: 0, calls: 0, byFeature: {} },
-      socials:  { cost: 0, calls: 0, byFeature: {} },
+      main:      { cost: 0, calls: 0, byFeature: {} },
+      aptitude:  { cost: 0, calls: 0, byFeature: {} },
+      socials:   { cost: 0, calls: 0, byFeature: {} },
+      casefiles: { cost: 0, calls: 0, byFeature: {} },
     };
     for (const row of todayAgg) {
       const k = row._id.key;
@@ -599,9 +596,10 @@ router.get('/openrouter/summary', async (_req, res) => {
       today[k].byFeature[row._id.feature] = { cost: row.cost, calls: row.calls };
     }
     const last7Days = {
-      main:     { cost: 0, calls: 0 },
-      aptitude: { cost: 0, calls: 0 },
-      socials:  { cost: 0, calls: 0 },
+      main:      { cost: 0, calls: 0 },
+      aptitude:  { cost: 0, calls: 0 },
+      socials:   { cost: 0, calls: 0 },
+      casefiles: { cost: 0, calls: 0 },
     };
     for (const row of weekAgg) {
       if (last7Days[row._id]) last7Days[row._id] = { cost: row.cost, calls: row.calls };
@@ -637,6 +635,15 @@ router.get('/openrouter/summary', async (_req, res) => {
           todayByFeature: today.socials.byFeature,
           last7Days: last7Days.socials.cost,
         },
+        casefiles: {
+          lifetime:  lifetime.casefiles.usage,
+          lifetimeLabel: lifetime.casefiles.label,
+          lifetimeError: lifetime.casefiles.error,
+          today:     today.casefiles.cost,
+          todayCalls: today.casefiles.calls,
+          todayByFeature: today.casefiles.byFeature,
+          last7Days: last7Days.casefiles.cost,
+        },
       },
     });
   } catch (err) {
@@ -655,7 +662,7 @@ router.get('/openrouter/logs', async (req, res) => {
     const cursor = req.query.cursor;
 
     const match = {};
-    if (key === 'main' || key === 'aptitude' || key === 'socials') match.key = key;
+    if (key === 'main' || key === 'aptitude' || key === 'socials' || key === 'casefiles') match.key = key;
     if (feature) {
       const list = Array.isArray(feature) ? feature : String(feature).split(',').map(s => s.trim()).filter(Boolean);
       if (list.length) match.feature = { $in: list };
@@ -719,6 +726,28 @@ router.get('/settings', async (_req, res) => {
 router.patch('/settings', requireReason, async (req, res) => {
   try {
     const { reason, ...updates } = req.body;
+
+    // CBAT aircraft allowlists must contain ≥1 entry whenever CBAT is enabled.
+    // Block empty saves at the API level so a 0-aircraft state can never persist.
+    {
+      const current = await AppSettings.findOne();
+      const willBeEnabled = updates.cbatEnabled ?? current?.cbatEnabled ?? false;
+      if (willBeEnabled) {
+        const checks = [
+          ['cbatTargetAircraftBriefIds', 'Target'],
+          ['cbatFlagAircraftBriefIds',   'FLAG'],
+        ];
+        for (const [key, label] of checks) {
+          if (key in updates) {
+            const next = Array.isArray(updates[key]) ? updates[key] : [];
+            if (next.length === 0) {
+              return res.status(400).json({ message: `At least one aircraft must be enabled for CBAT ${label}` });
+            }
+          }
+        }
+      }
+    }
+
     const settings = await AppSettings.findOneAndUpdate({}, updates, { returnDocument: 'after', upsert: true });
     // Mixed field tutorialContent needs explicit mark after findOneAndUpdate via set,
     // but findOneAndUpdate at the DB level handles it correctly already.
@@ -826,30 +855,61 @@ router.post('/test-email', async (req, res) => {
   }
 });
 
-// PATCH /api/admin/tutorials/content — save an override for one tutorial step
-// Body: { key: 'welcome_0', title, body, guestBody (optional) }
-// Send title/body as empty string to clear the override for that field.
-router.patch('/tutorials/content', requireReason, async (req, res) => {
+// GET /api/admin/tutorials — list every tutorial with its steps
+router.get('/tutorials', async (_req, res) => {
   try {
-    const { key, title, body, emoji, guestBody, reason } = req.body;
-    const VALID_KEYS = ['welcome_0','welcome_1','intel_brief_0','user_0','user_1','load_up_0'];
-    if (!VALID_KEYS.includes(key)) return res.status(400).json({ message: 'Invalid tutorial key' });
-
-    // Build the override object; omit guestBody unless it was provided
-    const override = { title: title ?? '', body: body ?? '', emoji: emoji ?? '' };
-    if (guestBody !== undefined) override.guestBody = guestBody;
-
-    const settings = await AppSettings.findOne() ?? await AppSettings.create({});
-    const existing = settings.tutorialContent ?? {};
-    existing[key] = override;
-    settings.tutorialContent = existing;
-    settings.markModified('tutorialContent');
-    await settings.save();
-
-    await AdminAction.create({ userId: req.user._id, actionType: 'edit_tutorial_content', reason });
-    res.json({ status: 'success', data: { tutorialContent: settings.tutorialContent } });
+    const Tutorial  = require('../models/Tutorial');
+    const tutorials = await Tutorial.find({}).lean();
+    res.json({ status: 'success', data: { tutorials } });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/admin/tutorials/:tutorialId — replace the steps array (and optionally name + showToGuests)
+// Body: { name?, showToGuests?, steps: [{ emoji, title, body, guestBody?, highlightSelector?, highlightPage?, advanceOnTargetClick?, showToGuests? }, ...], reason }
+router.put('/tutorials/:tutorialId', requireReason, async (req, res) => {
+  try {
+    const Tutorial = require('../models/Tutorial');
+    const { tutorialId } = req.params;
+    const { name, steps, showToGuests, reason } = req.body;
+
+    if (!Array.isArray(steps)) {
+      return res.status(400).json({ message: 'steps must be an array' });
+    }
+    // Validate each step shape — all string fields default to '' when missing,
+    // booleans coerce as: advanceOnTargetClick defaults true, showToGuests defaults true.
+    const cleanSteps = steps.map((s, i) => {
+      if (!s || typeof s !== 'object') {
+        throw Object.assign(new Error(`Step ${i} must be an object`), { status: 400 });
+      }
+      return {
+        emoji:                typeof s.emoji === 'string' ? s.emoji : '',
+        title:                typeof s.title === 'string' ? s.title : '',
+        body:                 typeof s.body  === 'string' ? s.body  : '',
+        guestBody:            typeof s.guestBody === 'string' ? s.guestBody : '',
+        highlightSelector:    typeof s.highlightSelector === 'string' ? s.highlightSelector.trim() : '',
+        highlightPage:        typeof s.highlightPage     === 'string' ? s.highlightPage.trim()     : '',
+        advanceOnTargetClick: s.advanceOnTargetClick !== false, // default true
+        showToGuests:         s.showToGuests !== false,         // default true
+      };
+    });
+
+    const update = { steps: cleanSteps };
+    if (typeof name === 'string' && name.trim()) update.name = name.trim();
+    if (typeof showToGuests === 'boolean') update.showToGuests = showToGuests;
+
+    const tutorial = await Tutorial.findOneAndUpdate(
+      { tutorialId },
+      update,
+      { returnDocument: 'after' }
+    );
+    if (!tutorial) return res.status(404).json({ message: 'Tutorial not found' });
+
+    await AdminAction.create({ userId: req.user._id, actionType: 'edit_tutorial_content', reason });
+    res.json({ status: 'success', data: { tutorial } });
+  } catch (err) {
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 
@@ -941,10 +1001,10 @@ async function enrichUsersWithStats(users) {
   });
 }
 
-// GET /api/admin/users — all users, oldest first (first registered at top)
+// GET /api/admin/users — admins first, then oldest registration first
 router.get('/users', async (req, res) => {
   try {
-    const users = await User.find().populate('rank').sort({ createdAt: 1 });
+    const users = await User.find().populate('rank').sort({ isAdmin: -1, createdAt: 1 });
     res.json({ status: 'success', data: { users: await enrichUsersWithStats(users) } });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -959,7 +1019,7 @@ router.get('/users/search', async (req, res) => {
 
     const users = await User.find({
       $or: [{ email: new RegExp(q, 'i') }, { agentNumber: q }],
-    }).populate('rank').limit(20);
+    }).populate('rank').sort({ isAdmin: -1, createdAt: 1 }).limit(20);
 
     res.json({ status: 'success', data: { users: await enrichUsersWithStats(users) } });
   } catch (err) {

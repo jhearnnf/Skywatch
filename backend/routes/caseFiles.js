@@ -530,7 +530,7 @@ router.post('/sessions/:sessionId/interrogate', protect, async (req, res) => {
     });
 
     const aiResponse = await callOpenRouter({
-      key:     'main',
+      key:     'casefiles',
       feature: 'case_file_interrogation',
       body:    {
         model:       INTERROGATION_MODEL,
