@@ -760,27 +760,40 @@ function PlayFieldImpl({
     if (shapeLockRef.current[lockKey] && nowMs < shapeLockRef.current[lockKey]) return
     shapeLockRef.current[lockKey] = nowMs + 250
 
-    const hotShape = shapesRef.current.find(s => s.color === color && s.hot)
-    if (!hotShape) {
+    // With a duplicate-colour palette there can be two hot shapes sharing
+    // this colour. Prefer the first one with an unclaimed slot — otherwise
+    // the user can't score the second shape's aircraft until the first one
+    // goes cold (which felt like a wrongful miss in playtesting).
+    const hotShapes = shapesRef.current.filter(s => s.color === color && s.hot)
+    if (hotShapes.length === 0) {
       onScoreEvent?.({ type: 'targetMiss' })
       flashShapesByColor(color, 'red')
       return
     }
-    const slotAcIds = shapeSlotsRef.current[String(hotShape.id)] || []
-    if (!shapeClaimRef.current[hotShape.id]) shapeClaimRef.current[hotShape.id] = {}
-    const claims = shapeClaimRef.current[hotShape.id]
-    const unclaimed = slotAcIds.find(acId => claims[acId] == null)
-
-    if (unclaimed != null) {
-      claims[unclaimed] = nowMs
-      onScoreEvent?.({ type: 'targetHit' })
-      flashShape(hotShape.id, 'green')
-      return
+    for (const target of hotShapes) {
+      const slotAcIds = shapeSlotsRef.current[String(target.id)] || []
+      if (!shapeClaimRef.current[target.id]) shapeClaimRef.current[target.id] = {}
+      const claims = shapeClaimRef.current[target.id]
+      const unclaimed = slotAcIds.find(acId => claims[acId] == null)
+      if (unclaimed != null) {
+        claims[unclaimed] = nowMs
+        onScoreEvent?.({ type: 'targetHit' })
+        flashShape(target.id, 'green')
+        return
+      }
     }
-    const latest = slotAcIds.reduce((m, acId) => Math.max(m, claims[acId] || 0), 0)
+    // Every hot shape of this colour is fully claimed — anti-spam against
+    // the most recent claim across them; otherwise count as a miss.
+    let latest = 0
+    for (const s of hotShapes) {
+      const claims = shapeClaimRef.current[s.id] || {}
+      for (const t of Object.values(claims)) {
+        if (t > latest) latest = t
+      }
+    }
     if (nowMs - latest < 2000) return
     onScoreEvent?.({ type: 'targetMiss' })
-    flashShape(hotShape.id, 'red')
+    flashShape(hotShapes[0].id, 'red')
   }
 
   useImperativeHandle(ref, () => ({
