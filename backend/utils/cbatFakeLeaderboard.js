@@ -23,6 +23,7 @@ const GAME_OFFSET = {
   'target':         16,
   'instruments':    20,
   'ant':             2,
+  'flag':            6,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -72,6 +73,15 @@ const FAKE_TUNING = {
     // Every ANT total is a multiple of 5 (10 exact / 5 partial / 0 miss × 8 rounds).
     scoreSequence: [70, 65, 60, 55, 50, 50, 45, 45, 40, 40, 35, 35, 30, 30, 25, 25, 20, 20, 15, 15],
   },
+  'flag': {
+    floor: 55, ceiling: 104, seedTime: 60, timeStep: 0,
+    // 20 values, monotonically non-increasing, max 104, min 55. Higher is
+    // better. FLAG is a fixed-60s game so all real totalTimes equal 60 too —
+    // fakes match (timeStep: 0) so tie-breaker order stays stable.
+    // Floor of 55 keeps the visible top-20 above 55 even when sub-floor real
+    // entries exist (paired with FULL_SEQUENCE_GAMES below).
+    scoreSequence: [104, 100, 97, 94, 91, 88, 85, 82, 79, 76, 73, 70, 67, 64, 62, 60, 58, 57, 56, 55],
+  },
 };
 
 // Fixed delta tables — natural-looking variance without randomness.
@@ -112,24 +122,36 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
   return fakes;
 }
 
+// ANT, code-duplicates, and flag: always generate the full demo sequence so
+// the visible top 20 keeps a per-game min-score floor (15 for ANT, 7 for
+// code-duplicates, 55 for flag) even when real entries with sub-floor
+// scores exist — including when the real pool is already at/above the
+// 20-row limit. Other games keep gap-fill padding (limit - real.length)
+// and short-circuit when real already fills the board.
+const FULL_SEQUENCE_GAMES = new Set(['ant', 'code-duplicates', 'flag']);
+
 function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
   const cfg = CBAT_GAMES[gameKey];
   const tuning = FAKE_TUNING[gameKey];
 
-  // If the pool is already full or we don't have tuning for this game, just
-  // rank the real entries as-is (aggregate already sorted them correctly).
-  if (real.length >= limit || !cfg || !tuning) {
+  // No tuning for this game → just rank real entries as-is.
+  if (!cfg || !tuning) {
+    real.forEach((e, i) => { e.rank = i + 1; });
+    return real;
+  }
+
+  const isFullSequence = FULL_SEQUENCE_GAMES.has(gameKey);
+
+  // Non-full-sequence games short-circuit when real already fills the board.
+  // Full-sequence games always run the merge so the floor displaces sub-floor
+  // real entries even when there are 20+ of them.
+  if (!isFullSequence && real.length >= limit) {
     real.forEach((e, i) => { e.rank = i + 1; });
     return real;
   }
 
   const lowerBetter = cfg.sortDir === 1;
-  // ANT and code-duplicates: always generate the full demo sequence so the
-  // visible top 20 keeps a per-game min-score floor (15 for ANT, 7 for
-  // code-duplicates) even when real entries with sub-floor scores exist.
-  // Other games keep gap-fill padding (limit - real.length).
-  const FULL_SEQUENCE_GAMES = new Set(['ant', 'code-duplicates']);
-  const needed = FULL_SEQUENCE_GAMES.has(gameKey) ? tuning.scoreSequence.length : (limit - real.length);
+  const needed = isFullSequence ? tuning.scoreSequence.length : (limit - real.length);
   const fakes = generateFakes(gameKey, needed, { lowerBetter, tuning, isAdmin });
 
   // Merge real + fakes, then sort by points-priority, time-on-ties.

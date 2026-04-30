@@ -9,6 +9,7 @@ const GAME_MAX = {
   'target':          null,   // accumulating score, no fixed ceiling (≥400 = Outstanding)
   'instruments':     null,   // time-limited, no fixed max
   'ant':             80,
+  'flag':            null,   // accumulating score, no fixed ceiling
 };
 const LOWER_BETTER = { 'plane-turn': true };
 
@@ -136,6 +137,24 @@ describe('padLeaderboard', () => {
       const out = padLeaderboard([], game);
       const unique = new Set(out.map(e => e.bestScore));
       expect(unique.size).toBeGreaterThan(5);
+    }
+  });
+
+  it('full-sequence games (flag, ant, code-duplicates) displace sub-floor real entries even when real fills the board', () => {
+    // 20 real entries, every score below the game's floor. Without the
+    // full-sequence path these would short-circuit past padding.
+    const cases = [
+      { game: 'flag',            subFloor: -10 }, // floor 55
+      { game: 'ant',             subFloor:   5 }, // floor 15
+      { game: 'code-duplicates', subFloor:   3 }, // floor 7
+    ];
+    for (const { game, subFloor } of cases) {
+      const real = Array.from({ length: 20 }, (_, i) => realEntry({
+        id: `r${i}`, userId: `u${i}`, score: subFloor, time: 60 + i, agent: `100000${i}`, rank: undefined,
+      }));
+      const out = padLeaderboard(real, game);
+      expect(out).toHaveLength(20);
+      expect(out.every(e => e.isFake)).toBe(true);
     }
   });
 });

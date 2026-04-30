@@ -30,6 +30,7 @@ const GameSessionCbatSymbolsResult        = CBAT_GAMES['symbols'].Model;
 const GameSessionCbatTargetResult         = CBAT_GAMES['target'].Model;
 const GameSessionCbatInstrumentsResult    = CBAT_GAMES['instruments'].Model;
 const GameSessionCbatAntResult            = CBAT_GAMES['ant'].Model;
+const GameSessionCbatFlagResult           = CBAT_GAMES['flag'].Model;
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -2298,6 +2299,32 @@ router.post('/cbat/ant/result', protect, async (req, res) => {
   }
 });
 
+// POST /api/games/cbat/flag/result
+router.post('/cbat/flag/result', protect, async (req, res) => {
+  try {
+    const {
+      totalScore,
+      mathCorrect, mathWrong, mathTimeout,
+      aircraftCorrect, aircraftWrong, aircraftMissed,
+      targetHits, targetMisses,
+      aircraftsSeen, aircraftBriefId,
+      totalTime, grade,
+    } = req.body;
+    const result = await GameSessionCbatFlagResult.create({
+      userId: req.user._id,
+      totalScore,
+      mathCorrect, mathWrong, mathTimeout,
+      aircraftCorrect, aircraftWrong, aircraftMissed,
+      targetHits, targetMisses,
+      aircraftsSeen, aircraftBriefId,
+      totalTime, grade,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/games/cbat/target/result
 router.post('/cbat/target/result', protect, async (req, res) => {
   try {
@@ -2419,6 +2446,7 @@ router.get('/cbat/symbols/leaderboard', protect, (req, res) => cbatLeaderboard(r
 router.get('/cbat/target/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'target'));
 router.get('/cbat/instruments/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'instruments'));
 router.get('/cbat/ant/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant'));
+router.get('/cbat/flag/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -2453,5 +2481,6 @@ router.get('/cbat/symbols/personal-best', protect, (req, res) => cbatPersonalBes
 router.get('/cbat/target/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'target'));
 router.get('/cbat/instruments/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'instruments'));
 router.get('/cbat/ant/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant'));
+router.get('/cbat/flag/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag'));
 
 module.exports = router;

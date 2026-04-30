@@ -11,8 +11,8 @@ const CBAT_GAMES = [
   { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: '/cbat/angles' },
   { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: '/cbat/instruments' },
   { key: 'plane-turn',      emoji: '🗺️', title: 'Plane Turn',       desc: 'Plan your turn and heading with precision.',            path: '/cbat/plane-turn' },
+  { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag' },
   { key: 'audio-interrupt',  emoji: '🎧', title: 'Audio Interrupt',  desc: 'Respond to audio cues while multitasking.',             path: null },
-  { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Figures Logistics and Groups — coming soon.',           path: null },
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — coming soon.',               path: null },
   { key: 'visualisation-3d', emoji: '🧊', title: 'Visualisation 3D', desc: 'Rotate and reason about 3D shapes — coming soon.',      path: null },
   { key: 'visualisation-2d', emoji: '🧮', title: 'Visualisation 2D', desc: 'Spatial reasoning with 2D figures — coming soon.',      path: null },
@@ -41,21 +41,22 @@ export default function Cbat() {
       )}
 
       {/* Game grid — blurred when not signed in */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3${!user ? ' opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4${!user ? ' opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
         {CBAT_GAMES.map((game, i) => (
           <motion.div
             key={game.key}
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.06, duration: 0.35 }}
+            className="h-full"
           >
             {game.path ? (
               <Link
                 to={game.path}
-                className="relative flex items-start gap-4 bg-surface rounded-2xl p-4 border border-slate-200 transition-all card-shadow cursor-pointer h-full
+                className="relative flex items-start gap-4 bg-surface rounded-2xl p-6 border border-slate-200 transition-all card-shadow cursor-pointer h-full min-h-[140px] w-full
                   hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5 no-underline"
               >
-                <span className="text-3xl shrink-0 group-hover:scale-110 transition-transform">{game.emoji}</span>
+                <span className="text-4xl shrink-0 group-hover:scale-110 transition-transform">{game.emoji}</span>
                 <div className="min-w-0">
                   <p className="font-bold text-slate-800 mb-0.5">{game.title}</p>
                   <p className="text-xs text-slate-400">{game.desc}</p>
@@ -63,9 +64,9 @@ export default function Cbat() {
               </Link>
             ) : (
               <div
-                className="relative flex items-start gap-4 bg-surface rounded-2xl p-4 border border-slate-200 transition-all card-shadow h-full opacity-60"
+                className="relative flex items-start gap-4 bg-surface rounded-2xl p-6 border border-slate-200 transition-all card-shadow h-full min-h-[140px] w-full opacity-60"
               >
-                <span className="text-3xl shrink-0">{game.emoji}</span>
+                <span className="text-4xl shrink-0">{game.emoji}</span>
                 <div className="min-w-0">
                   <p className="font-bold text-slate-800 mb-0.5">{game.title}</p>
                   <p className="text-xs text-slate-400">{game.desc}</p>

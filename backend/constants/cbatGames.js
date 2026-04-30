@@ -5,6 +5,7 @@ const GameSessionCbatSymbolsResult        = require('../models/GameSessionCbatSy
 const GameSessionCbatTargetResult         = require('../models/GameSessionCbatTargetResult');
 const GameSessionCbatInstrumentsResult    = require('../models/GameSessionCbatInstrumentsResult');
 const GameSessionCbatAntResult            = require('../models/GameSessionCbatAntResult');
+const GameSessionCbatFlagResult           = require('../models/GameSessionCbatFlagResult');
 
 // Single source of truth for CBAT games. Adding a new CBAT game = add one entry
 // here and it automatically flows through submission routes, leaderboards,
@@ -58,6 +59,13 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'Airborne Numerical Test',
+  },
+  'flag': {
+    Model: GameSessionCbatFlagResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'FLAG',
   },
 };
 

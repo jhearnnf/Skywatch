@@ -64,6 +64,15 @@ const GAME_CONFIG = {
     formatScore: (s) => `${s}`,
     backPath: '/cbat/ant',
   },
+  'flag': {
+    title: 'FLAG',
+    emoji: '\u{1F6A9}',
+    scoreLabel: 'Score',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}`,
+    backPath: '/cbat/flag',
+    hideTime: true,
+  },
 }
 
 export default function CbatLeaderboard() {
