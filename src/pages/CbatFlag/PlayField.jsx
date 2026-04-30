@@ -25,6 +25,61 @@ const MAX_OVERLAPPERS_PER_SHAPE = 2
 const OVERLAP_HYSTERESIS = 10
 const OVERLAP_DEFLECT_RATE = 3.5
 
+// ── Polygon geometry helpers ─────────────────────────────────────────────────
+// Returns vertices of a polygon shape in centred screen-space (relative to the
+// shape centre), after scale(wS, hS) and outer rotate(rotation°) are applied.
+// Matches the SVG transform chain: scale → outer-rotate → translate(cx,cy).
+// Diamond's inner rotate(45°) is baked into the pre-scale vertex positions.
+// Circle shapes return null — they use a radius check instead.
+function shapePolyVerts(s) {
+  const r = s.radius
+  const wS = s.widthScale ?? 1
+  const hS = s.heightScale ?? 1
+  const ang = (s.rotation ?? 0) * Math.PI / 180
+  const cosA = Math.cos(ang)
+  const sinA = Math.sin(ang)
+  const rot = (x, y) => [x * cosA - y * sinA, x * sinA + y * cosA]
+
+  if (s.kind === 'square') {
+    return [rot(r*wS, r*hS), rot(-r*wS, r*hS), rot(-r*wS, -r*hS), rot(r*wS, -r*hS)]
+  }
+  if (s.kind === 'diamond') {
+    // SVG inner rotate(45°) maps rect corners (±r,±r) → (±r√2,0) and (0,±r√2),
+    // then the group's scale(wS,hS) stretches independently per axis.
+    const d = r * Math.SQRT2
+    return [rot(d*wS, 0), rot(0, d*hS), rot(-d*wS, 0), rot(0, -d*hS)]
+  }
+  // triangle
+  const apex = (2 * r) / Math.sqrt(3)
+  const base = r / Math.sqrt(3)
+  return [rot(0, -apex*hS), rot(-r*wS, base*hS), rot(r*wS, base*hS)]
+}
+
+function distToSegSq(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay
+  const lenSq = dx * dx + dy * dy
+  if (lenSq === 0) return (px - ax) ** 2 + (py - ay) ** 2
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq))
+  return (px - ax - t * dx) ** 2 + (py - ay - t * dy) ** 2
+}
+
+// Minimum distance from point (px,py) to the polygon. Returns 0 if inside.
+function pointPolyDist(px, py, verts) {
+  let inside = false
+  const n = verts.length
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const [xi, yi] = verts[i], [xj, yj] = verts[j]
+    if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) inside = !inside
+  }
+  if (inside) return 0
+  let minSq = Infinity
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const [xi, yi] = verts[i], [xj, yj] = verts[j]
+    minSq = Math.min(minSq, distToSegSq(px, py, xi, yi, xj, yj))
+  }
+  return Math.sqrt(minSq)
+}
+
 // Per-stage spawn pressure. Stage schedule: easy/medium/hard/medium/easy across
 // 12s windows. maxAircraft is the soft cap on simultaneous on-screen aircraft;
 // spawnInterval is the average gap between spawn attempts when below the cap.
@@ -140,20 +195,26 @@ function placeShapes(fieldW, fieldH, palette) {
       }
       if (!ok) { allFit = false; break }
       const spec = specs[k]
-      placed.push({
+      const rotation = Math.random() * 360
+      const widthScale = randRange(SHAPE_STRETCH_MIN, SHAPE_STRETCH_MAX)
+      const heightScale = randRange(SHAPE_STRETCH_MIN, SHAPE_STRETCH_MAX)
+      const sh = {
         id: uidSh(),
         kind: spec.kind,
         color: spec.color,
         cx, cy,
         radius,
-        rotation: Math.random() * 360,
-        widthScale: randRange(SHAPE_STRETCH_MIN, SHAPE_STRETCH_MAX),
-        heightScale: randRange(SHAPE_STRETCH_MIN, SHAPE_STRETCH_MAX),
+        rotation,
+        widthScale,
+        heightScale,
         hot: false,
         flashGreen: false,
         flashRed: false,
         lockedUntil: 0,
-      })
+      }
+      // Precompute polygon vertices once — geometry never changes after placement.
+      if (sh.kind !== 'circle') sh.verts = shapePolyVerts(sh)
+      placed.push(sh)
     }
     if (allFit) return placed
   }
@@ -594,21 +655,26 @@ function PlayFieldImpl({
       }
       aircraftRef.current = surviving
 
-      // Per-shape overlap pass. Treats each shape as its stretched bounding
-      // circle (close enough for visual touch). Hysteresis on exit prevents
-      // boundary flutter; first ≤2 overlappers by entry time hold the slots
-      // and count for hot/scoring; any 3rd+ aircraft is deflected radially.
+      // Per-shape overlap pass. Circle shapes use bounding-circle; polygons use
+      // exact polygon-circle distance (pointPolyDist) so every part of the shape
+      // — sides and corners alike — triggers overlap precisely when the aircraft
+      // ring visually touches it. Hysteresis on exit prevents boundary flutter;
+      // first ≤2 overlappers by entry time hold the slots and count for
+      // hot/scoring; any 3rd+ aircraft is deflected radially.
       const overlappersByShape = {}
       for (const ac of surviving) {
         if (!ac.hasCircle) continue
         const acEntries = acShapeEntryRef.current[ac.id]
         for (const s of shapesRef.current) {
-          const eff = s.radius * Math.max(s.widthScale ?? 1, s.heightScale ?? 1)
-          const enterT = AIRCRAFT_RADIUS + eff
-          const exitT = enterT + OVERLAP_HYSTERESIS
-          const dist = Math.hypot(ac.x - s.cx, ac.y - s.cy)
           const wasInside = acEntries?.[s.id] != null
-          const isInside = wasInside ? dist < exitT : dist < enterT
+          const hyst = wasInside ? OVERLAP_HYSTERESIS : 0
+          let isInside
+          if (s.kind === 'circle') {
+            const eff = s.radius * Math.max(s.widthScale ?? 1, s.heightScale ?? 1)
+            isInside = Math.hypot(ac.x - s.cx, ac.y - s.cy) < AIRCRAFT_RADIUS + eff + hyst
+          } else {
+            isInside = pointPolyDist(ac.x - s.cx, ac.y - s.cy, s.verts) < AIRCRAFT_RADIUS + hyst
+          }
           if (isInside) {
             if (!acShapeEntryRef.current[ac.id]) acShapeEntryRef.current[ac.id] = {}
             if (!wasInside) acShapeEntryRef.current[ac.id][s.id] = now
