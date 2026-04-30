@@ -20,9 +20,9 @@ const GAME_DURATION = 60
 const MATH_COUNT = 10
 const MATH_TIMEOUT = 8
 const MATH_GAP = 3                  // min seconds between maths questions
-const AC_QUESTION_COOLDOWN = 8
+const AC_QUESTION_COOLDOWN = 3
 const AC_QUESTION_DURATION = 4
-const AC_QUESTION_FIRST = 10
+const AC_QUESTION_FIRST = 5
 
 // Difficulty schedule: array of { start, end, diff }
 const STAGE_SCHEDULE = [
@@ -164,7 +164,7 @@ function IntroScreen({ onStart, personalBest, aircraftList }) {
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
           <span className="text-brand-300 font-bold shrink-0">⏱</span>
-          <span>60-second mission with 5 silent difficulty phases</span>
+          <span>60-second mission</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
           <span className="text-brand-300 font-bold shrink-0">🎯</span>
@@ -419,11 +419,12 @@ export default function CbatFlag() {
         startMathQuestion(t)
       }
 
-      // Aircraft question schedule (8s cooldown, random 80% roll)
+      // Aircraft question schedule — cooldown gate then a per-tick roll;
+      // mean wait once eligible ≈ 1 / 0.015 ticks ≈ 6.7s at 100ms tick.
       if (!acSymbolRef.current && t >= AC_QUESTION_FIRST) {
         const timeSinceLast = t - acLastQuestionRef.current
         if (timeSinceLast >= AC_QUESTION_COOLDOWN) {
-          if (Math.random() < 0.015) {  // ~once per 8s at 100ms tick
+          if (Math.random() < 0.015) {
             spawnAcQuestion(t)
           }
         }
@@ -508,30 +509,30 @@ export default function CbatFlag() {
     }
   }, [bumpCounter])
 
-  const handleDelete = useCallback(() => {
-    if (!mathActiveRef.current) return
-    const next = mathEnteredRef.current.slice(0, -1)
-    mathEnteredRef.current = next
-    setMathEntered(next)
-  }, [])
-
   // ── Keyboard input (desktop) ──────────────────────────────────────────────
-  // Mirror numpad clicks: 0-9 → handleDigit, Backspace/Delete → handleDelete.
+  // Digits 0-9 mirror the numpad. Backspace/Delete/arrow keys are blocked
+  // entirely — there's no delete affordance in the game and arrow keys
+  // would otherwise scroll the page during play.
   useEffect(() => {
     if (phase !== 'playing') return
+    const BLOCKED_KEYS = new Set([
+      'Backspace', 'Delete',
+      'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+    ])
     const onKeyDown = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (BLOCKED_KEYS.has(e.key)) {
+        e.preventDefault()
+        return
+      }
       if (e.key >= '0' && e.key <= '9') {
         e.preventDefault()
         handleDigit(e.key)
-      } else if (e.key === 'Backspace' || e.key === 'Delete') {
-        e.preventDefault()
-        handleDelete()
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [phase, handleDigit, handleDelete])
+  }, [phase, handleDigit])
 
   // ── Aircraft Y/N handlers ─────────────────────────────────────────────────
   const handleAcAnswer = useCallback((choice) => {
@@ -690,7 +691,6 @@ export default function CbatFlag() {
                         question={mathQuestion}
                         entered={mathEntered}
                         onDigit={handleDigit}
-                        onDelete={handleDelete}
                         disabled={!mathQuestion}
                       />
                       {palette.length === 3 && (

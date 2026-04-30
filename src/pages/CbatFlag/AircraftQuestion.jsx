@@ -13,7 +13,7 @@ export default function AircraftQuestion({ symbol, onAnswer, disabled }) {
 
       <div className="flex-1 min-w-0 text-center">
         {hasSymbol ? (
-          <span className="font-mono text-base font-bold text-brand-300 tracking-widest">{symbol}</span>
+          <span className="font-mono text-base font-bold text-[#ddeaf8] tracking-widest">{symbol}</span>
         ) : (
           <span className="font-mono text-base font-bold text-slate-600 tracking-widest">—</span>
         )}

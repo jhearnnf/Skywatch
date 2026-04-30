@@ -18,6 +18,12 @@ const SHAPE_EDGE_PAD = 36          // hard min px between shape edge and screen 
 // breaking hit detection's bounding-radius approximation.
 const SHAPE_STRETCH_MIN = 0.75
 const SHAPE_STRETCH_MAX = 1.25
+// Cap simultaneous circle/shape overlaps. Aircraft past the cap are deflected
+// radially outward; slot priority is by overlap entry time. Hysteresis pad
+// stops shapes flickering hot when an aircraft skims the boundary.
+const MAX_OVERLAPPERS_PER_SHAPE = 2
+const OVERLAP_HYSTERESIS = 10
+const OVERLAP_DEFLECT_RATE = 3.5
 
 // Per-stage spawn pressure. Stage schedule: easy/medium/hard/medium/easy across
 // 12s windows. maxAircraft is the soft cap on simultaneous on-screen aircraft;
@@ -325,23 +331,33 @@ function ShapeOverlay({ shapes, fieldW, fieldH, onShapeClick }) {
     >
       {shapes.map(s => {
         const r = s.radius
-        const stroke = s.flashGreen ? '#22c55e' : s.flashRed ? '#ef4444' : s.color
         const fill = s.color
+        // Inner shape never changes on flash — that prevents a noisy colour
+        // swap on green/red shapes. The whole click cue lives in the outer
+        // halo: a light pastel ring (mint/coral) that contrasts cleanly with
+        // every palette colour.
+        const flashing = s.flashGreen || s.flashRed
+        const flashColor = s.flashGreen ? '#86efac' : s.flashRed ? '#fca5a5' : null
         // Render the shape centred at (0,0); the wrapping <g> translates,
         // rotates, then scales so width/height stretch is independent of
         // rotation. Diamond gets an extra inner 45° rotation so its corners
         // sit on the cardinal axes by default.
         let path = null
+        let haloPath = null
         if (s.kind === 'square') {
-          path = <rect x={-r} y={-r} width={r * 2} height={r * 2} fill={fill} fillOpacity={0.55} stroke={stroke} strokeWidth="2.5" />
+          path = <rect x={-r} y={-r} width={r * 2} height={r * 2} fill={fill} fillOpacity={0.55} stroke={s.color} strokeWidth="2.5" />
+          if (flashing) haloPath = <rect x={-r} y={-r} width={r * 2} height={r * 2} fill="none" stroke={flashColor} strokeWidth="2" vectorEffect="non-scaling-stroke" />
         } else if (s.kind === 'circle') {
-          path = <circle cx={0} cy={0} r={r} fill={fill} fillOpacity={0.55} stroke={stroke} strokeWidth="2.5" />
+          path = <circle cx={0} cy={0} r={r} fill={fill} fillOpacity={0.55} stroke={s.color} strokeWidth="2.5" />
+          if (flashing) haloPath = <circle cx={0} cy={0} r={r} fill="none" stroke={flashColor} strokeWidth="2" vectorEffect="non-scaling-stroke" />
         } else if (s.kind === 'triangle') {
           const apex = (r * 2) / Math.sqrt(3)
           const base = r / Math.sqrt(3)
-          path = <polygon points={`0,${-apex} ${-r},${base} ${r},${base}`} fill={fill} fillOpacity={0.55} stroke={stroke} strokeWidth="2.5" />
+          path = <polygon points={`0,${-apex} ${-r},${base} ${r},${base}`} fill={fill} fillOpacity={0.55} stroke={s.color} strokeWidth="2.5" />
+          if (flashing) haloPath = <polygon points={`0,${-apex} ${-r},${base} ${r},${base}`} fill="none" stroke={flashColor} strokeWidth="2" vectorEffect="non-scaling-stroke" />
         } else if (s.kind === 'diamond') {
-          path = <rect x={-r} y={-r} width={r * 2} height={r * 2} fill={fill} fillOpacity={0.55} stroke={stroke} strokeWidth="2.5" transform="rotate(45)" />
+          path = <rect x={-r} y={-r} width={r * 2} height={r * 2} fill={fill} fillOpacity={0.55} stroke={s.color} strokeWidth="2.5" transform="rotate(45)" />
+          if (flashing) haloPath = <rect x={-r} y={-r} width={r * 2} height={r * 2} fill="none" stroke={flashColor} strokeWidth="2" transform="rotate(45)" vectorEffect="non-scaling-stroke" />
         }
         return (
           <g
@@ -351,6 +367,11 @@ function ShapeOverlay({ shapes, fieldW, fieldH, onShapeClick }) {
             onClick={() => onShapeClick(s.id)}
           >
             <circle cx={0} cy={0} r={r + 10} fill="transparent" />
+            {haloPath && (
+              <g transform="scale(1.14)" style={{ filter: `drop-shadow(0 0 3px ${flashColor})` }}>
+                {haloPath}
+              </g>
+            )}
             {path}
           </g>
         )
@@ -423,7 +444,9 @@ function PlayFieldImpl({
   const symbolIdxRef = useRef(0)
   const spawnTimerRef = useRef(randRange(1.5, 3.5))
   const shapeLockRef = useRef({})   // id -> unlockTime (250ms anti-double-click)
-  const shapeClaimRef = useRef({})  // id -> { claimedAt: ms } while shape is hot and already awarded
+  const shapeClaimRef = useRef({})  // shapeId -> { [acId]: claimedAtMs } per-aircraft claims while in slot
+  const acShapeEntryRef = useRef({}) // acId -> { [shapeId]: enteredAtMs } slot-priority by entry time
+  const shapeSlotsRef = useRef({})   // shapeId -> [acId, acId] live slot holders (≤2)
 
   useEffect(() => { symbolsRef.current = symbols }, [symbols])
 
@@ -471,7 +494,7 @@ function PlayFieldImpl({
           symbolIdxRef.current++
           const ac = spawnAircraft(w, h)
           ac.symbol = sym
-          ac.symbolFlashAt = randRange(1.5, 14)
+          ac.symbolFlashAt = randRange(0, 14)
           aircraftRef.current = [...aircraftRef.current, ac]
           onAircraftSpawn?.(sym)
           spawnTimerRef.current = randRange(spawn * 0.7, spawn * 1.3)
@@ -571,24 +594,85 @@ function PlayFieldImpl({
       }
       aircraftRef.current = surviving
 
-      // Hot when any circled aircraft's white ring visually touches the shape
-      // (treat shape as a circle of its stretched bounding radius — close
-      // enough for a visual touch test, slightly generous on the longer axis).
-      const updatedShapes = shapesRef.current.map(s => {
-        const eff = s.radius * Math.max(s.widthScale ?? 1, s.heightScale ?? 1)
-        const hot = surviving.some(ac => {
-          if (!ac.hasCircle) return false
-          return Math.hypot(ac.x - s.cx, ac.y - s.cy) < AIRCRAFT_RADIUS + eff
-        })
-        return { ...s, hot }
-      })
-      shapesRef.current = updatedShapes
+      // Per-shape overlap pass. Treats each shape as its stretched bounding
+      // circle (close enough for visual touch). Hysteresis on exit prevents
+      // boundary flutter; first ≤2 overlappers by entry time hold the slots
+      // and count for hot/scoring; any 3rd+ aircraft is deflected radially.
+      const overlappersByShape = {}
+      for (const ac of surviving) {
+        if (!ac.hasCircle) continue
+        const acEntries = acShapeEntryRef.current[ac.id]
+        for (const s of shapesRef.current) {
+          const eff = s.radius * Math.max(s.widthScale ?? 1, s.heightScale ?? 1)
+          const enterT = AIRCRAFT_RADIUS + eff
+          const exitT = enterT + OVERLAP_HYSTERESIS
+          const dist = Math.hypot(ac.x - s.cx, ac.y - s.cy)
+          const wasInside = acEntries?.[s.id] != null
+          const isInside = wasInside ? dist < exitT : dist < enterT
+          if (isInside) {
+            if (!acShapeEntryRef.current[ac.id]) acShapeEntryRef.current[ac.id] = {}
+            if (!wasInside) acShapeEntryRef.current[ac.id][s.id] = now
+            const enteredAt = acShapeEntryRef.current[ac.id][s.id]
+            if (!overlappersByShape[s.id]) overlappersByShape[s.id] = []
+            overlappersByShape[s.id].push({ ac, enteredAt })
+          } else if (wasInside) {
+            delete acShapeEntryRef.current[ac.id][s.id]
+          }
+        }
+      }
 
-      // When a shape transitions from hot → cold, the current interaction is
-      // over — drop any award claim so the next overlap starts fresh.
-      for (const s of updatedShapes) {
-        if (!s.hot && shapeClaimRef.current[s.id]) {
-          delete shapeClaimRef.current[s.id]
+      const slotsByShape = {}
+      for (const shapeIdStr of Object.keys(overlappersByShape)) {
+        const list = overlappersByShape[shapeIdStr]
+        list.sort((a, b) => a.enteredAt - b.enteredAt || a.ac.id - b.ac.id)
+        slotsByShape[shapeIdStr] = list.slice(0, MAX_OVERLAPPERS_PER_SHAPE).map(o => o.ac.id)
+        if (list.length > MAX_OVERLAPPERS_PER_SHAPE) {
+          const shape = shapesRef.current.find(s => String(s.id) === shapeIdStr)
+          if (shape) {
+            for (let i = MAX_OVERLAPPERS_PER_SHAPE; i < list.length; i++) {
+              const ac = list[i].ac
+              const angleAway = Math.atan2(ac.y - shape.cy, ac.x - shape.cx)
+              let diff = angleAway - ac.heading
+              while (diff > Math.PI) diff -= 2 * Math.PI
+              while (diff < -Math.PI) diff += 2 * Math.PI
+              ac.heading += Math.sign(diff) * Math.min(Math.abs(diff), OVERLAP_DEFLECT_RATE * dt)
+              if (ac.state === 'LOCK_ON') {
+                ac.state = 'STRAIGHT'
+                ac.stateTimer = randRange(STATE_INTERVAL_MIN, STATE_INTERVAL_MAX)
+                ac.cumTurn = 0
+              }
+            }
+          }
+        }
+      }
+
+      const updatedShapes = shapesRef.current.map(s => ({
+        ...s,
+        hot: (slotsByShape[String(s.id)] || []).length > 0,
+      }))
+      shapesRef.current = updatedShapes
+      shapeSlotsRef.current = slotsByShape
+
+      // Drop entry tracking for despawned aircraft.
+      const liveAcIds = new Set(surviving.map(a => a.id))
+      for (const acIdStr of Object.keys(acShapeEntryRef.current)) {
+        if (!liveAcIds.has(Number(acIdStr))) {
+          delete acShapeEntryRef.current[acIdStr]
+        }
+      }
+
+      // Per-aircraft claims drop when their owner leaves the slot list — that
+      // covers exiting the zone, getting demoted past slot-2, and despawn.
+      for (const shapeIdStr of Object.keys(shapeClaimRef.current)) {
+        const claims = shapeClaimRef.current[shapeIdStr]
+        const slots = new Set(slotsByShape[shapeIdStr] || [])
+        for (const acIdStr of Object.keys(claims)) {
+          if (!slots.has(Number(acIdStr))) {
+            delete claims[acIdStr]
+          }
+        }
+        if (Object.keys(claims).length === 0) {
+          delete shapeClaimRef.current[shapeIdStr]
         }
       }
 
@@ -630,20 +714,24 @@ function PlayFieldImpl({
       return
     }
 
-    // Hot. One award per circle/shape interaction (claim cleared when the
-    // overlap ends — see rAF loop). Repeat clicks within 2s of the award are
-    // silent; after 2s they count as misses.
-    const claim = shapeClaimRef.current[shapeId]
-    if (!claim) {
-      shapeClaimRef.current[shapeId] = { claimedAt: nowMs }
+    // Hot. Each slot-holder aircraft is independently claimable once per
+    // overlap; the rAF loop drops a claim when its aircraft leaves the slot.
+    // Click awards the first unclaimed slot holder. If all are already
+    // claimed, repeat clicks within 2s of the latest claim are silent;
+    // after 2s they count as misses.
+    const slotAcIds = shapeSlotsRef.current[String(shapeId)] || []
+    if (!shapeClaimRef.current[shapeId]) shapeClaimRef.current[shapeId] = {}
+    const claims = shapeClaimRef.current[shapeId]
+    const unclaimed = slotAcIds.find(acId => claims[acId] == null)
+
+    if (unclaimed != null) {
+      claims[unclaimed] = nowMs
       onScoreEvent?.({ type: 'targetHit' })
       flashShape(shapeId, 'green')
       return
     }
-    if (nowMs - claim.claimedAt < 2000) {
-      // Within the grace window — no-op
-      return
-    }
+    const latest = slotAcIds.reduce((m, acId) => Math.max(m, claims[acId] || 0), 0)
+    if (nowMs - latest < 2000) return
     onScoreEvent?.({ type: 'targetMiss' })
     flashShape(shapeId, 'red')
   }
@@ -678,14 +766,19 @@ function PlayFieldImpl({
       flashShapesByColor(color, 'red')
       return
     }
-    const claim = shapeClaimRef.current[hotShape.id]
-    if (!claim) {
-      shapeClaimRef.current[hotShape.id] = { claimedAt: nowMs }
+    const slotAcIds = shapeSlotsRef.current[String(hotShape.id)] || []
+    if (!shapeClaimRef.current[hotShape.id]) shapeClaimRef.current[hotShape.id] = {}
+    const claims = shapeClaimRef.current[hotShape.id]
+    const unclaimed = slotAcIds.find(acId => claims[acId] == null)
+
+    if (unclaimed != null) {
+      claims[unclaimed] = nowMs
       onScoreEvent?.({ type: 'targetHit' })
       flashShape(hotShape.id, 'green')
       return
     }
-    if (nowMs - claim.claimedAt < 2000) return
+    const latest = slotAcIds.reduce((m, acId) => Math.max(m, claims[acId] || 0), 0)
+    if (nowMs - latest < 2000) return
     onScoreEvent?.({ type: 'targetMiss' })
     flashShape(hotShape.id, 'red')
   }

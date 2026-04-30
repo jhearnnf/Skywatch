@@ -173,17 +173,9 @@ describe('CbatFlag — numpad', () => {
     expect(screen.getByRole('button', { name: '5' })).toBeDefined()
   })
 
-  it('DELETE removes last entered digit', async () => {
+  it('does not render a DELETE button', async () => {
     await renderAndStart()
-    const btn5 = screen.getByRole('button', { name: '5' })
-    const btn3 = screen.getByRole('button', { name: '3' })
-    const btnDel = screen.getByRole('button', { name: /delete/i })
-    fireEvent.click(btn5)
-    fireEvent.click(btn3)
-    fireEvent.click(btnDel)
-    // After deleting, only '5' should remain if a question is active
-    // (if no question is active, no change — we verify no crash)
-    expect(btnDel).toBeDefined()
+    expect(screen.queryByRole('button', { name: /delete/i })).toBeNull()
   })
 })
 
@@ -322,14 +314,13 @@ describe('CbatFlag — aircraft Y/N', () => {
 describe('CbatFlag — Numpad unit tests', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('renders 10 digit buttons and a DELETE button', async () => {
+  it('renders 10 digit buttons and no DELETE button', async () => {
     const { default: Numpad } = await import('../CbatFlag/Numpad.jsx')
     render(
       <Numpad
         question={{ question: '3 + 4', answer: 7, expectedDigits: 1 }}
         entered=""
         onDigit={vi.fn()}
-        onDelete={vi.fn()}
         disabled={false}
       />
     )
@@ -337,29 +328,13 @@ describe('CbatFlag — Numpad unit tests', () => {
     for (const d of '0123456789') {
       expect(screen.getByRole('button', { name: d })).toBeDefined()
     }
-    expect(screen.getByRole('button', { name: /delete/i })).toBeDefined()
-  })
-
-  it('DELETE calls onDelete', async () => {
-    const { default: Numpad } = await import('../CbatFlag/Numpad.jsx')
-    const onDelete = vi.fn()
-    render(
-      <Numpad
-        question={{ question: '3 + 4', answer: 7, expectedDigits: 1 }}
-        entered="5"
-        onDigit={vi.fn()}
-        onDelete={onDelete}
-        disabled={false}
-      />
-    )
-    fireEvent.click(screen.getByRole('button', { name: /delete/i }))
-    expect(onDelete).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: /delete/i })).toBeNull()
   })
 
   it('digit buttons are disabled when disabled=true', async () => {
     const { default: Numpad } = await import('../CbatFlag/Numpad.jsx')
     render(
-      <Numpad question={null} entered="" onDigit={vi.fn()} onDelete={vi.fn()} disabled={true} />
+      <Numpad question={null} entered="" onDigit={vi.fn()} disabled={true} />
     )
     expect(screen.getByRole('button', { name: '7' }).disabled).toBe(true)
   })

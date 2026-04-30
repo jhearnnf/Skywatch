@@ -1,4 +1,4 @@
-export default function Numpad({ question, entered, onDigit, onDelete, disabled }) {
+export default function Numpad({ question, entered, onDigit, disabled }) {
   const digits = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '0']
 
   return (
@@ -36,13 +36,6 @@ export default function Numpad({ question, entered, onDigit, onDelete, disabled 
             {d}
           </button>
         ))}
-        <button
-          onClick={onDelete}
-          disabled={disabled}
-          className="col-span-3 py-2 max-[600px]:py-0.5 bg-[#0a1628] border border-[#1a3a5c] hover:bg-[#0f2240] hover:border-brand-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-400 text-xs max-[600px]:text-[9px] font-bold rounded-lg transition-all cursor-pointer"
-        >
-          DELETE
-        </button>
       </div>
     </div>
   )

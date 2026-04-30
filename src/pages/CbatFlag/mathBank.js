@@ -40,27 +40,27 @@ function generateMedium() {
 }
 
 function generateHard() {
-  const type = rand(2)
-  if (type === 0) {
-    // 3-term combo evaluated left-to-right
-    const a = randRange(5, 20)
-    const b = randRange(2, 12)
-    const c = randRange(1, 8)
-    const ops = ['+', '-', '×']
-    const op1 = ops[rand(3)]
-    const op2 = ops[rand(3)]
-    const apply = (x, y, op) => op === '+' ? x + y : op === '-' ? x - y : x * y
-    const intermediate = apply(a, b, op1)
-    const answer = apply(intermediate, c, op2)
-    // Ensure result is non-negative and not absurd
-    if (answer < 0 || Math.abs(answer) > 999) return generateMedium()
-    return { question: `${a} ${op1} ${b} ${op2} ${c}`, answer, expectedDigits: String(answer).length }
+  const roll = Math.random()
+  if (roll < 0.5) {
+    // Three-digit ± two-digit
+    const a = randRange(100, 500)
+    const b = randRange(11, 99)
+    const op = rand(2) === 0 ? '+' : '-'
+    const answer = op === '+' ? a + b : a - b
+    return { question: `${a} ${op} ${b}`, answer, expectedDigits: String(answer).length }
   }
-  // Hard multiplication
-  const a = randRange(11, 25)
-  const b = randRange(4, 12)
-  const answer = a * b
-  return { question: `${a} × ${b}`, answer, expectedDigits: String(answer).length }
+  if (roll < 0.85) {
+    // Larger 2-digit × single-digit
+    const a = randRange(11, 25)
+    const b = randRange(4, 12)
+    const answer = a * b
+    return { question: `${a} × ${b}`, answer, expectedDigits: String(answer).length }
+  }
+  // Rare harder division — quotient 6-15, divisor 4-12
+  const quotient = randRange(6, 15)
+  const divisor = randRange(4, 12)
+  const dividend = quotient * divisor
+  return { question: `${dividend} ÷ ${divisor}`, answer: quotient, expectedDigits: String(quotient).length }
 }
 
 export function generateMath(difficulty) {
