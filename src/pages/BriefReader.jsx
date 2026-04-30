@@ -21,6 +21,7 @@ import CategoryHeader from '../components/CategoryHeader'
 import { MOCK_RANKS } from '../data/mockData'
 import { PENDING_BRIEF_KEY, BRIEF_COINS_KEY, BRIEF_JUST_COMPLETED_KEY, tutorialKey, isCroFirstBriefActive, clearCroFirstBrief } from '../utils/storageKeys'
 import { normalizeSections, sectionBody } from '../utils/descriptionSections'
+import RsvpReader from '../components/briefReader/RsvpReader'
 
 // Render **bold** markdown syntax as <strong> spans
 function renderBoldMarkdown(text) {
@@ -494,9 +495,10 @@ function ImageGridReveal({ src, isFirstSeen, alt, imgClassName, imgStyle }) {
 }
 
 // ── Section card (image zone + stat + text) ───────────────────────────────
-function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, sectionIdx, total, isLast, suppressFlashcard, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, heading, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial }) {
+function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, sectionIdx, total, isLast, suppressFlashcard, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, heading, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial, rsvpReaderEnabled }) {
   const hasBases = (highlightedBaseNames ?? []).length > 0
   const statTapOrigin = useRef(null)
+  const descriptionRef = useRef(null)
 
   // ── Intel image flash effect ──────────────────────────────────────────────
   const imgContainerRef = useRef(null)
@@ -707,7 +709,7 @@ function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, se
         )
       )}
 
-      <div className="p-5">
+      <div ref={descriptionRef} className="p-5">
         {heading && (
           <h3 className="text-lg font-bold text-text leading-snug mb-3">{heading}</h3>
         )}
@@ -718,6 +720,7 @@ function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, se
         <div className="pl-3">
           <SectionText text={text} keywords={keywords} learnedKws={learnedKws} onKeywordTap={onKeywordTap} />
         </div>
+        <RsvpReader text={text} enabled={rsvpReaderEnabled} containerRef={descriptionRef} />
       </div>
     </div>
   )
@@ -1990,6 +1993,7 @@ export default function BriefReader() {
   // heading, so duplicating it in the page header above would be redundant.
   const isNewsFlashcardHidden = brief?.category === 'News' && settings?.newsFlashcardsEnabled === false
   const mnemonicsEnabled = settings?.mnemonicsClickEnabled === true
+  const rsvpReaderEnabled = settings?.rsvpReaderEnabled === true
   // Flashcard view = on the last section. Drives chrome that differs between normal
   // sections and the final section (header fade, progress-bar hide). Independent of
   // whether the last section renders as a FlashCard component or as a regular
@@ -2833,6 +2837,7 @@ export default function BriefReader() {
                         }).catch(() => {})
                       }
                     }}
+                    rsvpReaderEnabled={rsvpReaderEnabled}
                   />
                 </SwipeCard>
               </motion.div>
