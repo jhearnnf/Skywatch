@@ -362,8 +362,8 @@ function StatsTab({ API, onViewEmailLog }) {
         </div>
       </StatsSection>
 
-      {/* Quiz */}
-      <StatsSection title="Quiz">
+      {/* Intel Recall */}
+      <StatsSection title="Intel Recall">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="Played"           value={fmtNum(games.totalGamesPlayed)}  color="brand" />
           <StatCard label="Completed"        value={fmtNum(games.totalGamesCompleted)} color="slate" />
@@ -373,7 +373,7 @@ function StatsTab({ API, onViewEmailLog }) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           <StatCard label="Time Played"      value={fmtSeconds(games.quizTotalSeconds)} color="slate" />
           <StatCard label="Pass Rate"        value={pct(games.totalGamesWon, games.totalGamesCompleted)} color="emerald" />
-          <StatCard label="Failed Quizzes"   value={pct(games.totalGamesLost, games.totalGamesCompleted)} color="amber" sub={`below pass threshold`} />
+          <StatCard label="Failed Recalls"   value={pct(games.totalGamesLost, games.totalGamesCompleted)} color="amber" sub={`below pass threshold`} />
         </div>
       </StatsSection>
 
@@ -734,7 +734,7 @@ function CeilingScenarioColumn({ label, difficulty, sim, meta, simCycleThreshold
             <td className="py-1 text-right font-mono font-medium text-slate-700">{fmt(scenario.reads)}</td>
           </tr>
           <tr className="border-b border-slate-100">
-            <td className="py-1 text-slate-500 pr-3">Quiz</td>
+            <td className="py-1 text-slate-500 pr-3">Intel Recall</td>
             <td className="py-1 text-right font-mono font-medium text-slate-700">{fmt(scenario.quiz)}</td>
           </tr>
           <tr className="border-b border-slate-100">
@@ -996,7 +996,7 @@ function AirstarsEconomy({ API, onToast }) {
                   </div>
                 </div>
                 <div>
-                  <p className="text-[11px] text-slate-400 mb-1.5">Quiz</p>
+                  <p className="text-[11px] text-slate-400 mb-1.5">Intel Recall</p>
                   <div className="grid grid-cols-3 gap-2">
                     <RateInput label="Easy — per answer"   value={sim.rates.airstarsPerWinEasy}    onChange={v => setRate('airstarsPerWinEasy', v)} />
                     <RateInput label="Medium — per answer" value={sim.rates.airstarsPerWinMedium}  onChange={v => setRate('airstarsPerWinMedium', v)} />
@@ -1186,9 +1186,9 @@ const AI_PROMPT_GROUPS = [
     ],
   },
   {
-    group: 'Quiz Generation',
+    group: 'Intel Recall Generation',
     items: [
-      { key: 'quiz',        label: 'Generate Quiz' },
+      { key: 'quiz',        label: 'Generate Intel Recall' },
       { key: 'quizMissing', label: 'Generate Missing Questions' },
     ],
   },
@@ -1736,14 +1736,14 @@ function SettingsTab({ API }) {
           onClick={() => toggleGameGroup('quiz')}
           className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-1 pb-2 mb-2 border-b-2 border-brand-600/40"
         >
-          <span>Quiz</span>
+          <span>Intel Recall</span>
           <span className="text-brand-600 text-xs">{gameGroupsOpen.quiz ? '▲' : '▼'}</span>
         </button>
         {gameGroupsOpen.quiz && (
           <>
             <NumInput
               label="Minimum questions per difficulty"
-              hint="Used by admin 'Generate Missing' and the user-facing quiz availability gate"
+              hint="Used by admin 'Generate Missing' and the user-facing Intel Recall availability gate"
               value={draft.aiQuestionsPerDifficulty}
               min={1}
               max={20}
@@ -4085,7 +4085,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
         {resetModal && (
           <ConfirmModal
             title="Reset All Leads & Stubs"
-            body="This wipes all briefs, quiz questions, game data, and reading history — then re-seeds from the leads array. Cannot be undone."
+            body="This wipes all briefs, Intel Recall questions, game data, and reading history — then re-seeds from the leads array. Cannot be undone."
             confirmLabel="Yes, Reset Everything"
             danger
             onConfirm={resetLeads}
@@ -4910,7 +4910,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       if (data.status !== 'success') throw new Error(data.message ?? 'Generation failed')
       const nextSources = Array.isArray(data.data.sources) ? data.data.sources : []
       setDraft(p => ({ ...p, descriptionSections: normalizeDraftSections(data.data.descriptionSections), sources: nextSources }))
-      setToast('Description generated — keywords, quiz, and sources refreshed. Review and save when ready')
+      setToast('Description generated — keywords, recall questions, and sources refreshed. Review and save when ready')
     } catch (err) {
       setToast(`Generate description failed: ${err.message}`)
     } finally {
@@ -5036,7 +5036,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         >K</span>
         <span
           className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasQuiz ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}
-          title={`Quiz — easy ${(brief.quizQuestionsEasy?.length ?? 0)}/${questionsPerDifficulty}, medium ${(brief.quizQuestionsMedium?.length ?? 0)}/${questionsPerDifficulty}${hasQuiz ? ' (complete)' : ''}`}
+          title={`Intel Recall — easy ${(brief.quizQuestionsEasy?.length ?? 0)}/${questionsPerDifficulty}, medium ${(brief.quizQuestionsMedium?.length ?? 0)}/${questionsPerDifficulty}${hasQuiz ? ' (complete)' : ''}`}
         >Q</span>
         <span
           className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${hasMedia ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}
@@ -6365,7 +6365,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         )}
       </div>
 
-      {/* ── Section G: Quiz Questions ─────────────────────────────────── */}
+      {/* ── Section G: Intel Recall Questions ────────────────────────── */}
       <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
         {(generating === 'questions' || genQuestionsSingle || autoGenerating || regeneratingAll) && <GeneratingOverlay />}
         <div
@@ -6373,7 +6373,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
           className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <h3 className="font-bold text-slate-800">Quiz Questions</h3>
+            <h3 className="font-bold text-slate-800">Intel Recall Questions</h3>
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${easyQuestions.length >= questionsPerDifficulty && mediumQuestions.length >= questionsPerDifficulty ? 'bg-emerald-100 text-emerald-700' : 'bg-surface-raised text-text-muted'}`}>
               {easyQuestions.length + mediumQuestions.length} / 14
             </span>
@@ -6887,7 +6887,7 @@ const ACTION_TYPE_LABELS = {
   remove_admin:              { label: 'Remove Admin',          color: 'bg-orange-900/40 text-orange-300' },
   reset_user_stats:          { label: 'Reset Stats',           color: 'bg-amber-900/40 text-amber-300'   },
   make_admin:                { label: 'Make Admin',            color: 'bg-purple-900/40 text-purple-300' },
-  change_quiz_questions:     { label: 'Quiz Questions',        color: 'bg-blue-900/40 text-blue-300'     },
+  change_quiz_questions:     { label: 'Intel Recall Questions', color: 'bg-blue-900/40 text-blue-300'     },
   change_airstars:           { label: 'Airstars',              color: 'bg-amber-900/40 text-amber-300'   },
   change_trial_duration:     { label: 'Trial Duration',        color: 'bg-slate-700 text-slate-300'      },
   change_silver_categories:  { label: 'Silver Categories',     color: 'bg-slate-700 text-slate-300'      },
@@ -7267,8 +7267,8 @@ function SystemLogsTab({ API, onResolved }) {
     image_fetch_failure:         { label: 'Image Fetch Failed',       color: 'bg-amber-900/40 text-amber-300' },
     bulk_generation_warnings:    { label: 'Generation Warnings',      color: 'bg-yellow-900/40 text-yellow-300' },
     duplicate_leads_detected:    { label: 'Duplicate Leads Detected', color: 'bg-purple-900/40 text-purple-300' },
-    quiz_finish_failure:         { label: 'Quiz Finish Recovered',    color: 'bg-pink-900/40 text-pink-300' },
-    quiz_result_persist_failure: { label: 'Quiz Result Save Failed',  color: 'bg-pink-900/40 text-pink-300' },
+    quiz_finish_failure:         { label: 'Intel Recall Finish Recovered', color: 'bg-pink-900/40 text-pink-300' },
+    quiz_result_persist_failure: { label: 'Intel Recall Result Save Failed', color: 'bg-pink-900/40 text-pink-300' },
   }
 
   return (
