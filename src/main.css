@@ -924,6 +924,32 @@ body.play-mode .card-shadow {
   to   { transform: translateY(-50%); }
 }
 
+/* ── CBAT game card background pan + bloom ───────────────────────────────── */
+@keyframes cbat-img-pan {
+  from { transform: scale(1.14) translate(0%,  0%);  }
+  to   { transform: scale(1.14) translate(-5%, -4%); }
+}
+@keyframes cbat-bloom-pulse {
+  0%, 100% { opacity: 0.65; }
+  50%       { opacity: 1;    }
+}
+/* One-shot glitch — applied briefly by JS to a single card at a time */
+@keyframes cbat-flicker {
+  0%   { opacity: 1;    }
+  15%  { opacity: 0.35; }
+  25%  { opacity: 1;    }
+  45%  { opacity: 0.2;  }
+  55%  { opacity: 0.85; }
+  70%  { opacity: 0.45; }
+  85%  { opacity: 1;    }
+  100% { opacity: 1;    }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes cbat-img-pan     { from, to { transform: scale(1.14) translate(0%, 0%); } }
+  @keyframes cbat-bloom-pulse { from, to { opacity: 0.65; } }
+  @keyframes cbat-flicker     { from, to { opacity: 1; } }
+}
+
 /* Scene panel background — subtle radar haze + faint grid */
 .cbat-target-scene {
   background-color: #081424;

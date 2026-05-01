@@ -3335,9 +3335,10 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
       ? getPrompt(briefAiSettings, 'brief.news')
       : getTopicPrompt(briefAiSettings, category);
 
-    const dateFilterBody = (isNews && eventDate)
-      ? { search_after_date_filter: pplxDate(new Date(eventDate)) }
-      : {};
+    const dateFilterBody = {
+      ...(isNews && eventDate ? { search_after_date_filter: pplxDate(new Date(eventDate)) } : {}),
+      response_format: { type: 'json_object' },
+    };
 
     const data = await openRouterChat([{
       role: 'system',
@@ -3347,9 +3348,14 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
       content: userContent,
     }], 'perplexity/sonar', 2048, dateFilterBody);
     const raw = data.choices?.[0]?.message?.content ?? '{}';
+    const cleaned = cleanJson(raw);
+    if (!cleaned.startsWith('{')) {
+      console.error('[generate-brief] Non-JSON response:', raw.slice(0, 200));
+      throw new Error("Couldn't find sources for this headline — try rephrasing or changing the date.");
+    }
     let brief;
     try {
-      brief = JSON.parse(cleanJson(raw));
+      brief = JSON.parse(cleaned);
     } catch (parseErr) {
       console.error('[generate-brief] JSON parse failed. Raw response:', raw);
       throw new Error(`AI response was not valid JSON: ${parseErr.message}`);
