@@ -199,7 +199,7 @@ export default function FlashcardDeckNotification({ cardRect, onDone }) {
                 Flashcard added to deck
               </p>
               <p style={{ color: 'rgba(255,255,255,0.65)', fontWeight: 600, fontSize: 10, margin: '2px 0 0', lineHeight: 1 }}>
-                Available in Flashcard Recall
+                Available in Flashcards
               </p>
             </div>
           </motion.div>

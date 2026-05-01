@@ -360,7 +360,7 @@ export default function FlashcardGameModal({ onClose }) {
 
       const unlockedCategories = data?.data?.unlockedCategories ?? []
       if (earned > 0 && awardAirstars) {
-        awardAirstars(earned, 'Flashcard Recall', { cycleAfter, totalAfter, rankPromotion, unlockedCategories })
+        awardAirstars(earned, 'Flashcards', { cycleAfter, totalAfter, rankPromotion, unlockedCategories })
         awarded = true
       }
       if (data?.data?.categoryUnlocksGranted?.length) applyCategoryUnlocks(data.data.categoryUnlocksGranted)
@@ -375,7 +375,7 @@ export default function FlashcardGameModal({ onClose }) {
         const fresh = await refreshUser()
         const delta = (fresh?.totalAirstars ?? 0) - preSubmitTotal
         if (delta > 0 && awardAirstars) {
-          awardAirstars(delta, 'Flashcard Recall', {
+          awardAirstars(delta, 'Flashcards', {
             totalAfter: fresh.totalAirstars,
             cycleAfter: fresh.cycleAirstars,
           })

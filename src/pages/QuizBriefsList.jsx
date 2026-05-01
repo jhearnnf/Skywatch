@@ -95,8 +95,8 @@ export default function QuizBriefsList() {
           ← Back
         </Link>
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">🧠 Intel Quiz</h1>
-          <p className="text-sm text-slate-500">All briefs available for quizzing</p>
+          <h1 className="text-2xl font-extrabold text-slate-900">🧠 Intel Recall</h1>
+          <p className="text-sm text-slate-500">All briefs available for recall</p>
         </div>
       </div>
 

@@ -253,7 +253,7 @@ describe('FlashcardGameModal — results screen', () => {
     expect(mockAwardAirstars).toHaveBeenCalledTimes(1)
     expect(mockAwardAirstars).toHaveBeenCalledWith(
       10,
-      'Flashcard Recall',
+      'Flashcards',
       expect.objectContaining({ cycleAfter: 150, totalAfter: 500 }),
     )
   })

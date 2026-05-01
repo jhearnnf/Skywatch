@@ -52,7 +52,7 @@ const TUTORIAL_LABELS = [
   { key: 'home',            label: '🏠 Home',                       emoji: '🏠' },
   { key: 'learn-priority',  label: '📚 Learn',                      emoji: '📚' },
   { key: 'briefReader',     label: '📋 Brief Reader',               emoji: '📋' },
-  { key: 'quiz',            label: '🎯 Quiz',                       emoji: '🎯' },
+  { key: 'quiz',            label: '🎯 Intel Recall',               emoji: '🎯' },
   { key: 'play',            label: '🎮 Play Hub',                   emoji: '🎮' },
   { key: 'wheres_aircraft', label: "✈️ Where's That Aircraft",     emoji: '✈️' },
   { key: 'profile',         label: '👤 Profile',                    emoji: '👤' },
@@ -247,7 +247,7 @@ export default function Profile() {
 
           {/* Difficulty */}
           <div data-tutorial-target="profile-difficulty" className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Quiz Difficulty</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recall Difficulty</p>
             <div className="flex gap-2">
               {/* Standard — always available */}
               <button

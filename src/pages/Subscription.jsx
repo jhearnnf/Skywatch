@@ -333,10 +333,10 @@ export default function Subscription() {
       period: 'forever',
       features: [
         '✓ Read intel briefs in free subjects',
-        '✓ Basic quiz access',
+        '✓ Basic recall access',
         '✓ Airstars & level progression',
         '✗ Silver & Gold subjects locked',
-        '✗ Advanced quiz difficulty locked',
+        '✗ Advanced recall difficulty locked',
       ],
       categorySection: freeCategorySection,
     },
@@ -349,7 +349,7 @@ export default function Subscription() {
       features: [
         '✓ Full Silver access for the trial period',
         '✓ All Silver subject areas included',
-        '✓ Advanced quiz difficulty',
+        '✓ Advanced recall difficulty',
         `✓ ${trialDays}-day free trial — card required`,
         '✗ Gold subjects locked',
       ],
@@ -364,7 +364,7 @@ export default function Subscription() {
       features: [
         '✓ Everything in Free',
         '✓ Access to all Silver subjects',
-        '✓ Advanced quiz difficulty',
+        '✓ Advanced recall difficulty',
         '✗ Gold subjects locked',
       ],
       categorySection: trialSilverCategorySection,

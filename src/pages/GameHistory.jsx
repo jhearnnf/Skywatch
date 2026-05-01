@@ -5,11 +5,11 @@ import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 
 const TYPE_LABELS = {
-  quiz:            'Intel Brief Quiz',
+  quiz:            'Intel Recall',
   wheres_that_aircraft: "Where's That Aircraft",
   wheres_aircraft:      "Where's That Aircraft",
   order_of_battle: 'Battle of Order',
-  flashcard:       'Flashcard Recall',
+  flashcard:       'Flashcards',
   aptitude_sync:   'APTITUDE_SYNC',
 }
 const TYPE_ICONS = {

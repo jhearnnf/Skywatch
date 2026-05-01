@@ -6,11 +6,11 @@ import SEO from '../components/SEO'
 
 const REASON_LABELS = {
   brief_read:      'Intel Brief Read',
-  quiz:            'Quiz Completed',
+  quiz:            'Intel Recall complete',
   order_of_battle: 'Battle of Order',
   wheres_that_aircraft: "Where's That Aircraft",
   wheres_aircraft:      "Where's That Aircraft",
-  flashcard:       'Flashcard Recall',
+  flashcard:       'Flashcards',
   admin:           'Admin Award',
   login:           'Daily Login',
 }

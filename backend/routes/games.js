@@ -361,7 +361,7 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
         breakdown.push({ label: 'Perfect score bonus', amount: bonus });
       }
       if (airstarsEarned > 0) {
-        coinResult = await awardCoins(req.user._id, airstarsEarned, 'quiz', `Quiz (${attempt.difficulty}): ${brief?.title ?? 'Unknown Brief'} — ${correct}/${total} correct`, attempt.intelBriefId);
+        coinResult = await awardCoins(req.user._id, airstarsEarned, 'quiz', `Intel Recall (${attempt.difficulty}): ${brief?.title ?? 'Unknown Brief'} — ${correct}/${total} correct`, attempt.intelBriefId);
         attempt.rankPromotion = coinResult.rankPromotion;
         attempt.cycleAirstars = coinResult.cycleAirstars;
       }
@@ -1056,7 +1056,7 @@ router.post('/battle-of-order/generate', protect, async (req, res) => {
     const quizPassed = await GameSessionQuizAttempt.findOne({
       userId: req.user._id, intelBriefId: briefId, status: 'completed', won: true,
     }).lean();
-    if (!quizPassed) return res.status(403).json({ message: 'You must pass the Intel Quiz for this brief first.' });
+    if (!quizPassed) return res.status(403).json({ message: 'You must pass the Intel Recall for this brief first.' });
 
     const category        = anchor.category;
     const validOrderTypes = ORDER_TYPES[category];
@@ -1495,7 +1495,7 @@ router.post('/flashcard-recall/result', protect, async (req, res) => {
       userId: req.user._id, gameId, cardResults, gameSessionId, airstarsEarned,
     });
 
-    const label = `Flashcard Recall — ${correctCount}/${cardResults.length}${allCorrect ? ' (perfect)' : ''}`;
+    const label = `Flashcards — ${correctCount}/${cardResults.length}${allCorrect ? ' (perfect)' : ''}`;
     const coinResult = await awardCoins(req.user._id, airstarsEarned, 'flashcard', label);
 
     res.status(201).json({

@@ -1498,8 +1498,8 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, qu
               🧠
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm text-slate-500">Intel Quiz</p>
-              <p className="text-xs text-slate-400 mt-0.5">Still compiling intel for this quiz</p>
+              <p className="font-bold text-sm text-slate-500">Intel Recall</p>
+              <p className="text-xs text-slate-400 mt-0.5">Still compiling intel for this recall</p>
             </div>
             <span className="text-xs font-semibold text-slate-400 shrink-0">🔒 Intel Pending</span>
           </div>
@@ -1518,13 +1518,13 @@ function AlreadyReadScreen({ brief, quizPassed, booState, onReRead, navigate, qu
               🧠
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm text-slate-800">Intel Quiz</p>
+              <p className="font-bold text-sm text-slate-800">Intel Recall</p>
               <p className={`text-xs mt-0.5 ${quizPassed ? 'text-emerald-600' : 'text-slate-400'}`}>
                 {quizPassed ? '✓ Passed' : 'Test your understanding of this brief'}
               </p>
             </div>
             <span className={`text-sm font-bold shrink-0 ${quizPassed ? 'text-emerald-600' : 'text-brand-600 group-hover:text-brand-700'}`}>
-              {quizPassed ? 'Replay →' : 'Take Quiz →'}
+              {quizPassed ? 'Replay →' : 'Start Recall →'}
             </span>
           </button>
         )}

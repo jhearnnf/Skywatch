@@ -71,7 +71,7 @@ const GAME_MODES = [
   {
     key: 'quiz',
     emoji: '🧠',
-    title: 'Intel Quiz',
+    title: 'Intel Recall',
     desc: 'Test your knowledge on a specific brief. Standard or Advanced difficulty.',
     available: true,
     badge: null,
@@ -79,7 +79,7 @@ const GAME_MODES = [
   {
     key: 'flashcard',
     emoji: '⚡',
-    title: 'Flashcard Recall',
+    title: 'Flashcards',
     desc: 'Identify briefs from their content alone. Title hidden — type to recall.',
     available: true,
     badge: null,
@@ -620,9 +620,12 @@ export default function Play() {
                   </div>
                   <p className="text-xs text-slate-400">{mode.desc}</p>
                   {user && (stat ? (
-                    <div className="flex items-center gap-1.5 mt-2">
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                       <span className={`w-1.5 h-1.5 rounded-full ${accent.dot}`} aria-hidden="true" />
                       <span className={`intel-mono ${accent.text}`}>{stat}</span>
+                      {mode.key === 'flashcard' && settings?.newsFlashcardsEnabled === false && flashcardAvail !== null && flashcardAvail < 5 && (
+                        <span className="text-[9px] text-slate-400 leading-none">· news excl.</span>
+                      )}
                     </div>
                   ) : !cardReady[mode.key] ? (
                     <div
@@ -654,17 +657,17 @@ export default function Play() {
             a horizontal scrollbar while the animation is in flight */}
         <div className="space-y-4 overflow-x-clip">
 
-          {/* Intel Quiz */}
+          {/* Intel Recall */}
           <div ref={quizRef} className="launcher-dim">
           <motion.div {...fadeProps} className={sectionClass('quiz')}>
             <SectionAccent modeKey="quiz" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">🧠</span>
-                <h2 className="font-bold text-slate-800">Intel Quiz</h2>
+                <h2 className="font-bold text-slate-800">Intel Recall</h2>
               </div>
               <Link to="/play/quiz" className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors">
-                Browse intel quizzes →
+                Browse intel recalls →
               </Link>
             </div>
             <div className="p-5">
@@ -672,7 +675,7 @@ export default function Play() {
                 <SectionSkeleton rows={3} />
               ) : !user ? (
                 <div className="text-center py-4">
-                  <p className="text-sm text-slate-500 mb-4">Sign in to take quizzes and earn Airstars.</p>
+                  <p className="text-sm text-slate-500 mb-4">Sign in to start Intel Recall and earn Airstars.</p>
                   <Link
                     to="/login"
                     className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
@@ -791,14 +794,14 @@ export default function Play() {
           </motion.div>
           </div>
 
-          {/* Flashcard Recall */}
+          {/* Flashcards */}
           <div ref={flashcardRef} className="launcher-dim">
           <motion.div {...fadeProps} className={sectionClass('flashcard')}>
             <SectionAccent modeKey="flashcard" />
             <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-lg">⚡</span>
-                <h2 className="font-bold text-slate-800">Flashcard Recall</h2>
+                <h2 className="font-bold text-slate-800">Flashcards</h2>
                 {newGames.has('flashcard') && (
                   <span className="text-[10px] font-bold bg-brand-100 text-brand-600 px-1.5 py-0.5 rounded-full">
                     NEW
@@ -836,6 +839,11 @@ export default function Play() {
                       <span className="text-xl shrink-0">📖</span>
                       <p className="text-sm font-semibold text-slate-700 leading-snug">
                         Read at least 5 briefs to unlock Flashcard Round
+                        {settings?.newsFlashcardsEnabled === false && (
+                          <span className="block text-xs font-normal text-slate-500 mt-0.5">
+                            News briefs do not currently unlock additional flashcards.
+                          </span>
+                        )}
                       </p>
                       <span className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto shrink-0">→</span>
                     </Link>

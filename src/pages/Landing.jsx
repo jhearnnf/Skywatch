@@ -18,8 +18,8 @@ const FEATURES = [
 ]
 
 const GAMES = [
-  { key: 'quiz',                 icon: '🧠',  bar: 'bg-brand-500',  title: 'Intel Quiz',             hook: 'Standard or Advanced — answer questions tied to a specific brief.' },
-  { key: 'flashcard',            icon: '⚡',  bar: 'bg-amber-500',  title: 'Flashcard Recall',       hook: 'Title hidden. Read the content, then name the brief from memory.' },
+  { key: 'quiz',                 icon: '🧠',  bar: 'bg-brand-500',  title: 'Intel Recall',           hook: 'Standard or Advanced — answer questions tied to a specific brief.' },
+  { key: 'flashcard',            icon: '⚡',  bar: 'bg-amber-500',  title: 'Flashcards',             hook: 'Title hidden. Read the content, then name the brief from memory.' },
   { key: 'wheres-that-aircraft', icon: '✈️',  bar: 'bg-red-500',    title: "Where's That Aircraft?", hook: 'Spot the aircraft, then pinpoint its home base on the map.' },
   { key: 'battle-order',         icon: '🗺️',  bar: 'bg-violet-400', title: 'Battle of Order',        hook: 'Sequence aircraft, ranks, and missions in the correct order.' },
 ]

@@ -103,8 +103,8 @@ afterEach(() => {
 describe('Play page — game cards', () => {
   it('renders all 4 game card titles', () => {
     renderAsGuest()
-    expect(screen.getAllByText('Intel Quiz').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('Flashcard Recall').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Intel Recall').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Flashcards').length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText("Where's that Aircraft?").length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('Battle of Order').length).toBeGreaterThanOrEqual(1)
   })
@@ -112,8 +112,8 @@ describe('Play page — game cards', () => {
   // In jsdom, getBoundingClientRect() returns all zeros and scrollY=0,
   // so the offset formula yields Math.max(0, 0 + 0 - 72) = 0.
   it.each([
-    ['Intel Quiz',          'card-quiz'],
-    ['Flashcard Recall',    'card-flashcard'],
+    ['Intel Recall',        'card-quiz'],
+    ['Flashcards',          'card-flashcard'],
     ["Where's that Aircraft?", 'card-wheres-that-aircraft'],
     ['Battle of Order',     'card-battle-order'],
   ])('clicking %s card calls window.scrollTo with smooth behaviour', (_label, testId) => {
@@ -149,13 +149,13 @@ describe('Play page — game cards', () => {
     expect(window.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }))
   })
 
-  it('Intel Quiz card has no "Coming soon" badge', () => {
+  it('Intel Recall card has no "Coming soon" badge', () => {
     renderAsGuest()
     const card = screen.getByTestId('card-quiz')
     expect(card.textContent).not.toMatch(/coming soon/i)
   })
 
-  it('Flashcard Recall card has no "Coming soon" badge (now available)', () => {
+  it('Flashcards card has no "Coming soon" badge (now available)', () => {
     renderAsGuest()
     expect(screen.getByTestId('card-flashcard').textContent).not.toMatch(/coming soon/i)
   })
@@ -178,13 +178,13 @@ describe('Play page — launcher sections', () => {
     renderAsGuest()
     const headings = screen.getAllByRole('heading', { level: 2 })
     const titles = headings.map(h => h.textContent)
-    expect(titles).toContain('Intel Quiz')
-    expect(titles).toContain('Flashcard Recall')
+    expect(titles).toContain('Intel Recall')
+    expect(titles).toContain('Flashcards')
     expect(titles).toContain("Where's that Aircraft?")
     expect(titles).toContain('Battle of Order')
   })
 
-  it('Flashcard Recall section shows sign-in prompt for guests', () => {
+  it('Flashcards section shows sign-in prompt for guests', () => {
     renderAsGuest()
     expect(screen.getByText(/sign in to run flashcard drills/i)).toBeDefined()
   })
@@ -209,7 +209,7 @@ describe('Play page — launcher sections', () => {
     expect(screen.getByText(/sign in to play battle of order/i)).toBeDefined()
   })
 
-  it('Flashcard Recall section shows description for logged-in user', async () => {
+  it('Flashcards section shows description for logged-in user', async () => {
     renderAsUser({})
     await waitFor(() => screen.getByText(/identify briefs from their content alone/i))
   })
@@ -220,9 +220,9 @@ describe('Play page — launcher sections', () => {
     expect(screen.getByText(/Eligible categories: Aircrafts, Ranks, Training/i)).toBeDefined()
   })
 
-  it('Intel Quiz section "Browse intel quizzes" link points to /play/quiz', () => {
+  it('Intel Recall section "Browse intel recalls" link points to /play/quiz', () => {
     renderAsGuest()
-    const links = screen.getAllByRole('link', { name: /browse intel quizzes/i })
+    const links = screen.getAllByRole('link', { name: /browse intel recalls/i })
     const quizBrowse = links.find(l => l.getAttribute('href') === '/play/quiz')
     expect(quizBrowse).toBeDefined()
   })
@@ -235,10 +235,10 @@ describe('Play page — launcher sections', () => {
   })
 })
 
-describe('Play page — Intel Quiz section', () => {
+describe('Play page — Intel Recall section', () => {
   it('shows sign-in prompt when user is not logged in', () => {
     renderAsGuest()
-    expect(screen.getByText(/sign in to take quizzes/i)).toBeDefined()
+    expect(screen.getByText(/sign in to start intel recall/i)).toBeDefined()
   })
 
   it('shows Browse Briefs CTA when logged-in user has no quiz briefs', async () => {
@@ -277,7 +277,7 @@ describe('Play page — Intel Quiz section', () => {
   })
 })
 
-describe('Play page — Intel Quiz states', () => {
+describe('Play page — Intel Recall states', () => {
   it('shows "✓ Passed" badge on a passed brief', async () => {
     const quizBriefs = [{ _id: 'b1', title: 'Typhoon FGR4', category: 'Aircrafts', quizState: 'passed' }]
     renderAsUser({ quizBriefs })
@@ -844,11 +844,11 @@ describe('Play page — click-to-summon section + skeleton', () => {
     return { resolveQuiz: () => resolveQuiz() }
   }
 
-  it('Intel Quiz section header renders immediately with a skeleton body before its fetch settles', async () => {
+  it('Intel Recall section header renders immediately with a skeleton body before its fetch settles', async () => {
     mockWithDeferredQuiz()
     render(<Play />)
     // Header is in the DOM straight away — body shows a skeleton shimmer
-    expect(screen.getByRole('heading', { level: 2, name: 'Intel Quiz' })).toBeDefined()
+    expect(screen.getByRole('heading', { level: 2, name: 'Intel Recall' })).toBeDefined()
     expect(document.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0)
   })
 
@@ -885,7 +885,7 @@ describe('Play page — click-to-summon section + skeleton', () => {
     // BOO content should appear without waiting for the Quiz fetch
     await waitFor(() => screen.getByText('Early BOO Brief'))
     // Quiz section header is present, but its body is still a skeleton
-    expect(screen.getByRole('heading', { level: 2, name: 'Intel Quiz' })).toBeDefined()
+    expect(screen.getByRole('heading', { level: 2, name: 'Intel Recall' })).toBeDefined()
     expect(document.querySelectorAll('.skeleton-shimmer').length).toBeGreaterThan(0)
 
     resolveQuiz()
@@ -896,7 +896,7 @@ describe('Play page — click-to-summon section + skeleton', () => {
 })
 
 describe('Play page — entry-tile stat-line placeholder', () => {
-  it('logged-in user sees a pulsing stat placeholder on the Intel Quiz card while the quiz fetch is pending', async () => {
+  it('logged-in user sees a pulsing stat placeholder on the Intel Recall card while the quiz fetch is pending', async () => {
     let resolveQuiz
     const quizPromise = new Promise(r => { resolveQuiz = r })
     useAuth.mockReturnValue({ user: { _id: 'u1', subscriptionTier: 'gold' }, API: '', apiFetch: (...args) => fetch(...args) })

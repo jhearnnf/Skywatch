@@ -17,7 +17,7 @@ const TIER_CONFIG = {
     btnCls:   'bg-brand-600 hover:bg-brand-500 text-slate-50',
     perks: [
       'Access to all Silver subject areas',
-      'Advanced quiz difficulty',
+      'Advanced recall difficulty',
       'Large intel brief library',
     ],
   },
@@ -30,8 +30,8 @@ const TIER_CONFIG = {
     btnCls:   'bg-amber-600 hover:bg-amber-700 text-slate-50',
     perks: [
       'Access to ALL subject areas',
-      'Every intel brief and quiz',
-      'Advanced quiz difficulty',
+      'Every intel brief and recall',
+      'Advanced recall difficulty',
     ],
   },
 }

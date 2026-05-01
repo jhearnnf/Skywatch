@@ -404,8 +404,8 @@ function StatsTab({ API, onViewEmailLog }) {
         </div>
       </StatsSection>
 
-      {/* Flashcard Recall */}
-      <StatsSection title="Flashcard Recall">
+      {/* Flashcards */}
+      <StatsSection title="Flashcards">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="Sessions"    value={fmtNum(games.flashcard?.sessions)}                                                                        color="brand" />
           <StatCard label="Cards Total" value={fmtNum(games.flashcard?.totalCards)}                                                                      color="slate" />
@@ -467,16 +467,16 @@ const SOUND_GROUPS = [
     ],
   },
   {
-    title: 'Quiz',
+    title: 'Intel Recall',
     sounds: [
       { key: 'volumeQuizAnswerCorrect',   enabledKey: 'soundEnabledQuizAnswerCorrect',   label: 'Answer Correct',   sound: 'quiz_answer_correct'   },
       { key: 'volumeQuizAnswerIncorrect', enabledKey: 'soundEnabledQuizAnswerIncorrect', label: 'Answer Incorrect', sound: 'quiz_answer_incorrect' },
-      { key: 'volumeQuizCompleteWin',  enabledKey: 'soundEnabledQuizCompleteWin',  label: 'Quiz Won',  sound: 'quiz_complete_win'  },
-      { key: 'volumeQuizCompleteLose', enabledKey: 'soundEnabledQuizCompleteLose', label: 'Quiz Fail', sound: 'quiz_complete_lose' },
+      { key: 'volumeQuizCompleteWin',  enabledKey: 'soundEnabledQuizCompleteWin',  label: 'Recall Won',  sound: 'quiz_complete_win'  },
+      { key: 'volumeQuizCompleteLose', enabledKey: 'soundEnabledQuizCompleteLose', label: 'Recall Fail', sound: 'quiz_complete_lose' },
     ],
   },
   {
-    title: 'Flashcard Recall',
+    title: 'Flashcards',
     sounds: [
       { key: 'volumeFlashcardStart',     enabledKey: 'soundEnabledFlashcardStart',     label: 'Drill Start',       sound: 'flashcard_start'     },
       { key: 'volumeFlashcardCorrect',   enabledKey: 'soundEnabledFlashcardCorrect',   label: 'Correct Answer',    sound: 'flashcard_correct'   },
@@ -1019,7 +1019,7 @@ function AirstarsEconomy({ API, onToast }) {
                   </div>
                 </div>
                 <div>
-                  <p className="text-[11px] text-slate-400 mb-1.5">Flashcard Recall</p>
+                  <p className="text-[11px] text-slate-400 mb-1.5">Flashcards</p>
                   <div className="grid grid-cols-2 gap-2">
                     <RateInput label="Per correct card" value={sim.rates.airstarsFlashcardPerCard}      onChange={v => setRate('airstarsFlashcardPerCard', v)} />
                     <RateInput label="100% bonus"       value={sim.rates.airstarsFlashcardPerfectBonus} onChange={v => setRate('airstarsFlashcardPerfectBonus', v)} />
@@ -2951,7 +2951,7 @@ const EMAIL_DEFAULTS = {
 
 const CR_DEFAULTS = {
   combatReadinessTitle:    'Combat Readiness Assessment',
-  combatReadinessSubtitle: 'Choose your quiz difficulty.',
+  combatReadinessSubtitle: 'Choose your recall difficulty.',
   combatReadinessEasyLabel:    'Recruit',   combatReadinessEasyTag:    'EASY',   combatReadinessEasyStars:    '★★★☆☆', combatReadinessEasyFlavor:    'Direct recall questions.',
   combatReadinessMediumLabel:  'Operative', combatReadinessMediumTag:  'MEDIUM', combatReadinessMediumStars:  '★★★★☆', combatReadinessMediumFlavor:  'Contextual, deeper questions.',
 }
@@ -5448,7 +5448,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       {confirmRegen && (
         <ConfirmModal
           title="Regenerate Brief Content"
-          body="This will replace this brief's description, subtitle, sources, keywords, quiz questions, game data, and mnemonics with fresh AI output; clear all linked-brief relationships (bases, squadrons, aircraft, related); delete every user's read history, quiz results, Battle of Order, Where's That Aircraft, and Flashcard Recall plays tied to this brief; and reverse every Airstar awarded for it. This cannot be undone."
+          body="This will replace this brief's description, subtitle, sources, keywords, recall questions, game data, and mnemonics with fresh AI output; clear all linked-brief relationships (bases, squadrons, aircraft, related); delete every user's read history, Intel Recall results, Battle of Order, Where's That Aircraft, and Flashcards plays tied to this brief; and reverse every Airstar awarded for it. This cannot be undone."
           confirmLabel="Confirm & Regenerate"
           danger
           onConfirm={handleConfirmRegen}
@@ -5458,7 +5458,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       {confirmDescRegen && (
         <ConfirmModal
           title="Regenerate Description"
-          body="This will replace the description and sources on this brief with fresh AI output; wipe its keywords and quiz questions (these are NOT regenerated — regenerate them separately afterwards); clear all linked-brief relationships; delete every user's read history, quiz results, Battle of Order, Where's That Aircraft, and Flashcard Recall plays tied to this brief; and reverse every Airstar awarded for it. This cannot be undone."
+          body="This will replace the description and sources on this brief with fresh AI output; wipe its keywords and recall questions (these are NOT regenerated — regenerate them separately afterwards); clear all linked-brief relationships; delete every user's read history, Intel Recall results, Battle of Order, Where's That Aircraft, and Flashcards plays tied to this brief; and reverse every Airstar awarded for it. This cannot be undone."
           confirmLabel="Confirm & Regenerate"
           danger
           onConfirm={handleConfirmDescRegen}

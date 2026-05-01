@@ -627,7 +627,7 @@ export default function QuizFlow() {
           if (earned > 0) {
             setXP(earned)
             if (awardAirstars) {
-              awardAirstars(earned, 'Quiz complete', {
+              awardAirstars(earned, 'Intel Recall complete', {
                 cycleAfter:         data.data?.cycleAirstars,
                 totalAfter:         data.data?.totalAirstars,
                 rankPromotion:      data.data?.rankPromotion ?? null,
@@ -666,7 +666,7 @@ export default function QuizFlow() {
           const delta = (fresh?.totalAirstars ?? 0) - baseline
           if (delta > 0 && delta <= MAX_PLAUSIBLE_DELTA && awardAirstars) {
             setXP(delta)
-            awardAirstars(delta, 'Quiz complete', {
+            awardAirstars(delta, 'Intel Recall complete', {
               totalAfter: fresh.totalAirstars,
               cycleAfter: fresh.cycleAirstars,
             })
