@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { useAuth } from '../../context/AuthContext'
+import { isNative } from '../../utils/isNative'
 import { CATEGORY_ICONS, CATEGORY_DESCRIPTIONS } from '../../data/mockData'
 import { setCroFirstBrief } from '../../utils/storageKeys'
 import { getAccessibleCategories, isPathwayUnlocked } from '../../utils/subscription'
@@ -120,7 +121,7 @@ export default function WelcomeAgentFlow({ onClose }) {
             <p className="text-xs text-slate-500 mb-3">
               {isSignedIn
                 ? 'These subject areas are unlocked on your account — switch any time.'
-                : 'Free accounts include these subject areas + a 5-day Silver trial on sign-up.'}
+                : `Free accounts include these subject areas + a ${isNative ? '3' : '5'}-day Silver trial on sign-up.`}
             </p>
             {!isSignedIn && (
               <>

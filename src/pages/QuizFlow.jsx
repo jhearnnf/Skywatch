@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { isNative } from '../utils/isNative'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
@@ -344,7 +345,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
               href="/subscribe"
               className="shrink-0 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
             >
-              5-day free trial →
+              {isNative ? '3-day free trial →' : '5-day free trial →'}
             </a>
           </div>
         </motion.div>
