@@ -6,6 +6,7 @@ import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
 import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } from '../utils/sound'
+import { applyTierCascade } from '../utils/tierCascade'
 import RankBadge from '../components/RankBadge'
 import SocialsSection from '../components/admin/SocialsSection'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
@@ -1483,10 +1484,8 @@ function SettingsTab({ API }) {
   function toggleCaseTier(slug, tier) {
     setCaseFilesDraft(prev => {
       const current = prev[slug] ?? []
-      const next = current.includes(tier)
-        ? current.filter(t => t !== tier)
-        : [...current, tier]
-      return { ...prev, [slug]: next }
+      const willBeChecked = !current.includes(tier)
+      return { ...prev, [slug]: applyTierCascade(current, tier, willBeChecked) }
     })
   }
 
@@ -1722,6 +1721,7 @@ function SettingsTab({ API }) {
           'aptitudeSyncDailyLimitSilver',
           'aptitudeSyncDailyLimitGold',
           'cbatEnabled',
+          'cbatTiers',
           'caseFilesEnabled',
           'caseFilesDailyLimitFree',
           'caseFilesDailyLimitSilver',
@@ -1819,7 +1819,7 @@ function SettingsTab({ API }) {
               <p className="text-sm font-semibold text-slate-700 mb-1">Tier access</p>
               <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access regardless of this setting</p>
               <div className="flex flex-wrap gap-3">
-                {['gold', 'silver', 'free'].map(tier => {
+                {['free', 'silver', 'gold'].map(tier => {
                   const tiers   = draft.aptitudeSyncTiers ?? ['admin']
                   const checked = tiers.includes(tier)
                   return (
@@ -1828,10 +1828,7 @@ function SettingsTab({ API }) {
                         type="checkbox"
                         checked={checked}
                         onChange={() => {
-                          const next = checked
-                            ? tiers.filter(t => t !== tier)
-                            : [...tiers, tier]
-                          set('aptitudeSyncTiers', next)
+                          set('aptitudeSyncTiers', applyTierCascade(tiers, tier, !checked))
                         }}
                         className="w-4 h-4 accent-brand-600"
                       />
@@ -1840,6 +1837,7 @@ function SettingsTab({ API }) {
                   )
                 })}
               </div>
+              <p className="text-xs text-slate-400 mt-2">Enabling free also enables silver and gold; enabling silver also enables gold.</p>
             </div>
 
             <NumInput
@@ -1903,6 +1901,30 @@ function SettingsTab({ API }) {
               const flagEmpty   = (draft.cbatFlagAircraftBriefIds   ?? []).length === 0
               return (
                 <>
+                  <div className="py-2.5 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-700 mb-1">Subscription access</p>
+                    <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access regardless of this setting</p>
+                    <div className="flex flex-wrap gap-3">
+                      {['free', 'silver', 'gold'].map(tier => {
+                        const tiers   = draft.cbatTiers ?? ['free']
+                        const checked = tiers.includes(tier)
+                        return (
+                          <label key={tier} className="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => set('cbatTiers', applyTierCascade(tiers, tier, !checked))}
+                              className="w-4 h-4 accent-brand-600"
+                              data-testid={`cbat-tier-${tier}`}
+                            />
+                            <span className="text-sm font-medium text-slate-700 capitalize">{tier}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">Enabling free also enables silver and gold; enabling silver also enables gold.</p>
+                  </div>
+
                   <p className="text-sm font-bold text-slate-700 uppercase tracking-wide pt-2 pb-1">Target</p>
                   <div className="py-2.5 border-b border-slate-100">
                     <p className="text-sm font-semibold text-slate-700 mb-1">Aircraft in scan panels</p>
@@ -2056,7 +2078,7 @@ function SettingsTab({ API }) {
             {/* Tier access per case */}
             <div className="py-2.5 border-b border-slate-100">
               <p className="text-sm font-semibold text-slate-700 mb-1">Tier access per case</p>
-              <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access. Each case can be enabled for a subset of subscription tiers.</p>
+              <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access. Each case can be enabled for a subset of subscription tiers. Enabling free also enables silver and gold; enabling silver also enables gold.</p>
               {caseFilesList === null ? (
                 <p className="text-xs text-slate-400">Loading…</p>
               ) : caseFilesList.length === 0 ? (

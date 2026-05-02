@@ -727,6 +727,17 @@ router.patch('/settings', requireReason, async (req, res) => {
   try {
     const { reason, ...updates } = req.body;
 
+    // cbatTiers must be a valid subset of ['free','silver','gold','admin']
+    if ('cbatTiers' in updates) {
+      if (!Array.isArray(updates.cbatTiers)) {
+        return res.status(400).json({ message: 'cbatTiers must be an array' });
+      }
+      const VALID_TIERS = new Set(['free', 'silver', 'gold', 'admin']);
+      if (!updates.cbatTiers.every(t => VALID_TIERS.has(t))) {
+        return res.status(400).json({ message: 'cbatTiers must contain only free, silver, gold, or admin' });
+      }
+    }
+
     // CBAT aircraft allowlists must contain ≥1 entry whenever CBAT is enabled.
     // Block empty saves at the API level so a 0-aircraft state can never persist.
     {

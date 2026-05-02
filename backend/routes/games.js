@@ -2173,11 +2173,24 @@ router.get('/cbat/aircraft-cutouts', protect, async (_req, res) => {
 
 // ── CBAT — Start tracking ────────────────────────────────────────────────────
 
+function canAccessCbat(user, settings) {
+  if (user?.isAdmin) return true;
+  const { effectiveTier } = require('../utils/subscription');
+  const tier = effectiveTier(user);
+  const checkTier = tier === 'trial' ? 'silver' : tier;
+  const tiers = Array.isArray(settings?.cbatTiers) ? settings.cbatTiers : [];
+  return tiers.includes(checkTier);
+}
+
 // POST /api/games/cbat/:gameKey/start
 router.post('/cbat/:gameKey/start', protect, async (req, res) => {
   try {
     const { gameKey } = req.params;
     if (!CBAT_GAMES[gameKey]) return res.status(400).json({ message: 'Unknown game' });
+    const settings = await AppSettings.getSettings();
+    if (!canAccessCbat(req.user, settings)) {
+      return res.status(403).json({ message: 'Your subscription does not include CBAT access.', reason: 'tier' });
+    }
     const result = await GameSessionCbatStart.create({ userId: req.user._id, gameKey });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {

@@ -155,6 +155,9 @@ const appSettingsSchema = new mongoose.Schema({
   aptitudeSyncDailyLimitSilver: { type: Number,   default: 3,  min: 0 },
   aptitudeSyncDailyLimitGold:   { type: Number,   default: 10, min: 0 },
 
+  // Which subscription tiers can access CBAT (admin always bypasses regardless)
+  cbatTiers: { type: [String], default: ['free'] },
+
   // CBAT Target — strict allowlist of aircraft (briefIds) that appear in the scan panels.
   // Empty = no aircraft enabled. New 3D models added to /public/models/ start unticked
   // until an admin explicitly enables them via the Game Options → CBAT → Target section.

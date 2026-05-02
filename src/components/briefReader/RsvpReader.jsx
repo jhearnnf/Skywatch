@@ -40,6 +40,7 @@ function RsvpReaderInner({ text, containerRef }) {
   const exitTimerRef    = useRef(null)
   const lastBucketRef   = useRef(Math.floor(wpmRef.current / 25))
   const pointerYRef     = useRef(0)
+  const touchBlockerRef = useRef(null)
 
   // Glow zone refs (4 edges: left, right, top, bottom)
   const glowLeftRef   = useRef(null)
@@ -140,6 +141,7 @@ function RsvpReaderInner({ text, containerRef }) {
     phaseRef.current = 'exiting'
     directionRef.current = 'paused'
     setIsExiting(true)
+    removeTouchBlocker()
 
     // exitTimerRef fires after EXIT_DURATION_MS to complete the disengage.
     // If a new pointerdown arrives during this window, it cancels this timer
@@ -170,6 +172,22 @@ function RsvpReaderInner({ text, containerRef }) {
     if (glowBottomRef.current) glowBottomRef.current.style.opacity = z
   }
 
+  // ── Touch scroll blockers ─────────────────────────────────────────────
+  // Attached on arm start so the browser can't claim the gesture as a scroll
+  // before the 800ms hold timer fires. Removed on every exit path.
+  function attachTouchBlocker() {
+    if (touchBlockerRef.current) return
+    const handler = (e) => { e.preventDefault() }
+    touchBlockerRef.current = handler
+    document.addEventListener('touchmove', handler, { passive: false })
+  }
+
+  function removeTouchBlocker() {
+    if (!touchBlockerRef.current) return
+    document.removeEventListener('touchmove', touchBlockerRef.current, { passive: false })
+    touchBlockerRef.current = null
+  }
+
   // ── Pointer event handlers ────────────────────────────────────────────
   useEffect(() => {
     const el = containerRef.current
@@ -183,6 +201,7 @@ function RsvpReaderInner({ text, containerRef }) {
         e.preventDefault()
         e.stopPropagation()
         el.style.touchAction = 'none'
+        attachTouchBlocker()
         clearTimeout(exitTimerRef.current)
         pointerIdRef.current = e.pointerId
         originRef.current = { x: e.clientX, y: e.clientY }
@@ -209,6 +228,7 @@ function RsvpReaderInner({ text, containerRef }) {
       pointerYRef.current = e.clientY
       phaseRef.current = 'armed'
       wordIndexRef.current = 0
+      attachTouchBlocker()
 
       armTimerRef.current = setTimeout(() => {
         if (phaseRef.current !== 'armed') return
@@ -233,7 +253,13 @@ function RsvpReaderInner({ text, containerRef }) {
           phaseRef.current = 'idle'
           pointerIdRef.current = null
           el.style.touchAction = ''
+          removeTouchBlocker()
         }
+        return
+      }
+
+      if (phase === 'exiting') {
+        e.stopPropagation()
         return
       }
 
@@ -313,6 +339,7 @@ function RsvpReaderInner({ text, containerRef }) {
       if (phase === 'armed') {
         phaseRef.current = 'idle'
         pointerIdRef.current = null
+        removeTouchBlocker()
         return
       }
       if (phase === 'active') {
@@ -329,7 +356,10 @@ function RsvpReaderInner({ text, containerRef }) {
       try { el.releasePointerCapture(e.pointerId) } catch {}
 
       const phase = phaseRef.current
-      if (phase !== 'idle' && phase !== 'exiting') {
+      if (phase === 'armed') {
+        phaseRef.current = 'idle'
+        removeTouchBlocker()
+      } else if (phase !== 'idle' && phase !== 'exiting') {
         engageExit()
       }
       pointerIdRef.current = null
@@ -360,6 +390,7 @@ function RsvpReaderInner({ text, containerRef }) {
       clearTimeout(armTimerRef.current)
       clearTimeout(advanceTimerRef.current)
       clearTimeout(exitTimerRef.current)
+      removeTouchBlocker()
       delete document.body.dataset.rsvpActive
     }
   }, [containerRef]) // eslint-disable-line react-hooks/exhaustive-deps
