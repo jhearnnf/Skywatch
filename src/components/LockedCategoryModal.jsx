@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { isNative } from '../utils/isNative'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
@@ -36,6 +37,8 @@ const TIER_CONFIG = {
   },
 }
 
+const SUBSCRIBE_URL = 'https://skywatch.academy/subscribe'
+
 export default function LockedCategoryModal({ category, tier = 'silver', user, pendingBriefId = null, onClose }) {
   const navigate           = useNavigate()
   const { API, apiFetch, setUser }   = useAuth()
@@ -45,8 +48,29 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, p
   const description        = CATEGORY_DESCRIPTIONS[category] ?? ''
   const isGuest            = !user
 
-  const [email, setEmail]  = useState('')
-  const googleBtnRef       = useRef(null)
+  const [email, setEmail]       = useState('')
+  const [copied, setCopied]     = useState(false)
+  const [trialLoading, setTrialLoading] = useState(false)
+  const googleBtnRef            = useRef(null)
+
+  const appTrialExpired = isNative && user?.trialStartDate && user?.trialSource === 'app' && !user?.isTrialActive
+  const appTrialAvailable = isNative && !user?.trialStartDate
+
+  function copyLink() {
+    navigator.clipboard.writeText(SUBSCRIBE_URL).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    })
+  }
+
+  async function activateTrial() {
+    setTrialLoading(true)
+    try {
+      const res = await apiFetch(`${API}/api/auth/activate-trial`, { method: 'POST' })
+      const data = await res.json()
+      if (data?.data?.user) { setUser(data.data.user); onClose() }
+    } catch { /* ignore */ } finally { setTrialLoading(false) }
+  }
 
   // Close on Escape
   useEffect(() => {
@@ -150,7 +174,7 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, p
               {tier === 'silver' ? (
                 <p className="text-sm text-slate-600 mb-4 leading-relaxed">
                   Sign up for a free account — your included{' '}
-                  <span className="font-semibold text-slate-800">5-day Silver trial</span>{' '}
+                  <span className="font-semibold text-slate-800">{isNative ? '3' : '5'}-day Silver trial</span>{' '}
                   gives you immediate access to {description || `${category} briefs and quizzes`}.
                 </p>
               ) : (
@@ -172,7 +196,7 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, p
                   )}
                   <li className="flex items-center gap-2 text-sm text-slate-800">
                     <span className="text-emerald-600 font-bold shrink-0">✓</span>
-                    5-day Silver trial included on sign-up
+                    {isNative ? '3' : '5'}-day Silver trial included on sign-up
                   </li>
                   <li className="flex items-center gap-2 text-sm text-slate-800">
                     <span className="text-emerald-600 font-bold shrink-0">✓</span>
@@ -255,12 +279,36 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, p
                 </ul>
               </div>
 
-              <button
-                onClick={() => { onClose(); navigate('/subscribe') }}
-                className={`w-full py-3 rounded-2xl font-bold text-sm transition-colors mb-2 ${cfg.btnCls}`}
-              >
-                View {cfg.label} Plans
-              </button>
+              {appTrialAvailable ? (
+                <button
+                  onClick={activateTrial}
+                  disabled={trialLoading}
+                  className="w-full py-3 rounded-2xl font-bold text-sm transition-colors mb-2 bg-brand-600 hover:bg-brand-500 text-slate-50 disabled:opacity-50"
+                >
+                  {trialLoading ? 'Activating…' : 'Start 3-Day Free Trial'}
+                </button>
+              ) : appTrialExpired ? (
+                <div className="mb-2 text-center">
+                  <p className="text-xs text-slate-500 mb-1">Your 3-day trial has ended.</p>
+                  <p className="text-xs text-slate-400 mb-3">
+                    2 more days free — no charge until trial ends.<br />
+                    Subscribe at <span className="font-bold text-brand-600">skywatch.academy/subscribe</span>
+                  </p>
+                  <button
+                    onClick={copyLink}
+                    className={`w-full py-3 rounded-2xl font-bold text-sm transition-colors ${cfg.btnCls}`}
+                  >
+                    {copied ? '✓ Copied!' : 'Copy Link'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { onClose(); navigate('/subscribe') }}
+                  className={`w-full py-3 rounded-2xl font-bold text-sm transition-colors mb-2 ${cfg.btnCls}`}
+                >
+                  View {cfg.label} Plans
+                </button>
+              )}
 
               <button
                 onClick={onClose}

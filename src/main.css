@@ -88,6 +88,25 @@
   --font-family-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, 'Courier New', monospace;
 }
 
+/* ── Android/iOS safe area — status bar + gesture bar clearance ──────── */
+/* padding-top keeps top:0 intact so translateY(-100%) slide-outs still work */
+header.fixed {
+  padding-top: env(safe-area-inset-top);
+}
+/* AppShell TopBar has hardcoded h-14 — expand height to include the padding */
+.app-topbar {
+  height: calc(3.5rem + env(safe-area-inset-top));
+}
+.app-shell-body {
+  padding-top: calc(3.5rem + env(safe-area-inset-top));
+}
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.app-shell-main {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+}
+
 /* ── Loading overlay animations ──────────────────────────────────────── */
 @keyframes radar-sweep {
   from { transform: rotate(0deg); }
@@ -201,7 +220,7 @@ body[data-rsvp-active] > *:not(.rsvp-overlay) {
 @media (max-width: 600px) {
   .chrome-immersive .app-topbar    { transform: translateY(-100%); pointer-events: none; }
   .chrome-immersive .app-bottomnav { transform: translateY(100%);  pointer-events: none; }
-  .chrome-immersive .app-shell-body { padding-top: 0; }
+  .chrome-immersive .app-shell-body { padding-top: env(safe-area-inset-top); }
   .chrome-immersive .app-shell-main { padding-bottom: 0; }
   .chrome-immersive .app-shell-content { padding-bottom: 0; }
 }

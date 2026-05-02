@@ -36,6 +36,7 @@ const userSchema = new mongoose.Schema(
     },
     trialStartDate:     Date,
     trialDurationDays:  { type: Number, default: 5 }, // snapshot from settings at trial start
+    trialSource:        { type: String, enum: ['app', 'web'], default: null },
     subscriptionStartDate: Date,
     stripeCustomerId:      String,
     stripeSubscriptionId:  String,

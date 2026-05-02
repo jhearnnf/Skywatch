@@ -63,6 +63,7 @@ import GameHistory        from './pages/GameHistory'
 import IntelBriefHistory from './pages/IntelBriefHistory'
 import ReportProblem  from './pages/ReportProblem'
 import Contact        from './pages/Contact'
+import Privacy        from './pages/Privacy'
 import Subscription   from './pages/Subscription'
 import Share          from './pages/Share'
 import NotFound       from './pages/NotFound'
@@ -241,6 +242,7 @@ function AppRoutes() {
           <Route path="/subscribe"        element={<PageWrapper><Subscription /></PageWrapper>} />
           <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
           <Route path="/contact"          element={<PageWrapper><Contact /></PageWrapper>} />
+          <Route path="/privacy"          element={<PageWrapper><Privacy /></PageWrapper>} />
           <Route path="/share"            element={<PageWrapper><Share /></PageWrapper>} />
           <Route path="/airstar-history"       element={<RequireAuth><PageWrapper><AirstarHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"          element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />

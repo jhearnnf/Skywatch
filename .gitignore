@@ -3,6 +3,7 @@ APPLICATION_INFO/
 
 # Environment Variables (CRITICAL FOR SECURITY)
 .env
+.env.production
 .env*.local
 *.local
 

@@ -45,7 +45,7 @@ router.post('/create-checkout-session', protect, async (req, res) => {
       allow_promotion_codes: true,
       subscription_data: {
         metadata:           { userId: user._id.toString(), tier },
-        ...(trial ? { trial_period_days: 5 } : {}),
+        ...(trial ? { trial_period_days: 2 } : {}),
       },
     });
 

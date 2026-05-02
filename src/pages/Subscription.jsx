@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { isNative } from '../utils/isNative'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
@@ -124,6 +125,21 @@ function CurrentPlanBadge() {
   )
 }
 
+function NativeCopyLink({ copied, onCopy }) {
+  return (
+    <div className="text-center">
+      <p className="text-xs text-slate-500 mb-2">Subscribe at</p>
+      <p className="text-sm font-bold text-brand-600 mb-3">skywatch.academy/subscribe</p>
+      <button
+        onClick={onCopy}
+        className="w-full py-2.5 rounded-xl font-bold text-sm bg-brand-600 hover:bg-brand-700 text-white transition-colors"
+      >
+        {copied ? '✓ Copied!' : 'Copy Link'}
+      </button>
+    </div>
+  )
+}
+
 function ActionButton({ label, onClick, disabled = false, loading = false, variant = 'primary' }) {
   const base = 'w-full py-2.5 rounded-xl font-bold text-sm transition-colors'
   const styles = {
@@ -152,6 +168,18 @@ export default function Subscription() {
 
   const [actionLoading, setActionLoading] = useState(false)
   const [banner, setBanner]               = useState(null) // { type: 'success'|'error'|'info', msg }
+  const [copied, setCopied]               = useState(false)
+
+  const SUBSCRIBE_URL = 'https://skywatch.academy/subscribe'
+  function copyLink() {
+    navigator.clipboard.writeText(SUBSCRIBE_URL).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    })
+  }
+
+  const appTrialExpired   = isNative && user?.trialStartDate && user?.trialSource === 'app' && !user?.isTrialActive
+  const appTrialAvailable = isNative && !user?.trialStartDate
 
   const effective  = tierEffective(user)
   const timeLeft   = effective === 'trial' ? trialTimeLeft(user) : { days: 0, hours: 0, ms: 0 }
@@ -170,6 +198,24 @@ export default function Subscription() {
       setSearchParams({})
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Native app trial activation (no Stripe) ─────────────────────────
+  async function activateAppTrial() {
+    if (!user) { navigate('/login'); return }
+    setActionLoading(true)
+    setBanner(null)
+    try {
+      const res = await apiFetch(`${API}/api/auth/activate-trial`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed to activate trial')
+      refreshUser()
+      setBanner({ type: 'success', msg: 'Your 3-day free trial is now active!' })
+    } catch (err) {
+      setBanner({ type: 'error', msg: err.message })
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
   // ── Stripe actions ───────────────────────────────────────────────────
   async function startCheckout(tier, trial = false) {
@@ -233,6 +279,16 @@ export default function Subscription() {
       if (['silver', 'gold'].includes(effective)) {
         return <ActionButton label="Not Available" disabled variant="disabled" />
       }
+      if (appTrialAvailable) {
+        return (
+          <ActionButton
+            label="Start 3-Day Free Trial"
+            onClick={activateAppTrial}
+            loading={actionLoading}
+            variant="primary"
+          />
+        )
+      }
       return (
         <ActionButton
           label={`Start ${trialDays}-Day Free Trial`}
@@ -248,6 +304,9 @@ export default function Subscription() {
         return user.stripeSubscriptionId
           ? <ActionButton label="Manage Subscription" onClick={openPortal} loading={actionLoading} variant="outline" />
           : <CurrentPlanBadge />
+      }
+      if (isNative) {
+        return <NativeCopyLink copied={copied} onCopy={copyLink} />
       }
       if (effective === 'gold' && user.stripeSubscriptionId) {
         return <ActionButton label="Switch to Silver" onClick={openPortal} loading={actionLoading} variant="outline" />
@@ -267,6 +326,9 @@ export default function Subscription() {
         return user.stripeSubscriptionId
           ? <ActionButton label="Manage Subscription" onClick={openPortal} loading={actionLoading} variant="outline" />
           : <CurrentPlanBadge />
+      }
+      if (isNative) {
+        return <NativeCopyLink copied={copied} onCopy={copyLink} />
       }
       if (user.stripeSubscriptionId) {
         return <ActionButton label="Upgrade to Gold — £8.99/mo" onClick={openPortal} loading={actionLoading} variant="gold" />
@@ -401,6 +463,27 @@ export default function Subscription() {
         <h1 className="text-2xl font-extrabold text-slate-900">Subscription Plans</h1>
         <p className="text-sm text-slate-500 mt-1">Unlock more subject areas and advanced features.</p>
       </div>
+
+      {/* Native app — expired trial banner */}
+      {appTrialExpired && !banner && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl p-4 mb-5 border bg-amber-50 border-amber-200 text-amber-800"
+        >
+          <p className="font-bold text-sm mb-1">Your 3-day trial has ended</p>
+          <p className="text-xs leading-relaxed">
+            You've unlocked an additional 2 days free — no charge until your trial ends.
+            Subscribe at <span className="font-bold">skywatch.academy/subscribe</span>
+          </p>
+          <button
+            onClick={copyLink}
+            className="mt-3 w-full py-2 rounded-xl font-bold text-sm bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+          >
+            {copied ? '✓ Copied!' : 'Copy Link'}
+          </button>
+        </motion.div>
+      )}
 
       {/* Stripe return banner */}
       {banner && (

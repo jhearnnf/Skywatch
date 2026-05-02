@@ -332,6 +332,29 @@ router.post('/logout', (_req, res) => {
 });
 
 const { withSelectedBadge } = require('../utils/selectedBadge');
+const { protect } = require('../middleware/auth');
+
+// POST /api/auth/activate-trial  — native app 3-day trial (no Stripe)
+router.post('/activate-trial', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.trialStartDate) return res.status(400).json({ error: 'Trial already used' });
+
+    user.subscriptionTier = 'trial';
+    user.trialStartDate   = new Date();
+    user.trialDurationDays = 3;
+    user.trialSource      = 'app';
+    await user.save();
+
+    const userObj = user.toObject({ virtuals: true });
+    await withSelectedBadge(userObj);
+    res.json({ status: 'success', data: { user: userObj } });
+  } catch (err) {
+    console.error('Activate trial error:', err);
+    res.status(500).json({ error: 'Failed to activate trial' });
+  }
+});
 
 // GET /api/auth/me
 router.get('/me', require('../middleware/auth').protect, async (req, res) => {

@@ -417,6 +417,11 @@ export default function Landing() {
       <footer className="py-8 px-5 border-t border-slate-200 text-center">
         <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR THOSE WHO TAKE THE RAF SERIOUSLY</p>
         <SocialLinks source="landing" className="mt-4" />
+        <div className="mt-4">
+          <Link to="/privacy" className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
+            Privacy Policy
+          </Link>
+        </div>
       </footer>
 
       {/* ── Onboarding overlay ────────────────────────────── */}
