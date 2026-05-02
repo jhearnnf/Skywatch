@@ -4,7 +4,9 @@ const appSettingsSchema = new mongoose.Schema({
   _singleton: { type: String, default: 'settings', unique: true },
 
   // Trial
-  trialDurationDays: { type: Number, default: 5 },
+  appTrialDays:       { type: Number, default: 3 }, // immediate in-app trial (no card)
+  appStripeTrialDays: { type: Number, default: 2 }, // Stripe trial for app users who used free trial
+  webStripeTrialDays: { type: Number, default: 5 }, // Stripe trial for fresh web users
 
   // Ammunition per brief (free + silver configurable; gold is always unlimited = 9999)
   ammoFree:   { type: Number, default: 3 },

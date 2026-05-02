@@ -1,7 +1,8 @@
-const express = require('express');
-const stripe  = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { protect } = require('../middleware/auth');
-const User    = require('../models/User');
+const express      = require('express');
+const stripe       = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const { protect }  = require('../middleware/auth');
+const User         = require('../models/User');
+const AppSettings  = require('../models/AppSettings');
 
 const router = express.Router();
 
@@ -34,6 +35,10 @@ router.post('/create-checkout-session', protect, async (req, res) => {
     }
 
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const settings  = await AppSettings.getSettings();
+    const trialDays = user.trialSource === 'app'
+      ? (settings.appStripeTrialDays ?? 2)
+      : (settings.webStripeTrialDays ?? 5);
 
     const session = await stripe.checkout.sessions.create({
       customer:             customerId,
@@ -45,7 +50,7 @@ router.post('/create-checkout-session', protect, async (req, res) => {
       allow_promotion_codes: true,
       subscription_data: {
         metadata:           { userId: user._id.toString(), tier },
-        ...(trial ? { trial_period_days: user.trialSource === 'app' ? 2 : 5 } : {}),
+        ...(trial ? { trial_period_days: trialDays } : {}),
       },
     });
 

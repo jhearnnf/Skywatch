@@ -1594,8 +1594,10 @@ function SettingsTab({ API }) {
       )}
 
       {/* ── Pathway Access & Unlock Requirements ─────────────── */}
-      <Section title="Pathway Access & Unlock Requirements" collapsible onSave={() => save('Update Pathway Access & Unlock Requirements', ['trialDurationDays', 'guestCategories', 'freeCategories', 'silverCategories', 'pathwayUnlocks'])}>
-        <NumInput label="Trial duration (days)" value={draft.trialDurationDays} min={1} max={365} onChange={v => set('trialDurationDays', v)} />
+      <Section title="Pathway Access & Unlock Requirements" collapsible onSave={() => save('Update Pathway Access & Unlock Requirements', ['appTrialDays', 'appStripeTrialDays', 'webStripeTrialDays', 'guestCategories', 'freeCategories', 'silverCategories', 'pathwayUnlocks'])}>
+        <NumInput label="App (Immediate) Trial Days — in-app free trial, no card" value={draft.appTrialDays ?? 3} min={1} max={30} onChange={v => set('appTrialDays', v)} />
+        <NumInput label="App (Stripe) Trial Days — extension trial for app users at skywatch.academy" value={draft.appStripeTrialDays ?? 2} min={1} max={30} onChange={v => set('appStripeTrialDays', v)} />
+        <NumInput label="Web (Stripe) Trial Days — trial for fresh web sign-ups" value={draft.webStripeTrialDays ?? 5} min={1} max={30} onChange={v => set('webStripeTrialDays', v)} />
 
         <p className="text-xs text-slate-400 mt-4 mb-3">
           Each row controls all access conditions for a pathway. A pathway is visible when the user's subscription tier, agent level, and RAF rank all meet the requirements.

@@ -174,7 +174,7 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, p
               {tier === 'silver' ? (
                 <p className="text-sm text-slate-600 mb-4 leading-relaxed">
                   Sign up for a free account — your included{' '}
-                  <span className="font-semibold text-slate-800">{isNative ? '3' : '5'}-day Silver trial</span>{' '}
+                  <span className="font-semibold text-slate-800">{isNative ? (settings?.appTrialDays ?? 3) : (settings?.webStripeTrialDays ?? 5)}-day Silver trial</span>{' '}
                   gives you immediate access to {description || `${category} briefs and quizzes`}.
                 </p>
               ) : (
@@ -196,7 +196,7 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, p
                   )}
                   <li className="flex items-center gap-2 text-sm text-slate-800">
                     <span className="text-emerald-600 font-bold shrink-0">✓</span>
-                    {isNative ? '3' : '5'}-day Silver trial included on sign-up
+                    {isNative ? (settings?.appTrialDays ?? 3) : (settings?.webStripeTrialDays ?? 5)}-day Silver trial included on sign-up
                   </li>
                   <li className="flex items-center gap-2 text-sm text-slate-800">
                     <span className="text-emerald-600 font-bold shrink-0">✓</span>

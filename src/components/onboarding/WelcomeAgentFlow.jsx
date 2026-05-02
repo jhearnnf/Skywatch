@@ -121,7 +121,7 @@ export default function WelcomeAgentFlow({ onClose }) {
             <p className="text-xs text-slate-500 mb-3">
               {isSignedIn
                 ? 'These subject areas are unlocked on your account — switch any time.'
-                : `Free accounts include these subject areas + a ${isNative ? '3' : '5'}-day Silver trial on sign-up.`}
+                : `Free accounts include these subject areas + a ${isNative ? (settings?.appTrialDays ?? 3) : (settings?.webStripeTrialDays ?? 5)}-day Silver trial on sign-up.`}
             </p>
             {!isSignedIn && (
               <>

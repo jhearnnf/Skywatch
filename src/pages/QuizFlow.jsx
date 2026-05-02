@@ -345,7 +345,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
               href="/subscribe"
               className="shrink-0 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
             >
-              {isNative ? '3-day free trial →' : '5-day free trial →'}
+              {isNative ? `${settings?.appTrialDays ?? 3}-day free trial →` : `${settings?.webStripeTrialDays ?? 5}-day free trial →`}
             </a>
           </div>
         </motion.div>

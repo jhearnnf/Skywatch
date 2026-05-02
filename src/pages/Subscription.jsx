@@ -183,7 +183,7 @@ export default function Subscription() {
 
   const effective  = tierEffective(user)
   const timeLeft   = effective === 'trial' ? trialTimeLeft(user) : { days: 0, hours: 0, ms: 0 }
-  const trialDays  = settings?.trialDurationDays ?? 5
+  const trialDays  = isNative ? (settings?.appTrialDays ?? 3) : (settings?.webStripeTrialDays ?? 5)
 
   // Handle Stripe redirect return
   useEffect(() => {

@@ -341,10 +341,11 @@ router.post('/activate-trial', protect, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.trialStartDate) return res.status(400).json({ error: 'Trial already used' });
 
-    user.subscriptionTier = 'trial';
-    user.trialStartDate   = new Date();
-    user.trialDurationDays = 3;
-    user.trialSource      = 'app';
+    const settings = await AppSettings.getSettings();
+    user.subscriptionTier  = 'trial';
+    user.trialStartDate    = new Date();
+    user.trialDurationDays = settings.appTrialDays ?? 3;
+    user.trialSource       = 'app';
     await user.save();
 
     const userObj = user.toObject({ virtuals: true });
