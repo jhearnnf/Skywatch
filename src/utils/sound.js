@@ -73,7 +73,7 @@ export function playGridRevealTone() {
       osc.type = 'sine'
       osc.frequency.setValueAtTime(freq, t)
       const gain = ctx.createGain()
-      gain.gain.setValueAtTime(vol * 0.018, t)
+      gain.gain.setValueAtTime(vol * 0.1, t)
       gain.gain.exponentialRampToValueAtTime(0.0001, t + dur)
       osc.connect(gain)
       gain.connect(ctx.destination)
@@ -96,7 +96,7 @@ export function previewGridRevealTone(sliderValue, durationMs) {
       osc.type = 'sine'
       osc.frequency.setValueAtTime(freq, t)
       const gain = ctx.createGain()
-      gain.gain.setValueAtTime(vol * 0.018, t)
+      gain.gain.setValueAtTime(vol * 0.1, t)
       gain.gain.exponentialRampToValueAtTime(0.0001, t + dur)
       osc.connect(gain)
       gain.connect(ctx.destination)
