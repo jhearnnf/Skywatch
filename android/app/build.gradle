@@ -1,5 +1,9 @@
 apply plugin: 'com.android.application'
 
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+
 android {
     namespace = "academy.skywatch.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -18,10 +22,10 @@ android {
     }
     signingConfigs {
         release {
-            storeFile file('skywatch-release.jks')
-            storePassword 'skywatchrelease123'
-            keyAlias 'skywatch'
-            keyPassword 'skywatchrelease123'
+            storeFile file(keystoreProperties['storeFile'])
+            storePassword keystoreProperties['storePassword']
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
         }
     }
     buildTypes {
