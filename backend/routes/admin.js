@@ -2607,6 +2607,13 @@ function pplxDate(d) {
   return `${m}/${day}/${d.getFullYear()}`;
 }
 
+// Returns a YYYY-MM-DD string shifted by `days` from a YYYY-MM-DD input.
+function shiftDate(ymd, days) {
+  const d = new Date(ymd);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function extractBalanced(str, open, close) {
   const start = str.indexOf(open);
   if (start === -1) return null;
@@ -3107,11 +3114,14 @@ router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news
     // level AND remind the model in-prompt. Sources older than eventDate are
     // filtered out post-hoc; if none survive, the request fails (we don't save
     // a sourceless or temporally-wrong brief).
+    // A 3-day lookback is applied: headlines generated for "today" often have an
+    // eventDate of today, but the underlying articles were published 1-2 days ago.
+    const sourceDateFloor = eventDate ? shiftDate(eventDate, -3) : null;
     const dateFloorPrompt = eventDate
-      ? `\n\nThis story occurred on ${eventDate}. Cite ONLY sources published on or after ${eventDate} — a source cannot predate the event it reports on.`
+      ? `\n\nThis story occurred on ${eventDate}. Cite ONLY sources published on or after ${sourceDateFloor} — a source cannot predate the event it reports on.`
       : '';
-    const dateFilterBody = eventDate
-      ? { search_after_date_filter: pplxDate(new Date(eventDate)) }
+    const dateFilterBody = sourceDateFloor
+      ? { search_after_date_filter: pplxDate(new Date(sourceDateFloor)) }
       : {};
 
     const contentData = await openRouterChat([{
@@ -3139,9 +3149,9 @@ router.post('/ai/bulk-generate-news-item', featureMiddleware('bulk-generate-news
     const resolvedEventDate = eventDate || null;
     if (resolvedEventDate && briefContent.sources?.length) {
       const before = briefContent.sources.length;
-      briefContent.sources = briefContent.sources.filter(s => !s.articleDate || s.articleDate >= resolvedEventDate);
+      briefContent.sources = briefContent.sources.filter(s => !s.articleDate || s.articleDate >= sourceDateFloor);
       const dropped = before - briefContent.sources.length;
-      if (dropped > 0) warnings.push(`Dropped ${dropped} source(s) older than eventDate ${resolvedEventDate}`);
+      if (dropped > 0) warnings.push(`Dropped ${dropped} source(s) older than ${sourceDateFloor}`);
     }
     if (resolvedEventDate && (!briefContent.sources || briefContent.sources.length === 0)) {
       return res.status(422).json({
@@ -3332,8 +3342,9 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
     // of its sources. We push the constraint into the prompt AND into
     // Perplexity's native date filter so the model can't return 2024 reporting
     // for a 2026 headline. Topic briefs have no such floor.
-    const newsDateFloorPrompt = (headline && eventDate)
-      ? `\n\nThis story occurred on ${eventDate}. Cite ONLY sources published on or after ${eventDate} — a source cannot predate the event it reports on.`
+    const newsSourceFloorForPrompt = (headline && eventDate) ? shiftDate(eventDate, -3) : null;
+    const newsDateFloorPrompt = newsSourceFloorForPrompt
+      ? `\n\nThis story occurred on or around ${eventDate}. Cite ONLY sources published on or after ${newsSourceFloorForPrompt}.`
       : '';
 
     const userContent = topic
@@ -3346,9 +3357,9 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
       ? getPrompt(briefAiSettings, 'brief.news')
       : getTopicPrompt(briefAiSettings, category);
 
+    const newsSourceFloor = newsSourceFloorForPrompt;
     const dateFilterBody = {
-      ...(isNews && eventDate ? { search_after_date_filter: pplxDate(new Date(eventDate)) } : {}),
-      response_format: { type: 'json_object' },
+      ...(newsSourceFloor ? { search_after_date_filter: pplxDate(new Date(newsSourceFloor)) } : {}),
     };
 
     const data = await openRouterChat([{
@@ -3392,19 +3403,22 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
     if (isNews) {
       if (isHistoric) brief.historic = true;
       if (eventDate)  brief.eventDate = eventDate;
-      // eventDate is authoritative: drop any source that predates it. Sources
-      // can't predate the event they report on, so a 2024-dated source for a
-      // 2026 headline means the model retrieved the wrong story — don't keep it.
-      if (eventDate && brief.sources?.length) {
+      // Drop sources that clearly predate the event by more than 3 days. A 3-day
+      // grace window handles the common case where "today's" headlines were actually
+      // published 1-2 days ago. A 2024-dated source for a 2026 headline is still rejected.
+      // Only block the save if sources WERE returned but every one was filtered (wrong story).
+      // If Perplexity returned no sources at all, let the draft through — admin can review.
+      const hadSources = Array.isArray(brief.sources) && brief.sources.length > 0;
+      if (eventDate && hadSources) {
         const before = brief.sources.length;
-        brief.sources = brief.sources.filter(s => !s.articleDate || s.articleDate >= eventDate);
+        brief.sources = brief.sources.filter(s => !s.articleDate || s.articleDate >= newsSourceFloor);
         const dropped = before - brief.sources.length;
-        if (dropped > 0) console.warn(`[generate-brief] dropped ${dropped} source(s) older than eventDate ${eventDate}`);
-      }
-      if (eventDate && (!brief.sources || brief.sources.length === 0)) {
-        return res.status(422).json({
-          message: `No sources published on or after ${eventDate} for "${headline}" — try a different headline or date.`,
-        });
+        if (dropped > 0) console.warn(`[generate-brief] dropped ${dropped} source(s) older than ${newsSourceFloor}`);
+        if (brief.sources.length === 0) {
+          return res.status(422).json({
+            message: `No sources published on or after ${newsSourceFloor} for "${headline}" — try a different headline or date.`,
+          });
+        }
       }
     }
     res.json({ status: 'success', data: { brief: { ...brief, staleSourceWarning } } });
