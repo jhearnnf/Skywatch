@@ -53,7 +53,6 @@ const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
 const { callOpenRouter, featureMiddleware, setBrief } = require('../utils/openRouter');
-const { normalizeSections } = require('../utils/descriptionSections');
 
 // ── Shared quiz prompt fragments ──────────────────────────────────────────────
 // Single source of truth for answer format rules and core question rules,
