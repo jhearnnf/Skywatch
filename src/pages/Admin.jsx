@@ -240,7 +240,7 @@ function StatsTab({ API, onViewEmailLog }) {
       {/* Users */}
       <StatsSection title="Users" defaultOpen>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total Users"      value={fmtNum(users.totalUsers)}       color="brand" />
+          <StatCard label="Users Online"      value={`${fmtNum(users.onlineUsers ?? 0)} / ${fmtNum(users.totalUsers)}`} color="brand" />
           <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate" />
           <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber" />
           <StatCard label="Paying Subscribers" value={fmtNum(users.subscribedUsers)}   color="emerald" />
@@ -249,7 +249,6 @@ function StatsTab({ API, onViewEmailLog }) {
           <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate" />
           <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate" />
           <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate" />
-          <StatCard label="Users Online"     sub="not yet implemented"               color="slate" disabled />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           <button
@@ -4183,6 +4182,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [draft,         setDraft]         = useState({ ...EMPTY_DRAFT, descriptionSections: normalizeDraftSections(null) })
   const [easyQuestions, setEasyQuestions] = useState([])
   const [mediumQuestions,setMediumQuestions] = useState([])
+  const [questionsChanged, setQuestionsChanged] = useState(false)
   const [media,         setMedia]         = useState([])
   const [pendingImages, setPendingImages] = useState([])
   const [imageSources,  setImageSources]  = useState(['dvids', 'commons', 'wikipedia'])
@@ -4414,6 +4414,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       answers: q.answers.map(a => ({ title: a.title })),
       correctAnswerIndex: q.answers.findIndex(a => String(a._id) === String(q.correctAnswerId)),
     })) ?? [])
+    setQuestionsChanged(false)
     setMedia(br.media ?? [])
     setPendingImages([])
     setBriefId(String(br._id))
@@ -4465,6 +4466,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     setDraft({ ...EMPTY_DRAFT, descriptionSections: normalizeDraftSections(null) })
     setEasyQuestions([])
     setMediumQuestions([])
+    setQuestionsChanged(false)
     setMedia([])
     setPendingImages([])
     setBriefId(null)
@@ -4498,13 +4500,15 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       const id = String(data.data.brief._id)
       setBriefId(id)
 
-      // Save questions if present
-      if (easyQuestions.length > 0 || mediumQuestions.length > 0) {
+      // Save questions only when they were actually changed — POSTing this
+      // endpoint unconditionally wipes all user quiz history for the brief.
+      if (questionsChanged && (easyQuestions.length > 0 || mediumQuestions.length > 0)) {
         await apiFetch(`${API}/api/admin/briefs/${id}/questions`, {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ easyQuestions, mediumQuestions }),
         })
+        setQuestionsChanged(false)
       }
 
       // Add any selected pending images (reuse existing Media doc by mediaId)
@@ -4615,6 +4619,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     })
     setEasyQuestions([])
     setMediumQuestions([])
+    setQuestionsChanged(false)
     setMedia([])
     setPendingImages([])
     setBriefId(null)
@@ -4716,6 +4721,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       if (qData.status === 'success') {
         setEasyQuestions(qData.data.easyQuestions ?? [])
         setMediumQuestions(qData.data.mediumQuestions ?? [])
+        setQuestionsChanged(true)
       }
       if (imgData.status === 'success') {
         setPendingImages((imgData.data.images ?? []).map(img => ({ ...img, selected: true })))
@@ -4771,6 +4777,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       if (data.status === 'success') {
         setEasyQuestions(data.data.easyQuestions ?? [])
         setMediumQuestions(data.data.mediumQuestions ?? [])
+        setQuestionsChanged(true)
       }
     } finally {
       setGenerating(null)
@@ -4826,6 +4833,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     try {
       await fillOne('easy', easyQuestions, missingEasy, setEasyQuestions)
       await fillOne('medium', mediumQuestions, missingMedium, setMediumQuestions)
+      setQuestionsChanged(true)
     } finally {
       setGenQuestionsSingle(false)
     }
@@ -4836,6 +4844,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     const blank = { question: '', correctAnswerIndex: 0, answers: Array(10).fill(null).map(() => ({ title: '' })) }
     if (qTab === 'easy') setEasyQuestions(p => [...p, blank])
     else setMediumQuestions(p => [...p, blank])
+    setQuestionsChanged(true)
   }
 
 
@@ -4876,6 +4885,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     setDraft(p => ({ ...p, keywords: [], sources: [] }))
     setEasyQuestions([])
     setMediumQuestions([])
+    setQuestionsChanged(false)
     try {
       // Cascade: wipe all user stats / coins tied to this brief
       const cascadeRes  = await apiFetch(`${API}/api/admin/briefs/${briefId}/confirm-regeneration`, {
@@ -4904,6 +4914,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       }))
       setEasyQuestions(easyQuestions ?? [])
       setMediumQuestions(mediumQuestions ?? [])
+      setQuestionsChanged(true)
       setToast('Regenerated — review and save when ready')
     } catch (err) {
       setToast(`Regenerate failed: ${err.message}`)
@@ -4951,6 +4962,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     setDraft(p => ({ ...p, keywords: [], sources: [] }))
     setEasyQuestions([])
     setMediumQuestions([])
+    setQuestionsChanged(false)
     try {
       const res  = await apiFetch(`${API}/api/admin/ai/regenerate-description/${briefId}`, {
         method: 'POST', credentials: 'include',
@@ -5484,6 +5496,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const setCurrentQuestions = qTab === 'easy' ? setEasyQuestions : setMediumQuestions
 
   const updateQuestion = (idx, field, value) => {
+    setQuestionsChanged(true)
     setCurrentQuestions(p => {
       const next = [...p]
       next[idx] = { ...next[idx], [field]: value }
@@ -5492,6 +5505,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   }
 
   const updateAnswer = (qIdx, aIdx, value) => {
+    setQuestionsChanged(true)
     setCurrentQuestions(p => {
       const next = [...p]
       const answers = [...next[qIdx].answers]
@@ -6507,7 +6521,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-slate-500">Q{qIdx + 1}</span>
                     <button
-                      onClick={() => setCurrentQuestions(p => p.filter((_, i) => i !== qIdx))}
+                      onClick={() => { setCurrentQuestions(p => p.filter((_, i) => i !== qIdx)); setQuestionsChanged(true) }}
                       className="text-xs text-red-400 hover:text-red-600"
                     >
                       Remove

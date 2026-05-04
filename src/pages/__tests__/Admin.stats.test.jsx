@@ -59,7 +59,7 @@ vi.mock('framer-motion', () => ({
 
 const MOCK_STATS = {
   users: {
-    totalUsers: 10, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
+    totalUsers: 10, onlineUsers: 3, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
     easyPlayers: 6, mediumPlayers: 4, combinedStreaks: 20,
     emailsSent: 42, emailsFailed: 7,
   },
@@ -114,7 +114,7 @@ describe('Admin — Stats tab: collapsible sections', () => {
   it('renders Users and OpenRouter sections open by default', async () => {
     render(<Admin />)
 
-    await waitFor(() => expect(screen.getByText('Total Users')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
     await waitFor(() => expect(screen.getByText('$12.34')).toBeInTheDocument())     // OpenRouter lifetime main
   })
 

@@ -365,7 +365,7 @@ router.get('/stats', async (_req, res) => {
     const passThresholdMedium = settings.passThresholdMedium ?? 60;
 
     const [
-      totalUsers, freeUsers, trialUsers, silverUsers, goldUsers,
+      totalUsers, onlineUsers, freeUsers, trialUsers, silverUsers, goldUsers,
       easyPlayers, mediumPlayers,
       totalBrifsRead, totalBrifsOpened, readTimeAgg,
       totalGamesPlayed, totalGamesCompleted, totalPerfectScores, totalGamesWon,
@@ -383,6 +383,7 @@ router.get('/stats', async (_req, res) => {
       emailsSent, emailsFailed,
     ] = await Promise.all([
       User.countDocuments(),
+      User.countDocuments({ lastSeen: { $gte: new Date(Date.now() - 5 * 60 * 1000) } }),
       User.countDocuments({ subscriptionTier: 'free' }),
       User.countDocuments({ subscriptionTier: 'trial' }),
       // Silver/gold counts are restricted to real Stripe payers — excludes
@@ -468,7 +469,7 @@ router.get('/stats', async (_req, res) => {
       status: 'success',
       data: {
         users: {
-          totalUsers, freeUsers, trialUsers,
+          totalUsers, onlineUsers, freeUsers, trialUsers,
           subscribedUsers: silverUsers + goldUsers,
           easyPlayers, mediumPlayers,
           combinedStreaks:  streakAgg[0]?.total ?? 0,

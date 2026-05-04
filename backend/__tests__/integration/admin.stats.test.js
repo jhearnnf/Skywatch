@@ -115,6 +115,21 @@ describe('GET /api/admin/stats — users section', () => {
     expect(res.body.data.users.totalUsers).toBe(3);
   });
 
+  it('counts online users as those with lastSeen within 5 minutes', async () => {
+    const admin  = await createAdminUser();
+    const recent = new Date(Date.now() - 2 * 60 * 1000); // 2 min ago — online
+    const stale  = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago — offline
+    await createUser({ lastSeen: recent });
+    await createUser({ lastSeen: stale });
+    await createUser(); // lastSeen: null — offline
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.users.onlineUsers).toBe(1);
+  });
+
   it('counts users by subscription tier — only paying Stripe subscribers', async () => {
     const admin = await createAdminUser();
     await createUser({ subscriptionTier: 'free' });
