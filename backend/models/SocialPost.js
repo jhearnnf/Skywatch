@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const POST_TYPES = ['daily-recon', 'latest-intel', 'brand-transparency'];
+const POST_TYPES = ['daily-recon', 'daily-recon-info', 'latest-intel', 'brand-transparency'];
 const STATUSES   = ['draft', 'posted', 'failed'];
 const PLATFORMS  = ['x'];
 

@@ -19,7 +19,7 @@ const DEFAULT_MODEL = 'anthropic/claude-haiku-4-5';
 // Public site URL used to build linkable CTAs (latest-intel posts).
 const SITE_BASE_URL = 'https://skywatch.academy';
 
-const POST_TYPES = ['daily-recon', 'latest-intel', 'brand-transparency'];
+const POST_TYPES = ['daily-recon', 'daily-recon-info', 'latest-intel', 'brand-transparency'];
 
 // Per-variant prompt nudge — used when generating 3 alternative drafts in
 // parallel so the variants don't collapse to near-identical text. Index 0/1/2
@@ -42,14 +42,13 @@ const VARIANT_TEMPERATURE = 0.85;
 
 function describeTone(tone) {
   const t = clamp(Math.round(tone), 1, 10);
-  // Anchor descriptions at 1, 4, 7, 9, 10. The dial value is also passed in
-  // verbatim so the model can interpolate.
-  if (t <= 2) return 'stiff corporate, formal, neutral. Think a press release or a Big Co. apology note. No personality, no humour, no slang.';
-  if (t <= 4) return 'professional but readable. Plain English, no jargon, no emojis, no slang.';
-  if (t <= 6) return 'modern brand-account voice. Warm, specific, confident. One light personality beat allowed; no jokes.';
-  if (t <= 8) return 'modern X brand voice — confident, specific, human. A small dose of personality is welcome (a wry observation, a cheeky aside) but never at the expense of clarity. No emojis unless one genuinely earns its place.';
-  if (t === 9) return 'cheeky, witty, light satire/irony allowed. Reads like a sharp brand account that knows the platform. A real joke or punchline is welcome if it lands. NEVER any spelling mistakes, NEVER grammatical errors, NEVER cringe corporate-trying-to-be-funny energy.';
-  return 'MAXIMUM cheeky / witty / funny / jokey. The post should make someone genuinely smirk or laugh on the timeline — go for the punchline, not just a wry tone. Lean into one-liners, deadpan zingers, dry observational humour, irony, light satire, gentle roasting of the topic itself (never of real people or groups). Comedic timing matters: a strong setup → payoff beats a flat factual sentence. The funny line is the POINT of the post, not a garnish — if you cut the joke, the post should feel noticeably worse. Still factually accurate, still on-topic. NEVER any spelling mistakes, NEVER grammatical errors, NEVER emojis as the punchline, NEVER cringe "how do you do, fellow kids" / corporate-trying-to-be-funny / forced-meme energy. If a joke would feel forced, pick a different angle rather than dialling back to neutral.';
+  if (t === 1) return 'MAXIMUM MILITARY FORMAL. Write like a senior RAF officer filing an official operational report — crisp, passive voice where appropriate, zero personality, zero humour, zero contractions. Sentences are complete and precise. Every word must justify its presence. Think STANAG signal format crossed with a Ministry of Defence press release. Absolutely no slang, no emojis, no warmth, no first person.';
+  if (t <= 3) return 'formal and authoritative. Write like a defence ministry spokesperson: measured, impersonal, factually dense. No contractions, no slang, no emojis. Personality is absent by design. Reads like a briefing document, not a tweet.';
+  if (t <= 5) return 'professional and clear. Plain English, direct sentences, no filler. A human wrote this but left their personality at the door. No jokes, no emojis, no flourishes — just the facts, well-expressed.';
+  if (t <= 7) return 'modern brand voice — confident, warm, specific. Sounds like a person, not a press release. One light personality beat per post is fine; no jokes. Default register for SkyWatch posts.';
+  if (t === 8) return 'personable and a little cheeky. A wry observation or knowing aside is welcome. Conversational without being sloppy. Reads like someone who knows the platform and isn\'t afraid to show it — but the information still leads.';
+  if (t === 9) return 'genuinely witty and ironic. Sharp, honest, confident. A real joke or punchline is not just welcome — it\'s expected. Dry humour, light self-awareness, a touch of irreverence. Never forced, never cringe. NEVER spelling mistakes or grammatical errors.';
+  return 'MAXIMUM cheeky, wild, and carefree — but always honest and never dishonest. This post should make someone laugh out loud or do a double-take on the timeline. Go for it: deadpan zingers, absurdist observations, over-the-top irony, a punchline so good it hurts. The joke IS the point — if you removed it, the post would be worse. Wit and irreverence cranked to 11. Still 100% factually accurate (honesty is non-negotiable even at tone 10 — never exaggerate or misrepresent facts for comic effect). NEVER emojis as the punchline. NEVER forced memes or "fellow kids" energy. NEVER spelling mistakes or grammatical errors — sloppy writing kills the joke.';
 }
 
 function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
@@ -207,6 +206,57 @@ async function generateDailyRecon({ brief, tone, openRouterChat, model = DEFAULT
   };
 }
 
+// ─── Daily Recon (Info) ──────────────────────────────────────────────────────
+async function generateDailyReconInfo({ brief, tone, openRouterChat, model = DEFAULT_MODEL, siteBaseUrl = SITE_BASE_URL, variantIndex }) {
+  if (!brief)          throw new Error('daily-recon-info requires a brief');
+  if (!openRouterChat) throw new Error('openRouterChat dependency required');
+  const summary  = briefSummaryForPrompt(brief);
+  const briefId  = brief._id ? String(brief._id) : null;
+  const briefUrl = briefId ? `${siteBaseUrl}/brief/${briefId}` : null;
+  const ctaSuffix   = briefUrl ? `\n\nRead the full brief: ${briefUrl}` : '';
+  const proseTarget = X_CHAR_LIMIT - ctaSuffix.length;
+  const nudge = variantNudge(variantIndex);
+
+  const system = [
+    'You write tweets for SkyWatch — a defence/aerospace knowledge platform.',
+    `Voice/tone (dial = ${tone} of 10): ${describeTone(tone)}`,
+    nudge ? `\n${nudge}\n` : '',
+    'Task: a "Daily Recon" info post. Pick ONE specific, surprising, or little-known fact from the brief below — something that would make someone on X stop and read. State it directly. No poll, no speculation, facts only.',
+    '',
+    ctaSuffix
+      ? `IMPORTANT — write only the prose body of the tweet. The system will AUTOMATICALLY append "${ctaSuffix.trim()}" after your text. Do NOT include any URL, link, "read the brief"-style line, or other CTA yourself — that line is added for you. Your prose budget is ≤${proseTarget} chars (see HARD LIMIT below) — do NOT plan against X.com's 280-char tweet limit, plan against ${proseTarget}.`
+      : `The tweet must stand on its own — do NOT end with a CTA pointing to "the brief" or any other unlinked content.`,
+    '',
+    'Return PLAIN TEXT only — no JSON, no markdown, no quotes. The whole response is the tweet body.',
+    '',
+    'Guardrails:',
+    guardrailsBlock({ effectiveLimit: proseTarget, hasCta: !!ctaSuffix }),
+  ].join('\n');
+
+  const user = `Brief content:\n\n${summary}`;
+
+  const data = await openRouterChat({
+    model,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user',   content: user },
+    ],
+    temperature: VARIANT_TEMPERATURE,
+  });
+  const raw = (data?.choices?.[0]?.message?.content || '').trim();
+  if (!raw) throw new Error('daily-recon-info: empty model response');
+  const finalText = ctaSuffix ? `${raw}${ctaSuffix}` : raw;
+  return {
+    text: finalText,
+    poll: null,
+    sourceMeta: {
+      briefId,
+      briefName: brief.title || null,
+      briefUrl,
+    },
+  };
+}
+
 // ─── Latest Intel ────────────────────────────────────────────────────────────
 async function generateLatestIntel({ brief, tone, openRouterChat, model = DEFAULT_MODEL, siteBaseUrl = SITE_BASE_URL, variantIndex }) {
   if (!brief)          throw new Error('latest-intel requires a brief');
@@ -333,6 +383,8 @@ async function generateDraft({ postType, tone, brief, openRouterChat, fetchCommi
   switch (postType) {
     case 'daily-recon':
       return generateDailyRecon({ brief, tone: t, openRouterChat, model, variantIndex: v });
+    case 'daily-recon-info':
+      return generateDailyReconInfo({ brief, tone: t, openRouterChat, model, variantIndex: v });
     case 'latest-intel':
       return generateLatestIntel({ brief, tone: t, openRouterChat, model, variantIndex: v });
     case 'brand-transparency':
@@ -355,6 +407,7 @@ module.exports = {
   extractFirstJson,
   briefSummaryForPrompt,
   generateDailyRecon,
+  generateDailyReconInfo,
   generateLatestIntel,
   generateBrandTransparency,
   generateDraft,

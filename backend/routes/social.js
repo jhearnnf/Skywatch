@@ -229,7 +229,7 @@ router.post('/x/draft', async (req, res, next) => {
     }
 
     let brief = null;
-    if (postType === 'daily-recon' || postType === 'latest-intel') {
+    if (postType === 'daily-recon' || postType === 'daily-recon-info' || postType === 'latest-intel') {
       if (!briefId || !mongoose.Types.ObjectId.isValid(briefId)) {
         return res.status(400).json({ status: 'error', message: 'briefId required for this postType' });
       }
@@ -306,13 +306,23 @@ router.post('/x/publish', async (req, res, next) => {
 
     let mediaIds = [];
     if (imageUrl) {
-      const fetched = await fetch(imageUrl);
-      if (!fetched.ok) {
-        return res.status(400).json({ status: 'error', message: `imageUrl fetch failed: ${fetched.status}` });
+      let buf, mime;
+      if (String(imageUrl).startsWith('data:')) {
+        const match = String(imageUrl).match(/^data:([^;,]+)(?:;base64)?,(.+)$/s);
+        if (!match) {
+          return res.status(400).json({ status: 'error', message: 'invalid data URL format' });
+        }
+        mime = match[1] || 'image/jpeg';
+        buf  = Buffer.from(match[2], 'base64');
+      } else {
+        const fetched = await fetch(imageUrl);
+        if (!fetched.ok) {
+          return res.status(400).json({ status: 'error', message: `imageUrl fetch failed: ${fetched.status}` });
+        }
+        buf  = Buffer.from(await fetched.arrayBuffer());
+        mime = fetched.headers.get('content-type') || 'image/jpeg';
       }
-      const buf  = Buffer.from(await fetched.arrayBuffer());
-      const mime = fetched.headers.get('content-type') || 'image/jpeg';
-      const id   = await xClient.uploadMedia({ accessToken, buffer: buf, mimeType: mime });
+      const id = await xClient.uploadMedia({ accessToken, buffer: buf, mimeType: mime });
       if (id) mediaIds.push(id);
     }
 
@@ -339,7 +349,9 @@ router.post('/x/publish', async (req, res, next) => {
       sourceMeta: sourceMeta || {},
       draftText: String(draftText || text),
       finalText: text,
-      includedImageUrl: imageUrl || null,
+      includedImageUrl: imageUrl
+        ? (String(imageUrl).startsWith('data:') ? '[uploaded]' : imageUrl)
+        : null,
       poll: normalizedPoll,
       status,
       externalPostId,

@@ -5,21 +5,22 @@ import { CATEGORIES } from '../../../backend/constants/categories.json'
 
 const POST_TYPE_OPTIONS = [
   { value: 'daily-recon',         label: 'Daily Recon (poll)' },
+  { value: 'daily-recon-info',    label: 'Daily Recon (info)' },
   { value: 'latest-intel',        label: 'Latest Intel (news summary)' },
   { value: 'brand-transparency',  label: 'Brand Transparency (devlog)' },
 ]
 
 const TONE_LABEL = {
-  1: 'Stiff corporate',
-  2: 'Stiff corporate',
-  3: 'Professional',
+  1: 'Military formal',
+  2: 'Military formal',
+  3: 'Authoritative',
   4: 'Professional',
-  5: 'Brand voice',
+  5: 'Clear & direct',
   6: 'Brand voice',
   7: 'Brand voice (default)',
-  8: 'Confident, human',
-  9: 'Cheeky, witty',
-  10: 'Maximum cheeky',
+  8: 'A little cheeky',
+  9: 'Witty & ironic',
+  10: 'Wild & carefree',
 }
 
 const X_LIMIT = 280
@@ -48,8 +49,10 @@ export default function SocialsSection({ API }) {
   const [postType, setPostType]   = useState('latest-intel')
   const [tone, setTone]           = useState(7)
   const [briefId, setBriefId]     = useState('')
-  const [includeImage, setIncludeImage] = useState(false)
-  const [briefCategoryFilter, setBriefCategoryFilter] = useState('') // daily-recon only; '' = all categories
+  // 'none' | 'brief' | 'upload'
+  const [imageSource, setImageSource] = useState('none')
+  const [uploadedFileDataUrl, setUploadedFileDataUrl] = useState(null)
+  const [briefCategoryFilter, setBriefCategoryFilter] = useState('') // daily-recon / daily-recon-info only; '' = all categories
 
   // Draft state — three parallel variants, each independently loading. The
   // carousel renders one card per slot and the user picks which one to post.
@@ -173,7 +176,7 @@ export default function SocialsSection({ API }) {
   // filter only applies to daily-recon — latest-intel has its own ordering and
   // brand-transparency hides the picker entirely.
   const filteredBriefOptions = useMemo(() => {
-    if (postType !== 'daily-recon' || !briefCategoryFilter) return briefOptions
+    if ((postType !== 'daily-recon' && postType !== 'daily-recon-info') || !briefCategoryFilter) return briefOptions
     return briefOptions.filter(b => b.category === briefCategoryFilter)
   }, [briefOptions, briefCategoryFilter, postType])
 
@@ -184,7 +187,7 @@ export default function SocialsSection({ API }) {
   // the active category filter.
   useEffect(() => {
     if (!briefsLoaded) return
-    if (postType === 'daily-recon' && !briefId && filteredBriefOptions.length) {
+    if ((postType === 'daily-recon' || postType === 'daily-recon-info') && !briefId && filteredBriefOptions.length) {
       setBriefId(filteredBriefOptions[Math.floor(Math.random() * filteredBriefOptions.length)]._id)
     } else if (postType === 'latest-intel' && !briefId && briefOptions.length) {
       setBriefId(briefOptions[0]._id)
@@ -209,6 +212,7 @@ export default function SocialsSection({ API }) {
   // preview shows the same label users see on the intel brief media list.
   const imageName = useMemo(() => {
     if (!imageUrl) return ''
+    if (imageUrl.startsWith('data:')) return 'Uploaded image'
     const match = selectedBrief?.media?.find(m => m?.mediaUrl === imageUrl)
     if (match) {
       return match.name
@@ -218,25 +222,16 @@ export default function SocialsSection({ API }) {
     return imageUrl.split('/').pop().replace(/\.[^.]+$/, '')
   }, [imageUrl, selectedBrief])
 
-  // Keep imageUrl in sync with the include-image toggle so the preview shows
-  // the moment the box is ticked, not only after Generate.
+  // Keep imageUrl in sync with the image source selection.
   useEffect(() => {
-    if (postType === 'brand-transparency') return
-    if (includeImage) {
+    if (imageSource === 'brief') {
       setImageUrl(briefImageUrl || null)
+    } else if (imageSource === 'upload') {
+      setImageUrl(uploadedFileDataUrl || null)
     } else {
       setImageUrl(null)
     }
-  }, [includeImage, briefImageUrl, postType])
-
-  // X disallows poll + media on the same tweet, so daily-recon (poll) forces
-  // the include-image toggle off and clears any pending preview.
-  useEffect(() => {
-    if (postType === 'daily-recon' && includeImage) {
-      setIncludeImage(false)
-      setImageUrl(null)
-    }
-  }, [postType, includeImage])
+  }, [imageSource, briefImageUrl, uploadedFileDataUrl])
 
   const selectedCharCount = selectedDraft.text.length
   const selectedOverLimit = selectedCharCount > X_LIMIT
@@ -260,6 +255,14 @@ export default function SocialsSection({ API }) {
   }
 
   // ── draft actions ──
+  const handleFileChange = useCallback((e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => setUploadedFileDataUrl(ev.target.result || null)
+    reader.readAsDataURL(file)
+  }, [])
+
   const randomBrief = () => {
     const pool = filteredBriefOptions
     if (!pool.length) return
@@ -304,7 +307,7 @@ export default function SocialsSection({ API }) {
       // Image URL is brief-derived and identical across variants — first
       // variant to land sets it (or refreshes it on regenerate). Rather than
       // race three identical writes, only idx 0 sets it.
-      if (idx === 0 && includeImage && data.data.suggestedImageUrl) {
+      if (idx === 0 && imageSource === 'brief' && data.data.suggestedImageUrl) {
         setImageUrl(data.data.suggestedImageUrl)
       }
       return { ok: true, idx }
@@ -314,7 +317,7 @@ export default function SocialsSection({ API }) {
         : slot))
       return { ok: false, idx }
     }
-  }, [API, apiFetch, postType, tone, briefId, includeImage])
+  }, [API, apiFetch, postType, tone, briefId, imageSource])
 
   const generate = async () => {
     setDraftError('')
@@ -468,7 +471,7 @@ export default function SocialsSection({ API }) {
                 <select
                   data-testid="post-type-select"
                   value={postType}
-                  onChange={e => { setPostType(e.target.value); setBriefId('') }}
+                  onChange={e => { setPostType(e.target.value); setBriefId(''); setImageSource('none'); setUploadedFileDataUrl(null) }}
                   className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
                 >
                   {POST_TYPE_OPTIONS.map(opt => {
@@ -483,10 +486,10 @@ export default function SocialsSection({ API }) {
                 </select>
               </div>
 
-              {/* Brief picker (Daily Recon + Latest Intel) */}
-              {(postType === 'daily-recon' || postType === 'latest-intel') && (
+              {/* Brief picker (Daily Recon, Daily Recon Info + Latest Intel) */}
+              {(postType === 'daily-recon' || postType === 'daily-recon-info' || postType === 'latest-intel') && (
                 <div className="space-y-2">
-                  {postType === 'daily-recon' && (
+                  {(postType === 'daily-recon' || postType === 'daily-recon-info') && (
                     <div>
                       <label className="block text-xs font-semibold text-slate-500 mb-1">
                         Filter by category
@@ -509,7 +512,7 @@ export default function SocialsSection({ API }) {
                       <label className="text-xs font-semibold text-slate-500">
                         {postType === 'latest-intel' ? 'News brief' : 'Source brief'}
                       </label>
-                      {postType === 'daily-recon' && (
+                      {(postType === 'daily-recon' || postType === 'daily-recon-info') && (
                         <button onClick={randomBrief}
                                 className="text-[11px] font-bold text-brand-600 hover:text-brand-700">
                           🎲 Random
@@ -555,21 +558,62 @@ export default function SocialsSection({ API }) {
                   className="w-full"
                 />
                 <div className="flex justify-between mt-0.5 text-[10px] text-slate-400">
-                  <span>Corporate</span><span>Default 7</span><span>Cheeky</span>
+                  <span>Military</span><span>Default 7</span><span>Wild</span>
                 </div>
               </div>
 
-              {/* Include image toggle — hidden for daily-recon because X
-                  disallows poll + media on the same tweet. */}
-              {(postType !== 'brand-transparency' && postType !== 'daily-recon') && (
-                <label className="flex items-center justify-between gap-2 py-1">
-                  <span className="text-sm text-slate-700">Include brief image</span>
-                  <input
-                    type="checkbox"
-                    checked={includeImage}
-                    onChange={e => setIncludeImage(e.target.checked)}
-                  />
-                </label>
+              {/* Image source — hidden for daily-recon (poll posts can't have media on X) */}
+              {postType !== 'daily-recon' && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-500">Image</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { setImageSource('none'); setUploadedFileDataUrl(null) }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
+                        imageSource === 'none'
+                          ? 'bg-brand-600 border-brand-600 text-white'
+                          : 'border-slate-600 text-slate-400 hover:border-slate-400'
+                      }`}
+                    >
+                      None
+                    </button>
+                    {postType !== 'brand-transparency' && (
+                      <button
+                        type="button"
+                        onClick={() => setImageSource('brief')}
+                        disabled={!briefImageUrl}
+                        title={briefImageUrl ? "Use the selected brief's image" : 'Selected brief has no image'}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
+                          imageSource === 'brief'
+                            ? 'bg-brand-600 border-brand-600 text-white'
+                            : 'border-slate-600 text-slate-400 hover:border-slate-400'
+                        } disabled:opacity-40 disabled:cursor-not-allowed`}
+                      >
+                        Brief image
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setImageSource('upload')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
+                        imageSource === 'upload'
+                          ? 'bg-brand-600 border-brand-600 text-white'
+                          : 'border-slate-600 text-slate-400 hover:border-slate-400'
+                      }`}
+                    >
+                      Upload
+                    </button>
+                  </div>
+                  {imageSource === 'upload' && (
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="block w-full text-xs text-slate-400 file:mr-3 file:px-3 file:py-1.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-700 file:text-white hover:file:bg-slate-600"
+                    />
+                  )}
+                </div>
               )}
 
               {/* Image preview — sits between the toggle and Generate so the
@@ -816,9 +860,10 @@ export default function SocialsSection({ API }) {
               {!postsLoaded && <p className="text-xs text-slate-400">Loading…</p>}
               {postsLoaded && posts.length === 0 && <p className="text-xs text-slate-400">No posts yet.</p>}
               {posts.map(p => {
-                const isDeleted   = !!p.deletedAt
-                const hasImage    = !!p.includedImageUrl
-                const imageOpen   = openImagePostIds.has(p._id)
+                const isDeleted      = !!p.deletedAt
+                const hasImage      = !!p.includedImageUrl
+                const hasViewableImage = hasImage && p.includedImageUrl !== '[uploaded]'
+                const imageOpen     = openImagePostIds.has(p._id)
                 return (
                   <div key={p._id} data-testid={`post-row-${p._id}`} data-deleted={isDeleted ? 'true' : 'false'}
                        className={`py-2 border-b border-slate-800 last:border-0 ${isDeleted ? 'opacity-60' : ''}`}>
@@ -849,7 +894,7 @@ export default function SocialsSection({ API }) {
                           View on X →
                         </a>
                       )}
-                      {hasImage && (
+                      {hasViewableImage && (
                         <button
                           onClick={() => toggleImageOpen(p._id)}
                           data-testid={`post-toggle-image-${p._id}`}
@@ -869,7 +914,7 @@ export default function SocialsSection({ API }) {
                         </button>
                       )}
                     </div>
-                    {hasImage && imageOpen && (
+                    {hasViewableImage && imageOpen && (
                       <div className="mt-2 rounded-lg border border-slate-700 bg-slate-900/50 p-2 inline-block"
                            data-testid={`post-image-panel-${p._id}`}>
                         <a href={p.includedImageUrl} target="_blank" rel="noreferrer">

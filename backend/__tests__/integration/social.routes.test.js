@@ -195,6 +195,34 @@ describe('POST /x/draft', () => {
     expect(res.status).toBe(400);
   });
 
+  it('requires briefId for daily-recon-info', async () => {
+    const a = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/social/x/draft')
+      .set('Cookie', authCookie(a._id))
+      .send({ postType: 'daily-recon-info', tone: 7 });
+    expect(res.status).toBe(400);
+  });
+
+  it('generates a daily-recon-info draft — no poll, plain text with CTA (mocked OpenRouter)', async () => {
+    const a = await createAdminUser();
+    const brief = await createBrief({ title: 'Typhoon', category: 'Aircrafts' });
+    jest.spyOn(global, 'fetch').mockImplementation(() => jsonResp({
+      choices: [{ message: { content: 'The Typhoon can supercruise.' } }],
+      usage: { cost: 0.001 },
+    }));
+    const res = await request(app)
+      .post('/api/admin/social/x/draft')
+      .set('Cookie', authCookie(a._id))
+      .send({ postType: 'daily-recon-info', tone: 7, briefId: String(brief._id) });
+    expect(res.status).toBe(200);
+    expect(res.body.data.poll).toBeNull();
+    expect(res.body.data.text).toContain('Typhoon');
+    expect(res.body.data.text).toContain('Read the full brief:');
+    expect(res.body.data.briefName).toBe('Typhoon');
+    expect(res.body.data.suggestedImageUrl).toBeNull(); // brief has no media in this test
+  });
+
   it('generates a latest-intel draft (mocked OpenRouter)', async () => {
     const a = await createAdminUser();
     const brief = await createBrief({ title: 'Today News', category: 'News' });
@@ -367,6 +395,39 @@ describe('POST /x/publish', () => {
     const persisted = await SocialPost.findOne({});
     expect(persisted.status).toBe('posted');
     expect(persisted.finalText).toBe('hello world');
+  });
+
+  it('accepts a base64 data URL image, uploads it to X, and stores the [uploaded] sentinel', async () => {
+    const a = await createAdminUser();
+    await SocialAccount.create({
+      platform: 'x',
+      username: 'skywatch_uk',
+      accessTokenEncrypted:  encrypt('A'),
+      refreshTokenEncrypted: encrypt('R'),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      connectedBy: a._id,
+    });
+    let uploadCalled = false;
+    jest.spyOn(global, 'fetch').mockImplementation((url) => {
+      if (String(url).includes('/2/media/upload')) {
+        uploadCalled = true;
+        return jsonResp({ data: { id: 'media_999' } }, true, 201);
+      }
+      if (String(url).includes('/2/tweets')) {
+        return jsonResp({ data: { id: '5678', text: 'hello' } }, true, 201);
+      }
+      return jsonResp({});
+    });
+    // 1×1 transparent PNG as a base64 data URL
+    const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const res = await request(app)
+      .post('/api/admin/social/x/publish')
+      .set('Cookie', authCookie(a._id))
+      .send({ postType: 'daily-recon-info', tone: 7, finalText: 'hello world', imageUrl: dataUrl });
+    expect(res.status).toBe(200);
+    expect(uploadCalled).toBe(true);
+    const persisted = await SocialPost.findOne({});
+    expect(persisted.includedImageUrl).toBe('[uploaded]');
   });
 
   it('persists SocialPost as failed and returns 502 on X API error', async () => {

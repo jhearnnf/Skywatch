@@ -4,6 +4,7 @@ const {
   extractFirstJson,
   briefSummaryForPrompt,
   generateDailyRecon,
+  generateDailyReconInfo,
   generateLatestIntel,
   generateBrandTransparency,
   generateDraft,
@@ -45,8 +46,8 @@ describe('describeTone', () => {
     const high = describeTone(10);
     expect(low).not.toEqual(mid);
     expect(mid).not.toEqual(high);
-    expect(low.toLowerCase()).toMatch(/corporate|formal/);
-    expect(high.toLowerCase()).toMatch(/cheeky|wit|satir/);
+    expect(low.toLowerCase()).toMatch(/military|formal/);
+    expect(high.toLowerCase()).toMatch(/cheeky|wild|carefree|wit/);
   });
 
   test('clamps out-of-range values', () => {
@@ -274,6 +275,80 @@ describe('generateDailyRecon', () => {
   });
 });
 
+// ─── daily-recon-info ────────────────────────────────────────────────────────
+
+describe('generateDailyReconInfo', () => {
+  test('returns plain text, no poll, with brief URL CTA appended', async () => {
+    const openRouterChat = chatStub('The Eurofighter Typhoon can supercruise — supersonic without afterburners.');
+    const brief = makeBrief();
+    const out = await generateDailyReconInfo({ brief, tone: 7, openRouterChat });
+    expect(out.text).toContain('Typhoon');
+    expect(out.text).toContain('Read the full brief:');
+    expect(out.text).toContain(`${SITE_BASE_URL}/brief/${brief._id}`);
+    expect(out.poll).toBeNull();
+    expect(out.sourceMeta.briefName).toBe('Eurofighter Typhoon');
+    expect(out.sourceMeta.briefUrl).toBe(`${SITE_BASE_URL}/brief/${brief._id}`);
+  });
+
+  test('CTA sits at the very end of the post', async () => {
+    const openRouterChat = chatStub('A factual info tweet body.');
+    const brief = makeBrief();
+    const out = await generateDailyReconInfo({ brief, tone: 7, openRouterChat });
+    expect(out.text.endsWith(`${SITE_BASE_URL}/brief/${brief._id}`)).toBe(true);
+  });
+
+  test('preserves full model output verbatim — no truncation', async () => {
+    const openRouterChat = chatStub('x'.repeat(400));
+    const out = await generateDailyReconInfo({ brief: makeBrief(), tone: 7, openRouterChat });
+    expect(out.text.length).toBeGreaterThan(X_CHAR_LIMIT);
+    expect(out.text).toMatch(/^x{400}/);
+    expect(out.text).toContain('Read the full brief:');
+  });
+
+  test('honours an injected siteBaseUrl override', async () => {
+    const openRouterChat = chatStub('body');
+    const brief = makeBrief();
+    const out = await generateDailyReconInfo({
+      brief, tone: 7, openRouterChat, siteBaseUrl: 'https://staging.example.com',
+    });
+    expect(out.text).toContain(`https://staging.example.com/brief/${brief._id}`);
+    expect(out.sourceMeta.briefUrl).toBe(`https://staging.example.com/brief/${brief._id}`);
+  });
+
+  test('skips the CTA when the brief has no _id', async () => {
+    const openRouterChat = chatStub('stand-alone info tweet');
+    const out = await generateDailyReconInfo({
+      brief: makeBrief({ _id: undefined }), tone: 7, openRouterChat,
+    });
+    expect(out.text).toBe('stand-alone info tweet');
+    expect(out.text).not.toContain('Read the full brief:');
+    expect(out.sourceMeta.briefUrl).toBeNull();
+  });
+
+  test('HARD LIMIT in guardrails uses the prose budget, not 280', async () => {
+    const openRouterChat = chatStub('body');
+    const brief = makeBrief();
+    await generateDailyReconInfo({ brief, tone: 7, openRouterChat });
+    const sys = openRouterChat.mock.calls[0][0].messages.find(m => m.role === 'system').content;
+    const ctaLen = `\n\nRead the full brief: ${SITE_BASE_URL}/brief/${brief._id}`.length;
+    const proseBudget = 280 - ctaLen;
+    expect(sys).toMatch(new RegExp(`HARD LIMIT: ≤${proseBudget} characters of PROSE`));
+    expect(sys).toMatch(/do NOT use X\.com's 280-char tweet limit as your target/i);
+    expect(sys).not.toMatch(/HARD LIMIT: ≤280 characters total/);
+  });
+
+  test('throws if no brief supplied', async () => {
+    await expect(generateDailyReconInfo({ tone: 7, openRouterChat: jest.fn() }))
+      .rejects.toThrow(/brief/);
+  });
+
+  test('throws on empty model response', async () => {
+    const openRouterChat = chatStub('');
+    await expect(generateDailyReconInfo({ brief: makeBrief(), tone: 7, openRouterChat }))
+      .rejects.toThrow(/empty/);
+  });
+});
+
 // ─── latest-intel ────────────────────────────────────────────────────────────
 
 describe('generateLatestIntel', () => {
@@ -419,6 +494,16 @@ describe('generateDraft (dispatcher)', () => {
     expect(out.poll).toBeTruthy();
   });
 
+  test('routes to daily-recon-info (no poll, with brief URL CTA)', async () => {
+    const openRouterChat = chatStub('A stand-out fact from this brief.');
+    const out = await generateDraft({
+      postType: 'daily-recon-info', tone: 7, brief: makeBrief(), openRouterChat, fetchCommits: jest.fn(),
+    });
+    expect(out.text).toContain('fact');
+    expect(out.poll).toBeNull();
+    expect(out.text).toContain('Read the full brief:');
+  });
+
   test('routes to latest-intel', async () => {
     const openRouterChat = chatStub('latest news summary');
     const out = await generateDraft({
@@ -455,7 +540,7 @@ describe('generateDraft (dispatcher)', () => {
 
 describe('exports', () => {
   test('POST_TYPES is correct', () => {
-    expect(POST_TYPES).toEqual(['daily-recon', 'latest-intel', 'brand-transparency']);
+    expect(POST_TYPES).toEqual(['daily-recon', 'daily-recon-info', 'latest-intel', 'brand-transparency']);
   });
 });
 
@@ -530,6 +615,17 @@ describe('variantIndex injection — brand-transparency', () => {
     const body = openRouterChat.mock.calls[0][0];
     const sys = body.messages.find(m => m.role === 'system').content;
     expect(sys).toContain(VARIANT_NUDGES[0]);
+    expect(body.temperature).toBe(VARIANT_TEMPERATURE);
+  });
+});
+
+describe('variantIndex injection — daily-recon-info', () => {
+  test('appends the variant nudge and bumps temperature', async () => {
+    const openRouterChat = chatStub('body of the tweet');
+    await generateDailyReconInfo({ brief: makeBrief(), tone: 7, openRouterChat, variantIndex: 1 });
+    const body = openRouterChat.mock.calls[0][0];
+    const sys = body.messages.find(m => m.role === 'system').content;
+    expect(sys).toContain(VARIANT_NUDGES[1]);
     expect(body.temperature).toBe(VARIANT_TEMPERATURE);
   });
 });
