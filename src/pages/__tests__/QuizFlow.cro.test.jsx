@@ -142,13 +142,35 @@ describe('QuizFlow — locked category upsell teaser', () => {
     expect(screen.queryByText('5-day free trial →')).toBeNull()
   })
 
-  it('upsell teaser shows the highest-priority locked category (Threats first)', async () => {
+  it('upsell teaser shows the highest-priority upgrade-unlockable category (Threats first)', async () => {
     mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAirstars: vi.fn() })
     mockUseSettings.mockReturnValue({ settings: FREE_SETTINGS })
     global.fetch = setupFetch(true)
     render(<QuizFlow />)
     await completeQuiz(CORRECT_ID)
-    // Threats is first in UPSELL_PRIORITY and locked for free users
+    // Threats is first in UPSELL_PRIORITY, in silverCategories, and no pathway gates in this fixture
     expect(screen.getByText('Threats')).toBeDefined()
+  })
+
+  it('upsell teaser skips pathway-locked categories and shows the first immediately-unlockable one', async () => {
+    const PATHWAY_SETTINGS = {
+      freeCategories: ['News'],
+      silverCategories: ['Threats', 'Allies', 'Squadrons', 'Bases'],
+      pathwayUnlocks: [
+        { category: 'Threats',   levelRequired: 6, rankRequired: 3 },
+        { category: 'Allies',    levelRequired: 3, rankRequired: 2 },
+        { category: 'Squadrons', levelRequired: 3, rankRequired: 2 },
+        { category: 'Bases',     levelRequired: 1, rankRequired: 1 },
+      ],
+      airstarsPerBriefRead: 5,
+    }
+    mockUseAuth.mockReturnValue({ user: FREE_USER, API: '', apiFetch: (...args) => fetch(...args), awardAirstars: vi.fn() })
+    mockUseSettings.mockReturnValue({ settings: PATHWAY_SETTINGS })
+    global.fetch = setupFetch(true)
+    render(<QuizFlow />)
+    await completeQuiz(CORRECT_ID)
+    // FREE_USER is level 1 rank 1 — Threats/Allies/Squadrons pathway not met; Bases is immediately unlockable
+    expect(screen.getByText('Bases')).toBeDefined()
+    expect(screen.queryByText('Threats')).toBeNull()
   })
 })

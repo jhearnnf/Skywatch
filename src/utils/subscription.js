@@ -112,6 +112,15 @@ export function isCategoryLocked(category, user, settings, levelThresholds) {
   return !isPathwayUnlocked(category, user, settings, levelThresholds)
 }
 
+// True when upgrading to Silver would immediately unlock this category for the user:
+// locked by subscription, silver includes it, and the pathway gate is already met.
+export function isUpgradeUnlockable(category, user, settings, levelThresholds) {
+  const accessible = getAccessibleCategories(user, settings)
+  if (!accessible || accessible.includes(category)) return false
+  if (!(settings?.silverCategories ?? []).includes(category)) return false
+  return isPathwayUnlocked(category, user, settings, levelThresholds)
+}
+
 // Returns why a category is locked:
 //   'signin'  — guest (not logged in)
 //   'upgrade' — subscription tier too low

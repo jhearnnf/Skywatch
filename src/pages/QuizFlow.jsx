@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import LockedCategoryModal from '../components/LockedCategoryModal'
-import { requiredTier, isFreeUser, isCategoryLocked } from '../utils/subscription'
+import { requiredTier, isFreeUser, isUpgradeUnlockable } from '../utils/subscription'
 import { CATEGORY_ICONS } from '../data/mockData'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { playSound } from '../utils/sound'
@@ -204,7 +204,7 @@ function ResultsScreen({ score, total, xpEarned, breakdown = [], isFirstAttempt 
 
   // Pick the first priority category that is locked for this user
   const upsellCategory = (won && user && isFreeUser(user))
-    ? UPSELL_PRIORITY.find(c => isCategoryLocked(c, user, settings, levelThresholds)) ?? null
+    ? UPSELL_PRIORITY.find(c => isUpgradeUnlockable(c, user, settings, levelThresholds)) ?? null
     : null
 
   return (
