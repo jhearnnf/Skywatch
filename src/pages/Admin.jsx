@@ -2278,6 +2278,7 @@ function SubscriptionTierRow({ u, action }) {
 
 function UsersTab({ API }) {
   const { user: currentUser, refreshUser, apiFetch } = useAuth()
+  const navigate = useNavigate()
   const [users,   setUsers]   = useState([])
   const [q,       setQ]       = useState('')
   const [loading, setLoading] = useState(true)
@@ -2477,8 +2478,8 @@ function UsersTab({ API }) {
                 ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1), null],
                 ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), null],
               ].map(([l, v, onClick]) => onClick ? (
-                <button key={l} onClick={onClick} className="px-3 py-2 text-center hover:bg-brand-50 transition-colors cursor-pointer group">
-                  <p className="text-xs font-bold text-brand-600 group-hover:underline">{v}</p>
+                <button key={l} onClick={onClick} className="px-3 py-2 text-center cursor-pointer">
+                  <p className="text-xs font-bold text-slate-700">{v}</p>
                   <p className="text-[10px] text-slate-400">{l}</p>
                 </button>
               ) : (
