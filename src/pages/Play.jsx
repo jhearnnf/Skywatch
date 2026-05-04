@@ -892,14 +892,14 @@ export default function Play() {
                 </div>
               ) : (
                 <>
-                  <Link to="/learn-priority" className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group mb-3">
+                  <Link to="/learn-priority?category=Aircrafts" className="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3.5 border border-slate-200 hover:border-brand-300 hover:bg-brand-50 transition-all group mb-3">
                     <AircraftEmoji
                       cutout={randomAircraft}
                       sizePx={26}
                       emojiClass="text-xl shrink-0"
                     />
                     <p className="text-sm font-semibold text-slate-700 leading-snug">
-                      Learn about aircrafts for these random missions to appear
+                      Unlock Aircraft missions — explore the Aircraft pathway
                     </p>
                     <span className="text-slate-300 group-hover:text-brand-400 transition-colors ml-auto shrink-0">→</span>
                   </Link>
