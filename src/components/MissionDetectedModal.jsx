@@ -35,7 +35,8 @@ export default function MissionDetectedModal({ aircraftBriefId, aircraftTitle, m
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] bg-slate-950/95 flex flex-col items-center justify-center p-6"
+        className="safe-area-inset flex flex-col items-center justify-center p-6"
+        style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(2,6,23,0.95)' }}
       >
         {/* Radar pulse ring */}
         <div className="relative mb-6">

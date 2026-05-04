@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import useCaseFileSession from '../hooks/useCaseFileSession'
+import Overlay from '../components/ui/Overlay'
 import { useGameChrome } from '../context/GameChromeContext'
 import StageRouter from '../components/caseFiles/StageRouter'
 import CaseFilesGate from '../components/caseFiles/CaseFilesGate'
@@ -65,16 +66,11 @@ function AbortConfirmModal({ open, onCancel, onConfirm }) {
 
   if (!open) return null
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4"
-      onClick={onCancel}
-      data-testid="abort-confirm-modal"
-    >
+    <Overlay zIndex={100} backdrop="rgba(0,0,0,0.70)" onDismiss={onCancel} className="flex items-center justify-center px-4" data-testid="abort-confirm-modal">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="abort-title"
-        onClick={(e) => e.stopPropagation()}
         className="w-full max-w-sm rounded-2xl border border-slate-300/20 bg-surface p-5 flex flex-col gap-3"
       >
         <h2 id="abort-title" className="text-base font-bold text-text">
@@ -102,7 +98,7 @@ function AbortConfirmModal({ open, onCancel, onConfirm }) {
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   )
 }
 

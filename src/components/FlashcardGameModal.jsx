@@ -5,6 +5,7 @@ import { useNewGameUnlock } from '../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { playSound } from '../utils/sound'
+import Overlay from './ui/Overlay'
 
 const COUNT_OPTIONS = [5, 10, 15, 20]
 const CARD_TIMER_SECONDS = 30
@@ -422,7 +423,7 @@ export default function FlashcardGameModal({ onClose }) {
   const currentCard = cards[cardIdx]
 
   const anchored = screen === 'game' && vv
-  const overlayStyle = anchored
+  const gameOverlayStyle = anchored
     ? {
         background:    'rgba(8, 14, 30, 0.88)',
         position:      'fixed',
@@ -432,13 +433,18 @@ export default function FlashcardGameModal({ onClose }) {
         height:        vv.height,
         paddingLeft:   '1rem',
         paddingRight:  '1rem',
-        paddingTop:    '0.5rem',
-        paddingBottom: '0.5rem',
+        paddingTop:    'calc(0.5rem + env(safe-area-inset-top))',
+        paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))',
       }
-    : { background: 'rgba(8, 14, 30, 0.88)' }
-  const overlayClassName = anchored
-    ? 'z-[1100] flex justify-center items-start'
-    : 'fixed inset-0 z-[1100] flex items-center justify-center p-4'
+    : {
+        background:    'rgba(8, 14, 30, 0.88)',
+        position:      'fixed',
+        inset:         0,
+        paddingLeft:   'calc(1rem + env(safe-area-inset-left))',
+        paddingRight:  'calc(1rem + env(safe-area-inset-right))',
+        paddingTop:    'calc(0.5rem + env(safe-area-inset-top))',
+        paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))',
+      }
 
   function handleOverlayPointerDown(e) {
     if (screen !== 'game') return
@@ -447,106 +453,262 @@ export default function FlashcardGameModal({ onClose }) {
     searchRef.current?.blur()
   }
 
+  if (screen === 'pick' || screen === 'result') {
+    return (
+      <>
+        <Overlay zIndex={1100} lockBodyScroll data-testid="flashcard-modal">
+          <div className="flex items-center justify-center p-4 min-h-full">
+            <AnimatePresence mode="wait">
+
+              {/* ── Count picker ─────────────────────────────────────────────── */}
+              {screen === 'pick' && (
+                <motion.div
+                  key="pick"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.22 }}
+                  className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
+                  style={{ background: 'linear-gradient(160deg, #0d1f3c 0%, #091529 100%)', border: '1px solid rgba(245,158,11,0.25)' }}
+                >
+                  {/* Header */}
+                  <div className="px-6 pt-7 pb-4 text-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="text-3xl mb-2">⚡</div>
+                    <p className="text-[10px] font-bold tracking-[0.2em] uppercase mb-1" style={{ color: '#f59e0b' }}>Recall Drill</p>
+                    <h2 className="text-xl font-extrabold" style={{ color: '#f8fafc' }}>Flashcard Round</h2>
+                    <p className="text-sm mt-2" style={{ color: '#94a3b8' }}>
+                      Each card shows a brief's content with the title hidden.
+                      Type to find and select the correct title.
+                    </p>
+                  </div>
+
+                  <div className="px-6 py-5">
+                    {available === null ? (
+                      <p className="text-center text-sm" style={{ color: '#64748b' }}>Loading…</p>
+                    ) : available < 5 ? (
+                      <div className="text-center py-3">
+                        <p className="text-sm font-semibold mb-1" style={{ color: '#f87171' }}>Not enough completed briefs</p>
+                        <p className="text-xs" style={{ color: '#64748b' }}>
+                          You have completed {available} brief{available !== 1 ? 's' : ''}.
+                          Read at least 5 briefs to unlock Flashcard Round.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-xs font-bold uppercase tracking-widest mb-3 text-center" style={{ color: '#64748b' }}>
+                          How many cards? <span style={{ color: '#94a3b8' }}>({available} available)</span>
+                        </p>
+                        <div className="grid grid-cols-4 gap-2 mb-5">
+                          {COUNT_OPTIONS.map(n => {
+                            const locked = n > available
+                            const active = selectedCount === n
+                            return (
+                              <button
+                                key={n}
+                                disabled={locked}
+                                onClick={() => setSelectedCount(n)}
+                                data-testid={`count-option-${n}`}
+                                className="py-3 rounded-2xl text-sm font-bold transition-all"
+                                style={{
+                                  background: locked ? 'rgba(255,255,255,0.04)' : active ? '#f59e0b' : 'rgba(255,255,255,0.07)',
+                                  color:      locked ? '#334155' : active ? '#0f172a' : '#cbd5e1',
+                                  cursor:     locked ? 'not-allowed' : 'pointer',
+                                  border:     `1.5px solid ${locked ? 'transparent' : active ? '#f59e0b' : 'rgba(255,255,255,0.1)'}`,
+                                }}
+                              >
+                                {n}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {error && <p className="text-xs text-center mb-3" style={{ color: '#f87171' }}>{error}</p>}
+                        <button
+                          onClick={startGame}
+                          disabled={!selectedCount || loading}
+                          data-testid="flashcard-start-btn"
+                          className="w-full py-3 rounded-2xl text-sm font-extrabold tracking-wide transition-all"
+                          style={{
+                            background: selectedCount && !loading ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'rgba(255,255,255,0.06)',
+                            color:      selectedCount && !loading ? '#0f172a' : '#475569',
+                            cursor:     !selectedCount || loading ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {loading ? 'Loading…' : 'START DRILL →'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full transition-colors"
+                    style={{ color: '#475569', background: 'rgba(255,255,255,0.06)' }}
+                    aria-label="Close"
+                  >
+                    ✕
+                  </button>
+                </motion.div>
+              )}
+
+              {/* ── Results ──────────────────────────────────────────────────── */}
+              {screen === 'result' && resultData && (
+                <motion.div
+                  key="result"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
+                  style={{ background: 'linear-gradient(160deg, #0d1f3c 0%, #091529 100%)', border: '1px solid rgba(245,158,11,0.25)' }}
+                >
+                  {/* Score header */}
+                  <div className="px-6 pt-7 pb-5 text-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div className="text-4xl mb-2">
+                      {resultData.correct === resultData.total ? '⚡' : resultData.correct >= resultData.total / 2 ? '✓' : '🔁'}
+                    </div>
+                    <p className="text-[10px] font-bold tracking-[0.2em] uppercase mb-1" style={{ color: '#f59e0b' }}>Drill Complete</p>
+                    <p className="text-3xl font-extrabold mb-1" style={{ color: '#f8fafc' }}>
+                      {resultData.correct} <span className="text-lg font-bold" style={{ color: '#64748b' }}>/ {resultData.total}</span>
+                    </p>
+                    <p className="text-sm" style={{ color: '#94a3b8' }}>
+                      {Math.round((resultData.correct / resultData.total) * 100)}% recalled
+                    </p>
+                    {resultData.airstarsEarned > 0 && (
+                      <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full" style={{ background: 'rgba(148,163,184,0.18)', border: '1px solid rgba(148,163,184,0.35)' }}>
+                        <span className="star-silver">⭐</span>
+                        <span className="text-sm font-bold text-white">+{resultData.airstarsEarned} Airstars</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card breakdown */}
+                  <div className="px-4 py-4 max-h-64 overflow-y-auto space-y-1.5" data-testid="flashcard-breakdown">
+                    {resultData.cardBreakdown.map((r, i) => {
+                      const isOpen = expanded.has(i)
+                      const hasSnippet = !!r.contentSnippet
+                      return (
+                        <div
+                          key={i}
+                          className="rounded-xl overflow-hidden"
+                          style={{ background: r.recalled ? 'rgba(16,185,129,0.07)' : 'rgba(239,68,68,0.07)' }}
+                        >
+                          {/* Row header */}
+                          <div
+                            className="flex items-center gap-3 px-3 py-2"
+                            onClick={() => hasSnippet && setExpanded(prev => {
+                              const s = new Set(prev)
+                              s.has(i) ? s.delete(i) : s.add(i)
+                              return s
+                            })}
+                            style={{ cursor: hasSnippet ? 'pointer' : 'default' }}
+                          >
+                            <span className="text-sm shrink-0" style={{ color: r.recalled ? '#10b981' : '#ef4444' }}>
+                              {r.recalled ? '✓' : '✗'}
+                            </span>
+                            <p className="text-xs font-medium truncate flex-1" style={{ color: r.recalled ? '#a7f3d0' : '#fca5a5' }}>
+                              {r.briefTitle}
+                            </p>
+                            <span className="text-[10px] shrink-0" style={{ color: '#475569' }}>{r.timeTakenSeconds}s</span>
+                            {hasSnippet && (
+                              <button
+                                className="shrink-0 w-5 h-5 flex items-center justify-center rounded transition-transform"
+                                style={{
+                                  color: '#f59e0b',
+                                  transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
+                                  transition: 'transform 0.18s ease',
+                                }}
+                                aria-label={isOpen ? 'Collapse' : 'Expand'}
+                              >
+                                ›
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Expandable snippet */}
+                          <AnimatePresence initial={false}>
+                            {isOpen && (
+                              <motion.div
+                                key="snippet"
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                                style={{ overflow: 'hidden' }}
+                              >
+                                <div
+                                  className="px-3 pb-3 pt-1"
+                                  style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
+                                >
+                                  {r.cardCategory && (
+                                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: '#f59e0b' }}>
+                                      {r.cardCategory}
+                                    </p>
+                                  )}
+                                  <p className="text-xs leading-relaxed" style={{ color: '#94a3b8' }}>
+                                    {r.contentSnippet}
+                                  </p>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="px-6 pb-6 pt-3 flex flex-col gap-2">
+                    <button
+                      onClick={playAgain}
+                      data-testid="flashcard-play-again"
+                      className="w-full py-3 rounded-2xl text-sm font-extrabold tracking-wide transition-all"
+                      style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#0f172a' }}
+                    >
+                      DRILL AGAIN ⚡
+                    </button>
+                    <button
+                      onClick={onClose}
+                      className="w-full py-2.5 rounded-2xl text-sm font-semibold transition-colors"
+                      style={{ color: '#64748b', background: 'rgba(255,255,255,0.04)' }}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+            </AnimatePresence>
+          </div>
+        </Overlay>
+
+        {/* Loading/submitting overlay */}
+        <AnimatePresence>
+          {submitting && (
+            <Overlay zIndex={1110} backdrop="rgba(8,14,30,0.6)" respectSafeArea={false}>
+              <motion.div
+                key="submitting"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center justify-center h-full"
+              >
+                <p className="text-sm font-bold" style={{ color: '#f59e0b' }}>Saving results…</p>
+              </motion.div>
+            </Overlay>
+          )}
+        </AnimatePresence>
+      </>
+    )
+  }
+
+  // ── Game screen (visualViewport-anchored) ───────────────────────────────────
   return (
     <div
-      className={overlayClassName}
-      style={overlayStyle}
+      className="z-[1100] flex justify-center items-start"
+      style={gameOverlayStyle}
       data-testid="flashcard-modal"
       onPointerDown={handleOverlayPointerDown}
     >
       <AnimatePresence mode="wait">
-
-        {/* ── Count picker ─────────────────────────────────────────────── */}
-        {screen === 'pick' && (
-          <motion.div
-            key="pick"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.22 }}
-            className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
-            style={{ background: 'linear-gradient(160deg, #0d1f3c 0%, #091529 100%)', border: '1px solid rgba(245,158,11,0.25)' }}
-          >
-            {/* Header */}
-            <div className="px-6 pt-7 pb-4 text-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-              <div className="text-3xl mb-2">⚡</div>
-              <p className="text-[10px] font-bold tracking-[0.2em] uppercase mb-1" style={{ color: '#f59e0b' }}>Recall Drill</p>
-              <h2 className="text-xl font-extrabold" style={{ color: '#f8fafc' }}>Flashcard Round</h2>
-              <p className="text-sm mt-2" style={{ color: '#94a3b8' }}>
-                Each card shows a brief's content with the title hidden.
-                Type to find and select the correct title.
-              </p>
-            </div>
-
-            <div className="px-6 py-5">
-              {available === null ? (
-                <p className="text-center text-sm" style={{ color: '#64748b' }}>Loading…</p>
-              ) : available < 5 ? (
-                <div className="text-center py-3">
-                  <p className="text-sm font-semibold mb-1" style={{ color: '#f87171' }}>Not enough completed briefs</p>
-                  <p className="text-xs" style={{ color: '#64748b' }}>
-                    You have completed {available} brief{available !== 1 ? 's' : ''}.
-                    Read at least 5 briefs to unlock Flashcard Round.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <p className="text-xs font-bold uppercase tracking-widest mb-3 text-center" style={{ color: '#64748b' }}>
-                    How many cards? <span style={{ color: '#94a3b8' }}>({available} available)</span>
-                  </p>
-                  <div className="grid grid-cols-4 gap-2 mb-5">
-                    {COUNT_OPTIONS.map(n => {
-                      const locked = n > available
-                      const active = selectedCount === n
-                      return (
-                        <button
-                          key={n}
-                          disabled={locked}
-                          onClick={() => setSelectedCount(n)}
-                          data-testid={`count-option-${n}`}
-                          className="py-3 rounded-2xl text-sm font-bold transition-all"
-                          style={{
-                            background: locked ? 'rgba(255,255,255,0.04)' : active ? '#f59e0b' : 'rgba(255,255,255,0.07)',
-                            color:      locked ? '#334155' : active ? '#0f172a' : '#cbd5e1',
-                            cursor:     locked ? 'not-allowed' : 'pointer',
-                            border:     `1.5px solid ${locked ? 'transparent' : active ? '#f59e0b' : 'rgba(255,255,255,0.1)'}`,
-                          }}
-                        >
-                          {n}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {error && <p className="text-xs text-center mb-3" style={{ color: '#f87171' }}>{error}</p>}
-                  <button
-                    onClick={startGame}
-                    disabled={!selectedCount || loading}
-                    data-testid="flashcard-start-btn"
-                    className="w-full py-3 rounded-2xl text-sm font-extrabold tracking-wide transition-all"
-                    style={{
-                      background: selectedCount && !loading ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'rgba(255,255,255,0.06)',
-                      color:      selectedCount && !loading ? '#0f172a' : '#475569',
-                      cursor:     !selectedCount || loading ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {loading ? 'Loading…' : 'START DRILL →'}
-                  </button>
-                </>
-              )}
-            </div>
-
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full transition-colors"
-              style={{ color: '#475569', background: 'rgba(255,255,255,0.06)' }}
-              aria-label="Close"
-            >
-              ✕
-            </button>
-          </motion.div>
-        )}
-
-        {/* ── Game screen ──────────────────────────────────────────────── */}
         {screen === 'game' && currentCard && (
           <motion.div
             key={`card-${cardIdx}`}
@@ -659,147 +821,6 @@ export default function FlashcardGameModal({ onClose }) {
             </button>
           </motion.div>
         )}
-
-        {/* ── Results ──────────────────────────────────────────────────── */}
-        {screen === 'result' && resultData && (
-          <motion.div
-            key="result"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
-            style={{ background: 'linear-gradient(160deg, #0d1f3c 0%, #091529 100%)', border: '1px solid rgba(245,158,11,0.25)' }}
-          >
-            {/* Score header */}
-            <div className="px-6 pt-7 pb-5 text-center" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-              <div className="text-4xl mb-2">
-                {resultData.correct === resultData.total ? '⚡' : resultData.correct >= resultData.total / 2 ? '✓' : '🔁'}
-              </div>
-              <p className="text-[10px] font-bold tracking-[0.2em] uppercase mb-1" style={{ color: '#f59e0b' }}>Drill Complete</p>
-              <p className="text-3xl font-extrabold mb-1" style={{ color: '#f8fafc' }}>
-                {resultData.correct} <span className="text-lg font-bold" style={{ color: '#64748b' }}>/ {resultData.total}</span>
-              </p>
-              <p className="text-sm" style={{ color: '#94a3b8' }}>
-                {Math.round((resultData.correct / resultData.total) * 100)}% recalled
-              </p>
-              {resultData.airstarsEarned > 0 && (
-                <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full" style={{ background: 'rgba(148,163,184,0.18)', border: '1px solid rgba(148,163,184,0.35)' }}>
-                  <span className="star-silver">⭐</span>
-                  <span className="text-sm font-bold text-white">+{resultData.airstarsEarned} Airstars</span>
-                </div>
-              )}
-            </div>
-
-            {/* Card breakdown */}
-            <div className="px-4 py-4 max-h-64 overflow-y-auto space-y-1.5" data-testid="flashcard-breakdown">
-              {resultData.cardBreakdown.map((r, i) => {
-                const isOpen = expanded.has(i)
-                const hasSnippet = !!r.contentSnippet
-                return (
-                  <div
-                    key={i}
-                    className="rounded-xl overflow-hidden"
-                    style={{ background: r.recalled ? 'rgba(16,185,129,0.07)' : 'rgba(239,68,68,0.07)' }}
-                  >
-                    {/* Row header */}
-                    <div
-                      className="flex items-center gap-3 px-3 py-2"
-                      onClick={() => hasSnippet && setExpanded(prev => {
-                        const s = new Set(prev)
-                        s.has(i) ? s.delete(i) : s.add(i)
-                        return s
-                      })}
-                      style={{ cursor: hasSnippet ? 'pointer' : 'default' }}
-                    >
-                      <span className="text-sm shrink-0" style={{ color: r.recalled ? '#10b981' : '#ef4444' }}>
-                        {r.recalled ? '✓' : '✗'}
-                      </span>
-                      <p className="text-xs font-medium truncate flex-1" style={{ color: r.recalled ? '#a7f3d0' : '#fca5a5' }}>
-                        {r.briefTitle}
-                      </p>
-                      <span className="text-[10px] shrink-0" style={{ color: '#475569' }}>{r.timeTakenSeconds}s</span>
-                      {hasSnippet && (
-                        <button
-                          className="shrink-0 w-5 h-5 flex items-center justify-center rounded transition-transform"
-                          style={{
-                            color: '#f59e0b',
-                            transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-                            transition: 'transform 0.18s ease',
-                          }}
-                          aria-label={isOpen ? 'Collapse' : 'Expand'}
-                        >
-                          ›
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Expandable snippet */}
-                    <AnimatePresence initial={false}>
-                      {isOpen && (
-                        <motion.div
-                          key="snippet"
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.2, ease: 'easeInOut' }}
-                          style={{ overflow: 'hidden' }}
-                        >
-                          <div
-                            className="px-3 pb-3 pt-1"
-                            style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}
-                          >
-                            {(r.cardCategory || r.cardSubcategory) && (
-                              <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: '#f59e0b' }}>
-                                {r.cardCategory}{r.cardSubcategory ? ` · ${r.cardSubcategory}` : ''}
-                              </p>
-                            )}
-                            <p className="text-xs leading-relaxed" style={{ color: '#94a3b8' }}>
-                              {r.contentSnippet}
-                            </p>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Actions */}
-            <div className="px-6 pb-6 pt-3 flex flex-col gap-2">
-              <button
-                onClick={playAgain}
-                data-testid="flashcard-play-again"
-                className="w-full py-3 rounded-2xl text-sm font-extrabold tracking-wide transition-all"
-                style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#0f172a' }}
-              >
-                DRILL AGAIN ⚡
-              </button>
-              <button
-                onClick={onClose}
-                className="w-full py-2.5 rounded-2xl text-sm font-semibold transition-colors"
-                style={{ color: '#64748b', background: 'rgba(255,255,255,0.04)' }}
-              >
-                Close
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Loading/submitting overlay */}
-        {submitting && (
-          <motion.div
-            key="submitting"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="fixed inset-0 z-10 flex items-center justify-center"
-            style={{ background: 'rgba(8,14,30,0.6)' }}
-          >
-            <p className="text-sm font-bold" style={{ color: '#f59e0b' }}>Saving results…</p>
-          </motion.div>
-        )}
-
       </AnimatePresence>
     </div>
   )

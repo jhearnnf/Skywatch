@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import Overlay from '../ui/Overlay'
 
 // Element picker — opens the target page in an iframe with ?tutorialPicker=1
 // so the in-page TutorialPickerOverlay enters select mode. Communicates back
@@ -32,10 +33,7 @@ export default function TutorialPickerModal({ route, onPick, onCancel }) {
   const iframeSrc = appendPickerQuery(editableRoute)
 
   return (
-    <div
-      className="fixed inset-0 z-[60] bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onCancel}
-    >
+    <Overlay zIndex={60} backdrop="rgba(15, 23, 42, 0.70)" onDismiss={onCancel} className="flex items-center justify-center p-4" style={{ backdropFilter: 'blur(4px)' }}>
       <div
         className="bg-surface rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
@@ -83,7 +81,7 @@ export default function TutorialPickerModal({ route, onPick, onCancel }) {
           Hover an element inside the preview, then click to lock it in. Or type a CSS selector by hand and press Cancel.
         </div>
       </div>
-    </div>
+    </Overlay>
   )
 }
 

@@ -135,7 +135,8 @@ export default function LockedCategoryModal({ category, tier = 'silver', user, p
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/70 backdrop-blur-sm"
+        className="safe-area-inset flex items-end sm:items-center justify-center"
+        style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(15,23,42,0.70)', backdropFilter: 'blur(4px)' }}
         onClick={onClose}
       >
         {/* Sheet */}

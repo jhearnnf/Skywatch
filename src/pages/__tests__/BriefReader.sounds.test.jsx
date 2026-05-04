@@ -39,20 +39,20 @@ vi.mock('../../components/UpgradePrompt', () => ({
 
 vi.mock('framer-motion', () => ({
   motion: {
-    div: ({ children, className, style, onClick, onDragEnd, drag }) => {
+    div: ({ children, className, style, onClick, onDragEnd, drag, ...rest }) => {
       if (drag === 'x' && onDragEnd) {
         return (
-          <div className={className} style={style} onClick={onClick}>
+          <div className={className} style={style} onClick={onClick} {...rest}>
             {children}
             <button data-testid="swipe-left"  onClick={() => onDragEnd(null, { offset: { x: -150, y: 0 }, velocity: { x: 0, y: 0 } })} />
             <button data-testid="swipe-right" onClick={() => onDragEnd(null, { offset: { x:  150, y: 0 }, velocity: { x: 0, y: 0 } })} />
           </div>
         )
       }
-      return <div className={className} style={style} onClick={onClick}>{children}</div>
+      return <div className={className} style={style} onClick={onClick} {...rest}>{children}</div>
     },
-    button: ({ children, className, onClick }) => <button className={className} onClick={onClick}>{children}</button>,
-    p:      ({ children, className })          => <p className={className}>{children}</p>,
+    button: ({ children, className, onClick, ...rest }) => <button className={className} onClick={onClick} {...rest}>{children}</button>,
+    p:      ({ children, className, ...rest })          => <p className={className} {...rest}>{children}</p>,
   },
   AnimatePresence:      ({ children }) => <>{children}</>,
   LayoutGroup:          ({ children }) => <>{children}</>,
@@ -183,8 +183,8 @@ describe('BriefReader — sound wiring', () => {
 
     playSound.mockClear()
 
-    // Click the background overlay (first fixed inset-0 div = backdrop)
-    const backdrop = document.querySelector('.fixed.inset-0.z-50.bg-slate-900\\/40')
+    // Click the background overlay (kw backdrop)
+    const backdrop = document.querySelector('[data-testid="kw-backdrop"]')
     if (backdrop) fireEvent.click(backdrop)
 
     expect(playSound).toHaveBeenCalledWith('stand_down')

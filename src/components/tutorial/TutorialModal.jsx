@@ -14,7 +14,7 @@ export default function TutorialModal() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[48] bg-slate-900/60 backdrop-blur-sm"
+            style={{ position: 'fixed', inset: 0, zIndex: 48, background: 'rgba(15,23,42,0.60)', backdropFilter: 'blur(4px)' }}
             onClick={skip}
           />
 

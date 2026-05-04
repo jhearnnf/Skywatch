@@ -60,8 +60,8 @@ export default function WelcomeAgentFlow({ onClose }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center px-5 py-8 overflow-y-auto"
-        style={{ background: 'rgba(6, 16, 30, 0.97)' }}
+        className="safe-area-inset flex items-center justify-center px-5 py-8 overflow-y-auto"
+        style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(6, 16, 30, 0.97)' }}
       >
         <div className="w-full max-w-lg">
           {/* Header */}

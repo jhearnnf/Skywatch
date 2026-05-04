@@ -26,4 +26,24 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Ban bare "fixed inset-0" in className strings outside the Overlay primitive.
+    // Use <Overlay> instead; it handles safe-area padding and portaling automatically.
+    // App.jsx is excluded: its loading fallback renders before the portal target is ready.
+    files: ['**/*.{js,jsx}'],
+    ignores: ['src/components/ui/Overlay.jsx', 'src/App.jsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'JSXAttribute[name.name="className"][value.type="Literal"][value.value=/fixed inset-0/]',
+          message: 'Use <Overlay> from src/components/ui/Overlay.jsx instead of bare "fixed inset-0" className.',
+        },
+        {
+          selector: 'JSXAttribute[name.name="className"][value.type="TemplateLiteral"] > TemplateElement[value.cooked=/fixed inset-0/]',
+          message: 'Use <Overlay> from src/components/ui/Overlay.jsx instead of bare "fixed inset-0" in template literal className.',
+        },
+      ],
+    },
+  },
 ])

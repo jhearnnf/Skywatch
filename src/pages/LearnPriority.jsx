@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useAnimationControls } from 'framer-motion'
+import Overlay from '../components/ui/Overlay'
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
@@ -1376,7 +1377,8 @@ function UnlockInfoModal({ unlock, category, colors, userLevel, userRankNumber, 
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 flex items-end justify-center px-4 pb-8"
+      className="safe-area-inset flex items-end justify-center px-4 pb-8"
+      style={{ position: 'fixed', inset: 0, zIndex: 50 }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -1481,8 +1483,8 @@ function PathwaySwipeHint({ onDismiss }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[1100] flex items-center justify-center pointer-events-auto cursor-pointer"
-      style={{ background: 'rgba(10,20,40,0.55)' }}
+      className="safe-area-inset flex items-center justify-center pointer-events-auto cursor-pointer"
+      style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(10,20,40,0.55)' }}
       onClick={onDismiss}
     >
       <div className="flex flex-col items-center gap-3 px-7 py-6 rounded-2xl select-none" style={{ background: 'rgba(6,16,30,0.85)', backdropFilter: 'blur(6px)' }}>

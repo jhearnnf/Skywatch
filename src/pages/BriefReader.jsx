@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import Overlay from '../components/ui/Overlay'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useTransform, useAnimationControls, LayoutGroup } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -89,8 +90,9 @@ function KeywordSheet({ kw, onClose, navigate, disableLinkedBriefNav = false, is
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-slate-900/40"
+            style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(15,23,42,0.40)' }}
             onClick={onClose}
+            data-testid="kw-backdrop"
           />
           <motion.div
             key="kw-sheet"
@@ -342,7 +344,7 @@ function StatMnemonicSheet({ stat, onClose }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-slate-900/40"
+            style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(15,23,42,0.40)' }}
             onClick={onClose}
           />
           <motion.div
@@ -2600,12 +2602,7 @@ export default function BriefReader() {
 
       {/* Layer 1: block navigation while spawn-check is in-flight */}
       {spawnCheckPending && (
-        <motion.div
-          key="spawn-check-overlay"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed inset-0 z-[300] bg-slate-950/85 flex flex-col items-center justify-center gap-5 pointer-events-all"
-        >
+        <Overlay zIndex={300} backdrop="rgba(2,6,23,0.85)" className="flex flex-col items-center justify-center gap-5">
           <motion.div
             animate={{ scale: [1, 1.5, 1], opacity: [0.6, 0.1, 0.6] }}
             transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
@@ -2614,7 +2611,7 @@ export default function BriefReader() {
           <p className="text-xs font-bold tracking-[0.3em] text-red-400 uppercase">
             Incoming message
           </p>
-        </motion.div>
+        </Overlay>
       )}
 
       {/* Where's That Aircraft — mission spawn */}
