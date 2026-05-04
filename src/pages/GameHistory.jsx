@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
@@ -475,6 +475,11 @@ function SessionRow({ session, API, index }) {
 export default function GameHistory() {
   const { user, API, apiFetch } = useAuth()
   const navigate  = useNavigate()
+  const location  = useLocation()
+
+  const adminUserId   = location.state?.adminUserId   ?? null
+  const adminUserName = location.state?.adminUserName ?? null
+  const isAdminView   = !!(adminUserId && user?.isAdmin)
 
   const [sessions,      setSessions]      = useState([])
   const [total,         setTotal]         = useState(0)
@@ -492,7 +497,10 @@ export default function GameHistory() {
       const params = new URLSearchParams({ page: p, limit: LIMIT })
       if (type   !== 'all') params.set('type',   type)
       if (result !== 'all') params.set('result', result)
-      const res  = await apiFetch(`${API}/api/games/history?${params}`, { credentials: 'include' })
+      const baseUrl = isAdminView
+        ? `${API}/api/admin/users/${adminUserId}/game-history`
+        : `${API}/api/games/history`
+      const res  = await apiFetch(`${baseUrl}?${params}`, { credentials: 'include' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || 'Failed to load history')
       setSessions(json.data.sessions)
@@ -502,7 +510,7 @@ export default function GameHistory() {
     } finally {
       setLoading(false)
     }
-  }, [API])
+  }, [API, isAdminView, adminUserId])
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
@@ -520,11 +528,29 @@ export default function GameHistory() {
 
       {/* Header */}
       <div className="mb-4">
-        <button onClick={() => navigate('/profile')} className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1">
-          ← Back
-        </button>
-        <h1 className="text-2xl font-extrabold text-slate-900">Game History</h1>
-        <p className="text-sm text-slate-500 mt-0.5">{total} session{total !== 1 ? 's' : ''} on record.</p>
+        {isAdminView ? (
+          <>
+            <button
+              onClick={() => navigate('/admin', { state: { tab: 'users' } })}
+              className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1"
+            >
+              ← Back to Admin
+            </button>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">Admin View</span>
+            </div>
+            <h1 className="text-2xl font-extrabold text-slate-900">Game History</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Viewing sessions for <span className="font-semibold text-slate-700">{adminUserName}</span> — {total} session{total !== 1 ? 's' : ''} on record.</p>
+          </>
+        ) : (
+          <>
+            <button onClick={() => navigate('/profile')} className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1">
+              ← Back
+            </button>
+            <h1 className="text-2xl font-extrabold text-slate-900">Game History</h1>
+            <p className="text-sm text-slate-500 mt-0.5">{total} session{total !== 1 ? 's' : ''} on record.</p>
+          </>
+        )}
       </div>
 
       {/* Filters */}

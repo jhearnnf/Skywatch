@@ -53,6 +53,7 @@ const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
 const { callOpenRouter, featureMiddleware, setBrief } = require('../utils/openRouter');
+const { normalizeSections } = require('../utils/descriptionSections');
 
 // ── Shared quiz prompt fragments ──────────────────────────────────────────────
 // Single source of truth for answer format rules and core question rules,
@@ -1079,6 +1080,226 @@ router.get('/users/:id/airstars/history', async (req, res) => {
 
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json({ status: 'success', data: { logs, total, page: Number(page), limit: Number(limit), user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/users/:id/brief-history — admin view of any user's brief history
+router.get('/users/:id/brief-history', protect, adminOnly, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const targetUser = await User.findById(userId).select('agentNumber displayName email').lean();
+    if (!targetUser) return res.status(404).json({ message: 'User not found' });
+
+    const page      = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit     = Math.min(50, parseInt(req.query.limit) || 30);
+    const skip      = (page - 1) * limit;
+    const flashcard = req.query.flashcard === '1';
+
+    const uid       = new mongoose.Types.ObjectId(userId);
+    const baseMatch = flashcard
+      ? { userId: uid, reachedFlashcard: true }
+      : { userId: uid, completed: true };
+    const populateFields = flashcard
+      ? 'title category subcategory descriptionSections'
+      : 'title category subcategory';
+
+    const [records, total, avgResult] = await Promise.all([
+      IntelligenceBriefRead.find(baseMatch)
+        .sort({ completedAt: -1, lastReadAt: -1 })
+        .skip(skip).limit(limit)
+        .populate('intelBriefId', populateFields)
+        .lean(),
+      IntelligenceBriefRead.countDocuments(baseMatch),
+      IntelligenceBriefRead.aggregate([
+        { $match: baseMatch },
+        { $group: { _id: null, avg: { $avg: '$timeSpentSeconds' } } },
+      ]),
+    ]);
+
+    const avgTimeSeconds = avgResult[0]?.avg ? Math.round(avgResult[0].avg) : 0;
+
+    const reads = records.map(r => {
+      const base = {
+        _id:                 r._id,
+        briefId:             r.intelBriefId?._id ?? null,
+        title:               r.intelBriefId?.title       ?? 'Unknown Brief',
+        category:            r.intelBriefId?.category    ?? '',
+        subcategory:         r.intelBriefId?.subcategory ?? '',
+        timeSpentSeconds:    r.timeSpentSeconds,
+        completedAt:         r.completedAt,
+        firstReadAt:         r.firstReadAt,
+        lastReadAt:          r.lastReadAt,
+        flashcardUnlockedAt: r.flashcardUnlockedAt ?? null,
+      };
+      if (flashcard) {
+        const sections = normalizeSections(r.intelBriefId?.descriptionSections);
+        base.flashcardQuestion = sections[3]?.body ?? null;
+      }
+      return base;
+    });
+
+    res.json({ status: 'success', data: { reads, total, avgTimeSeconds, user: targetUser } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/users/:id/game-history — admin view of any user's game history
+router.get('/users/:id/game-history', protect, adminOnly, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const targetUser = await User.findById(userId).select('agentNumber displayName email').lean();
+    if (!targetUser) return res.status(404).json({ message: 'User not found' });
+
+    const page         = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit        = Math.min(50, parseInt(req.query.limit) || 20);
+    const typeFilter   = req.query.type   || 'all';
+    const resultFilter = req.query.result || 'all';
+
+    const uid = new mongoose.Types.ObjectId(userId);
+
+    const [quizAttempts, whos, oob, flash, whereAircraft, aptitudeSync] = await Promise.all([
+      GameSessionQuizAttempt.find({ userId: uid, status: { $in: ['completed', 'abandoned'] } })
+        .populate('intelBriefId', 'title').sort({ timeStarted: -1 }).lean(),
+      GameSessionWheresThatAircraftResult.find({ userId: uid }).sort({ createdAt: -1 }).lean(),
+      GameSessionOrderOfBattleResult.find({ userId: uid })
+        .populate({ path: 'gameId', select: 'category difficulty orderType anchorBriefId', populate: { path: 'anchorBriefId', select: 'title' } })
+        .sort({ createdAt: -1 }).lean(),
+      GameSessionFlashcardRecallResult.find({ userId: uid }).sort({ createdAt: -1 }).lean(),
+      GameSessionWhereAircraftResult.find({ userId: uid })
+        .populate('aircraftBriefId', 'title').sort({ createdAt: -1 }).lean(),
+      AptitudeSyncUsage.find({ userId: uid, $or: [{ completedAt: { $ne: null } }, { abandoned: true }] })
+        .populate('briefId', 'title').sort({ _id: -1 }).lean(),
+    ]);
+
+    const sessions = [
+      ...quizAttempts.map(a => {
+        let resultCategory;
+        if (a.status === 'abandoned')         resultCategory = 'abandoned';
+        else if (a.percentageCorrect === 100) resultCategory = 'perfect';
+        else if (a.percentageCorrect >= 60)   resultCategory = 'passed';
+        else                                  resultCategory = 'failed';
+        return {
+          _id:               a._id,
+          type:              'quiz',
+          gameSessionId:     a.gameSessionId,
+          date:              a.timeStarted,
+          status:            a.status,
+          briefTitle:        a.intelBriefId?.title ?? 'Unknown Brief',
+          briefId:           a.intelBriefId?._id,
+          difficulty:        a.difficulty,
+          correctAnswers:    a.correctAnswers,
+          totalQuestions:    a.totalQuestions,
+          percentageCorrect: a.percentageCorrect,
+          airstarsEarned:    a.airstarsEarned,
+          timeTakenSeconds:  a.timeFinished && a.timeStarted
+            ? Math.round((new Date(a.timeFinished) - new Date(a.timeStarted)) / 1000) : null,
+          canDrillDown:  a.status === 'completed',
+          resultCategory,
+        };
+      }),
+      ...whos.map(r => ({
+        _id:              r._id,
+        type:             'wheres_that_aircraft',
+        gameSessionId:    r.gameSessionId,
+        date:             r.createdAt,
+        status:           r.isCorrect ? 'correct' : 'incorrect',
+        isCorrect:        r.isCorrect,
+        airstarsEarned:   r.airstarsEarned,
+        timeTakenSeconds: r.timeTakenSeconds,
+        canDrillDown:     false,
+        resultCategory:   r.isCorrect ? 'passed' : 'failed',
+      })),
+      ...whereAircraft.map(r => {
+        let resultCategory;
+        if (r.status === 'abandoned') resultCategory = 'abandoned';
+        else if (r.won)               resultCategory = 'perfect';
+        else if (r.round1Correct)     resultCategory = 'passed';
+        else                          resultCategory = 'failed';
+        return {
+          _id:              r._id,
+          type:             'wheres_aircraft',
+          gameSessionId:    r.gameSessionId,
+          date:             r.createdAt,
+          status:           r.status === 'abandoned' ? 'abandoned' : r.won ? 'won' : r.round1Correct ? 'partial' : 'lost',
+          won:              r.won,
+          briefTitle:       r.aircraftBriefId?.title ?? 'Unknown Aircraft',
+          briefId:          r.aircraftBriefId?._id,
+          round1Correct:    r.round1Correct,
+          round2Attempted:  r.round2Attempted,
+          round2Correct:    r.round2Correct,
+          airstarsEarned:   r.airstarsEarned,
+          timeTakenSeconds: r.timeTakenSeconds,
+          canDrillDown:     r.status !== 'abandoned',
+          resultCategory,
+        };
+      }),
+      ...oob.map(r => ({
+        _id:              r._id,
+        type:             'order_of_battle',
+        date:             r.createdAt,
+        status:           r.abandoned ? 'abandoned' : r.won ? 'won' : 'lost',
+        won:              r.won,
+        abandoned:        r.abandoned,
+        briefTitle:       r.gameId?.anchorBriefId?.title ?? null,
+        category:         r.gameId?.category,
+        difficulty:       r.gameId?.difficulty,
+        orderType:        r.gameId?.orderType,
+        airstarsEarned:   r.airstarsEarned,
+        timeTakenSeconds: r.timeTakenSeconds ?? null,
+        canDrillDown:     !r.abandoned,
+        resultCategory:   r.abandoned ? 'abandoned' : r.won ? 'passed' : 'failed',
+      })),
+      ...aptitudeSync.map(r => ({
+        _id:            r._id,
+        type:           'aptitude_sync',
+        date:           r.completedAt ?? r._id.getTimestamp(),
+        status:         r.abandoned ? 'abandoned' : 'completed',
+        briefTitle:     r.briefId?.title ?? 'Unknown Brief',
+        briefId:        r.briefId?._id ?? r.briefId,
+        airstarsEarned: r.airstarsEarned ?? null,
+        finalSummary:   r.finalSummary  ?? null,
+        knowledgeGaps:  r.knowledgeGaps ?? null,
+        canDrillDown:   !r.abandoned && !!(r.finalSummary || r.knowledgeGaps),
+        resultCategory: r.abandoned ? 'abandoned' : 'passed',
+      })),
+      ...flash.map(r => {
+        const recalled         = r.cardResults?.filter(c => c.recalled).length ?? 0;
+        const cardCount        = r.cardResults?.length ?? 0;
+        const perfect          = recalled === cardCount && cardCount > 0;
+        const timeTakenSeconds = r.cardResults?.reduce((sum, c) => sum + (c.timeTakenSeconds ?? 0), 0) ?? 0;
+        return {
+          _id:             r._id,
+          type:            'flashcard',
+          gameSessionId:   r.gameSessionId,
+          date:            r.createdAt,
+          status:          r.abandoned ? 'abandoned' : perfect ? 'perfect' : 'completed',
+          recalled,
+          cardCount,
+          timeTakenSeconds,
+          airstarsEarned:  r.abandoned ? 0 : r.airstarsEarned,
+          canDrillDown:    cardCount > 0,
+          resultCategory:  r.abandoned ? 'abandoned' : perfect ? 'perfect' : 'passed',
+        };
+      }),
+    ];
+
+    const VALID_TYPES   = ['quiz', 'order_of_battle', 'wheres_aircraft', 'flashcard', 'wheres_that_aircraft', 'aptitude_sync'];
+    const VALID_RESULTS = ['perfect', 'passed', 'failed', 'abandoned'];
+
+    const filtered = sessions.filter(s => {
+      if (typeFilter   !== 'all' && VALID_TYPES.includes(typeFilter)     && s.type           !== typeFilter)   return false;
+      if (resultFilter !== 'all' && VALID_RESULTS.includes(resultFilter) && s.resultCategory !== resultFilter) return false;
+      return true;
+    });
+
+    filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const total     = filtered.length;
+    const paginated = filtered.slice((page - 1) * limit, page * limit);
+    res.json({ status: 'success', data: { sessions: paginated, total, page, limit, user: targetUser } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

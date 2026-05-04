@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
@@ -85,6 +85,11 @@ function FlashcardRow({ read, index }) {
 export default function IntelBriefHistory() {
   const { user, API, apiFetch } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  const adminUserId   = location.state?.adminUserId   ?? null
+  const adminUserName = location.state?.adminUserName ?? null
+  const isAdminView   = !!(adminUserId && user?.isAdmin)
 
   const [tab, setTab] = useState('briefs') // 'briefs' | 'flashcards'
 
@@ -108,7 +113,10 @@ export default function IntelBriefHistory() {
   const fetchHistory = useCallback(async (p) => {
     setLoading(true); setError(null)
     try {
-      const res  = await apiFetch(`${API}/api/briefs/history?page=${p}&limit=${LIMIT}`, { credentials: 'include' })
+      const url = isAdminView
+        ? `${API}/api/admin/users/${adminUserId}/brief-history?page=${p}&limit=${LIMIT}`
+        : `${API}/api/briefs/history?page=${p}&limit=${LIMIT}`
+      const res  = await apiFetch(url, { credentials: 'include' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || 'Failed to load history')
       setReads(json.data.reads)
@@ -119,12 +127,15 @@ export default function IntelBriefHistory() {
     } finally {
       setLoading(false)
     }
-  }, [API])
+  }, [API, isAdminView, adminUserId])
 
   const fetchFlashcards = useCallback(async (p) => {
     setFcLoading(true); setFcError(null)
     try {
-      const res  = await apiFetch(`${API}/api/briefs/history?flashcard=1&page=${p}&limit=${LIMIT}`, { credentials: 'include' })
+      const url = isAdminView
+        ? `${API}/api/admin/users/${adminUserId}/brief-history?flashcard=1&page=${p}&limit=${LIMIT}`
+        : `${API}/api/briefs/history?flashcard=1&page=${p}&limit=${LIMIT}`
+      const res  = await apiFetch(url, { credentials: 'include' })
       const json = await res.json()
       if (!res.ok) throw new Error(json.message || 'Failed to load flashcards')
       setFcReads(json.data.reads)
@@ -134,7 +145,7 @@ export default function IntelBriefHistory() {
     } finally {
       setFcLoading(false)
     }
-  }, [API])
+  }, [API, isAdminView, adminUserId])
 
   useEffect(() => {
     if (!user) { navigate('/login'); return }
@@ -156,11 +167,29 @@ export default function IntelBriefHistory() {
 
       {/* Header */}
       <div className="mb-5">
-        <button onClick={() => navigate('/profile')} className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1">
-          ← Back
-        </button>
-        <h1 className="text-2xl font-extrabold text-slate-900">Intel Brief History</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Every brief you've read, and your collected flashcards.</p>
+        {isAdminView ? (
+          <>
+            <button
+              onClick={() => navigate('/admin', { state: { tab: 'users' } })}
+              className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1"
+            >
+              ← Back to Admin
+            </button>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">Admin View</span>
+            </div>
+            <h1 className="text-2xl font-extrabold text-slate-900">Intel Brief History</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Viewing briefs read by <span className="font-semibold text-slate-700">{adminUserName}</span>.</p>
+          </>
+        ) : (
+          <>
+            <button onClick={() => navigate('/profile')} className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1">
+              ← Back
+            </button>
+            <h1 className="text-2xl font-extrabold text-slate-900">Intel Brief History</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Every brief you've read, and your collected flashcards.</p>
+          </>
+        )}
       </div>
 
       {/* Tab toggle */}

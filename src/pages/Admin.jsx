@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import Overlay from '../components/ui/Overlay'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
@@ -120,12 +121,11 @@ function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger = false, o
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 flex items-end sm:items-center justify-center p-4" onClick={onCancel}>
+    <Overlay zIndex={50} backdrop="rgba(15,23,42,0.60)" onDismiss={onCancel} className="flex items-end sm:items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         className="bg-surface rounded-2xl p-6 w-full max-w-md shadow-2xl"
-        onClick={e => e.stopPropagation()}
       >
         <h3 className="text-base font-bold text-slate-900 mb-1">{title}</h3>
         {body && <p className="text-sm text-slate-500 mb-4">{body}</p>}
@@ -152,7 +152,7 @@ function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger = false, o
           </button>
         </div>
       </motion.div>
-    </div>
+    </Overlay>
   )
 }
 
@@ -2467,14 +2467,21 @@ function UsersTab({ API }) {
             {/* Stats row */}
             <div className="grid grid-cols-4 sm:grid-cols-7 divide-x divide-slate-100 border-b border-slate-100">
               {[
-                ['Coins', (u.totalAirstars ?? 0).toLocaleString()],
-                ['Streak', u.loginStreak ?? 0],
-                ['Briefs Read', u.profileStats?.brifsRead ?? 0],
-                ['Games', (u.profileStats?.quizzesPlayed ?? 0) + (u.profileStats?.booPlayed ?? 0) + (u.profileStats?.wtaPlayed ?? 0) + (u.profileStats?.wherePlayed ?? 0) + (u.profileStats?.flashcardsPlayed ?? 0)],
-                ['CBAT Games Finished', `${u.profileStats?.cbatPlayed ?? 0}/${u.profileStats?.cbatStarted ?? 0}`],
-                ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1)],
-                ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })],
-              ].map(([l, v]) => (
+                ['Coins', (u.totalAirstars ?? 0).toLocaleString(), null],
+                ['Streak', u.loginStreak ?? 0, null],
+                ['Briefs Read', u.profileStats?.brifsRead ?? 0,
+                  () => navigate('/intel-brief-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } })],
+                ['Games', (u.profileStats?.quizzesPlayed ?? 0) + (u.profileStats?.booPlayed ?? 0) + (u.profileStats?.wtaPlayed ?? 0) + (u.profileStats?.wherePlayed ?? 0) + (u.profileStats?.flashcardsPlayed ?? 0),
+                  () => navigate('/game-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } })],
+                ['CBAT Games Finished', `${u.profileStats?.cbatPlayed ?? 0}/${u.profileStats?.cbatStarted ?? 0}`, null],
+                ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1), null],
+                ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), null],
+              ].map(([l, v, onClick]) => onClick ? (
+                <button key={l} onClick={onClick} className="px-3 py-2 text-center hover:bg-brand-50 transition-colors cursor-pointer group">
+                  <p className="text-xs font-bold text-brand-600 group-hover:underline">{v}</p>
+                  <p className="text-[10px] text-slate-400">{l}</p>
+                </button>
+              ) : (
                 <div key={l} className="px-3 py-2 text-center">
                   <p className="text-xs font-bold text-slate-700">{v}</p>
                   <p className="text-[10px] text-slate-400">{l}</p>
@@ -2772,7 +2779,7 @@ function ProblemsTab({ API, onOpenBrief }) {
 
       {/* Confirmation modal */}
       {confirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <Overlay zIndex={50} backdrop="rgba(0,0,0,0.40)" className="flex items-center justify-center p-4">
           <div className="bg-surface rounded-2xl shadow-xl border border-slate-700 max-w-md w-full p-6 space-y-4">
             <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider">Confirm — send to user</h3>
             <p className="text-xs text-slate-400">
@@ -2796,7 +2803,7 @@ function ProblemsTab({ API, onOpenBrief }) {
               </button>
             </div>
           </div>
-        </div>
+        </Overlay>
       )}
 
       {/* Controls */}
@@ -3481,8 +3488,8 @@ function NewsModal({ API, onClose, onGenerate }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/70 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-surface rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh] relative" onClick={e => e.stopPropagation()}>
+    <Overlay zIndex={50} backdrop="rgba(15,23,42,0.70)" onDismiss={onClose} className="flex items-end sm:items-center justify-center p-4">
+      <div className="bg-surface rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh] relative">
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
@@ -3779,7 +3786,7 @@ function NewsModal({ API, onClose, onGenerate }) {
           </div>
         )}
       </div>
-    </div>
+    </Overlay>
   )
 }
 
@@ -3971,8 +3978,8 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
   ) : openSubsections
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/70 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-surface rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+    <Overlay zIndex={50} backdrop="rgba(15,23,42,0.70)" onDismiss={onClose} className="flex items-end sm:items-center justify-center p-4">
+      <div className="bg-surface rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh]">
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
@@ -4117,7 +4124,7 @@ function LeadsModal({ API, onClose, onGenerate, onReset, initialSearch = '' }) {
           />
         )}
       </div>
-    </div>
+    </Overlay>
   )
 }
 
