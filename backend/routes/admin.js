@@ -4629,6 +4629,7 @@ const BULK_LINK_CONFIG = {
 
 router.post('/ai/bulk-generate-stub/:id', featureMiddleware('bulk-generate-stub'), async (req, res) => {
   let brief;
+  const { sources: imageSources } = req.body || {};
   try {
     setBrief(req.params.id);
     brief = await IntelligenceBrief.findById(req.params.id);
@@ -4662,6 +4663,7 @@ router.post('/ai/bulk-generate-stub/:id', featureMiddleware('bulk-generate-stub'
         subtitle: brief.subtitle,
         imagePromptBase: getPrompt(aiSettings, 'imageExtraction'),
         publicIdPrefix: 'brief-bulk',
+        sources: Array.isArray(imageSources) && imageSources.length ? imageSources : undefined,
       });
     for (const w of stubImgWarnings) generationWarnings.push(`Image: ${w}`);
     if (!stubMediaDocs.length) {
@@ -5046,7 +5048,7 @@ router.post('/ai/generate-rank-data/:id', featureMiddleware('generate-rank-data'
 // that matches an existing Media doc is reused instead of re-uploaded.
 router.post('/ai/generate-image', featureMiddleware('generate-image'), async (req, res) => {
   try {
-    const { title, subtitle, briefId = null } = req.body;
+    const { title, subtitle, briefId = null, sources: imageSources } = req.body;
     if (briefId) setBrief(briefId);
     if (!title) return res.status(400).json({ message: 'title is required' });
 
@@ -5056,6 +5058,7 @@ router.post('/ai/generate-image', featureMiddleware('generate-image'), async (re
       subtitle,
       imagePromptBase: getPrompt(imgAiSettings, 'imageExtraction'),
       publicIdPrefix: 'brief',
+      sources: Array.isArray(imageSources) && imageSources.length ? imageSources : undefined,
     });
 
     if (mediaDocs.length === 0) {

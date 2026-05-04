@@ -8,6 +8,7 @@ function md5Hex(buffer) {
 }
 
 const MAX_IMAGES = 2;
+const ALL_SOURCES = ['dvids', 'commons', 'wikipedia'];
 
 async function extractSearchTerms({ title, subtitle, imagePromptBase }) {
   const data = await callOpenRouter({
@@ -29,6 +30,46 @@ async function extractSearchTerms({ title, subtitle, imagePromptBase }) {
   return terms.slice(0, MAX_IMAGES);
 }
 
+// ── Source fetchers ─────────────────────────────────────────────────────────
+// Each returns an array of { imageUrl, pageTitle } or [] on failure / no results.
+
+async function fetchDvidsImages(term, max = 1) {
+  const apiKey = process.env.DVIDS_API_KEY;
+  if (!apiKey) return [];
+  try {
+    const url = `https://api.dvidshub.net/search?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(term)}&type=image&rows=${max}`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'SkyWatch/1.0 (educational-platform)' } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results ?? [])
+      .filter(r => r.thumbnail)
+      .map(r => ({ imageUrl: r.thumbnail, pageTitle: r.title || term }));
+  } catch {
+    return [];
+  }
+}
+
+
+async function fetchCommonsImages(term, max = 1) {
+  try {
+    // Request more than needed so we can filter out SVG diagrams and still find a photo
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(term)}&gsrnamespace=6&gsrlimit=${max * 4}&prop=imageinfo&iiprop=url&iiurlwidth=800&format=json&origin=*`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'SkyWatch/1.0 (educational-platform)' } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const pages = Object.values(data.query?.pages ?? {});
+    return pages
+      .filter(p => {
+        const t = (p.title ?? '').toLowerCase();
+        return p.imageinfo?.[0]?.thumburl && (t.endsWith('.jpg') || t.endsWith('.jpeg') || t.endsWith('.png'));
+      })
+      .slice(0, max)
+      .map(p => ({ imageUrl: p.imageinfo[0].thumburl, pageTitle: p.title?.replace(/^File:/, '') || term }));
+  } catch {
+    return [];
+  }
+}
+
 async function resolveWikipediaPageTitle(term) {
   const searchRes = await fetch(
     `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(term)}&format=json&srlimit=1&origin=*`
@@ -45,13 +86,30 @@ async function fetchWikipediaThumbnailUrl(pageTitle) {
   return Object.values(thumbData.query?.pages ?? {})[0]?.thumbnail?.source ?? null;
 }
 
-async function resolveWikipediaImage(term) {
-  const pageTitle = await resolveWikipediaPageTitle(term);
-  if (!pageTitle) return null;
-  const imageUrl = await fetchWikipediaThumbnailUrl(pageTitle);
-  if (!imageUrl) return null;
-  return { pageTitle, imageUrl };
+async function fetchWikipediaImages(term, max = 1) {
+  try {
+    const pageTitle = await resolveWikipediaPageTitle(term);
+    if (!pageTitle) return [];
+    const imageUrl = await fetchWikipediaThumbnailUrl(pageTitle);
+    if (!imageUrl) return [];
+    return [{ imageUrl, pageTitle }];
+  } catch {
+    return [];
+  }
 }
+
+// Kept for external callers (e.g. scripts that resolve a single term)
+async function resolveWikipediaImage(term) {
+  const results = await fetchWikipediaImages(term);
+  if (!results.length) return null;
+  return { pageTitle: results[0].pageTitle, imageUrl: results[0].imageUrl };
+}
+
+const SOURCE_FETCHERS = {
+  dvids:     fetchDvidsImages,
+  commons:   fetchCommonsImages,
+  wikipedia: fetchWikipediaImages,
+};
 
 async function downloadImage(imageUrl) {
   const imgRes = await fetch(imageUrl, { headers: { 'User-Agent': 'SkyWatch/1.0 (educational-platform)' } });
@@ -60,15 +118,14 @@ async function downloadImage(imageUrl) {
 }
 
 /**
- * For a single search term: look up an existing Media doc first (by term, then
- * by resolved Wikipedia page title). If none exists, download from Wikipedia,
- * upload to Cloudinary, and create a new Media doc. Returns the Media doc (or
- * null if Wikipedia had nothing for this term).
+ * For a single search term: check the DB first, then waterfall through the
+ * requested sources until one produces an image. Deduplicates by search term,
+ * Wikipedia page title (for the wikipedia source), and file content hash.
  */
-async function getOrCreateMediaForTerm(term, { publicIdPrefix }) {
+async function getOrCreateMediaForTerm(term, { publicIdPrefix, sources = ALL_SOURCES }) {
   const normalizedTerm = Media.normalizeTerm(term);
 
-  // Step 1 — check DB before touching Wikipedia / Cloudinary
+  // Step 1 — DB check before touching any external API
   if (normalizedTerm) {
     const existing = await Media.findOne({
       $or: [
@@ -79,63 +136,72 @@ async function getOrCreateMediaForTerm(term, { publicIdPrefix }) {
     if (existing) return { media: existing, reused: true };
   }
 
-  // Step 2 — resolve to a Wikipedia page title (so we know the canonical title)
-  const pageTitle = await resolveWikipediaPageTitle(term);
-  if (!pageTitle) return null;
+  // Step 2 — waterfall through sources
+  for (const source of sources) {
+    const fetcher = SOURCE_FETCHERS[source];
+    if (!fetcher) continue;
 
-  // Step 3 — check DB by the resolved page title BEFORE fetching the
-  // thumbnail (different terms may point at the same page — short-circuit
-  // to avoid an unnecessary Wikipedia call)
-  const normalizedPage = Media.normalizeTerm(pageTitle);
-  if (normalizedPage) {
-    const existing = await Media.findOne({ wikiPageTitleNormalized: normalizedPage });
-    if (existing) return { media: existing, reused: true };
+    let results;
+    try {
+      results = await fetcher(term, 1);
+    } catch {
+      continue;
+    }
+    if (!results.length) continue;
+
+    const { imageUrl, pageTitle } = results[0];
+
+    // For Wikipedia: secondary DB check by the resolved canonical page title —
+    // different search terms may point at the same Wikipedia article
+    if (source === 'wikipedia' && pageTitle) {
+      const normalizedPage = Media.normalizeTerm(pageTitle);
+      if (normalizedPage) {
+        const existing = await Media.findOne({ wikiPageTitleNormalized: normalizedPage });
+        if (existing) return { media: existing, reused: true };
+      }
+    }
+
+    let buffer;
+    try {
+      buffer = await downloadImage(imageUrl);
+    } catch {
+      continue; // bad URL — try the next source
+    }
+
+    const contentHash = md5Hex(buffer);
+    const existingByHash = await Media.findOne({ contentHash });
+    if (existingByHash) return { media: existingByHash, reused: true };
+
+    const upload = await uploadBuffer(buffer, { public_id: `${publicIdPrefix}-${Date.now()}` });
+
+    const mediaData = {
+      mediaType:          'picture',
+      mediaUrl:           upload.secure_url,
+      cloudinaryPublicId: upload.public_id,
+      contentHash,
+      name:               pageTitle || term,
+      searchTerm:         term,
+      showOnSummary:      true,
+    };
+    // Only set wikiPageTitle for the wikipedia source — the setter auto-computes
+    // wikiPageTitleNormalized, and an empty-string value would pollute the index
+    if (source === 'wikipedia' && pageTitle) {
+      mediaData.wikiPageTitle = pageTitle;
+    }
+
+    const media = await Media.create(mediaData);
+    return { media, reused: false };
   }
 
-  // Step 4 — fetch the image URL for this page
-  const imageUrl = await fetchWikipediaThumbnailUrl(pageTitle);
-  if (!imageUrl) return null;
-
-  // Step 5 — download the image, then hash-check before uploading. This
-  // catches cases where a completely different term/page resolves to the
-  // same underlying file bytes (e.g. two Wikipedia pages sharing a photo).
-  const buffer = await downloadImage(imageUrl);
-  const contentHash = md5Hex(buffer);
-
-  const existingByHash = await Media.findOne({ contentHash });
-  if (existingByHash) return { media: existingByHash, reused: true };
-
-  // Step 5 — new image: upload + persist
-  const upload = await uploadBuffer(buffer, {
-    public_id: `${publicIdPrefix}-${Date.now()}`,
-  });
-  const media = await Media.create({
-    mediaType: 'picture',
-    mediaUrl: upload.secure_url,
-    cloudinaryPublicId: upload.public_id,
-    contentHash,
-    name: pageTitle || term,
-    searchTerm: term,
-    wikiPageTitle: pageTitle,
-    showOnSummary: true,
-  });
-  return { media, reused: false };
+  return null;
 }
 
 /**
- * Generate images for a brief. Runs AI extraction, deduplicates each term
- * against existing Media, downloads + uploads the rest. Non-fatal: any
- * individual failure is captured as a warning and the remaining terms are
- * still attempted.
- *
- * @param {object} opts
- * @param {string} opts.title
- * @param {string} [opts.subtitle]
- * @param {string} opts.imagePromptBase  getPrompt(settings, 'imageExtraction')
- * @param {string} [opts.publicIdPrefix] Cloudinary public_id prefix, e.g. 'brief'
- * @returns {Promise<{ mediaDocs: object[], searchTerms: string[], warnings: string[] }>}
+ * Generate images for a brief. Runs AI term extraction then waterfalls each
+ * term through the requested sources. Non-fatal: failures are captured as
+ * warnings and remaining terms are still attempted.
  */
-async function generateBriefImages({ title, subtitle, imagePromptBase, publicIdPrefix = 'brief' }) {
+async function generateBriefImages({ title, subtitle, imagePromptBase, publicIdPrefix = 'brief', sources = ALL_SOURCES }) {
   const warnings = [];
   let searchTerms = [];
   const mediaDocs = [];
@@ -150,9 +216,9 @@ async function generateBriefImages({ title, subtitle, imagePromptBase, publicIdP
 
   for (const term of searchTerms) {
     try {
-      const result = await getOrCreateMediaForTerm(term, { publicIdPrefix });
+      const result = await getOrCreateMediaForTerm(term, { publicIdPrefix, sources });
       if (!result) {
-        warnings.push(`No Wikipedia image for "${term}"`);
+        warnings.push(`No image found for "${term}" across sources: ${sources.join(', ')}`);
         continue;
       }
       const idStr = String(result.media._id);
@@ -173,4 +239,5 @@ module.exports = {
   resolveWikipediaImage,
   getOrCreateMediaForTerm,
   MAX_IMAGES,
+  ALL_SOURCES,
 };

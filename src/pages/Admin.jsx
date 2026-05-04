@@ -4185,6 +4185,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [mediumQuestions,setMediumQuestions] = useState([])
   const [media,         setMedia]         = useState([])
   const [pendingImages, setPendingImages] = useState([])
+  const [imageSources,  setImageSources]  = useState(['dvids', 'commons', 'wikipedia'])
   const [extractingMediaId, setExtractingMediaId] = useState(null) // mediaId currently running subject extraction
   const [originalPreviewIds, setOriginalPreviewIds] = useState(() => new Set()) // per-row toggle: user explicitly chose to view the original instead of the cutout
   const [qTab,          setQTab]          = useState('easy')
@@ -4294,7 +4295,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
         const startedAt = Date.now()
         setBulkLog(prev => prev.map(s => s._id === stub._id ? { ...s, status: 'running', startedAt } : s))
         try {
-          const r = await apiFetch(`${API}/api/admin/ai/bulk-generate-stub/${stub._id}`, { method: 'POST', credentials: 'include' })
+          const r = await apiFetch(`${API}/api/admin/ai/bulk-generate-stub/${stub._id}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sources: imageSources }) })
           const d = await r.json()
           if (d.status !== 'success') throw new Error(d.message ?? 'Generation failed')
           setBulkLog(prev => prev.map(s => s._id === stub._id ? { ...s, status: 'done', completedAt: Date.now(), warnings: d.warnings?.length ? d.warnings : null } : s))
@@ -4845,7 +4846,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
       const res  = await apiFetch(`${API}/api/admin/ai/generate-image`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: draft.title, subtitle: draft.subtitle, briefId: briefId || null }),
+        body: JSON.stringify({ title: draft.title, subtitle: draft.subtitle, briefId: briefId || null, sources: imageSources }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -5262,6 +5263,24 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
                     className="w-16 border border-slate-200 rounded-lg px-2 py-1 text-xs text-center outline-none focus:ring-2 focus:ring-brand-200 bg-surface text-text"
                   />
                 </label>
+                <p className="text-xs font-semibold text-slate-500 mb-1.5">Image sources (waterfall order):</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mb-4">
+                  {[{id:'dvids',label:'DVIDS'},{id:'commons',label:'Commons'},{id:'wikipedia',label:'Wikipedia'}].map(src => (
+                    <label key={src.id} className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={imageSources.includes(src.id)}
+                        onChange={e => setImageSources(prev => {
+                          const order = ['dvids','commons','wikipedia']
+                          const next = e.target.checked ? [...prev, src.id] : prev.filter(s => s !== src.id)
+                          return order.filter(s => next.includes(s))
+                        })}
+                        className="accent-brand-600"
+                      />
+                      <span className="text-xs text-slate-700">{src.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
               {/* Action button */}
@@ -6040,6 +6059,28 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               </div>
             )}
             {media.length === 0 && <p className="text-sm text-slate-400 mb-4">No images yet</p>}
+
+            {/* Image source selector */}
+            <div className="mb-3">
+              <p className="text-xs font-semibold text-slate-500 mb-1.5">Image sources (waterfall order):</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {[{id:'dvids',label:'DVIDS'},{id:'commons',label:'Commons'},{id:'wikipedia',label:'Wikipedia'}].map(src => (
+                  <label key={src.id} className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={imageSources.includes(src.id)}
+                      onChange={e => setImageSources(prev => {
+                        const order = ['dvids','commons','wikipedia']
+                        const next = e.target.checked ? [...prev, src.id] : prev.filter(s => s !== src.id)
+                        return order.filter(s => next.includes(s))
+                      })}
+                      className="accent-brand-600"
+                    />
+                    <span className="text-xs text-slate-600">{src.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
 
             {/* Generate button */}
             <button
