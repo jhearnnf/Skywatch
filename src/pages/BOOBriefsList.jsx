@@ -79,7 +79,7 @@ export default function BOOBriefsList() {
       <div className="flex items-center gap-3 mb-6">
         <Link
           to="/play"
-          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-violet-400 transition-colors"
         >
           ← Back
         </Link>
@@ -96,7 +96,7 @@ export default function BOOBriefsList() {
           placeholder="Search briefs…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-full bg-surface border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 transition-all"
+          className="w-full bg-surface border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-500/20 transition-all"
         />
         {search && (
           <button
@@ -116,8 +116,8 @@ export default function BOOBriefsList() {
             onClick={() => handleTabChange(tab)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all
               ${activeTab === tab
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+                ? 'bg-violet-500/15 text-violet-400 shadow-sm'
+                : 'text-slate-600 hover:text-slate-700'
               }`}
           >
             {tab}
@@ -280,11 +280,11 @@ export default function BOOBriefsList() {
                     className={`flex items-center gap-3 rounded-xl px-4 py-3 border transition-all group
                       ${completed
                         ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-300'
-                        : 'bg-slate-50 border-slate-200 hover:border-brand-300 hover:bg-brand-50'
+                        : 'bg-slate-50 border-slate-200 hover:border-violet-400 hover:bg-violet-500/10'
                       }`}
                   >
                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0
-                      ${completed ? 'bg-emerald-500' : 'bg-slate-800 group-hover:bg-slate-700 transition-colors'}`}
+                      ${completed ? 'bg-emerald-500' : 'bg-violet-500/20 group-hover:bg-violet-500/30 transition-colors'}`}
                     >
                       {completed ? (
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
@@ -300,7 +300,7 @@ export default function BOOBriefsList() {
                     </div>
                     {completed
                       ? <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">✓ Played</span>
-                      : <span className="text-slate-300 group-hover:text-brand-400 transition-colors">→</span>
+                      : <span className="text-slate-300 group-hover:text-violet-400 transition-colors">→</span>
                     }
                   </Link>
                 </motion.div>
@@ -312,7 +312,7 @@ export default function BOOBriefsList() {
             <button
               onClick={handleLoadMore}
               disabled={loadingMore}
-              className="w-full mt-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:border-brand-300 hover:text-brand-600 disabled:opacity-40 transition-all"
+              className="w-full mt-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 hover:border-violet-400 hover:text-violet-400 disabled:opacity-40 transition-all"
             >
               {loadingMore ? 'Loading…' : 'Load More'}
             </button>

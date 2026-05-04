@@ -53,6 +53,7 @@ export default function Privacy() {
             <li><span className="text-slate-700 font-medium">Usage data</span> — game scores, quiz results, intel brief reading history, streaks, and airstar totals.</li>
             <li><span className="text-slate-700 font-medium">Support data</span> — content and email address provided when you submit a problem report.</li>
             <li><span className="text-slate-700 font-medium">Analytics data</span> — page views, click events, session replays, and device/browser information collected via PostHog.</li>
+            <li><span className="text-slate-700 font-medium">Presence data</span> — a "last seen" timestamp recorded periodically while you are actively using the app with the page visible and in focus. This is used by administrators to monitor platform usage.</li>
           </ul>
         </Section>
 
@@ -69,7 +70,7 @@ export default function Privacy() {
             <span className="text-slate-700 font-medium">Performance of a contract</span> — to create and maintain your account, authenticate you, and deliver the core features of the service.
           </p>
           <p>
-            <span className="text-slate-700 font-medium">Legitimate interests</span> — to understand how the app is used so we can improve it (analytics), and to maintain security and prevent abuse.
+            <span className="text-slate-700 font-medium">Legitimate interests</span> — to understand how the app is used so we can improve it (analytics), to maintain security and prevent abuse, and to allow administrators to monitor active usage of the platform.
           </p>
           <p>
             We do not sell your personal data to third parties and we do not use it for advertising.

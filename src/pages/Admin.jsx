@@ -2276,6 +2276,14 @@ function SubscriptionTierRow({ u, action }) {
   )
 }
 
+function onlineStatus(lastSeen) {
+  if (!lastSeen) return null
+  const diff = Date.now() - new Date(lastSeen).getTime()
+  if (diff < 90_000)       return 'live'
+  if (diff < 10 * 60_000)  return 'away'
+  return null
+}
+
 function UsersTab({ API }) {
   const { user: currentUser, refreshUser, apiFetch } = useAuth()
   const navigate = useNavigate()
@@ -2420,7 +2428,17 @@ function UsersTab({ API }) {
               className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-raised/40 transition-colors ${isExpanded ? 'border-b border-slate-100' : ''}`}
             >
               <div>
-                <p className="font-bold text-slate-800 text-sm">
+                <p className="font-bold text-slate-800 text-sm flex items-center">
+                  {(() => {
+                    const s = onlineStatus(u.lastSeen)
+                    if (!s) return null
+                    return (
+                      <span
+                        title={s === 'live' ? 'Online now' : 'Recently active'}
+                        className={`inline-block w-2 h-2 rounded-full mr-2 shrink-0 ${s === 'live' ? 'bg-green-500' : 'bg-amber-400'}`}
+                      />
+                    )
+                  })()}
                   Agent {u.agentNumber}
                   {u.isAdmin && <span className="ml-2 text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-bold">ADMIN</span>}
                   {u.isBanned && <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">BANNED</span>}

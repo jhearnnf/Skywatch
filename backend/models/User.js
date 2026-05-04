@@ -86,6 +86,8 @@ const userSchema = new mongoose.Schema(
     // Login history (kept for session tracking)
     logins: [loginSchema],
 
+    lastSeen: { type: Date, default: null },
+
     // Game tutorial tracking
     gameTypesSeen: [gameTutorialSchema],
 

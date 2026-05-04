@@ -74,6 +74,7 @@ import OpenRouterUsage from './pages/OpenRouterUsage'
 import AptitudeSync   from './pages/AptitudeSync'
 
 import { playSound } from './utils/sound'
+import useHeartbeat from './hooks/useHeartbeat'
 
 // ── Page transition wrapper ────────────────────────────────────────────────
 function PageWrapper({ children }) {
@@ -167,6 +168,7 @@ function AppRoutes() {
   const { loading } = useAuth()
   const location    = useLocation()
   const navigate    = useNavigate()
+  useHeartbeat()
 
   // When the user transitions TO /login from another route, remember where
   // they came from so we can send them back after successful sign-in. Covers

@@ -538,4 +538,14 @@ router.get('/me/read-briefs', protect, async (req, res) => {
   }
 });
 
+// POST /api/users/heartbeat — records lastSeen for active-user presence tracking
+router.post('/heartbeat', protect, async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.user._id, { lastSeen: new Date() });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

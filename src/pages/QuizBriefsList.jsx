@@ -127,8 +127,8 @@ export default function QuizBriefsList() {
             onClick={() => handleTabChange(tab)}
             className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-all
               ${activeTab === tab
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+                ? 'bg-brand-600/20 text-brand-400 shadow-sm'
+                : 'text-slate-600 hover:text-slate-700'
               }`}
           >
             {tab}
