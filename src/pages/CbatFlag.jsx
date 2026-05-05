@@ -146,8 +146,8 @@ function ResultsScreen({ stats, onPlayAgain, scoreSaved }) {
 }
 
 // ── Intro screen ──────────────────────────────────────────────────────────────
-function IntroScreen({ onStart, personalBest, aircraftList }) {
-  const disabled = aircraftList.length === 0
+function IntroScreen({ onStart, personalBest, aircraftList, aircraftLoading }) {
+  const disabled = aircraftLoading || aircraftList.length === 0
 
   return (
     <motion.div
@@ -203,7 +203,7 @@ function IntroScreen({ onStart, personalBest, aircraftList }) {
         disabled={disabled}
         className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
       >
-        {disabled ? 'No aircraft enabled — ask an admin to enable at least one in CBAT settings.' : 'Start'}
+        {aircraftLoading ? 'Loading aircraft…' : aircraftList.length === 0 ? 'No aircraft enabled — ask an admin to enable at least one in CBAT settings.' : 'Start'}
       </button>
     </motion.div>
   )
@@ -219,6 +219,7 @@ export default function CbatFlag() {
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [aircraftList, setAircraftList] = useState([])
+  const [aircraftLoading, setAircraftLoading] = useState(true)
   const [modelUrl, setModelUrl] = useState(null)
   const [symbols, setSymbols] = useState([])
   const [palette, setPalette] = useState([])
@@ -286,8 +287,9 @@ export default function CbatFlag() {
           .filter(a => allowlist.has(String(a.briefId)))
           .map(a => ({ ...a, modelUrl: getModelUrl(a.briefId, a.title) }))
         setAircraftList(list)
+        setAircraftLoading(false)
       })
-      .catch(() => {})
+      .catch(() => { setAircraftLoading(false) })
   }, [user, settings?.cbatFlagAircraftBriefIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-load model during intro
@@ -660,6 +662,7 @@ export default function CbatFlag() {
                 onStart={startGame}
                 personalBest={personalBest}
                 aircraftList={aircraftList}
+                aircraftLoading={aircraftLoading}
               />
             )}
 
