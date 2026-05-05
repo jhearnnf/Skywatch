@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Overlay from '../components/ui/Overlay'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -2349,6 +2349,17 @@ function UsersTab({ API }) {
     setLoading(false)
   }
 
+  const sortedUsers = useMemo(() => {
+    const priority = u => {
+      if (u.isAdmin) return 3
+      const s = onlineStatus(u.lastSeen)
+      if (s === 'live') return 2
+      if (s === 'away') return 1
+      return 0
+    }
+    return [...users].sort((a, b) => priority(b) - priority(a))
+  }, [users])
+
   const action = (label, endpoint, method = 'POST', extra = {}) => setModal({ label, endpoint, method, extra })
 
   const confirmAction = async (reason) => {
@@ -2412,7 +2423,7 @@ function UsersTab({ API }) {
       )}
 
       <div className="space-y-3">
-        {users.map(u => {
+        {sortedUsers.map(u => {
           const isExpanded = expanded.has(u._id)
           return (
           <div key={u._id} className={`rounded-2xl border overflow-hidden ${u._id === currentUser?._id ? 'bg-red-950/40 border-red-900/50' : 'bg-surface border-slate-200'}`}>
