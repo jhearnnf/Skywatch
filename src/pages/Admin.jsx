@@ -3367,6 +3367,10 @@ function NewsModal({ API, onClose, onGenerate }) {
   const [bulkNewsLog,       setBulkNewsLog]       = useState([])
   const bulkNewsCancelRef = useRef(false)
   const bulkNewsLogRef    = useRef(null)
+  const [newsTab,         setNewsTab]         = useState('today')
+  const [rssHeadlines,    setRssHeadlines]    = useState([])
+  const [rssBusy,         setRssBusy]         = useState(false)
+  const [relevanceFilter, setRelevanceFilter] = useState(3)
 
   useEffect(() => {
     // Pre-load existing titles for duplicate detection
@@ -3376,14 +3380,14 @@ function NewsModal({ API, onClose, onGenerate }) {
       .catch(() => {})
   }, [API])
 
-  const generate = async (headline, eventDate) => {
+  const generate = async (headline, eventDate, sourceContent) => {
     setBusy(headline)
     try {
       const todayStr = new Date().toISOString().slice(0, 10)
       const res  = await apiFetch(`${API}/api/admin/ai/generate-brief`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ headline, eventDate, isHistoric: !!(eventDate && eventDate !== todayStr) }),
+        body: JSON.stringify({ headline, eventDate, isHistoric: !!(eventDate && eventDate !== todayStr), ...(sourceContent ? { sourceContent } : {}) }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -3417,11 +3421,31 @@ function NewsModal({ API, onClose, onGenerate }) {
     }
   }
 
-  const handleHeadlineClick = (headline, eventDate) => {
+  const handleHeadlineClick = (headline, eventDate, sourceContent) => {
     if (isSimilarTitle(headline, existingTitles)) {
-      setDupConfirm({ headline, eventDate })
+      setDupConfirm({ headline, eventDate, sourceContent })
     } else {
-      generate(headline, eventDate)
+      generate(headline, eventDate, sourceContent)
+    }
+  }
+
+  const fetchRssHeadlines = async () => {
+    setRssBusy(true)
+    setRssHeadlines([])
+    try {
+      const res  = await apiFetch(`${API}/api/admin/ai/rss-headlines`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (!res.ok || data.status !== 'success') {
+        alert(`RSS fetch failed: ${data.message ?? res.status}`)
+        return
+      }
+      setRssHeadlines(data.data.headlines ?? [])
+    } finally {
+      setRssBusy(false)
     }
   }
 
@@ -3515,82 +3539,195 @@ function NewsModal({ API, onClose, onGenerate }) {
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-4 py-4">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex items-center gap-2 flex-1">
-              <label className="text-xs text-slate-500 whitespace-nowrap">Date</label>
-              <input
-                type="date"
-                value={newsDate}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={e => { setNewsDate(e.target.value); setHeadlines([]) }}
-                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-brand-400"
-              />
-              {newsDate !== new Date().toISOString().slice(0, 10) && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Historic</span>
-              )}
-            </div>
+        {/* Tabs */}
+        <div className="flex border-b border-slate-100 px-4 gap-1 pt-2">
+          {[
+            { id: 'today',    label: "Today's Headlines" },
+            { id: 'historic', label: 'Historic Date' },
+            { id: 'bulk',     label: 'Bulk Month' },
+          ].map(tab => (
             <button
-              onClick={fetchHeadlines}
-              disabled={newsBusy}
-              className="text-xs px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
+              key={tab.id}
+              onClick={() => setNewsTab(tab.id)}
+              className={`text-xs px-3 py-2 font-semibold rounded-t-lg transition-colors border-b-2 -mb-px
+                ${newsTab === tab.id
+                  ? 'text-brand-600 border-brand-600'
+                  : 'text-slate-500 border-transparent hover:text-slate-700'
+                }`}
             >
-              {newsBusy ? '⏳ Fetching…' : '🔄 Fetch Headlines'}
+              {tab.label}
             </button>
-          </div>
+          ))}
+        </div>
 
-          {headlines.length === 0 && !newsBusy && (
-            <p className="text-sm text-slate-400 text-center py-8">Select a date and press "Fetch Headlines".</p>
-          )}
+        <div className="overflow-y-auto flex-1 px-4 py-4">
 
-          {newsBusy && (
-            <div className="space-y-2">
-              {[1,2,3].map(i => (
-                <div key={i} className="h-12 bg-slate-100 rounded-xl animate-pulse" />
-              ))}
+          {/* ── Today's Headlines (RSS) ──────────────────────────────────── */}
+          {newsTab === 'today' && (
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <p className="text-xs text-slate-500 flex-1">Live feed from UK Defence Journal, Forces Net &amp; Breaking Defense.</p>
+                <button
+                  onClick={fetchRssHeadlines}
+                  disabled={rssBusy}
+                  className="text-xs px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {rssBusy ? '⏳ Fetching…' : '📡 Fetch Headlines'}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 mb-4 px-1">
+                <span className="text-[10px] text-slate-400 whitespace-nowrap">RAF relevance</span>
+                <input
+                  type="range" min={1} max={3} step={1}
+                  value={relevanceFilter}
+                  onChange={e => setRelevanceFilter(Number(e.target.value))}
+                  className="flex-1 accent-brand-600 h-1.5 cursor-pointer"
+                />
+                <span className="text-[10px] font-bold text-slate-600 whitespace-nowrap w-16 text-right">
+                  {relevanceFilter === 3 ? 'RAF only' : relevanceFilter === 2 ? 'UK defence' : 'All stories'}
+                </span>
+              </div>
+
+              {rssHeadlines.length === 0 && !rssBusy && (
+                <p className="text-sm text-slate-400 text-center py-8">Press "Fetch Headlines" to pull from live RSS feeds.</p>
+              )}
+
+              {rssBusy && (
+                <div className="space-y-2">
+                  {[1,2,3].map(i => (
+                    <div key={i} className="h-12 bg-slate-100 rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {rssHeadlines.filter(item => (item.relevance ?? 1) >= relevanceFilter).map((item, i) => {
+                  const isDup = isSimilarTitle(item.headline, existingTitles)
+                  return (
+                    <div
+                      key={i}
+                      className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border transition-all
+                        ${isDup ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200 bg-surface hover:border-brand-300 hover:bg-brand-50/30'}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-semibold leading-snug ${isDup ? 'text-slate-400' : 'text-slate-800'}`}>
+                          {item.headline}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {item.source && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">{item.source}</span>
+                          )}
+                          {item.eventDate && (
+                            <span className="text-[10px] text-slate-400 font-medium">{item.eventDate}</span>
+                          )}
+                          {item.url && (
+                            <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-brand-600 hover:underline" onClick={e => e.stopPropagation()}>↗ source</a>
+                          )}
+                          {isDup && (
+                            <span className="text-[10px] text-amber-600 font-semibold">⚠️ Possible duplicate</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleHeadlineClick(item.headline, item.eventDate, item.description)}
+                        disabled={busy === item.headline}
+                        className={`shrink-0 text-xs px-3 py-1.5 rounded-lg font-bold transition-colors whitespace-nowrap
+                          ${isDup
+                            ? 'border border-slate-300 text-slate-500 hover:bg-slate-100'
+                            : 'border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
+                          } disabled:opacity-40`}
+                      >
+                        {busy === item.headline ? '…' : isDup ? 'Create anyway' : 'Generate →'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 
-          <div className="space-y-2">
-            {headlines.map((item, i) => {
-              const isDup = isSimilarTitle(item.headline, existingTitles)
-              return (
-                <div
-                  key={i}
-                  className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border transition-all
-                    ${isDup ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200 bg-surface hover:border-brand-300 hover:bg-brand-50/30'}`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-semibold leading-snug ${isDup ? 'text-slate-400' : 'text-slate-800'}`}>
-                      {item.headline}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {item.eventDate && (
-                        <span className="text-[10px] text-slate-400 font-medium">{item.eventDate}</span>
-                      )}
-                      {isDup && (
-                        <span className="text-[10px] text-amber-600 font-semibold">⚠️ Possible duplicate brief</span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleHeadlineClick(item.headline, item.eventDate)}
-                    disabled={busy === item.headline}
-                    className={`shrink-0 text-xs px-3 py-1.5 rounded-lg font-bold transition-colors whitespace-nowrap
-                      ${isDup
-                        ? 'border border-slate-300 text-slate-500 hover:bg-slate-100'
-                        : 'border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
-                      } disabled:opacity-40`}
-                  >
-                    {busy === item.headline ? '…' : isDup ? 'Create anyway' : 'Generate →'}
-                  </button>
+          {/* ── Historic Date (Perplexity) ───────────────────────────────── */}
+          {newsTab === 'historic' && (
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-2 flex-1">
+                  <label className="text-xs text-slate-500 whitespace-nowrap">Date</label>
+                  <input
+                    type="date"
+                    value={newsDate}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={e => { setNewsDate(e.target.value); setHeadlines([]) }}
+                    className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-brand-400"
+                  />
+                  {newsDate !== new Date().toISOString().slice(0, 10) && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Historic</span>
+                  )}
                 </div>
-              )
-            })}
-          </div>
+                <button
+                  onClick={fetchHeadlines}
+                  disabled={newsBusy}
+                  className="text-xs px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {newsBusy ? '⏳ Fetching…' : '🔄 Fetch Headlines'}
+                </button>
+              </div>
 
-          {/* ── Bulk Month Generate ─────────────────────────────────────── */}
-          <div className="mt-4 rounded-xl border border-slate-200 overflow-hidden">
+              {headlines.length === 0 && !newsBusy && (
+                <p className="text-sm text-slate-400 text-center py-8">Select a date and press "Fetch Headlines".</p>
+              )}
+
+              {newsBusy && (
+                <div className="space-y-2">
+                  {[1,2,3].map(i => (
+                    <div key={i} className="h-12 bg-slate-100 rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {headlines.map((item, i) => {
+                  const isDup = isSimilarTitle(item.headline, existingTitles)
+                  return (
+                    <div
+                      key={i}
+                      className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border transition-all
+                        ${isDup ? 'border-slate-200 bg-slate-50 opacity-60' : 'border-slate-200 bg-surface hover:border-brand-300 hover:bg-brand-50/30'}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-semibold leading-snug ${isDup ? 'text-slate-400' : 'text-slate-800'}`}>
+                          {item.headline}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {item.eventDate && (
+                            <span className="text-[10px] text-slate-400 font-medium">{item.eventDate}</span>
+                          )}
+                          {isDup && (
+                            <span className="text-[10px] text-amber-600 font-semibold">⚠️ Possible duplicate</span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleHeadlineClick(item.headline, item.eventDate)}
+                        disabled={busy === item.headline}
+                        className={`shrink-0 text-xs px-3 py-1.5 rounded-lg font-bold transition-colors whitespace-nowrap
+                          ${isDup
+                            ? 'border border-slate-300 text-slate-500 hover:bg-slate-100'
+                            : 'border border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
+                          } disabled:opacity-40`}
+                      >
+                        {busy === item.headline ? '…' : isDup ? 'Create anyway' : 'Generate →'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Bulk Month Generate ──────────────────────────────────────── */}
+          {newsTab === 'bulk' && (
+          <div className="rounded-xl border border-slate-200 overflow-hidden">
             <button
               onClick={() => { if (!bulkNewsRunning) setBulkNewsOpen(o => !o) }}
               className={`w-full flex items-center justify-between px-4 py-3 text-sm font-semibold transition-colors ${bulkNewsRunning ? 'cursor-default' : 'hover:bg-slate-50'} text-slate-700`}
@@ -3777,6 +3914,8 @@ function NewsModal({ API, onClose, onGenerate }) {
               </div>
             )}
           </div>
+          )}
+
         </div>
 
         {/* Duplicate confirmation overlay */}
@@ -3795,7 +3934,7 @@ function NewsModal({ API, onClose, onGenerate }) {
                 Cancel
               </button>
               <button
-                onClick={() => { const d = dupConfirm; setDupConfirm(null); generate(d.headline, d.eventDate) }}
+                onClick={() => { const d = dupConfirm; setDupConfirm(null); generate(d.headline, d.eventDate, d.sourceContent) }}
                 className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm"
               >
                 Generate Anyway

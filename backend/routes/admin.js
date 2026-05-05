@@ -53,6 +53,7 @@ const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
 const { callOpenRouter, featureMiddleware, setBrief } = require('../utils/openRouter');
+const { fetchRssHeadlines }    = require('../utils/rssFetcher');
 
 // ── Shared quiz prompt fragments ──────────────────────────────────────────────
 // Single source of truth for answer format rules and core question rules,
@@ -3312,6 +3313,44 @@ router.post('/ai/news-headlines-month', featureMiddleware('news-headlines-month'
   }
 });
 
+// POST /api/admin/ai/rss-headlines
+// Fetches recent headlines from RSS feeds then scores RAF relevance in one AI batch call.
+router.post('/ai/rss-headlines', featureMiddleware('rss-headlines'), async (req, res) => {
+  try {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const fromDate = shiftDate(todayStr, -3);
+    const headlines = await fetchRssHeadlines(fromDate, todayStr);
+
+    if (headlines.length > 0) {
+      try {
+        const list = headlines.map((h, i) => `${i}: ${h.headline}`).join('\n');
+        const result = await openRouterChat([{
+          role: 'system',
+          content: 'Score news headlines by relevance to the UK Royal Air Force (RAF). Return ONLY a JSON array, no prose, no markdown.',
+        }, {
+          role: 'user',
+          content: `Score each headline:\n3 = Directly about the RAF, RAF aircraft, RAF bases, RAF personnel, or RAF operations\n2 = UK/British defence broadly (Royal Navy, British Army, MOD, UK military policy, NATO with UK involvement)\n1 = No relevance to RAF or UK defence\n\nHeadlines:\n${list}\n\nReturn ONLY: [{"i":0,"r":3},{"i":1,"r":1},...]`,
+        }], 'openai/gpt-4o-mini', 512);
+        const raw = result.choices?.[0]?.message?.content ?? '[]';
+        const scores = JSON.parse(cleanJson(raw));
+        const scoreMap = new Map(scores.map(s => [Number(s.i), Number(s.r)]));
+        for (let i = 0; i < headlines.length; i++) {
+          headlines[i].relevance = scoreMap.get(i) ?? 2;
+        }
+      } catch (scoreErr) {
+        console.warn('[rss-headlines] AI scoring failed, defaulting relevance to 2:', scoreErr.message);
+        for (const h of headlines) h.relevance = 2;
+      }
+    }
+
+    console.log(`[rss-headlines] ${headlines.length} item(s) fetched and scored (${fromDate} → ${todayStr})`);
+    res.json({ status: 'success', data: { headlines, count: headlines.length } });
+  } catch (err) {
+    console.error('[rss-headlines] error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/admin/ai/bulk-generate-news-item
 // Full server-side pipeline for a single news headline: generates content, keywords,
 // and image, then saves a new published News IntelligenceBrief to DB.
@@ -3524,7 +3563,7 @@ const LIST_FORMAT_RULE = 'LIST FORMAT RULE: Whenever you name 3 or more items of
 // POST /api/admin/ai/generate-brief
 router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (req, res) => {
   try {
-    const { headline, topic, category, subcategory, eventDate, isHistoric } = req.body;
+    const { headline, topic, category, subcategory, eventDate, isHistoric, sourceContent } = req.body;
     if (!headline && !topic) return res.status(400).json({ message: 'headline or topic required' });
 
     // News is always RAF-shaped; topic briefs branch on category/subcategory/historic
@@ -3568,9 +3607,12 @@ router.post('/ai/generate-brief', featureMiddleware('generate-brief'), async (re
       ? `\n\nThis story occurred on or around ${eventDate}. Cite ONLY sources published on or after ${newsSourceFloorForPrompt}.`
       : '';
 
+    const sourceBlock = (sourceContent?.trim() && headline)
+      ? `\n\nSOURCE ARTICLE:\n${sourceContent.trim()}\n\nBase the brief on the facts in this article. Supplement with additional verified information where helpful, but do not contradict the source.`
+      : '';
     const userContent = topic
       ? `Write a comprehensive intelligence brief about this subject: "${topic}"\n\n${grounding}${buildTopicUserGuidance(shape)}\n\n${TOPIC_JSON_SHAPE}`
-      : `Search the web for this specific RAF news story: "${headline}"${newsDateFloorPrompt}\n\nUsing only verified facts from published sources, return a JSON object for an RAF news intelligence brief. Be as informative as possible about the current RAF affairs covered by this story.\n\n${JSON_SHAPE}`;
+      : `Search the web for this specific RAF news story: "${headline}"${newsDateFloorPrompt}${sourceBlock}\n\nUsing only verified facts from published sources, return a JSON object for an RAF news intelligence brief. Be as informative as possible about the current RAF affairs covered by this story.\n\n${JSON_SHAPE}`;
 
     const isNews = !!headline;
     const briefAiSettings = await AppSettings.getSettings();
