@@ -427,7 +427,9 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className={`text-2xl flame-blue${flamePulsing ? ' flame-pulsing' : ''}`}>🔥</div>
+                  <div className={`flame-anim${flamePulsing ? ' flame-pulsing' : ''}`}>
+                    <div className="text-2xl flame-blue">🔥</div>
+                  </div>
                   <div className="text-xl font-black text-brand-700">
                     {displayStreak}
                   </div>
