@@ -3782,6 +3782,19 @@ router.post('/intel-leads/:id/create-stub', async (req, res) => {
       return res.status(409).json({ message: `A brief already exists for "${lead.title}"` });
     }
 
+    // Catch manufacturer-prefix variants (e.g. "Boeing C-17 Globemaster III" vs
+    // "C-17 Globemaster III") that the exact regex above misses. One normalised
+    // title must be a word-boundary suffix of the other.
+    const normLead = normaliseLeadTitle(lead.title);
+    const sameCatBriefs = await IntelligenceBrief.find({ category: lead.category }, 'title').lean();
+    const nearMatch = sameCatBriefs.find(b => {
+      const n = normaliseLeadTitle(b.title);
+      return normLead.endsWith(' ' + n) || n.endsWith(' ' + normLead);
+    });
+    if (nearMatch) {
+      return res.status(409).json({ message: `A brief with a similar title already exists: "${nearMatch.title}". Rename this lead to match before creating a stub.` });
+    }
+
     const validSubs = SUBCATEGORIES[lead.category] ?? [];
     if (validSubs.length > 0 && !lead.subcategory) {
       return res.status(400).json({ message: `Lead "${lead.title}" has no subcategory — set one on the lead before creating a stub` });
