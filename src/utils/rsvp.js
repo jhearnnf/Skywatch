@@ -1,6 +1,9 @@
 export function tokenize(text) {
   if (!text) return []
-  const stripped = text.replace(/\*\*([^*]+)\*\*/g, '$1')
+  const stripped = text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/^[-*•]\s+/gm, '')
+    .replace(/^\d+\.\s+/gm, '')
   return stripped
     .split(/\s+/)
     .filter(w => w.length > 0)

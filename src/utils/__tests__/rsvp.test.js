@@ -3,6 +3,29 @@ import { tokenize, clampWpm } from '../rsvp'
 
 // ── tokenize ──────────────────────────────────────────────────────────────
 
+describe('tokenize — list marker stripping', () => {
+  it('strips "- " bullet prefix from each line', () => {
+    expect(tokenize('- Red Arrows\n- Blue Eagles').map(t => t.word))
+      .toEqual(['Red', 'Arrows', 'Blue', 'Eagles'])
+  })
+
+  it('strips "* " bullet prefix', () => {
+    expect(tokenize('* foo\n* bar').map(t => t.word)).toEqual(['foo', 'bar'])
+  })
+
+  it('strips "• " bullet prefix', () => {
+    expect(tokenize('• foo\n• bar').map(t => t.word)).toEqual(['foo', 'bar'])
+  })
+
+  it('strips numbered list prefixes', () => {
+    expect(tokenize('1. First\n2. Second').map(t => t.word)).toEqual(['First', 'Second'])
+  })
+
+  it('does not strip mid-word hyphens', () => {
+    expect(tokenize('F-35 is fast').map(t => t.word)).toEqual(['F-35', 'is', 'fast'])
+  })
+})
+
 describe('tokenize — bold stripping', () => {
   it('strips **bold** markers and keeps inner text', () => {
     const tokens = tokenize('**foo** bar')

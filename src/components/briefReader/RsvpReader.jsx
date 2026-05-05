@@ -41,6 +41,8 @@ function RsvpReaderInner({ text, containerRef }) {
   const lastBucketRef   = useRef(Math.floor(wpmRef.current / 25))
   const pointerYRef     = useRef(0)
   const touchBlockerRef = useRef(null)
+  const wordSpansRef    = useRef([])
+  const highlightDivRef = useRef(null)
 
   // Glow zone refs (4 edges: left, right, top, bottom)
   const glowLeftRef   = useRef(null)
@@ -96,6 +98,7 @@ function RsvpReaderInner({ text, containerRef }) {
 
       wordIndexRef.current = nextIdx
       setCurrentWord(tokensRef.current[nextIdx])
+      updateWordHighlight(nextIdx)
       scheduleAdvance()
     }, msPerWord)
   }
@@ -133,10 +136,14 @@ function RsvpReaderInner({ text, containerRef }) {
     setCurrentRate(wpmRef.current)
 
     navigator.vibrate?.(10)
+
+    wordSpansRef.current = buildWordSpans(containerRef.current)
+    updateWordHighlight(Math.min(idx, wordSpansRef.current.length - 1))
   }
 
   // ── Engage exit fade ──────────────────────────────────────────────────
   function engageExit() {
+    if (highlightDivRef.current) highlightDivRef.current.style.display = 'none'
     clearTimeout(advanceTimerRef.current)
     phaseRef.current = 'exiting'
     directionRef.current = 'paused'
@@ -158,7 +165,9 @@ function RsvpReaderInner({ text, containerRef }) {
       if (containerRef.current) {
         containerRef.current.style.opacity = ''
         containerRef.current.style.touchAction = ''
+        clearWordSpans(containerRef.current)
       }
+      wordSpansRef.current = []
       clearGlows()
     }, EXIT_DURATION_MS)
   }
@@ -170,6 +179,65 @@ function RsvpReaderInner({ text, containerRef }) {
     if (glowRightRef.current)  glowRightRef.current.style.opacity  = z
     if (glowTopRef.current)    glowTopRef.current.style.opacity    = z
     if (glowBottomRef.current) glowBottomRef.current.style.opacity = z
+  }
+
+  // ── Word-span helpers (background highlight) ─────────────────────────
+  // Wraps every whitespace-delimited word in the container in a span so we
+  // can position a highlight rect over the currently-spoken word. Skips
+  // headings (H1-H6) which are not part of the tokenised text.
+  function buildWordSpans(rootEl) {
+    const spans = []
+    const SKIP = new Set(['H1','H2','H3','H4','H5','H6','SCRIPT','STYLE'])
+    function walk(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent
+        if (!text.trim()) return
+        const parts = text.split(/(\s+)/)
+        const frag = document.createDocumentFragment()
+        for (const part of parts) {
+          if (/\S/.test(part)) {
+            const s = document.createElement('span')
+            s.dataset.rsvpWord = String(spans.length)
+            s.textContent = part
+            frag.appendChild(s)
+            spans.push(s)
+          } else if (part) {
+            frag.appendChild(document.createTextNode(part))
+          }
+        }
+        node.parentNode.replaceChild(frag, node)
+        return
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return
+      if (SKIP.has(node.tagName)) return
+      Array.from(node.childNodes).forEach(walk)
+    }
+    walk(rootEl)
+    return spans
+  }
+
+  function clearWordSpans(rootEl) {
+    if (!rootEl) return
+    rootEl.querySelectorAll('[data-rsvp-word]').forEach(s => {
+      s.parentNode.replaceChild(document.createTextNode(s.textContent), s)
+    })
+    rootEl.normalize()
+  }
+
+  function updateWordHighlight(idx) {
+    const div = highlightDivRef.current
+    if (!div) return
+    const spans = wordSpansRef.current
+    if (!spans.length || idx < 0 || idx >= spans.length) { div.style.display = 'none'; return }
+    const span = spans[idx]
+    if (!span.isConnected) { div.style.display = 'none'; return }
+    const rect = span.getBoundingClientRect()
+    if (!rect.width) { div.style.display = 'none'; return }
+    div.style.display = 'block'
+    div.style.left   = `${rect.left - 3}px`
+    div.style.top    = `${rect.top - 1}px`
+    div.style.width  = `${rect.width + 6}px`
+    div.style.height = `${rect.height + 2}px`
   }
 
   // ── Touch scroll blockers ─────────────────────────────────────────────
@@ -196,27 +264,6 @@ function RsvpReaderInner({ text, containerRef }) {
     function onPointerDown(e) {
       const phase = phaseRef.current
 
-      // Resume-during-exit: cancel the exit and re-engage immediately from same word
-      if (phase === 'exiting') {
-        e.preventDefault()
-        e.stopPropagation()
-        el.style.touchAction = 'none'
-        attachTouchBlocker()
-        clearTimeout(exitTimerRef.current)
-        pointerIdRef.current = e.pointerId
-        originRef.current = { x: e.clientX, y: e.clientY }
-        pointerYRef.current = e.clientY
-        phaseRef.current = 'active'
-        directionRef.current = 'paused'
-        try { el.setPointerCapture(e.pointerId) } catch {}
-        document.body.dataset.rsvpActive = ''
-        setCompleted(false)
-        setIsExiting(false)
-        setCurrentWord(tokensRef.current[Math.min(wordIndexRef.current, tokensRef.current.length - 1)])
-        setCurrentRate(wpmRef.current)
-        return
-      }
-
       if (phase !== 'idle') return
 
       // Don't preventDefault or stopPropagation here — let framer-motion's
@@ -228,10 +275,10 @@ function RsvpReaderInner({ text, containerRef }) {
       pointerYRef.current = e.clientY
       phaseRef.current = 'armed'
       wordIndexRef.current = 0
-      attachTouchBlocker()
 
       armTimerRef.current = setTimeout(() => {
         if (phaseRef.current !== 'armed') return
+        attachTouchBlocker()
         enterActive(pointerIdRef.current, el)
       }, 800)
     }
@@ -391,6 +438,8 @@ function RsvpReaderInner({ text, containerRef }) {
       clearTimeout(advanceTimerRef.current)
       clearTimeout(exitTimerRef.current)
       removeTouchBlocker()
+      clearWordSpans(el)
+      wordSpansRef.current = []
       delete document.body.dataset.rsvpActive
     }
   }, [containerRef]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -434,6 +483,16 @@ function RsvpReaderInner({ text, containerRef }) {
       opacity: isExiting ? 0 : 1,
       transition: isExiting ? `opacity ${EXIT_DURATION_MS}ms ease-out` : 'none',
     }}>
+      {/* Current-word position highlight — drawn over the dimmed background text */}
+      <div ref={highlightDivRef} style={{
+        position: 'fixed',
+        display: 'none',
+        background: 'rgba(91,170,255,0.2)',
+        border: '1px solid rgba(91,170,255,0.4)',
+        borderRadius: 3,
+        pointerEvents: 'none',
+      }} />
+
       {/* Glow zones — anchored to description card, opacity mutated via refs */}
       {containerRef.current && (() => {
         const rect = containerRef.current.getBoundingClientRect()
