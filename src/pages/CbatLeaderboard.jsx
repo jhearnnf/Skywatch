@@ -73,6 +73,14 @@ const GAME_CONFIG = {
     backPath: '/cbat/flag',
     hideTime: true,
   },
+  'visualisation-2d': {
+    title: 'Visualisation 2D',
+    emoji: '\u{1F9EE}',
+    scoreLabel: 'Correct',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}/8`,
+    backPath: '/cbat/visualisation-2d',
+  },
 }
 
 export default function CbatLeaderboard() {

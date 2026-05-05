@@ -31,6 +31,7 @@ const GameSessionCbatTargetResult         = CBAT_GAMES['target'].Model;
 const GameSessionCbatInstrumentsResult    = CBAT_GAMES['instruments'].Model;
 const GameSessionCbatAntResult            = CBAT_GAMES['ant'].Model;
 const GameSessionCbatFlagResult           = CBAT_GAMES['flag'].Model;
+const GameSessionCbatVisualisation2DResult = CBAT_GAMES['visualisation-2d'].Model;
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -2362,6 +2363,24 @@ router.post('/cbat/target/result', protect, async (req, res) => {
   }
 });
 
+// POST /api/games/cbat/visualisation-2d/result
+router.post('/cbat/visualisation-2d/result', protect, async (req, res) => {
+  try {
+    const { correctCount, tier1Correct, tier2Correct, totalTime, grade } = req.body;
+    const result = await GameSessionCbatVisualisation2DResult.create({
+      userId: req.user._id,
+      correctCount,
+      tier1Correct,
+      tier2Correct,
+      totalTime,
+      grade,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Generic CBAT leaderboard handler — reused by all games.
 // Every session is a standalone entry — a user can occupy multiple rows if
 // several of their runs land in the top 20.
@@ -2460,6 +2479,7 @@ router.get('/cbat/target/leaderboard', protect, (req, res) => cbatLeaderboard(re
 router.get('/cbat/instruments/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'instruments'));
 router.get('/cbat/ant/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant'));
 router.get('/cbat/flag/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag'));
+router.get('/cbat/visualisation-2d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-2d'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -2495,5 +2515,6 @@ router.get('/cbat/target/personal-best', protect, (req, res) => cbatPersonalBest
 router.get('/cbat/instruments/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'instruments'));
 router.get('/cbat/ant/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant'));
 router.get('/cbat/flag/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag'));
+router.get('/cbat/visualisation-2d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-2d'));
 
 module.exports = router;

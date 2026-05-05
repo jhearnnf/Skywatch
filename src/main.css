@@ -179,6 +179,18 @@ body::before {
 /* prevent layout shift when bottom-sheet open */
 .no-scroll { overflow: hidden; }
 
+/* Lock body scroll on mobile while a CBAT Visualisation 2D round is active.
+   Sizes are tuned to fit 320×568 in immersive mode; this pin guards against
+   any small overflow (e.g. dynamic safe-area changes) producing a scroll. */
+@media (max-width: 600px) {
+  body.cbat-vis2d-locked {
+    overflow: hidden;
+    height: 100dvh;
+    overscroll-behavior: contain;
+    touch-action: pan-x;
+  }
+}
+
 /* ── RSVP speed-reader blur/dim ──────────────────────────────────────── */
 body[data-rsvp-active] > *:not(.rsvp-overlay) {
   filter: blur(2px);

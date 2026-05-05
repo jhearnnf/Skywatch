@@ -39,13 +39,14 @@ describe('CBAT_GAMES data', () => {
 
   it('image paths match expected filenames', () => {
     const expected = {
-      'target':          '/images/Target.png',
-      'ant':             '/images/ANT.png',
-      'symbols':         '/images/Symbols.png',
-      'code-duplicates': '/images/Code Duplicates.png',
-      'angles':          '/images/Angles.png',
-      'instruments':     '/images/Instruments.png',
-      'plane-turn':      '/images/Plane Turn.png',
+      'target':           '/images/Target.png',
+      'ant':              '/images/ANT.png',
+      'symbols':          '/images/Symbols.png',
+      'code-duplicates':  '/images/Code Duplicates.png',
+      'angles':           '/images/Angles.png',
+      'instruments':      '/images/Instruments.png',
+      'plane-turn':       '/images/Plane Turn.png',
+      'visualisation-2d': '/images/Visualisation 2D.png',
     }
     for (const [key, path] of Object.entries(expected)) {
       const game = CBAT_GAMES.find(g => g.key === key)
@@ -54,7 +55,7 @@ describe('CBAT_GAMES data', () => {
   })
 
   it('coming-soon games use the placeholder image', () => {
-    const comingSoonKeys = ['audio-interrupt', 'dad', 'visualisation-3d', 'visualisation-2d']
+    const comingSoonKeys = ['audio-interrupt', 'dad', 'visualisation-3d']
     for (const key of comingSoonKeys) {
       const game = CBAT_GAMES.find(g => g.key === key)
       expect(game.image).toBe('/images/placeholder-brief.svg')
@@ -78,7 +79,7 @@ describe('Cbat page — background images', () => {
 
   it('renders a bg image for coming-soon games using the placeholder', () => {
     renderWithUser()
-    const placeholderKeys = ['audio-interrupt', 'dad', 'visualisation-3d', 'visualisation-2d']
+    const placeholderKeys = ['audio-interrupt', 'dad', 'visualisation-3d']
     for (const key of placeholderKeys) {
       const img = screen.getByTestId(`card-bg-image-${key}`)
       expect(img).toBeInTheDocument()

@@ -24,6 +24,7 @@ const GAME_OFFSET = {
   'instruments':    20,
   'ant':             2,
   'flag':            6,
+  'visualisation-2d': 10,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -73,6 +74,7 @@ const FAKE_TUNING = {
     // Every ANT total is a multiple of 5 (10 exact / 5 partial / 0 miss × 8 rounds).
     scoreSequence: [70, 65, 60, 55, 50, 50, 45, 45, 40, 40, 35, 35, 30, 30, 25, 25, 20, 20, 15, 15],
   },
+  'visualisation-2d': { floor: 1, ceiling: 7, seedScore: 7, seedTime: 70, scoreStep: 1, timeStep: 4 },
   'flag': {
     floor: 55, ceiling: 104, seedTime: 60, timeStep: 0,
     // 20 values, monotonically non-increasing, max 104, min 55. Higher is

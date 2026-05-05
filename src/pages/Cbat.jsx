@@ -13,10 +13,10 @@ export const CBAT_GAMES = [
   { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: '/cbat/instruments',     image: '/images/Instruments.png' },
   { key: 'plane-turn',      emoji: '🗺️', title: 'Plane Turn',       desc: 'Choose your aircraft, plan your turn and heading with precision.',            path: '/cbat/plane-turn',      image: '/images/Plane Turn.png' },
   { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png' },
+  { key: 'visualisation-2d', emoji: '🧮', title: 'Visualisation 2D', desc: 'Mentally weld labelled shapes into the correct final figure.', path: '/cbat/visualisation-2d', image: '/images/Visualisation 2D.png' },
+  { key: 'visualisation-3d', emoji: '🧊', title: 'Visualisation 3D', desc: 'Rotate and reason about 3D shapes — coming soon.',      path: null,                    image: '/images/placeholder-brief.svg' },
   { key: 'audio-interrupt',  emoji: '🎧', title: 'Audio Interrupt',  desc: 'Respond to audio cues while multitasking.',             path: null,                    image: '/images/placeholder-brief.svg' },
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — coming soon.',               path: null,                    image: '/images/placeholder-brief.svg' },
-  { key: 'visualisation-3d', emoji: '🧊', title: 'Visualisation 3D', desc: 'Rotate and reason about 3D shapes — coming soon.',      path: null,                    image: '/images/placeholder-brief.svg' },
-  { key: 'visualisation-2d', emoji: '🧮', title: 'Visualisation 2D', desc: 'Spatial reasoning with 2D figures — coming soon.',      path: null,                    image: '/images/placeholder-brief.svg' },
 ]
 
 function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) {
