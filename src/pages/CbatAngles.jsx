@@ -348,6 +348,18 @@ export default function CbatAngles() {
     setPhase('playing')
   }, [apiFetch, API])
 
+  const goToIntro = useCallback(() => {
+    clearInterval(timerRef.current)
+    setPhase('intro')
+    setQuestions([])
+    setCurrentIdx(0)
+    setAnswers([])
+    setSelectedOption(null)
+    setIsCorrect(null)
+    setElapsed(0)
+    setScoreSaved(false)
+  }, [])
+
   const handleAnswer = (option) => {
     if (phase !== 'playing') return
     const correct = option === currentQuestion.angle
@@ -381,7 +393,10 @@ export default function CbatAngles() {
 
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
-        <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+        {phase === 'intro'
+          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+          : <button onClick={goToIntro} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+        }
         <h1 className="text-sm font-extrabold text-slate-900">Angles</h1>
       </div>
 

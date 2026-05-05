@@ -451,6 +451,18 @@ export default function CbatAnt() {
     startRound(0)
   }, [startRound, apiFetch, API])
 
+  const goToIntro = useCallback(() => {
+    clearInterval(tickRef.current)
+    if (advanceRef.current) clearTimeout(advanceRef.current)
+    setPhase('intro')
+    setRound(null)
+    setAnswers([])
+    answersRef.current = []
+    setFeedback(null)
+    setAnswerInput('')
+    setScoreSaved(false)
+  }, [])
+
   const timeLeft = Math.max(0, ROUND_TIME - roundElapsed)
   const timePct = (timeLeft / ROUND_TIME) * 100
 
@@ -471,7 +483,10 @@ export default function CbatAnt() {
 
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
-        <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+        {phase === 'intro'
+          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+          : <button onClick={goToIntro} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+        }
         <h1 className="text-sm font-extrabold text-slate-900">ANT</h1>
       </div>
 

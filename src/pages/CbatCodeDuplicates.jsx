@@ -264,6 +264,22 @@ export default function CbatCodeDuplicates() {
     startRound(1)
   }, [startRound, apiFetch, API])
 
+  const goToIntro = useCallback(() => {
+    clearTimeout(displayTimerRef.current)
+    clearInterval(timerRef.current)
+    clearInterval(countdownRef.current)
+    setPhase('intro')
+    setRound(1)
+    setSequence([])
+    setQueryDigit(null)
+    setActualCount(0)
+    setUserAnswer('')
+    setIsCorrect(null)
+    setRoundResults([])
+    setElapsed(0)
+    setScoreSaved(false)
+  }, [])
+
   const handleSubmit = () => {
     if (phase !== 'answering' || userAnswer === '') return
     const answer = parseInt(userAnswer, 10)
@@ -303,7 +319,10 @@ export default function CbatCodeDuplicates() {
 
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
-        <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+        {phase === 'intro'
+          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+          : <button onClick={goToIntro} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+        }
         <h1 className="text-sm font-extrabold text-slate-900">Code Duplicates</h1>
       </div>
 

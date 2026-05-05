@@ -582,6 +582,20 @@ export default function CbatFlag() {
   }, [])
 
   // ── Start game ────────────────────────────────────────────────────────────
+  const goToIntro = useCallback(() => {
+    clearInterval(tickRef.current)
+    if (mathTimerRef.current) clearTimeout(mathTimerRef.current)
+    if (acQuestionTimerRef.current) clearTimeout(acQuestionTimerRef.current)
+    mathActiveRef.current = false
+    mathQuestionRef.current = null
+    acSymbolRef.current = null
+    setMathQuestion(null)
+    setMathEntered('')
+    mathEnteredRef.current = ''
+    setAcSymbol(null)
+    setPhase('intro')
+  }, [])
+
   const startGame = useCallback(() => {
     if (aircraftList.length === 0) return
     const syms = generateUniqueSymbols(40)
@@ -633,7 +647,10 @@ export default function CbatFlag() {
       {user && (
         <>
           <div className="flex items-center gap-2 mb-2 max-[600px]:mb-1">
-            <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+            {phase === 'intro'
+              ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+              : <button onClick={goToIntro} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+            }
             <h1 className="text-sm font-extrabold text-[#ddeaf8]">FLAG</h1>
           </div>
 

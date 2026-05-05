@@ -276,6 +276,19 @@ export default function CbatSymbols() {
     setPhase('playing')
   }, [apiFetch, API])
 
+  const goToIntro = useCallback(() => {
+    clearInterval(timerRef.current)
+    if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current)
+    setPhase('intro')
+    setRounds([])
+    setCurrentIdx(0)
+    setAnswers([])
+    setPickedSymbol(null)
+    setWasCorrect(null)
+    setElapsed(0)
+    setScoreSaved(false)
+  }, [])
+
   // Reset round-start timestamp when a new round begins
   useEffect(() => {
     if (phase === 'playing') {
@@ -325,7 +338,10 @@ export default function CbatSymbols() {
 
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
-        <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+        {phase === 'intro'
+          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+          : <button onClick={goToIntro} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+        }
         <h1 className="text-sm font-extrabold text-slate-900">Symbols</h1>
       </div>
 

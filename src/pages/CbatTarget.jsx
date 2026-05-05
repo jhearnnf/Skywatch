@@ -995,6 +995,11 @@ export default function CbatTarget() {
     setPhase('results')
   }, [elapsedMs, phase, stats])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  const goToIntro = useCallback(() => {
+    clearInterval(tickRef.current)
+    setPhase('intro')
+  }, [])
+
   // ── Derived values ─────────────────────────────────────────────────────────
   const visibleShapes = useMemo(() => (
     shapes.filter(s => s.spawnAt <= elapsedMs && !clickedShapeIds.has(s.id))
@@ -1185,7 +1190,10 @@ export default function CbatTarget() {
 
       {user && (
         <div className="flex items-center gap-2 mb-2">
-          <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+          {phase === 'intro'
+            ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+            : <button onClick={goToIntro} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+          }
           <h1 className="text-sm font-extrabold text-slate-900">Target</h1>
         </div>
       )}
