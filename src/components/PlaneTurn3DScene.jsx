@@ -86,41 +86,32 @@ function CarePackage({ r, c, layer }) {
   )
 }
 
-function NextPosMarker({ r, c, layer }) {
-  const [x, y, z] = toWorld(r, c, layer)
-  return (
-    <mesh position={[x, y, z]}>
-      <sphereGeometry args={[0.14, 8, 8]} />
-      <meshStandardMaterial
-        color="#4ade80"
-        transparent
-        opacity={0.55}
-        emissive="#4ade80"
-        emissiveIntensity={0.4}
-      />
-    </mesh>
-  )
-}
-
-// Subtle 2D plane perpendicular to the movement axis, at the aircraft's next
-// grid position. Green when the next move stays in bounds, red when it would
-// hit the wall. Helps the player perceive depth/position before each tick.
+// Subtle wireframe grid perpendicular to the movement axis, at the aircraft's
+// next grid position. Green when the next move stays in bounds, red when it
+// would hit the wall. Helps the player perceive depth/position before each tick.
 function NextPosPlane({ position, axis, inBounds }) {
   let rotation = [0, 0, 0]
   if (axis === 'x')      rotation = [0, Math.PI / 2, 0]
   else if (axis === 'y') rotation = [Math.PI / 2, 0, 0]
   const color = inBounds ? '#4ade80' : '#ef4444'
+  const geom = useMemo(() => {
+    const positions = []
+    const half = GRID / 2
+    for (let i = 0; i <= GRID; i++) {
+      const t = i - half
+      // horizontal line
+      positions.push(-half, t, 0, half, t, 0)
+      // vertical line
+      positions.push(t, -half, 0, t, half, 0)
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    return g
+  }, [])
   return (
-    <mesh position={position} rotation={rotation}>
-      <planeGeometry args={[GRID, GRID]} />
-      <meshBasicMaterial
-        color={color}
-        transparent
-        opacity={0.1}
-        side={THREE.DoubleSide}
-        depthWrite={false}
-      />
-    </mesh>
+    <lineSegments position={position} rotation={rotation} geometry={geom}>
+      <lineBasicMaterial color={color} transparent opacity={0.25} depthWrite={false} />
+    </lineSegments>
   )
 }
 
@@ -142,11 +133,6 @@ export default function PlaneTurn3DScene({ plane, pkg, modelUrl, onError, onRead
     nextC     = plane.c + dc * sign
     nextLayer = plane.layer
   }
-  const showNext =
-    nextR >= 0 && nextR < GRID &&
-    nextC >= 0 && nextC < GRID &&
-    nextLayer >= 0 && nextLayer < LAYERS
-
   // Arena centre Y = (LAYERS - 1) / 2
   const arenaY = (LAYERS - 1) / 2
 
@@ -193,7 +179,6 @@ export default function PlaneTurn3DScene({ plane, pkg, modelUrl, onError, onRead
       />
 
       <CarePackage r={pkg.r} c={pkg.c} layer={pkg.layer} />
-      {showNext && <NextPosMarker r={nextR} c={nextC} layer={nextLayer} />}
       <NextPosPlane position={nextPlanePos} axis={nextAxis} inBounds={nextPlaneInBounds} />
 
       {modelUrl && (

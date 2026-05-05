@@ -17,8 +17,17 @@ function realEntry({ id, userId, score, time, agent, rank }) {
   return { _id: id, userId, agentNumber: agent, bestScore: score, bestTime: time, rank };
 }
 
+// Tuning keys can be `gameKey` or `gameKey:mode`. Split each key into the
+// `(gameKey, mode|null)` pair so tests drive padLeaderboard the way callers do.
+const ALL_GAME_MODES = Object.keys(FAKE_TUNING).map((tuningKey) => {
+  const i = tuningKey.indexOf(':');
+  return i === -1
+    ? { game: tuningKey, mode: null, opts: {} }
+    : { game: tuningKey.slice(0, i), mode: tuningKey.slice(i + 1), opts: { mode: tuningKey.slice(i + 1) } };
+});
+
 describe('padLeaderboard', () => {
-  const ALL_GAMES = Object.keys(FAKE_TUNING);
+  const ALL_GAMES = [...new Set(ALL_GAME_MODES.map(g => g.game))];
 
   it('returns the original list unchanged when already at or above limit', () => {
     const real = Array.from({ length: 20 }, (_, i) => realEntry({
@@ -36,9 +45,9 @@ describe('padLeaderboard', () => {
     outOver.forEach((e, i) => expect(e.rank).toBe(i + 1));
   });
 
-  it('fills up to 20 entries for every game when real is empty', () => {
-    for (const game of ALL_GAMES) {
-      const out = padLeaderboard([], game);
+  it('fills up to 20 entries for every game/mode when real is empty', () => {
+    for (const { game, opts } of ALL_GAME_MODES) {
+      const out = padLeaderboard([], game, opts);
       expect(out).toHaveLength(20);
       expect(out.every(e => e.isFake)).toBe(true);
       out.forEach((e, i) => expect(e.rank).toBe(i + 1));
@@ -52,8 +61,8 @@ describe('padLeaderboard', () => {
   });
 
   it('never shows a zero score on a fake row (per product requirement)', () => {
-    for (const game of ALL_GAMES) {
-      const out = padLeaderboard([], game);
+    for (const { game, opts } of ALL_GAME_MODES) {
+      const out = padLeaderboard([], game, opts);
       out.filter(e => e.isFake).forEach(f => expect(f.bestScore).toBeGreaterThan(0));
     }
   });
@@ -67,14 +76,14 @@ describe('padLeaderboard', () => {
   });
 
   it('sorts the merged list by points-priority, then time-on-ties (all games)', () => {
-    for (const game of ALL_GAMES) {
+    for (const { game, opts } of ALL_GAME_MODES) {
       const lowerBetter = !!LOWER_BETTER[game];
       // Mix real entries that would naturally interleave with fakes
       const real = [
         realEntry({ id: 'r1', userId: 'u1', score: lowerBetter ? 16 : 10, time: 30, agent: '1111111', rank: 1 }),
         realEntry({ id: 'r2', userId: 'u2', score: lowerBetter ? 40 : 5,  time: 50, agent: '2222222', rank: 2 }),
       ];
-      const out = padLeaderboard(real, game);
+      const out = padLeaderboard(real, game, opts);
       for (let i = 1; i < out.length; i++) {
         const prev = out[i - 1], cur = out[i];
         if (lowerBetter) expect(cur.bestScore).toBeGreaterThanOrEqual(prev.bestScore);
@@ -133,8 +142,8 @@ describe('padLeaderboard', () => {
   });
 
   it('produces a varied spread of scores (more than 5 distinct values) for every game', () => {
-    for (const game of ALL_GAMES) {
-      const out = padLeaderboard([], game);
+    for (const { game, opts } of ALL_GAME_MODES) {
+      const out = padLeaderboard([], game, opts);
       const unique = new Set(out.map(e => e.bestScore));
       expect(unique.size).toBeGreaterThan(5);
     }

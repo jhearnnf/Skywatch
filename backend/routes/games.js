@@ -2206,13 +2206,15 @@ router.post('/cbat/:gameKey/start', protect, async (req, res) => {
 // POST /api/games/cbat/plane-turn/result
 router.post('/cbat/plane-turn/result', protect, async (req, res) => {
   try {
-    const { totalRotations, totalTime, levelsCompleted, aircraftUsed } = req.body;
+    const { totalRotations, totalTime, levelsCompleted, aircraftUsed, mode: rawMode } = req.body;
+    const mode = ['2d', '3d'].includes(rawMode) ? rawMode : '2d';
     const result = await GameSessionCbatPlaneTurnResult.create({
       userId: req.user._id,
       totalRotations,
       totalTime,
       levelsCompleted: levelsCompleted ?? 5,
       aircraftUsed,
+      mode,
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
@@ -2390,8 +2392,13 @@ async function cbatLeaderboard(req, res, gameKey) {
 
   const isAdmin = !!req.user?.isAdmin;
 
+  const mode = cfg.modeField
+    ? (['2d', '3d'].includes(req.query.mode) ? req.query.mode : '2d')
+    : null;
+
   try {
     const pipeline = [
+      ...(mode ? [{ $match: { [cfg.modeField]: mode } }] : []),
       { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
       { $limit: 20 },
       {
@@ -2420,7 +2427,7 @@ async function cbatLeaderboard(req, res, gameKey) {
     // Pad with demo rows and re-sort so points-priority order holds across the
     // merged list. padLeaderboard reassigns each row's rank based on its
     // position after sort (real and fake interleaved by score / time).
-    const padded = padLeaderboard(leaderboard, gameKey, { limit: 20, isAdmin });
+    const padded = padLeaderboard(leaderboard, gameKey, { limit: 20, isAdmin, mode });
 
     // Surface the user's entry from the padded list when they're in view; fall
     // back to a real-only rank computation when they're outside the top 20.
@@ -2430,15 +2437,17 @@ async function cbatLeaderboard(req, res, gameKey) {
       if (myEntry) {
         myBest = myEntry;
       } else {
-        const [best] = await cfg.Model.find({ userId: req.user._id })
+        const modeFilter = mode ? { [cfg.modeField]: mode } : {};
+        const [best] = await cfg.Model.find({ userId: req.user._id, ...modeFilter })
           .sort({ [cfg.primaryField]: cfg.sortDir, totalTime: 1 })
           .limit(1)
           .lean();
         if (best) {
           const scoreVal = best[cfg.primaryField];
           const timeVal = best.totalTime;
-          const countBetter = await cfg.Model.countDocuments(
-            cfg.sortDir === 1
+          const countBetter = await cfg.Model.countDocuments({
+            ...modeFilter,
+            ...(cfg.sortDir === 1
               ? {
                   $or: [
                     { [cfg.primaryField]: { $lt: scoreVal } },
@@ -2450,8 +2459,8 @@ async function cbatLeaderboard(req, res, gameKey) {
                     { [cfg.primaryField]: { $gt: scoreVal } },
                     { [cfg.primaryField]: scoreVal, totalTime: { $lt: timeVal } },
                   ],
-                }
-          );
+                }),
+          });
           myBest = {
             _id: best._id,
             userId: req.user._id,
@@ -2486,14 +2495,19 @@ async function cbatPersonalBest(req, res, gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return res.status(400).json({ message: 'Unknown game' });
 
+  const mode = cfg.modeField
+    ? (['2d', '3d'].includes(req.query.mode) ? req.query.mode : '2d')
+    : null;
+  const modeFilter = mode ? { [cfg.modeField]: mode } : {};
+
   try {
-    const [best] = await cfg.Model.find({ userId: req.user._id })
+    const [best] = await cfg.Model.find({ userId: req.user._id, ...modeFilter })
       .sort({ [cfg.primaryField]: cfg.sortDir, totalTime: 1 })
       .limit(1)
       .lean();
     if (!best) return res.json({ status: 'success', data: null });
 
-    const attempts = await cfg.Model.countDocuments({ userId: req.user._id });
+    const attempts = await cfg.Model.countDocuments({ userId: req.user._id, ...modeFilter });
     res.json({
       status: 'success',
       data: {

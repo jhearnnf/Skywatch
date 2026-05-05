@@ -16,7 +16,8 @@ const FAKE_AGENTS = [
 ];
 
 const GAME_OFFSET = {
-  'plane-turn':      0,
+  'plane-turn:2d':   0,
+  'plane-turn:3d':   1,
   'angles':          4,
   'code-duplicates': 8,
   'symbols':        12,
@@ -40,11 +41,13 @@ const GAME_OFFSET = {
 // game (e.g. code-duplicates is 15 rounds × ~5s display + answer ≈ 100–200s,
 // instruments is capped at a 90-second timer, ANT runs 8×60s rounds ≈ 180–450s).
 const FAKE_TUNING = {
-  'plane-turn': {
+  'plane-turn:2d': {
     floor: 42, ceiling: 107, seedTime: 80, timeStep: 3,
-    // Lower = better. Top fake sits at 42 rotations (no demo beats this);
-    // worst fake up near 107. Fastest demo time is 80s (no demo goes faster).
     scoreSequence: [42, 45, 48, 52, 55, 58, 62, 65, 68, 72, 75, 78, 82, 85, 88, 92, 95, 98, 102, 107],
+  },
+  'plane-turn:3d': {
+    floor: 65, ceiling: 140, seedTime: 110, timeStep: 4,
+    scoreSequence: [65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 124, 128, 132, 135, 138, 140, 140, 140],
   },
   'angles':          { floor: 1,  ceiling: 19,  seedScore: 18,  seedTime: 38, scoreStep: 1,  timeStep: 2.5 },
   'code-duplicates': {
@@ -90,8 +93,8 @@ const FAKE_TUNING = {
 const SCORE_STEPS = [1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1, 1];
 const TIME_STEPS  = [1, 1, 2, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1];
 
-function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
-  const offset = GAME_OFFSET[gameKey] ?? 0;
+function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin, tuningKey }) {
+  const offset = GAME_OFFSET[tuningKey ?? gameKey] ?? GAME_OFFSET[gameKey] ?? 0;
   const fakes = [];
   let runScore = tuning.seedScore;
   let runTime = tuning.seedTime;
@@ -111,8 +114,8 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
       runTime += timeDelta;
     }
     const entry = {
-      _id: `fake-${gameKey}-${i}`,
-      userId: `fake-user-${gameKey}-${i}`,
+      _id: `fake-${tuningKey ?? gameKey}-${i}`,
+      userId: `fake-user-${tuningKey ?? gameKey}-${i}`,
       agentNumber: FAKE_AGENTS[(offset + i) % FAKE_AGENTS.length],
       bestScore: runScore,
       bestTime: Number(runTime.toFixed(1)),
@@ -132,9 +135,10 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
 // and short-circuit when real already fills the board.
 const FULL_SEQUENCE_GAMES = new Set(['ant', 'code-duplicates', 'flag']);
 
-function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
+function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false, mode = null } = {}) {
   const cfg = CBAT_GAMES[gameKey];
-  const tuning = FAKE_TUNING[gameKey];
+  const tuningKey = mode ? (`${gameKey}:${mode}` in FAKE_TUNING ? `${gameKey}:${mode}` : gameKey) : gameKey;
+  const tuning = FAKE_TUNING[tuningKey];
 
   // No tuning for this game → just rank real entries as-is.
   if (!cfg || !tuning) {
@@ -154,7 +158,7 @@ function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
 
   const lowerBetter = cfg.sortDir === 1;
   const needed = isFullSequence ? tuning.scoreSequence.length : (limit - real.length);
-  const fakes = generateFakes(gameKey, needed, { lowerBetter, tuning, isAdmin });
+  const fakes = generateFakes(gameKey, needed, { lowerBetter, tuning, isAdmin, tuningKey });
 
   // Merge real + fakes, then sort by points-priority, time-on-ties.
   const merged = [...real, ...fakes].sort((a, b) => {

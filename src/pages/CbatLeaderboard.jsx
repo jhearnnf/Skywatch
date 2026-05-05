@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
+import { usePlaneTurnMode } from '../hooks/usePlaneTurnMode'
+import PlaneTurnModeToggle from '../components/PlaneTurnModeToggle'
 
 // ── Game config — add new CBAT games here ────────────────────────────────────
 const GAME_CONFIG = {
@@ -89,12 +91,15 @@ export default function CbatLeaderboard() {
   const [leaderboard, setLeaderboard] = useState([])
   const [myBest, setMyBest] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [mode, setMode] = usePlaneTurnMode()
 
   const cfg = GAME_CONFIG[gameKey]
 
   useEffect(() => {
     if (!user || !cfg) return
-    apiFetch(`${API}/api/games/cbat/${gameKey}/leaderboard`)
+    setLoading(true)
+    const modeParam = gameKey === 'plane-turn' ? `?mode=${mode}` : ''
+    apiFetch(`${API}/api/games/cbat/${gameKey}/leaderboard${modeParam}`)
       .then(r => r.json())
       .then(d => {
         setLeaderboard(d.data?.leaderboard || [])
@@ -102,7 +107,7 @@ export default function CbatLeaderboard() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [user, gameKey])
+  }, [user, gameKey, mode])
 
   if (!cfg) {
     return (
@@ -121,10 +126,17 @@ export default function CbatLeaderboard() {
       <SEO title={`${cfg.title} Leaderboard — CBAT`} description={`Top scores for ${cfg.title}`} />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        <Link to={cfg.backPath} className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; Instructions</Link>
-        <h1 className="text-sm font-extrabold text-slate-900">{cfg.emoji} {cfg.title} Leaderboard</h1>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Link to={cfg.backPath} className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; Instructions</Link>
+          <h1 className="text-sm font-extrabold text-slate-900">{cfg.emoji} {cfg.title} Leaderboard</h1>
+        </div>
+        {gameKey === 'plane-turn' && <PlaneTurnModeToggle value={mode} onChange={setMode} />}
       </div>
+
+      {gameKey === 'plane-turn' && (
+        <p className="text-[11px] text-slate-500 mb-2">Showing {mode === '3d' ? '3D' : '2D'} scores · best rotations through 5 levels</p>
+      )}
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
@@ -184,6 +196,9 @@ export default function CbatLeaderboard() {
                       </span>
                       <span className="text-right font-mono font-bold text-brand-600">
                         {cfg.formatScore(entry.bestScore)}
+                        {gameKey === 'plane-turn' && mode === '3d' && (
+                          <span className="ml-1 text-[8px] font-bold px-1 py-0.5 rounded bg-brand-600/80 text-white leading-none align-middle">3D</span>
+                        )}
                       </span>
                       {!cfg.hideTime && (
                         <span className="text-right font-mono text-slate-400">
@@ -207,6 +222,9 @@ export default function CbatLeaderboard() {
                     >{myBest.email ? myBest.email : `Agent ${myBest.agentNumber || '???'}`} (you)</span>
                     <span className="text-right font-mono font-bold text-brand-600">
                       {cfg.formatScore(myBest.bestScore)}
+                      {gameKey === 'plane-turn' && mode === '3d' && (
+                        <span className="ml-1 text-[8px] font-bold px-1 py-0.5 rounded bg-brand-600/80 text-white leading-none align-middle">3D</span>
+                      )}
                     </span>
                     {!cfg.hideTime && (
                       <span className="text-right font-mono text-slate-400">

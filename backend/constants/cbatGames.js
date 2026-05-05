@@ -18,6 +18,7 @@ const CBAT_GAMES = {
     sortDir: 1,            // lower is better
     bestOp: '$min',
     label: 'Plane Turn',
+    modeField: 'mode',
   },
   'angles': {
     Model: GameSessionCbatAnglesResult,

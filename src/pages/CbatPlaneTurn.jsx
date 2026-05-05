@@ -7,6 +7,8 @@ import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
+import { usePlaneTurnMode } from '../hooks/usePlaneTurnMode'
+import PlaneTurnModeToggle from '../components/PlaneTurnModeToggle'
 
 // Aircraft control model: full local-frame flight controls.
 //   - Pitch (climb/dive): rotation around the aircraft's local right axis (model -Z).
@@ -103,32 +105,11 @@ function randomPackagePos(planeR, planeC) {
 }
 
 // ── Aircraft Selection Screen ────────────────────────────────────────────────
-function AircraftSelect({ aircraft, onSelect, loading, personalBest, gameMode3D, onToggle3D }) {
+function AircraftSelect({ aircraft, onSelect, loading, personalBest, gameMode3D }) {
   return (
     <div>
       <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Choose Your Aircraft</h2>
       <p className="text-xs text-slate-400 text-center mb-3">Select an aircraft, then navigate through 5 levels.</p>
-
-      {/* 3D Mode toggle */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-w-md mx-auto mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-[#ddeaf8]">3D Mode</p>
-          <p className="text-xs text-slate-400">Only shows aircraft with 3D models</p>
-        </div>
-        <button
-          onClick={() => onToggle3D(!gameMode3D)}
-          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
-            gameMode3D ? 'bg-brand-600' : 'bg-[#1a3a5c]'
-          }`}
-          aria-label="Toggle 3D mode"
-        >
-          <span
-            className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-              gameMode3D ? 'translate-x-6' : 'translate-x-1'
-            }`}
-          />
-        </button>
-      </div>
 
       {/* Instructions */}
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
@@ -312,7 +293,8 @@ export default function CbatPlaneTurn() {
   const [selected, setSelected]         = useState(null)
 
   // Mode toggle
-  const [gameMode3D, setGameMode3D]     = useState(false)
+  const [mode, setMode]                 = usePlaneTurnMode()
+  const gameMode3D                      = mode === '3d'
   const gameMode3DRef                   = useRef(false)
   useEffect(() => { gameMode3DRef.current = gameMode3D }, [gameMode3D])
 
@@ -376,14 +358,15 @@ export default function CbatPlaneTurn() {
       .finally(() => setLoadingAircraft(false))
   }, [user])
 
-  // Fetch personal best
+  // Fetch personal best (re-runs when mode changes)
   useEffect(() => {
     if (!user) return
-    apiFetch(`${API}/api/games/cbat/plane-turn/personal-best`)
+    setPersonalBest(null)
+    apiFetch(`${API}/api/games/cbat/plane-turn/personal-best?mode=${mode}`)
       .then(r => r.json())
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
-  }, [user])
+  }, [user, mode])
 
   // Submit score
   const submitScore = useCallback((finalRotations, finalTime, aircraftTitle) => {
@@ -396,18 +379,19 @@ export default function CbatPlaneTurn() {
         totalTime: finalTime,
         levelsCompleted: MAX_LEVEL,
         aircraftUsed: aircraftTitle,
+        mode,
       }),
     })
       .then(r => r.json())
       .then(() => {
         setScoreSaved(true)
-        apiFetch(`${API}/api/games/cbat/plane-turn/personal-best`)
+        apiFetch(`${API}/api/games/cbat/plane-turn/personal-best?mode=${mode}`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
           .catch(() => {})
       })
       .catch(() => {})
-  }, [apiFetch, API])
+  }, [apiFetch, API, mode])
 
   // Keep gameRef in sync (includes 3D state)
   useEffect(() => {
@@ -691,12 +675,15 @@ export default function CbatPlaneTurn() {
       <SEO title="Plane Turn — CBAT" description="Navigate your aircraft to collect care packages." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'select'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <button onClick={handleMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">Plane Turn</h1>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          {phase === 'select'
+            ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+            : <button onClick={handleMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+          }
+          <h1 className="text-sm font-extrabold text-slate-900">Plane Turn</h1>
+        </div>
+        {phase === 'select' && <PlaneTurnModeToggle value={mode} onChange={setMode} />}
       </div>
 
       {/* Not logged in */}
@@ -724,7 +711,6 @@ export default function CbatPlaneTurn() {
                 loading={loadingAircraft}
                 personalBest={personalBest}
                 gameMode3D={gameMode3D}
-                onToggle3D={setGameMode3D}
               />
             </div>
           )}
@@ -1015,12 +1001,12 @@ export default function CbatPlaneTurn() {
               {/* ── Mobile controls ── */}
               {gameMode3D ? (
                 <div className="flex flex-col items-center gap-2 mt-4">
-                  <DpadBtn label="↑" onPress={() => handleRotate('up')}   ariaLabel="Climb" />
-                  <div className="flex gap-4">
+                  <DpadBtn label="↑" onPress={() => handleRotate('up')} ariaLabel="Dive" />
+                  <div className="flex gap-2">
                     <DpadBtn label="←" onPress={() => handleRotate('left')}  ariaLabel="Rotate left" />
+                    <DpadBtn label="↓" onPress={() => handleRotate('down')}  ariaLabel="Climb" />
                     <DpadBtn label="→" onPress={() => handleRotate('right')} ariaLabel="Rotate right" />
                   </div>
-                  <DpadBtn label="↓" onPress={() => handleRotate('down')} ariaLabel="Descend" />
                 </div>
               ) : (
                 <div className="flex gap-4 justify-center mt-4">
