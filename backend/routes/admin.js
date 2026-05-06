@@ -5038,8 +5038,8 @@ router.post('/ai/generate-battle-order-data', featureMiddleware('generate-battle
     let fieldSpec = '';
     let jsonShape = '';
     if (category === 'Aircrafts') {
-      fieldSpec = 'topSpeedKph (integer, cruise/max speed in km/h), yearIntroduced (integer, year RAF first operated this aircraft), yearRetired (integer or null if still in service)';
-      jsonShape = '{"topSpeedKph":2400,"yearIntroduced":1976,"yearRetired":null}';
+      fieldSpec = 'topSpeedKph (integer, cruise/max speed in km/h), yearIntroduced (integer, year RAF first operated this aircraft), yearRetired (integer or null if still in service), aircraftType (string, exactly one of: "fighter" for air-superiority/multirole combat aircraft like Eurofighter Typhoon FGR4 or F-35B; "bomber" for strategic/tactical bombers; "transport" for airlifters like A400M or C-17; "helicopter" for any rotary-wing aircraft; "trainer" for training aircraft where the PRIMARY UK role is training, like Hawk T2; "recon" for ISR/surveillance/AEW&C/maritime patrol like E-7 Wedgetail or P-8 Poseidon; "tanker" for air-to-air refuelling tankers; "uav" for uncrewed/drone systems; "other" only if none fit)';
+      jsonShape = '{"topSpeedKph":2400,"yearIntroduced":1976,"yearRetired":null,"aircraftType":"fighter"}';
     } else if (category === 'Ranks') {
       fieldSpec = 'rankHierarchyOrder (integer, 1 = most senior e.g. Marshal of the RAF, higher numbers = more junior)';
       jsonShape = '{"rankHierarchyOrder":5}';

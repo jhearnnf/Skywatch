@@ -83,6 +83,14 @@ const GAME_CONFIG = {
     formatScore: (s) => `${s}/8`,
     backPath: '/cbat/visualisation-2d',
   },
+  'dpt': {
+    title: 'DPT',
+    emoji: '\u{1F6E9}️',
+    scoreLabel: 'Score',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}`,
+    backPath: '/cbat/dpt',
+  },
 }
 
 export default function CbatLeaderboard() {

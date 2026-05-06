@@ -236,6 +236,56 @@ body[data-rsvp-active] > *:not(.rsvp-overlay) {
    (but not flush with) the navbar, matching the bottom gap on the header div. */
 .cbat-route .app-shell-content { padding-top: 0.75rem; }
 
+/* DPT during gameplay needs the full main-content width (sidebar already
+   handled by md:ml-56 on .app-shell-main). The default max-w-3xl/mx-auto
+   on .app-shell-content would otherwise cap the layout at 768px and prevent
+   the side-by-side arena/controls layout from fitting. Body class is
+   toggled by CbatDpt while phase==='playing'. */
+body.cbat-dpt-fullwidth .app-shell-content {
+  max-width: none;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
+/* DPT — yellow pulse used for edge-warning highlights and aircraft halos
+   whenever a player aircraft enters the edge buffer (auto-turn zone). */
+@keyframes dpt-edge-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.9; }
+}
+.dpt-edge-pulse {
+  animation: dpt-edge-pulse 0.6s ease-in-out infinite;
+}
+
+/* DPT — quick scale pulse used to draw attention on selection events:
+   ALT button → every aircraft alt value pulses; BRG button → every bearing
+   label around the arena pulses; aircraft button → that aircraft's sprite
+   pulses. transform-box: fill-box makes transform-origin work for SVG
+   children based on each element's own bounding box. */
+@keyframes dpt-select-pulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.5); }
+  100% { transform: scale(1); }
+}
+.dpt-select-pulse {
+  animation: dpt-select-pulse 0.45s ease-out;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* DPT — bearing-command visualisation. Pulses the degree-calculation line
+   and the turn arc from full visibility down to invisible over the lifetime
+   of the visualisation, so the player sees the planned course briefly after
+   committing a bearing. */
+@keyframes dpt-command-pulse {
+  0%   { opacity: 0.95; }
+  20%  { opacity: 0.95; }
+  100% { opacity: 0; }
+}
+.dpt-command-pulse {
+  animation: dpt-command-pulse 1.6s ease-out forwards;
+}
+
 @media (max-width: 600px) {
   .chrome-immersive .app-topbar    { transform: translateY(-100%); pointer-events: none; }
   .chrome-immersive .app-bottomnav { transform: translateY(100%);  pointer-events: none; }

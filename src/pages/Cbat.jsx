@@ -14,6 +14,7 @@ export const CBAT_GAMES = [
   { key: 'plane-turn',      emoji: '🗺️', title: 'Plane Turn',       desc: 'Choose your aircraft, plan your turn and heading with precision.',            path: '/cbat/plane-turn',      image: '/images/Plane Turn.png' },
   { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png' },
   { key: 'visualisation-2d', emoji: '🧮', title: 'Visualisation 2D', desc: 'Mentally weld labelled shapes into the correct final figure.', path: '/cbat/visualisation-2d', image: '/images/Visualisation 2D.png' },
+  { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png' },
   { key: 'visualisation-3d', emoji: '🧊', title: 'Visualisation 3D', desc: 'Rotate and reason about 3D shapes — coming soon.',      path: null,                    image: '/images/placeholder-brief.svg' },
   { key: 'audio-interrupt',  emoji: '🎧', title: 'Audio Interrupt',  desc: 'Respond to audio cues while multitasking.',             path: null,                    image: '/images/placeholder-brief.svg' },
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — coming soon.',               path: null,                    image: '/images/placeholder-brief.svg' },
@@ -75,9 +76,15 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
 
 const IMAGE_GAMES = CBAT_GAMES.filter(g => g.image)
 
+// Display the "NEW GAME" badge on the DPT card until midnight local time at
+// the start of 8 May 2026 (i.e. visible on 6th and 7th May; gone from 8th).
+const NEW_GAME_KEY = 'dpt'
+const NEW_GAME_DEADLINE = new Date(2026, 4, 8) // month is 0-indexed; 4 = May
+
 export default function Cbat() {
   const { user } = useAuth()
   const [flickeringKey, setFlickeringKey] = useState(null)
+  const showNewBadge = Date.now() < NEW_GAME_DEADLINE.getTime()
 
   useEffect(() => {
     let tid
@@ -132,6 +139,14 @@ export default function Cbat() {
                   hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5 no-underline overflow-hidden"
               >
                 <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
+                {showNewBadge && game.key === NEW_GAME_KEY && (
+                  <span
+                    className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
+                    style={{ zIndex: 4 }}
+                  >
+                    New Game
+                  </span>
+                )}
                 <span className="text-4xl shrink-0 group-hover:scale-110 transition-transform" style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
                 <div className="min-w-0" style={{ position: 'relative', zIndex: 3 }}>
                   <p className="font-bold text-slate-800 mb-0.5">{game.title}</p>

@@ -69,6 +69,7 @@ const intelligenceBriefSchema = new mongoose.Schema(
       topSpeedKph:        { type: Number },
       yearIntroduced:     { type: Number },
       yearRetired:        { type: Number },   // null = still in service
+      aircraftType:       { type: String, enum: ['fighter', 'bomber', 'transport', 'helicopter', 'trainer', 'recon', 'tanker', 'uav', 'other'] },
 
       // Ranks
       rankHierarchyOrder: { type: Number },   // 1 = most senior

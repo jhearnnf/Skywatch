@@ -12,6 +12,7 @@ const GameSessionCbatSymbolsResult        = require('../../models/GameSessionCba
 const GameSessionCbatTargetResult         = require('../../models/GameSessionCbatTargetResult');
 const GameSessionCbatInstrumentsResult    = require('../../models/GameSessionCbatInstrumentsResult');
 const GameSessionCbatAntResult            = require('../../models/GameSessionCbatAntResult');
+const GameSessionCbatDptResult            = require('../../models/GameSessionCbatDptResult');
 
 let user, cookie, user2, cookie2;
 
@@ -690,6 +691,74 @@ describe('CBAT Airborne Numerical Test', () => {
       expect(res.body.data.leaderboard).toHaveLength(20);
       expect(res.body.data.leaderboard.every(e => e.isFake)).toBe(true);
       expect(res.body.data.myBest).toBeNull();
+    });
+  });
+});
+
+// ── DPT (Dynamic Projection Test) ────────────────────────────────────────────
+describe('CBAT DPT', () => {
+  const RESULT_URL = '/api/games/cbat/dpt/result';
+  const PB_URL     = '/api/games/cbat/dpt/personal-best';
+
+  describe('POST /result', () => {
+    it('saves a result with all gameplay fields', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({
+          totalScore: 1250,
+          totalTime: 312.4,
+          finalRound: 8,
+          gatesHit: 18,
+          interceptions: 3,
+          dangerZoneViolations: 2,
+          separationViolations: 1,
+          aircraftUsed: 'F-35B Lightning II',
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.data.totalScore).toBe(1250);
+      expect(res.body.data.finalRound).toBe(8);
+      expect(res.body.data.interceptions).toBe(3);
+      expect(res.body.data.aircraftUsed).toBe('F-35B Lightning II');
+      expect(await GameSessionCbatDptResult.countDocuments()).toBe(1);
+    });
+
+    it('coerces missing numeric fields to 0 and clamps negative score to 0', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({ totalScore: -50, totalTime: 60, finalRound: 1 });
+      expect(res.status).toBe(201);
+      expect(res.body.data.totalScore).toBe(0);
+      expect(res.body.data.gatesHit).toBe(0);
+      expect(res.body.data.interceptions).toBe(0);
+    });
+
+    it('returns 401 without auth', async () => {
+      const res = await request(app).post(RESULT_URL).send({ totalScore: 100, totalTime: 30 });
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /personal-best', () => {
+    it('returns null when user has no results', async () => {
+      const res = await request(app).get(PB_URL).set('Cookie', cookie);
+      expect(res.status).toBe(200);
+      expect(res.body.data).toBeNull();
+    });
+
+    it('returns highest totalScore as best (higher is better)', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 500,  totalTime: 100, finalRound: 4 });
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 1200, totalTime: 200, finalRound: 8 });
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 800,  totalTime: 150, finalRound: 6 });
+
+      const res = await request(app).get(PB_URL).set('Cookie', cookie);
+      expect(res.body.data.bestScore).toBe(1200);
+      expect(res.body.data.bestTime).toBe(200);
+      expect(res.body.data.attempts).toBe(3);
     });
   });
 });

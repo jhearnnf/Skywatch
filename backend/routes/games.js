@@ -32,6 +32,7 @@ const GameSessionCbatInstrumentsResult    = CBAT_GAMES['instruments'].Model;
 const GameSessionCbatAntResult            = CBAT_GAMES['ant'].Model;
 const GameSessionCbatFlagResult           = CBAT_GAMES['flag'].Model;
 const GameSessionCbatVisualisation2DResult = CBAT_GAMES['visualisation-2d'].Model;
+const GameSessionCbatDptResult             = CBAT_GAMES['dpt'].Model;
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -2172,6 +2173,36 @@ router.get('/cbat/aircraft-cutouts', protect, async (_req, res) => {
   }
 });
 
+// ── CBAT — DPT: fighter aircraft pool for the Fighter / enemy aircraft ─────
+// Returns published Aircraft briefs whose gameData.aircraftType is 'fighter'
+// AND that have a 3D model AND a cutout image. Used by DPT to randomly pick
+// the player's Fighter aircraft and the enemy aircraft (rendered red).
+router.get('/cbat/fighter-aircraft', protect, async (_req, res) => {
+  try {
+    const { has3DModel } = require('../data/aircraftModels');
+    const briefs = await IntelligenceBrief.find({
+      category: 'Aircrafts',
+      status: 'published',
+      'gameData.aircraftType': 'fighter',
+    })
+      .select('title media')
+      .populate('media')
+      .lean();
+
+    const results = briefs
+      .map(b => {
+        if (!has3DModel(b._id, b.title)) return null;
+        const img = (b.media || []).find(m => m.cutoutUrl);
+        return img ? { briefId: b._id, title: b.title, cutoutUrl: img.cutoutUrl } : null;
+      })
+      .filter(Boolean);
+
+    res.json({ status: 'success', data: results });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ── CBAT — Start tracking ────────────────────────────────────────────────────
 
 function canAccessCbat(user, settings) {
@@ -2383,6 +2414,31 @@ router.post('/cbat/visualisation-2d/result', protect, async (req, res) => {
   }
 });
 
+// POST /api/games/cbat/dpt/result — Dynamic Projection Test
+router.post('/cbat/dpt/result', protect, async (req, res) => {
+  try {
+    const {
+      totalScore, totalTime, finalRound,
+      gatesHit, dangerZoneViolations, separationViolations, interceptions,
+      aircraftUsed,
+    } = req.body;
+    const result = await GameSessionCbatDptResult.create({
+      userId: req.user._id,
+      totalScore:           Math.max(0, Math.round(totalScore ?? 0)),
+      totalTime:            totalTime ?? 0,
+      finalRound:           finalRound ?? 1,
+      gatesHit:             gatesHit ?? 0,
+      dangerZoneViolations: dangerZoneViolations ?? 0,
+      separationViolations: separationViolations ?? 0,
+      interceptions:        interceptions ?? 0,
+      aircraftUsed,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Generic CBAT leaderboard handler — reused by all games.
 // Every session is a standalone entry — a user can occupy multiple rows if
 // several of their runs land in the top 20.
@@ -2489,6 +2545,7 @@ router.get('/cbat/instruments/leaderboard', protect, (req, res) => cbatLeaderboa
 router.get('/cbat/ant/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant'));
 router.get('/cbat/flag/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag'));
 router.get('/cbat/visualisation-2d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-2d'));
+router.get('/cbat/dpt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -2530,5 +2587,6 @@ router.get('/cbat/instruments/personal-best', protect, (req, res) => cbatPersona
 router.get('/cbat/ant/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant'));
 router.get('/cbat/flag/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag'));
 router.get('/cbat/visualisation-2d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-2d'));
+router.get('/cbat/dpt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt'));
 
 module.exports = router;

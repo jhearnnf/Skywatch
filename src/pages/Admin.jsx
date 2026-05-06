@@ -6870,6 +6870,28 @@ function GameDataField({ label, field, draft, setDraft, nullable = false }) {
   )
 }
 
+function GameDataSelect({ label, field, draft, setDraft, options }) {
+  const val = draft.gameData?.[field] ?? ''
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
+      <select
+        value={val}
+        onChange={e => {
+          const v = e.target.value
+          setDraft(p => ({ ...p, gameData: { ...p.gameData, [field]: v === '' ? null : v } }))
+        }}
+        className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
+      >
+        <option value="">— unset —</option>
+        {options.map(o => (
+          <option key={o} value={o}>{o}</option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function GenerateStatsButton({ draft, setDraft, briefId, API }) {
   const { apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
@@ -6958,6 +6980,14 @@ function AircraftDataSection({ draft, setDraft, briefId, API }) {
 
       <GameDataField label="Year Retired (blank = still in service)" field="yearRetired" draft={draft} setDraft={setDraft} nullable />
       <MnemonicField mnemonicKey="status" draft={draft} setDraft={setDraft} briefId={briefId} API={API} />
+
+      <GameDataSelect
+        label="Aircraft Type"
+        field="aircraftType"
+        draft={draft}
+        setDraft={setDraft}
+        options={['fighter', 'bomber', 'transport', 'helicopter', 'trainer', 'recon', 'tanker', 'uav', 'other']}
+      />
 
       <div className="pt-1 flex flex-wrap gap-2 items-center">
         <button
