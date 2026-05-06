@@ -153,6 +153,7 @@ function fetchSettings() {
         volumeWhereAircraftWin: 100,             soundEnabledWhereAircraftWin: true,
         volumeWhereAircraftLose: 100,            soundEnabledWhereAircraftLose: true,
         volumeWhereAircraftMissionDetected: 100, soundEnabledWhereAircraftMissionDetected: true,
+        volumeSkywatchLogo: 100, soundEnabledSkywatchLogo: true,
         volumeBattleOfOrderWon: 100,       soundEnabledBattleOfOrderWon: true,
         volumeBattleOfOrderLost: 100,      soundEnabledBattleOfOrderLost: true,
         volumeBattleOfOrderSelection: 100, soundEnabledBattleOfOrderSelection: true,
@@ -316,6 +317,17 @@ export function playSound(name, { onAudio } = {}) {
       if (settings.soundEnabledWhereAircraftMissionDetected === false) return Promise.resolve()
       const volume = masterVol(Math.min(1, Math.max(0, (settings.volumeWhereAircraftMissionDetected ?? 100) / 100)))
       const audio  = new Audio('/sounds/where_aircraft_mission_detected.mp3')
+      audio.volume = volume
+      audio.play().catch(() => {})
+      return Promise.resolve()
+    }
+
+    // Skywatch logo cue: bypasses the queue so it fires instantly alongside
+    // any logo-reveal animation and isn't held back by other sounds.
+    if (name === 'skywatch_logo') {
+      if (settings.soundEnabledSkywatchLogo === false) return Promise.resolve()
+      const volume = masterVol(Math.min(1, Math.max(0, (settings.volumeSkywatchLogo ?? 100) / 100)))
+      const audio  = new Audio('/sounds/skywatch_logo.mp3')
       audio.volume = volume
       audio.play().catch(() => {})
       return Promise.resolve()

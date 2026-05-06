@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import { usePlaneTurnMode } from '../hooks/usePlaneTurnMode'
 import PlaneTurnModeToggle from '../components/PlaneTurnModeToggle'
@@ -307,10 +308,14 @@ export default function CbatPlaneTurn() {
   const [phase, setPhase]               = useState('select')
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
-    if (phase === 'playing' || phase === 'over') enterImmersive()
+    if (phase === 'playing' || phase === 'over' || phase === 'intro') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
+
+  // Skip the logo-boot intro on Play Again within the same aircraft
+  // selection. Reset by handleMenu (back to aircraft select).
+  const introPlayedRef = useRef(false)
 
   const [plane, setPlane]               = useState({ r: 5, c: 5, dir: 0, angle: 0 })
   const [pkg, setPkg]                   = useState({ r: 0, c: 0 })
@@ -571,7 +576,21 @@ export default function CbatPlaneTurn() {
     setTotalRotations(0)
     setTotalTime(0)
     startGame(1)
+    // Logo-boot intro covers the arena while it boots. Skip for users with
+    // prefers-reduced-motion or on replay within the same aircraft pick.
+    // startGame() above set phase='playing'; under React's batching the
+    // override below wins, so phase ends as 'intro' and the timer/movement/
+    // keyboard effects (gated on === 'playing') stay paused until the
+    // curtain lifts. handleIntroComplete flips phase back to 'playing'.
+    const reduceMotion = typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (!reduceMotion && !introPlayedRef.current) setPhase('intro')
   }
+
+  const handleIntroComplete = useCallback(() => {
+    introPlayedRef.current = true
+    setPhase('playing')
+  }, [])
 
   const handleRestart = () => {
     if (won) {
@@ -593,6 +612,8 @@ export default function CbatPlaneTurn() {
 
   const handleMenu = () => {
     setSelected(null)
+    // Back to aircraft select → next pick should replay the intro.
+    introPlayedRef.current = false
     setPhase('select')
   }
 
@@ -768,8 +789,11 @@ export default function CbatPlaneTurn() {
             </motion.div>
           )}
 
-          {/* Game board */}
-          {(phase === 'playing' || phase === 'over') && selected && (
+          {/* Game board — mounted during 'intro' too so it sits ready behind
+              the curtain. Timer/movement/keyboard effects stay gated on
+              `phase === 'playing'`, so the simulation only starts once the
+              intro completes and flips us back to 'playing'. */}
+          {(phase === 'playing' || phase === 'over' || phase === 'intro') && selected && (
             <div className="w-full max-w-md">
               <HUD collected={collected} rotations={rotations} elapsed={elapsed} level={level} />
 
@@ -1038,6 +1062,12 @@ export default function CbatPlaneTurn() {
               </p>
             </div>
           )}
+
+          {/* Logo-boot intro — covers the viewport while the game board boots
+              behind it. Choreography + sound + completion timer all live in
+              <SkywatchLogoIntro>; we just gate it on phase. Shared with DPT
+              and applies to both 2D and 3D modes here. */}
+          {phase === 'intro' && <SkywatchLogoIntro onComplete={handleIntroComplete} />}
         </div>
       )}
 

@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import SkywatchLogoIntro, { SKYWATCH_LOGO_INTRO_MS } from '../components/SkywatchLogoIntro'
 import { has3DModel, getModelUrl } from '../data/aircraftModels'
 import DptAircraftLayer from '../components/DptAircraftLayer'
 import { useGLTF } from '@react-three/drei'
@@ -95,6 +96,7 @@ const MIN_GATE_DIST     = 200     // min distance between gate centres
 const SPAWN_R_MIN       = 160     // gates spawn this far from arena centre min
 const SPAWN_R_MAX       = ARENA_HALF - 130   // …and at most this far (keeps off the edge)
 const ROUND_OVERLAY_MS  = 1800    // duration of the round-complete overlay
+const INTRO_DURATION_MS = SKYWATCH_LOGO_INTRO_MS  // alias — choreography lives in SkywatchLogoIntro
 
 const LETTERS = 'ABCDEFGHIJ'
 const NUMBERS = '123456789'
@@ -999,7 +1001,7 @@ export default function CbatDpt() {
   const [phase, setPhase] = useState('select')
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
-    if (phase === 'playing' || phase === 'over') enterImmersive()
+    if (phase === 'playing' || phase === 'over' || phase === 'intro') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
@@ -1007,8 +1009,10 @@ export default function CbatDpt() {
   // While playing, opt the AppShell content area out of its max-w-3xl cap so
   // the side-by-side arena+controls layout can use the full main width
   // (which is already offset for the sidebar via md:ml-56 on app-shell-main).
+  // 'intro' is included so the arena mounts behind the curtain at the same
+  // width it'll have once the curtain lifts — avoids a layout shift on reveal.
   useEffect(() => {
-    if (phase !== 'playing') return
+    if (phase !== 'playing' && phase !== 'intro') return
     document.body.classList.add('cbat-dpt-fullwidth')
     return () => document.body.classList.remove('cbat-dpt-fullwidth')
   }, [phase])
@@ -1030,6 +1034,13 @@ export default function CbatDpt() {
   const [cheatUsed, setCheatUsed]       = useState(false)
   const cheatUsedRef                    = useRef(false)
   useEffect(() => { cheatUsedRef.current = cheatUsed }, [cheatUsed])
+  // Tracks the previous phase so the round-1 spawn effect can distinguish
+  // "first entry into intro/playing" (spawn aircraft) from the "intro→playing"
+  // transition (aircraft already spawned, just start the round timer).
+  const prevPhaseRef = useRef('select')
+  // Skip the intro overlay on Play Again within the same aircraft selection.
+  // Reset by handleMenu (back to aircraft select).
+  const introPlayedRef = useRef(false)
   // Aircraft GLB scale multiplier — 1.0 means default size; admin can set
   // anywhere 0.50..1.49 via a 9XX numpad code (50 + last two digits as %).
   const [aircraftSizeMultiplier, setAircraftSizeMultiplier] = useState(1.0)
@@ -1229,13 +1240,22 @@ export default function CbatDpt() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, fighterPool])
 
-  // Entering playing phase → kick off round 1 INLINE (not via startRound),
+  // Entering intro/playing phase → kick off round 1 INLINE (not via startRound),
   // so this effect's closure doesn't depend on startRound's identity — that
   // way fighterPool loading after the user is already in 'playing' won't
   // respawn round 1 mid-game. Round 2+ still go through startRound, called
   // from the round-overlay timeout below.
+  //
+  // Intro choreography: aircraft spawn at intro entry (so GLBs and positions
+  // are warm by the time the curtain lifts), but the round timer is HELD at 0
+  // and only starts on the intro→playing transition. The movement loop also
+  // skips during intro (`phase !== 'playing'`), so aircraft sit at their spawn
+  // poses behind the curtain.
   useEffect(() => {
-    if (phase !== 'playing') {
+    const prevPhase = prevPhaseRef.current
+    prevPhaseRef.current = phase
+
+    if (phase !== 'playing' && phase !== 'intro') {
       setAircraftList([])
       setGateList([])
       setDangerZoneList([])
@@ -1252,7 +1272,15 @@ export default function CbatDpt() {
     }
     if (!selected) return
 
-    // Round 1: 2 lettered gates, CA-A only.
+    // Intro→playing: aircraft already spawned during intro; just start the
+    // round timer now that the curtain has lifted.
+    if (prevPhase === 'intro' && phase === 'playing') {
+      setRoundEndTime(Date.now() + ROUND_DURATION_MS)
+      return
+    }
+
+    // First entry (select→intro, or select→playing under reduced-motion /
+    // replay-skip): spawn round 1.
     const ac    = [spawnPlayerAircraft('CA-A', 'CA-A', getModelUrl(selected.briefId, selected.title))]
     const gates = generateGates(2, 'letter')
 
@@ -1262,7 +1290,9 @@ export default function CbatDpt() {
     setDangerZoneList([])
     setNextLetterIndex(0)
     setNextNumberIndex(0)
-    setRoundEndTime(Date.now() + ROUND_DURATION_MS)
+    // Hold timer at 0 during intro — the prevPhase==='intro' branch above
+    // will set it once the curtain lifts.
+    setRoundEndTime(phase === 'playing' ? Date.now() + ROUND_DURATION_MS : 0)
     setRoundOverlay(null)
     setBearingInput('')
     setActiveId('CA-A')
@@ -1273,6 +1303,15 @@ export default function CbatDpt() {
     playerInterceptRef.current = new Set()
     fractionalPenaltyRef.current = 0
   }, [phase, selected])
+
+  // Intro → playing transition is fired by SkywatchLogoIntro's onComplete
+  // callback below. Cleanup if the user backs out mid-intro is handled by
+  // the component itself (it clears its setTimeout on unmount, and we
+  // unmount it by flipping phase off 'intro' from handleMenu).
+  const handleIntroComplete = useCallback(() => {
+    introPlayedRef.current = true
+    setPhase('playing')
+  }, [])
 
   // Round-complete overlay → advance to next round (or finish after round 8).
   // submitScore is defined later in the file but the timeout closure resolves
@@ -1800,11 +1839,18 @@ export default function CbatDpt() {
     cheatUsedRef.current = false
     setAircraftSizeMultiplier(1.0)
     startTimeRef.current = Date.now()
-    setPhase('playing')
+
+    // Skip the intro for users with prefers-reduced-motion, or on replay
+    // within the same aircraft selection (introPlayedRef set after first run).
+    const reduceMotion = typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    setPhase(reduceMotion || introPlayedRef.current ? 'playing' : 'intro')
   }, [apiFetch, API])
 
   const handleMenu = useCallback(() => {
     setSelected(null)
+    // Back to aircraft select → next pick should replay the intro.
+    introPlayedRef.current = false
     setPhase('select')
   }, [])
 
@@ -1873,8 +1919,10 @@ export default function CbatDpt() {
             </div>
           )}
 
-          {/* Game arena */}
-          {phase === 'playing' && selected && (
+          {/* Game arena — mounted during 'intro' too so it sits ready behind
+              the curtain. Movement loop and round timer stay paused until the
+              phase flips to 'playing' (see effects above). */}
+          {(phase === 'playing' || phase === 'intro') && selected && (
             <div className="w-full flex flex-col md:flex-row md:items-start md:justify-center md:gap-4">
             {/* HUD + arena — on md+ sized so arena width fits the available
                 content area beside the controls column AND the viewport
@@ -2065,6 +2113,11 @@ export default function CbatDpt() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Logo-boot intro overlay — covers the viewport while the arena
+              boots behind it. Choreography + sound + completion timer all
+              live in <SkywatchLogoIntro>; we just gate it on phase. */}
+          {phase === 'intro' && <SkywatchLogoIntro onComplete={handleIntroComplete} />}
 
         </div>
       )}

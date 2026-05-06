@@ -455,6 +455,7 @@ const SOUND_GROUPS = [
       { key: 'volumeIntelBriefOpened',    enabledKey: 'soundEnabledIntelBriefOpened',    label: 'Brief Opened',          sound: 'intel_brief_opened'    },
       { key: 'volumeFirstBriefComplete',  enabledKey: 'soundEnabledFirstBriefComplete',  label: 'Brief Complete (Guest)', sound: 'first_brief_complete' },
       { key: 'volumeGridReveal',          enabledKey: 'soundEnabledGridReveal',          durationKey: 'durationGridReveal', durationMax: 50, durationDefault: 12, label: 'Image Grid Reveal',      sound: '__grid_reveal__'       },
+      { key: 'volumeSkywatchLogo',        enabledKey: 'soundEnabledSkywatchLogo',        label: 'Skywatch Logo',          sound: 'skywatch_logo'         },
     ],
   },
   {

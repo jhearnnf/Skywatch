@@ -68,6 +68,7 @@ const appSettingsSchema = new mongoose.Schema({
   volumeWhereAircraftMissionDetected: { type: Number, default: 100, min: 0, max: 100 },
   volumeStandDown:            { type: Number, default: 100, min: 0, max: 100 },
   volumeTargetLockedKeyword:  { type: Number, default: 100, min: 0, max: 100 },
+  volumeSkywatchLogo:         { type: Number, default: 100, min: 0, max: 100 },
 
   // Sound enabled flags (true = on, false = off)
   soundEnabledIntelBriefOpened:    { type: Boolean, default: true },
@@ -86,6 +87,7 @@ const appSettingsSchema = new mongoose.Schema({
   soundEnabledWhereAircraftWin:             { type: Boolean, default: true },
   soundEnabledWhereAircraftLose:            { type: Boolean, default: true },
   soundEnabledWhereAircraftMissionDetected: { type: Boolean, default: true },
+  soundEnabledSkywatchLogo:                 { type: Boolean, default: true },
 
   // Where's That Aircraft — coin awards
   airstarsWhereAircraftRound1: { type: Number, default: 5,  min: 0 },
