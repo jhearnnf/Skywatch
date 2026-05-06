@@ -2435,7 +2435,7 @@ function UsersTab({ API }) {
               aria-label={`${isExpanded ? 'Collapse' : 'Expand'} Agent ${u.agentNumber}`}
               onClick={() => toggleExpanded(u._id)}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(u._id) } }}
-              className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-raised/40 transition-colors ${isExpanded ? 'border-b border-slate-100' : ''}`}
+              className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-raised/40 transition-colors"
             >
               <div>
                 <p className="font-bold text-slate-800 text-sm flex items-center">
@@ -2494,7 +2494,7 @@ function UsersTab({ API }) {
             {isExpanded && (
             <>
             {/* Stats row */}
-            <div className="grid grid-cols-4 sm:grid-cols-7 divide-x divide-slate-100 border-b border-slate-100">
+            <div className="grid grid-cols-4 sm:grid-cols-7">
               {[
                 ['Coins', (u.totalAirstars ?? 0).toLocaleString(), null],
                 ['Streak', u.loginStreak ?? 0, null],
@@ -2506,12 +2506,12 @@ function UsersTab({ API }) {
                 ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1), null],
                 ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), null],
               ].map(([l, v, onClick]) => onClick ? (
-                <button key={l} onClick={onClick} className="px-3 py-2 text-center cursor-pointer">
+                <button key={l} onClick={onClick} className="flex flex-col items-center justify-center px-3 py-2 text-center cursor-pointer">
                   <p className="text-xs font-bold text-slate-700">{v}</p>
                   <p className="text-[10px] text-slate-400">{l}</p>
                 </button>
               ) : (
-                <div key={l} className="px-3 py-2 text-center">
+                <div key={l} className="flex flex-col items-center justify-center px-3 py-2 text-center">
                   <p className="text-xs font-bold text-slate-700">{v}</p>
                   <p className="text-[10px] text-slate-400">{l}</p>
                 </div>
