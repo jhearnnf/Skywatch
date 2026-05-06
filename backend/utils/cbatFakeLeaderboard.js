@@ -46,8 +46,14 @@ const FAKE_TUNING = {
     scoreSequence: [42, 45, 48, 52, 55, 58, 62, 65, 68, 72, 75, 78, 82, 85, 88, 92, 95, 98, 102, 107],
   },
   'plane-turn:3d': {
-    floor: 65, ceiling: 140, seedTime: 110, timeStep: 4,
-    scoreSequence: [65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 124, 128, 132, 135, 138, 140, 140, 140],
+    // 3D adds vertical navigation, climbs/dives, and quaternion rotations —
+    // real best runs land closer to ~180 rotations, not the ~65 the early
+    // tuning assumed. Top demo of 180 keeps the board feeling competitive
+    // without giving users a trivially-beatable target. Times use a non-
+    // integer seed and step so the rounded display varies (220.7, 225.4,
+    // 234.8…) instead of every demo row showing a .0 second tie.
+    floor: 180, ceiling: 265, seedTime: 220.7, timeStep: 4.7,
+    scoreSequence: [180, 185, 190, 195, 200, 205, 210, 215, 220, 225, 230, 235, 240, 244, 248, 252, 256, 260, 263, 265],
   },
   'angles':          { floor: 1,  ceiling: 19,  seedScore: 18,  seedTime: 38, scoreStep: 1,  timeStep: 2.5 },
   'code-duplicates': {
