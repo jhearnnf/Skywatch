@@ -16,6 +16,7 @@ import { AppTutorialProvider }             from './context/AppTutorialContext'
 import { NewGameUnlockProvider }           from './context/NewGameUnlockContext'
 import { NewCategoryUnlockProvider }       from './context/NewCategoryUnlockContext'
 import { UnsolvedReportsProvider }          from './context/UnsolvedReportsContext'
+import { ChatUnreadProvider }                from './context/ChatUnreadContext'
 import { GameChromeProvider }                from './context/GameChromeContext'
 import TutorialPickerOverlay                  from './components/TutorialPickerOverlay'
 import AppShell                            from './components/layout/AppShell'
@@ -60,10 +61,12 @@ import CbatFlag from './pages/CbatFlag'
 import CbatVisualisation2D from './pages/CbatVisualisation2D'
 import CbatDpt from './pages/CbatDpt'
 import CbatLeaderboard from './pages/CbatLeaderboard'
+import CbatGameGuard from './components/CbatGameGuard'
 import AirstarHistory from './pages/AirstarHistory'
 import GameHistory        from './pages/GameHistory'
 import IntelBriefHistory from './pages/IntelBriefHistory'
 import ReportProblem  from './pages/ReportProblem'
+import Chat           from './pages/Chat'
 import Contact        from './pages/Contact'
 import Privacy        from './pages/Privacy'
 import Subscription   from './pages/Subscription'
@@ -232,21 +235,22 @@ function AppRoutes() {
           <Route path="/play/quiz"              element={<RequireAuth><PageWrapper><QuizBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/play/battle-of-order"   element={<RequireAuth><PageWrapper><BOOBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/cbat"                   element={<PageWrapper><Cbat /></PageWrapper>} />
-          <Route path="/cbat/plane-turn"        element={<RequireAuth><PageWrapper><CbatPlaneTurn /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/angles"           element={<RequireAuth><PageWrapper><CbatAngles /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/code-duplicates" element={<RequireAuth><PageWrapper><CbatCodeDuplicates /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/symbols"          element={<RequireAuth><PageWrapper><CbatSymbols /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/target"           element={<RequireAuth><PageWrapper><CbatTarget /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/instruments"      element={<RequireAuth><PageWrapper><CbatInstruments /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/ant"              element={<RequireAuth><PageWrapper><CbatAnt /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/flag"             element={<RequireAuth><PageWrapper><CbatFlag /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/visualisation-2d" element={<RequireAuth><PageWrapper><CbatVisualisation2D /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/dpt"              element={<RequireAuth><PageWrapper><CbatDpt /></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/plane-turn"        element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="plane-turn"        gameTitle="Plane Turn"      ><CbatPlaneTurn       /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/angles"           element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="angles"            gameTitle="Angles"          ><CbatAngles          /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/code-duplicates" element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="code-duplicates"   gameTitle="Code Duplicates" ><CbatCodeDuplicates  /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/symbols"          element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="symbols"           gameTitle="Symbols"         ><CbatSymbols         /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/target"           element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="target"            gameTitle="Target"          ><CbatTarget          /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/instruments"      element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="instruments"       gameTitle="Instruments"     ><CbatInstruments     /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/ant"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="ant"               gameTitle="ANT"             ><CbatAnt             /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/flag"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="flag"              gameTitle="FLAG"            ><CbatFlag            /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/visualisation-2d" element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="visualisation-2d"  gameTitle="Visualisation 2D"><CbatVisualisation2D /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/dpt"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="dpt"               gameTitle="DPT"             ><CbatDpt             /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/:gameKey/leaderboard" element={<RequireAuth><PageWrapper><CbatLeaderboard /></PageWrapper></RequireAuth>} />
 
           {/* v2 protected pages */}
           <Route path="/subscribe"        element={<PageWrapper><Subscription /></PageWrapper>} />
           <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
+          <Route path="/chat"             element={<RequireAuth><PageWrapper><Chat /></PageWrapper></RequireAuth>} />
           <Route path="/contact"          element={<PageWrapper><Contact /></PageWrapper>} />
           <Route path="/privacy"          element={<PageWrapper><Privacy /></PageWrapper>} />
           <Route path="/share"            element={<PageWrapper><Share /></PageWrapper>} />
@@ -348,14 +352,16 @@ export default function App() {
             <NewGameUnlockProvider>
              <NewCategoryUnlockProvider>
               <UnsolvedReportsProvider>
-                <GameChromeProvider>
-                  <AppRoutes />
-                  <NotifLayer />
-                  <LearnNavFlasher />
-                  <PlayNavFlasher />
-                  <ReportNotifBanner />
-                  <TutorialPickerOverlay />
-                </GameChromeProvider>
+                <ChatUnreadProvider>
+                  <GameChromeProvider>
+                    <AppRoutes />
+                    <NotifLayer />
+                    <LearnNavFlasher />
+                    <PlayNavFlasher />
+                    <ReportNotifBanner />
+                    <TutorialPickerOverlay />
+                  </GameChromeProvider>
+                </ChatUnreadProvider>
               </UnsolvedReportsProvider>
              </NewCategoryUnlockProvider>
             </NewGameUnlockProvider>

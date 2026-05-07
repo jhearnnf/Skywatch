@@ -33,6 +33,7 @@ app.use('/api/case-files', require('./routes/caseFiles'));
 app.use('/api/games',      require('./routes/games'));
 app.use('/api/admin',  require('./routes/admin'));
 app.use('/api/users',  require('./routes/users'));
+app.use('/api/chat',   require('./routes/chat'));
 app.use('/api/tutorials', require('./routes/tutorials'));
 app.use('/api/stripe',        require('./routes/stripe'));
 app.use('/api/aptitude-sync', require('./routes/aptitudeSync'));

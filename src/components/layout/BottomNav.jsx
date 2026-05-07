@@ -4,6 +4,8 @@ import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
+import { useChatUnread } from '../../context/ChatUnreadContext'
+import { useAppSettings } from '../../context/AppSettingsContext'
 import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
 
@@ -21,14 +23,20 @@ const NAV_ITEMS = [
 ]
 
 const ADMIN_ITEM = { to: '/admin', emoji: '⚙️', label: 'Admin' }
+const CHAT_ITEM  = { to: '/chat',  emoji: '💬', label: 'Chat'  }
 
 export default function BottomNav() {
   const { user } = useAuth()
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
+  const { hasAnyOpenChat: chatVisible, hasUnread: chatUnread } = useChatUnread() ?? {}
+  const { settings } = useAppSettings() ?? {}
+  const showChatNav = user && settings?.chatEnabled !== false && chatVisible
 
-  const items = user?.isAdmin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS
+  let items = [...NAV_ITEMS]
+  if (showChatNav) items = [...items, CHAT_ITEM]
+  if (user?.isAdmin) items = [...items, ADMIN_ITEM]
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -63,6 +71,7 @@ export default function BottomNav() {
           const showBadge = to === '/play' && hasAnyNew && user
           const showCategoryBadge = isLearn && hasAnyNewCategory && user
           const showReportBadge = to === '/admin' && unsolvedCount > 0
+          const showChatBadge   = to === '/chat'  && chatUnread
           const isProfileItem = to === '/profile'
           const handleLearnClick = isLearn && hasAnyNewCategory && user
             ? (e) => {
@@ -97,6 +106,9 @@ export default function BottomNav() {
                 )}
                 {showReportBadge && (
                   <span className="nav-new-badge" aria-label={`${unsolvedCount} unsolved report${unsolvedCount !== 1 ? 's' : ''}`} />
+                )}
+                {showChatBadge && (
+                  <span className="nav-new-badge" aria-label="New chat message" />
                 )}
               </span>
               <span className={`text-[10px] font-semibold tracking-wide ${active ? 'text-brand-600' : ''}`}>

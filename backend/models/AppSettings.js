@@ -171,6 +171,9 @@ const appSettingsSchema = new mongoose.Schema({
   // the admin UI omits these keys from PATCH so the previously-saved values persist.
   cbatFlagAircraftBriefIds: { type: [String], default: [] },
 
+  // Chat (user↔admin help) feature
+  chatEnabled:                { type: Boolean,  default: true },
+
   // Case Files feature
   caseFilesEnabled:           { type: Boolean,  default: false },
   // Per-case tier gating lives on each GameCaseFile.tiers (admin always bypasses).

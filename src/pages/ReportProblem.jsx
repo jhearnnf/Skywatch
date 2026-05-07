@@ -15,6 +15,21 @@ export default function ReportProblem() {
   const [error,       setError]       = useState('')
   const [busy,        setBusy]        = useState(false)
   const [brief,       setBrief]       = useState(null)
+  const [chatBusy,    setChatBusy]    = useState(false)
+
+  const startChat = async () => {
+    if (!user || chatBusy) return
+    setChatBusy(true)
+    try {
+      const res = await apiFetch(`${API}/api/chat/conversations`, {
+        method: 'POST', credentials: 'include',
+      })
+      if (!res.ok) throw new Error()
+      navigate('/chat')
+    } catch {
+      setChatBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!briefId) { setBrief(null); return }
@@ -106,6 +121,19 @@ export default function ReportProblem() {
         </button>
         <h1 className="text-2xl font-extrabold text-slate-900">Report a Problem</h1>
         <p className="text-sm text-slate-500 mt-1">Something not working? Let us know and we'll fix it.</p>
+      </div>
+
+      <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow mb-4">
+        <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Talk to a real person</p>
+        <p className="text-sm text-slate-500 mb-3">Get a fast reply from the Skywatch team — usually within a few hours.</p>
+        <button
+          type="button"
+          onClick={startChat}
+          disabled={chatBusy}
+          className="w-full py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold rounded-2xl text-sm transition-colors"
+        >
+          {chatBusy ? 'Opening…' : 'Start a chat'}
+        </button>
       </div>
 
       <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow">

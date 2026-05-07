@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
+import { useChatUnread } from '../../context/ChatUnreadContext'
 import ProfileBadge from '../ProfileBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
@@ -35,7 +36,9 @@ export default function Sidebar() {
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
-  const { levels: liveLevels } = useAppSettings()
+  const { hasAnyOpenChat: chatVisible, hasUnread: chatUnread } = useChatUnread() ?? {}
+  const { levels: liveLevels, settings } = useAppSettings() ?? {}
+  const showChatNav = user && settings?.chatEnabled !== false && chatVisible
   const levelInfo = user ? getLevelInfo(user.cycleAirstars ?? 0, liveLevels) : null
 
   return (
@@ -81,6 +84,28 @@ export default function Sidebar() {
             </NavLink>
           )
         })}
+
+        {showChatNav && (
+          <NavLink
+            data-nav="chat"
+            to="/chat"
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
+              ${isActive
+                ? 'bg-brand-100 text-brand-600 border-brand-200'
+                : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+              }`
+            }
+          >
+            <span className="relative text-lg w-6 text-center shrink-0">
+              💬
+              {chatUnread && (
+                <span className="nav-new-badge" aria-label="New chat message" />
+              )}
+            </span>
+            Chat
+          </NavLink>
+        )}
 
         {user?.isAdmin && (
           <NavLink

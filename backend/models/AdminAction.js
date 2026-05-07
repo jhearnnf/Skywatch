@@ -26,6 +26,9 @@ const ACTION_TYPES = [
   'reset_category_badges',
   'change_app_settings',
   'edit_tutorial_content',
+  'chat_close',
+  'chat_reopen',
+  'chat_start',
 ];
 
 const adminActionSchema = new mongoose.Schema({
