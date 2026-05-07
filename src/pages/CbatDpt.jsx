@@ -72,15 +72,15 @@ function bearingToCenter(x, y) {
 }
 
 // ── Gates / rounds ──────────────────────────────────────────────────────────
-// Rounds 1–3: 90s (1m 30s) — basic CA-A flow.
-// Rounds 4–5: 120s (2m)    — CA-N joins; +30s.
-// Rounds 6–8: 180s (3m)    — Fighter + enemies; +60s on top of rounds 4–5.
+// Rounds 1–3: 105s (1m 45s) — basic CA-A flow.
+// Rounds 4–5: 120s (2m)     — CA-N joins.
+// Rounds 6–8: 180s (3m)     — Fighter + enemies; +60s on top of rounds 4–5.
 function roundDurationMs(roundNum) {
   if (roundNum >= 6) return 180_000
   if (roundNum >= 4) return 120_000
-  return 90_000
+  return 105_000
 }
-const ROUND_DURATION_MS = 90_000  // base — used by round-1 inline spawn
+const ROUND_DURATION_MS = 105_000  // base — used by round-1 inline spawn
 
 // Admin-only cheat codes typed into the numpad jump to the matching round
 // number. Using any of these flags the run as a debug session: score stops
@@ -893,7 +893,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
         </div>
         <div className="flex items-start gap-2">
           <span className="text-brand-300 shrink-0">⏱</span>
-          <span>90s per round &middot; {TOTAL_ROUNDS} rounds total</span>
+          <span>{TOTAL_ROUNDS} rounds &middot; 105s / 120s / 180s as difficulty ramps</span>
         </div>
       </div>
 
