@@ -64,6 +64,7 @@ import CbatLeaderboard from './pages/CbatLeaderboard'
 import CbatGameGuard from './components/CbatGameGuard'
 import AirstarHistory from './pages/AirstarHistory'
 import GameHistory        from './pages/GameHistory'
+import CbatGameHistory   from './pages/CbatGameHistory'
 import IntelBriefHistory from './pages/IntelBriefHistory'
 import ReportProblem  from './pages/ReportProblem'
 import Chat           from './pages/Chat'
@@ -256,6 +257,7 @@ function AppRoutes() {
           <Route path="/share"            element={<PageWrapper><Share /></PageWrapper>} />
           <Route path="/airstar-history"       element={<RequireAuth><PageWrapper><AirstarHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"          element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
+          <Route path="/cbat-game-history"     element={<RequireAuth><PageWrapper><CbatGameHistory /></PageWrapper></RequireAuth>} />
           <Route path="/intel-brief-history"   element={<RequireAuth><PageWrapper><IntelBriefHistory /></PageWrapper></RequireAuth>} />
           <Route path="/admin"             element={<RequireAuth><PageWrapper><Admin /></PageWrapper></RequireAuth>} />
           <Route path="/admin/openrouter-usage" element={<RequireAuth><PageWrapper><OpenRouterUsage /></PageWrapper></RequireAuth>} />

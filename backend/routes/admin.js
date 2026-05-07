@@ -1344,6 +1344,128 @@ router.get('/users/:id/game-history', protect, adminOnly, async (req, res) => {
   }
 });
 
+// GET /api/admin/users/:id/cbat-history — admin view of a user's CBAT sessions
+//
+// Returns one row per CBAT session — both finished and abandoned (started but
+// no matching result) — sorted most-recent first. Pairing logic per gameKey:
+// walk starts in chronological order; each start consumes the earliest unmatched
+// finish whose createdAt is at or after the start's startedAt. Leftover starts
+// → abandoned. Orphan finishes (no preceding start) are still listed as
+// finished with no startedAt — defensive against pre-tracking-era records.
+router.get('/users/:id/cbat-history', protect, adminOnly, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const targetUser = await User.findById(userId).select('agentNumber displayName email').lean();
+    if (!targetUser) return res.status(404).json({ message: 'User not found' });
+
+    const page         = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit        = Math.min(50, parseInt(req.query.limit) || 20);
+    const gameFilter   = req.query.gameKey || 'all';
+    const resultFilter = req.query.result  || 'all';
+
+    const uid = new mongoose.Types.ObjectId(userId);
+    const cbatEntries = Object.entries(CBAT_GAMES);
+
+    const [allStarts, ...finishesPerGame] = await Promise.all([
+      GameSessionCbatStart.find({ userId: uid }).lean(),
+      ...cbatEntries.map(([, cfg]) => cfg.Model.find({ userId: uid }).lean()),
+    ]);
+
+    const startsByGame = {};
+    for (const s of allStarts) (startsByGame[s.gameKey] ??= []).push(s);
+
+    const sessions = [];
+    cbatEntries.forEach(([gameKey, cfg], i) => {
+      const starts   = (startsByGame[gameKey] ?? []).slice().sort((a, b) =>
+        new Date(a.startedAt) - new Date(b.startedAt));
+      const finishes = (finishesPerGame[i] ?? []).slice().sort((a, b) =>
+        new Date(a.createdAt) - new Date(b.createdAt));
+
+      const usedFinishIds = new Set();
+      for (const start of starts) {
+        const startTime = new Date(start.startedAt).getTime();
+        const match = finishes.find(f =>
+          !usedFinishIds.has(String(f._id)) &&
+          new Date(f.createdAt).getTime() >= startTime
+        );
+        if (match) {
+          usedFinishIds.add(String(match._id));
+          sessions.push({
+            _id:              String(match._id),
+            gameKey,
+            gameLabel:        cfg.label,
+            status:           'finished',
+            startedAt:        start.startedAt,
+            finishedAt:       match.createdAt,
+            totalTimeSeconds: match.totalTime ?? null,
+            primaryField:     cfg.primaryField,
+            primaryValue:     match[cfg.primaryField] ?? null,
+            grade:            match.grade ?? null,
+          });
+        } else {
+          sessions.push({
+            _id:              String(start._id),
+            gameKey,
+            gameLabel:        cfg.label,
+            status:           'abandoned',
+            startedAt:        start.startedAt,
+            finishedAt:       null,
+            totalTimeSeconds: null,
+            primaryField:     cfg.primaryField,
+            primaryValue:     null,
+            grade:            null,
+          });
+        }
+      }
+
+      // Orphan finishes — finish records with no preceding start
+      for (const f of finishes) {
+        if (usedFinishIds.has(String(f._id))) continue;
+        sessions.push({
+          _id:              String(f._id),
+          gameKey,
+          gameLabel:        cfg.label,
+          status:           'finished',
+          startedAt:        null,
+          finishedAt:       f.createdAt,
+          totalTimeSeconds: f.totalTime ?? null,
+          primaryField:     cfg.primaryField,
+          primaryValue:     f[cfg.primaryField] ?? null,
+          grade:            f.grade ?? null,
+        });
+      }
+    });
+
+    const VALID_GAMEKEYS = Object.keys(CBAT_GAMES);
+    const VALID_RESULTS  = ['finished', 'abandoned'];
+
+    const filtered = sessions.filter(s => {
+      if (gameFilter   !== 'all' && VALID_GAMEKEYS.includes(gameFilter)   && s.gameKey !== gameFilter)   return false;
+      if (resultFilter !== 'all' && VALID_RESULTS.includes(resultFilter) && s.status  !== resultFilter) return false;
+      return true;
+    });
+
+    filtered.sort((a, b) => {
+      const ta = new Date(a.finishedAt ?? a.startedAt).getTime();
+      const tb = new Date(b.finishedAt ?? b.startedAt).getTime();
+      return tb - ta;
+    });
+
+    const counts = {
+      total:     sessions.length,
+      finished:  sessions.filter(s => s.status === 'finished').length,
+      abandoned: sessions.filter(s => s.status === 'abandoned').length,
+    };
+
+    const total     = filtered.length;
+    const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+    res.json({ status: 'success', data: { sessions: paginated, total, page, limit, user: targetUser, counts } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // DELETE /api/admin/users/:id — permanently delete a user and all their data
 router.delete('/users/:id', requireReason, async (req, res) => {
   try {

@@ -2519,7 +2519,8 @@ function UsersTab({ API }) {
                   () => navigate('/intel-brief-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } })],
                 ['Games', (u.profileStats?.quizzesPlayed ?? 0) + (u.profileStats?.booPlayed ?? 0) + (u.profileStats?.wtaPlayed ?? 0) + (u.profileStats?.wherePlayed ?? 0) + (u.profileStats?.flashcardsPlayed ?? 0),
                   () => navigate('/game-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } })],
-                ['CBAT Games Finished', `${u.profileStats?.cbatPlayed ?? 0}/${u.profileStats?.cbatStarted ?? 0}`, null],
+                ['CBAT Games Finished', `${u.profileStats?.cbatPlayed ?? 0}/${u.profileStats?.cbatStarted ?? 0}`,
+                  () => navigate('/cbat-game-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } })],
                 ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1), null],
                 ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), null],
               ].map(([l, v, onClick]) => onClick ? (
