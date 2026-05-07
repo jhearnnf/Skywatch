@@ -196,7 +196,7 @@ describe('Play page — launcher sections', () => {
 
   it("Where's that Aircraft? section prompts logged-in users to learn about aircrafts", async () => {
     renderAsUser({})
-    await waitFor(() => screen.getByText(/learn about aircrafts for these random missions to appear/i))
+    await waitFor(() => screen.getByText(/Read aircrafts & bases to unlock/i))
   })
 
   it("Where's that Aircraft? section shows bases hint for logged-in users", async () => {
@@ -631,7 +631,7 @@ describe('Play page — WTA card padlock', () => {
 
   it('WTA card padlock is locked (grey) when wta-spawn returns prereqsMet: false', async () => {
     renderWithWtaSpawn({ prereqsMet: false })
-    await waitFor(() => screen.getByText(/learn about aircrafts for these random missions to appear/i))
+    await waitFor(() => screen.getByText(/Read aircrafts & bases to unlock/i))
     const card = screen.getByTestId('card-wheres-that-aircraft')
     // Locked SVG uses grey stroke #94a3b8; unlocked uses green #22c55e
     const svgPaths = card.querySelectorAll('svg [stroke]')
@@ -660,7 +660,7 @@ describe('Play page — WTA card padlock', () => {
   it('does NOT call markUnlockFromServer("wta") when prereqsMet: false', async () => {
     const markUnlockFromServer = vi.fn()
     renderWithWtaSpawn({ prereqsMet: false }, { markUnlockFromServer })
-    await waitFor(() => screen.getByText(/learn about aircrafts/i))
+    await waitFor(() => screen.getByText(/Read aircrafts & bases to unlock/i))
     expect(markUnlockFromServer).not.toHaveBeenCalledWith('wta')
   })
 
@@ -680,7 +680,7 @@ describe('Play page — WTA card padlock', () => {
     // So even if the current spawn endpoint says prereqs are no longer met,
     // the cached isUnlocked('wta') keeps the padlock green.
     renderWithWtaSpawn({ prereqsMet: false }, { isUnlockedFn: (key) => key === 'wta' })
-    await waitFor(() => screen.getByText(/learn about aircrafts for these random missions to appear/i))
+    await waitFor(() => screen.getByText(/Read aircrafts & bases to unlock/i))
     const card = screen.getByTestId('card-wheres-that-aircraft')
     const svgPaths = card.querySelectorAll('svg [stroke]')
     const strokes = Array.from(svgPaths).map(el => el.getAttribute('stroke'))
@@ -690,7 +690,7 @@ describe('Play page — WTA card padlock', () => {
   it('does NOT call revokeUnlock("wta") when prereqsMet: false (unlocks must persist)', async () => {
     const revokeUnlock = vi.fn()
     renderWithWtaSpawn({ prereqsMet: false }, { isUnlockedFn: (key) => key === 'wta', revokeUnlock })
-    await waitFor(() => screen.getByText(/learn about aircrafts/i))
+    await waitFor(() => screen.getByText(/Read aircrafts & bases to unlock/i))
     expect(revokeUnlock).not.toHaveBeenCalled()
   })
 })

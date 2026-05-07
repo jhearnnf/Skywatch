@@ -11,6 +11,9 @@ vi.mock('react-router-dom', () => ({
 }))
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
+vi.mock('../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({ settings: { cbatGameEnabled: {} } }),
+}))
 vi.mock('../../components/SEO', () => ({ default: () => null }))
 
 vi.mock('framer-motion', () => ({
@@ -32,8 +35,8 @@ function renderWithUser(user = { _id: '1', name: 'Test' }) {
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('CBAT_GAMES data', () => {
-  it('has 12 games with images and 0 without', () => {
-    expect(GAMES_WITH_IMAGES.length).toBe(12)
+  it('has 13 games with images and 0 without', () => {
+    expect(GAMES_WITH_IMAGES.length).toBe(13)
     expect(GAMES_WITHOUT_IMAGES.length).toBe(0)
   })
 

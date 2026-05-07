@@ -127,28 +127,28 @@ describe('Admin — Stats tab: collapsible sections', () => {
     expect(labels.length).toBe(2)
   })
 
-  it('renders Quiz/BOO/WTA/Flashcard/Aptitude sections closed by default', async () => {
+  it('renders Intel Recall/BOO/WTA/Flashcard/Aptitude sections closed by default', async () => {
     render(<Admin />)
 
     // Wait for stats to load before asserting hidden content
     await waitFor(() => expect(screen.getByText('Users')).toBeInTheDocument())
 
     // Section headers are visible, but their unique body labels are not
-    expect(screen.getByText('Quiz')).toBeInTheDocument()
-    expect(screen.queryByText('Perfect Score')).not.toBeInTheDocument()  // Quiz-only label
+    expect(screen.getByText('Intel Recall')).toBeInTheDocument()
+    expect(screen.queryByText('Perfect Score')).not.toBeInTheDocument()  // Intel Recall-only label
     expect(screen.queryByText('Defeated')).not.toBeInTheDocument()       // BOO-only label
     expect(screen.queryByText('R1 Correct (ID)')).not.toBeInTheDocument()// WTA-only label
     expect(screen.queryByText('Cards Total')).not.toBeInTheDocument()    // Flashcard-only label
     expect(screen.queryByText('Airstars Earned')).not.toBeInTheDocument()// Aptitude Sync-only label
   })
 
-  it('expands Quiz section when its header is clicked', async () => {
+  it('expands Intel Recall section when its header is clicked', async () => {
     render(<Admin />)
 
     await waitFor(() => expect(screen.getByText('Users')).toBeInTheDocument())
     expect(screen.queryByText('Perfect Score')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Quiz'))
+    fireEvent.click(screen.getByText('Intel Recall'))
     expect(screen.getByText('Perfect Score')).toBeInTheDocument()
   })
 

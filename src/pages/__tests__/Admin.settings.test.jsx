@@ -54,7 +54,12 @@ vi.mock('framer-motion', () => ({
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
 const MOCK_SETTINGS = {
-  trialDurationDays: 7,
+  // Trial duration was split into 3 fields: appTrialDays (in-app, no card),
+  // appStripeTrialDays (Stripe extension trial for app users), webStripeTrialDays
+  // (trial for fresh web sign-ups). Distinct values keep the assertion specific.
+  appTrialDays: 7,
+  appStripeTrialDays: 4,
+  webStripeTrialDays: 9,
   guestCategories: ['News'],
   freeCategories: ['News'],
   silverCategories: [],
@@ -244,10 +249,10 @@ describe('Admin — Settings tab: Sound Effects', () => {
     expect(last.play).toHaveBeenCalled()
   })
 
-  it('▶ for "Quiz Won" plays quiz_complete_win.mp3', async () => {
+  it('▶ for "Recall Won" plays quiz_complete_win.mp3', async () => {
     await renderAndOpenSettings()
 
-    const row = screen.getByText('Quiz Won').closest('div')
+    const row = screen.getByText('Recall Won').closest('div')
     fireEvent.click(within(row).getByTitle('Preview'))
 
     const last = audioInstances.at(-1)
@@ -255,10 +260,10 @@ describe('Admin — Settings tab: Sound Effects', () => {
     expect(last.play).toHaveBeenCalled()
   })
 
-  it('▶ for "Quiz Fail" plays quiz_complete_lose.mp3', async () => {
+  it('▶ for "Recall Fail" plays quiz_complete_lose.mp3', async () => {
     await renderAndOpenSettings()
 
-    const row = screen.getByText('Quiz Fail').closest('div')
+    const row = screen.getByText('Recall Fail').closest('div')
     fireEvent.click(within(row).getByTitle('Preview'))
 
     const last = audioInstances.at(-1)
@@ -286,7 +291,7 @@ describe('Admin — Settings tab: Sound Effects', () => {
     expect(firstAudio.play).toHaveBeenCalled()
     expect(firstAudio.pause).not.toHaveBeenCalled()
 
-    const secondRow = screen.getByText('Quiz Won').closest('div')
+    const secondRow = screen.getByText('Recall Won').closest('div')
     fireEvent.click(within(secondRow).getByTitle('Preview'))
 
     // First preview must have been stopped before the second one started
@@ -433,9 +438,12 @@ describe('Admin — Settings tab: Pathway Access (trial duration + tier access)'
     await waitFor(() => screen.getByText('Aircrafts'))
   }
 
-  it('shows trial duration from settings', async () => {
+  it('shows the three trial duration inputs from settings', async () => {
     await openPathwaySection()
+    // appTrialDays=7, appStripeTrialDays=4, webStripeTrialDays=9 (set in MOCK_SETTINGS)
     expect(screen.getByDisplayValue('7')).toBeDefined()
+    expect(screen.getByDisplayValue('4')).toBeDefined()
+    expect(screen.getByDisplayValue('9')).toBeDefined()
   })
 
   it('changing a category tier select to "free" updates the row', async () => {

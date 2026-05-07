@@ -352,7 +352,9 @@ describe('POST /api/admin/ai/generate-brief', () => {
 
 
   it('returns 500 with message when AI returns malformed JSON', async () => {
-    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter('This is not JSON at all!!!'));
+    // Must start with `{` so the route reaches JSON.parse — non-JSON-starting
+    // responses now hit a different branch ("Couldn't find sources…").
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(mockOpenRouter('{this is broken'));
 
     const admin = await createAdminUser();
     const res   = await request(app)
@@ -533,7 +535,8 @@ describe('POST /api/admin/ai/generate-brief', () => {
       .send({ headline: 'RAF Typhoons deployed overseas', eventDate });
 
     expect(res.status).toBe(422);
-    expect(res.body.message).toMatch(/2026-04-20/);
+    // Route applies a 3-day grace window: floor = eventDate - 3 days = 2026-04-17.
+    expect(res.body.message).toMatch(/published on or after 2026-04-/);
   });
 
   it('passes search_after_date_filter to Perplexity when eventDate is supplied', async () => {
@@ -560,7 +563,8 @@ describe('POST /api/admin/ai/generate-brief', () => {
       .send({ headline: 'RAF Typhoons deployed overseas', eventDate });
 
     expect(capturedBody).toContain('search_after_date_filter');
-    expect(capturedBody).toContain('04/20/2026');
+    // 3-day grace window: floor = 2026-04-20 - 3 days = 04/17/2026 (MM/DD/YYYY)
+    expect(capturedBody).toContain('04/17/2026');
   });
 
   it('returns 401 for unauthenticated request', async () => {
@@ -793,7 +797,9 @@ describe('POST /api/admin/ai/generate-image', () => {
     const res   = await request(app)
       .post('/api/admin/ai/generate-image')
       .set('Cookie', authCookie(admin._id))
-      .send({ title: 'RAF Typhoon', subtitle: 'Multi-role fast jet' });
+      // Limit to wikipedia so the helper skips DVIDS/Commons and the existing
+      // Wikipedia-shaped mock chain (search → thumb → download) lines up.
+      .send({ title: 'RAF Typhoon', subtitle: 'Multi-role fast jet', sources: ['wikipedia'] });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('success');
@@ -836,7 +842,7 @@ describe('POST /api/admin/ai/generate-image', () => {
     const res   = await request(app)
       .post('/api/admin/ai/generate-image')
       .set('Cookie', authCookie(admin._id))
-      .send({ title: 'Nonexistent Subject XYZ' });
+      .send({ title: 'Nonexistent Subject XYZ', sources: ['wikipedia'] });
 
     expect(res.status).toBe(500);
     expect(typeof res.body.message).toBe('string');
@@ -934,7 +940,7 @@ describe('POST /api/admin/ai/generate-image', () => {
     const res   = await request(app)
       .post('/api/admin/ai/generate-image')
       .set('Cookie', authCookie(admin._id))
-      .send({ title: 'Typhoon' });
+      .send({ title: 'Typhoon', sources: ['wikipedia'] });
 
     expect(res.status).toBe(200);
     expect(String(res.body.data.images[0].mediaId)).toBe(String(existing._id));

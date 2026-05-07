@@ -259,23 +259,23 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
   beforeEach(() => { vi.clearAllMocks() })
   afterEach(()  => { vi.restoreAllMocks() })
 
-  it('happy path: /finish returns 200 OK with airstarsEarned → notifQueue has [Brief read, Quiz complete]', async () => {
+  it('happy path: /finish returns 200 OK with airstarsEarned → notifQueue has [Brief read, Intel Recall complete]', async () => {
     const { queueSink } = await runFlow({ finishBehavior: { kind: 'ok' } })
 
     // Expectation: 2 notifs. Brief-read first (consumed last-in-first-out? no — FIFO),
-    // so index 0 is Brief read, index 1 is Quiz complete.
+    // so index 0 is Brief read, index 1 is Intel Recall complete.
     const labels = queueSink.map(n => n.label)
     expect(labels).toContain('Brief read')
-    expect(labels).toContain('Quiz complete')
-    expect(labels.filter(l => l === 'Quiz complete')).toHaveLength(1)
+    expect(labels).toContain('Intel Recall complete')
+    expect(labels.filter(l => l === 'Intel Recall complete')).toHaveLength(1)
   })
 
-  it('slow /finish (100ms delay) still queues a Quiz complete notif', async () => {
+  it('slow /finish (100ms delay) still queues a Intel Recall complete notif', async () => {
     const { queueSink } = await runFlow({
       finishBehavior: { kind: 'slow', delayMs: 100 },
     })
     const labels = queueSink.map(n => n.label)
-    expect(labels).toContain('Quiz complete')
+    expect(labels).toContain('Intel Recall complete')
   })
 
   it('/finish 500 → falls through to refreshUser fallback; if delta > 0 should still notify', async () => {
@@ -284,7 +284,7 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
       freshUserAfterFinish: { ...INITIAL_USER, totalAirstars: 10, cycleAirstars: 10 }, // server awarded 10
     })
     const labels = queueSink.map(n => n.label)
-    expect(labels).toContain('Quiz complete')
+    expect(labels).toContain('Intel Recall complete')
   })
 
   it('/finish rejects (network) → falls through to refreshUser fallback', async () => {
@@ -293,7 +293,7 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
       freshUserAfterFinish: { ...INITIAL_USER, totalAirstars: 10, cycleAirstars: 10 },
     })
     const labels = queueSink.map(n => n.label)
-    expect(labels).toContain('Quiz complete')
+    expect(labels).toContain('Intel Recall complete')
   })
 
   it('/finish parse error → falls through to refreshUser fallback', async () => {
@@ -302,16 +302,16 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
       freshUserAfterFinish: { ...INITIAL_USER, totalAirstars: 10, cycleAirstars: 10 },
     })
     const labels = queueSink.map(n => n.label)
-    expect(labels).toContain('Quiz complete')
+    expect(labels).toContain('Intel Recall complete')
   })
 
-  it('NO preseed (control): happy /finish still queues Quiz complete', async () => {
+  it('NO preseed (control): happy /finish still queues Intel Recall complete', async () => {
     const { queueSink } = await runFlow({
       finishBehavior: { kind: 'ok' },
       preSeedBriefRead: false,
     })
     const labels = queueSink.map(n => n.label)
-    expect(labels).toContain('Quiz complete')
+    expect(labels).toContain('Intel Recall complete')
     expect(labels.filter(l => l === 'Brief read')).toHaveLength(0)
   })
 
@@ -341,7 +341,7 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
       // /auth/me after finish reflects the server-side award: brief-read(5) + quiz(10) = 15
       freshUserAfterFinish: { ...INITIAL_USER, totalAirstars: 15, cycleAirstars: 15 },
     })
-    expect(queueSink.map(n => n.label)).toContain('Quiz complete')
+    expect(queueSink.map(n => n.label)).toContain('Intel Recall complete')
   })
 
   it('regression: /finish 200 OK missing `.data` envelope → fallback recovers via delta', async () => {
@@ -352,7 +352,7 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
       },
       freshUserAfterFinish: { ...INITIAL_USER, totalAirstars: 15, cycleAirstars: 15 },
     })
-    expect(queueSink.map(n => n.label)).toContain('Quiz complete')
+    expect(queueSink.map(n => n.label)).toContain('Intel Recall complete')
   })
 
   it('repro: /finish returns totalAirstars equal to preFinishTotal (server thinks already awarded)', async () => {
@@ -375,9 +375,9 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
         },
       },
     })
-    // For a repeat attempt, no Quiz complete notif is expected — this is correct behaviour.
+    // For a repeat attempt, no Intel Recall complete notif is expected — this is correct behaviour.
     const labels = queueSink.map(n => n.label)
-    expect(labels).not.toContain('Quiz complete')
+    expect(labels).not.toContain('Intel Recall complete')
   })
 
   it('repro: /finish response body resolves AFTER user unmounts (leaked navigation)', async () => {
@@ -409,7 +409,7 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
       },
     })
     const labels = queueSink.map(n => n.label)
-    expect(labels).toContain('Quiz complete')
+    expect(labels).toContain('Intel Recall complete')
   })
 
   // ── Race condition: "See Results" clicked before fireFinish runs ──────────
@@ -576,8 +576,8 @@ describe('QuizFlow — notif after brief-read preseed (bug repro)', () => {
     // any sync/microtask to run, then check.
     await new Promise(r => setTimeout(r, 200))
     const labels = queueSink.map(n => n.label)
-    // With a hung /finish, no Quiz complete notif is queued (stuck awaiting).
+    // With a hung /finish, no Intel Recall complete notif is queued (stuck awaiting).
     // This is *expected* behaviour of the code — not a bug per se, but a hazard.
-    expect(labels).not.toContain('Quiz complete')
+    expect(labels).not.toContain('Intel Recall complete')
   })
 })

@@ -127,11 +127,10 @@ describe('Admin — Users tab: Briefs Read stat', () => {
 
     await waitFor(() => screen.getByText('agent@test.com'))
 
-    // Find the user card and assert the Briefs Read stat within it
-    const card = screen.getByText('agent@test.com').closest('div[class*="border"]') ??
-                 screen.getByText('agent@test.com').parentElement.parentElement
+    // User rows are now collapsible — expand to reveal the stats panel
+    fireEvent.click(screen.getByLabelText(/Expand Agent 001/))
 
-    expect(screen.getByText('Briefs Read')).toBeDefined()
+    expect(await screen.findByText('Briefs Read')).toBeDefined()
     expect(screen.getByText('7')).toBeDefined()
   })
 
@@ -144,7 +143,8 @@ describe('Admin — Users tab: Briefs Read stat', () => {
     fireEvent.click(usersTab)
 
     await waitFor(() => screen.getByText('agent@test.com'))
-    expect(screen.getByText('Briefs Read')).toBeDefined()
+    fireEvent.click(screen.getByLabelText(/Expand Agent 001/))
+    expect(await screen.findByText('Briefs Read')).toBeDefined()
   })
 })
 
@@ -170,7 +170,9 @@ describe('Admin — Users tab: ban / unban routing', () => {
     await navigateToUsers()
     await waitFor(() => screen.getByText('banned@test.com'))
 
-    fireEvent.click(screen.getByRole('button', { name: /^unban user$/i }))
+    // User rows are now collapsible — expand to reveal action buttons
+    fireEvent.click(screen.getByLabelText(/Expand Agent 002/))
+    fireEvent.click(await screen.findByRole('button', { name: /^unban user$/i }))
     await submitModal()
 
     const calls = global.fetch.mock.calls
@@ -194,7 +196,8 @@ describe('Admin — Users tab: ban / unban routing', () => {
     await navigateToUsers()
     await waitFor(() => screen.getByText('agent@test.com'))
 
-    fireEvent.click(screen.getByRole('button', { name: /^ban user$/i }))
+    fireEvent.click(screen.getByLabelText(/Expand Agent 001/))
+    fireEvent.click(await screen.findByRole('button', { name: /^ban user$/i }))
     await submitModal()
 
     const banCall = global.fetch.mock.calls.find(([url, opts]) =>
@@ -249,7 +252,8 @@ describe('Admin — Users tab: self-action buttons hidden on own row', () => {
     await navigateToUsers()
     await waitFor(() => screen.getByText('other-admin@test.com'))
 
-    expect(screen.getByRole('button', { name: /^delete account$/i })).toBeDefined()
+    fireEvent.click(screen.getByLabelText(/Expand Agent 009/))
+    expect(await screen.findByRole('button', { name: /^delete account$/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /^ban user$/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /^remove admin$/i })).toBeDefined()
   })

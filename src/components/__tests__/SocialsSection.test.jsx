@@ -176,7 +176,7 @@ describe('SocialsSection — form behaviour', () => {
     expect(screen.getByText(/7 ·/)).toBeInTheDocument()
     fireEvent.change(screen.getByTestId('tone-slider'), { target: { value: '10' } })
     expect(screen.getByText(/10 ·/)).toBeInTheDocument()
-    expect(screen.getByText(/Maximum cheeky/)).toBeInTheDocument()
+    expect(screen.getByText(/Wild & carefree/)).toBeInTheDocument()
   })
 })
 
@@ -372,11 +372,10 @@ describe('SocialsSection — include image preview', () => {
     fireEvent.click(screen.getByText('Socials'))
     await screen.findByTestId('brief-select')
     await waitFor(() => expect(screen.getByTestId('brief-select').value).toBe('withimg'))
-    // No image preview yet — checkbox is off by default.
+    // No image preview yet — image source defaults to 'none'.
     expect(screen.queryByTestId('image-preview-name')).toBeNull()
-    // Tick the include-image checkbox.
-    const checkbox = screen.getByLabelText('Include brief image')
-    fireEvent.click(checkbox)
+    // Click the "Brief image" button (replaces the old include-image checkbox).
+    fireEvent.click(screen.getByRole('button', { name: /^brief image$/i }))
     // Preview appears immediately, sourced from the selected brief's media.
     const nameEl = await screen.findByTestId('image-preview-name')
     expect(nameEl.textContent).toBe('F-35 over Akrotiri')
@@ -410,15 +409,15 @@ describe('SocialsSection — daily-recon poll', () => {
     return jsonResp({})
   }
 
-  it('hides the include-image toggle when post type is daily-recon', async () => {
+  it('hides the image controls when post type is daily-recon', async () => {
     global.fetch = vi.fn().mockImplementation(pollRouter)
     render(<SocialsSection API="" />)
     fireEvent.click(screen.getByText('Socials'))
     await screen.findByTestId('post-type-select')
-    // latest-intel default → toggle visible
-    expect(screen.getByLabelText('Include brief image')).toBeInTheDocument()
+    // latest-intel default → image source buttons (None / Brief image / Upload) visible
+    expect(screen.getByRole('button', { name: /^brief image$/i })).toBeInTheDocument()
     fireEvent.change(screen.getByTestId('post-type-select'), { target: { value: 'daily-recon' } })
-    expect(screen.queryByLabelText('Include brief image')).toBeNull()
+    expect(screen.queryByRole('button', { name: /^brief image$/i })).toBeNull()
   })
 
   it('shows the poll options + correct answer in the preview after generating a daily-recon draft', async () => {

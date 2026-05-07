@@ -319,8 +319,8 @@ describe('Admin Briefs — Regenerate All two-step flow', () => {
     await confirmRegenModal()
 
     await waitFor(() => screen.getByText(/regenerated — review and save/i))
-    // Quiz Questions section is collapsed by default — expand it to see the tab counts
-    fireEvent.click(screen.getByText('Quiz Questions'))
+    // Intel Recall Questions section is collapsed by default — expand it to see the tab counts
+    fireEvent.click(screen.getByText('Intel Recall Questions'))
     await waitFor(() => expect(screen.getByText(/easy.*10|10.*easy/i)).toBeDefined())
   })
 })
@@ -459,7 +459,7 @@ describe('Admin Briefs — Generate Description button', () => {
     render(<Admin />)
     await openBriefEditor()
     await confirmDescModal()
-    await waitFor(() => screen.getByText(/description generated — keywords, quiz, and sources refreshed/i))
+    await waitFor(() => screen.getByText(/description generated — keywords, recall questions, and sources refreshed/i))
   })
 
   it('shows error toast when the API returns an error response', async () => {
