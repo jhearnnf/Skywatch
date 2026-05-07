@@ -112,6 +112,34 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, gameMode3D 
       <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Choose Your Aircraft</h2>
       <p className="text-xs text-slate-400 text-center mb-3">Select an aircraft, then navigate through 5 levels.</p>
 
+      {/* Mode recommendation — explicit nudge so users know the toggle in the
+          header switches between an easier practice mode and the real
+          challenge. Slate/brand/amber scales are inverted on dark theme:
+          high values = light, low values = dark. Use 700–800 for body text. */}
+      <div
+        className={`max-w-md mx-auto mb-3 rounded-lg border-2 p-3 text-sm ${
+          gameMode3D
+            ? 'border-amber-700 bg-amber-100 text-amber-800'
+            : 'border-brand-600 bg-brand-100 text-brand-800'
+        }`}
+      >
+        {gameMode3D ? (
+          <>
+            <span className="font-extrabold uppercase tracking-wide">3D — Hard.</span>{' '}
+            <span className="text-slate-800">Full pitch &amp; yaw with 10 vertical layers. New to this? Switch to</span>{' '}
+            <span className="font-mono font-bold">2D · Practice</span>{' '}
+            <span className="text-slate-800">in the top-right.</span>
+          </>
+        ) : (
+          <>
+            <span className="font-extrabold uppercase tracking-wide">2D — Practice.</span>{' '}
+            <span className="text-slate-800">Flat grid to learn the controls. Ready for the real challenge? Switch to</span>{' '}
+            <span className="font-mono font-bold">3D · Hard</span>{' '}
+            <span className="text-slate-800">in the top-right.</span>
+          </>
+        )}
+      </div>
+
       {/* Instructions */}
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
         <div className="flex items-start gap-2">
