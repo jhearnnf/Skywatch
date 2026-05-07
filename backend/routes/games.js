@@ -2174,28 +2174,29 @@ router.get('/cbat/aircraft-cutouts', protect, async (_req, res) => {
 });
 
 // ── CBAT — DPT: fighter aircraft pool for the Fighter / enemy aircraft ─────
-// Returns published Aircraft briefs whose gameData.aircraftType is 'fighter'
-// AND that have a 3D model AND a cutout image. Used by DPT to randomly pick
-// the player's Fighter aircraft and the enemy aircraft (rendered red).
+// Prefers published Aircraft briefs tagged gameData.aircraftType='fighter'
+// with a 3D model + cutout. Falls back to ANY 3D-modelled Aircraft brief if
+// no fighters are tagged, so the DPT spawn never silently breaks when the
+// catalogue isn't fully classified.
 router.get('/cbat/fighter-aircraft', protect, async (_req, res) => {
   try {
     const { has3DModel } = require('../data/aircraftModels');
     const briefs = await IntelligenceBrief.find({
       category: 'Aircrafts',
       status: 'published',
-      'gameData.aircraftType': 'fighter',
     })
-      .select('title media')
+      .select('title gameData.aircraftType media')
       .populate('media')
       .lean();
 
-    const results = briefs
-      .map(b => {
-        if (!has3DModel(b._id, b.title)) return null;
-        const img = (b.media || []).find(m => m.cutoutUrl);
-        return img ? { briefId: b._id, title: b.title, cutoutUrl: img.cutoutUrl } : null;
-      })
-      .filter(Boolean);
+    const buildEntry = b => {
+      if (!has3DModel(b._id, b.title)) return null;
+      const img = (b.media || []).find(m => m.cutoutUrl);
+      return img ? { briefId: b._id, title: b.title, cutoutUrl: img.cutoutUrl } : null;
+    };
+
+    const fighters = briefs.filter(b => b.gameData?.aircraftType === 'fighter').map(buildEntry).filter(Boolean);
+    const results = fighters.length > 0 ? fighters : briefs.map(buildEntry).filter(Boolean);
 
     res.json({ status: 'success', data: results });
   } catch (err) {
