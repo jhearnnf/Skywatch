@@ -1130,12 +1130,15 @@ export default function CbatDpt() {
       .finally(() => setLoadingAircraft(false))
   }, [user])
 
-  // Fetch the fighter pool used for the player's Fighter and for enemy aircraft
+  // Fetch the fighter pool used for the player's Fighter and for enemy aircraft.
+  // The backend can't reliably check for GLB presence (its filesystem view of
+  // public/models/ depends on deployment layout — Railway ships only backend/),
+  // so we filter to 3D-modelled briefs here via the Vite virtual module.
   useEffect(() => {
     if (!user) return
     apiFetch(`${API}/api/games/cbat/fighter-aircraft`)
       .then(res => res.json())
-      .then(d => setFighterPool(d.data || []))
+      .then(d => setFighterPool((d.data || []).filter(a => has3DModel(a.briefId, a.title))))
       .catch(() => {})
   }, [user])
 

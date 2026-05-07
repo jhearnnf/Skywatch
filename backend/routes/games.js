@@ -2175,12 +2175,12 @@ router.get('/cbat/aircraft-cutouts', protect, async (_req, res) => {
 
 // ── CBAT — DPT: fighter aircraft pool for the Fighter / enemy aircraft ─────
 // Prefers published Aircraft briefs tagged gameData.aircraftType='fighter'
-// with a 3D model + cutout. Falls back to ANY 3D-modelled Aircraft brief if
-// no fighters are tagged, so the DPT spawn never silently breaks when the
-// catalogue isn't fully classified.
+// with a cutout. Falls back to ANY Aircraft brief with a cutout if no
+// fighters are tagged. The 3D-model filter is applied client-side (the
+// backend has no reliable filesystem view of the frontend's public/models/
+// directory in the deployed environment).
 router.get('/cbat/fighter-aircraft', protect, async (_req, res) => {
   try {
-    const { has3DModel } = require('../data/aircraftModels');
     const briefs = await IntelligenceBrief.find({
       category: 'Aircrafts',
       status: 'published',
@@ -2190,7 +2190,6 @@ router.get('/cbat/fighter-aircraft', protect, async (_req, res) => {
       .lean();
 
     const buildEntry = b => {
-      if (!has3DModel(b._id, b.title)) return null;
       const img = (b.media || []).find(m => m.cutoutUrl);
       return img ? { briefId: b._id, title: b.title, cutoutUrl: img.cutoutUrl } : null;
     };
