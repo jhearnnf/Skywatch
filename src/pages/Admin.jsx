@@ -15,6 +15,7 @@ import TutorialsEditor from './admin/TutorialsEditor'
 import SEO from '../components/SEO'
 import { has3DModel } from '../data/aircraftModels'
 import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } from '../../backend/constants/categories.json'
+import { CBAT_GAMES } from './Cbat'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -1463,6 +1464,8 @@ function SettingsTab({ API }) {
   const [cbatAircraft, setCbatAircraft] = useState(null)   // aircraft with a 3D model available
   const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false, cbat: false, caseFiles: false, flashcards: false })
   const toggleGameGroup = (key) => setGameGroupsOpen(p => ({ ...p, [key]: !p[key] }))
+  const [cbatGameRowsOpen, setCbatGameRowsOpen] = useState({ general: true })
+  const toggleCbatGameRow = (key) => setCbatGameRowsOpen(p => ({ ...p, [key]: !p[key] }))
 
   const [caseFilesList, setCaseFilesList] = useState(null) // null = loading, [] = empty, [...] = loaded
   const [caseFilesDraft, setCaseFilesDraft] = useState({}) // { [slug]: ['free','silver',...] }
@@ -1722,6 +1725,7 @@ function SettingsTab({ API }) {
           'aptitudeSyncDailyLimitGold',
           'cbatEnabled',
           'cbatTiers',
+          'cbatGameEnabled',
           'caseFilesEnabled',
           'caseFilesDailyLimitFree',
           'caseFilesDailyLimitSilver',
@@ -1879,28 +1883,103 @@ function SettingsTab({ API }) {
           <span>CBAT</span>
           <span className="text-brand-600 text-xs">{gameGroupsOpen.cbat ? '▲' : '▼'}</span>
         </button>
-        {gameGroupsOpen.cbat && (
-          <>
-            <Toggle
-              label="CBAT Games enabled"
-              hint="Show the Play CBAT button on the Play page"
-              checked={draft.cbatEnabled ?? false}
-              onChange={v => set('cbatEnabled', v)}
-            />
+        {gameGroupsOpen.cbat && (() => {
+          const CBAT_UNIMPL = new Set(['visualisation-3d', 'audio-interrupt', 'dad'])
+          const gameEnabledMap = draft.cbatGameEnabled ?? {}
+          const isGameEnabled = (key) => {
+            const v = gameEnabledMap[key]
+            return v === undefined ? !CBAT_UNIMPL.has(key) : v
+          }
+          const setGameEnabled = (key, val) => set('cbatGameEnabled', { ...gameEnabledMap, [key]: val })
+          const cbatLocked = !(draft.cbatEnabled ?? false)
+          const targetEmpty = (draft.cbatTargetAircraftBriefIds ?? []).length === 0
+          const flagEmpty   = (draft.cbatFlagAircraftBriefIds   ?? []).length === 0
 
-            {(() => {
-              const cbatLocked = !(draft.cbatEnabled ?? false)
-              if (cbatLocked) {
-                return (
-                  <p className="text-xs text-slate-400 italic pt-1 pb-2">
-                    Enable CBAT Games above to configure individual game settings.
-                  </p>
-                )
-              }
-              const targetEmpty = (draft.cbatTargetAircraftBriefIds ?? []).length === 0
-              const flagEmpty   = (draft.cbatFlagAircraftBriefIds   ?? []).length === 0
-              return (
+          const renderAircraftAllowlist = (fieldKey, hint, isEmpty) => {
+            const list = draft[fieldKey] ?? []
+            return (
+              <div className="py-2.5 border-b border-slate-100">
+                <p className="text-sm font-semibold text-slate-700 mb-1">Aircraft in scan panels</p>
+                <p className="text-xs text-slate-400 mb-3">{hint}</p>
+                {cbatAircraft === null ? (
+                  <p className="text-xs text-slate-400">Loading aircraft…</p>
+                ) : cbatAircraft.length === 0 ? (
+                  <p className="text-xs text-slate-400">No aircraft with 3D models found.</p>
+                ) : (
+                  <>
+                    <div className="flex gap-3 mb-2 text-xs">
+                      <button
+                        type="button"
+                        className="text-brand-600 hover:underline font-semibold"
+                        onClick={() => set(fieldKey, cbatAircraft.map(a => String(a.briefId)))}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        className="text-slate-500 hover:underline font-semibold"
+                        onClick={() => set(fieldKey, [])}
+                      >
+                        Deselect all
+                      </button>
+                      <span className="ml-auto text-slate-400">
+                        {list.length}/{cbatAircraft.length} enabled
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {cbatAircraft.map(a => {
+                        const id      = String(a.briefId)
+                        const enabled = list.includes(id)
+                        return (
+                          <label key={id} className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 rounded px-2 py-1.5 border border-slate-200">
+                            <input
+                              type="checkbox"
+                              checked={enabled}
+                              onChange={() => {
+                                const current = draft[fieldKey] ?? []
+                                const next    = enabled
+                                  ? current.filter(x => x !== id)
+                                  : [...current, id]
+                                set(fieldKey, next)
+                              }}
+                              className="w-4 h-4 accent-brand-600"
+                            />
+                            {a.cutoutUrl && (
+                              <img src={a.cutoutUrl} alt="" className="w-8 h-8 object-contain flex-shrink-0" />
+                            )}
+                            <span className="text-sm font-medium text-slate-700 truncate">{a.title}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {isEmpty && (
+                      <p className="text-xs text-red-500 mt-2">At least one aircraft must be enabled</p>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          }
+
+          return (
+            <>
+              {/* Row: General Settings */}
+              <button
+                type="button"
+                onClick={() => toggleCbatGameRow('general')}
+                className="w-full flex items-center justify-between text-sm font-bold text-slate-700 uppercase tracking-wide pt-3 pb-2 mb-1 border-b border-slate-200"
+              >
+                <span>General Settings</span>
+                <span className="text-slate-400 text-xs">{cbatGameRowsOpen.general ? '▲' : '▼'}</span>
+              </button>
+              {cbatGameRowsOpen.general && (
                 <>
+                  <Toggle
+                    label="CBAT Games enabled"
+                    hint="Show the Play CBAT button on the Play page"
+                    checked={draft.cbatEnabled ?? false}
+                    onChange={v => set('cbatEnabled', v)}
+                  />
                   <div className="py-2.5 border-b border-slate-100">
                     <p className="text-sm font-semibold text-slate-700 mb-1">Subscription access</p>
                     <p className="text-xs text-slate-400 mb-2">Admin always has unlimited access regardless of this setting</p>
@@ -1924,139 +2003,70 @@ function SettingsTab({ API }) {
                     </div>
                     <p className="text-xs text-slate-400 mt-2">Enabling free also enables silver and gold; enabling silver also enables gold.</p>
                   </div>
-
-                  <p className="text-sm font-bold text-slate-700 uppercase tracking-wide pt-2 pb-1">Target</p>
-                  <div className="py-2.5 border-b border-slate-100">
-                    <p className="text-sm font-semibold text-slate-700 mb-1">Aircraft in scan panels</p>
-                    <p className="text-xs text-slate-400 mb-3">
-                      Only ticked aircraft appear in the Target game's scan panels. New 3D models added to <code>/public/models/</code> start unticked until enabled here.
-                    </p>
-                    {cbatAircraft === null ? (
-                      <p className="text-xs text-slate-400">Loading aircraft…</p>
-                    ) : cbatAircraft.length === 0 ? (
-                      <p className="text-xs text-slate-400">No aircraft with 3D models found.</p>
-                    ) : (
-                      <>
-                        <div className="flex gap-3 mb-2 text-xs">
-                          <button
-                            type="button"
-                            className="text-brand-600 hover:underline font-semibold"
-                            onClick={() => set('cbatTargetAircraftBriefIds', cbatAircraft.map(a => String(a.briefId)))}
-                          >
-                            Select all
-                          </button>
-                          <button
-                            type="button"
-                            className="text-slate-500 hover:underline font-semibold"
-                            onClick={() => set('cbatTargetAircraftBriefIds', [])}
-                          >
-                            Deselect all
-                          </button>
-                          <span className="ml-auto text-slate-400">
-                            {(draft.cbatTargetAircraftBriefIds ?? []).length}/{cbatAircraft.length} enabled
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {cbatAircraft.map(a => {
-                            const id      = String(a.briefId)
-                            const enabled = (draft.cbatTargetAircraftBriefIds ?? []).includes(id)
-                            return (
-                              <label key={id} className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 rounded px-2 py-1.5 border border-slate-200">
-                                <input
-                                  type="checkbox"
-                                  checked={enabled}
-                                  onChange={() => {
-                                    const current = draft.cbatTargetAircraftBriefIds ?? []
-                                    const next    = enabled
-                                      ? current.filter(x => x !== id)
-                                      : [...current, id]
-                                    set('cbatTargetAircraftBriefIds', next)
-                                  }}
-                                  className="w-4 h-4 accent-brand-600"
-                                />
-                                {a.cutoutUrl && (
-                                  <img src={a.cutoutUrl} alt="" className="w-8 h-8 object-contain flex-shrink-0" />
-                                )}
-                                <span className="text-sm font-medium text-slate-700 truncate">{a.title}</span>
-                              </label>
-                            )
-                          })}
-                        </div>
-                        {targetEmpty && (
-                          <p className="text-xs text-red-500 mt-2">At least one aircraft must be enabled</p>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  <p className="text-sm font-bold text-slate-700 uppercase tracking-wide pt-3 pb-1">FLAG</p>
-                  <div className="py-2.5 border-b border-slate-100">
-                    <p className="text-sm font-semibold text-slate-700 mb-1">Aircraft in scan panels</p>
-                    <p className="text-xs text-slate-400 mb-3">
-                      Only ticked aircraft are used in the FLAG game. New 3D models added to <code>/public/models/</code> start unticked until enabled here.
-                    </p>
-                    {cbatAircraft === null ? (
-                      <p className="text-xs text-slate-400">Loading aircraft…</p>
-                    ) : cbatAircraft.length === 0 ? (
-                      <p className="text-xs text-slate-400">No aircraft with 3D models found.</p>
-                    ) : (
-                      <>
-                        <div className="flex gap-3 mb-2 text-xs">
-                          <button
-                            type="button"
-                            className="text-brand-600 hover:underline font-semibold"
-                            onClick={() => set('cbatFlagAircraftBriefIds', cbatAircraft.map(a => String(a.briefId)))}
-                          >
-                            Select all
-                          </button>
-                          <button
-                            type="button"
-                            className="text-slate-500 hover:underline font-semibold"
-                            onClick={() => set('cbatFlagAircraftBriefIds', [])}
-                          >
-                            Deselect all
-                          </button>
-                          <span className="ml-auto text-slate-400">
-                            {(draft.cbatFlagAircraftBriefIds ?? []).length}/{cbatAircraft.length} enabled
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {cbatAircraft.map(a => {
-                            const id      = String(a.briefId)
-                            const enabled = (draft.cbatFlagAircraftBriefIds ?? []).includes(id)
-                            return (
-                              <label key={id} className="flex items-center gap-2 cursor-pointer select-none bg-slate-50 hover:bg-slate-100 rounded px-2 py-1.5 border border-slate-200">
-                                <input
-                                  type="checkbox"
-                                  checked={enabled}
-                                  onChange={() => {
-                                    const current = draft.cbatFlagAircraftBriefIds ?? []
-                                    const next    = enabled
-                                      ? current.filter(x => x !== id)
-                                      : [...current, id]
-                                    set('cbatFlagAircraftBriefIds', next)
-                                  }}
-                                  className="w-4 h-4 accent-brand-600"
-                                />
-                                {a.cutoutUrl && (
-                                  <img src={a.cutoutUrl} alt="" className="w-8 h-8 object-contain flex-shrink-0" />
-                                )}
-                                <span className="text-sm font-medium text-slate-700 truncate">{a.title}</span>
-                              </label>
-                            )
-                          })}
-                        </div>
-                        {flagEmpty && (
-                          <p className="text-xs text-red-500 mt-2">At least one aircraft must be enabled</p>
-                        )}
-                      </>
-                    )}
-                  </div>
                 </>
-              )
-            })()}
-          </>
-        )}
+              )}
+
+              {cbatLocked ? (
+                <p className="text-xs text-slate-400 italic pt-3 pb-2">
+                  Enable CBAT Games above to configure individual game settings.
+                </p>
+              ) : (
+                CBAT_GAMES.map(game => {
+                  const isImpl   = !!game.path
+                  const enabled  = isGameEnabled(game.key)
+                  const open     = !!cbatGameRowsOpen[game.key]
+                  return (
+                    <div key={game.key}>
+                      <button
+                        type="button"
+                        onClick={() => toggleCbatGameRow(game.key)}
+                        className="w-full flex items-center justify-between text-sm font-bold text-slate-700 uppercase tracking-wide pt-3 pb-2 mb-1 border-b border-slate-200"
+                      >
+                        <span className="flex items-center gap-2">
+                          <span aria-hidden="true">{game.emoji}</span>
+                          <span>{game.title}</span>
+                        </span>
+                        <span className="flex items-center gap-2">
+                          <span className={`text-[10px] font-extrabold tracking-widest px-1.5 py-0.5 rounded ${enabled ? 'bg-brand-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                            {enabled ? 'ON' : 'OFF'}
+                          </span>
+                          <span className="text-slate-400 text-xs">{open ? '▲' : '▼'}</span>
+                        </span>
+                      </button>
+                      {open && (
+                        <>
+                          {isImpl ? (
+                            <Toggle
+                              label={`Enable ${game.title}`}
+                              hint={`Show the ${game.title} card as clickable on the CBAT page`}
+                              checked={enabled}
+                              onChange={v => setGameEnabled(game.key, v)}
+                            />
+                          ) : (
+                            <div className="py-3 border-b border-slate-100 opacity-60">
+                              <p className="text-sm font-semibold text-slate-700">Enable {game.title}</p>
+                              <p className="text-xs text-slate-400">No game page yet — toggle becomes available once the game launches.</p>
+                            </div>
+                          )}
+                          {game.key === 'target' && enabled && renderAircraftAllowlist(
+                            'cbatTargetAircraftBriefIds',
+                            <>Only ticked aircraft appear in the Target game's scan panels. New 3D models added to <code>/public/models/</code> start unticked until enabled here.</>,
+                            targetEmpty,
+                          )}
+                          {game.key === 'flag' && enabled && renderAircraftAllowlist(
+                            'cbatFlagAircraftBriefIds',
+                            <>Only ticked aircraft are used in the FLAG game. New 3D models added to <code>/public/models/</code> start unticked until enabled here.</>,
+                            flagEmpty,
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </>
+          )
+        })()}
 
         <button
           type="button"

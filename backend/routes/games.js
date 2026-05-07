@@ -2223,6 +2223,13 @@ router.post('/cbat/:gameKey/start', protect, async (req, res) => {
     if (!canAccessCbat(req.user, settings)) {
       return res.status(403).json({ message: 'Your subscription does not include CBAT access.', reason: 'tier' });
     }
+    if (!req.user.isAdmin) {
+      const enabledMap = settings?.cbatGameEnabled;
+      const stored = enabledMap && typeof enabledMap.get === 'function' ? enabledMap.get(gameKey) : undefined;
+      if (stored === false) {
+        return res.status(403).json({ message: 'This CBAT game is currently disabled.', reason: 'gameDisabled' });
+      }
+    }
     const result = await GameSessionCbatStart.create({ userId: req.user._id, gameKey });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {

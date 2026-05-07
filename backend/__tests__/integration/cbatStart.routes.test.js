@@ -3,7 +3,8 @@ process.env.JWT_SECRET = 'test_secret';
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
-const { createUser, createSettings, authCookie } = require('../helpers/factories');
+const { createUser, createAdminUser, createSettings, authCookie } = require('../helpers/factories');
+const AppSettings = require('../../models/AppSettings');
 const GameSessionCbatStart = require('../../models/GameSessionCbatStart');
 const { CBAT_GAMES }       = require('../../constants/cbatGames');
 
@@ -78,5 +79,50 @@ describe('POST /api/games/cbat/:gameKey/start — success', () => {
     const doc = await GameSessionCbatStart.findOne({ userId: user._id });
     expect(doc).not.toBeNull();
     expect(doc.userId.toString()).toBe(user._id.toString());
+  });
+});
+
+describe('POST /api/games/cbat/:gameKey/start — per-game gate', () => {
+  it('returns 403 reason=gameDisabled when the game is per-game disabled (non-admin)', async () => {
+    await AppSettings.findOneAndUpdate(
+      { _singleton: true },
+      { $set: { cbatGameEnabled: { target: false, symbols: true } } },
+    );
+
+    const res = await request(app)
+      .post('/api/games/cbat/target/start')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(403);
+    expect(res.body.reason).toBe('gameDisabled');
+  });
+
+  it('still allows other games when one is disabled', async () => {
+    await AppSettings.findOneAndUpdate(
+      { _singleton: true },
+      { $set: { cbatGameEnabled: { target: false, symbols: true } } },
+    );
+
+    const res = await request(app)
+      .post('/api/games/cbat/symbols/start')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(201);
+  });
+
+  it('admin bypasses the per-game gate and gets 201 even when the game is disabled', async () => {
+    await AppSettings.findOneAndUpdate(
+      { _singleton: true },
+      { $set: { cbatGameEnabled: { target: false } } },
+    );
+
+    const admin       = await createAdminUser({ agentNumber: '1000099' });
+    const adminCookie = authCookie(admin._id);
+
+    const res = await request(app)
+      .post('/api/games/cbat/target/start')
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(201);
   });
 });

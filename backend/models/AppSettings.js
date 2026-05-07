@@ -171,6 +171,20 @@ const appSettingsSchema = new mongoose.Schema({
   // the admin UI omits these keys from PATCH so the previously-saved values persist.
   cbatFlagAircraftBriefIds: { type: [String], default: [] },
 
+  // Per-game enable/disable for CBAT. Key = game key (e.g. 'target', 'plane-turn'),
+  // value = boolean. Admin always bypasses regardless. Missing keys treated as enabled
+  // (defensive — backfill in getSettings keeps prod docs healthy).
+  cbatGameEnabled: {
+    type: Map,
+    of: Boolean,
+    default: () => ({
+      target: true, ant: true, symbols: true, 'code-duplicates': true,
+      angles: true, instruments: true, 'plane-turn': true, flag: true,
+      'visualisation-2d': true, dpt: true,
+      'visualisation-3d': false, 'audio-interrupt': false, dad: false,
+    }),
+  },
+
   // Chat (user↔admin help) feature
   chatEnabled:                { type: Boolean,  default: true },
 
@@ -306,6 +320,29 @@ appSettingsSchema.statics.getSettings = async function () {
         [[], []]
       );
       updates.pathwayUnlocks = [...missingFront, ...(settings.pathwayUnlocks || []), ...missingRest];
+    }
+
+    // Backfill cbatGameEnabled — ensure every known CBAT game key is present.
+    // Implemented games default to enabled; the 3 unimplemented (path=null on FE)
+    // default to disabled. Saves Mongoose Map shape directly.
+    {
+      const KNOWN_KEYS = {
+        target: true, ant: true, symbols: true, 'code-duplicates': true,
+        angles: true, instruments: true, 'plane-turn': true, flag: true,
+        'visualisation-2d': true, dpt: true,
+        'visualisation-3d': false, 'audio-interrupt': false, dad: false,
+      };
+      const current = settings.cbatGameEnabled;
+      let touched = false;
+      const next = {};
+      // Preserve existing entries
+      if (current && typeof current.forEach === 'function') {
+        current.forEach((v, k) => { next[k] = v; });
+      }
+      for (const [k, v] of Object.entries(KNOWN_KEYS)) {
+        if (!(k in next)) { next[k] = v; touched = true; }
+      }
+      if (touched) updates.cbatGameEnabled = next;
     }
 
     if (Object.keys(updates).length)

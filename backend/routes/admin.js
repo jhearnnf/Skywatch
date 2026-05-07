@@ -740,18 +740,56 @@ router.patch('/settings', requireReason, async (req, res) => {
       }
     }
 
-    // CBAT aircraft allowlists must contain ≥1 entry whenever CBAT is enabled.
-    // Block empty saves at the API level so a 0-aircraft state can never persist.
+    // cbatGameEnabled must be a plain object, keys ∈ known game keys, values boolean.
+    // The 3 unimplemented games cannot be enabled — no backend route exists yet.
+    const CBAT_KNOWN_KEYS = new Set([
+      'target', 'ant', 'symbols', 'code-duplicates', 'angles', 'instruments',
+      'plane-turn', 'flag', 'visualisation-2d', 'dpt',
+      'visualisation-3d', 'audio-interrupt', 'dad',
+    ]);
+    const CBAT_UNIMPLEMENTED = new Set(['visualisation-3d', 'audio-interrupt', 'dad']);
+    if ('cbatGameEnabled' in updates) {
+      const v = updates.cbatGameEnabled;
+      if (!v || typeof v !== 'object' || Array.isArray(v)) {
+        return res.status(400).json({ message: 'cbatGameEnabled must be an object' });
+      }
+      for (const [key, val] of Object.entries(v)) {
+        if (!CBAT_KNOWN_KEYS.has(key)) {
+          return res.status(400).json({ message: `cbatGameEnabled has unknown game key: ${key}` });
+        }
+        if (typeof val !== 'boolean') {
+          return res.status(400).json({ message: `cbatGameEnabled.${key} must be a boolean` });
+        }
+        if (val === true && CBAT_UNIMPLEMENTED.has(key)) {
+          return res.status(400).json({ message: `CBAT game "${key}" has no backend route yet and cannot be enabled` });
+        }
+      }
+    }
+
+    // CBAT aircraft allowlists must contain ≥1 entry whenever the master CBAT toggle
+    // is on AND the per-game toggle (target/flag) is on. Block empty saves at the API
+    // level so a 0-aircraft state can never persist while a game is live.
     {
       const current = await AppSettings.findOne();
       const willBeEnabled = updates.cbatEnabled ?? current?.cbatEnabled ?? false;
       if (willBeEnabled) {
+        const readGameEnabled = (gameKey) => {
+          if ('cbatGameEnabled' in updates && gameKey in (updates.cbatGameEnabled || {})) {
+            return updates.cbatGameEnabled[gameKey];
+          }
+          const m = current?.cbatGameEnabled;
+          if (m && typeof m.get === 'function') {
+            const stored = m.get(gameKey);
+            return stored === undefined ? true : stored;
+          }
+          return true;
+        };
         const checks = [
-          ['cbatTargetAircraftBriefIds', 'Target'],
-          ['cbatFlagAircraftBriefIds',   'FLAG'],
+          ['cbatTargetAircraftBriefIds', 'Target', 'target'],
+          ['cbatFlagAircraftBriefIds',   'FLAG',   'flag'],
         ];
-        for (const [key, label] of checks) {
-          if (key in updates) {
+        for (const [key, label, gameKey] of checks) {
+          if (key in updates && readGameEnabled(gameKey)) {
             const next = Array.isArray(updates[key]) ? updates[key] : [];
             if (next.length === 0) {
               return res.status(400).json({ message: `At least one aircraft must be enabled for CBAT ${label}` });
