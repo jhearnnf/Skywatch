@@ -1843,11 +1843,9 @@ export default function CbatDpt() {
     setAircraftSizeMultiplier(1.0)
     startTimeRef.current = Date.now()
 
-    // Skip the intro for users with prefers-reduced-motion, or on replay
-    // within the same aircraft selection (introPlayedRef set after first run).
-    const reduceMotion = typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    setPhase(reduceMotion || introPlayedRef.current ? 'playing' : 'intro')
+    // Skip the intro on replay within the same aircraft selection
+    // (introPlayedRef set after first run).
+    setPhase(introPlayedRef.current ? 'playing' : 'intro')
   }, [apiFetch, API])
 
   const handleMenu = useCallback(() => {
