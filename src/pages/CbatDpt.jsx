@@ -1635,7 +1635,7 @@ export default function CbatDpt() {
       if (interceptDelta > 0) setInterceptions(i => i + interceptDelta)
       // Score is always calculated, even in debug mode — only the final
       // leaderboard submission is suppressed when cheatUsed is set.
-      if (scoreDelta !== 0) setTotalScore(s => Math.max(0, s + scoreDelta))
+      if (scoreDelta !== 0) setTotalScore(s => s + scoreDelta)
 
       // Apply edge auto-turn visualisations collected this frame. Each
       // entry overrides any existing CommandViz for that aircraft (so a
