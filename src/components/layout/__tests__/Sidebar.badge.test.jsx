@@ -7,10 +7,10 @@ const mockUseAuth  = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
-  NavLink: ({ children, className, to, onClick }) => {
-    const cls = typeof className === 'function' ? className({ isActive: false }) : className
-    return <a href={to} className={cls} onClick={onClick}>{children}</a>
-  },
+  useLocation: () => ({ pathname: '/' }),
+  Link: ({ children, className, to, onClick, ...rest }) => (
+    <a href={to} className={className} onClick={onClick} {...rest}>{children}</a>
+  ),
 }))
 
 vi.mock('../../../context/AuthContext', () => ({ useAuth: mockUseAuth }))

@@ -8,6 +8,7 @@ import { useChatUnread } from '../../context/ChatUnreadContext'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
+import { getActiveNavTo } from '../../utils/navSections'
 
 // Slightly longer than the 300ms slide-in transition in main.css so the flash
 // starts after the BottomNav is on-screen.
@@ -66,7 +67,7 @@ export default function BottomNav() {
     <nav className="app-bottomnav fixed bottom-0 left-0 right-0 z-40 md:hidden bg-slate-50/95 backdrop-blur-md border-t border-slate-200 safe-area-bottom">
       <div className="flex items-stretch h-16">
         {items.map(({ to, emoji, label }) => {
-          const active = location.pathname === to || location.pathname.startsWith(to + '/')
+          const active = getActiveNavTo(location.pathname) === to
           const isLearn = to === '/learn-priority'
           const showBadge = to === '/play' && hasAnyNew && user
           const showCategoryBadge = isLearn && hasAnyNewCategory && user

@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
@@ -7,6 +7,7 @@ import { useChatUnread } from '../../context/ChatUnreadContext'
 import ProfileBadge from '../ProfileBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
+import { getActiveNavTo } from '../../utils/navSections'
 
 const NAV_ITEMS = [
   { to: '/home',          emoji: '🏠', label: 'Home'       },
@@ -33,6 +34,8 @@ function CrosshairLogo() {
 export default function Sidebar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const activeNavTo = getActiveNavTo(location.pathname)
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
@@ -57,19 +60,19 @@ export default function Sidebar() {
                 navigate('/learn-priority', target ? { state: { category: target } } : undefined)
               }
             : undefined
+          const isActive = activeNavTo === to
           return (
-            <NavLink
+            <Link
               key={to}
               data-nav={isPlay ? 'play' : isLearn ? 'learn' : undefined}
               to={to}
               onClick={handleLearnClick}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
+              aria-current={isActive ? 'page' : undefined}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
                 ${isActive
                   ? 'bg-brand-100 text-brand-600 border-brand-200'
                   : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
-                }`
-              }
+                }`}
             >
               <span className="relative text-lg w-6 text-center shrink-0">
                 {emoji}
@@ -81,52 +84,56 @@ export default function Sidebar() {
                 )}
               </span>
               {label}
-            </NavLink>
+            </Link>
           )
         })}
 
-        {showChatNav && (
-          <NavLink
-            data-nav="chat"
-            to="/chat"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
-              ${isActive
-                ? 'bg-brand-100 text-brand-600 border-brand-200'
-                : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
-              }`
-            }
-          >
-            <span className="relative text-lg w-6 text-center shrink-0">
-              💬
-              {chatUnread && (
-                <span className="nav-new-badge" aria-label="New chat message" />
-              )}
-            </span>
-            Chat
-          </NavLink>
-        )}
+        {showChatNav && (() => {
+          const isActive = activeNavTo === '/chat'
+          return (
+            <Link
+              data-nav="chat"
+              to="/chat"
+              aria-current={isActive ? 'page' : undefined}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
+                ${isActive
+                  ? 'bg-brand-100 text-brand-600 border-brand-200'
+                  : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                }`}
+            >
+              <span className="relative text-lg w-6 text-center shrink-0">
+                💬
+                {chatUnread && (
+                  <span className="nav-new-badge" aria-label="New chat message" />
+                )}
+              </span>
+              Chat
+            </Link>
+          )
+        })()}
 
-        {user?.isAdmin && (
-          <NavLink
-            to="/admin"
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all mt-2 outline-none focus:outline-none
-              ${isActive
-                ? 'bg-slate-200 text-slate-800'
-                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
-              }`
-            }
-          >
-            <span className="relative text-lg w-6 text-center shrink-0">
-              ⚙️
-              {unsolvedCount > 0 && (
-                <span className="nav-new-badge" aria-label={`${unsolvedCount} unsolved report${unsolvedCount !== 1 ? 's' : ''}`} />
-              )}
-            </span>
-            Admin
-          </NavLink>
-        )}
+        {user?.isAdmin && (() => {
+          const isActive = activeNavTo === '/admin'
+          return (
+            <Link
+              to="/admin"
+              aria-current={isActive ? 'page' : undefined}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all mt-2 outline-none focus:outline-none
+                ${isActive
+                  ? 'bg-slate-200 text-slate-800'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                }`}
+            >
+              <span className="relative text-lg w-6 text-center shrink-0">
+                ⚙️
+                {unsolvedCount > 0 && (
+                  <span className="nav-new-badge" aria-label={`${unsolvedCount} unsolved report${unsolvedCount !== 1 ? 's' : ''}`} />
+                )}
+              </span>
+              Admin
+            </Link>
+          )
+        })()}
       </nav>
 
       {/* User stats at bottom */}
