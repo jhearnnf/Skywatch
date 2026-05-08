@@ -31,6 +31,7 @@ app.use('/api/auth',       require('./routes/auth'));
 app.use('/api/briefs',     require('./routes/briefs'));
 app.use('/api/case-files', require('./routes/caseFiles'));
 app.use('/api/games',      require('./routes/games'));
+app.use('/api/admin/reports', require('./routes/adminReports'));
 app.use('/api/admin',  require('./routes/admin'));
 app.use('/api/users',  require('./routes/users'));
 app.use('/api/chat',   require('./routes/chat'));

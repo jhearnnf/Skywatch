@@ -10,6 +10,7 @@ import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } fr
 import { applyTierCascade } from '../utils/tierCascade'
 import RankBadge from '../components/RankBadge'
 import SocialsSection from '../components/admin/SocialsSection'
+import ReportChart, { ChartSkeleton } from '../components/admin/ReportChart'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 import TutorialsEditor from './admin/TutorialsEditor'
 import SEO from '../components/SEO'
@@ -430,6 +431,415 @@ function StatsTab({ API, onViewEmailLog }) {
           <StatCard label="Airstars Earned" value={fmtNum(games.aptitudeSync?.airstarsEarned)} color="amber" sub="across all sessions" />
           <StatCard label="Avg per Session" value={fmtNum(games.aptitudeSync?.completed ? Math.round((games.aptitudeSync?.airstarsEarned ?? 0) / games.aptitudeSync.completed) : 0)} color="slate" sub="completed sessions" />
         </div>
+      </StatsSection>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REPORTS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+
+const REPORT_WINDOWS = [
+  { id: 'today', label: 'Today' },
+  { id: '7d',    label: '7d'    },
+  { id: '30d',   label: '30d'   },
+  { id: 'all',   label: 'All'   },
+]
+
+function WindowPicker({ value, onChange }) {
+  return (
+    <div className="inline-flex rounded-xl border border-slate-200 bg-surface p-1 mb-4">
+      {REPORT_WINDOWS.map(w => (
+        <button
+          key={w.id}
+          onClick={() => onChange(w.id)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all
+            ${value === w.id
+              ? 'bg-brand-600 text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+            }`}
+        >
+          {w.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function WindowChip({ window }) {
+  const labels = { today: 'TODAY', '7d': '7D', '30d': '30D', all: 'ALL-TIME' }
+  return (
+    <span className="ml-2 inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-brand-600 text-white tracking-widest align-middle">
+      {labels[window] ?? window.toUpperCase()}
+    </span>
+  )
+}
+
+function FixedChip() {
+  return (
+    <span className="ml-2 inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 tracking-widest align-middle border border-slate-200">
+      FIXED
+    </span>
+  )
+}
+
+function ChartCard({ title, sub, children }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-surface p-4">
+      <div className="mb-3">
+        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">{title}</h4>
+        {sub && <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function fmtPct(n) {
+  if (n == null || Number.isNaN(n)) return '—'
+  return `${(n * 100).toFixed(0)}%`
+}
+
+function fmtPctOneDecimal(n) {
+  if (n == null || Number.isNaN(n)) return '—'
+  return `${(n * 100).toFixed(1)}%`
+}
+
+function fmtDelta(n) {
+  if (n == null || Number.isNaN(n)) return null
+  const sign = n > 0 ? '+' : ''
+  return `${sign}${(n * 100).toFixed(0)}% vs prior`
+}
+
+function StatCardSkeleton() {
+  // Heights match StatCard with sub-text exactly:
+  //   p-4 (32) + text-xl line-height (28) + mb-0.5 (2) + text-xs (16) + mt-0.5 (2) + text-[10px] (12) = 92px
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 animate-pulse">
+      <div className="h-7 mb-0.5 flex items-center"><div className="h-5 w-14 bg-slate-200 rounded" /></div>
+      <div className="h-4 flex items-center"><div className="h-3 w-24 bg-slate-200 rounded" /></div>
+      <div className="h-3 mt-0.5 flex items-center"><div className="h-2 w-20 bg-slate-200 rounded" /></div>
+    </div>
+  )
+}
+
+function PerGameTableSkeleton() {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-surface overflow-hidden animate-pulse">
+      <div className="px-4 py-3 border-b border-slate-200">
+        <div className="h-3 w-32 bg-slate-200 rounded mb-1" />
+        <div className="h-2 w-24 bg-slate-200 rounded" />
+      </div>
+      <div className="divide-y divide-slate-100">
+        {[0,1,2,3,4,5,6,7,8,9].map(i => (
+          <div key={i} className="px-3 py-2 flex items-center gap-4">
+            <div className="h-3 w-24 bg-slate-200 rounded" />
+            <div className="h-3 w-12 bg-slate-200 rounded ml-auto" />
+            <div className="h-3 w-12 bg-slate-200 rounded" />
+            <div className="h-3 w-12 bg-slate-200 rounded" />
+            <div className="h-3 w-12 bg-slate-200 rounded" />
+            <div className="h-3 w-12 bg-slate-200 rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ReportsTab({ API }) {
+  const { apiFetch } = useAuth()
+  const [window, setWindow] = useState('7d')
+  const [snapshot, setSnapshot] = useState(null)
+  const [windowed, setWindowed] = useState(null)
+  const [cbat, setCbat] = useState(null)
+  const [windowedLoading, setWindowedLoading] = useState(true)
+  const [cbatLoading, setCbatLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  // Snapshot is fetched ONCE on mount — it doesn't depend on the window picker.
+  useEffect(() => {
+    let cancelled = false
+    apiFetch(`${API}/api/admin/reports/snapshot`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        if (d.status === 'success') setSnapshot(d.data)
+        else setError(e => e || 'Failed to load snapshot')
+      })
+      .catch(() => { if (!cancelled) setError(e => e || 'Failed to load snapshot') })
+    return () => { cancelled = true }
+  }, [API])
+
+  // Window-driven data — stale-while-revalidate: previous data stays in place,
+  // skeletons only appear on the very first load.
+  useEffect(() => {
+    let cancelled = false
+    setWindowedLoading(true)
+    setCbatLoading(true)
+    apiFetch(`${API}/api/admin/reports/window?window=${window}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        if (d.status === 'success') setWindowed(d.data)
+        else setError(e => e || 'Failed to load window stats')
+      })
+      .catch(() => { if (!cancelled) setError(e => e || 'Failed to load reports') })
+      .finally(() => { if (!cancelled) setWindowedLoading(false) })
+    apiFetch(`${API}/api/admin/reports/cbat?window=${window}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        if (d.status === 'success') setCbat(d.data)
+        else setError(e => e || 'Failed to load CBAT report')
+      })
+      .catch(() => { if (!cancelled) setError(e => e || 'Failed to load reports') })
+      .finally(() => { if (!cancelled) setCbatLoading(false) })
+    return () => { cancelled = true }
+  }, [API, window])
+
+  if (error) return <p className="text-sm text-red-500 py-8 text-center">{error}</p>
+
+  const windowedDimmed = windowedLoading && windowed ? 'opacity-60 transition-opacity' : ''
+  const cbatDimmed     = cbatLoading     && cbat     ? 'opacity-60 transition-opacity' : ''
+
+  return (
+    <div className="space-y-8">
+      {/* ── SNAPSHOT (no window) ──────────────────────────────────────────── */}
+      <StatsSection title={<>Snapshot<FixedChip /></>} defaultOpen>
+        {!snapshot ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)"><ChartSkeleton height={200} /></ChartCard>
+              <ChartCard title="Signup Source" sub="all-time"><ChartSkeleton height={200} /></ChartCard>
+              <ChartCard title="Subscription Tiers" sub="current snapshot"><ChartSkeleton height={200} /></ChartCard>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <StatCard label="DAU"  value={fmtNum(snapshot.headlines.dau)} color="brand" sub="active today" />
+              <StatCard label="WAU"  value={fmtNum(snapshot.headlines.wau)} color="brand" sub="last 7 days" />
+              <StatCard label="MAU"  value={fmtNum(snapshot.headlines.mau)} color="brand" sub="last 30 days" />
+              <StatCard label="Total Users" value={fmtNum(snapshot.headlines.totalUsers)} color="slate" sub="registered all-time" />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)">
+                <ReportChart
+                  type="line"
+                  data={snapshot.dailyDau}
+                  xKey="date"
+                  keys={['count']}
+                  height={200}
+                />
+              </ChartCard>
+
+              <ChartCard title="Signup Source" sub="all-time">
+                <ReportChart
+                  type="donut"
+                  data={[
+                    { source: 'Google', count: snapshot.signupSource.google },
+                    { source: 'Email',  count: snapshot.signupSource.email  },
+                  ]}
+                  xKey="source"
+                  keys={['count']}
+                  colors={['#5baaff', '#f59e0b']}
+                  height={200}
+                  showLegend
+                />
+              </ChartCard>
+
+              <ChartCard title="Subscription Tiers" sub="current snapshot">
+                <ReportChart
+                  type="donut"
+                  data={[
+                    { tier: 'Free',   count: snapshot.subscription.free   },
+                    { tier: 'Trial',  count: snapshot.subscription.trial  },
+                    { tier: 'Silver', count: snapshot.subscription.silver },
+                    { tier: 'Gold',   count: snapshot.subscription.gold   },
+                  ]}
+                  xKey="tier"
+                  keys={['count']}
+                  colors={['#8ba0c0', '#f59e0b', '#aec0d8', '#fbbf24']}
+                  height={200}
+                  showLegend
+                />
+              </ChartCard>
+            </div>
+          </div>
+        )}
+      </StatsSection>
+
+      {/* ── WINDOW PICKER ─────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-brand-200 bg-brand-50/30 p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-700">Time window</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">Filters <strong>Activity &amp; Growth</strong> and <strong>CBAT Engagement</strong> below.</p>
+          </div>
+          <WindowPicker value={window} onChange={setWindow} />
+        </div>
+      </div>
+
+      {/* ── ACTIVITY & GROWTH ─────────────────────────────────────────────── */}
+      <StatsSection title={<>Activity &amp; Growth<WindowChip window={window} /></>} defaultOpen>
+        {!windowed ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <StatCardSkeleton /><StatCardSkeleton />
+            </div>
+            <ChartCard title="Daily Signups" sub={`window: ${window}`}>
+              <ChartSkeleton height={200} />
+            </ChartCard>
+          </div>
+        ) : (
+          <div className={`space-y-4 ${windowedDimmed}`}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <StatCard
+                label="Signups (window)"
+                value={fmtNum(windowed.headlines.signupsInWindow)}
+                color="emerald"
+                sub={fmtDelta(windowed.headlines.signupsDelta) ?? 'no prior data'}
+              />
+              <StatCard
+                label="Active in Window"
+                value={fmtNum(windowed.headlines.activeInWindow)}
+                color="brand"
+                sub={`${fmtPct(windowed.headlines.activeRate)} of users`}
+              />
+            </div>
+
+            <ChartCard title="Daily Signups" sub={`window: ${window}`}>
+              <ReportChart
+                type="bar"
+                data={windowed.dailySignups}
+                xKey="date"
+                keys={['count']}
+                colors={['#34d399']}
+                height={200}
+              />
+            </ChartCard>
+          </div>
+        )}
+      </StatsSection>
+
+      {/* ── CBAT ENGAGEMENT ───────────────────────────────────────────────── */}
+      <StatsSection title={<>CBAT Engagement<WindowChip window={window} /></>} defaultOpen>
+        {!cbat ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
+            </div>
+            <ChartCard title="Daily CBAT Sessions" sub={`stacked by game · window: ${window}`}>
+              <ChartSkeleton height={260} />
+            </ChartCard>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ChartCard title="Sessions per User" sub="distribution across users">
+                <ChartSkeleton height={220} />
+              </ChartCard>
+              <ChartCard title="Sessions by Game" sub={`window: ${window}`}>
+                <ChartSkeleton height={280} />
+              </ChartCard>
+            </div>
+            <PerGameTableSkeleton />
+          </div>
+        ) : (
+          <div className={`space-y-4 ${cbatDimmed}`}>
+            {/* Headlines — Activation first (most decision-relevant for CBAT funnel) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <StatCard
+                label="Activation"
+                value={windowed ? fmtPct(windowed.headlines.activationRate) : '—'}
+                color="amber"
+                sub="first CBAT within 24h"
+              />
+              <StatCard label="Total Sessions"  value={fmtNum(cbat.headlines.totalSessions)} color="brand" sub="all CBAT games combined" />
+              <StatCard label="Unique Players"  value={fmtNum(cbat.headlines.uniquePlayers)} color="brand"
+                sub={`${fmtPct(cbat.headlines.totalUsers ? cbat.headlines.uniquePlayers / cbat.headlines.totalUsers : 0)} of users`} />
+              <StatCard label="D1 Retention"    value={fmtPct(cbat.headlines.d1Retention)} color="emerald"
+                sub={`cohort: ${fmtNum(cbat.headlines.cohortSize)}`} />
+              <StatCard label="D7 Retention"    value={fmtPct(cbat.headlines.d7Retention)} color="emerald"
+                sub="played again 7d+ later" />
+            </div>
+
+            {/* Daily sessions stacked by game */}
+            <ChartCard title="Daily CBAT Sessions" sub={`stacked by game · window: ${window}`}>
+              <ReportChart
+                type="stackedBar"
+                data={cbat.dailySessions}
+                xKey="date"
+                keys={cbat.gameKeys}
+                labels={cbat.gameLabels}
+                height={260}
+                showLegend
+              />
+            </ChartCard>
+
+            {/* Distribution + per-game side by side on lg */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ChartCard title="Sessions per User" sub={`distribution across all ${fmtNum(cbat.headlines.totalUsers)} users`}>
+                <ReportChart
+                  type="bar"
+                  data={cbat.sessionsPerPlayerBuckets}
+                  xKey="bucket"
+                  keys={['users']}
+                  colors={['#5baaff']}
+                  height={220}
+                  formatX={v => v}
+                />
+              </ChartCard>
+
+              <ChartCard title="Sessions by Game" sub={`window: ${window}`}>
+                <ReportChart
+                  type="horizontalBar"
+                  data={cbat.perGame.map(g => ({ label: g.label, sessions: g.sessions }))}
+                  xKey="label"
+                  keys={['sessions']}
+                  colors={['#5baaff']}
+                  height={Math.max(220, cbat.perGame.length * 28)}
+                />
+              </ChartCard>
+            </div>
+
+            {/* Per-game table */}
+            <div className="rounded-2xl border border-slate-200 bg-surface overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-200">
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Per-game Breakdown</h4>
+                <p className="text-[10px] text-slate-400 mt-0.5">window: {window}</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider">
+                    <tr>
+                      <th className="text-left  px-3 py-2 font-bold">Game</th>
+                      <th className="text-right px-3 py-2 font-bold">Sessions</th>
+                      <th className="text-right px-3 py-2 font-bold">Players</th>
+                      <th className="text-right px-3 py-2 font-bold">Avg/Player</th>
+                      <th className="text-right px-3 py-2 font-bold">Starts</th>
+                      <th className="text-right px-3 py-2 font-bold">Abandon %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {cbat.perGame.map(g => (
+                      <tr key={g.key}>
+                        <td className="px-3 py-2 font-semibold">{g.label}</td>
+                        <td className="px-3 py-2 text-right">{fmtNum(g.sessions)}</td>
+                        <td className="px-3 py-2 text-right">{fmtNum(g.players)}</td>
+                        <td className="px-3 py-2 text-right">{g.avgPerPlayer.toFixed(1)}</td>
+                        <td className="px-3 py-2 text-right">{fmtNum(g.starts)}</td>
+                        <td className="px-3 py-2 text-right">{fmtPctOneDecimal(g.abandonPct)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </StatsSection>
     </div>
   )
@@ -7763,6 +8173,7 @@ function IntelTab({ API, unsolvedCount, unresolvedSystemLogs, initialSub, initia
 
 const TABS = [
   { id: 'stats',    label: 'Stats',    icon: '📊' },
+  { id: 'reports',  label: 'Reports',  icon: '📈' },
   { id: 'settings', label: 'Settings', icon: '⚙️'  },
   { id: 'users',    label: 'Users',    icon: '👥'  },
   { id: 'content',  label: 'Content',  icon: '✏️'  },
@@ -7848,6 +8259,7 @@ export default function Admin() {
             transition={{ duration: 0.15 }}
           >
             {tab === 'stats'    && <StatsTab    API={API} onViewEmailLog={openEmailLog} />}
+            {tab === 'reports'  && <ReportsTab  API={API} />}
             {tab === 'settings' && <SettingsTab API={API} />}
             {tab === 'users'    && <UsersTab    API={API} />}
             {tab === 'content'  && <ContentTab  API={API} />}
