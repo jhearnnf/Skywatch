@@ -60,6 +60,7 @@ import CbatAnt from './pages/CbatAnt'
 import CbatFlag from './pages/CbatFlag'
 import CbatVisualisation2D from './pages/CbatVisualisation2D'
 import CbatDpt from './pages/CbatDpt'
+import CbatAct from './pages/CbatAct'
 import CbatLeaderboard from './pages/CbatLeaderboard'
 import CbatGameGuard from './components/CbatGameGuard'
 import AirstarHistory from './pages/AirstarHistory'
@@ -246,6 +247,7 @@ function AppRoutes() {
           <Route path="/cbat/flag"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="flag"              gameTitle="FLAG"            ><CbatFlag            /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/visualisation-2d" element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="visualisation-2d"  gameTitle="Visualisation 2D"><CbatVisualisation2D /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/dpt"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="dpt"               gameTitle="DPT"             ><CbatDpt             /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/act"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="act"               gameTitle="ACT"             ><CbatAct             /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/:gameKey/leaderboard" element={<RequireAuth><PageWrapper><CbatLeaderboard /></PageWrapper></RequireAuth>} />
 
           {/* v2 protected pages */}

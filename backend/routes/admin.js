@@ -744,10 +744,10 @@ router.patch('/settings', requireReason, async (req, res) => {
     // The 3 unimplemented games cannot be enabled — no backend route exists yet.
     const CBAT_KNOWN_KEYS = new Set([
       'target', 'ant', 'symbols', 'code-duplicates', 'angles', 'instruments',
-      'plane-turn', 'flag', 'visualisation-2d', 'dpt',
-      'visualisation-3d', 'audio-interrupt', 'dad',
+      'plane-turn', 'flag', 'visualisation-2d', 'dpt', 'act',
+      'visualisation-3d', 'dad',
     ]);
-    const CBAT_UNIMPLEMENTED = new Set(['visualisation-3d', 'audio-interrupt', 'dad']);
+    const CBAT_UNIMPLEMENTED = new Set(['visualisation-3d', 'dad']);
     if ('cbatGameEnabled' in updates) {
       const v = updates.cbatGameEnabled;
       if (!v || typeof v !== 'object' || Array.isArray(v)) {

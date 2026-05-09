@@ -4,7 +4,7 @@
  * Covers PATCH /api/admin/settings handling of cbatGameEnabled (Map field):
  *   - rejects unknown game keys
  *   - rejects non-boolean values
- *   - rejects enabling unimplemented games (visualisation-3d / audio-interrupt / dad)
+ *   - rejects enabling unimplemented games (visualisation-3d / dad)
  *   - persists a valid object
  *   - relaxes min-aircraft enforcement when target/flag is per-game disabled
  */

@@ -180,8 +180,8 @@ const appSettingsSchema = new mongoose.Schema({
     default: () => ({
       target: true, ant: true, symbols: true, 'code-duplicates': true,
       angles: true, instruments: true, 'plane-turn': true, flag: true,
-      'visualisation-2d': true, dpt: true,
-      'visualisation-3d': false, 'audio-interrupt': false, dad: false,
+      'visualisation-2d': true, dpt: true, act: true,
+      'visualisation-3d': false, dad: false,
     }),
   },
 
@@ -329,8 +329,8 @@ appSettingsSchema.statics.getSettings = async function () {
       const KNOWN_KEYS = {
         target: true, ant: true, symbols: true, 'code-duplicates': true,
         angles: true, instruments: true, 'plane-turn': true, flag: true,
-        'visualisation-2d': true, dpt: true,
-        'visualisation-3d': false, 'audio-interrupt': false, dad: false,
+        'visualisation-2d': true, dpt: true, act: true,
+        'visualisation-3d': false, dad: false,
       };
       const current = settings.cbatGameEnabled;
       let touched = false;

@@ -13,6 +13,7 @@ const GameSessionCbatTargetResult         = require('../../models/GameSessionCba
 const GameSessionCbatInstrumentsResult    = require('../../models/GameSessionCbatInstrumentsResult');
 const GameSessionCbatAntResult            = require('../../models/GameSessionCbatAntResult');
 const GameSessionCbatDptResult            = require('../../models/GameSessionCbatDptResult');
+const GameSessionCbatActResult            = require('../../models/GameSessionCbatActResult');
 
 let user, cookie, user2, cookie2;
 
@@ -759,6 +760,98 @@ describe('CBAT DPT', () => {
       expect(res.body.data.bestScore).toBe(1200);
       expect(res.body.data.bestTime).toBe(200);
       expect(res.body.data.attempts).toBe(3);
+    });
+  });
+});
+
+// ── ACT (Auditory Capacity Test) ─────────────────────────────────────────────
+describe('CBAT ACT', () => {
+  const RESULT_URL = '/api/games/cbat/act/result';
+  const PB_URL     = '/api/games/cbat/act/personal-best';
+
+  describe('POST /result', () => {
+    it('saves a result with all gameplay fields', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({
+          totalScore: 380,
+          totalTime: 224.5,
+          finalRound: 5,
+          ringsThreaded: 78,
+          ringsMissed: 6,
+          avoidObeyed: 9,
+          avoidViolated: 2,
+          wallScrapeSeconds: 1.4,
+          bleepHits: 11,
+          bleepMisses: 3,
+          avgBleepReactionMs: 612,
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.data.totalScore).toBe(380);
+      expect(res.body.data.finalRound).toBe(5);
+      expect(res.body.data.ringsThreaded).toBe(78);
+      expect(res.body.data.avoidObeyed).toBe(9);
+      expect(res.body.data.bleepHits).toBe(11);
+      expect(res.body.data.avgBleepReactionMs).toBe(612);
+      expect(await GameSessionCbatActResult.countDocuments()).toBe(1);
+    });
+
+    it('coerces missing numeric fields to 0 and clamps negative score to 0', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({ totalScore: -75, totalTime: 60, finalRound: 1 });
+      expect(res.status).toBe(201);
+      expect(res.body.data.totalScore).toBe(0);
+      expect(res.body.data.ringsThreaded).toBe(0);
+      expect(res.body.data.avoidObeyed).toBe(0);
+      expect(res.body.data.bleepHits).toBe(0);
+    });
+
+    it('returns 401 without auth', async () => {
+      const res = await request(app).post(RESULT_URL).send({ totalScore: 100, totalTime: 30 });
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /personal-best', () => {
+    it('returns null when user has no results', async () => {
+      const res = await request(app).get(PB_URL).set('Cookie', cookie);
+      expect(res.status).toBe(200);
+      expect(res.body.data).toBeNull();
+    });
+
+    it('returns highest totalScore as best (higher is better)', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 200, totalTime: 220, finalRound: 5 });
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 410, totalTime: 225, finalRound: 5 });
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 300, totalTime: 222, finalRound: 5 });
+
+      const res = await request(app).get(PB_URL).set('Cookie', cookie);
+      expect(res.body.data.bestScore).toBe(410);
+      expect(res.body.data.bestTime).toBe(225);
+      expect(res.body.data.attempts).toBe(3);
+    });
+  });
+
+  describe('GET /leaderboard', () => {
+    const LEADERBOARD_URL = '/api/games/cbat/act/leaderboard';
+
+    it('returns padded leaderboard even with no real results', async () => {
+      const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data.leaderboard)).toBe(true);
+      expect(res.body.data.leaderboard.length).toBe(20);
+    });
+
+    it('places a top real score above demo entries', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 600, totalTime: 200, finalRound: 5 });
+      const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
+      expect(res.body.data.leaderboard[0].bestScore).toBe(600);
     });
   });
 });

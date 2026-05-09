@@ -8,6 +8,7 @@ const GameSessionCbatAntResult            = require('../models/GameSessionCbatAn
 const GameSessionCbatFlagResult           = require('../models/GameSessionCbatFlagResult');
 const GameSessionCbatVisualisation2DResult = require('../models/GameSessionCbatVisualisation2DResult');
 const GameSessionCbatDptResult           = require('../models/GameSessionCbatDptResult');
+const GameSessionCbatActResult           = require('../models/GameSessionCbatActResult');
 
 // Single source of truth for CBAT games. Adding a new CBAT game = add one entry
 // here and it automatically flows through submission routes, leaderboards,
@@ -83,6 +84,13 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'DPT',
+  },
+  'act': {
+    Model: GameSessionCbatActResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'ACT',
   },
 };
 

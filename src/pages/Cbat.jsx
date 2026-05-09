@@ -16,8 +16,8 @@ export const CBAT_GAMES = [
   { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png' },
   { key: 'visualisation-2d', emoji: '🧮', title: 'Visualisation 2D', desc: 'Mentally weld labelled shapes into the correct final figure.', path: '/cbat/visualisation-2d', image: '/images/Visualisation 2D.png' },
   { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png' },
+  { key: 'act',              emoji: '🎧', title: 'ACT',              desc: 'Auditory Capacity Test — track callsigns, steer through the right gates, react to bleeps.', path: '/cbat/act',             image: '/images/ACT.png' },
   { key: 'visualisation-3d', emoji: '🧊', title: 'Visualisation 3D', desc: 'Rotate and reason about 3D shapes — coming soon.',      path: null,                    image: '/images/placeholder-brief.svg' },
-  { key: 'audio-interrupt',  emoji: '🎧', title: 'Audio Interrupt',  desc: 'Respond to audio cues while multitasking.',             path: null,                    image: '/images/placeholder-brief.svg' },
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — coming soon.',               path: null,                    image: '/images/placeholder-brief.svg' },
 ]
 
@@ -77,10 +77,10 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
 
 const IMAGE_GAMES = CBAT_GAMES.filter(g => g.image)
 
-// Display the "NEW GAME" badge on the DPT card until midnight local time at
-// the start of 8 May 2026 (i.e. visible on 6th and 7th May; gone from 8th).
-const NEW_GAME_KEY = 'dpt'
-const NEW_GAME_DEADLINE = new Date(2026, 4, 8) // month is 0-indexed; 4 = May
+// Display the "NEW GAME" badge on the ACT card until midnight local time at
+// the start of 11 May 2026 (i.e. visible up to and including 10th May; gone from 11th).
+const NEW_GAME_KEY = 'act'
+const NEW_GAME_DEADLINE = new Date(2026, 4, 11) // month is 0-indexed; 4 = May
 
 export default function Cbat() {
   const { user } = useAuth()

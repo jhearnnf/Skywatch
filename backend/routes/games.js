@@ -33,6 +33,7 @@ const GameSessionCbatAntResult            = CBAT_GAMES['ant'].Model;
 const GameSessionCbatFlagResult           = CBAT_GAMES['flag'].Model;
 const GameSessionCbatVisualisation2DResult = CBAT_GAMES['visualisation-2d'].Model;
 const GameSessionCbatDptResult             = CBAT_GAMES['dpt'].Model;
+const GameSessionCbatActResult             = CBAT_GAMES['act'].Model;
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -2446,6 +2447,34 @@ router.post('/cbat/dpt/result', protect, async (req, res) => {
   }
 });
 
+// POST /api/games/cbat/act/result — Auditory Capacity Test
+router.post('/cbat/act/result', protect, async (req, res) => {
+  try {
+    const {
+      totalScore, totalTime, finalRound,
+      ringsThreaded, ringsMissed, avoidObeyed, avoidViolated,
+      wallScrapeSeconds, bleepHits, bleepMisses, avgBleepReactionMs,
+    } = req.body;
+    const result = await GameSessionCbatActResult.create({
+      userId: req.user._id,
+      totalScore:         Math.max(0, Math.round(totalScore ?? 0)),
+      totalTime:          totalTime ?? 0,
+      finalRound:         finalRound ?? 1,
+      ringsThreaded:      ringsThreaded ?? 0,
+      ringsMissed:        ringsMissed ?? 0,
+      avoidObeyed:        avoidObeyed ?? 0,
+      avoidViolated:      avoidViolated ?? 0,
+      wallScrapeSeconds:  wallScrapeSeconds ?? 0,
+      bleepHits:          bleepHits ?? 0,
+      bleepMisses:        bleepMisses ?? 0,
+      avgBleepReactionMs: avgBleepReactionMs ?? 0,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Generic CBAT leaderboard handler — reused by all games.
 // Every session is a standalone entry — a user can occupy multiple rows if
 // several of their runs land in the top 20.
@@ -2553,6 +2582,7 @@ router.get('/cbat/ant/leaderboard', protect, (req, res) => cbatLeaderboard(req, 
 router.get('/cbat/flag/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag'));
 router.get('/cbat/visualisation-2d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-2d'));
 router.get('/cbat/dpt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt'));
+router.get('/cbat/act/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'act'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -2595,5 +2625,6 @@ router.get('/cbat/ant/personal-best', protect, (req, res) => cbatPersonalBest(re
 router.get('/cbat/flag/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag'));
 router.get('/cbat/visualisation-2d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-2d'));
 router.get('/cbat/dpt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt'));
+router.get('/cbat/act/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'act'));
 
 module.exports = router;

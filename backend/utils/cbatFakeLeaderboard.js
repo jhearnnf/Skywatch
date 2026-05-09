@@ -26,6 +26,8 @@ const GAME_OFFSET = {
   'ant':             2,
   'flag':            6,
   'visualisation-2d': 10,
+  'dpt':             14,
+  'act':             18,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -92,6 +94,14 @@ const FAKE_TUNING = {
     // Floor of 55 keeps the visible top-20 above 55 even when sub-floor real
     // entries exist (paired with FULL_SEQUENCE_GAMES below).
     scoreSequence: [104, 100, 97, 94, 91, 88, 85, 82, 79, 76, 73, 70, 67, 64, 62, 60, 58, 57, 56, 55],
+  },
+  'act': {
+    // 5 rounds × ~45s = ~225s totalTime. Score is a sum of correct rings (+20),
+    // wrong rings/missed instructions (-15/-10), wall scrape (-5/sec), and
+    // graded bleep hits/misses (+25/+20/+10/-10). A capable run lands in the
+    // 250–420 band; the top fake at 460 is competitive but not unbeatable.
+    floor: 60, ceiling: 460, seedTime: 226, timeStep: 4,
+    scoreSequence: [460, 420, 380, 350, 320, 295, 270, 245, 220, 195, 175, 155, 135, 120, 105, 95, 85, 75, 68, 60],
   },
 };
 

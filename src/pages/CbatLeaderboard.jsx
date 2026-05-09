@@ -91,6 +91,14 @@ const GAME_CONFIG = {
     formatScore: (s) => `${s}`,
     backPath: '/cbat/dpt',
   },
+  'act': {
+    title: 'ACT',
+    emoji: '\u{1F3A7}',
+    scoreLabel: 'Score',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}`,
+    backPath: '/cbat/act',
+  },
 }
 
 export default function CbatLeaderboard() {
