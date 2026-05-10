@@ -109,8 +109,8 @@ function randomPackagePos(planeR, planeC) {
 function AircraftSelect({ aircraft, onSelect, loading, personalBest, gameMode3D }) {
   return (
     <div>
-      <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Choose Your Aircraft</h2>
-      <p className="text-xs text-slate-400 text-center mb-3">Select an aircraft, then navigate through 5 levels.</p>
+      <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Plane Turn</h2>
+      <p className="text-xs text-slate-400 text-center mb-3">Practise for TRACE 1 + 2 CBAT tests</p>
 
       {/* Mode recommendation — explicit nudge so users know the toggle in the
           header switches between an easier practice mode and the real
@@ -178,6 +178,9 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, gameMode3D 
           View Leaderboard →
         </Link>
       </div>
+
+      <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Choose Your Aircraft</h2>
+      <p className="text-xs text-slate-400 text-center mb-3">Select an aircraft, then navigate through 5 levels.</p>
 
       {loading && (
         <div className="flex flex-col items-center justify-center py-10">
