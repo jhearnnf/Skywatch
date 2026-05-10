@@ -42,55 +42,60 @@ const GAME_OFFSET = {
 // deltas. Both reflect what a real completion actually looks like for each
 // game (e.g. code-duplicates is 15 rounds × ~5s display + answer ≈ 100–200s,
 // instruments is capped at a 90-second timer, ANT runs 8×60s rounds ≈ 180–450s).
+//
+// Both seedTime and timeStep are kept non-integer so the rounded 1-decimal
+// display (`bestTime.toFixed(1)`) varies row-to-row (e.g. 80.4 / 83.7 / 87.0…)
+// instead of every demo row showing a .0 second tie. Exception: `flag` is a
+// fixed-60s game where every real run also displays 60.0, so its fakes match.
 const FAKE_TUNING = {
   'plane-turn:2d': {
-    floor: 42, ceiling: 107, seedTime: 80, timeStep: 3,
+    floor: 42, ceiling: 107, seedTime: 80.4, timeStep: 3.3,
     scoreSequence: [42, 45, 48, 52, 55, 58, 62, 65, 68, 72, 75, 78, 82, 85, 88, 92, 95, 98, 102, 107],
   },
   'plane-turn:3d': {
     // 3D adds vertical navigation, climbs/dives, and quaternion rotations —
     // real best runs land closer to ~180 rotations, not the ~65 the early
     // tuning assumed. Top demo of 180 keeps the board feeling competitive
-    // without giving users a trivially-beatable target. Times use a non-
-    // integer seed and step so the rounded display varies (220.7, 225.4,
-    // 234.8…) instead of every demo row showing a .0 second tie.
+    // without giving users a trivially-beatable target.
     floor: 180, ceiling: 265, seedTime: 220.7, timeStep: 4.7,
     scoreSequence: [180, 185, 190, 195, 200, 205, 210, 215, 220, 225, 230, 235, 240, 244, 248, 252, 256, 260, 263, 265],
   },
-  'angles':          { floor: 1,  ceiling: 19,  seedScore: 18,  seedTime: 38, scoreStep: 1,  timeStep: 2.5 },
+  'angles':          { floor: 1,  ceiling: 19,  seedScore: 18,  seedTime: 38.4, scoreStep: 1,  timeStep: 2.5 },
   'code-duplicates': {
-    floor: 7, ceiling: 14, seedTime: 88, timeStep: 3,
+    floor: 7, ceiling: 14, seedTime: 88.7, timeStep: 3.4,
     // 20 values, monotonically non-increasing, max 13, min 7 (out of 15).
-    // Times run 88s → 163s — bracketing realistic user runs (15 rounds ×
+    // Times run ~88s → ~165s — bracketing realistic user runs (15 rounds ×
     // 5s display + answer time ≈ 85s fast / 160s slow).
     scoreSequence: [13, 13, 12, 12, 12, 11, 11, 11, 10, 10, 10, 9, 9, 9, 8, 8, 8, 7, 7, 7],
   },
-  'symbols':         { floor: 1,  ceiling: 14,  seedScore: 13,  seedTime: 30, scoreStep: 1,  timeStep: 2   },
+  'symbols':         { floor: 1,  ceiling: 14,  seedScore: 13,  seedTime: 30.6, scoreStep: 1,  timeStep: 2.3 },
   'target': {
-    floor: 15, ceiling: 580, seedTime: 95, timeStep: 6,
+    floor: 15, ceiling: 580, seedTime: 95.4, timeStep: 6.3,
     // Top fakes sit in the 300–600 "decent to impressive" band (Outstanding
     // threshold is 400); the rest trail off through Good / Needs Work / Failed.
     scoreSequence: [580, 520, 470, 420, 380, 340, 300, 260, 220, 180, 140, 110, 85, 65, 50, 40, 32, 25, 20, 15],
   },
   'instruments': {
     // Always runs to the 90s time limit, so fake times barely vary.
-    floor: 1, ceiling: 10, seedTime: 87, timeStep: 0.1,
+    floor: 1, ceiling: 10, seedTime: 87.4, timeStep: 0.1,
     // Top fake sits at the low end of "Good" (≥10); most of the roster is
     // "Needs Work" (5–9) or "Failed" (<5). Grade bands: 15+ / 10+ / 5+.
     scoreSequence: [10, 9, 9, 8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 1],
   },
   'ant': {
-    floor: 15, ceiling: 75, seedTime: 210, timeStep: 9,
+    floor: 15, ceiling: 75, seedTime: 210.6, timeStep: 9.3,
     // 20 multiples-of-5 values, monotonically non-increasing, max 70, min 15.
     // Every ANT total is a multiple of 5 (10 exact / 5 partial / 0 miss × 8 rounds).
     scoreSequence: [70, 65, 60, 55, 50, 50, 45, 45, 40, 40, 35, 35, 30, 30, 25, 25, 20, 20, 15, 15],
   },
-  'visualisation-2d': { floor: 1, ceiling: 7, seedScore: 7, seedTime: 70, scoreStep: 1, timeStep: 4 },
+  'visualisation-2d': { floor: 1, ceiling: 7, seedScore: 7, seedTime: 70.5, scoreStep: 1, timeStep: 4.3 },
   'flag': {
     floor: 55, ceiling: 104, seedTime: 60, timeStep: 0,
     // 20 values, monotonically non-increasing, max 104, min 55. Higher is
     // better. FLAG is a fixed-60s game so all real totalTimes equal 60 too —
-    // fakes match (timeStep: 0) so tie-breaker order stays stable.
+    // fakes match (timeStep: 0, integer seedTime) so tie-breaker order stays
+    // stable AND fake rows display the same 60.0 every real row does. This is
+    // the one tuning intentionally exempt from the "non-integer" rule above.
     // Floor of 55 keeps the visible top-20 above 55 even when sub-floor real
     // entries exist (paired with FULL_SEQUENCE_GAMES below).
     scoreSequence: [104, 100, 97, 94, 91, 88, 85, 82, 79, 76, 73, 70, 67, 64, 62, 60, 58, 57, 56, 55],
@@ -100,7 +105,7 @@ const FAKE_TUNING = {
     // wrong rings/missed instructions (-15/-10), wall scrape (-5/sec), and
     // graded bleep hits/misses (+25/+20/+10/-10). A capable run lands in the
     // 250–420 band; the top fake at 460 is competitive but not unbeatable.
-    floor: 60, ceiling: 460, seedTime: 226, timeStep: 4,
+    floor: 60, ceiling: 460, seedTime: 226.4, timeStep: 4.3,
     scoreSequence: [460, 420, 380, 350, 320, 295, 270, 245, 220, 195, 175, 155, 135, 120, 105, 95, 85, 75, 68, 60],
   },
 };

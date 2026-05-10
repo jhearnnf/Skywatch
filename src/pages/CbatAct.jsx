@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import {
   ActAudioEngine,
   CALLSIGNS,
@@ -20,21 +21,23 @@ const TOTAL_ROUNDS = 5
 const TUNNEL_RADIUS = 2.0
 const BALL_RADIUS = 0.18
 const SHAPE_RADIUS = 0.7                      // hoop/square half-size — small enough that the ball must be aimed
-const TURN_RATE   = 0.0035                    // radians per pixel of drag
-const MAX_ROT_PER_TICK = 0.30                 // hard cap on per-tick rotation (rad) — prevents insta-flip from a fast drag
+const TURN_RATE   = 0.006                     // radians per pixel of drag
+const MAX_ROT_PER_TICK = 0.9                  // hard cap on per-tick rotation (rad) — large enough that real flicks don't clip; the forcedT floor in the game loop now protects t-progress regardless of orientation, so the old tight cap is unnecessary
 const KEYBOARD_RATE_PER_TICK = 4.5            // pixel-equivalent per 16ms keyboard tick
 const AUDIO_WARMUP_T = 0.15                   // no audio cues until ball reaches this fraction along the curve
-const MAX_ROUND_DURATION_S = 90               // safety net — force-end the round if the player gets stuck somehow
+const MAX_ROUND_DURATION_S = 150              // safety net — force-end the round if the player gets stuck somehow
 
 // Per-round tuning. Speed = world units / second the ball moves along its
 // own forward direction. Distractor density and turn intensity grow with
 // round number.
 const ROUND_CONFIG = [
-  { speed: 4.0, shapes: 12, distractorOdds: 0.30, avoidOdds: 0.18, bleepOdds: 0.10, turns: 4, callsigns: 2 },
-  { speed: 4.5, shapes: 14, distractorOdds: 0.40, avoidOdds: 0.22, bleepOdds: 0.12, turns: 5, callsigns: 2 },
-  { speed: 5.0, shapes: 16, distractorOdds: 0.50, avoidOdds: 0.25, bleepOdds: 0.14, turns: 6, callsigns: 2 },
-  { speed: 5.5, shapes: 18, distractorOdds: 0.55, avoidOdds: 0.28, bleepOdds: 0.16, turns: 7, callsigns: 3 },
-  { speed: 6.5, shapes: 20, distractorOdds: 0.60, avoidOdds: 0.30, bleepOdds: 0.18, turns: 8, callsigns: 3 },
+  // `turns` doubled (was 4/5/6/7/8) so total iterations and curve length
+  // double too, giving ~2× round duration at the same speeds.
+  { speed: 4.0, shapes:  8, distractorOdds: 0.30, avoidOdds: 0.18, bleepOdds: 0.10, turns: 12, callsigns: 2 },
+  { speed: 4.5, shapes: 10, distractorOdds: 0.40, avoidOdds: 0.22, bleepOdds: 0.12, turns: 14, callsigns: 2 },
+  { speed: 5.0, shapes: 12, distractorOdds: 0.50, avoidOdds: 0.25, bleepOdds: 0.14, turns: 16, callsigns: 2 },
+  { speed: 5.5, shapes: 14, distractorOdds: 0.55, avoidOdds: 0.28, bleepOdds: 0.16, turns: 18, callsigns: 3 },
+  { speed: 6.5, shapes: 16, distractorOdds: 0.60, avoidOdds: 0.30, bleepOdds: 0.18, turns: 20, callsigns: 3 },
 ]
 
 // Score deltas
@@ -52,32 +55,55 @@ const SCORE = {
 
 // ── Tunnel geometry ──────────────────────────────────────────────────────────
 
-// Build a smooth Catmull-Rom curve through random waypoints. The curve advances
-// mainly along +Z but bends up/down/left/right by a controlled magnitude per
-// round. The total length is roughly proportional to shapes-per-round so each
-// shape sits on its own distinct segment.
+// Build a Catmull-Rom curve through random waypoints. Each "corner" is spread
+// across 3–4 consecutive waypoints that bend the tunnel in the same axis and
+// direction (a "streak"), so the curve sweeps through a long arc instead of
+// lurching at a single waypoint. Per-waypoint magnitude stays moderate; the
+// cumulative deflection across a streak is what produces the sharp-but-
+// smoothed corners. `centripetal` keeps the smoothing well behaved without
+// overshoot.
 function buildTunnelCurve(roundIdx) {
   const cfg = ROUND_CONFIG[roundIdx]
-  const turnMag = 4 + roundIdx * 1.2
-  const segmentLen = 14
+  const turnMag = 7 + roundIdx * 2       // round 1=7 … round 5=15, lateral per waypoint INSIDE a streak
+  const segmentLen = 14                   // forward units on a STRAIGHT waypoint
+  const turnForwardFrac = 0.85            // forward fraction on a turn waypoint (cumulative arc shape)
   const points = [new THREE.Vector3(0, 0, 0)]
   let cursor = new THREE.Vector3(0, 0, 0)
 
+  // Streak state: when active, every turn waypoint reuses these axis/dir
+  // values so consecutive bends compound into a single sweeping arc. A
+  // straight waypoint resets the streak so the next corner can pick a fresh
+  // direction.
+  let streakAxis = 'x'
+  let streakDir = 1
+  let streakRemaining = 0
+
   for (let i = 0; i < cfg.turns + 4; i++) {
     cursor = cursor.clone()
-    cursor.z += segmentLen
     // Keep the first two waypoints colinear with the start so the opening
     // ~28 world units of tunnel are straight — long enough to cover the 3s
     // callsign overlay at every round speed (max 6.5 u/s × 3s ≈ 20 units).
-    if (i >= 2 && Math.random() < 0.7) {
-      const axis = Math.random() < 0.5 ? 'x' : 'y'
-      const dir  = Math.random() < 0.5 ? 1 : -1
-      cursor[axis] += dir * turnMag * (0.6 + Math.random() * 0.4)
+    const isTurn = i >= 2 && Math.random() < 0.95
+    if (isTurn) {
+      cursor.z += segmentLen * turnForwardFrac
+      if (streakRemaining <= 0) {
+        // Begin a fresh streak — pick a new axis/direction and commit for
+        // 2–3 more turn waypoints after this one (3–4 total in the arc).
+        streakAxis = Math.random() < 0.5 ? 'x' : 'y'
+        streakDir  = Math.random() < 0.5 ? 1 : -1
+        streakRemaining = 2 + Math.floor(Math.random() * 2)
+      } else {
+        streakRemaining--
+      }
+      cursor[streakAxis] += streakDir * turnMag * (0.75 + Math.random() * 0.35)
+    } else {
+      cursor.z += segmentLen
+      streakRemaining = 0   // a straight pad breaks the streak
     }
     points.push(cursor.clone())
   }
 
-  return new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.3)
+  return new THREE.CatmullRomCurve3(points, false, 'centripetal')
 }
 
 // World-space buffer (in curve length units) before the first shape. Sized
@@ -110,17 +136,31 @@ function generateShapeEvents(curve, count) {
 const AVOID_LEAD_MIN = [0, 0, 0, 1, 1]   // by roundIdx
 const AVOID_LEAD_MAX = [0, 1, 2, 3, 4]
 
+// Per-round chatter-distraction density. Rounds 1 and 3 get nothing.
+// Round 2 = audible-but-spaced; round 4 = near-continuous; round 5 = sparse
+// because static is already playing there. The engine's same-voice rule
+// caps actual density when attempts arrive faster than a clip's ~2–4 s length.
+const DISTRACTION_PLAN = [
+  null,                                       // round 1
+  { startMs: 3000, gapMs: [3000, 7000] },     // round 2
+  null,                                       // round 3
+  { startMs: 1500, gapMs: [400,  1800] },     // round 4
+  { startMs: 4000, gapMs: [5000, 11000] },    // round 5 (also has static)
+]
+
 // Minimum t-space gap between the START of an avoid-instruction's audio and
 // the arrival of its target shape. The audio takes ~2–3s to play (callsigns
-// + combined avoid clip), and the player needs additional processing time —
-// 0.15 of t translates to ~3.5–4s at every round speed, so the audio always
-// finishes with breathing room before the target arrives.
-const MIN_AUDIO_TO_TARGET_GAP_T = 0.15
+// + combined avoid clip), and the player needs additional processing time
+// to commit the target shape to working memory before steering. 0.30 of t
+// translates to ~7–9s at every round speed, leaving 5–6s of think/steer time
+// AFTER the audio finishes — comfortably above the audio's run length so
+// the cue never feels like a snap reaction test.
+const MIN_AUDIO_TO_TARGET_GAP_T = 0.30
 
 // Build the per-round audio plan: which shapes get an "avoid" instruction
 // (with the player's callsign), which get a distractor, and where bleeps fire.
 // Returns { audioCues } sorted by time-to-fire (curve-t at which to play).
-function generateAudioPlan(events, roundCfg, userCallsign, roundIdx) {
+function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curveLen) {
   const cues = []
 
   // Step 1: pick which shapes will be avoid-targets for this round.
@@ -172,6 +212,24 @@ function generateAudioPlan(events, roundCfg, userCallsign, roundIdx) {
     activeWindowEndT = ev.t + 0.01
   }
 
+  // Step 2b: top up avoid cues so the player's callsign is always heard at
+  // least MIN_AVOID_CUES times per round — they need to recognise their own
+  // callsign under stress, and a low avoidOdds roll could otherwise leave
+  // them with 0 or 1 instructions for a whole round. Additions respect the
+  // same window invariant (next cue starts after the previous target's t)
+  // so they never overlap step-2 cues at play time.
+  const MIN_AVOID_CUES = 2
+  const targetedIds = new Set(cues.filter(c => c.kind === 'avoid').map(c => c.targetId))
+  for (let i = 0; i < events.length && targetedIds.size < MIN_AVOID_CUES; i++) {
+    const ev = events[i]
+    if (targetedIds.has(ev.id)) continue
+    const audioT = Math.max(activeWindowEndT, AUDIO_WARMUP_T, ev.t - MIN_AUDIO_TO_TARGET_GAP_T)
+    if (audioT >= ev.t) continue
+    cues.push({ t: audioT, kind: 'avoid', callsigns: userCallsign, shape: ev.shape, targetId: ev.id })
+    targetedIds.add(ev.id)
+    activeWindowEndT = ev.t + 0.01
+  }
+
   // Step 3: distractors — fire near a non-target shape, with a non-matching
   // callsign. The player should ignore these.
   for (let i = 0; i < events.length; i++) {
@@ -186,10 +244,27 @@ function generateAudioPlan(events, roundCfg, userCallsign, roundIdx) {
     cues.push({ t: audioT, kind: 'distractor', callsigns: distractorSet, shape: distractorShape, targetId: null })
   }
 
-  // Step 4: bleeps — sprinkled randomly across the round, after warmup.
-  const bleepCount = Math.round(roundCfg.shapes * roundCfg.bleepOdds)
+  // Step 4: bleeps — stratified across the round so adjacent bleeps are
+  // always at least 3 s apart in real time. Floor at 5 per round so the
+  // reaction-time check always gets enough reps. Each bleep sits in its
+  // own equal slot of the [warmup, 0.95] t-range; restricting placement
+  // within each slot to leave a `minGapT/2` margin at each end guarantees
+  // neighbouring bleeps never get within minGapT of each other.
+  const bleepCount = Math.max(5, Math.round(roundCfg.shapes * roundCfg.bleepOdds))
+  const bleepRangeStart = AUDIO_WARMUP_T
+  const bleepRangeEnd   = 0.95
+  const bleepRange      = bleepRangeEnd - bleepRangeStart
+  const slotWidth       = bleepRange / bleepCount
+  // Convert "3 seconds" into curve-t units via cfg.speed and curve length.
+  // Cap at slotWidth so the per-slot sub-range never inverts on shorter
+  // rounds; gap is still as large as the slot allows.
+  const minGapT = Math.min(slotWidth, (3 * roundCfg.speed) / Math.max(1, curveLen))
   for (let i = 0; i < bleepCount; i++) {
-    const t = AUDIO_WARMUP_T + Math.random() * (0.95 - AUDIO_WARMUP_T)
+    const slotStart = bleepRangeStart + i * slotWidth
+    const slotEnd   = slotStart + slotWidth
+    const subStart  = i === 0              ? slotStart : slotStart + minGapT / 2
+    const subEnd    = i === bleepCount - 1 ? slotEnd   : slotEnd   - minGapT / 2
+    const t = subStart + Math.random() * Math.max(0, subEnd - subStart)
     cues.push({ t, kind: 'bleep' })
   }
 
@@ -221,11 +296,15 @@ function TunnelMesh({ curve, proximityRef, ballPosRef }) {
   const shaderRef = useRef(null)
 
   const material = useMemo(() => {
+    // Opaque on purpose. Earlier transparency (opacity 0.85) caused shapes
+    // sitting inside future curve sections to bleed through the nearer
+    // wall when the tunnel bent — three.js alpha-blends the wall on top
+    // of the further shape, so 15 % of the shape was always visible
+    // through the wall. Going opaque restores correct depth occlusion;
+    // the warning glow still works because it's emissive, not alpha-based.
     const mat = new THREE.MeshStandardMaterial({
       color: '#0c2a4a',
       side: THREE.BackSide,
-      transparent: true,
-      opacity: 0.85,
     })
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uBallPos   = { value: new THREE.Vector3() }
@@ -458,7 +537,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
   const userCallsign = useMemo(() => pickCallsigns(cfg.callsigns), [roundIdx])
   const curve   = useMemo(() => buildTunnelCurve(roundIdx), [roundIdx])
   const events  = useMemo(() => generateShapeEvents(curve, cfg.shapes), [curve, cfg.shapes])
-  const audioCues = useMemo(() => generateAudioPlan(events, cfg, userCallsign, roundIdx), [events, cfg, userCallsign, roundIdx])
+  const audioCues = useMemo(() => generateAudioPlan(events, cfg, userCallsign, roundIdx, curve.getLength()), [events, cfg, userCallsign, roundIdx, curve])
 
   const ballTRef       = useRef(0)
   const ballPosRef     = useRef(new THREE.Vector3())
@@ -497,6 +576,14 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     score: 0,
   })
 
+  // Round-1 bleep tutorial. While `tutorialActiveRef.current` is true the
+  // game loop pauses (no motion, no audio cues, no scoring) and the JSX
+  // shows a "press the button when you hear a bleep" overlay + pulses the
+  // bleep button. `onBleepTap` dismisses the tutorial. State mirrors the
+  // ref so JSX can react to changes.
+  const tutorialActiveRef = useRef(false)
+  const [tutorialActive, setTutorialActive] = useState(false)
+
   // Pending bleep — set when a bleep fires; cleared on hit/miss.
   const pendingBleepRef = useRef(null)
   // Cue cursor — index of the next audio cue to fire.
@@ -506,25 +593,58 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
 
   const completedRef = useRef(false)
 
-  // Touch / pointer drag input.
-  const pointerActiveRef = useRef(false)
-  const lastPointerRef   = useRef({ x: 0, y: 0 })
+  // Touch / pointer drag input. We pointer-capture on down so move/up keep
+  // firing even when the cursor leaves the canvas — without capture, a
+  // mid-drag exit would silently stop the input. Every move/up handler
+  // gates on the captured pointerId; without that gate, a stray second
+  // pointer (touch, tablet, R3F-internal synthetic event, etc.) would
+  // overwrite lastPointer and the next real move would compute a delta
+  // against the wrong reference, producing the "darting cursor" jitter.
+  // While captured we also hide the OS cursor globally so the drag feels
+  // seamless even if the cursor crosses the canvas edge.
+  const pointerActiveRef  = useRef(false)
+  const lastPointerRef    = useRef({ x: 0, y: 0 })
+  const capturedPointerIdRef = useRef(null)
 
   const onPointerDown = useCallback((e) => {
+    // Already dragging on a different pointer — ignore secondary inputs so
+    // they can't reset lastPointer and cause a frame of huge dx/dy.
+    if (capturedPointerIdRef.current != null) return
     pointerActiveRef.current = true
     lastPointerRef.current = { x: e.clientX, y: e.clientY }
+    try {
+      e.currentTarget?.setPointerCapture?.(e.pointerId)
+      capturedPointerIdRef.current = e.pointerId
+    } catch {}
+    document.body.style.cursor = 'none'
   }, [])
   const onPointerMove = useCallback((e) => {
     if (!pointerActiveRef.current) return
+    // Only the captured pointer is allowed to move the ball — everything
+    // else is a stray that would corrupt the delta reference.
+    const pid = capturedPointerIdRef.current
+    if (pid != null && e.pointerId !== pid) return
     const dx = e.clientX - lastPointerRef.current.x   // raw pixel delta
     const dy = e.clientY - lastPointerRef.current.y
     lastPointerRef.current = { x: e.clientX, y: e.clientY }
     inputRef.current.dx += dx
     inputRef.current.dy += dy
   }, [])
-  const onPointerUp = useCallback(() => {
+  const onPointerUp = useCallback((e) => {
+    // A different pointer going up shouldn't end the captured drag.
+    const pid = capturedPointerIdRef.current
+    if (pid != null && e?.pointerId != null && e.pointerId !== pid) return
     pointerActiveRef.current = false
+    if (pid != null && e?.currentTarget?.releasePointerCapture) {
+      try { e.currentTarget.releasePointerCapture(pid) } catch {}
+    }
+    capturedPointerIdRef.current = null
+    document.body.style.cursor = ''
   }, [])
+
+  // Safety: if the round unmounts mid-drag (menu, navigation, errors),
+  // restore the body cursor so the user isn't left with an invisible cursor.
+  useEffect(() => () => { document.body.style.cursor = '' }, [])
 
   // Keyboard input. Each tick adds a fixed pixel-equivalent to the input
   // accumulator so keyboard and touch share the same TURN_RATE conversion.
@@ -555,6 +675,13 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
 
   // Bleep button handler — exposed for the JSX.
   const onBleepTap = useCallback(() => {
+    // Tutorial path: any tap during the round-1 tutorial dismisses it and
+    // resumes gameplay. Doesn't count as a scored hit.
+    if (tutorialActiveRef.current) {
+      tutorialActiveRef.current = false
+      setTutorialActive(false)
+      return
+    }
     const pending = pendingBleepRef.current
     if (!pending) return
     const reactionMs = performance.now() - pending.startedAt
@@ -569,11 +696,43 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     pendingBleepRef.current = null
   }, [])
 
+  // Trigger the round-1 bleep tutorial. Plays a single bleep, pauses the
+  // game loop, and shows the overlay + button pulse until the player taps.
+  const startBleepTutorial = useCallback(() => {
+    tutorialActiveRef.current = true
+    setTutorialActive(true)
+    audio.playBleep()
+    // Note: pendingBleepRef stays null so this isn't scored as a hit/miss.
+  }, [audio])
+
   // Static-noise distractor on rounds 1, 3, 5 (roundIdx 0, 2, 4).
   useEffect(() => {
     const useStatic = roundIdx % 2 === 0
     if (useStatic) audio.startStatic({ volume: 0.06 })
     return () => audio.stopStatic()
+  }, [roundIdx, audio])
+
+  // Chatter-distraction scheduler — rounds 2, 4, 5 (roundIdx 1, 3, 4).
+  // Each tick attempts a play in a randomly picked voice; the audio engine
+  // drops the call if that voice is still mid-clip, so per-round density is
+  // bounded both by gap range and by the engine's same-voice rule.
+  useEffect(() => {
+    const plan = DISTRACTION_PLAN[roundIdx]
+    if (!plan) return
+    let cancelled = false
+    let timer = null
+    const fire = () => {
+      if (cancelled) return
+      const voice = Math.random() < 0.5 ? 'male' : 'female'
+      audio.playDistraction({ voice })
+      const [lo, hi] = plan.gapMs
+      timer = setTimeout(fire, lo + Math.random() * (hi - lo))
+    }
+    timer = setTimeout(fire, plan.startMs)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [roundIdx, audio])
 
   // Main game loop — runs via requestAnimationFrame.
@@ -587,19 +746,33 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
       const dt  = Math.min(0.05, (now - lastTickRef.current) / 1000)
       lastTickRef.current = now
 
+      // ── 0. Tutorial pause — round-1 bleep teach moment. While active,
+      // skip motion, audio cue firing, scoring, and shape evaluation.
+      // Resumes on the next frame after the player taps BLEEP. dt is
+      // already captured/clamped above so we don't accumulate a giant
+      // delta when the loop unpauses.
+      if (tutorialActiveRef.current) {
+        raf = requestAnimationFrame(tick)
+        return
+      }
+
       // ── 1. Apply pending steering input as a rotation of the ball's forward ──
       // Yaw around world-up; pitch around camera-right. The per-tick magnitude
-      // is capped so a sudden 1000-px drag can't flip the ball backward in a
-      // single frame (which previously could trap forwardProgress at ≤ 0).
+      // is capped at MAX_ROT_PER_TICK so a single frame can't spin the ball
+      // through a half-revolution. Whatever pixels exceed the cap are KEPT in
+      // the accumulator and applied next frame, so big flicks aren't silently
+      // discarded — they just take an extra frame or two to fully play out.
       const fwd = ballForwardRef.current
       const worldUp = Math.abs(fwd.y) > 0.95 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0)
       const camRight = new THREE.Vector3().crossVectors(fwd, worldUp).normalize()
-      let yaw   = -inputRef.current.dx * TURN_RATE
-      let pitch =  inputRef.current.dy * TURN_RATE          // dy>0 (drag down) pitches the ball downward
-      yaw   = Math.max(-MAX_ROT_PER_TICK, Math.min(MAX_ROT_PER_TICK, yaw))
-      pitch = Math.max(-MAX_ROT_PER_TICK, Math.min(MAX_ROT_PER_TICK, pitch))
-      inputRef.current.dx = 0
-      inputRef.current.dy = 0
+      const wantedYaw   = -inputRef.current.dx * TURN_RATE
+      const wantedPitch =  inputRef.current.dy * TURN_RATE   // dy>0 (drag down) pitches the ball downward
+      const yaw   = Math.max(-MAX_ROT_PER_TICK, Math.min(MAX_ROT_PER_TICK, wantedYaw))
+      const pitch = Math.max(-MAX_ROT_PER_TICK, Math.min(MAX_ROT_PER_TICK, wantedPitch))
+      // Pixel-equivalents of what we just applied — pull only those out of the
+      // accumulator. Anything left over rolls into the next frame.
+      inputRef.current.dx -= -yaw   / TURN_RATE
+      inputRef.current.dy -=  pitch / TURN_RATE
       if (yaw   !== 0) fwd.applyAxisAngle(worldUp,  yaw)
       if (pitch !== 0) fwd.applyAxisAngle(camRight, pitch)
       fwd.normalize()
@@ -607,9 +780,19 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
       // ── 2. Advance position along the ball's own forward direction. ───────
       ballPosRef.current.addScaledVector(fwd, cfg.speed * dt)
 
-      // ── 3. Update curve-t by nearest-point search (monotonic). ────────────
-      // Sample around the previous t and pick the curve point closest to the
-      // ball. ballT only advances — it never regresses, so a player who turns
+      // ── 3. Update curve-t. ───────────────────────────────────────────────
+      // Two contributions:
+      //   (a) Nearest-point search around the previous t — lets organic
+      //       forward motion (ball-forward roughly aligned with the curve
+      //       tangent) register at its natural rate.
+      //   (b) A floor of cfg.speed/curveLen worth of t-advance per frame —
+      //       guarantees forward progress even when the player is steering
+      //       hard into a wall. Without this floor, a heavily-off-axis
+      //       ball-forward yields near-zero tangent component, the snap
+      //       step then resets ball-pos to curve(oldT)+lateral, and t
+      //       stalls. With it, a wall-scraping player glides along the
+      //       wall at the same forward rate as a clean run.
+      // ballT only advances — it never regresses, so a player who turns
       // around still sees their progress preserved and the round can finish.
       const prevT = ballTRef.current
       let bestT = prevT
@@ -624,7 +807,8 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
           if (d < bestDist) { bestDist = d; bestT = ti }
         }
       }
-      ballTRef.current = Math.max(prevT, bestT)
+      const forcedT = Math.min(1, prevT + (cfg.speed * dt) / totalLen)
+      ballTRef.current = Math.max(prevT, bestT, forcedT)
 
       // ── 4. Wall collision: project ball-pos onto cross-section at new t. ──
       const c_new   = curve.getPointAt(ballTRef.current)
@@ -681,9 +865,17 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
       // ── 7. Evaluate shape events as the ball passes them. ─────────────────
       while (eventIdxRef.current < events.length && events[eventIdxRef.current].t <= ballTRef.current) {
         const ev = events[eventIdxRef.current++]
-        const shapeCentre = curve.getPointAt(ev.t)
-        const distToCentre = ballPosRef.current.distanceTo(shapeCentre)
-        const threadedThrough = distToCentre < SHAPE_RADIUS - BALL_RADIUS
+        const shapeCentre  = curve.getPointAt(ev.t)
+        const shapeTangent = curve.getTangentAt(ev.t)
+        // Project ball→shape onto the cross-section perpendicular to the curve
+        // at ev.t. This measures the LATERAL offset only — the same thing the
+        // wall-snap uses — so a small tangential offset (which can happen when
+        // the forcedT floor advances ballT slightly ahead of physical motion)
+        // doesn't bloat the distance and falsely register a miss.
+        const offset = ballPosRef.current.clone().sub(shapeCentre)
+        offset.addScaledVector(shapeTangent, -offset.dot(shapeTangent))
+        const lateralFromShape = offset.length()
+        const threadedThrough = lateralFromShape < SHAPE_RADIUS - BALL_RADIUS
         const activeAvoid = activeAvoidRef.current && activeAvoidRef.current.targetId === ev.id
 
         if (activeAvoid) {
@@ -760,6 +952,8 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     onPointerMove,
     onPointerUp,
     onBleepTap,
+    tutorialActive,
+    startBleepTutorial,
   }
 }
 
@@ -782,7 +976,7 @@ function ActScene({ state }) {
       onPointerDown={state.onPointerDown}
       onPointerMove={state.onPointerMove}
       onPointerUp={state.onPointerUp}
-      onPointerLeave={state.onPointerUp}
+      onPointerCancel={state.onPointerUp}
     >
       <color attach="background" args={['#020812']} />
       <fog attach="fog" args={['#020812', 12, 60]} />
@@ -869,7 +1063,7 @@ function Stat({ label, value, good, bad }) {
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function CbatAct() {
   const { user, apiFetch, API } = useAuth()
-  const [phase, setPhase] = useState('intro')   // intro | callsign | playing | recap | results
+  const [phase, setPhase] = useState('intro')   // intro | logoIntro | callsign | playing | recap | results
   const [roundIdx, setRoundIdx] = useState(0)
   const [allRoundStats, setAllRoundStats] = useState([])
   const [latestStats, setLatestStats]   = useState(null)
@@ -877,6 +1071,17 @@ export default function CbatAct() {
   const [scoreSaved, setScoreSaved]     = useState(false)
   const [audioReady, setAudioReady]     = useState(false)
   const audioRef = useRef(null)
+
+  // Skywatch logo curtain — plays once per page mount on the first
+  // start. Subsequent Play Again's skip it for snappy replays.
+  const logoPlayedRef = useRef(false)
+
+  // Round-1 bleep tutorial: fires once per "session". A session ends when
+  // the player explicitly returns to the instructions screen (handleMenu)
+  // or navigates away from the page entirely (component unmount). Play
+  // Again from the results screen does NOT reset the flag.
+  const [tutorialDone, setTutorialDone] = useState(false)
+  const onTutorialFired = useCallback(() => setTutorialDone(true), [])
 
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
@@ -909,8 +1114,13 @@ export default function CbatAct() {
     setAllRoundStats([])
     setLatestStats(null)
     setScoreSaved(false)
-    setPhase('callsign')
+    setPhase(logoPlayedRef.current ? 'callsign' : 'logoIntro')
   }, [apiFetch, API, initAudio])
+
+  const handleLogoComplete = useCallback(() => {
+    logoPlayedRef.current = true
+    setPhase('callsign')
+  }, [])
 
   // Auto-advance from callsign reveal to playing after 3s.
   useEffect(() => {
@@ -988,6 +1198,10 @@ export default function CbatAct() {
   useEffect(() => () => { audioRef.current?.dispose() }, [])
 
   // Bail out of an in-progress run back to the intro / instructions screen.
+  // Tutorial flag is NOT reset here — tutorial fires once per page mount,
+  // surviving Play Again / Menu within the same /cbat/act visit. Only a
+  // full page exit + return (component unmount → remount) resets it via
+  // the useState initial value.
   const handleMenu = useCallback(() => {
     audioRef.current?.stopAll()
     audioRef.current?.stopStatic()
@@ -1029,6 +1243,10 @@ export default function CbatAct() {
             />
           )}
 
+          {phase === 'logoIntro' && (
+            <SkywatchLogoIntro onComplete={handleLogoComplete} />
+          )}
+
           {(phase === 'callsign' || phase === 'playing') && audioRef.current && (
             <ActRound
               key={roundIdx}
@@ -1036,6 +1254,8 @@ export default function CbatAct() {
               audio={audioRef.current}
               showCallsignOverlay={phase === 'callsign'}
               onRoundComplete={onRoundComplete}
+              tutorialDone={tutorialDone}
+              onTutorialFired={onTutorialFired}
             />
           )}
 
@@ -1122,9 +1342,53 @@ function IntroScreen({ personalBest, onStart }) {
 }
 
 // ── Round wrapper (mounts game-state hook + canvas + HUD) ────────────────────
-function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete }) {
+function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutorialDone, onTutorialFired }) {
   const state = useActRoundState(roundIdx, audio, onRoundComplete)
   const stats = state.statsRef.current
+
+  // Round-1 bleep tutorial: ~1.5 s after the callsign overlay disappears,
+  // play one bleep and pause everything until the player taps the button.
+  // The deliberate gap lets the player see the tunnel and start moving
+  // before the prompt interrupts.
+  //
+  // Gating policy:
+  //   - tutorialDone (parent state): "already fired during this /cbat/act
+  //     page mount". Initialised false on every Cbat mount; sticky across
+  //     Play Again, Menu→Start, and round changes within the same mount.
+  //     Only resets when the page itself unmounts and the user returns.
+  //   - scheduledRef (mount-local): protects the 1.5 s setTimeout from
+  //     being scheduled multiple times if this effect re-runs before the
+  //     timer fires (e.g., HUD-throttle re-renders).
+  //
+  // Robustness notes:
+  //   - Deps include ONLY stable refs (the `startBleepTutorial` useCallback
+  //     and the `onTutorialFired` useCallback) plus primitive flags, NOT
+  //     the whole `state` object — `state` is a fresh object literal every
+  //     render and would make this effect re-run constantly.
+  //   - mountedRef is re-set on every mount (not just initialised) so
+  //     StrictMode's mount→unmount→mount dance leaves it correctly true.
+  const TUTORIAL_DELAY_MS = 1500
+  const scheduledRef = useRef(false)
+  const tutorialMountedRef = useRef(true)
+  useEffect(() => {
+    tutorialMountedRef.current = true
+    return () => { tutorialMountedRef.current = false }
+  }, [])
+  const startBleepTutorial = state.startBleepTutorial
+  useEffect(() => {
+    if (showCallsignOverlay) return
+    if (roundIdx !== 0) return
+    if (tutorialDone) return
+    if (scheduledRef.current) return
+    scheduledRef.current = true
+    setTimeout(() => {
+      if (!tutorialMountedRef.current) return
+      startBleepTutorial()
+      onTutorialFired()
+    }, TUTORIAL_DELAY_MS)
+  }, [showCallsignOverlay, roundIdx, tutorialDone, startBleepTutorial, onTutorialFired])
+
+  const tutorialActive = state.tutorialActive
 
   return (
     <div className="w-full max-w-2xl">
@@ -1152,12 +1416,33 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete }) {
             </div>
           </motion.div>
         )}
+
+        {tutorialActive && !showCallsignOverlay && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-20"
+          >
+            <div className="text-center px-6">
+              <p className="text-xs text-amber-400 uppercase tracking-widest mb-3">Reaction-time check</p>
+              <p className="text-2xl sm:text-3xl font-extrabold text-amber-300">
+                Press the button below when you hear a bleep
+              </p>
+            </div>
+          </motion.div>
+        )}
       </div>
 
-      {/* Bleep button — large, mobile-friendly */}
+      {/* Bleep button — large, mobile-friendly. Pulses + brightens during the
+          round-1 tutorial so the player knows where to tap. */}
       <button
         onClick={state.onBleepTap}
-        className="w-full mt-3 py-5 bg-amber-500/20 hover:bg-amber-500/30 active:bg-amber-500/40 border-2 border-amber-500/50 text-amber-300 font-extrabold text-lg uppercase tracking-widest rounded-xl transition-colors"
+        className={`w-full mt-3 py-5 border-2 font-extrabold text-lg uppercase tracking-widest rounded-xl transition-colors ${
+          tutorialActive
+            ? 'bg-amber-500/40 border-amber-300 text-amber-100 ring-4 ring-amber-400/60 animate-pulse'
+            : 'bg-amber-500/20 hover:bg-amber-500/30 active:bg-amber-500/40 border-amber-500/50 text-amber-300'
+        }`}
       >
         BLEEP
       </button>

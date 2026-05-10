@@ -80,7 +80,10 @@ const IMAGE_GAMES = CBAT_GAMES.filter(g => g.image)
 // Display the "NEW GAME" badge on the ACT card until midnight local time at
 // the start of 11 May 2026 (i.e. visible up to and including 10th May; gone from 11th).
 const NEW_GAME_KEY = 'act'
-const NEW_GAME_DEADLINE = new Date(2026, 4, 11) // month is 0-indexed; 4 = May
+// Badge shows up to and including May 14 — set deadline to start-of-May-15
+// (month is 0-indexed; 4 = May) so `Date.now() < deadline` is still true
+// at any point on May 14.
+const NEW_GAME_DEADLINE = new Date(2026, 4, 15)
 
 export default function Cbat() {
   const { user } = useAuth()
@@ -129,8 +132,14 @@ export default function Cbat() {
       {/* Game grid — blurred when not signed in */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4${!user ? ' opacity-40 pointer-events-none select-none blur-sm' : ''}`} style={{ rowGap: '2rem' }}>
         {CBAT_GAMES.map((game, i) => {
-          const enabled   = isGameEnabled(game.key)
-          const clickable = !!game.path && (enabled || !!user?.isAdmin)
+          const isImplemented = !!game.path
+          const enabled       = isGameEnabled(game.key)
+          // Admins always click through to test, regardless of toggle state.
+          const clickable     = isImplemented && (enabled || !!user?.isAdmin)
+          // Distinguishes "admin disabled this in settings" (temporary) from
+          // "this game has no page yet" (genuinely future) so the picker can
+          // show the right message to non-admins.
+          const adminDisabled = isImplemented && !enabled
           return (
             <motion.div
               key={game.key}
@@ -177,7 +186,9 @@ export default function Cbat() {
                   <div className="min-w-0" style={{ position: 'relative', zIndex: 3 }}>
                     <p className="font-bold text-slate-800 mb-0.5">{game.title}</p>
                     <p className="text-xs text-slate-700">{game.desc}</p>
-                    <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wide">Coming soon</p>
+                    <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wide">
+                      {adminDisabled ? 'Temporarily disabled — check back soon' : 'Coming soon'}
+                    </p>
                   </div>
                 </div>
               )}

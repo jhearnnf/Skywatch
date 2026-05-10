@@ -9,33 +9,77 @@
 export const CALLSIGNS = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'hotel'];
 export const SHAPES    = ['circle', 'square'];
 
+// Each clip exists as a male_ and female_ variant; one voice is chosen at
+// random per instruction sequence so the speaker changes throughout the game
+// without flipping mid-sentence.
+export const VOICES = ['male', 'female'];
+
 // Combined avoid clips — the connector phrase and shape are baked into a single
 // MP3 each ("avoid the next circle.mp3", "avoid the next square.mp3"). Internal
 // keys use underscores; the loader translates them to spaces in the URL.
 const AVOID_KEYS = SHAPES.map(s => `avoid_the_next_${s}`);
 
-// All audio chunks loaded on init.
+// Voice-agnostic chunk identifiers. Voice prefix is added at load + play time.
 const CHUNK_FILES = [
   ...CALLSIGNS,
   ...AVOID_KEYS,
 ];
 
-// Map internal key → actual filename (no extension). Most are 1:1; the avoid
-// keys translate underscores to spaces.
+// Map internal key → actual filename body (no voice prefix, no extension).
+// Most are 1:1; the avoid keys translate underscores to spaces.
 function chunkKeyToFilename(key) {
   if (key.startsWith('avoid_the_next_')) return key.replaceAll('_', ' ');
   return key;
 }
 
+// Buffer-map key for a given voice + chunk pair.
+function bufferKey(voice, name) {
+  return `${voice}:${name}`;
+}
+
+// ── Distraction chatter ─────────────────────────────────────────────────────
+// Two long mono recordings (`distractions_male.mp3`, `distractions_female.mp3`)
+// of unrelated chatter. On load we slice each into N evenly-spaced windows;
+// at play time we pick one at random and play it as a sub-region of the
+// loaded buffer (no extra fetches). The two chatter voices are different
+// speakers from the instruction voices, so distractions can freely overlap
+// instructions; the only rule is a chatter voice can never overlap itself.
+
+const DISTRACTION_SEGMENT_COUNT = 10;
+const DISTRACTION_BUMPER_S = 0.5;        // skip this much head/tail to avoid silence/fades
+const DISTRACTION_MIN_S = 2;
+const DISTRACTION_MAX_S = 4;
+
+// Carve `count` non-overlapping {offset, duration} windows from a chatter file
+// of length `totalDuration`. Each window is 2–4s, placed randomly inside its
+// equally-sized chunk so successive plays don't always hit the same content.
+export function computeDistractionSegments(totalDuration, count = DISTRACTION_SEGMENT_COUNT) {
+  const usable = Math.max(0, totalDuration - 2 * DISTRACTION_BUMPER_S);
+  if (usable <= 0 || count <= 0) return [];
+  const chunk = usable / count;
+  const segs = [];
+  for (let i = 0; i < count; i++) {
+    const chunkStart = DISTRACTION_BUMPER_S + i * chunk;
+    const wantedDur = DISTRACTION_MIN_S + Math.random() * (DISTRACTION_MAX_S - DISTRACTION_MIN_S);
+    const segDur = Math.min(wantedDur, Math.max(0.5, chunk - 0.1));
+    const offset = chunkStart + Math.random() * Math.max(0, chunk - segDur);
+    segs.push({ offset, duration: segDur });
+  }
+  return segs;
+}
+
 export class ActAudioEngine {
   constructor() {
     this.ctx = null;
-    this.buffers = new Map();   // name → AudioBuffer
+    this.buffers = new Map();   // voice:name → AudioBuffer
     this.activeSources = new Set();
     this.bleepListeners = new Set();
     this._lastBleepStartedAt = 0;
     this._staticNodes = null;   // { source, filter, gain, lfoTimer } when static is playing
     this._instructionPlayingUntil = 0;   // audio-ctx time at which the current exclusive sequence ends
+    this.distractionBuffers = new Map();        // voice → AudioBuffer (full chatter file)
+    this._distractionSegments = new Map();      // voice → [{ offset, duration }, …]
+    this._distractionBusyUntil = { male: 0, female: 0 };   // audio-ctx time per voice
   }
 
   // Lazy-init AudioContext on first user gesture (browsers block autoplay).
@@ -43,22 +87,48 @@ export class ActAudioEngine {
     if (this.ctx) return;
     const Ctor = window.AudioContext || window.webkitAudioContext;
     this.ctx = new Ctor();
-    await Promise.all(CHUNK_FILES.map(name => this._loadBuffer(name)));
+    const jobs = [];
+    for (const voice of VOICES) {
+      for (const name of CHUNK_FILES) jobs.push(this._loadBuffer(voice, name));
+      jobs.push(this._loadDistractionBuffer(voice));
+    }
+    await Promise.all(jobs);
   }
 
-  async _loadBuffer(name) {
-    if (this.buffers.has(name)) return;
-    const filename = chunkKeyToFilename(name);
+  async _loadDistractionBuffer(voice) {
+    if (this.distractionBuffers.has(voice)) return;
+    const url = `/sounds/act/distractions_${voice}.mp3`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const arrayBuffer = await res.arrayBuffer();
+      const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+      this.distractionBuffers.set(voice, audioBuffer);
+      this._distractionSegments.set(voice, computeDistractionSegments(audioBuffer.duration));
+    } catch (err) {
+      console.warn(`[ACT] Failed to load ${url}:`, err.message);
+    }
+  }
+
+  async _loadBuffer(voice, name) {
+    const key = bufferKey(voice, name);
+    if (this.buffers.has(key)) return;
+    const filename = `${voice}_${chunkKeyToFilename(name)}`;
     const url = `/sounds/act/${encodeURIComponent(filename)}.mp3`;
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const arrayBuffer = await res.arrayBuffer();
       const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-      this.buffers.set(name, audioBuffer);
+      this.buffers.set(key, audioBuffer);
     } catch (err) {
       console.warn(`[ACT] Failed to load ${url}:`, err.message);
     }
+  }
+
+  // Pick a voice for a fresh sequence. Random by default; overridable in tests.
+  _pickVoice() {
+    return VOICES[Math.floor(Math.random() * VOICES.length)];
   }
 
   // Play an array of chunk names sequentially. Resolves when the last clip ends.
@@ -68,12 +138,15 @@ export class ActAudioEngine {
   // `exclusive: true` makes this call skip if another exclusive sequence is
   // currently playing — used for callsign instructions so two voices never
   // overlap.
-  playSequence(names, { gap = 0.04, volume = 0.40, exclusive = false } = {}) {
+  playSequence(names, { gap = 0.04, volume = 0.40, exclusive = false, voice } = {}) {
     if (!this.ctx) return { promise: Promise.resolve(), cancel: () => {}, played: false };
 
     if (exclusive && this._instructionPlayingUntil > this.ctx.currentTime + 0.01) {
       return { promise: Promise.resolve(), cancel: () => {}, played: false };
     }
+
+    // One voice per sequence so a sentence doesn't flip speakers mid-utterance.
+    const chosenVoice = voice && VOICES.includes(voice) ? voice : this._pickVoice();
 
     let cancelled = false;
     const sources = [];
@@ -84,7 +157,7 @@ export class ActAudioEngine {
     gain.connect(this.ctx.destination);
 
     for (const name of names) {
-      const buf = this.buffers.get(name);
+      const buf = this.buffers.get(bufferKey(chosenVoice, name));
       if (!buf) continue;
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
@@ -117,7 +190,7 @@ export class ActAudioEngine {
     };
   }
 
-  // Synthesised square-wave bleep — sharp, ~220ms, A5 (880Hz).
+  // Synthesised square-wave bleep — sharp attack, ~440ms total, E5 (660Hz).
   // Notifies all bleep listeners with the precise audio-context start time so
   // the game can score reaction time relative to the actual onset.
   playBleep() {
@@ -126,13 +199,13 @@ export class ActAudioEngine {
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'square';
-    osc.frequency.value = 880;
+    osc.frequency.value = 660;
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(0.32, now + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.44);
     osc.connect(gain).connect(this.ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.23);
+    osc.stop(now + 0.46);
 
     this._lastBleepStartedAt = performance.now();
     for (const cb of this.bleepListeners) cb(this._lastBleepStartedAt);
@@ -149,12 +222,56 @@ export class ActAudioEngine {
     return () => this.bleepListeners.delete(cb);
   }
 
+  // Play a random pre-sliced chatter segment for the given voice.
+  // Same-voice rule: drops if this voice is still mid-segment so two male (or
+  // two female) chatter clips never overlap. Distraction voices are different
+  // speakers from the instruction voices, so this does not consult
+  // `_instructionPlayingUntil` — chatter freely overlaps instruction audio.
+  playDistraction({ voice, volume = 0.40 } = {}) {
+    if (!this.ctx) return { played: false, cancel: () => {} };
+    if (!voice || !VOICES.includes(voice)) return { played: false, cancel: () => {} };
+
+    const buf = this.distractionBuffers.get(voice);
+    const segments = this._distractionSegments.get(voice);
+    if (!buf || !segments || segments.length === 0) return { played: false, cancel: () => {} };
+
+    const now = this.ctx.currentTime;
+    if (this._distractionBusyUntil[voice] > now + 0.01) {
+      return { played: false, cancel: () => {} };
+    }
+
+    const seg = segments[Math.floor(Math.random() * segments.length)];
+    const start = now + 0.02;
+
+    const gain = this.ctx.createGain();
+    gain.gain.value = volume;
+    gain.connect(this.ctx.destination);
+
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(gain);
+    src.start(start, seg.offset, seg.duration);
+    this.activeSources.add(src);
+    src.onended = () => this.activeSources.delete(src);
+    this._distractionBusyUntil[voice] = start + seg.duration;
+
+    return {
+      played: true,
+      cancel: () => {
+        try { src.stop(); } catch {}
+        this.activeSources.delete(src);
+        this._distractionBusyUntil[voice] = 0;
+      },
+    };
+  }
+
   stopAll() {
     for (const src of this.activeSources) {
       try { src.stop(); } catch {}
     }
     this.activeSources.clear();
     this._instructionPlayingUntil = 0;
+    this._distractionBusyUntil = { male: 0, female: 0 };
   }
 
   // ── Static / radio-noise distractor ─────────────────────────────────────

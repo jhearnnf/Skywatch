@@ -149,6 +149,24 @@ describe('padLeaderboard', () => {
     }
   });
 
+  it('produces decimal-bearing demo times for every game except flag (fixed-60s, intentional)', () => {
+    // Demo bestTime is rounded to 1 decimal. If seedTime AND timeStep are both
+    // integers, every row displays as N.0 — looks fake. flag is the documented
+    // exception (fixed-60s game where real runs also display 60.0).
+    for (const { game, opts } of ALL_GAME_MODES) {
+      if (game === 'flag') continue;
+      const out = padLeaderboard([], game, opts);
+      const fakes = out.filter(e => e.isFake);
+      const fractional = fakes.filter(f => Math.round(f.bestTime * 10) % 10 !== 0);
+      expect(fractional.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('flag fakes intentionally tie at 60.0 (fixed-60s game, real runs do the same)', () => {
+    const out = padLeaderboard([], 'flag');
+    out.filter(e => e.isFake).forEach(f => expect(f.bestTime).toBe(60));
+  });
+
   it('full-sequence games (flag, ant, code-duplicates) displace sub-floor real entries even when real fills the board', () => {
     // 20 real entries, every score below the game's floor. Without the
     // full-sequence path these would short-circuit past padding.

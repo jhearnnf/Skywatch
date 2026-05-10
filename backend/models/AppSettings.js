@@ -256,6 +256,15 @@ const appSettingsSchema = new mongoose.Schema({
   combatReadinessMediumTag:    { type: String, default: '' },
   combatReadinessMediumFlavor: { type: String, default: '' },
   combatReadinessMediumStars:  { type: String, default: '' },
+}, {
+  // Flatten Map fields (cbatGameEnabled, tutorialContent) into plain objects
+  // on every toObject/toJSON call. Without this, Map fields survive toJSON
+  // (Document.toJSON flattens by default in Mongoose 9) but NOT toObject —
+  // so the public GET /api/settings endpoint, which calls s.toObject(),
+  // would emit `cbatGameEnabled: {}` and the frontend would treat every
+  // CBAT game as enabled regardless of admin toggles.
+  toObject: { flattenMaps: true },
+  toJSON:   { flattenMaps: true },
 });
 
 // Static helper — always returns (or creates) the single settings document
