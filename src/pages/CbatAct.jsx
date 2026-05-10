@@ -1434,14 +1434,20 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
         )}
       </div>
 
-      {/* Bleep button — large, mobile-friendly. Pulses + brightens during the
-          round-1 tutorial so the player knows where to tap. */}
+      {/* Bleep button — large, mobile-friendly. Disabled while the callsign
+          overlay is showing at round start (no bleeps fire during warmup
+          anyway, so a tap there has no game effect; the disabled state is
+          a UX cue that the round hasn't begun). Pulses + brightens during
+          the round-1 tutorial so the player knows where to tap. */}
       <button
         onClick={state.onBleepTap}
+        disabled={showCallsignOverlay}
         className={`w-full mt-3 py-5 border-2 font-extrabold text-lg uppercase tracking-widest rounded-xl transition-colors ${
-          tutorialActive
-            ? 'bg-amber-500/40 border-amber-300 text-amber-100 ring-4 ring-amber-400/60 animate-pulse'
-            : 'bg-amber-500/20 hover:bg-amber-500/30 active:bg-amber-500/40 border-amber-500/50 text-amber-300'
+          showCallsignOverlay
+            ? 'bg-slate-700/20 border-slate-600/30 text-slate-500 cursor-not-allowed'
+            : tutorialActive
+              ? 'bg-amber-500/40 border-amber-300 text-amber-100 ring-4 ring-amber-400/60 animate-pulse'
+              : 'bg-amber-500/20 hover:bg-amber-500/30 active:bg-amber-500/40 border-amber-500/50 text-amber-300'
         }`}
       >
         BLEEP
