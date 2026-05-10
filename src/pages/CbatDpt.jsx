@@ -860,9 +860,9 @@ function DptControls({
 function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
   return (
     <div>
-      <h2 className="text-lg font-bold text-text text-center mb-1">Choose Your Aircraft</h2>
+      <h2 className="text-lg font-bold text-text text-center mb-1">Dynamic Projection Test</h2>
       <p className="text-xs text-slate-400 text-center mb-3">
-        Used as the visual for CA-A and CA-N — Fighter is randomly assigned per round 6+.
+        Vector multiple aircraft through gates and intercept enemy contacts.
       </p>
 
       {/* Instructions */}
@@ -956,7 +956,12 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
       )}
 
       {!loading && aircraft.length > 0 && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-w-md mx-auto">
+        <>
+          <h3 className="text-lg font-bold text-text text-center mb-1">Choose Your Aircraft</h3>
+          <p className="text-xs text-slate-400 text-center mb-3">
+            Used as the visual for CA-A and CA-N — Fighter is randomly assigned per round 6+.
+          </p>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-w-md mx-auto">
           {aircraft.map((a, i) => (
             <motion.button
               key={a.briefId}
@@ -979,7 +984,8 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
               </span>
             </motion.button>
           ))}
-        </div>
+          </div>
+        </>
       )}
     </div>
   )
@@ -1888,7 +1894,7 @@ export default function CbatDpt() {
             ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
             : <button onClick={handleMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Quit</button>
           }
-          <h1 className="text-sm font-extrabold text-text">DPT &mdash; Dynamic Projection Test</h1>
+          <h1 className="text-sm font-extrabold text-text">DPT</h1>
         </div>
       </div>
 
