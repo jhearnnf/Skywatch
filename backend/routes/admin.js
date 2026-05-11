@@ -753,17 +753,21 @@ router.patch('/settings', requireReason, async (req, res) => {
       if (!v || typeof v !== 'object' || Array.isArray(v)) {
         return res.status(400).json({ message: 'cbatGameEnabled must be an object' });
       }
+      // Drop legacy/renamed keys silently — frontend echoes back whatever the
+      // DB returned, including stale entries (e.g. 'audio-interrupt' before
+      // it was renamed to 'act'). Only reject genuinely malformed input.
+      const filtered = {};
       for (const [key, val] of Object.entries(v)) {
-        if (!CBAT_KNOWN_KEYS.has(key)) {
-          return res.status(400).json({ message: `cbatGameEnabled has unknown game key: ${key}` });
-        }
+        if (!CBAT_KNOWN_KEYS.has(key)) continue;
         if (typeof val !== 'boolean') {
           return res.status(400).json({ message: `cbatGameEnabled.${key} must be a boolean` });
         }
         if (val === true && CBAT_UNIMPLEMENTED.has(key)) {
           return res.status(400).json({ message: `CBAT game "${key}" has no backend route yet and cannot be enabled` });
         }
+        filtered[key] = val;
       }
+      updates.cbatGameEnabled = filtered;
     }
 
     // CBAT aircraft allowlists must contain ≥1 entry whenever the master CBAT toggle
@@ -799,7 +803,31 @@ router.patch('/settings', requireReason, async (req, res) => {
       }
     }
 
+    // Mongoose 9 doesn't reliably replace an existing Map field via
+    // `findOneAndUpdate({}, { cbatGameEnabled: {...} })` — the PATCH returns
+    // success but stored Map entries don't change. Pull it out, write the rest
+    // via findOneAndUpdate, then mutate the Map on the doc and save().
+    const cgeUpdate = updates.cbatGameEnabled;
+    delete updates.cbatGameEnabled;
+
     const settings = await AppSettings.findOneAndUpdate({}, updates, { returnDocument: 'after', upsert: true });
+
+    if (cgeUpdate && typeof cgeUpdate === 'object' && !Array.isArray(cgeUpdate)) {
+      // Prune stale keys from prior schema versions (e.g. 'audio-interrupt')
+      const staleKeys = [];
+      settings.cbatGameEnabled.forEach((_v, k) => {
+        if (!CBAT_KNOWN_KEYS.has(k)) staleKeys.push(k);
+      });
+      for (const k of staleKeys) settings.cbatGameEnabled.delete(k);
+      for (const [k, v] of Object.entries(cgeUpdate)) {
+        settings.cbatGameEnabled.set(k, v);
+      }
+      settings.markModified('cbatGameEnabled');
+      // validateModifiedOnly skips legacy bad data in unrelated Map fields
+      // (e.g. tutorialContent had a CastError) — we only care that the path
+      // we just touched is valid.
+      await settings.save({ validateModifiedOnly: true });
+    }
     // Mixed field tutorialContent needs explicit mark after findOneAndUpdate via set,
     // but findOneAndUpdate at the DB level handles it correctly already.
 

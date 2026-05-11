@@ -1927,12 +1927,19 @@ function SettingsTab({ API }) {
   const confirmSave = async (reason) => {
     const updates = {}
     modal.fields.forEach(f => { updates[f] = draft[f] })
-    await apiFetch(`${API}/api/admin/settings`, {
+    const res = await apiFetch(`${API}/api/admin/settings`, {
       method: 'PATCH', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...updates, reason }),
     })
     setModal(null)
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      console.error('[admin save failed]', res.status, body)
+      setToast(`✗ ${body.message || `${modal.label} failed`}`)
+      load()
+      return
+    }
     invalidateSoundSettings()
     refreshSettings()
     setToast(`✓ ${modal.label} saved`)
