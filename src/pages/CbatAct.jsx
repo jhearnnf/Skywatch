@@ -977,6 +977,7 @@ function ActScene({ state }) {
       onPointerMove={state.onPointerMove}
       onPointerUp={state.onPointerUp}
       onPointerCancel={state.onPointerUp}
+      style={{ touchAction: 'none' }}
     >
       <color attach="background" args={['#020812']} />
       <fog attach="fog" args={['#020812', 12, 60]} />
