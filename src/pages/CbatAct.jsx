@@ -23,6 +23,8 @@ const BALL_RADIUS = 0.18
 const SHAPE_RADIUS = 0.7                      // hoop/square half-size — small enough that the ball must be aimed
 const TURN_RATE   = 0.006                     // radians per pixel of drag
 const MAX_ROT_PER_TICK = 0.9                  // hard cap on per-tick rotation (rad) — large enough that real flicks don't clip; the forcedT floor in the game loop now protects t-progress regardless of orientation, so the old tight cap is unnecessary
+const MAX_FWD_DEVIATION_RAD = Math.PI * 5 / 12   // 75° — half-angle of the cone the ball-forward must stay within around the tunnel's tangent, so the camera can never face perpendicular or backwards
+const MAX_FWD_DEVIATION_COS = Math.cos(MAX_FWD_DEVIATION_RAD)
 const KEYBOARD_RATE_PER_TICK = 4.5            // pixel-equivalent per 16ms keyboard tick
 const AUDIO_WARMUP_T = 0.15                   // no audio cues until ball reaches this fraction along the curve
 const MAX_ROUND_DURATION_S = 150              // safety net — force-end the round if the player gets stuck somehow
@@ -51,6 +53,37 @@ const SCORE = {
   BLEEP_MED:       20,   // < 1000ms
   BLEEP_SLOW:      10,   // < 2000ms
   BLEEP_MISS:      -10,
+}
+
+// ── Hooks ────────────────────────────────────────────────────────────────────
+
+// True when the device is touch-first OR the viewport is mobile-narrow. The
+// touch-steer pad renders on this; the canvas keeps its own pointer handlers
+// regardless (the pad is additive). Re-evaluates on matchMedia change + resize
+// so rotating/resizing a hybrid device updates the UI live.
+function useIsTouch() {
+  const compute = () => {
+    if (typeof window === 'undefined') return false
+    const coarse = typeof window.matchMedia === 'function'
+      && window.matchMedia('(hover: none) and (pointer: coarse)').matches
+    const narrow = window.innerWidth <= 600
+    return coarse || narrow
+  }
+  const [isTouch, setIsTouch] = useState(compute)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const update = () => setIsTouch(compute())
+    const mql = typeof window.matchMedia === 'function'
+      ? window.matchMedia('(hover: none) and (pointer: coarse)')
+      : null
+    mql?.addEventListener?.('change', update)
+    window.addEventListener('resize', update)
+    return () => {
+      mql?.removeEventListener?.('change', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+  return isTouch
 }
 
 // ── Tunnel geometry ──────────────────────────────────────────────────────────
@@ -113,17 +146,33 @@ function buildTunnelCurve(roundIdx) {
 const START_BUFFER_WORLD_UNITS = 45
 const END_MARGIN_T = 0.05
 
-// Place shape events along the curve, alternating circle/square with some
-// randomness. `t` is the curve parameter (0..1).
-function generateShapeEvents(curve, count) {
+// Per-round probability that the next shape repeats the previous shape.
+// Higher rounds → longer same-type runs → more opposite-type decoys between
+// any "avoid the next X" cue and its target (the runtime resolver always
+// binds to the next visible same-type shape, so the only way to get extra
+// decoys at higher rounds is to make same-type runs longer in the stream).
+// Mean opposite-run length ≈ 1 / (1 − repeatProb). Tuned so R1≈1.4 and
+// R5≈3.6, roughly matching the old AVOID_LEAD_MAX curve.
+const SHAPE_REPEAT_PROB = [0.30, 0.45, 0.55, 0.65, 0.72]
+
+// Place shape events along the curve. The shape stream is a simple Markov
+// chain biased by round (see SHAPE_REPEAT_PROB) so higher rounds produce
+// longer same-type runs. `t` is the curve parameter (0..1).
+function generateShapeEvents(curve, count, roundIdx) {
   const curveLen = curve.getLength()
   const startMarginT = Math.min(0.45, START_BUFFER_WORLD_UNITS / curveLen)
+  const repeatProb = SHAPE_REPEAT_PROB[Math.min(roundIdx, 4)]
   const events = []
+  let prev = null
   for (let i = 0; i < count; i++) {
     const t = startMarginT + (1 - END_MARGIN_T - startMarginT) * (i / Math.max(1, count - 1))
-    const shape = i % 2 === 0
-      ? (Math.random() < 0.5 ? 'circle' : 'square')
-      : (Math.random() < 0.5 ? 'square' : 'circle')
+    let shape
+    if (prev !== null && Math.random() < repeatProb) {
+      shape = prev
+    } else {
+      shape = Math.random() < 0.5 ? 'circle' : 'square'
+    }
+    prev = shape
     const colorIdx = Math.floor(Math.random() * 4)
     events.push({ id: i, t, shape, colorIdx, threaded: null })
   }
@@ -208,7 +257,7 @@ function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curveLen) {
     if (audioT < earliestAudioT) continue          // can't fit between warmup/prev-window and the gap
     if (audioT >= ev.t) continue                   // sanity
 
-    cues.push({ t: audioT, kind: 'avoid', callsigns: userCallsign, shape: ev.shape, targetId: ev.id })
+    cues.push({ t: audioT, kind: 'avoid', callsigns: userCallsign, shape: ev.shape })
     activeWindowEndT = ev.t + 0.01
   }
 
@@ -216,17 +265,21 @@ function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curveLen) {
   // least MIN_AVOID_CUES times per round — they need to recognise their own
   // callsign under stress, and a low avoidOdds roll could otherwise leave
   // them with 0 or 1 instructions for a whole round. Additions respect the
-  // same window invariant (next cue starts after the previous target's t)
-  // so they never overlap step-2 cues at play time.
+  // same window invariant (next cue starts after the previous step-2 cue's
+  // anchor t) so they never overlap step-2 cues at play time. The picked
+  // event is only used to derive a sensible audioT — the actual avoid
+  // target is resolved at cue-fire time against whatever the player sees.
   const MIN_AVOID_CUES = 2
-  const targetedIds = new Set(cues.filter(c => c.kind === 'avoid').map(c => c.targetId))
-  for (let i = 0; i < events.length && targetedIds.size < MIN_AVOID_CUES; i++) {
+  let avoidCueCount = cues.filter(c => c.kind === 'avoid').length
+  const usedAnchorIds = new Set()
+  for (let i = 0; i < events.length && avoidCueCount < MIN_AVOID_CUES; i++) {
     const ev = events[i]
-    if (targetedIds.has(ev.id)) continue
+    if (usedAnchorIds.has(ev.id)) continue
     const audioT = Math.max(activeWindowEndT, AUDIO_WARMUP_T, ev.t - MIN_AUDIO_TO_TARGET_GAP_T)
     if (audioT >= ev.t) continue
-    cues.push({ t: audioT, kind: 'avoid', callsigns: userCallsign, shape: ev.shape, targetId: ev.id })
-    targetedIds.add(ev.id)
+    cues.push({ t: audioT, kind: 'avoid', callsigns: userCallsign, shape: ev.shape })
+    usedAnchorIds.add(ev.id)
+    avoidCueCount += 1
     activeWindowEndT = ev.t + 0.01
   }
 
@@ -490,7 +543,11 @@ function ChaseCamera({ ballPosRef, ballForwardRef, ballTRef, curve }) {
     const fwd = ballForwardRef.current
     const ballT = ballTRef.current
 
-    const worldUp = Math.abs(fwd.y) > 0.95 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0)
+    // World-Y is always our up reference. The tunnel curve never tilts more
+    // than ~50° off horizontal and the ball-forward cone keeps fwd within
+    // 75° of the tangent, so fwd.y can't approach the vertical singularity
+    // that would justify swapping axes.
+    const worldUp = new THREE.Vector3(0, 1, 0)
     const camRight = new THREE.Vector3().crossVectors(fwd, worldUp).normalize()
     const camUp    = new THREE.Vector3().crossVectors(camRight, fwd).normalize()
 
@@ -501,13 +558,46 @@ function ChaseCamera({ ballPosRef, ballForwardRef, ballTRef, curve }) {
     // Sample the curve backward from ballT to find the nearest cross-section
     // for the camera, then clamp the camera's lateral offset to keep it safely
     // inside the tube (margin of 0.3 from the wall).
+    //
+    // Pass 1: coarse scan of 9 samples across a 0.05-t window behind the ball
+    // to bracket the minimum. Pass 2: golden-section refine inside the bracket
+    // so the anchor slides CONTINUOUSLY with desiredPos instead of snapping
+    // between fixed sample points — that snap is what produces the judder you
+    // can see when the ball scrapes a wall and desiredPos jitters frame-to-frame.
     const SAFE_RADIUS = TUNNEL_RADIUS - 0.3
+    const COARSE_RANGE = 0.05
+    const COARSE_SAMPLES = 8
+    const coarseStep = COARSE_RANGE / COARSE_SAMPLES
     let bestT = Math.max(0, ballT - 0.012)
     let bestDist = Infinity
-    for (let i = 0; i <= 8; i++) {
-      const ti = Math.max(0, ballT - 0.05 * (i / 8))
+    for (let i = 0; i <= COARSE_SAMPLES; i++) {
+      const ti = Math.max(0, ballT - coarseStep * i)
       const d = curve.getPointAt(ti).distanceTo(desiredPos)
       if (d < bestDist) { bestDist = d; bestT = ti }
+    }
+    let lo = Math.max(0, bestT - coarseStep)
+    let hi = Math.min(ballT, bestT + coarseStep)
+    if (hi > lo) {
+      const GR = 0.6180339887   // (sqrt(5) - 1) / 2
+      let xL = hi - (hi - lo) * GR
+      let xR = lo + (hi - lo) * GR
+      let dL = curve.getPointAt(xL).distanceTo(desiredPos)
+      let dR = curve.getPointAt(xR).distanceTo(desiredPos)
+      for (let i = 0; i < 4; i++) {
+        if (dL < dR) {
+          hi = xR
+          xR = xL; dR = dL
+          xL = hi - (hi - lo) * GR
+          dL = curve.getPointAt(xL).distanceTo(desiredPos)
+        } else {
+          lo = xL
+          xL = xR; dL = dR
+          xR = lo + (hi - lo) * GR
+          dR = curve.getPointAt(xR).distanceTo(desiredPos)
+        }
+      }
+      if (dL < dR) { bestT = xL; bestDist = dL }
+      else         { bestT = xR; bestDist = dR }
     }
     const cCurve = curve.getPointAt(bestT)
     const cTan   = curve.getTangentAt(bestT)
@@ -520,10 +610,12 @@ function ChaseCamera({ ballPosRef, ballForwardRef, ballTRef, curve }) {
       desiredPos.copy(cCurve).add(lateral).addScaledVector(cTan, along)
     }
 
+    // Order matters: lookAt() consumes camera.up at call time to compute
+    // roll, so writing camera.up AFTER lookAt would leave roll a frame stale.
     camera.position.copy(desiredPos)
+    camera.up.copy(camUp)
     const lookTarget = pos.clone().addScaledVector(fwd, 5)
     camera.lookAt(lookTarget)
-    camera.up.copy(camUp)
   })
   return null
 }
@@ -536,7 +628,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
   const cfg     = ROUND_CONFIG[roundIdx]
   const userCallsign = useMemo(() => pickCallsigns(cfg.callsigns), [roundIdx])
   const curve   = useMemo(() => buildTunnelCurve(roundIdx), [roundIdx])
-  const events  = useMemo(() => generateShapeEvents(curve, cfg.shapes), [curve, cfg.shapes])
+  const events  = useMemo(() => generateShapeEvents(curve, cfg.shapes, roundIdx), [curve, cfg.shapes, roundIdx])
   const audioCues = useMemo(() => generateAudioPlan(events, cfg, userCallsign, roundIdx, curve.getLength()), [events, cfg, userCallsign, roundIdx, curve])
 
   const ballTRef       = useRef(0)
@@ -605,6 +697,9 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
   const pointerActiveRef  = useRef(false)
   const lastPointerRef    = useRef({ x: 0, y: 0 })
   const capturedPointerIdRef = useRef(null)
+  // Mirrored as React state so the touch-steer pad can hide its idle hint
+  // while any drag is active (whether on the canvas or the pad).
+  const [isDragging, setIsDragging] = useState(false)
 
   const onPointerDown = useCallback((e) => {
     // Already dragging on a different pointer — ignore secondary inputs so
@@ -617,6 +712,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
       capturedPointerIdRef.current = e.pointerId
     } catch {}
     document.body.style.cursor = 'none'
+    setIsDragging(true)
   }, [])
   const onPointerMove = useCallback((e) => {
     if (!pointerActiveRef.current) return
@@ -640,6 +736,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     }
     capturedPointerIdRef.current = null
     document.body.style.cursor = ''
+    setIsDragging(false)
   }, [])
 
   // Safety: if the round unmounts mid-drag (menu, navigation, errors),
@@ -763,7 +860,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
       // the accumulator and applied next frame, so big flicks aren't silently
       // discarded — they just take an extra frame or two to fully play out.
       const fwd = ballForwardRef.current
-      const worldUp = Math.abs(fwd.y) > 0.95 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0)
+      const worldUp = new THREE.Vector3(0, 1, 0)
       const camRight = new THREE.Vector3().crossVectors(fwd, worldUp).normalize()
       const wantedYaw   = -inputRef.current.dx * TURN_RATE
       const wantedPitch =  inputRef.current.dy * TURN_RATE   // dy>0 (drag down) pitches the ball downward
@@ -776,6 +873,28 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
       if (yaw   !== 0) fwd.applyAxisAngle(worldUp,  yaw)
       if (pitch !== 0) fwd.applyAxisAngle(camRight, pitch)
       fwd.normalize()
+
+      // Clamp ball-forward to stay inside a cone of MAX_FWD_DEVIATION_RAD
+      // around the tunnel's tangent at the ball's current t. This prevents
+      // any combination of player input + passive curve bend from rotating
+      // the camera past perpendicular (let alone backwards). When fwd is
+      // outside the cone, snap it back to the cone surface along its own
+      // lateral direction — the player just stops turning further; pending
+      // input keeps draining at the cap rate so they don't queue up rotation
+      // that can't actually apply.
+      const curveTan = curve.getTangentAt(ballTRef.current)
+      const fwdDotTan = fwd.dot(curveTan)
+      if (fwdDotTan < MAX_FWD_DEVIATION_COS) {
+        const perp = fwd.clone().addScaledVector(curveTan, -fwdDotTan)
+        const perpLen = perp.length()
+        if (perpLen > 1e-6) {
+          perp.divideScalar(perpLen)
+          const sinDev = Math.sqrt(1 - MAX_FWD_DEVIATION_COS * MAX_FWD_DEVIATION_COS)
+          fwd.copy(curveTan).multiplyScalar(MAX_FWD_DEVIATION_COS).addScaledVector(perp, sinDev)
+        } else {
+          fwd.copy(curveTan)
+        }
+      }
 
       // ── 2. Advance position along the ball's own forward direction. ───────
       ballPosRef.current.addScaledVector(fwd, cfg.speed * dt)
@@ -840,9 +959,23 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
       while (cueIdxRef.current < audioCues.length && audioCues[cueIdxRef.current].t <= ballTRef.current) {
         const cue = audioCues[cueIdxRef.current++]
         if (cue.kind === 'avoid') {
+          // Resolve the avoid target NOW so it matches what the player sees:
+          // the first un-passed event of the cue's shape, with a small
+          // lookahead so it can't land before the audio finishes. If nothing
+          // valid is ahead, drop the cue silently (don't play audio that
+          // can't be scored coherently).
+          const MIN_LOOKAHEAD_T = 0.08
+          let dynTargetId = null
+          for (let k = eventIdxRef.current; k < events.length; k++) {
+            if (events[k].shape !== cue.shape) continue
+            if (events[k].t < ballTRef.current + MIN_LOOKAHEAD_T) continue
+            dynTargetId = events[k].id
+            break
+          }
+          if (dynTargetId == null) continue
           const result = audio.playSequence(buildAvoidSequence(cue.callsigns, cue.shape), { exclusive: true })
           if (result.played) {
-            activeAvoidRef.current = { targetId: cue.targetId, shape: cue.shape }
+            activeAvoidRef.current = { targetId: dynTargetId, shape: cue.shape }
           }
         } else if (cue.kind === 'distractor') {
           audio.playSequence(buildAvoidSequence(cue.callsigns, cue.shape), { exclusive: true })
@@ -951,6 +1084,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     onPointerDown,
     onPointerMove,
     onPointerUp,
+    isDragging,
     onBleepTap,
     tutorialActive,
     startBleepTutorial,
@@ -1011,6 +1145,54 @@ function ActScene({ state }) {
         curve={state.curve}
       />
     </Canvas>
+  )
+}
+
+// ── Touch steer pad ──────────────────────────────────────────────────────────
+
+// Below-canvas drag surface for touch devices, so the player doesn't have to
+// drag on top of the gameplay (which would obscure the tunnel with a finger).
+// The same pointer handlers used by <Canvas> are bound here — pad input is
+// additive, not exclusive. While idle (no active drag anywhere), a slow
+// swipe-cue animates left↔right so first-time users discover the gesture.
+function TouchSteerPad({ onPointerDown, onPointerMove, onPointerUp, isDragging }) {
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      className="relative w-full h-36 mt-3 bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden"
+      style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+      aria-label="Touch steering pad — drag to steer"
+      role="application"
+    >
+      <AnimatePresence>
+        {!isDragging && (
+          <motion.div
+            key="hint"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+          >
+            <motion.div
+              animate={{ x: [-44, 44, -44] }}
+              transition={{ duration: 2.4, ease: 'easeInOut', repeat: Infinity }}
+              className="flex items-center gap-2"
+            >
+              <motion.div
+                animate={{ opacity: [0.55, 1, 0.55], scale: [0.92, 1.04, 0.92] }}
+                transition={{ duration: 2.4, ease: 'easeInOut', repeat: Infinity }}
+                className="w-9 h-9 rounded-full bg-brand-400/25 border-2 border-brand-300 shadow-[0_0_18px_rgba(91,170,255,0.45)]"
+              />
+            </motion.div>
+            <p className="mt-3 text-[11px] uppercase tracking-widest text-slate-400">Drag to steer</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
@@ -1298,6 +1480,14 @@ function IntroScreen({ personalBest, onStart }) {
         with your full callsign, skip that one. Ignore everything else.
       </p>
 
+      <div className="bg-amber-500/10 border border-amber-500/40 rounded-lg p-3 mb-5 flex items-start gap-2 text-left">
+        <span className="text-lg shrink-0 leading-none mt-0.5">🎧</span>
+        <p className="text-xs text-amber-800">
+          <span className="font-bold text-amber-900">Headphones strongly recommended.</span>
+          {' '}This game relies heavily on audio cues — you'll struggle to pick out your callsign or the BLEEP without them.
+        </p>
+      </div>
+
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
           <span className="text-brand-300 font-bold shrink-0">🎯</span>
@@ -1337,7 +1527,7 @@ function IntroScreen({ personalBest, onStart }) {
       >
         Start Mission
       </button>
-      <p className="text-[10px] text-slate-500 mt-3">Tap to enable audio. Headphones recommended.</p>
+      <p className="text-[10px] text-slate-500 mt-3">Tap to enable audio.</p>
     </motion.div>
   )
 }
@@ -1390,6 +1580,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
   }, [showCallsignOverlay, roundIdx, tutorialDone, startBleepTutorial, onTutorialFired])
 
   const tutorialActive = state.tutorialActive
+  const isTouch = useIsTouch()
 
   return (
     <div className="w-full max-w-2xl">
@@ -1453,7 +1644,21 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
       >
         BLEEP
       </button>
-      <p className="text-[10px] text-slate-500 text-center mt-2">Tap on bleep • Drag canvas to steer • Arrow keys also work</p>
+
+      {isTouch && (
+        <TouchSteerPad
+          onPointerDown={state.onPointerDown}
+          onPointerMove={state.onPointerMove}
+          onPointerUp={state.onPointerUp}
+          isDragging={state.isDragging}
+        />
+      )}
+
+      <p className="text-[10px] text-slate-500 text-center mt-2">
+        {isTouch
+          ? 'Tap on bleep • Drag the pad to steer • You can also drag on the tunnel'
+          : 'Tap on bleep • Drag canvas to steer • Arrow keys also work'}
+      </p>
     </div>
   )
 }
