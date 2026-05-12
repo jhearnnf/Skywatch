@@ -1070,6 +1070,11 @@ export default function CbatDpt() {
   const [activeId, setActiveId]         = useState('CA-A')
   // 0–3 digits typed so far (e.g. "01" displayed as "01_")
   const [bearingInput, setBearingInput] = useState('')
+  // Mirror of bearingInput for synchronous reads from the keydown handler.
+  // Rapid keypresses fire faster than React can commit + re-render, so the
+  // handler can't rely on the state value or a functional updater (which
+  // must be pure — calling commitInput from inside one drops presses).
+  const bearingInputRef = useRef('')
   // Direction the next bearing input will turn the active aircraft.
   const [turnDir, setTurnDir]           = useState('R')
   // Whether the next 3-digit commit sets a heading (BRG) or altitude (ALT).
@@ -1752,20 +1757,30 @@ export default function CbatDpt() {
     }
   }, [inputMode, activeId, turnDir, user, startRound])
 
+  // Keep the ref in sync with state for code paths that reset bearingInput
+  // outside handleDigit (mode switches, round starts, etc.).
+  useEffect(() => { bearingInputRef.current = bearingInput }, [bearingInput])
+
   const handleDigit = useCallback((d) => {
-    setBearingInput(prev => {
-      if (prev.length >= 3) return prev
-      const next = prev + d
-      if (next.length === 3) {
-        commitInput(next)
-        return ''
-      }
-      return next
-    })
+    const prev = bearingInputRef.current
+    if (prev.length >= 3) return
+    const next = prev + d
+    if (next.length === 3) {
+      // Clear input first, then commit — keeps the setter pure and prevents
+      // rapid follow-up presses from racing the commit.
+      bearingInputRef.current = ''
+      setBearingInput('')
+      commitInput(next)
+      return
+    }
+    bearingInputRef.current = next
+    setBearingInput(next)
   }, [commitInput])
 
   const handleBackspace = useCallback(() => {
-    setBearingInput(prev => prev.slice(0, -1))
+    const next = bearingInputRef.current.slice(0, -1)
+    bearingInputRef.current = next
+    setBearingInput(next)
   }, [])
 
   // Keyboard shortcuts
