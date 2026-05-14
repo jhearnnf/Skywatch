@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
+import RecentCbatScores from '../components/RecentCbatScores'
 
 export const CBAT_GAMES = [
   { key: 'target',          emoji: '🎯', title: 'Target',           desc: 'Multi-task across eight panels — hunt shapes, match lights, ID aircraft, find codes.', path: '/cbat/target',          image: '/images/Target.png' },
@@ -93,6 +94,15 @@ export default function Cbat() {
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
   const isGameEnabled = (key) => cbatGameEnabled[key] !== false
 
+  // Admins get a Recent Scores side column on lg+ — widen the page shell so
+  // the existing 2-column game grid keeps its natural width instead of being
+  // squeezed by the new column. Mirror of the cbat-dpt-fullwidth pattern.
+  useEffect(() => {
+    if (!user?.isAdmin) return
+    document.body.classList.add('cbat-admin-wide')
+    return () => document.body.classList.remove('cbat-admin-wide')
+  }, [user?.isAdmin])
+
   useEffect(() => {
     let tid
     function tick() {
@@ -116,6 +126,9 @@ export default function Cbat() {
 
       <h1 className="text-2xl font-extrabold text-slate-900 mb-1">CBAT Games</h1>
       <p className="text-sm text-slate-500 mb-6">Practise for CBAT with targeted training games.</p>
+
+      <div className="lg:flex lg:gap-6 lg:items-start">
+        <div className="lg:flex-1 lg:min-w-0">
 
       {/* Lock card — shown when not signed in */}
       {!user && (
@@ -195,6 +208,16 @@ export default function Cbat() {
             </motion.div>
           )
         })}
+      </div>
+
+        </div>
+
+        {/* Admin-only recent scores side column — desktop (lg+) only */}
+        {user?.isAdmin && (
+          <aside className="hidden lg:block lg:w-[340px] lg:shrink-0 lg:sticky lg:top-4">
+            <RecentCbatScores />
+          </aside>
+        )}
       </div>
     </div>
   )

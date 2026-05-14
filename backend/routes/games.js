@@ -2615,6 +2615,77 @@ async function cbatPersonalBest(req, res, gameKey) {
   }
 }
 
+// GET /api/games/cbat/recent — admin-only feed of latest scores across every CBAT game.
+// Each row's `rank` is computed against the same game's real (non-padded) sessions, so
+// reuses the same comparator semantics as the per-game leaderboards.
+router.get('/cbat/recent', protect, async (req, res) => {
+  if (!req.user?.isAdmin) return res.status(403).json({ message: 'Admin access required' });
+
+  const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
+
+  try {
+    // Pull recent sessions from every CBAT collection in parallel.
+    const perGame = await Promise.all(
+      Object.entries(CBAT_GAMES).map(async ([gameKey, cfg]) => {
+        const sessions = await cfg.Model.find({})
+          .sort({ createdAt: -1 })
+          .limit(limit)
+          .lean();
+        return sessions.map(s => ({ session: s, gameKey, cfg }));
+      })
+    );
+
+    const merged = perGame.flat()
+      .sort((a, b) => new Date(b.session.createdAt) - new Date(a.session.createdAt))
+      .slice(0, limit);
+
+    const userIds = [...new Set(merged.map(r => String(r.session.userId)))];
+    const users = await User.find({ _id: { $in: userIds } }).select('email agentNumber').lean();
+    const userMap = Object.fromEntries(users.map(u => [String(u._id), u]));
+
+    const recent = await Promise.all(merged.map(async ({ session, gameKey, cfg }) => {
+      const scoreVal = session[cfg.primaryField];
+      const timeVal  = session.totalTime;
+      const modeFilter = cfg.modeField ? { [cfg.modeField]: session[cfg.modeField] } : {};
+
+      const countBetter = await cfg.Model.countDocuments({
+        ...modeFilter,
+        ...(cfg.sortDir === 1
+          ? {
+              $or: [
+                { [cfg.primaryField]: { $lt: scoreVal } },
+                { [cfg.primaryField]: scoreVal, totalTime: { $lt: timeVal } },
+              ],
+            }
+          : {
+              $or: [
+                { [cfg.primaryField]: { $gt: scoreVal } },
+                { [cfg.primaryField]: scoreVal, totalTime: { $lt: timeVal } },
+              ],
+            }),
+      });
+
+      const u = userMap[String(session.userId)];
+      return {
+        _id:         session._id,
+        gameKey,
+        gameLabel:   cfg.label,
+        email:       u?.email || null,
+        agentNumber: u?.agentNumber || null,
+        score:       scoreVal,
+        time:        timeVal,
+        rank:        countBetter + 1,
+        achievedAt:  session.createdAt,
+        ...(cfg.modeField ? { mode: session[cfg.modeField] } : {}),
+      };
+    }));
+
+    res.json({ status: 'success', data: { recent } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.get('/cbat/plane-turn/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'plane-turn'));
 router.get('/cbat/angles/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'angles'));
 router.get('/cbat/code-duplicates/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'code-duplicates'));
