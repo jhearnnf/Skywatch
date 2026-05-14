@@ -98,6 +98,7 @@ const GAME_CONFIG = {
     lowerIsBetter: false,
     formatScore: (s) => `${s}`,
     backPath: '/cbat/act',
+    hideTime: true,
   },
 }
 
