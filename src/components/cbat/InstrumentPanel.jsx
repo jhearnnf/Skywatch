@@ -25,11 +25,18 @@ function useInterp(target, randomRange = 0) {
   return v
 }
 
-function InstrumentFace({ label, children }) {
-  return (
-    <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-xl p-2 flex flex-col items-center">
-      <p className="text-[9px] text-slate-500 uppercase tracking-wide mb-1 text-center w-full">{label}</p>
-      <svg viewBox="0 0 100 100" className="w-full max-w-[120px] aspect-square">
+function InstrumentFace({ label, children, onClick, active }) {
+  const clickable = typeof onClick === 'function'
+  const wrapperClass = [
+    'bg-[#060e1a] border rounded-xl p-2 flex flex-col items-center transition-colors w-full',
+    active ? 'border-amber-700 ring-2 ring-amber-700/40' : 'border-[#1a3a5c]',
+    clickable && !active ? 'hover:border-brand-500' : '',
+    clickable ? 'cursor-pointer active:scale-[0.98] transition-transform' : '',
+  ].filter(Boolean).join(' ')
+  const inner = (
+    <>
+      <p className={`text-[9px] uppercase tracking-wide mb-1 text-center w-full ${active ? 'text-amber-700' : 'text-slate-500'}`}>{label}</p>
+      <svg viewBox="0 0 100 100" className="w-full max-w-[120px] aspect-square pointer-events-none">
         <defs>
           <radialGradient id="faceBg" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#0a1628" />
@@ -39,19 +46,27 @@ function InstrumentFace({ label, children }) {
         <circle cx="50" cy="50" r="48" fill="url(#faceBg)" stroke="#1a3a5c" strokeWidth="1" />
         {children}
       </svg>
-    </div>
+    </>
   )
+  if (clickable) {
+    return (
+      <button type="button" onClick={onClick} aria-pressed={!!active} className={wrapperClass}>
+        {inner}
+      </button>
+    )
+  }
+  return <div className={wrapperClass}>{inner}</div>
 }
 
 // ── Altimeter ────────────────────────────────────────────────────────────────
-export function Altimeter({ altitude, durationMs = 2000 }) {
+export function Altimeter({ altitude, durationMs = 2000, onClick, active }) {
   const smallTarget = (altitude / 10000) * 360
   const bigTarget = ((altitude % 1000) / 1000) * 360
   const smallAngle = useUnwrappedAngle(smallTarget)
   const bigAngle = useUnwrappedAngle(bigTarget)
   const t = { transition: `transform ${durationMs}ms ${SPRING}`, transformOrigin: '50px 50px', transformBox: 'view-box' }
   return (
-    <InstrumentFace label="Altimeter">
+    <InstrumentFace label="Altimeter" onClick={onClick} active={active}>
       {/* Major ticks + numerals 0–9 */}
       {Array.from({ length: 10 }).map((_, i) => {
         const theta = (i / 10) * 2 * Math.PI - Math.PI / 2
@@ -94,25 +109,32 @@ export function Altimeter({ altitude, durationMs = 2000 }) {
 }
 
 // ── Attitude Indicator ───────────────────────────────────────────────────────
-export function AttitudeIndicator({ durationMs = 2000 }) {
-  // All rounds generate level flight per spec, but the calibration sweep
-  // starts with a slight bank + pitch wobble before settling to level.
+// Shows pitch (from `vs` — climb/descend) and roll (from `turn` — bank angle).
+// In a real cockpit this is the primary instrument; clicking it highlights
+// both the climb/descend phrase AND the turn phrase in the answers, because
+// it reflects both pieces of flight state at once.
+export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active }) {
+  // Pitch translates the horizon — positive moves it down (nose-up climb).
+  const targetPitch = vs === 'Ascend' ? 12 : vs === 'Descend' ? -12 : 0
+  // Roll rotates the horizon opposite the bank — right bank shows as horizon
+  // rotating counter-clockwise (negative degrees).
+  const targetRoll = turn === 'Standard' ? -15 : turn === 'Non-standard' ? -30 : 0
   const [pitch, setPitch] = useState(() => -10 + Math.random() * 20)
   const [roll, setRoll] = useState(() => -18 + Math.random() * 36)
   useEffect(() => {
-    // Two rAFs ensure the initial wobble paints before we transition to level.
+    // Two rAFs ensure the initial wobble paints before we transition.
     const id1 = requestAnimationFrame(() => {
       const id2 = requestAnimationFrame(() => {
-        setPitch(0)
-        setRoll(0)
+        setPitch(targetPitch)
+        setRoll(targetRoll)
       })
       return () => cancelAnimationFrame(id2)
     })
     return () => cancelAnimationFrame(id1)
-  }, [durationMs])
+  }, [durationMs, targetPitch, targetRoll])
   const t = `transform ${durationMs}ms ${SPRING}`
   return (
-    <InstrumentFace label="Attitude">
+    <InstrumentFace label="Attitude" onClick={onClick} active={active}>
       <defs>
         <clipPath id="attClip">
           <circle cx="50" cy="50" r="40" />
@@ -146,12 +168,12 @@ export function AttitudeIndicator({ durationMs = 2000 }) {
 }
 
 // ── Airspeed Indicator ───────────────────────────────────────────────────────
-export function Airspeed({ knots, durationMs = 2000 }) {
+export function Airspeed({ knots, durationMs = 2000, onClick, active }) {
   const target = (knots / 360) * 360  // 0–360 kt mapped 1:1 to degrees
   const angle = useInterp(target, 180)
   const t = { transition: `transform ${durationMs}ms ${SPRING}`, transformOrigin: '50px 50px', transformBox: 'view-box' }
   return (
-    <InstrumentFace label="Airspeed (kt)">
+    <InstrumentFace label="Airspeed (kt)" onClick={onClick} active={active}>
       {/* Major ticks at 0, 60, 120, ... 300 */}
       {[0, 60, 120, 180, 240, 300].map(v => {
         const theta = (v / 360) * 2 * Math.PI - Math.PI / 2
@@ -191,12 +213,12 @@ export function Airspeed({ knots, durationMs = 2000 }) {
 
 // ── Vertical Speed Indicator (Ascend/Descend) ────────────────────────────────
 // Needle rests at 9 o'clock (pointing left). Up = climb, down = descend.
-export function VSI({ vs, durationMs = 2000 }) {
+export function VSI({ vs, durationMs = 2000, onClick, active }) {
   const target = vs === 'Ascend' ? -60 : vs === 'Descend' ? -120 : -90
   const angle = useUnwrappedAngle(target)
   const t = { transition: `transform ${durationMs}ms ${SPRING}`, transformOrigin: '50px 50px', transformBox: 'view-box' }
   return (
-    <InstrumentFace label="V. Speed">
+    <InstrumentFace label="V. Speed" onClick={onClick} active={active}>
       {/* Scale marks along the left arc */}
       {[-150, -120, -90, -60, -30].map(deg => {
         const theta = (deg * Math.PI) / 180 - Math.PI / 2
@@ -221,7 +243,7 @@ export function VSI({ vs, durationMs = 2000 }) {
 
 // ── Heading Indicator (Directional Gyro) ─────────────────────────────────────
 // Compass rose rotates so the current heading sits at the top.
-export function HeadingDG({ heading, durationMs = 2000 }) {
+export function HeadingDG({ heading, durationMs = 2000, onClick, active }) {
   const headingDeg = { N: 0, E: 90, S: 180, W: 270 }[heading] ?? 0
   // Rotate rose so heading sits at top: rose rotation = -heading
   const roseAngle = useUnwrappedAngle(-headingDeg)
@@ -233,7 +255,7 @@ export function HeadingDG({ heading, durationMs = 2000 }) {
     { label: 'W', deg: 270 },
   ]
   return (
-    <InstrumentFace label="Heading">
+    <InstrumentFace label="Heading" onClick={onClick} active={active}>
       <g style={{ ...t, transform: `rotate(${roseAngle}deg)` }}>
         {/* Tick marks every 30° */}
         {Array.from({ length: 12 }).map((_, i) => {
@@ -270,14 +292,14 @@ export function HeadingDG({ heading, durationMs = 2000 }) {
 // ── Turn Coordinator ─────────────────────────────────────────────────────────
 // Needle deflects right for a turn. "Level" box below shows a white dot when
 // no turn is applied; deflected when turning.
-export function TurnCoordinator({ turn, durationMs = 2000 }) {
+export function TurnCoordinator({ turn, durationMs = 2000, onClick, active }) {
   const needleTarget = turn === 'Standard' ? 20 : turn === 'Non-standard' ? 40 : 0
   const ballTarget = turn === 'Standard' ? 8 : turn === 'Non-standard' ? 16 : 0
   const needleAngle = useUnwrappedAngle(needleTarget)
   const ballX = useInterp(ballTarget, 10)
   const t = `transform ${durationMs}ms ${SPRING}`
   return (
-    <InstrumentFace label="Turn">
+    <InstrumentFace label="Turn" onClick={onClick} active={active}>
       {/* L / R labels */}
       <text x="18" y="38" fill="#5a6a80" fontSize="7" fontFamily="monospace" fontWeight="bold">L</text>
       <text x="78" y="38" fill="#5a6a80" fontSize="7" fontFamily="monospace" fontWeight="bold">R</text>
@@ -308,15 +330,17 @@ export function TurnCoordinator({ turn, durationMs = 2000 }) {
 }
 
 // ── Combined panel ───────────────────────────────────────────────────────────
-export default function InstrumentPanel({ altitude, airspeed, heading, vs, turn, durationMs }) {
+export default function InstrumentPanel({ altitude, airspeed, heading, vs, turn, durationMs, highlightedKey, onToggleHighlight }) {
+  const interactive = typeof onToggleHighlight === 'function'
+  const handler = (k) => interactive ? () => onToggleHighlight(k) : undefined
   return (
     <div className="grid grid-cols-3 gap-2">
-      <Altimeter altitude={altitude} durationMs={durationMs} />
-      <AttitudeIndicator durationMs={durationMs} />
-      <Airspeed knots={airspeed} durationMs={durationMs} />
-      <VSI vs={vs} durationMs={durationMs} />
-      <HeadingDG heading={heading} durationMs={durationMs} />
-      <TurnCoordinator turn={turn} durationMs={durationMs} />
+      <Altimeter altitude={altitude} durationMs={durationMs} onClick={handler('altitude')} active={highlightedKey === 'altitude'} />
+      <AttitudeIndicator vs={vs} turn={turn} durationMs={durationMs} onClick={handler('attitude')} active={highlightedKey === 'attitude'} />
+      <Airspeed knots={airspeed} durationMs={durationMs} onClick={handler('airspeed')} active={highlightedKey === 'airspeed'} />
+      <VSI vs={vs} durationMs={durationMs} onClick={handler('vs')} active={highlightedKey === 'vs'} />
+      <HeadingDG heading={heading} durationMs={durationMs} onClick={handler('heading')} active={highlightedKey === 'heading'} />
+      <TurnCoordinator turn={turn} durationMs={durationMs} onClick={handler('turn')} active={highlightedKey === 'turn'} />
     </div>
   )
 }

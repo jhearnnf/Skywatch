@@ -90,7 +90,10 @@ function buildRound() {
   return { params: correct, statements: shuffled, correctIdx }
 }
 
-function formatStatement(p) {
+// Returns the statement as a list of segments, each tagged with the instrument
+// key it refers to (or untagged for connective text). The renderer uses these
+// tags to highlight whichever phrase matches the currently-pressed dial.
+function statementSegments(p) {
   const turnPhrase =
     p.turn === 'None' ? 'maintaining direction'
     : p.turn === 'Standard' ? 'Standard turn'
@@ -99,7 +102,19 @@ function formatStatement(p) {
     p.vs === 'Level' ? 'maintaining height'
     : p.vs === 'Ascend' ? 'climbing'
     : 'descending'
-  return `Flying at ${p.airspeed} kt, ${turnPhrase}, heading ${p.heading}, ${vsPhrase} at ${p.altitude} feet.`
+  return [
+    { text: 'Flying at ' },
+    { text: `${p.airspeed} kt`, key: 'airspeed' },
+    { text: ', ' },
+    { text: turnPhrase, key: 'turn' },
+    { text: ', ' },
+    { text: `heading ${p.heading}`, key: 'heading' },
+    { text: ', ' },
+    { text: vsPhrase, key: 'vs' },
+    { text: ' at ' },
+    { text: `${p.altitude} feet`, key: 'altitude' },
+    { text: '.' },
+  ]
 }
 
 function gradeFor(correct) {
@@ -222,6 +237,18 @@ export default function CbatInstruments() {
   const answersRef = useRef([])
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
+  const [highlightedKey, setHighlightedKey] = useState(null)
+  const [hintDismissed, setHintDismissed] = useState(
+    () => typeof localStorage !== 'undefined' && localStorage.getItem('cbat.instruments.highlightHint') === '1'
+  )
+
+  const toggleHighlight = useCallback((key) => {
+    setHighlightedKey(prev => (prev === key ? null : key))
+    if (!hintDismissed) {
+      setHintDismissed(true)
+      try { localStorage.setItem('cbat.instruments.highlightHint', '1') } catch {}
+    }
+  }, [hintDismissed])
 
   // Keep latest answers in a ref for use inside timer callback (avoids stale closure)
   useEffect(() => { answersRef.current = answers }, [answers])
@@ -305,6 +332,7 @@ export default function CbatInstruments() {
     setRoundIndex(n => n + 1)
     setPickedIdx(null)
     setWasCorrect(null)
+    setHighlightedKey(null)
     setPhase('calibrating')
     calibrationTimeoutRef.current = setTimeout(() => {
       roundStartRef.current = (Date.now() - startTimeRef.current) / 1000
@@ -479,17 +507,41 @@ export default function CbatInstruments() {
                   vs={round.params.vs}
                   turn={round.params.turn}
                   durationMs={calibrationMs}
+                  highlightedKey={phase === 'calibrating' ? null : highlightedKey}
+                  onToggleHighlight={phase === 'calibrating' ? undefined : toggleHighlight}
                 />
-                {phase === 'calibrating' && (
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-center text-[10px] text-slate-500 uppercase tracking-wider mt-3 font-bold"
-                  >
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse mr-1.5" />
-                    Calibrating instruments…
-                  </motion.p>
-                )}
+                {/* Fixed-height slot reserves space for the calibrating /
+                    hint message so the panel doesn't grow/shrink as messages
+                    appear, which would otherwise shove the answers below. */}
+                <div className="relative mt-2 h-[1.75rem]">
+                  <AnimatePresence mode="wait">
+                    {phase === 'calibrating' && (
+                      <motion.p
+                        key="calibrating"
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.45, ease: 'easeOut' }}
+                        className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-500 uppercase tracking-wider font-bold"
+                      >
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse mr-1.5" />
+                        Calibrating instruments…
+                      </motion.p>
+                    )}
+                    {(phase === 'playing' || phase === 'feedback') && !hintDismissed && (
+                      <motion.p
+                        key="hint"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.35, ease: 'easeOut' }}
+                        className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-500"
+                      >
+                        Tap an instrument to highlight it in the answers
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
 
               {/* Options — hidden during calibration, slide in after */}
@@ -506,7 +558,7 @@ export default function CbatInstruments() {
                       Which statement is correct?
                     </p>
                     {round.statements.map((s, i) => {
-                      const text = formatStatement(s)
+                      const segments = statementSegments(s)
                       let btnClass = 'bg-[#060e1a] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240]'
                       if (phase === 'feedback') {
                         if (i === round.correctIdx) {
@@ -525,12 +577,28 @@ export default function CbatInstruments() {
                           transition={{ delay: i * 0.06, duration: 0.22, ease: 'easeOut' }}
                           onClick={() => handlePick(i)}
                           disabled={phase === 'feedback'}
-                          className={`w-full text-left px-3 py-2.5 rounded-lg border-2 text-xs sm:text-sm transition-all ${btnClass} ${
+                          className={`w-full text-left px-3 py-2.5 rounded-lg border-2 text-xs sm:text-sm transition-all min-h-[3.75rem] sm:min-h-[4.25rem] ${btnClass} ${
                             phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                           }`}
                         >
                           <span className="font-mono text-[10px] text-slate-500 mr-2">{String.fromCharCode(65 + i)}</span>
-                          {text}
+                          {segments.map((seg, j) => {
+                            // 'attitude' is a meta-key — the attitude indicator
+                            // shows both pitch (vs) and roll (turn), so tapping
+                            // it highlights both phrases at once.
+                            const match = seg.key && (
+                              seg.key === highlightedKey ||
+                              (highlightedKey === 'attitude' && (seg.key === 'vs' || seg.key === 'turn'))
+                            )
+                            // No font-bold / no horizontal padding on the mark
+                            // — both alter layout metrics (bold glyph width,
+                            // padding wrap point) and would jitter the text
+                            // when a dial is toggled. The bright amber bg vs.
+                            // dark text already gives the highlight enough pop.
+                            return match
+                              ? <mark key={j} className="bg-amber-700 text-amber-50 rounded">{seg.text}</mark>
+                              : <span key={j}>{seg.text}</span>
+                          })}
                         </motion.button>
                       )
                     })}
