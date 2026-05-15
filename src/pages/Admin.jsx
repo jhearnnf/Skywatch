@@ -2148,16 +2148,34 @@ function SettingsTab({ API }) {
           'caseFilesDailyLimitSilver',
           'caseFilesDailyLimitGold',
           'newsFlashcardsEnabled',
+          'previewWindowIntelBriefEnabled',
+          'previewWindowCbatEnabled',
         ]
         if (draft.cbatEnabled) {
           gameOptionsFields.push('cbatTargetAircraftBriefIds', 'cbatFlagAircraftBriefIds')
         }
         save('Update Game Options', gameOptionsFields)
       }}>
+        <div className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-1 pb-2 mb-2 border-b-2 border-brand-600/40">
+          <span>Home Page Preview Windows</span>
+        </div>
+        <Toggle
+          label="Intel Brief preview window"
+          hint="Shows a looping montage of the intel-brief games (Priority pathway, Intel Recall, Flashcards, Where's That Aircraft, Battle of Order, Aptitude Sync, Case Files) on the public landing page. Per-game gates (e.g. aptitudeSyncEnabled) still filter individual scenes."
+          checked={draft.previewWindowIntelBriefEnabled !== false}
+          onChange={v => set('previewWindowIntelBriefEnabled', v)}
+        />
+        <Toggle
+          label="CBAT preview window"
+          hint="Shows a looping montage of the CBAT practice games on the public landing page. Per-game cbatGameEnabled flags still filter individual scenes."
+          checked={draft.previewWindowCbatEnabled !== false}
+          onChange={v => set('previewWindowCbatEnabled', v)}
+        />
+
         <button
           type="button"
           onClick={() => toggleGameGroup('quiz')}
-          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-1 pb-2 mb-2 border-b-2 border-brand-600/40"
+          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-6 pb-2 mb-2 border-b-2 border-brand-600/40"
         >
           <span>Intel Recall</span>
           <span className="text-brand-600 text-xs">{gameGroupsOpen.quiz ? '▲' : '▼'}</span>

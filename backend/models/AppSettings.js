@@ -188,6 +188,12 @@ const appSettingsSchema = new mongoose.Schema({
   // Chat (user↔admin help) feature
   chatEnabled:                { type: Boolean,  default: true },
 
+  // Home-page preview windows (Landing.jsx). Each window can be hidden
+  // independently by an admin. Per-game gates inside each window still apply
+  // (e.g. disabling Aptitude Sync via aptitudeSyncEnabled drops its scene).
+  previewWindowIntelBriefEnabled: { type: Boolean, default: true },
+  previewWindowCbatEnabled:       { type: Boolean, default: true },
+
   // Case Files feature
   caseFilesEnabled:           { type: Boolean,  default: false },
   // Per-case tier gating lives on each GameCaseFile.tiers (admin always bypasses).

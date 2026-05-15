@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -7,6 +7,9 @@ import { captureEvent } from '../lib/posthog'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import SocialLinks from '../components/SocialLinks'
 import SEO from '../components/SEO'
+import PreviewWindow from '../components/homePreview/PreviewWindow'
+import { buildIntelBriefScenes } from '../components/homePreview/registries/intelBriefRegistry'
+import { buildCbatScenes } from '../components/homePreview/registries/cbatRegistry'
 
 const FEATURES = [
   { icon: '✈️', title: 'Learn About the RAF',        body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — designed for aspiring aviators.' },
@@ -15,13 +18,6 @@ const FEATURES = [
   { icon: '🔥', title: 'Daily Streaks',              body: 'Return every day to keep your streak alive. Consistent learning beats last-minute cramming every time.' },
   { icon: '🏆', title: 'Climb the Rankings',         body: 'Compete with other learners on the leaderboard as you progress through subjects.' },
   { icon: '📰', title: 'Daily RAF News',             body: 'Stay up to date with real RAF news — automatically sourced and formatted as intel briefs.' },
-]
-
-const GAMES = [
-  { key: 'quiz',                 icon: '🧠',  bar: 'bg-brand-500',  title: 'Intel Recall',           hook: 'Standard or Advanced — answer questions tied to a specific brief.' },
-  { key: 'flashcard',            icon: '⚡',  bar: 'bg-amber-500',  title: 'Flashcards',             hook: 'Title hidden. Read the content, then name the brief from memory.' },
-  { key: 'wheres-that-aircraft', icon: '✈️',  bar: 'bg-red-500',    title: "Where's That Aircraft?", hook: 'Spot the aircraft, then pinpoint its home base on the map.' },
-  { key: 'battle-order',         icon: '🗺️',  bar: 'bg-violet-400', title: 'Battle of Order',        hook: 'Sequence aircraft, ranks, and missions in the correct order.' },
 ]
 
 const PREVIEW_CATEGORIES = [
@@ -84,25 +80,34 @@ export default function Landing() {
   const { settings } = useAppSettings()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [liveStats, setLiveStats] = useState(null)
-  // One random aircraft cutout per page visit, used to liven up the WTA
-  // showcase tile — mirrors the Play page hero treatment so returning users
-  // recognise the same tile when they click through.
-  const [randomAircraft, setRandomAircraft] = useState(null)
+  // Imported lazily inside the registry; here we just need the metadata list
+  // to feed the CBAT registry's scene-filtering pass. Sync import is fine —
+  // it's a tiny static array, no perf cost.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const [cbatGamesMeta, setCbatGamesMeta] = useState(null)
+  useEffect(() => {
+    let aborted = false
+    import('../data/cbatGames').then(m => { if (!aborted) setCbatGamesMeta(m.CBAT_GAMES) })
+    return () => { aborted = true }
+  }, [])
+
+  const intelBriefScenes = useMemo(
+    () => buildIntelBriefScenes(settings, user),
+    [settings, user],
+  )
+  const cbatScenes = useMemo(
+    () => cbatGamesMeta ? buildCbatScenes(settings, user, cbatGamesMeta) : [],
+    [settings, user, cbatGamesMeta],
+  )
+
+  const showIntelBriefWindow = (settings?.previewWindowIntelBriefEnabled !== false) && intelBriefScenes.length > 0
+  const showCbatWindow       = (settings?.previewWindowCbatEnabled       !== false) && cbatScenes.length > 0
 
   useEffect(() => {
     let aborted = false
     fetch(`${API}/api/briefs/public-stats`)
       .then(r => r.ok ? r.json() : null)
       .then(j => { if (!aborted && j?.data) setLiveStats(j.data) })
-      .catch(() => {})
-    fetch(`${API}/api/briefs/aircraft-cutouts`)
-      .then(r => r.ok ? r.json() : null)
-      .then(j => {
-        if (aborted) return
-        const pool = j?.data?.cutouts ?? []
-        if (pool.length === 0) return
-        setRandomAircraft(pool[Math.floor(Math.random() * pool.length)])
-      })
       .catch(() => {})
     return () => { aborted = true }
   }, [API])
@@ -141,7 +146,7 @@ export default function Landing() {
       </header>
 
       {/* ── Hero ───────────────────────────────────────────── */}
-      <section className="pt-36 pb-24 px-5 text-center max-w-3xl mx-auto">
+      <section className="pt-24 sm:pt-36 pb-16 sm:pb-24 px-5 text-center max-w-3xl mx-auto">
         <motion.div
           initial="hidden" animate="visible"
           variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
@@ -210,7 +215,7 @@ export default function Landing() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, duration: 0.5 }}
-          className="mt-16 flex flex-wrap justify-center gap-10 text-center"
+          className="mt-12 sm:mt-16 flex flex-wrap justify-center gap-4 sm:gap-10 text-center"
         >
           {[
             { value: '15',                                                 label: 'Subject Areas'  },
@@ -227,6 +232,18 @@ export default function Landing() {
           ))}
         </motion.div>
       </section>
+
+      {/* ── Intel Brief preview window ─────────────────────── */}
+      {showIntelBriefWindow && (
+        <Suspense fallback={null}>
+          <PreviewWindow
+            eyebrow="INTEL BRIEF GAMES"
+            heading="Your training, in 25 seconds"
+            scenes={intelBriefScenes}
+            dataTestId="preview-window-intel-brief"
+          />
+        </Suspense>
+      )}
 
       {/* ── Subject areas ──────────────────────────────────── */}
       <section className="py-16 px-5 max-w-4xl mx-auto">
@@ -314,68 +331,25 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Test Yourself — game showcase ─────────────────── */}
-      <section className="py-16 px-5 max-w-5xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="text-center mb-10"
-        >
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <span className="intel-tag">RANGE TIME</span>
-          </div>
-          <h2 className="text-3xl font-bold text-slate-900 mb-3">Four Ways to Test Yourself</h2>
-          <p className="text-slate-500 max-w-lg mx-auto">Every brief unlocks new ways to play — each one drilling a different way of knowing the material.</p>
-        </motion.div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {GAMES.map(({ key, icon, bar, title, hook }, i) => {
-            const showCutout = key === 'wheres-that-aircraft' && randomAircraft?.cutoutUrl
-            return (
-              <motion.div
-                key={title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.07, duration: 0.4 }}
-                className="relative card-intel rounded-2xl p-5 text-center overflow-hidden"
-              >
-                <span className={`absolute left-0 right-0 top-0 h-1 ${bar}`} aria-hidden="true" />
-                <CornerBrackets size={10} />
-                <span className="inline-flex items-center justify-center" style={{ height: 40 }}>
-                  {showCutout ? (
-                    <span
-                      className="profile-badge-cutout-wrap profile-badge-cutout-wrap--no-scan"
-                      style={{ width: 56, height: 40 }}
-                    >
-                      <img
-                        src={randomAircraft.cutoutUrl}
-                        alt={randomAircraft.title || 'Aircraft'}
-                        className="profile-badge-cutout-img"
-                        draggable={false}
-                      />
-                    </span>
-                  ) : (
-                    <span className="text-3xl leading-none">{icon}</span>
-                  )}
-                </span>
-                <h3 className="font-bold text-slate-900 mt-3 mb-1.5">{title}</h3>
-                <p className="text-sm text-slate-500 leading-relaxed">{hook}</p>
-              </motion.div>
-            )
-          })}
-        </div>
-      </section>
+      {/* ── CBAT preview window ────────────────────────────── */}
+      {showCbatWindow && (
+        <Suspense fallback={null}>
+          <PreviewWindow
+            eyebrow="CBAT PRACTICE GAMES"
+            heading="Practice every CBAT subtest"
+            scenes={cbatScenes}
+            dataTestId="preview-window-cbat"
+          />
+        </Suspense>
+      )}
 
       {/* ── CTA ───────────────────────────────────────────── */}
-      <section className="py-20 px-5">
+      <section className="py-12 sm:py-20 px-5">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="relative max-w-2xl mx-auto rounded-3xl p-10 text-center overflow-hidden"
+          className="relative max-w-2xl mx-auto rounded-3xl p-6 sm:p-10 text-center overflow-hidden"
           style={{
             background: 'linear-gradient(135deg, #0f2850 0%, #081930 100%)',
             border: '1px solid rgba(91,170,255,0.2)',
