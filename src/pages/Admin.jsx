@@ -10,6 +10,7 @@ import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } fr
 import { applyTierCascade } from '../utils/tierCascade'
 import RankBadge from '../components/RankBadge'
 import SocialsSection from '../components/admin/SocialsSection'
+import BriefReelReviewPanel from '../components/briefReel/admin/BriefReelReviewPanel'
 import ReportChart, { ChartSkeleton } from '../components/admin/ReportChart'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 import TutorialsEditor from './admin/TutorialsEditor'
@@ -337,6 +338,22 @@ function StatsTab({ API, onViewEmailLog }) {
                 label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>casefiles</>}
                 value={fmtUSD(openRouter.casefiles?.lifetime)}
                 sub={openRouter.casefiles?.lifetimeError || 'all-time spend'}
+                color="emerald"
+              />
+            </button>
+            <button type="button" onClick={() => openRouterNav('briefreel', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
+              <StatCard
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>briefreel</>}
+                value={fmtUSD(openRouter.briefreel?.today)}
+                sub={`${fmtNum(openRouter.briefreel?.todayCalls)} calls today`}
+                color="emerald"
+              />
+            </button>
+            <button type="button" onClick={() => openRouterNav('briefreel', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
+              <StatCard
+                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>briefreel</>}
+                value={fmtUSD(openRouter.briefreel?.lifetime)}
+                sub={openRouter.briefreel?.lifetimeError || 'all-time spend'}
                 color="emerald"
               />
             </button>
@@ -953,6 +970,49 @@ function Toggle({ label, hint, checked, onChange }) {
       >
         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-surface rounded-full shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
       </button>
+    </div>
+  )
+}
+
+// Tri-state feature-flag control. Three states: 'off' | 'admin' | 'everyone'.
+// Used for flags that need a "soft launch to admins only" before flipping on
+// for all users — keeps the rollout decision in the same place as the kill
+// switch instead of needing a separate boolean.
+function TriStateFlag({ label, hint, value, onChange }) {
+  const v = value || 'off'
+  const opts = [
+    { key: 'off',      label: 'Off' },
+    { key: 'admin',    label: 'Admin only' },
+    { key: 'everyone', label: 'Everyone' },
+  ]
+  return (
+    <div className="flex items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-0">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-slate-700">{label}</p>
+        {hint && <p className="text-xs text-slate-400">{hint}</p>}
+      </div>
+      <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg border border-slate-200 overflow-hidden shrink-0">
+        {opts.map(o => {
+          const active = v === o.key
+          return (
+            <button
+              key={o.key}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(o.key)}
+              className={
+                'px-3 py-1.5 text-xs font-semibold transition-colors ' +
+                (active
+                  ? 'bg-brand-500 text-white'
+                  : 'bg-surface text-slate-600 hover:bg-slate-100')
+              }
+            >
+              {o.label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -2634,7 +2694,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'rsvpReaderEnabled', 'chatEnabled'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -2647,11 +2707,17 @@ function SettingsTab({ API }) {
           checked={draft.mnemonicsClickEnabled ?? false}
           onChange={v => set('mnemonicsClickEnabled', v)}
         />
-        <Toggle
+        <TriStateFlag
           label="RSVP Speed Reader"
-          hint="Hold-to-engage rapid serial reading on brief description sections. When off, holds do nothing and the RSVP tutorial step is hidden."
-          checked={draft.rsvpReaderEnabled ?? false}
-          onChange={v => set('rsvpReaderEnabled', v)}
+          hint="Hold-to-engage rapid serial reading on brief description sections. Admin-only restricts the affordance to admins for soft-launch testing."
+          value={draft.featureFlags?.rsvpReader ?? 'off'}
+          onChange={v => set('featureFlags', { ...(draft.featureFlags ?? {}), rsvpReader: v })}
+        />
+        <TriStateFlag
+          label="Brief Reel"
+          hint="AI-generated stickman animation per brief description section. Reels need admin review + Publish before they reach users. Admin-only is the safe default while seeding the review queue."
+          value={draft.featureFlags?.briefReel ?? 'off'}
+          onChange={v => set('featureFlags', { ...(draft.featureFlags ?? {}), briefReel: v })}
         />
         <Toggle
           label="Help Chat"
@@ -3551,6 +3617,9 @@ function ContentTab({ API }) {
     <div>
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
       {modal && <ConfirmModal title={modal.label} onConfirm={confirmSave} onCancel={() => setModal(null)} />}
+
+      {/* ── Brief Reel review queue ─────────────────────────────────── */}
+      <BriefReelReviewPanel />
 
       {/* ── Welcome Email ─────────────────────────────────────────── */}
       <Section title="Welcome Email" collapsible onSave={() => save('Update Welcome Email', ['emailWelcomeEnabled', 'welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
