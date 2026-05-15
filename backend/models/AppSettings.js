@@ -139,7 +139,23 @@ const appSettingsSchema = new mongoose.Schema({
   betaTesterAutoGold:    { type: Boolean, default: false },
   cbatEnabled:           { type: Boolean, default: false },
   mnemonicsClickEnabled: { type: Boolean, default: false },
+
+  // DEPRECATED — superseded by featureFlags.rsvpReader (tri-state). Kept on
+  // the schema so legacy reads (still present in frontend) don't break;
+  // remove once all reads are switched to featureFlags.rsvpReader.
   rsvpReaderEnabled:     { type: Boolean, default: false },
+
+  // Tri-state feature flags. Each value is one of 'off' | 'admin' | 'everyone'.
+  // - 'off'      = feature hidden for all users (including admins)
+  // - 'admin'    = feature visible only to admin accounts
+  // - 'everyone' = feature visible to all authenticated users
+  // Known keys are validated at the admin PATCH route; getSettings() backfills
+  // missing keys with 'off' so the public /api/settings response is exhaustive.
+  featureFlags: {
+    type: Map,
+    of: String,
+    default: () => ({ rsvpReader: 'off', briefReel: 'off' }),
+  },
 
   // Flashcards feature — when false, News-category briefs skip the flashcard
   // layout on section 4, are excluded from the flashcard deck and overall count,
@@ -335,6 +351,29 @@ appSettingsSchema.statics.getSettings = async function () {
         [[], []]
       );
       updates.pathwayUnlocks = [...missingFront, ...(settings.pathwayUnlocks || []), ...missingRest];
+    }
+
+    // Backfill featureFlags — ensure every known tri-state flag is present.
+    // New flags added to the schema land here with their default ('off') so
+    // the admin UI can show them without a manual seed step. The legacy
+    // boolean `rsvpReaderEnabled` is intentionally NOT auto-migrated — the
+    // admin can flip rsvpReader to 'everyone' once after deploy if they want
+    // the prior behaviour back.
+    {
+      const KNOWN_FLAG_KEYS = {
+        rsvpReader: 'off',
+        briefReel:  'off',
+      };
+      const current = settings.featureFlags;
+      let touched = false;
+      const next = {};
+      if (current && typeof current.forEach === 'function') {
+        current.forEach((v, k) => { next[k] = v; });
+      }
+      for (const [k, v] of Object.entries(KNOWN_FLAG_KEYS)) {
+        if (!(k in next)) { next[k] = v; touched = true; }
+      }
+      if (touched) updates.featureFlags = next;
     }
 
     // Backfill cbatGameEnabled — ensure every known CBAT game key is present.

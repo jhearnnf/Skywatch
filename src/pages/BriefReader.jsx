@@ -23,6 +23,7 @@ import { MOCK_RANKS } from '../data/mockData'
 import { PENDING_BRIEF_KEY, BRIEF_COINS_KEY, BRIEF_JUST_COMPLETED_KEY, tutorialKey, isCroFirstBriefActive, clearCroFirstBrief } from '../utils/storageKeys'
 import { normalizeSections, sectionBody } from '../utils/descriptionSections'
 import RsvpReader from '../components/briefReader/RsvpReader'
+import BriefReelSection from '../components/briefReel/BriefReelSection'
 
 // Render **bold** markdown syntax as <strong> spans
 function renderBoldMarkdown(text) {
@@ -497,7 +498,7 @@ function ImageGridReveal({ src, isFirstSeen, alt, imgClassName, imgStyle }) {
 }
 
 // ── Section card (image zone + stat + text) ───────────────────────────────
-function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, sectionIdx, total, isLast, suppressFlashcard, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, heading, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial, rsvpReaderEnabled }) {
+function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, sectionIdx, total, isLast, suppressFlashcard, tutorialActive, highlightedBaseNames, mapOpen, setMapOpen, centreOn, title, subtitle, category, subcategory, heading, text, keywords, learnedKws, onKeywordTap, onStatTap, showStatTutorial, onDismissStatTutorial, rsvpReaderEnabled, briefId, briefReelEnabled, isAdmin, apiFetch }) {
   const hasBases = (highlightedBaseNames ?? []).length > 0
   const statTapOrigin = useRef(null)
   const descriptionRef = useRef(null)
@@ -712,16 +713,39 @@ function SectionCard({ imageZone, isFirstSeenImage, rankHierarchyOrder, stat, se
       )}
 
       <div ref={descriptionRef} className="p-5">
-        {heading && (
-          <h3 className="text-lg font-bold text-text leading-snug mb-3">{heading}</h3>
+        {briefReelEnabled && briefId ? (
+          <BriefReelSection
+            briefId={briefId}
+            sectionIndex={sectionIdx}
+            sectionBody={text}
+            isAdmin={isAdmin}
+            apiFetch={apiFetch}
+          >
+            {heading && (
+              <h3 className="text-lg font-bold text-text leading-snug mb-3">{heading}</h3>
+            )}
+            {/* data-brief-reel-body marks the element whose textContent
+                corresponds to `sectionBody`. BriefReelSection's active-beat
+                highlighter walks from this element so the heading above
+                isn't mis-counted as part of the body. */}
+            <div className="pl-3" data-brief-reel-body>
+              <SectionText text={text} keywords={keywords} learnedKws={learnedKws} onKeywordTap={onKeywordTap} />
+            </div>
+          </BriefReelSection>
+        ) : (
+          <>
+            {heading && (
+              <h3 className="text-lg font-bold text-text leading-snug mb-3">{heading}</h3>
+            )}
+            {/* Body inset from the heading's left edge — creates a classic hanging-
+                heading hierarchy where the heading "owns" the full width and the
+                body nests beneath it. Reduces line length from ~73 → ~65 chars,
+                still comfortably in the 45–75 ideal range. */}
+            <div className="pl-3">
+              <SectionText text={text} keywords={keywords} learnedKws={learnedKws} onKeywordTap={onKeywordTap} />
+            </div>
+          </>
         )}
-        {/* Body inset from the heading's left edge — creates a classic hanging-
-            heading hierarchy where the heading "owns" the full width and the
-            body nests beneath it. Reduces line length from ~73 → ~65 chars,
-            still comfortably in the 45–75 ideal range. */}
-        <div className="pl-3">
-          <SectionText text={text} keywords={keywords} learnedKws={learnedKws} onKeywordTap={onKeywordTap} />
-        </div>
         <RsvpReader text={text} enabled={rsvpReaderEnabled} containerRef={descriptionRef} />
       </div>
     </div>
@@ -1996,6 +2020,11 @@ export default function BriefReader() {
   const isNewsFlashcardHidden = brief?.category === 'News' && settings?.newsFlashcardsEnabled === false
   const mnemonicsEnabled = settings?.mnemonicsClickEnabled === true
   const rsvpReaderEnabled = settings?.rsvpReaderEnabled === true
+  // Brief Reel — tri-state flag: 'off' | 'admin' | 'everyone'. Admins always
+  // see the affordance (so they can seed the review queue); regular users
+  // only see it when the flag is 'everyone'.
+  const briefReelMode    = settings?.featureFlags?.briefReel ?? 'off'
+  const briefReelEnabled = briefReelMode === 'everyone' || (briefReelMode === 'admin' && !!user?.isAdmin)
   // Flashcard view = on the last section. Drives chrome that differs between normal
   // sections and the final section (header fade, progress-bar hide). Independent of
   // whether the last section renders as a FlashCard component or as a regular
@@ -2835,6 +2864,10 @@ export default function BriefReader() {
                       }
                     }}
                     rsvpReaderEnabled={rsvpReaderEnabled}
+                    briefId={brief._id}
+                    briefReelEnabled={briefReelEnabled && !isLast}
+                    isAdmin={!!user?.isAdmin}
+                    apiFetch={apiFetch}
                   />
                 </SwipeCard>
               </motion.div>

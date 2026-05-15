@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "totalDurationMs": 18500,
+  "sectionBody": "Air Chief Marshal Harvey Smyth has stated that the Royal Air Force must accelerate its shift towards an AI-enabled air force, originally envisaged for the 2030s. He now argues that rapid advances in artificial intelligence and autonomous systems mean that AI-powered uncrewed aircraft must become operational much sooner than previously planned.",
+  "actors": [
+    { "id": "smyth",   "name": "Air Chief Marshal Harvey Smyth", "shortLabel": "ACM Smyth",   "faction": "raf-primary",   "headgear": "cap-acm" },
+    { "id": "officer", "name": "RAF Planning Officer",           "shortLabel": "RAF Planner", "faction": "raf-secondary", "headgear": "cap-officer" }
+  ],
+  "props": [
+    { "id": "laptop", "type": "laptop",           "label": "AI" },
+    { "id": "jet",    "type": "aircraft-typhoon" },
+    { "id": "sky",    "type": "sky-bg" }
+  ],
+  "beats": [
+    {
+      "id": "b1",
+      "textSpan": { "start": 0, "end": 36 },
+      "durationMs": 3000,
+      "actions": [
+        { "type": "enter",     "actorId": "smyth", "params": { "position": "centre" } },
+        { "type": "salute",    "actorId": "smyth" },
+        { "type": "show-name", "actorId": "smyth" }
+      ]
+    },
+    {
+      "id": "b2",
+      "textSpan": { "start": 37, "end": 167 },
+      "durationMs": 3500,
+      "actions": [
+        { "type": "show-text", "params": { "text": "2030s = AI" } },
+        { "type": "crossout",  "params": { "text": "2030s = AI" } },
+        { "type": "speak",     "actorId": "smyth", "params": { "text": "Not 2030s. Sooner." } }
+      ]
+    },
+    {
+      "id": "b3",
+      "textSpan": { "start": 168, "end": 210 },
+      "durationMs": 3000,
+      "actions": [
+        { "type": "enter", "actorId": "officer", "params": { "position": "right" } },
+        { "type": "argue", "actorId": "smyth",   "params": { "targetActorId": "officer" } }
+      ]
+    },
+    {
+      "id": "b4",
+      "textSpan": { "start": 211, "end": 320 },
+      "durationMs": 4000,
+      "actions": [
+        { "type": "pulse",      "actorId": "smyth",  "params": { "targetId": "laptop" } },
+        { "type": "throw-up",   "actorId": "smyth",  "params": { "propId": "laptop" } },
+        { "type": "background",                       "params": { "propId": "sky" } },
+        { "type": "pilot",      "actorId": "smyth",  "params": { "propId": "jet" } }
+      ]
+    },
+    {
+      "id": "b5",
+      "textSpan": { "start": 321, "end": 380 },
+      "durationMs": 2500,
+      "actions": [
+        { "type": "speak", "actorId": "smyth", "params": { "text": "Soon!" } }
+      ]
+    }
+  ]
+}

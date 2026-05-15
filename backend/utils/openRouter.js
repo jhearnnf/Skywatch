@@ -53,6 +53,12 @@ function resolveKeyAndHeader(key) {
       title:  'SkyWatch Case Files',
     };
   }
+  if (key === 'briefreel') {
+    return {
+      apiKey: process.env.OPENROUTER_KEY_BRIEFREEL || process.env.OPENROUTER_KEY,
+      title:  'SkyWatch Brief Reel',
+    };
+  }
   return {
     apiKey: process.env.OPENROUTER_KEY,
     title:  'SkyWatch',

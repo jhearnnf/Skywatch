@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "totalDurationMs": 12000,
+  "sectionBody": "RAF Typhoons of 6 Squadron, based at RAF Lossiemouth, intercepted two Russian Tu-95 Bear bombers approaching UK airspace north of Scotland. The aircraft were escorted away from the UK air policing area without incident.",
+  "actors": [
+    { "id": "pilot", "name": "RAF Typhoon Pilot", "shortLabel": "6 Sqn Pilot", "faction": "raf-primary", "headgear": "flight-helmet" }
+  ],
+  "props": [
+    { "id": "typhoon", "type": "aircraft-typhoon" },
+    { "id": "bear",    "type": "aircraft-generic", "label": "Tu-95" },
+    { "id": "sky",     "type": "sky-bg" }
+  ],
+  "beats": [
+    {
+      "id": "b1",
+      "textSpan": { "start": 0, "end": 56 },
+      "durationMs": 3500,
+      "actions": [
+        { "type": "background",                       "params": { "propId": "sky" } },
+        { "type": "enter",     "actorId": "pilot",   "params": { "position": "left" } },
+        { "type": "pilot",     "actorId": "pilot",   "params": { "propId": "typhoon" } },
+        { "type": "show-name", "actorId": "pilot" }
+      ]
+    },
+    {
+      "id": "b2",
+      "textSpan": { "start": 57, "end": 160 },
+      "durationMs": 4000,
+      "actions": [
+        { "type": "show-text", "params": { "text": "Tu-95 Bear" } },
+        { "type": "pulse",     "actorId": "pilot",  "params": { "targetId": "pilot" } }
+      ]
+    },
+    {
+      "id": "b3",
+      "textSpan": { "start": 161, "end": 250 },
+      "durationMs": 4500,
+      "actions": [
+        { "type": "walk-to", "actorId": "pilot", "params": { "position": "right" } },
+        { "type": "speak",   "actorId": "pilot", "params": { "text": "Escorted clear." } }
+      ]
+    }
+  ]
+}

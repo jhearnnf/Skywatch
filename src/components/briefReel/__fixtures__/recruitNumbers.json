@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "totalDurationMs": 11000,
+  "sectionBody": "RAF recruitment rose 12% year-on-year as the new fast-jet pipeline cleared its longstanding backlog. Recruit numbers at RAF Cranwell reached a five-year high and entry into training is now within twelve weeks of application.",
+  "actors": [
+    { "id": "recruiter", "name": "RAF Recruitment Lead", "shortLabel": "Recruiter", "faction": "raf-primary",   "headgear": "cap-officer" },
+    { "id": "trainee",   "name": "New Recruit",          "shortLabel": "Recruit",    "faction": "raf-secondary", "headgear": "beret" }
+  ],
+  "props": [
+    { "id": "doc",     "type": "document", "label": "+12%" }
+  ],
+  "beats": [
+    {
+      "id": "b1",
+      "textSpan": { "start": 0, "end": 80 },
+      "durationMs": 3500,
+      "actions": [
+        { "type": "enter",     "actorId": "recruiter", "params": { "position": "centre" } },
+        { "type": "show-text",                          "params": { "text": "+12% YoY" } },
+        { "type": "show-name", "actorId": "recruiter" }
+      ]
+    },
+    {
+      "id": "b2",
+      "textSpan": { "start": 81, "end": 150 },
+      "durationMs": 4000,
+      "actions": [
+        { "type": "enter",     "actorId": "trainee", "params": { "position": "right" } },
+        { "type": "show-text",                        "params": { "text": "RAF Cranwell" } },
+        { "type": "pulse",     "actorId": "trainee", "params": { "targetId": "trainee" } }
+      ]
+    },
+    {
+      "id": "b3",
+      "textSpan": { "start": 151, "end": 230 },
+      "durationMs": 3500,
+      "actions": [
+        { "type": "speak",     "actorId": "recruiter", "params": { "text": "12 weeks to start." } }
+      ]
+    }
+  ]
+}

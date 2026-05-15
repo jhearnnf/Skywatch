@@ -179,7 +179,7 @@ export default function OpenRouterUsage() {
         <div>
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">API Key</p>
           <div className="flex gap-2 flex-wrap">
-            {['all', 'main', 'aptitude', 'socials', 'casefiles'].map(k => (
+            {['all', 'main', 'aptitude', 'socials', 'casefiles', 'briefreel'].map(k => (
               <button
                 key={k}
                 onClick={() => setKey(k)}
@@ -255,7 +255,7 @@ export default function OpenRouterUsage() {
               {rows.map(r => (
                 <tr key={r._id} className="border-t border-slate-100">
                   <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDateTime(r.createdAt)}</td>
-                  <td className="px-3 py-2"><span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${r.key === 'aptitude' ? 'bg-amber-50 text-amber-700' : r.key === 'socials' ? 'bg-emerald-50 text-emerald-700' : r.key === 'casefiles' ? 'bg-violet-50 text-violet-700' : 'bg-brand-50 text-brand-700'}`}>{r.key}</span></td>
+                  <td className="px-3 py-2"><span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${r.key === 'aptitude' ? 'bg-amber-50 text-amber-700' : r.key === 'socials' ? 'bg-emerald-50 text-emerald-700' : r.key === 'casefiles' ? 'bg-violet-50 text-violet-700' : r.key === 'briefreel' ? 'bg-sky-50 text-sky-700' : 'bg-brand-50 text-brand-700'}`}>{r.key}</span></td>
                   <td className="px-3 py-2 text-slate-700">{r.feature}</td>
                   <td className="px-3 py-2 text-slate-600 truncate max-w-[200px]">
                     {r.briefId && r.briefId.title ? (

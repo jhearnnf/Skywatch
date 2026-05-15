@@ -581,6 +581,83 @@ body.play-mode::before {
 }
 
 
+/* ── Brief Reel — button pulse + section dimming ─────────────────────────── */
+/* Slow attention pulse on the section's BriefReel logo button when a reel is
+   cached and ready to play. Two-second cycle so it reads as "hey, there's
+   something here" without competing with the brief content. */
+@keyframes brief-reel-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(91, 170, 255, 0.0); }
+  50%       { box-shadow: 0 0 0 8px rgba(91, 170, 255, 0.18), 0 0 14px rgba(91, 170, 255, 0.35); }
+}
+.brief-reel-pulse {
+  animation: brief-reel-pulse 2.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brief-reel-pulse { animation: none; }
+}
+
+/* Brief-reel READING MODE — applied to the host-rendered body while a reel
+   is playing. We don't swap or wrap the DOM; we just dim the body text and
+   neutralise the keyword pills so the only visual emphasis remaining is the
+   active beat highlight painted via the CSS Custom Highlight API below.
+   Transitioning `color` (not `opacity`) keeps the active highlight at full
+   strength while the surrounding text fades. */
+.brief-reel-body-wrapper {
+  transition: color 0.4s ease-out;
+}
+.brief-reel-body-wrapper[data-reel-active] {
+  color: rgba(221, 234, 248, 0.32) !important;
+}
+/* SectionText sets `text-text` (a Tailwind utility) on its root div, which
+   wins over a `color` inherited from this wrapper. Force every descendant
+   to inherit so the dim actually reaches the rendered prose. The active-
+   beat highlight is unaffected because ::highlight() paints on a separate
+   layer above normal text colour, just like ::selection. */
+.brief-reel-body-wrapper[data-reel-active] * {
+  color: inherit !important;
+  transition: color 0.4s ease-out, border-color 0.4s ease-out;
+}
+.brief-reel-body-wrapper[data-reel-active] button {
+  border-color: transparent !important;
+  cursor: default !important;
+  pointer-events: none;
+}
+/* The active beat's text range. Coloured by JS via CSS.highlights — the
+   browser overlays this style on the matched Range without touching DOM,
+   so the body's layout stays pixel-stable. */
+::highlight(brief-reel-active-beat) {
+  color: #ddeaf8;
+  background-color: rgba(91, 170, 255, 0.18);
+}
+
+/* Stickman idle breathing — runs continuously in the browser independent
+   of React renders. Pure CSS keyframes are immune to framer-motion's
+   "new array every re-render" restart bug that made earlier versions
+   look like an occasional pulse.
+
+   transform-box: fill-box anchors transform-origin to the element's own
+   bounding box rather than the SVG viewport — without this, a percentage
+   transform-origin lands at the viewport's bottom-centre instead of the
+   stickman's feet, and the scale looks like the figure drifting toward
+   the corner. The asymmetric curve (slow inhale, brief hold, slow
+   exhale) matches the rhythm of an actual breath cycle. Per-actor phase
+   delay is set inline so two stickmen don't inhale in lockstep. */
+@keyframes brief-reel-stickman-breathe {
+   0%   { transform: scale(1);     }
+  45%   { transform: scale(1.04);  }
+  55%   { transform: scale(1.04);  }
+ 100%   { transform: scale(1);     }
+}
+.brief-reel-stickman-breathe {
+  animation: brief-reel-stickman-breathe 4.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brief-reel-stickman-breathe { animation: none; }
+}
+
 /* ── New-game badge dot on nav Play button ───────────────────────────────── */
 .nav-new-badge {
   position: absolute;

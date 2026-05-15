@@ -546,13 +546,14 @@ async function getLifetimeUsage() {
   if (lifetimeCache.data && (Date.now() - lifetimeCache.fetchedAt) < LIFETIME_CACHE_MS) {
     return lifetimeCache.data;
   }
-  const [main, aptitude, socials, casefiles] = await Promise.all([
+  const [main, aptitude, socials, casefiles, briefreel] = await Promise.all([
     fetchOpenRouterKeyUsage('main'),
     fetchOpenRouterKeyUsage('aptitude'),
     fetchOpenRouterKeyUsage('socials'),
     fetchOpenRouterKeyUsage('casefiles'),
+    fetchOpenRouterKeyUsage('briefreel'),
   ]);
-  const data = { main, aptitude, socials, casefiles };
+  const data = { main, aptitude, socials, casefiles, briefreel };
   lifetimeCache.data = data;
   lifetimeCache.fetchedAt = Date.now();
   return data;
@@ -589,6 +590,7 @@ router.get('/openrouter/summary', async (_req, res) => {
       aptitude:  { cost: 0, calls: 0, byFeature: {} },
       socials:   { cost: 0, calls: 0, byFeature: {} },
       casefiles: { cost: 0, calls: 0, byFeature: {} },
+      briefreel: { cost: 0, calls: 0, byFeature: {} },
     };
     for (const row of todayAgg) {
       const k = row._id.key;
@@ -602,6 +604,7 @@ router.get('/openrouter/summary', async (_req, res) => {
       aptitude:  { cost: 0, calls: 0 },
       socials:   { cost: 0, calls: 0 },
       casefiles: { cost: 0, calls: 0 },
+      briefreel: { cost: 0, calls: 0 },
     };
     for (const row of weekAgg) {
       if (last7Days[row._id]) last7Days[row._id] = { cost: row.cost, calls: row.calls };
@@ -646,6 +649,15 @@ router.get('/openrouter/summary', async (_req, res) => {
           todayByFeature: today.casefiles.byFeature,
           last7Days: last7Days.casefiles.cost,
         },
+        briefreel: {
+          lifetime:  lifetime.briefreel.usage,
+          lifetimeLabel: lifetime.briefreel.label,
+          lifetimeError: lifetime.briefreel.error,
+          today:     today.briefreel.cost,
+          todayCalls: today.briefreel.calls,
+          todayByFeature: today.briefreel.byFeature,
+          last7Days: last7Days.briefreel.cost,
+        },
       },
     });
   } catch (err) {
@@ -664,7 +676,7 @@ router.get('/openrouter/logs', async (req, res) => {
     const cursor = req.query.cursor;
 
     const match = {};
-    if (key === 'main' || key === 'aptitude' || key === 'socials' || key === 'casefiles') match.key = key;
+    if (key === 'main' || key === 'aptitude' || key === 'socials' || key === 'casefiles' || key === 'briefreel') match.key = key;
     if (feature) {
       const list = Array.isArray(feature) ? feature : String(feature).split(',').map(s => s.trim()).filter(Boolean);
       if (list.length) match.feature = { $in: list };
@@ -803,12 +815,34 @@ router.patch('/settings', requireReason, async (req, res) => {
       }
     }
 
+    // featureFlags — tri-state ('off' | 'admin' | 'everyone') keyed by known
+    // flag names. Same Mongoose-Map quirk as cbatGameEnabled: extract here,
+    // apply via mutate+save below.
+    const KNOWN_FLAG_KEYS = new Set(['rsvpReader', 'briefReel']);
+    const VALID_FLAG_VALUES = new Set(['off', 'admin', 'everyone']);
+    if ('featureFlags' in updates) {
+      const v = updates.featureFlags;
+      if (!v || typeof v !== 'object' || Array.isArray(v)) {
+        return res.status(400).json({ message: 'featureFlags must be an object' });
+      }
+      for (const [key, val] of Object.entries(v)) {
+        if (!KNOWN_FLAG_KEYS.has(key)) {
+          return res.status(400).json({ message: `Unknown feature flag "${key}"` });
+        }
+        if (!VALID_FLAG_VALUES.has(val)) {
+          return res.status(400).json({ message: `featureFlags.${key} must be one of off, admin, everyone` });
+        }
+      }
+    }
+
     // Mongoose 9 doesn't reliably replace an existing Map field via
     // `findOneAndUpdate({}, { cbatGameEnabled: {...} })` — the PATCH returns
     // success but stored Map entries don't change. Pull it out, write the rest
     // via findOneAndUpdate, then mutate the Map on the doc and save().
     const cgeUpdate = updates.cbatGameEnabled;
     delete updates.cbatGameEnabled;
+    const ffUpdate = updates.featureFlags;
+    delete updates.featureFlags;
 
     const settings = await AppSettings.findOneAndUpdate({}, updates, { returnDocument: 'after', upsert: true });
 
@@ -826,6 +860,14 @@ router.patch('/settings', requireReason, async (req, res) => {
       // validateModifiedOnly skips legacy bad data in unrelated Map fields
       // (e.g. tutorialContent had a CastError) — we only care that the path
       // we just touched is valid.
+      await settings.save({ validateModifiedOnly: true });
+    }
+
+    if (ffUpdate && typeof ffUpdate === 'object' && !Array.isArray(ffUpdate)) {
+      for (const [k, v] of Object.entries(ffUpdate)) {
+        settings.featureFlags.set(k, v);
+      }
+      settings.markModified('featureFlags');
       await settings.save({ validateModifiedOnly: true });
     }
     // Mixed field tutorialContent needs explicit mark after findOneAndUpdate via set,

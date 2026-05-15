@@ -39,6 +39,7 @@ app.use('/api/tutorials', require('./routes/tutorials'));
 app.use('/api/stripe',        require('./routes/stripe'));
 app.use('/api/aptitude-sync', require('./routes/aptitudeSync'));
 app.use('/api/admin/social', require('./routes/social'));
+app.use('/api/brief-reels',   require('./routes/briefReels'));
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "totalDurationMs": 13500,
+  "sectionBody": "NATO has reaffirmed its Article 5 commitment in light of renewed aggression on the Eastern flank. UK Defence Secretary John Healey confirmed an additional Typhoon detachment to Poland to bolster the air policing mission.",
+  "actors": [
+    { "id": "healey",   "name": "John Healey",     "shortLabel": "UK Def. Sec", "faction": "civilian", "headgear": "civilian-hat" },
+    { "id": "natoCmdr", "name": "NATO Commander",  "shortLabel": "NATO Cdr",    "faction": "ally",     "headgear": "cap-officer" }
+  ],
+  "props": [
+    { "id": "doc",     "type": "document",         "label": "Article 5" },
+    { "id": "typhoon", "type": "aircraft-typhoon" },
+    { "id": "map",     "type": "map",              "label": "Poland" }
+  ],
+  "beats": [
+    {
+      "id": "b1",
+      "textSpan": { "start": 0, "end": 96 },
+      "durationMs": 4000,
+      "actions": [
+        { "type": "enter", "actorId": "natoCmdr", "params": { "position": "centre" } },
+        { "type": "pulse", "actorId": "natoCmdr", "params": { "targetId": "natoCmdr" } },
+        { "type": "show-text",                    "params": { "text": "Article 5" } }
+      ]
+    },
+    {
+      "id": "b2",
+      "textSpan": { "start": 97, "end": 160 },
+      "durationMs": 4500,
+      "actions": [
+        { "type": "enter",     "actorId": "healey", "params": { "position": "right" } },
+        { "type": "show-name", "actorId": "healey" }
+      ]
+    },
+    {
+      "id": "b3",
+      "textSpan": { "start": 161, "end": 230 },
+      "durationMs": 5000,
+      "actions": [
+        { "type": "background",                       "params": { "propId": "map" } },
+        { "type": "pilot", "actorId": "healey",      "params": { "propId": "typhoon" } },
+        { "type": "speak", "actorId": "healey",      "params": { "text": "Detachment to Poland" } }
+      ]
+    }
+  ]
+}
