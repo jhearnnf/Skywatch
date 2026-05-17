@@ -178,12 +178,9 @@ export default function TutorialsEditor({ API, ConfirmModal, Toast, CollapsibleB
 
   return (
     <CollapsibleBox
-      bodyStyle={{ border: '1px solid #172236', background: '#0c1829' }}
-      headerStyle={{ borderColor: '#172236', background: '#102040' }}
-      headerContent={<>
-        <h3 className="font-bold text-slate-800">Tutorials</h3>
-        <p className="text-xs text-slate-400 ml-2">Click a tutorial to edit its steps. Steps with a highlight target are tinted amber.</p>
-      </>}
+      bodyStyle={{ border: '1px solid #243650', background: '#0c1829' }}
+      headerStyle={{ borderColor: '#0d1625' }}
+      headerContent={<h3 className="font-bold text-slate-800">Tutorials</h3>}
     >
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
       {confirmOpen && (
@@ -202,6 +199,7 @@ export default function TutorialsEditor({ API, ConfirmModal, Toast, CollapsibleB
       )}
 
       <div className="px-5 py-3 space-y-2">
+        <p className="text-xs text-slate-400">Click a tutorial to edit its steps. Steps with a highlight target are tinted amber.</p>
         {tutorials.length === 0 && (
           <p className="text-sm text-slate-400 italic py-4">Loading tutorials…</p>
         )}

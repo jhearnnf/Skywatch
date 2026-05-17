@@ -1817,11 +1817,8 @@ function AiPromptsSection({ API }) {
       >
         <div className="flex items-center gap-2">
           <span style={{ color: '#f87171', fontSize: 16 }}>⚠</span>
-          <div>
-            <h3 className="font-bold" style={{ color: '#fca5a5' }}>AI Prompts</h3>
-            <p className="text-xs mt-0.5" style={{ color: '#f87171', opacity: 0.75 }}>Leave a field blank or click Restore to use the hardcoded default</p>
-          </div>
-          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full self-start mt-0.5" style={{ background: '#3d1010', color: '#fca5a5' }}>Critical</span>
+          <h3 className="font-bold" style={{ color: '#fca5a5' }}>AI Prompts</h3>
+          <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: '#3d1010', color: '#fca5a5' }}>Critical</span>
         </div>
         <div className="flex items-center gap-3">
           {dirtyCount > 0 && (
@@ -1844,6 +1841,7 @@ function AiPromptsSection({ API }) {
       </button>
 
       {open && <div className="px-5 py-4 space-y-6">
+        <p className="text-xs" style={{ color: '#f87171', opacity: 0.75 }}>Leave a field blank or click Restore to use the hardcoded default</p>
         {keywordsDraft !== null && (
           <div className="flex items-center justify-between pb-4 border-b" style={{ borderColor: '#3d1010' }}>
             <div className="pr-3">
@@ -3618,8 +3616,8 @@ function ContentTab({ API }) {
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
       {modal && <ConfirmModal title={modal.label} onConfirm={confirmSave} onCancel={() => setModal(null)} />}
 
-      {/* ── Brief Reel review queue ─────────────────────────────────── */}
-      <BriefReelReviewPanel />
+      {/* ── Static Content ────────────────────────────────────────── */}
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Static Content</p>
 
       {/* ── Welcome Email ─────────────────────────────────────────── */}
       <Section title="Welcome Email" collapsible onSave={() => save('Update Welcome Email', ['emailWelcomeEnabled', 'welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
@@ -3674,10 +3672,13 @@ function ContentTab({ API }) {
         CollapsibleBox={CollapsibleBox}
       />
 
-      {/* ── AI Prompts ────────────────────────────────────────────── */}
+      {/* ── Generated Content ─────────────────────────────────────── */}
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Generated Content</p>
+      <BriefReelReviewPanel />
       <AiPromptsSection API={API} />
 
-      {/* ── Socials ──────────────────────────────────────────────── */}
+      {/* ── Marketing ─────────────────────────────────────────────── */}
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Marketing</p>
       <SocialsSection API={API} />
     </div>
   )

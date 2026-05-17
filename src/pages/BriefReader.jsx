@@ -2019,10 +2019,10 @@ export default function BriefReader() {
   // heading, so duplicating it in the page header above would be redundant.
   const isNewsFlashcardHidden = brief?.category === 'News' && settings?.newsFlashcardsEnabled === false
   const mnemonicsEnabled = settings?.mnemonicsClickEnabled === true
-  const rsvpReaderEnabled = settings?.rsvpReaderEnabled === true
-  // Brief Reel — tri-state flag: 'off' | 'admin' | 'everyone'. Admins always
-  // see the affordance (so they can seed the review queue); regular users
-  // only see it when the flag is 'everyone'.
+  // RSVP and Brief Reel — tri-state flags: 'off' | 'admin' | 'everyone'.
+  // Admin-only restricts the affordance to admins for soft-launch testing.
+  const rsvpReaderMode    = settings?.featureFlags?.rsvpReader ?? 'off'
+  const rsvpReaderEnabled = rsvpReaderMode === 'everyone' || (rsvpReaderMode === 'admin' && !!user?.isAdmin)
   const briefReelMode    = settings?.featureFlags?.briefReel ?? 'off'
   const briefReelEnabled = briefReelMode === 'everyone' || (briefReelMode === 'admin' && !!user?.isAdmin)
   // Flashcard view = on the last section. Drives chrome that differs between normal

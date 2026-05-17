@@ -204,7 +204,8 @@ export function AppTutorialProvider({ children }) {
   const mnemonicsEnabled = settings?.mnemonicsClickEnabled === true
   const mnemonicsEnabledRef = useRef(mnemonicsEnabled)
   useEffect(() => { mnemonicsEnabledRef.current = mnemonicsEnabled }, [mnemonicsEnabled])
-  const rsvpEnabled = settings?.rsvpReaderEnabled === true
+  const rsvpReaderMode = settings?.featureFlags?.rsvpReader ?? 'off'
+  const rsvpEnabled = rsvpReaderMode === 'everyone' || (rsvpReaderMode === 'admin' && !!user?.isAdmin)
   const rsvpEnabledRef = useRef(rsvpEnabled)
   useEffect(() => { rsvpEnabledRef.current = rsvpEnabled }, [rsvpEnabled])
   const isGuest = !user?._id

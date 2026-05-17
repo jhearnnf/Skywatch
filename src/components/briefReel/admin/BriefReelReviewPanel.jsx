@@ -10,6 +10,7 @@ import BriefReelPlayer from '../BriefReelPlayer';
 // fresh one with the current section body.
 export default function BriefReelReviewPanel() {
   const { API, apiFetch } = useAuth();
+  const [open,    setOpen]    = useState(false);
   const [rows,    setRows]    = useState([]);
   const [loading, setLoading] = useState(true);
   const [active,  setActive]  = useState(null);  // row being reviewed
@@ -59,49 +60,65 @@ export default function BriefReelReviewPanel() {
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-surface p-4 mb-4">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h3 className="text-sm font-bold text-slate-700">Brief Reel — Review Queue</h3>
-          <p className="text-xs text-slate-400">Pending reels need admin approval before they show to users.</p>
+    <div className="bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full px-5 py-4 border-b border-slate-100 flex items-center justify-between text-left"
+      >
+        <div className="flex items-center gap-2">
+          <h3 className="font-bold text-slate-800">Brief Reel — Review Queue</h3>
+          {rows.length > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold bg-red-600 text-white">
+              {rows.length}
+            </span>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={load}
-          className="text-xs font-semibold text-brand-600 hover:text-brand-700 px-2 py-1 rounded-md hover:bg-brand-50"
-        >
-          Refresh
-        </button>
-      </div>
+        <span className="text-slate-400 text-xs ml-2">{open ? '▲' : '▼'}</span>
+      </button>
 
-      {loading ? (
-        <p className="text-xs text-slate-400 italic py-3">Loading…</p>
-      ) : rows.length === 0 ? (
-        <p className="text-xs text-slate-400 italic py-3">No pending reels.</p>
-      ) : (
-        <ul className="divide-y divide-slate-100">
-          {rows.map(r => (
-            <li key={r._id} className="py-2.5 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-700 truncate">{r.briefTitle}</p>
-                <p className="text-xs text-slate-400 truncate">Section {r.sectionIndex + 1} · {new Date(r.generatedAt).toLocaleString()}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActive(r)}
-                className="text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-md hover:bg-brand-700 shrink-0"
-              >
-                Review
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {open && (
+        <div className="px-5 py-3">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-slate-400">Pending reels need admin approval before they show to users.</p>
+            <button
+              type="button"
+              onClick={load}
+              className="text-xs font-semibold text-brand-600 hover:text-brand-700 px-2 py-1 rounded-md hover:bg-brand-50"
+            >
+              Refresh
+            </button>
+          </div>
 
-      {toast && (
-        <p className={`mt-3 text-xs font-semibold ${toast.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
-          {toast}
-        </p>
+          {loading ? (
+            <p className="text-xs text-slate-400 italic py-3">Loading…</p>
+          ) : rows.length === 0 ? (
+            <p className="text-xs text-slate-400 italic py-3">No pending reels.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {rows.map(r => (
+                <li key={r._id} className="py-2.5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-700 truncate">{r.briefTitle}</p>
+                    <p className="text-xs text-slate-400 truncate">Section {r.sectionIndex + 1} · {new Date(r.generatedAt).toLocaleString()}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActive(r)}
+                    className="text-xs font-semibold bg-brand-600 text-white px-3 py-1.5 rounded-md hover:bg-brand-700 shrink-0"
+                  >
+                    Review
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {toast && (
+            <p className={`mt-3 text-xs font-semibold ${toast.startsWith('✓') ? 'text-emerald-600' : 'text-red-500'}`}>
+              {toast}
+            </p>
+          )}
+        </div>
       )}
 
       <AnimatePresence>
