@@ -82,7 +82,7 @@ export default function RecentCbatScores() {
             return (
               <div key={r._id} className="px-4 py-2.5 text-sm grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center">
                 <span className="truncate text-[#ddeaf8]" title={r.email || ''}>
-                  {r.email || `Agent ${r.agentNumber || '???'}`}
+                  {r.displayName || r.email || `Agent ${r.agentNumber || '???'}`}
                 </span>
                 <Link
                   to={leaderboardPath}

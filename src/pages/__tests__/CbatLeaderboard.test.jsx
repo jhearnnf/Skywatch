@@ -202,6 +202,49 @@ describe('CbatLeaderboard — admin email display', () => {
     expect(myCell.getAttribute('title')).toBe(new Date(achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }))
   })
 
+  it('renders displayName instead of agent number when set', async () => {
+    setupAuth(mockApiFetch({
+      leaderboard: [
+        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', displayName: 'Maverick' },
+        { _id: 'e2', userId: 'u1',    rank: 2, bestScore: 14, bestTime: 31, agentNumber: 'A001', displayName: 'Goose' },
+      ],
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByText('Maverick')).toBeDefined())
+    expect(screen.getByText('Goose (you)')).toBeDefined()
+    expect(screen.queryByText(/Agent A999/)).toBeNull()
+    expect(screen.queryByText(/Agent A001/)).toBeNull()
+  })
+
+  it('displayName takes precedence over admin email', async () => {
+    setupAuth(mockApiFetch({
+      leaderboard: [
+        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', displayName: 'Maverick', email: 'ace@skywatch.test' },
+      ],
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByText('Maverick')).toBeDefined())
+    expect(screen.queryByText('ace@skywatch.test')).toBeNull()
+  })
+
+  it('renders displayName on the myBest row', async () => {
+    setupAuth(mockApiFetch({
+      leaderboard: [
+        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999' },
+      ],
+      myBest: { userId: 'u1', rank: 42, bestScore: 8, bestTime: 55, agentNumber: 'A001', displayName: 'Slider' },
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByText('#42')).toBeDefined())
+    expect(screen.getByText('Slider (you)')).toBeDefined()
+  })
+
   it('does NOT render a tooltip when achievedAt is absent (non-admin view)', async () => {
     setupAuth(mockApiFetch({
       leaderboard: [

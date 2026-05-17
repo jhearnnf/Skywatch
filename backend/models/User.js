@@ -23,6 +23,14 @@ const userSchema = new mongoose.Schema(
 
     agentNumber: { type: String, unique: true, sparse: true }, // 7-digit, auto-generated
 
+    // User-chosen display name shown on profile + every public leaderboard.
+    // displayNameLower mirrors displayName in lowercase to enforce
+    // case-insensitive uniqueness via a sparse unique index.
+    // displayNameChangedAt drives the 30-day cooldown between changes.
+    displayName:          { type: String, trim: true, minlength: 3, maxlength: 20, default: null },
+    displayNameLower:     { type: String, default: null },
+    displayNameChangedAt: { type: Date,   default: null },
+
     difficultySetting: { type: String, enum: DIFFICULTY_LEVELS, default: 'easy' },
 
     isAdmin:  { type: Boolean, default: false },
@@ -116,6 +124,13 @@ const userSchema = new mongoose.Schema(
     },
   },
   { timestamps: true }
+);
+
+// Unique index on displayNameLower that only applies when the field is a
+// string — null/missing values are ignored, so unset users don't collide.
+userSchema.index(
+  { displayNameLower: 1 },
+  { unique: true, partialFilterExpression: { displayNameLower: { $type: 'string' } } }
 );
 
 // ── Hooks ────────────────────────────────────────────────────────────────────

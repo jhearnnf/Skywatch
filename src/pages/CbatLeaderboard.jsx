@@ -209,7 +209,7 @@ export default function CbatLeaderboard() {
                         className={`truncate ${achievedAtTitle ? 'cursor-help' : ''} ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}
                         {...(achievedAtTitle ? { title: achievedAtTitle } : {})}
                       >
-                        {entry.email ? entry.email : `Agent ${entry.agentNumber || '???'}`}{isMe ? ' (you)' : ''}
+                        {entry.displayName || (entry.email ? entry.email : `Agent ${entry.agentNumber || '???'}`)}{isMe ? ' (you)' : ''}
                       </span>
                       <span className="text-right font-mono font-bold text-brand-600">
                         {cfg.formatScore(entry.bestScore)}
@@ -236,7 +236,7 @@ export default function CbatLeaderboard() {
                     <span
                       className={`truncate text-brand-600 font-bold ${myBest.achievedAt ? 'cursor-help' : ''}`}
                       {...(myBest.achievedAt ? { title: new Date(myBest.achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) } : {})}
-                    >{myBest.email ? myBest.email : `Agent ${myBest.agentNumber || '???'}`} (you)</span>
+                    >{myBest.displayName || (myBest.email ? myBest.email : `Agent ${myBest.agentNumber || '???'}`)} (you)</span>
                     <span className="text-right font-mono font-bold text-brand-600">
                       {cfg.formatScore(myBest.bestScore)}
                       {gameKey === 'plane-turn' && mode === '3d' && (

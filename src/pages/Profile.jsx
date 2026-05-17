@@ -69,6 +69,10 @@ export default function Profile() {
   const [statsLoading, setStatsLoading] = useState(!!user)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
   const [diffBusy,    setDiffBusy]    = useState(false)
+  const [nameEditing, setNameEditing] = useState(false)
+  const [nameDraft,   setNameDraft]   = useState('')
+  const [nameBusy,    setNameBusy]    = useState(false)
+  const [nameError,   setNameError]   = useState('')
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
   const [masterVol,   setMasterVol]   = useState(() => isIOS ? 100 : getMasterVolume())
   const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'settings' | 'tutorials'
@@ -116,6 +120,49 @@ export default function Profile() {
       .catch(() => {})
       .finally(() => setStatsLoading(false))
   }, [API, user])
+
+  const COOLDOWN_DAYS = 30
+  const COOLDOWN_MS   = COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+  const nameChangedAt  = user?.displayNameChangedAt ? new Date(user.displayNameChangedAt).getTime() : null
+  const nameCooldownMs = nameChangedAt ? Math.max(0, COOLDOWN_MS - (Date.now() - nameChangedAt)) : 0
+  const nameCooldownDays = Math.ceil(nameCooldownMs / (24 * 60 * 60 * 1000))
+  const nameOnCooldown   = nameCooldownMs > 0
+
+  const startNameEdit = () => {
+    setNameDraft(user?.displayName ?? '')
+    setNameError('')
+    setNameEditing(true)
+  }
+  const cancelNameEdit = () => {
+    setNameEditing(false)
+    setNameError('')
+    setNameDraft('')
+  }
+  const saveDisplayName = async (clear = false) => {
+    if (nameBusy || nameOnCooldown) return
+    setNameBusy(true)
+    setNameError('')
+    try {
+      const body = clear ? { displayName: null } : { displayName: nameDraft.trim() }
+      const res = await apiFetch(`${API}/api/users/me/display-name`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setNameError(data?.message || 'Could not update display name')
+        return
+      }
+      if (data?.data?.user) setUser(data.data.user)
+      setNameEditing(false)
+      setNameDraft('')
+    } catch {
+      setNameError('Network error — please try again')
+    } finally {
+      setNameBusy(false)
+    }
+  }
 
   const changeDifficulty = async (d) => {
     if (diffBusy || d === user?.difficultySetting) return
@@ -244,6 +291,90 @@ export default function Profile() {
       {/* Settings tab */}
       {tab === 'settings' && user && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+
+          {/* Display Name */}
+          <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Display Name</p>
+
+            {!nameEditing ? (
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  {user.displayName ? (
+                    <p className="text-sm font-bold text-slate-700 truncate">{user.displayName}</p>
+                  ) : (
+                    <p className="text-sm text-slate-400 italic">Set a display name</p>
+                  )}
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Shown on leaderboards and your profile.
+                  </p>
+                </div>
+                <button
+                  onClick={startNameEdit}
+                  disabled={nameOnCooldown}
+                  className={`text-xs font-bold px-3 py-1.5 rounded-xl shrink-0 transition-colors
+                    ${nameOnCooldown
+                      ? 'bg-slate-50 border border-slate-200 text-slate-400 cursor-not-allowed'
+                      : 'bg-brand-50 text-brand-700 hover:bg-brand-100'
+                    }`}
+                  title={nameOnCooldown ? `Available in ${nameCooldownDays} day${nameCooldownDays === 1 ? '' : 's'}` : undefined}
+                >
+                  {user.displayName ? 'Change' : 'Set'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={nameDraft}
+                  onChange={e => { setNameDraft(e.target.value); if (nameError) setNameError('') }}
+                  maxLength={20}
+                  placeholder="3–20 chars · letters, numbers, _ and -"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-700 focus:outline-none focus:border-brand-400"
+                  autoFocus
+                  disabled={nameBusy}
+                />
+                {nameError && (
+                  <p className="text-xs text-rose-600 font-semibold">{nameError}</p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => saveDisplayName(false)}
+                    disabled={nameBusy || !nameDraft.trim()}
+                    className="flex-1 py-2 rounded-xl text-sm font-bold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {nameBusy ? 'Saving…' : 'Save'}
+                  </button>
+                  {user.displayName && (
+                    <button
+                      onClick={() => saveDisplayName(true)}
+                      disabled={nameBusy}
+                      className="py-2 px-3 rounded-xl text-sm font-bold bg-slate-50 border border-slate-200 text-slate-500 hover:border-rose-300 hover:text-rose-600 disabled:opacity-50 transition-colors"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    onClick={cancelNameEdit}
+                    disabled={nameBusy}
+                    className="py-2 px-3 rounded-xl text-sm font-bold bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300 disabled:opacity-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {nameOnCooldown && !nameEditing && (
+              <p className="text-[11px] text-slate-400 mt-2">
+                Next change available in {nameCooldownDays} day{nameCooldownDays === 1 ? '' : 's'}.
+              </p>
+            )}
+            {!nameOnCooldown && user.displayName && !nameEditing && (
+              <p className="text-[11px] text-slate-400 mt-2">
+                You can change your name once every {COOLDOWN_DAYS} days.
+              </p>
+            )}
+          </div>
 
           {/* Difficulty */}
           <div data-tutorial-target="profile-difficulty" className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
@@ -388,7 +519,7 @@ export default function Profile() {
                     {pos}
                   </span>
                   <span className={`flex-1 text-sm font-semibold ${isCurrent ? 'text-brand-700' : 'text-slate-800'}`}>
-                    Agent {agent.agentNumber} {isCurrent && <span className="text-xs text-brand-500">(You)</span>}
+                    {agent.displayName || `Agent ${agent.agentNumber}`} {isCurrent && <span className="text-xs text-brand-500">(You)</span>}
                   </span>
                   <span className="text-sm font-bold text-white"><span className="star-silver">⭐</span> {agent.totalAirstars.toLocaleString()}</span>
                 </li>
@@ -409,7 +540,7 @@ export default function Profile() {
                     —
                   </span>
                   <span className="flex-1 text-sm font-semibold text-brand-700">
-                    Agent {user.agentNumber} <span className="text-xs text-brand-500">(You)</span>
+                    {user.displayName || `Agent ${user.agentNumber}`} <span className="text-xs text-brand-500">(You)</span>
                   </span>
                   <span className="text-sm font-bold text-white"><span className="star-silver">⭐</span> {(user.totalAirstars ?? 0).toLocaleString()}</span>
                 </li>

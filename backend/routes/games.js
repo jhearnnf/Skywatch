@@ -2507,6 +2507,7 @@ async function cbatLeaderboard(req, res, gameKey) {
           _id: 1,
           userId: 1,
           agentNumber: '$user.agentNumber',
+          displayName: '$user.displayName',
           ...(isAdmin ? { email: '$user.email', achievedAt: '$createdAt' } : {}),
           bestScore: `$${cfg.primaryField}`,
           bestTime: '$totalTime',
@@ -2557,6 +2558,7 @@ async function cbatLeaderboard(req, res, gameKey) {
             _id: best._id,
             userId: req.user._id,
             agentNumber: req.user.agentNumber,
+            displayName: req.user.displayName,
             ...(isAdmin ? { email: req.user.email, achievedAt: best.createdAt } : {}),
             bestScore: scoreVal,
             bestTime: timeVal,
@@ -2640,7 +2642,7 @@ router.get('/cbat/recent', protect, async (req, res) => {
       .slice(0, limit);
 
     const userIds = [...new Set(merged.map(r => String(r.session.userId)))];
-    const users = await User.find({ _id: { $in: userIds } }).select('email agentNumber').lean();
+    const users = await User.find({ _id: { $in: userIds } }).select('email agentNumber displayName').lean();
     const userMap = Object.fromEntries(users.map(u => [String(u._id), u]));
 
     const recent = await Promise.all(merged.map(async ({ session, gameKey, cfg }) => {
@@ -2672,6 +2674,7 @@ router.get('/cbat/recent', protect, async (req, res) => {
         gameLabel:   cfg.label,
         email:       u?.email || null,
         agentNumber: u?.agentNumber || null,
+        displayName: u?.displayName || null,
         score:       scoreVal,
         time:        timeVal,
         rank:        countBetter + 1,

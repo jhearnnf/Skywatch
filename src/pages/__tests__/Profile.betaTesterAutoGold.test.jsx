@@ -123,7 +123,7 @@ describe('Profile — betaTesterAutoGold hides subscription card', () => {
     render(<Profile />)
     openSettingsTab()
     // Wait for any async effects to settle before asserting absence
-    await waitFor(() => expect(screen.getByText('Agent Test')).toBeDefined())
+    await waitFor(() => expect(screen.getAllByText('Agent Test').length).toBeGreaterThan(0))
     expect(screen.queryByText('Subscription')).toBeNull()
     expect(screen.queryByText('Current Plan')).toBeNull()
   })
@@ -133,7 +133,7 @@ describe('Profile — betaTesterAutoGold hides subscription card', () => {
     setupSettings({ betaTesterAutoGold: true })
     render(<Profile />)
     openSettingsTab()
-    await waitFor(() => expect(screen.getByText('Agent Test')).toBeDefined())
+    await waitFor(() => expect(screen.getAllByText('Agent Test').length).toBeGreaterThan(0))
     expect(screen.queryByText('Subscription')).toBeNull()
   })
 })

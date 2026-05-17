@@ -18,6 +18,7 @@ const Rank = require('../models/Rank');
 const AirstarLog = require('../models/AirstarLog');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { withSelectedBadge } = require('../utils/selectedBadge');
+const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 
 // GET /api/users/stats — current user's stats for profile page
 router.get('/stats', protect, async (req, res) => {
@@ -117,11 +118,65 @@ router.patch('/me/difficulty', protect, async (req, res) => {
   }
 });
 
+// PATCH /api/users/me/display-name — set, change, or clear the user's display name.
+// Null/empty body clears it. Enforces validation, case-insensitive uniqueness,
+// and a 30-day cooldown between changes (first-ever set is free).
+router.patch('/me/display-name', protect, async (req, res) => {
+  try {
+    const { displayName } = req.body ?? {};
+    const result = validateDisplayName(displayName, { isAdmin: !!req.user?.isAdmin });
+    if (!result.ok) {
+      return res.status(400).json({ status: 'error', message: result.reason });
+    }
+
+    const remaining = cooldownRemaining(req.user.displayNameChangedAt);
+    if (remaining > 0) {
+      return res.status(429).json({
+        status: 'error',
+        message: `You can change your display name once every ${COOLDOWN_DAYS} days.`,
+        retryAfterMs: remaining,
+      });
+    }
+
+    const nextValue = result.value; // already null or trimmed string
+    const nextLower = nextValue ? nextValue.toLowerCase() : null;
+
+    // Case-insensitive uniqueness — only when setting a non-null value.
+    if (nextLower) {
+      const existing = await User.findOne({
+        displayNameLower: nextLower,
+        _id: { $ne: req.user._id },
+      }).select('_id').lean();
+      if (existing) {
+        return res.status(409).json({ status: 'error', message: 'That display name is already taken.' });
+      }
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        displayName:          nextValue,
+        displayNameLower:     nextLower,
+        displayNameChangedAt: new Date(),
+      },
+      { returnDocument: 'after' }
+    ).populate('rank');
+    const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
+    res.json({ status: 'success', data: { user } });
+  } catch (err) {
+    // Duplicate-key from a race on the unique index — surface as 409.
+    if (err && err.code === 11000) {
+      return res.status(409).json({ status: 'error', message: 'That display name is already taken.' });
+    }
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/users/leaderboard — top 20 agents by total airstars (public)
 router.get('/leaderboard', async (req, res) => {
   try {
     const agents = await User.find({})
-      .select('agentNumber totalAirstars')
+      .select('agentNumber displayName totalAirstars')
       .sort({ totalAirstars: -1 })
       .limit(20);
 
