@@ -2670,6 +2670,7 @@ router.get('/cbat/recent', protect, async (req, res) => {
       const u = userMap[String(session.userId)];
       return {
         _id:         session._id,
+        userId:      String(session.userId),
         gameKey,
         gameLabel:   cfg.label,
         ...(isAdmin ? { email: u?.email || null } : {}),

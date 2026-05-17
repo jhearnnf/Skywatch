@@ -25,7 +25,7 @@ const EMOJI_BY_KEY = {
 }
 
 export default function RecentCbatScores() {
-  const { apiFetch, API } = useAuth()
+  const { apiFetch, API, user } = useAuth()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -79,10 +79,16 @@ export default function RecentCbatScores() {
             const title = r.gameLabel || r.gameKey
             const leaderboardPath = `/cbat/${r.gameKey}/leaderboard`
             const rankBadge = r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : `#${r.rank}`
+            const isMe = user && r.userId && r.userId === user._id
             return (
-              <div key={r._id} className="px-4 py-2.5 text-sm grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center">
-                <span className="truncate text-[#ddeaf8]" title={r.email || ''}>
-                  {r.displayName || r.email || `Agent ${r.agentNumber || '???'}`}
+              <div
+                key={r._id}
+                className={`px-4 py-2.5 text-sm grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center ${
+                  isMe ? 'bg-brand-600/10 border-l-2 border-l-brand-400' : ''
+                }`}
+              >
+                <span className={`truncate ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`} title={r.email || ''}>
+                  {r.displayName || r.email || `Agent ${r.agentNumber || '???'}`}{isMe ? ' (you)' : ''}
                 </span>
                 <Link
                   to={leaderboardPath}

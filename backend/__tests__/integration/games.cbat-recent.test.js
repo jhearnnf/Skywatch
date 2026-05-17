@@ -51,6 +51,19 @@ describe('GET /api/games/cbat/recent — visibility', () => {
     expect(row.agentNumber).toBe('3000002');
   });
 
+  it('includes userId on every row so the client can highlight the current user', async () => {
+    const scorer = await createUser({ agentNumber: '3000005' });
+    const scorerCookie = authCookie(scorer._id);
+    await request(app).post(PLANE_TURN_RESULT).set('Cookie', scorerCookie)
+      .send({ totalRotations: 30, totalTime: 25 });
+
+    const res = await request(app).get(ROUTE).set('Cookie', scorerCookie);
+    expect(res.status).toBe(200);
+    const row = res.body.data.recent.find(r => r.agentNumber === '3000005');
+    expect(row).toBeTruthy();
+    expect(row.userId).toBe(String(scorer._id));
+  });
+
   it('includes email for admins', async () => {
     const scorer = await createUser({ email: 'scorer@test.com', agentNumber: '3000004' });
     const scorerCookie = authCookie(scorer._id);
