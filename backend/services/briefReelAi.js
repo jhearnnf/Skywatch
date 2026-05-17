@@ -135,6 +135,7 @@ Rules:
 5. THE PRIMARY GOAL IS INFORMATION RETENTION. Every numeric fact in the section MUST become a show-stat. Every specific date or year MUST become a show-date. Every important named concept (squadron name, unit, treaty, operation, place, decision) should become a show-text. Spectacle (salute, argue, pilot, throw-up) is decoration only — it should never replace a fact.
 6. CALLOUTS ARE TV-STYLE — they appear ONE AT A TIME, dominate the screen briefly, then dismiss. Do not put more than ONE callout (show-text / show-stat / show-date) in a single beat. If a beat needs multiple facts, split it into separate beats so each callout gets its own moment. The viewer cannot read two callouts at once.
 7. CALLOUT TEXT MUST STAND ALONE. A callout the viewer sees out of context should still make sense — "AI air force" is too short, "AI-enabled air force originally planned for 2030s" is right. For stats: "+12%" without a label is meaningless, "+12%" with label "YoY RAF recruitment" is the right shape.
+7b. NO REDUNDANT CALLOUTS. Each callout in the reel must surface a DIFFERENT idea. If the section keeps returning to the same concept (e.g. AI mentioned in three sentences), pick ONE callout to anchor that concept and use other devices for the remaining sentences — a speak bubble from the actor, a flyby, an argue gesture, a pulse, or a show-stat/show-date on a related concrete number. Two callouts about "AI systems" / "AI uncrewed aircraft" / "AI-enabled air force" read as a stutter. Distil to one strong AI callout, then move on. The recap at the end will show every callout side-by-side, so any redundancy compounds visibly.
 8. Within a beat, prefer 2–4 actions: at most ONE callout, plus one or two character actions (enter / pilot / point / pulse), and optionally a speak. Avoid stuffing 5+ actions into one beat.
 9. RANK: whenever an RAF actor's TITLE is given in the source text (e.g. "Air Chief Marshal", "Wing Commander", "Sergeant"), set their numeric \`rank\` field using the mapping above. This drives the visible insignia on the hat — leaving it off means no insignia is drawn. Civilian/ally/adversary actors must NOT have a rank. If an RAF actor has no title in the source text (e.g. "a Typhoon pilot"), choose a sensible rank from the role: 11 (Flt Lt) for typical pilots, 14 (Gp Capt) for senior commanders, 12 (Sqn Ldr) for squadron leadership, 5 (Sgt) for ground-crew NCOs.
 10. Use show-name on the first beat that mentions an actor by full name. Do not repeat show-name for the same actor.
@@ -288,6 +289,13 @@ Return ONLY the JSON timeline.`;
   // word; drop it if no beat does.
   realignFlybys(parsed, sectionBody);
 
+  // The AI also tends to spawn multiple callouts that all paraphrase the same
+  // concept (e.g. three "AI systems" texts) when the section body returns to
+  // the concept across consecutive sentences. Keep the first callout for each
+  // concept cluster; later near-duplicates are dropped so the reel — and the
+  // end-of-reel recap grid — show distinct ideas instead of a stutter.
+  dedupCallouts(parsed);
+
   return parsed;
 }
 
@@ -295,6 +303,81 @@ Return ONLY the JSON timeline.`;
 // of sectionBody covered by each beat's textSpan. Anchored to word boundaries
 // so "craftsman" doesn't match "aircraft".
 const AIRCRAFT_KEYWORD_RE = /\b(?:aircraft|jet|jets|drone|drones|fighter|fighters|bomber|bombers|helicopter|helicopters|sortie|sorties|scramble|scrambled|intercept|intercepted|fly|flying|flown|flew|patrol|patrolled|patrolling|squadron|airframe|airframes|typhoon|f-?35|f35|hawk|a400m|c-?17|c17|chinook|wedgetail|poseidon|tu-?95|tu95|uav|uavs)\b/i;
+
+// Tokens shared by nearly every callout — they don't tell us anything about
+// the concept being expressed, so we strip them before measuring overlap.
+const CALLOUT_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'over',
+  'must', 'will', 'now', 'are', 'has', 'have', 'their', 'than', 'about',
+  'within', 'without', 'after', 'before', 'between', 'against', 'across',
+  'raf', 'uk', 'force', 'forces', 'system', 'systems', // generic to the domain
+]);
+
+function calloutTokens(action) {
+  const p = action.params || {};
+  const blob = [p.text, p.value, p.label, p.date].filter(Boolean).join(' ').toLowerCase();
+  // 2-char minimum so concept anchors like "ai", "uk", "5g" survive — they're
+  // the words that drive the perception of redundancy ("AI" appearing in 3
+  // back-to-back callouts is exactly what we're trying to detect).
+  const words = blob.match(/[a-z0-9]{2,}/g) || [];
+  return new Set(words.filter(w => !CALLOUT_STOPWORDS.has(w)));
+}
+
+// Containment, not Jaccard: overlap / size-of-smaller-set. Two callouts
+// whose smaller-set tokens are entirely covered by the larger set read as
+// "saying the same thing", even if the larger set has unique extras.
+// Jaccard underweights this because the union grows with the longer text.
+function containment(a, b) {
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersect = 0;
+  for (const t of a) if (b.has(t)) intersect++;
+  return intersect / Math.min(a.size, b.size);
+}
+
+// Drop callout actions whose remaining-token containment against an earlier
+// callout exceeds the threshold. The beat keeps its non-callout actions
+// (enter / speak / pulse / flyby) so character motion still plays.
+// Crossout callouts are never dropped — they're paired with a preceding
+// show-* action by beat position, and dropping one half breaks the pair.
+function dedupCallouts(timeline) {
+  const CALLOUT_KINDS = new Set(['show-text', 'show-stat', 'show-date']);
+  const SIMILARITY_THRESHOLD = 0.5;
+  const seen = [];
+  for (const beat of timeline.beats) {
+    const hasCrossout = beat.actions.some(a => a.type === 'crossout');
+    const survivors = [];
+    for (const act of beat.actions) {
+      if (!CALLOUT_KINDS.has(act.type)) { survivors.push(act); continue; }
+      if (hasCrossout) { survivors.push(act); continue; } // protect crossout pair
+      const tokens = calloutTokens(act);
+      if (tokens.size === 0) { survivors.push(act); continue; }
+      const dup = seen.some(prev => containment(prev, tokens) >= SIMILARITY_THRESHOLD);
+      if (dup) continue; // drop this near-duplicate callout
+      seen.push(tokens);
+      survivors.push(act);
+    }
+    beat.actions = survivors;
+  }
+  // If dedup emptied a beat, merge it into the previous beat so the player
+  // doesn't fire clearBeatScoped on a silent slot and wipe the screen for
+  // dead air. The merged beat absorbs the orphan's textSpan and durationMs.
+  for (let i = timeline.beats.length - 1; i > 0; i--) {
+    const beat = timeline.beats[i];
+    if (beat.actions.length === 0) {
+      const prev = timeline.beats[i - 1];
+      prev.textSpan = { start: prev.textSpan.start, end: beat.textSpan.end };
+      prev.durationMs = Math.min(prev.durationMs + beat.durationMs, 10000);
+      timeline.beats.splice(i, 1);
+    }
+  }
+  // Edge case: first beat was the empty one. Absorb forward into the next.
+  if (timeline.beats.length > 1 && timeline.beats[0].actions.length === 0) {
+    const next = timeline.beats[1];
+    next.textSpan = { start: timeline.beats[0].textSpan.start, end: next.textSpan.end };
+    next.durationMs = Math.min(timeline.beats[0].durationMs + next.durationMs, 10000);
+    timeline.beats.shift();
+  }
+}
 
 function realignFlybys(timeline, body) {
   if (!body) return;
@@ -406,6 +489,7 @@ module.exports = {
   parseTimelineJson,
   adjustBeatDurations,
   realignFlybys,
+  dedupCallouts,
   FACTIONS,
   HEADGEAR,
   PROP_TYPES,
