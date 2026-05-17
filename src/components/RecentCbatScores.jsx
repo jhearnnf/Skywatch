@@ -56,7 +56,7 @@ export default function RecentCbatScores() {
     <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-[#1a3a5c] flex items-center justify-between">
         <p className="text-[11px] font-extrabold tracking-wider uppercase text-slate-500">Recent Scores</p>
-        <span className="text-[10px] text-slate-500">Admin · auto-refreshing</span>
+        <span className="text-[10px] text-slate-500">Auto-refreshing</span>
       </div>
 
       {loading ? (

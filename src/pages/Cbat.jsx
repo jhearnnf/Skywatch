@@ -82,14 +82,14 @@ export default function Cbat() {
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
   const isGameEnabled = (key) => cbatGameEnabled[key] !== false
 
-  // Admins get a Recent Scores side column on lg+ — widen the page shell so
-  // the existing 2-column game grid keeps its natural width instead of being
-  // squeezed by the new column. Mirror of the cbat-dpt-fullwidth pattern.
+  // Signed-in users get a Recent Scores side column on lg+ — widen the page
+  // shell so the existing 2-column game grid keeps its natural width instead
+  // of being squeezed by the new column. Mirror of the cbat-dpt-fullwidth pattern.
   useEffect(() => {
-    if (!user?.isAdmin) return
-    document.body.classList.add('cbat-admin-wide')
-    return () => document.body.classList.remove('cbat-admin-wide')
-  }, [user?.isAdmin])
+    if (!user) return
+    document.body.classList.add('cbat-recent-wide')
+    return () => document.body.classList.remove('cbat-recent-wide')
+  }, [user])
 
   useEffect(() => {
     let tid
@@ -200,8 +200,8 @@ export default function Cbat() {
 
         </div>
 
-        {/* Admin-only recent scores side column — desktop (lg+) only */}
-        {user?.isAdmin && (
+        {/* Recent scores side column — desktop (lg+) only, requires sign-in */}
+        {user && (
           <aside className="hidden lg:block lg:w-[340px] lg:shrink-0 lg:sticky lg:top-4">
             <RecentCbatScores />
           </aside>

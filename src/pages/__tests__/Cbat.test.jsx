@@ -28,7 +28,10 @@ const GAMES_WITHOUT_IMAGES = CBAT_GAMES.filter(g => g.image === null)
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function renderWithUser(user = { _id: '1', name: 'Test' }) {
-  mockUseAuth.mockReturnValue({ user })
+  // RecentCbatScores side column renders for any signed-in user; stub apiFetch
+  // so the polling loop has a no-op fetch to call.
+  const apiFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'success', data: { recent: [] } }) })
+  mockUseAuth.mockReturnValue({ user, API: '', apiFetch })
   return render(<Cbat />)
 }
 

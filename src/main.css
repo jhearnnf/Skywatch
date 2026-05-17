@@ -247,11 +247,11 @@ body.cbat-dpt-fullwidth .app-shell-content {
   padding-right: 0.75rem;
 }
 
-/* CBAT picker for admins: widen the main content past max-w-3xl on desktop
-   so the Recent Scores side column doesn't squeeze the two-column game grid.
-   Toggled from src/pages/Cbat.jsx for admin users only. */
+/* CBAT picker: widen the main content past max-w-3xl on desktop so the
+   Recent Scores side column doesn't squeeze the two-column game grid.
+   Toggled from src/pages/Cbat.jsx for any signed-in user. */
 @media (min-width: 1024px) {
-  body.cbat-admin-wide .app-shell-content {
+  body.cbat-recent-wide .app-shell-content {
     max-width: none;
     padding-left: 1rem;
     padding-right: 1rem;

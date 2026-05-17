@@ -2617,12 +2617,12 @@ async function cbatPersonalBest(req, res, gameKey) {
   }
 }
 
-// GET /api/games/cbat/recent — admin-only feed of latest scores across every CBAT game.
+// GET /api/games/cbat/recent — public-to-signed-in feed of latest scores across every CBAT game.
 // Each row's `rank` is computed against the same game's real (non-padded) sessions, so
-// reuses the same comparator semantics as the per-game leaderboards.
+// reuses the same comparator semantics as the per-game leaderboards. Emails are only
+// surfaced to admins; everyone else sees displayName / agentNumber.
 router.get('/cbat/recent', protect, async (req, res) => {
-  if (!req.user?.isAdmin) return res.status(403).json({ message: 'Admin access required' });
-
+  const isAdmin = !!req.user?.isAdmin;
   const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
 
   try {
@@ -2672,7 +2672,7 @@ router.get('/cbat/recent', protect, async (req, res) => {
         _id:         session._id,
         gameKey,
         gameLabel:   cfg.label,
-        email:       u?.email || null,
+        ...(isAdmin ? { email: u?.email || null } : {}),
         agentNumber: u?.agentNumber || null,
         displayName: u?.displayName || null,
         score:       scoreVal,
