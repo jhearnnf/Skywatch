@@ -43,7 +43,7 @@ const TITLE_BY_KEY = {
   instruments:       'READ THE COCKPIT',
   'plane-turn':      'PLAN YOUR TURN',
   flag:              'PUSH THE LIMITS',
-  'visualisation-2d':'WELD THE SHAPES',
+  'visualisation-2d':'FIT THE PIECES',
   dpt:               'VECTOR THE FIGHTERS',
   act:               'TUNE YOUR EAR',
 }
