@@ -1,6 +1,7 @@
 import { Suspense, Component, useMemo, useRef, useEffect, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
+import * as THREE from 'three';
 
 // FlybyOverlay — short 3D flyby of two RAF airframes across the brief-reel
 // stage. Mounts when world.flyby is non-null (set by a 'flyby' action) and
@@ -32,9 +33,17 @@ class ErrorCatcher extends Component {
 
 function FlybyPlane({ url, startX, endX, y, z, scale, bank, durationMs = FLY_DURATION_MS }) {
   const { scene } = useGLTF(url);
-  // Clone the scene once per instance so two flybys of the same airframe
-  // don't share a single Object3D and overwrite each other's position.
-  const cloned = useMemo(() => scene.clone(true), [scene]);
+  // Clone + recentre the GLB so the geometric centre of the model lines up
+  // with the group's position. Some of the project's GLBs have their origin
+  // far from the visible mesh (wingtip / nose anchor), which previously made
+  // the plane sit off the camera frustum and read as a 1-px speck. Same
+  // trick AircraftTopDown uses.
+  const { cloned, offset } = useMemo(() => {
+    const c = scene.clone(true);
+    const box = new THREE.Box3().setFromObject(c);
+    const ctr = box.getCenter(new THREE.Vector3());
+    return { cloned: c, offset: [-ctr.x, -ctr.y, -ctr.z] };
+  }, [scene]);
   const groupRef = useRef();
   const t0Ref = useRef(null);
 
@@ -51,14 +60,15 @@ function FlybyPlane({ url, startX, endX, y, z, scale, bank, durationMs = FLY_DUR
     groupRef.current.position.x = startX + (endX - startX) * eased;
   });
 
-  // Face the direction of travel. GLB models in /public/models/ are oriented
-  // along +X by default (the CBAT 3D scenes assume this); flip yaw by 180°
-  // when flying left so the nose still leads.
-  const yaw = endX < startX ? Math.PI : 0;
+  // Models in /public/models/ are authored top-down with the nose along
+  // local -x (matches DptAircraftLayer's headingToYRot convention). So when
+  // flying in the +x direction we need a 180° yaw so the nose leads; flying
+  // in -x leaves the model facing its natural -x heading.
+  const yaw = endX > startX ? Math.PI : 0;
 
   return (
     <group ref={groupRef} position={[startX, y, z]} rotation={[0, yaw, bank]}>
-      <primitive object={cloned} scale={[scale, scale, scale]} />
+      <primitive object={cloned} position={offset} scale={[scale, scale, scale]} />
     </group>
   );
 }
@@ -83,7 +93,7 @@ export default function FlybyOverlay({ aircraft, onError }) {
       data-brief-reel-flyby
     >
       <Canvas
-        camera={{ position: [0, 4, 55], fov: 38, near: 0.1, far: 300 }}
+        camera={{ position: [0, 1, 22], fov: 42, near: 0.1, far: 200 }}
         gl={{ alpha: true, antialias: true }}
         style={{ width: '100%', height: '100%', background: 'transparent' }}
       >
@@ -93,21 +103,23 @@ export default function FlybyOverlay({ aircraft, onError }) {
         <pointLight position={[ 8, -4, 8]}  intensity={0.7} color="#f5c542" />
         <Suspense fallback={null}>
           <ErrorCatcher onError={onError}>
-            {/* Upper lane: left-to-right, slightly closer to camera */}
+            {/* Upper lane: left-to-right, slightly closer to camera. Flight
+                range is generous so the plane enters from well off-screen,
+                crosses the visible frame, and exits cleanly. */}
             <FlybyPlane
               url={urlA}
-              startX={-55} endX={55}
-              y={6}  z={-2}
-              scale={0.55}
+              startX={-30} endX={30}
+              y={3}  z={-2}
+              scale={3.6}
               bank={0.22}
             />
             {/* Lower lane: right-to-left, slightly further so the two read as
                 distinct depth planes rather than a mirrored pair */}
             <FlybyPlane
               url={urlB}
-              startX={55} endX={-55}
-              y={-2} z={-12}
-              scale={0.50}
+              startX={30} endX={-30}
+              y={-3} z={-7}
+              scale={3.2}
               bank={-0.18}
             />
           </ErrorCatcher>

@@ -60,7 +60,7 @@ export default function AptitudeSyncScene({ runKey }) {
       />
 
       <div
-        className="relative rounded-lg px-5 py-4 mt-12 mx-4"
+        className="relative rounded-lg px-5 py-4 mt-16 sm:mt-24 mx-4"
         style={{
           width: '100%',
           maxWidth: 460,

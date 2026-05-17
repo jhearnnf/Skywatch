@@ -66,7 +66,7 @@ export default function BattleOfOrderScene({ runKey }) {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="relative z-10 text-center px-6 pt-16"
+            className="relative z-10 text-center px-6 pt-16 sm:pt-24"
           >
             <p className="intel-mono mb-3" style={{ fontSize: 9, color: '#a78bfa', letterSpacing: '0.18em', fontWeight: 700, textTransform: 'uppercase' }}>
               {phase === 'pick' ? 'Challenge Selected' : 'Selecting Challenge'}

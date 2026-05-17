@@ -117,7 +117,7 @@ export default function WhosAtAircraftScene({ runKey }) {
             style={{
               width: 300, maxWidth: '90%',
               padding: isMobile ? 10 : 16,
-              marginTop: isMobile ? 22 : 30,
+              marginTop: isMobile ? 60 : 80,
               position: 'relative', zIndex: 5,
             }}
           >
@@ -215,7 +215,7 @@ export default function WhosAtAircraftScene({ runKey }) {
             style={{
               width: 300, maxWidth: '90%',
               padding: isMobile ? 10 : 16,
-              marginTop: isMobile ? 22 : 30,
+              marginTop: isMobile ? 60 : 80,
               position: 'relative', zIndex: 5,
             }}
           >

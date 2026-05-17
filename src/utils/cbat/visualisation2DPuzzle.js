@@ -98,16 +98,36 @@ export function layoutComposite(shapes, welds) {
   }))
 }
 
-// Translation-invariant key for comparing two composites — used to dedupe
-// distractors against the correct answer and against each other.
+// Congruence-invariant key for comparing two composites — used to dedupe
+// distractors against the correct answer and against each other. Canonicalises
+// across the 8 rigid symmetries of the plane (4 rotations × optional mirror)
+// so that any two layouts which are rotations/reflections of each other share
+// a key. Answer tiles render only the silhouette (no letters), so a rotated
+// duplicate of the correct answer would be visually identical — this prevents
+// that ambiguity.
 export function compositeKey(layout) {
-  const all = layout.flatMap(p => p.vertices)
-  if (!all.length) return ''
-  const minX = Math.min(...all.map(v => v.x))
-  const minY = Math.min(...all.map(v => v.y))
-  return all.map(v => `${Math.round(v.x - minX)},${Math.round(v.y - minY)}`)
-    .sort()
-    .join('|')
+  const pts = layout.flatMap(p => p.vertices)
+  if (!pts.length) return ''
+  const variants = []
+  for (const sx of [1, -1]) {
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI / 2
+      const c = Math.cos(a), s = Math.sin(a)
+      const tx = pts.map(v => {
+        const mx = sx * v.x
+        return { x: mx * c - v.y * s, y: mx * s + v.y * c }
+      })
+      const minX = Math.min(...tx.map(v => v.x))
+      const minY = Math.min(...tx.map(v => v.y))
+      variants.push(
+        tx.map(v => `${Math.round(v.x - minX)},${Math.round(v.y - minY)}`)
+          .sort()
+          .join('|')
+      )
+    }
+  }
+  variants.sort()
+  return variants[0]
 }
 
 // ── Overlap detection ───────────────────────────────────────────────────────

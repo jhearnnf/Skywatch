@@ -8,15 +8,21 @@ const prefersReducedMotion =
 
 // Drives the preview-window scene timeline. Auto-plays and auto-loops; pauses
 // when the tab is hidden so backgrounded landing pages don't burn animation
-// frames. Returns the current scene plus controls (pause / replay / jump).
+// frames. Also pauses when the host element is scrolled out of view (driven by
+// the caller via `inView`) so a window way below the fold doesn't burn through
+// its scenes before the user gets there. Returns the current scene plus
+// controls (pause / replay / jump).
 //
 // scenes: ordered array of { id, title, durationMs, Component }
 //         (gate filtering is done by the caller before passing in)
+// inView: caller-driven visibility flag. When false the timer pauses; when it
+//         flips back to true the current scene replays from frame 0 (rather
+//         than resuming mid-animation) so the user sees a clean first frame.
 //
 // When prefers-reduced-motion is enabled the player still rotates scenes but
 // holds each one for a longer interval so the page is functionally
 // information-equivalent without rapid motion.
-export default function useScenePlayer(scenes, { autoplay = true, loop = true } = {}) {
+export default function useScenePlayer(scenes, { autoplay = true, loop = true, inView = true } = {}) {
   // Honour reduced motion by starting paused if requested.
   const effectiveAutoplay = autoplay && !prefersReducedMotion
   const [index,    setIndex]    = useState(0)
@@ -28,6 +34,10 @@ export default function useScenePlayer(scenes, { autoplay = true, loop = true } 
   const timerRef     = useRef(null)
   const lastBumpRef  = useRef(Date.now())
   const remainingRef = useRef(scenes[0]?.durationMs ?? 3000)
+  // Tracks the previous inView so we can detect transitions (entering or
+  // leaving the viewport) and replay the current scene from frame 0 on
+  // re-entry — otherwise the user scrolls in and sees a frozen mid-frame.
+  const prevInViewRef = useRef(inView)
 
   const clearTimer = () => {
     if (timerRef.current) {
@@ -56,14 +66,28 @@ export default function useScenePlayer(scenes, { autoplay = true, loop = true } 
     }, ms)
   }, [advance])
 
-  // Whenever index changes (and we're playing), schedule the next hop.
+  // Re-entry detection: when the host scrolls back into view, bump runKey so
+  // the current scene re-mounts and plays its internal animation timeline
+  // from frame 0 again. Without this, the user scrolls back and sees a
+  // mid-state of whichever scene was active when they scrolled away.
   useEffect(() => {
-    if (isPaused) { clearTimer(); return }
+    if (inView && !prevInViewRef.current) {
+      setRunKey(k => k + 1)
+    }
+    prevInViewRef.current = inView
+  }, [inView])
+
+  // Whenever the active scene changes (or play/visibility state changes),
+  // schedule the next hop. The inView gate prevents off-screen previews from
+  // advancing; runKey is in deps so re-entry (which bumps runKey above)
+  // reschedules with a fresh full duration.
+  useEffect(() => {
+    if (isPaused || !inView) { clearTimer(); return }
     const scene = scenes[index]
     if (!scene) return
     scheduleAdvance(scene.durationMs ?? 3000)
     return clearTimer
-  }, [index, isPaused, scenes, scheduleAdvance])
+  }, [index, runKey, isPaused, inView, scenes, scheduleAdvance])
 
   // Pause when the tab loses focus so off-screen landing pages don't animate.
   useEffect(() => {

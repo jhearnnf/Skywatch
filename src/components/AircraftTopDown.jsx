@@ -10,7 +10,7 @@ class ErrorCatcher extends Component {
   render() { return this.state.hasError ? null : this.props.children }
 }
 
-function Model({ url }) {
+function Model({ url, yawDeg = 0 }) {
   const { scene } = useGLTF(url)
   // Re-centre the scene on its geometric centre so off-origin GLTFs frame
   // correctly in the panel.
@@ -20,8 +20,9 @@ function Model({ url }) {
     const ctr = box.getCenter(new THREE.Vector3())
     return { clonedScene: c, centre: ctr }
   }, [scene])
+  const yawRad = (yawDeg * Math.PI) / 180
   return (
-    <group scale={[2, 2, 2]}>
+    <group scale={[2, 2, 2]} rotation={[0, yawRad, 0]}>
       <primitive object={clonedScene} position={[-centre.x, -centre.y, -centre.z]} />
     </group>
   )
@@ -61,7 +62,10 @@ function RadarOverlay() {
   )
 }
 
-export default function AircraftTopDown({ modelUrl, onError, partial = false, offsetX = 0, offsetZ = 0, clear = false }) {
+export default function AircraftTopDown({
+  modelUrl, onError, partial = false, offsetX = 0, offsetZ = 0,
+  clear = false, transparent = false, yawDeg = 0,
+}) {
   if (!modelUrl) return null
   // Partial view: camera sits much closer and is offset horizontally, so only a
   // fragment of the aircraft lands in frame — forces the user to identify the
@@ -69,8 +73,11 @@ export default function AircraftTopDown({ modelUrl, onError, partial = false, of
   const camPos = partial ? [offsetX, 8, offsetZ] : [0, 13, 0]
   const camFov = partial ? 34 : (clear ? 26 : 30)
   const innerFilter = clear ? 'none' : 'blur(1.6px) contrast(1.1)'
+  // `transparent` lets callers slot the canvas onto a coloured field (e.g.
+  // the landing-page preview windows) without a hard-coded dark backdrop.
+  const wrapperBg = transparent ? 'transparent' : '#020a18'
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 8, background: '#020a18' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 8, background: wrapperBg }}>
       <div style={{ position: 'absolute', inset: 0, filter: innerFilter }}>
         <Canvas
           camera={{ position: camPos, fov: camFov, near: 0.1, far: 50 }}
@@ -83,7 +90,7 @@ export default function AircraftTopDown({ modelUrl, onError, partial = false, of
           <pointLight position={[2, 8, 2]} intensity={1.2} color="#ffffff" />
           <Suspense fallback={null}>
             <ErrorCatcher onError={onError}>
-              <Model url={modelUrl} />
+              <Model url={modelUrl} yawDeg={yawDeg} />
             </ErrorCatcher>
           </Suspense>
         </Canvas>

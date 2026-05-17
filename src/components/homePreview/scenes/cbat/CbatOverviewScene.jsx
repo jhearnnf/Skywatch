@@ -14,7 +14,7 @@ export default function CbatOverviewScene() {
   return (
     <div className="absolute inset-0 overflow-hidden">
       <CbatBg amber />
-      <div className="absolute inset-0 flex items-center justify-center pt-16">
+      <div className="absolute inset-0 flex items-center justify-center pt-16 sm:pt-24">
         <div className="grid grid-cols-4 gap-1.5 max-w-md w-full px-6">
           {TILES.map((t, i) => (
             <motion.div

@@ -142,7 +142,7 @@ Rules:
 12. Aircraft props are drawn in brand-blue when their context is RAF; if a section explicitly discusses a foreign airframe, use "aircraft-generic". Never invent enemy faction markings.
 13. AIRCRAFT JUSTIFICATION: include an aircraft prop only when the section text gives at least ONE of: (a) a named aircraft/airframe ("Typhoon", "F-35", "Tu-95"), (b) a flight verb ("intercept", "scramble", "sortie", "fly", "pilot", "deploy aircraft"), (c) a flight squadron actively conducting an operation. If none of those appear in the section, do NOT add any aircraft prop and do NOT use 'pilot' — leaving the actor on the ground with their facts is strictly better than tagging on a random airframe. When you DO add an aircraft, always also add a 'show-text' or include the airframe name in the prop.label so the viewer can identify it.
 14. CROSSOUT for SUPERSEDED facts: whenever the section text frames a date, plan, target, or stat as the OLD / ORIGINAL / SUPERSEDED one — phrases like "originally planned for", "the prior target of", "the abandoned X programme", "down from", "previously expected", "envisaged for" — emit a show-date / show-text / show-stat for the OLD value, then a 'crossout' action in the SAME beat. Concrete examples that should trigger this: "originally envisaged for the 2030s" → show-date "2030s" + crossout; "the original 12% target" → show-stat "12%" + crossout; "the cancelled Tempest programme" → show-text "Tempest programme" + crossout. The NEXT beat should show the replacement/current fact uncrossed so the viewer leaves with the correct information cemented. Bias toward USING crossout whenever the source text contrasts an old fact with a new one — it is a more durable memory anchor than narration alone.
-15. FLYBY for AMBIENT aircraft mentions: when the section text references aircraft activity in aggregate or abstract — phrases like "uncrewed aircraft", "drone fleet", "fighter jets", "robot jets", "the F-35 force", "RAF jets patrolled", "autonomous aircraft" — emit a 'flyby' action in that beat. This is DIFFERENT from rule 13's 'pilot' action: 'pilot' requires a named timeline actor depicted operating a SPECIFIC airframe; 'flyby' is for the ambient case where no individual is in the cockpit but the text wants the viewer to picture aircraft. The flyby is non-blocking — it can coexist with a show-text or show-stat in the same beat. If the text names a specific airframe ("F-35", "Typhoon"), pass it via params.aircraft = ["f35", "typhoon"]; otherwise omit params and the renderer picks at random.
+15. FLYBY for AMBIENT aircraft mentions: when the section text references aircraft activity in aggregate or abstract — phrases like "uncrewed aircraft", "drone fleet", "fighter jets", "robot jets", "the F-35 force", "RAF jets patrolled", "autonomous aircraft" — emit a 'flyby' action. This is DIFFERENT from rule 13's 'pilot' action: 'pilot' requires a named timeline actor depicted operating a SPECIFIC airframe; 'flyby' is for the ambient case where no individual is in the cockpit but the text wants the viewer to picture aircraft. CRITICAL: the flyby MUST live on the beat whose textSpan actually contains the aircraft phrase — if "uncrewed aircraft" appears at offsets 180–198, the flyby goes on the beat whose textSpan covers that range, not on a later closing beat. Never emit a flyby on a beat whose textSpan does not include an aircraft mention. The flyby is non-blocking — it can coexist with a show-text or show-stat in the same beat. If the text names a specific airframe ("F-35", "Typhoon"), pass it via params.aircraft = ["f35", "typhoon"]; otherwise omit params and the renderer picks at random.
 16. Output ONLY the JSON object. No markdown, no code fences, no commentary.`;
 
 const WORKED_EXAMPLES = `Examples of well-formed reels.
@@ -282,7 +282,41 @@ Return ONLY the JSON timeline.`;
   // beat the AI picked, only stretch where the content demands more time.
   adjustBeatDurations(parsed);
 
+  // The AI sometimes parks a flyby on the closing beat for spectacle even
+  // when the closing beat's textSpan does not mention aircraft. Re-anchor
+  // any misplaced flyby to the first beat whose textSpan covers an aircraft
+  // word; drop it if no beat does.
+  realignFlybys(parsed, sectionBody);
+
   return parsed;
+}
+
+// Aircraft keywords that justify a flyby on a beat. Matched against the slice
+// of sectionBody covered by each beat's textSpan. Anchored to word boundaries
+// so "craftsman" doesn't match "aircraft".
+const AIRCRAFT_KEYWORD_RE = /\b(?:aircraft|jet|jets|drone|drones|fighter|fighters|bomber|bombers|helicopter|helicopters|sortie|sorties|scramble|scrambled|intercept|intercepted|fly|flying|flown|flew|patrol|patrolled|patrolling|squadron|airframe|airframes|typhoon|f-?35|f35|hawk|a400m|c-?17|c17|chinook|wedgetail|poseidon|tu-?95|tu95|uav|uavs)\b/i;
+
+function realignFlybys(timeline, body) {
+  if (!body) return;
+  const beatHasAircraft = timeline.beats.map(b => {
+    const slice = body.slice(b.textSpan.start, b.textSpan.end);
+    return AIRCRAFT_KEYWORD_RE.test(slice);
+  });
+  const targetIdx = beatHasAircraft.indexOf(true);
+
+  for (let i = 0; i < timeline.beats.length; i++) {
+    const beat = timeline.beats[i];
+    const flybyActs = beat.actions.filter(a => a.type === 'flyby');
+    if (flybyActs.length === 0) continue;
+    if (beatHasAircraft[i]) continue; // already on a beat that mentions aircraft
+
+    beat.actions = beat.actions.filter(a => a.type !== 'flyby');
+    if (targetIdx === -1) continue; // no beat mentions aircraft — drop the flyby
+
+    const targetBeat = timeline.beats[targetIdx];
+    const alreadyThere = targetBeat.actions.some(a => a.type === 'flyby');
+    if (!alreadyThere) targetBeat.actions.push(flybyActs[0]); // one flyby per reel
+  }
 }
 
 // Minimum dwell time for a readable payload, based on a slow reading speed
@@ -371,6 +405,7 @@ module.exports = {
   validateTimeline,
   parseTimelineJson,
   adjustBeatDurations,
+  realignFlybys,
   FACTIONS,
   HEADGEAR,
   PROP_TYPES,

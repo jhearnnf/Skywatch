@@ -39,7 +39,7 @@ export default function CbatAntScene({ runKey }) {
   return (
     <div className="absolute inset-0 overflow-hidden">
       <CbatBg amber />
-      <div className="absolute inset-0 px-4 pt-14 pb-4 flex gap-3">
+      <div className="absolute inset-0 px-4 pt-16 sm:pt-24 pb-4 flex gap-3">
 
         {/* Left: SVG journey map */}
         <div

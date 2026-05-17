@@ -2,16 +2,19 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import CbatBg from './_cbatBg'
 
-// Mirrors the real Symbols play screen: target symbol shown in a large
-// bordered box, then a grid of unicode symbol buttons. Tap the match.
-// The real game uses Cyrillic / Arabic / Hiragana / CJK / Hangul characters.
+// Mirrors the real Symbols play screen: grid of unicode symbol buttons on
+// top, target symbol shown in a large bordered box BELOW the grid (the real
+// game's order — grid is the primary play area). 4 columns / 16 symbols
+// match the real game's mid-tier layout. Characters are mixed Cyrillic /
+// Arabic / Hiragana / CJK / Hangul.
 const GRID = [
-  'Ж', 'ﺽ', 'み', '漢', '한', 'Ψ',
-  'ت', 'カ', '猫', '뮤', 'Ω', 'Я',
-  'ك', 'ね', '行', '비', 'Δ', 'Ц',
+  'Ж', 'ﺽ', 'み', '漢',
+  '한', 'Ψ', 'ت', 'カ',
+  '猫', '뮤', 'Ω', 'Я',
+  'ك', 'ね', '行', '비',
 ]
 const TARGET = '漢'
-const TARGET_INDEX = 9
+const TARGET_INDEX = 3
 
 export default function CbatSymbolsScene({ runKey }) {
   const [found, setFound] = useState(false)
@@ -24,7 +27,7 @@ export default function CbatSymbolsScene({ runKey }) {
   return (
     <div className="absolute inset-0 overflow-hidden">
       <CbatBg amber />
-      <div className="absolute inset-0 px-4 pt-14 pb-4 flex flex-col items-center">
+      <div className="absolute inset-0 px-4 pt-16 sm:pt-24 pb-4 flex flex-col items-center">
 
         {/* HUD */}
         <div className="flex justify-between items-center w-full mb-2 intel-mono" style={{ fontSize: 7 }}>
@@ -33,35 +36,8 @@ export default function CbatSymbolsScene({ runKey }) {
           <span style={{ color: '#cbd5e1', letterSpacing: '0.15em', fontWeight: 700 }}>00:21</span>
         </div>
 
-        {/* Progress bar */}
-        <div className="h-1 rounded-full w-full mb-2" style={{ background: 'rgba(255,255,255,0.08)' }}>
-          <motion.div
-            key={runKey}
-            initial={{ width: '40%' }}
-            animate={{ width: '60%' }}
-            transition={{ duration: 2.2 }}
-            style={{ height: '100%', background: '#fbbf24', borderRadius: 999 }}
-          />
-        </div>
-
-        {/* Target card */}
-        <div
-          className="rounded-lg flex items-center justify-center mb-3"
-          style={{
-            width: 64, height: 64,
-            background: '#0a1628',
-            border: '2px solid #5baaff',
-            boxShadow: '0 0 16px rgba(91,170,255,0.25)',
-          }}
-        >
-          <span style={{ fontSize: 32, color: '#fff', textShadow: '0 0 6px rgba(91,170,255,0.5)' }}>{TARGET}</span>
-        </div>
-        <p className="intel-mono mb-2" style={{ fontSize: 7, color: '#94a3b8', letterSpacing: '0.18em', fontWeight: 700, textTransform: 'uppercase' }}>
-          Find this symbol
-        </p>
-
-        {/* Grid */}
-        <div className="grid grid-cols-6 gap-1.5 mt-1">
+        {/* Grid — top of the play area (the dominant element in the real game) */}
+        <div className="grid grid-cols-4 gap-1.5 mb-3 w-full" style={{ maxWidth: 220 }}>
           {GRID.map((s, i) => {
             const isCorrect = i === TARGET_INDEX
             const showState = found
@@ -72,12 +48,12 @@ export default function CbatSymbolsScene({ runKey }) {
                 transition={{ duration: 0.5 }}
                 className="flex items-center justify-center"
                 style={{
-                  width: 34, height: 34,
+                  aspectRatio: '1 / 1',
                   background: showState && isCorrect ? 'rgba(34,197,94,0.18)' : '#060e1a',
                   border: `1.5px solid ${showState && isCorrect ? '#22c55e' : '#1a3a5c'}`,
                   color: '#fff',
-                  fontSize: 17,
-                  borderRadius: 4,
+                  fontSize: 22,
+                  borderRadius: 6,
                   boxShadow: showState && isCorrect ? '0 0 10px rgba(34,197,94,0.4)' : 'none',
                   opacity: showState && !isCorrect ? 0.35 : 1,
                   transition: 'opacity 0.3s',
@@ -87,6 +63,22 @@ export default function CbatSymbolsScene({ runKey }) {
               </motion.div>
             )
           })}
+        </div>
+
+        {/* Target card — below the grid, larger to match the real game's text-6xl. */}
+        <p className="intel-mono mb-1.5" style={{ fontSize: 7, color: '#94a3b8', letterSpacing: '0.18em', fontWeight: 700, textTransform: 'uppercase' }}>
+          Find this symbol
+        </p>
+        <div
+          className="rounded-lg flex items-center justify-center"
+          style={{
+            width: 84, height: 84,
+            background: '#0a1628',
+            border: '2px solid #5baaff',
+            boxShadow: '0 0 18px rgba(91,170,255,0.3)',
+          }}
+        >
+          <span style={{ fontSize: 48, color: '#fff', textShadow: '0 0 8px rgba(91,170,255,0.55)' }}>{TARGET}</span>
         </div>
       </div>
     </div>

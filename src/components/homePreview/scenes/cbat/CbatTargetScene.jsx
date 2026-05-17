@@ -22,17 +22,42 @@ const SHAPES = [
 
 const CODES = ['AX-441', 'KL-208', 'QR-117', 'TM-883', 'WV-072', 'HJ-394']
 
-function Shape({ s, locked }) {
-  const size = 14
+// Each shape renders inside its own square SVG so the geometry never stretches
+// when the parent container's aspect ratio changes. The outer wrapper handles
+// positioning via percent-based left/top; the SVG handles its own scaling.
+function Shape({ s, locked, sizePx }) {
   const props = {
     fill: s.color,
     opacity: locked ? 0.45 : 1,
     filter: locked ? 'none' : `drop-shadow(0 0 5px ${s.color})`,
   }
-  if (s.type === 'circle')   return <circle cx="0" cy="0" r={size / 2} {...props} />
-  if (s.type === 'square')   return <rect   x={-size/2} y={-size/2} width={size} height={size} {...props} />
-  if (s.type === 'triangle') return <polygon points={`0,${-size/2} ${size/2},${size/2} ${-size/2},${size/2}`} {...props} />
-  return <polygon points={`0,${-size/2} ${size/2},0 0,${size/2} ${-size/2},0`} {...props} />
+  let inner
+  if      (s.type === 'circle')   inner = <circle cx="10" cy="10" r="6" {...props} />
+  else if (s.type === 'square')   inner = <rect x="4" y="4" width="12" height="12" {...props} />
+  else if (s.type === 'triangle') inner = <polygon points="10,3 17,17 3,17" {...props} />
+  else                            inner = <polygon points="10,3 17,10 10,17 3,10" {...props} />
+  return (
+    <svg viewBox="0 0 20 20" width={sizePx} height={sizePx} style={{ display: 'block', overflow: 'visible' }}>
+      {inner}
+    </svg>
+  )
+}
+
+function LockReticle({ sizePx }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      width={sizePx * 1.9}
+      height={sizePx * 1.9}
+      style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', overflow: 'visible' }}
+    >
+      <circle cx="10" cy="10" r="8" fill="none" stroke="#fbbf24" strokeWidth="0.6" />
+      <line x1="0"  y1="10" x2="4"  y2="10" stroke="#fbbf24" strokeWidth="0.5" />
+      <line x1="16" y1="10" x2="20" y2="10" stroke="#fbbf24" strokeWidth="0.5" />
+      <line x1="10" y1="0"  x2="10" y2="4"  stroke="#fbbf24" strokeWidth="0.5" />
+      <line x1="10" y1="16" x2="10" y2="20" stroke="#fbbf24" strokeWidth="0.5" />
+    </svg>
+  )
 }
 
 export default function CbatTargetScene({ runKey }) {
@@ -47,7 +72,7 @@ export default function CbatTargetScene({ runKey }) {
   return (
     <div className="absolute inset-0 overflow-hidden">
       <CbatBg amber />
-      <div className="absolute inset-0 px-4 pt-14 pb-4 flex gap-3">
+      <div className="absolute inset-0 px-4 pt-16 sm:pt-24 pb-4 flex gap-3">
 
         {/* Left: scene scope with shapes */}
         <div
@@ -73,24 +98,28 @@ export default function CbatTargetScene({ runKey }) {
             <span style={{ color: '#fbbf24', letterSpacing: '0.12em', fontWeight: 700 }}>TIME 00:42</span>
             <span style={{ color: '#5baaff', letterSpacing: '0.12em', fontWeight: 700 }}>SCORE 12</span>
           </div>
-          {/* Shapes */}
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-            {SHAPES.map((s, i) => (
-              <g key={i} transform={`translate(${s.x} ${s.y})`}>
-                <Shape s={s} locked={lockedIdx !== null && i !== lockedIdx} />
-                {lockedIdx === i && (
-                  <>
-                    {/* Crosshair lock */}
-                    <circle cx="0" cy="0" r="11" fill="none" stroke="#fbbf24" strokeWidth="0.8" />
-                    <line x1="-14" y1="0" x2="-7" y2="0" stroke="#fbbf24" strokeWidth="0.6" />
-                    <line x1="7"   y1="0" x2="14"  y2="0" stroke="#fbbf24" strokeWidth="0.6" />
-                    <line x1="0" y1="-14" x2="0" y2="-7" stroke="#fbbf24" strokeWidth="0.6" />
-                    <line x1="0" y1="7"   x2="0" y2="14"  stroke="#fbbf24" strokeWidth="0.6" />
-                  </>
-                )}
-              </g>
-            ))}
-          </svg>
+          {/* Shapes — each positioned by %, rendering in its own square SVG so
+              they keep a 1:1 aspect regardless of the container's shape. */}
+          {SHAPES.map((s, i) => {
+            const locked = lockedIdx !== null && i !== lockedIdx
+            const isTarget = lockedIdx === i
+            const SIZE = 76
+            return (
+              <div
+                key={i}
+                className="absolute"
+                style={{
+                  left: `${s.x}%`,
+                  top:  `${s.y}%`,
+                  transform: 'translate(-50%, -50%)',
+                  width: SIZE, height: SIZE,
+                }}
+              >
+                <Shape s={s} locked={locked} sizePx={SIZE} />
+                {isTarget && <LockReticle sizePx={SIZE} />}
+              </div>
+            )
+          })}
         </div>
 
         {/* Right column: 3 stacked side panels */}

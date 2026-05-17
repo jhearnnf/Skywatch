@@ -21,7 +21,7 @@ export default function CbatAnglesScene({ runKey }) {
   return (
     <div className="absolute inset-0 overflow-hidden">
       <CbatBg amber />
-      <div className="absolute inset-0 px-4 pt-14 pb-4 flex flex-col items-center">
+      <div className="absolute inset-0 px-4 pt-16 sm:pt-24 pb-4 flex flex-col items-center">
 
         {/* HUD */}
         <div className="flex justify-between items-center w-full mb-2 intel-mono" style={{ fontSize: 7 }}>
@@ -29,43 +29,42 @@ export default function CbatAnglesScene({ runKey }) {
           <span style={{ color: '#fbbf24', letterSpacing: '0.15em', fontWeight: 700 }}>CORRECT 4</span>
         </div>
 
-        {/* Angle diagram */}
-        <div className="flex-1 flex items-center justify-center w-full">
-          <svg viewBox="0 0 100 80" style={{ width: 260, maxWidth: '90%' }}>
-            {/* Grid circles */}
-            {[10, 20, 30, 40].map(r => (
-              <circle key={r} cx="20" cy="65" r={r} fill="none" stroke="#1a3a5c" strokeWidth="0.4" strokeDasharray="1 2" />
+        {/* Angle diagram — vertex centred horizontally so the arc opens
+            symmetrically inside the SVG box rather than hugging the corner. */}
+        <div className="flex items-center justify-center w-full" style={{ marginBottom: 8 }}>
+          <svg viewBox="0 0 100 70" style={{ width: 260, maxWidth: '92%' }}>
+            {/* Grid circles centred on the vertex */}
+            {[12, 22, 32].map(r => (
+              <circle key={r} cx="50" cy="55" r={r} fill="none" stroke="#1a3a5c" strokeWidth="0.4" strokeDasharray="1 2" />
             ))}
-            {/* Baseline (horizontal) */}
-            <line x1="20" y1="65" x2="80" y2="65" stroke="#fff" strokeWidth="1" />
-            {/* Angled line (~45°) */}
+            {/* Baseline (horizontal, vertex centred) */}
+            <line x1="20" y1="55" x2="80" y2="55" stroke="#fff" strokeWidth="1" />
+            {/* Angled line (~45° up-right from vertex) */}
             <motion.line
               key={`l-${runKey}`}
-              x1="20" y1="65" x2="50" y2="35"
+              x1="50" y1="55" x2="71" y2="34"
               stroke="#5baaff" strokeWidth="1.4" strokeLinecap="round"
               initial={{ pathLength: 0 }}
               animate={{ pathLength: 1 }}
               transition={{ duration: 0.6, ease: 'easeOut' }}
               filter="drop-shadow(0 0 3px rgba(91,170,255,0.6))"
             />
-            {/* Arc */}
-            <path d="M 33 65 A 13 13 0 0 0 28.5 56" fill="none" stroke="#5baaff" strokeOpacity="0.6" strokeWidth="0.8" />
-            {/* Centre dot */}
-            <circle cx="20" cy="65" r="1.5" fill="#5baaff" />
+            {/* Arc between baseline and angled line */}
+            <path d="M 63 55 A 13 13 0 0 0 59.2 46" fill="none" stroke="#5baaff" strokeOpacity="0.7" strokeWidth="0.8" />
+            {/* Vertex dot */}
+            <circle cx="50" cy="55" r="1.5" fill="#5baaff" />
             {/* "?" mark inside the arc */}
-            <text x="33" y="60" fill="#5baaff" fontSize="6" fontFamily="ui-monospace, monospace" fontWeight="700">?</text>
+            <text x="63" y="50" fill="#5baaff" fontSize="6" fontFamily="ui-monospace, monospace" fontWeight="700">?</text>
             {/* End-points */}
-            <circle cx="80" cy="65" r="1" fill="#fff" />
-            <circle cx="50" cy="35" r="1" fill="#5baaff" />
-            {/* Compass tick marks */}
+            <circle cx="80" cy="55" r="1" fill="#fff" />
+            <circle cx="71" cy="34" r="1" fill="#5baaff" />
             <g fontFamily="ui-monospace, monospace" fontSize="3" fill="#64748b">
-              <text x="80" y="71">N</text>
-              <text x="14" y="71">·</text>
+              <text x="80" y="62" textAnchor="middle">N</text>
             </g>
           </svg>
         </div>
 
-        {/* Answer row */}
+        {/* Answer row — sits right under the diagram, not flex-spaced away. */}
         <div className="flex gap-1.5 w-full">
           {OPTIONS.map((deg, i) => {
             const isPicked = picked === i

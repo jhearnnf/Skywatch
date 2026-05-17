@@ -21,10 +21,9 @@ const QUESTIONS = [
     answers: [
       { _id: 'q2a', title: 'RAF Coningsby' },
       { _id: 'q2b', title: 'RAF Waddington' },
-      { _id: 'q2c', title: 'RAF Waddington Annex' },
-      { _id: 'q2d', title: 'RAF Scampton (historic)' },
+      { _id: 'q2c', title: 'RAF Scampton (historic)' },
     ],
-    correctId: 'q2d',
+    correctId: 'q2c',
     pickIndex: 1, // pick a wrong answer first to show the wrong state
     wrongPickFirst: true,
   },

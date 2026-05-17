@@ -49,7 +49,7 @@ export default function CaseFilesScene({ runKey }) {
             animate={{ opacity: 1, y: 0, rotate: 0 }}
             exit={{ opacity: 0, scale: 0.6, rotate: 8 }}
             transition={{ duration: 0.5 }}
-            className="relative rounded-xl mt-12"
+            className="relative rounded-xl mt-16 sm:mt-24"
             style={{
               width: 220, height: 150,
               background: 'linear-gradient(160deg, #d4a849 0%, #b88a32 100%)',
@@ -104,7 +104,7 @@ export default function CaseFilesScene({ runKey }) {
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.45 }}
-            className="relative mt-12"
+            className="relative mt-16 sm:mt-24"
             style={{
               width: 320, height: 200,
               background:

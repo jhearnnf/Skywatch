@@ -1,4 +1,4 @@
-import { useMemo, Suspense } from 'react'
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import useScenePlayer from './useScenePlayer'
 
@@ -14,8 +14,32 @@ import useScenePlayer from './useScenePlayer'
 //  - loop, autoplay: passed through to useScenePlayer.
 export default function PreviewWindow({ eyebrow, heading, scenes, loop = true, autoplay = true, dataTestId }) {
   const scenesSafe = useMemo(() => Array.isArray(scenes) ? scenes : [], [scenes])
+  const windowRef = useRef(null)
+  // inView starts false so the timer doesn't start ticking on a window that's
+  // below the fold — the IntersectionObserver flips it true when the user
+  // scrolls it into view. This is what makes the second (CBAT) window
+  // auto-start when the user reaches it, instead of silently burning scenes
+  // off-screen during the initial page load. Environments without IO (SSR /
+  // very old browsers) fall back to always-on.
+  const [inView, setInView] = useState(() => typeof IntersectionObserver === 'undefined')
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return
+    const el = windowRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      // Generous threshold (10%) so the player kicks in just as the window
+      // edges into view, with a small bottom rootMargin to start prefetching
+      // scene chunks a touch before the user actually sees it.
+      { threshold: 0.1, rootMargin: '0px 0px -10% 0px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
   const { index, runKey, currentScene, isPaused, replay, togglePause, jumpTo, total } =
-    useScenePlayer(scenesSafe, { loop, autoplay })
+    useScenePlayer(scenesSafe, { loop, autoplay, inView })
 
   if (total === 0) return null
 
@@ -34,6 +58,7 @@ export default function PreviewWindow({ eyebrow, heading, scenes, loop = true, a
       {/* The window — taller (4:5) on phones so vertical scene content fits, 16:9 on desktop */}
       <div className="relative">
         <div
+          ref={windowRef}
           className="relative rounded-2xl sm:rounded-3xl overflow-hidden mx-auto aspect-[4/5] sm:aspect-[16/9]"
           style={{
             background:   '#06101e',
@@ -91,8 +116,11 @@ export default function PreviewWindow({ eyebrow, heading, scenes, loop = true, a
                 </h3>
                 {currentScene.subtitle && (
                   <p
-                    className="text-[10px] sm:text-xs text-slate-300 intel-mono mt-1"
-                    style={{ textShadow: '0 1px 8px rgba(0,0,0,0.8)' }}
+                    className="text-[10px] sm:text-xs text-slate-800 intel-mono mt-1"
+                    style={{
+                      textShadow:
+                        '0 1px 2px rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.85), 0 0 22px rgba(0,0,0,0.6)',
+                    }}
                   >
                     {currentScene.subtitle}
                   </p>

@@ -1,6 +1,16 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import CbatBg from './_cbatBg'
+
+// Lazy so the Three.js bundle (Canvas + drei useGLTF) doesn't load on landing
+// page mount — it streams in only once this scene becomes active.
+const AircraftTopDown = lazy(() => import('../../../AircraftTopDown'))
+const HAWK_T2_URL = '/models/hawk t2.glb'
+// The Hawk T2 GLB is authored with its nose along +X; from the top-down
+// camera that puts the nose pointing screen-right. We want "north" (rot=0)
+// to mean nose-up, so apply a -90° yaw correction at the model level. CSS
+// rotation on the wrapper then steers from there.
+const HAWK_T2_NOSE_YAW = -90
 
 // Mirrors the real Plane Turn play: 10×10 grid with aircraft cutout in the
 // centre, package emoji in a random cell, green chevrons ahead of the plane
@@ -30,7 +40,7 @@ export default function CbatPlaneTurnScene({ runKey }) {
   return (
     <div className="absolute inset-0 overflow-hidden">
       <CbatBg amber />
-      <div className="absolute inset-0 px-4 pt-14 pb-4 flex flex-col items-center">
+      <div className="absolute inset-0 px-4 pt-16 sm:pt-24 pb-4 flex flex-col items-center">
 
         {/* HUD */}
         <div className="flex justify-between items-center w-full mb-2 intel-mono" style={{ fontSize: 7 }}>
@@ -89,29 +99,40 @@ export default function CbatPlaneTurnScene({ runKey }) {
             </motion.div>
           )}
 
-          {/* Aircraft */}
+          {/* Aircraft — real top-down render of the Hawk T2 GLB the real game
+              uses. The motion.div positions the cell on the grid; an inner
+              rotating wrapper applies the heading. Sized at ~2.5 cells so the
+              silhouette is clearly readable in the preview. */}
           <motion.div
             animate={{
-              left: `${plane.c * cellPct}%`,
-              top:  `${plane.r * cellPct}%`,
+              left: `${(plane.c - 0.75) * cellPct}%`,
+              top:  `${(plane.r - 0.75) * cellPct}%`,
             }}
             transition={{ duration: 0.6, ease: 'easeInOut' }}
-            className="absolute flex items-center justify-center"
+            className="absolute"
             style={{
-              width: `${cellPct}%`,
-              height: `${cellPct}%`,
+              width:  `${cellPct * 2.5}%`,
+              height: `${cellPct * 2.5}%`,
+              pointerEvents: 'none',
             }}
           >
             <motion.div
               animate={{ rotate: plane.rot }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
               style={{
-                fontSize: 18,
-                color: '#5baaff',
-                textShadow: '0 0 8px rgba(91,170,255,0.7)',
+                width: '100%',
+                height: '100%',
+                filter: 'drop-shadow(0 0 6px rgba(91,170,255,0.55))',
               }}
             >
-              ▲
+              <Suspense fallback={null}>
+                <AircraftTopDown
+                  modelUrl={HAWK_T2_URL}
+                  clear
+                  transparent
+                  yawDeg={HAWK_T2_NOSE_YAW}
+                />
+              </Suspense>
             </motion.div>
           </motion.div>
 

@@ -2,28 +2,50 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import CbatBg from './_cbatBg'
 
-// Mirrors the real ACT play: a 3D tube-tunnel POV (player flies forward
-// through a tunnel) with shapes appearing ahead, and audio callsigns +
-// avoid/target instructions overlaid as text. Replicated with SVG depth
-// lines + scaling shapes that simulate forward motion.
+// Mirrors the real ACT play: a 3D tube-tunnel POV with shape gates the
+// player steers through, audio callsigns + avoid/engage instructions, a
+// score HUD, and a bleep button. The real game uses R3F + GLSL shaders +
+// a TubeGeometry — too heavy to embed in a 2.5s preview, so this is an SVG
+// evocation that keeps the gate-flying interaction readable.
 
 const TUNNEL_RINGS = [0.15, 0.25, 0.40, 0.60, 0.85] // depth (0 = far, 1 = near)
-const APPROACH_SHAPES = [
-  { e: '◆', x: 40, color: '#22c55e' },
-  { e: '●', x: 65, color: '#ef4444' },
-  { e: '▲', x: 25, color: '#5baaff' },
+
+// Each gate carries a coloured shape (square / diamond / triangle) — these
+// are the targets the player either flies through (ENGAGE) or avoids per the
+// callsign. Order tuned so the avoided shape passes after the user reacts.
+const GATES = [
+  { kind: 'square',   color: '#22c55e', x: 40 },   // green — avoided
+  { kind: 'triangle', color: '#5baaff', x: 50 },   // blue — engaged
+  { kind: 'diamond',  color: '#ef4444', x: 30 },   // red — distractor
 ]
+
+function GateShape({ kind, color, size = 22 }) {
+  const half = size / 2
+  if (kind === 'square') {
+    return <rect x={-half} y={-half} width={size} height={size} fill="none" stroke={color} strokeWidth={2} rx="2" />
+  }
+  if (kind === 'diamond') {
+    return <polygon points={`0,${-half} ${half},0 0,${half} ${-half},0`} fill="none" stroke={color} strokeWidth={2} />
+  }
+  return <polygon points={`0,${-half} ${half},${half} ${-half},${half}`} fill="none" stroke={color} strokeWidth={2} />
+}
 
 export default function CbatActScene({ runKey }) {
   const [callsign, setCallsign] = useState('HAWK-1, AVOID GREEN')
   const [reaction, setReaction] = useState(null) // 'avoid' | 'engage'
+  // Ball drifts left/right as the player steers — matches the real game's
+  // touch-pad steering. Values are CSS-px offsets from the bottom-centre.
+  const [steerX,   setSteerX]   = useState(0)
   useEffect(() => {
     setCallsign('HAWK-1, AVOID GREEN')
-    setReaction(null)
+    setReaction(null); setSteerX(0)
+    const tA = setTimeout(() => setSteerX(-22), 600)   // steer left to avoid green
     const t1 = setTimeout(() => setReaction('avoid'), 1200)
+    const tB = setTimeout(() => setSteerX(0),    1700)
     const t2 = setTimeout(() => setCallsign('EAGLE-2, ENGAGE BLUE'), 2400)
+    const tC = setTimeout(() => setSteerX(8),    2900)
     const t3 = setTimeout(() => setReaction('engage'), 3300)
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+    return () => { [tA, t1, tB, t2, tC, t3].forEach(clearTimeout) }
   }, [runKey])
 
   return (
@@ -84,25 +106,31 @@ export default function CbatActScene({ runKey }) {
           ))}
         </svg>
 
-        {/* Approaching shapes — scale up to feel like they're flying at us */}
-        {APPROACH_SHAPES.map((s, i) => (
-          <motion.div
+        {/* Approaching gates — coloured ring outlines that grow from the
+            vanishing point. Each carries a square / diamond / triangle
+            target. Players steer the ball through the right one per
+            callsign. Scaling + fade simulates forward motion. */}
+        {GATES.map((g, i) => (
+          <motion.svg
             key={`${i}-${runKey}`}
-            initial={{ scale: 0.2, opacity: 0,    x: `${s.x}%`, y: '50%' }}
-            animate={{ scale: 2.5, opacity: [0, 1, 1, 0], x: `${s.x}%`, y: '110%' }}
-            transition={{ duration: 2.2, delay: i * 0.7, repeat: Infinity, ease: 'linear' }}
-            className="absolute"
+            viewBox="-30 -30 60 60"
+            initial={{ scale: 0.15, opacity: 0,    x: `${g.x}%`, y: '50%' }}
+            animate={{ scale: 3.2,  opacity: [0, 1, 1, 0], x: `${g.x}%`, y: '115%' }}
+            transition={{ duration: 2.3, delay: i * 0.7, repeat: Infinity, ease: 'linear' }}
+            width="48" height="48"
             style={{
+              position: 'absolute',
               left: 0, top: 0,
               transform: 'translate(-50%, -50%)',
-              color: s.color,
-              fontSize: 22,
-              filter: `drop-shadow(0 0 5px ${s.color})`,
-              fontWeight: 800,
+              overflow: 'visible',
+              filter: `drop-shadow(0 0 6px ${g.color})`,
             }}
           >
-            {s.e}
-          </motion.div>
+            {/* Outer gate ring */}
+            <circle cx="0" cy="0" r="24" fill="none" stroke={g.color} strokeWidth="2" strokeOpacity="0.4" />
+            {/* Inner shape — the actual target */}
+            <GateShape kind={g.kind} color={g.color} size={20} />
+          </motion.svg>
         ))}
       </div>
 
@@ -112,7 +140,7 @@ export default function CbatActScene({ runKey }) {
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="absolute top-12 left-1/2 -translate-x-1/2 z-10 intel-mono px-3 py-1.5 rounded"
+        className="absolute top-16 sm:top-24 left-1/2 -translate-x-1/2 z-10 intel-mono px-3 py-1.5 rounded"
         style={{
           background: 'rgba(6,16,30,0.92)',
           border: '1.5px solid #fbbf24',
@@ -145,18 +173,40 @@ export default function CbatActScene({ runKey }) {
         </motion.div>
       )}
 
-      {/* Ball (player marker) — sits low-centre as POV anchor */}
-      <div
+      {/* Ball (player marker) — sits low-centre as POV anchor. Drifts
+          left/right with the user's "steer" so they fly through the
+          right gate per the callsign. */}
+      <motion.div
+        animate={{ x: steerX }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         className="absolute"
         style={{
           left: '50%', bottom: 22,
           transform: 'translateX(-50%)',
-          width: 14, height: 14, borderRadius: 999,
+          width: 16, height: 16, borderRadius: 999,
           background: 'radial-gradient(circle at 30% 30%, #ffffff, #5baaff)',
-          boxShadow: '0 0 14px rgba(91,170,255,0.8), inset 0 0 4px rgba(0,0,0,0.4)',
+          boxShadow: '0 0 16px rgba(91,170,255,0.85), inset 0 0 5px rgba(0,0,0,0.4)',
           zIndex: 5,
         }}
       />
+
+      {/* Bleep button — bottom-right pill, matches the real game's UI */}
+      <div
+        className="absolute intel-mono"
+        style={{
+          right: 10, bottom: 16,
+          fontSize: 8, fontWeight: 800, letterSpacing: '0.18em',
+          color: '#fde68a',
+          background: 'rgba(6,16,30,0.85)',
+          border: '1.5px solid #fbbf24',
+          borderRadius: 999,
+          padding: '4px 10px',
+          boxShadow: '0 0 10px rgba(251,191,36,0.35)',
+          zIndex: 5,
+        }}
+      >
+        🔔 BLEEP
+      </div>
     </div>
   )
 }
