@@ -50,21 +50,30 @@ beforeEach(() => {
 
 afterEach(() => { vi.clearAllMocks(); });
 
+// The panel is collapsed by default — every test needs to expand it before
+// the row list (or empty state) becomes visible.
+function expandPanel() {
+  fireEvent.click(screen.getByRole('button', { name: /Brief Reel — Review Queue/i }));
+}
+
 describe('BriefReelReviewPanel', () => {
   it('shows "No pending reels" empty state when list is empty', async () => {
     apiFetchMock.mockImplementationOnce(async () => jsonRes({ status: 'success', data: { rows: [] } }));
     render(<BriefReelReviewPanel />);
+    expandPanel();
     await waitFor(() => expect(screen.getByText(/No pending reels/i)).toBeInTheDocument());
   });
 
   it('renders pending rows with brief title and section', async () => {
     render(<BriefReelReviewPanel />);
+    expandPanel();
     await waitFor(() => expect(screen.getByText('Pending Brief')).toBeInTheDocument());
     expect(screen.getByText(/Section 1/)).toBeInTheDocument();
   });
 
   it('opens the review modal on Review click and renders the player', async () => {
     render(<BriefReelReviewPanel />);
+    expandPanel();
     await waitFor(() => screen.getByRole('button', { name: 'Review' }));
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     expect(screen.getByRole('dialog', { name: /Brief Reel review/i })).toBeInTheDocument();
@@ -82,6 +91,7 @@ describe('BriefReelReviewPanel', () => {
     });
 
     render(<BriefReelReviewPanel />);
+    expandPanel();
     await waitFor(() => screen.getByRole('button', { name: 'Review' }));
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 
@@ -108,6 +118,7 @@ describe('BriefReelReviewPanel', () => {
 
     try {
       render(<BriefReelReviewPanel />);
+      expandPanel();
       await waitFor(() => screen.getByRole('button', { name: 'Review' }));
       fireEvent.click(screen.getByRole('button', { name: 'Review' }));
 

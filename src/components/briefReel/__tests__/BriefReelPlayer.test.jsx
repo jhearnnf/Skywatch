@@ -120,6 +120,18 @@ describe('BriefReelPlayer', () => {
     expect(onBeatStart.mock.calls.at(-1)[0].id).toBe('b2');
   });
 
+  it('carries crossed-out callouts into the recap (X stays on the recap cell)', () => {
+    const { container } = render(<BriefReelPlayer timeline={airChiefMarshal} />);
+    // Advance past every beat to land on the recap. The live in-beat callout
+    // (and its overlay) clears at the next beat boundary — so any red lines
+    // present at recap-time must come from the recap cell's own overlay.
+    const total = airChiefMarshal.beats.reduce((s, b) => s + b.durationMs, 0);
+    act(() => { vi.advanceTimersByTime(total + 1000); });
+    expect(container.textContent).toContain('RECAP');
+    const redLines = container.querySelectorAll('line[stroke="#ef4444"]');
+    expect(redLines.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('renders the crossout overlay when a beat fires a crossout action', () => {
     const { container } = render(<BriefReelPlayer timeline={airChiefMarshal} />);
     // airChiefMarshal b2 contains show-text + crossout. Advance past b1

@@ -330,23 +330,34 @@ export default function BriefReelPlayer({
 
     // Helper: if an action introduces a callout, record it (deduped by
     // kind+content) so the end-of-reel recap can replay every fact shown.
+    // A `crossout` action targets the most-recently-shown callout (whether
+    // freshly logged or a dedup hit) and stamps `crossedOut: true` on it
+    // so the recap renders the same red X overlay it showed live.
+    let lastShown = null;
     const recordCallout = (action) => {
+      if (action.type === 'crossout') {
+        if (lastShown) lastShown.crossedOut = true;
+        return;
+      }
       const p = action.params || {};
       let entry = null;
       if (action.type === 'show-text' && p.text)            entry = { kind: 'text', text: p.text };
       else if (action.type === 'show-stat')                 entry = { kind: 'stat', value: p.value || '', label: p.label || '' };
       else if (action.type === 'show-date' && p.date)       entry = { kind: 'date', value: p.date, label: p.label || '' };
       if (!entry) return;
-      const dup = calloutLogRef.current.some(e =>
+      const dup = calloutLogRef.current.find(e =>
         e.kind === entry.kind &&
         e.text  === entry.text  &&
         e.value === entry.value &&
         e.label === entry.label
       );
-      if (!dup) {
-        entry.id = `recap-${calloutLogRef.current.length}`;
-        calloutLogRef.current.push(entry);
+      if (dup) {
+        lastShown = dup;
+        return;
       }
+      entry.id = `recap-${calloutLogRef.current.length}`;
+      calloutLogRef.current.push(entry);
+      lastShown = entry;
     };
 
     // Pre-roll: silently apply every action in beats [0..startBeatIdx-1] so
@@ -451,11 +462,14 @@ export default function BriefReelPlayer({
       // correct state — don't re-fire already-fired actions.
       if (skipMs === 0) {
         const at0 = plan.filter(p => p.fireAt <= 0);
+        // Record callouts synchronously here (not inside the updater) so the
+        // recap log reflects the AI-authored action order even when React
+        // defers the setWorld updater past subsequent setTimeout firings.
+        for (const { action } of at0) recordCallout(action);
         setWorld(prev => {
           const next = structuredClone(prev);
           clearBeatScoped(next, beat.id);
           for (const { action, idx } of at0) {
-            recordCallout(action);
             applyAction(next, action, { beatId: beat.id, actionIdx: idx });
           }
           return next;
@@ -990,6 +1004,7 @@ function RecapCell({ item, x, y, w, h, delay }) {
           </text>
         ));
       })()}
+      {item.crossedOut && <CrossoutOverlay cx={cx} cy={cy} width={w - 60} height={h - 44} />}
     </motion.g>
   );
 }
