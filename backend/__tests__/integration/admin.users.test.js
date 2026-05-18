@@ -54,6 +54,32 @@ describe('GET /api/admin/users — auth guards', () => {
   });
 });
 
+// ── stale streak sweep ───────────────────────────────────────────────────────
+
+describe('GET /api/admin/users — stale streak sweep', () => {
+  it('zeros loginStreak on users whose lastStreakDate is older than yesterday', async () => {
+    const admin  = await createAdminUser();
+    const today  = new Date();
+    const week   = new Date(Date.now() - 7 * 86400000);
+    const fresh  = await createUser({ loginStreak: 4, lastStreakDate: today });
+    const stale  = await createUser({ loginStreak: 1, lastStreakDate: week });
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const byId   = Object.fromEntries(res.body.data.users.map(u => [u._id.toString(), u]));
+    expect(byId[fresh._id.toString()].loginStreak).toBe(4);
+    expect(byId[stale._id.toString()].loginStreak).toBe(0);
+
+    // Sweep is persistent — re-reading the doc shows the cleared value
+    const User = require('../../models/User');
+    const reloaded = await User.findById(stale._id);
+    expect(reloaded.loginStreak).toBe(0);
+  });
+});
+
 // ── sort order ────────────────────────────────────────────────────────────────
 
 describe('GET /api/admin/users — sort order', () => {

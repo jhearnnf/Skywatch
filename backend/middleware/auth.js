@@ -8,19 +8,36 @@ const extractToken = (req) => {
   return req.cookies.jwt;
 };
 
+// Cutoff for a "live" streak: midnight at the start of yesterday. Any
+// lastStreakDate older than this means the streak has lapsed (since the user
+// has missed both yesterday and today).
+const staleStreakCutoff = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - 1);
+  return d;
+};
+
 // If the user's last streak day is neither today nor yesterday, the streak
 // has lapsed — zero it out so the displayed value matches reality without
 // waiting for the next brief completion to recompute it.
 const normalizeStaleStreak = async (user) => {
   if (!user || !user.lastStreakDate || !(user.loginStreak > 0)) return;
-  const todayStr  = new Date().toDateString();
-  const yesterStr = new Date(Date.now() - 86400000).toDateString();
-  const lastStr   = new Date(user.lastStreakDate).toDateString();
-  if (lastStr !== todayStr && lastStr !== yesterStr) {
+  if (new Date(user.lastStreakDate) < staleStreakCutoff()) {
     user.loginStreak = 0;
     await user.save();
   }
 };
+
+// Bulk version of normalizeStaleStreak — used by admin endpoints to clean up
+// records of users who never come back (and therefore never trip the
+// per-request middleware). Single indexed updateMany, only touches rows that
+// actually need changing.
+const sweepStaleStreaks = () =>
+  User.updateMany(
+    { lastStreakDate: { $lt: staleStreakCutoff() }, loginStreak: { $gt: 0 } },
+    { $set: { loginStreak: 0 } },
+  );
 
 const protect = async (req, res, next) => {
   const token = extractToken(req);
@@ -69,4 +86,4 @@ const optionalAuth = async (req, res, next) => {
   next();
 };
 
-module.exports = { protect, adminOnly, optionalAuth };
+module.exports = { protect, adminOnly, optionalAuth, sweepStaleStreaks, staleStreakCutoff };

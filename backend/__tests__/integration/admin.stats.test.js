@@ -163,8 +163,9 @@ describe('GET /api/admin/stats — users section', () => {
 
   it('sums loginStreak across all users for combinedStreaks', async () => {
     const admin = await createAdminUser();
-    await createUser({ loginStreak: 1 });
-    await createUser({ loginStreak: 4 });
+    const today = new Date();
+    await createUser({ loginStreak: 1, lastStreakDate: today });
+    await createUser({ loginStreak: 4, lastStreakDate: today });
     await createUser({ loginStreak: 0 });
 
     const res = await request(app)
@@ -172,6 +173,21 @@ describe('GET /api/admin/stats — users section', () => {
       .set('Cookie', authCookie(admin._id));
 
     expect(res.body.data.users.combinedStreaks).toBe(5);
+  });
+
+  it('excludes stale streaks (lastStreakDate older than yesterday) from combinedStreaks', async () => {
+    const admin = await createAdminUser();
+    const today  = new Date();
+    const week   = new Date(Date.now() - 7 * 86400000);
+    await createUser({ loginStreak: 3, lastStreakDate: today });
+    await createUser({ loginStreak: 1, lastStreakDate: week });  // stale — should NOT count
+    await createUser({ loginStreak: 5, lastStreakDate: null });  // never streaked — should NOT count
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.users.combinedStreaks).toBe(3);
   });
 
   it('returns 0 emailsSent and emailsFailed when no email log entries exist', async () => {

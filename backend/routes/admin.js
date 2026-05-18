@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { protect, adminOnly } = require('../middleware/auth');
+const { protect, adminOnly, sweepStaleStreaks, staleStreakCutoff } = require('../middleware/auth');
 const User = require('../models/User');
 const ProblemReport = require('../models/ProblemReport');
 const AdminAction = require('../models/AdminAction');
@@ -122,6 +122,10 @@ const AI_PROMPT_DEFAULTS = {
   // Mnemonics
   'mnemonic.single':         'You are a memory coach creating strikingly memorable mnemonics for RAF applicants (18–25). Your goal is a mnemonic so vivid it cannot be forgotten. TECHNIQUE: exploit what that number MEANS — its cultural weight, symbolism, or universal associations (e.g. 18 = finally an adult, 21 = key to the door, 007 = James Bond, 2020 = perfect vision, 42 = answer to life). Then anchor it to a movie quote, video game moment, TV catchphrase, or famous phrase that reinforces that meaning. Prioritise in this order: (1) iconic movie quotes or scenes, (2) video game references, (3) TV show catchphrases or moments, (4) famous phrases or cultural touchstones. The number MUST carry its own meaning in the sentence — not just appear in it. Write one punchy sentence, max 20 words. Return ONLY the plain sentence — no markdown, no asterisks, no bold, no italics, no preamble, no quotes, no citation markers.',
   'mnemonic.batch':          'You are a memory coach creating strikingly memorable mnemonics for RAF applicants (18–25). Your goal is a mnemonic so vivid it cannot be forgotten. TECHNIQUE: exploit what that number MEANS — its cultural weight, symbolism, or universal associations (e.g. 18 = finally an adult, 21 = key to the door, 007 = James Bond, 2020 = perfect vision, 42 = answer to life). Then anchor it to a movie quote, video game moment, TV catchphrase, or famous phrase that reinforces that meaning. Prioritise in this order: (1) iconic movie quotes or scenes, (2) video game references, (3) TV show catchphrases or moments, (4) famous phrases or cultural touchstones. The number MUST carry its own meaning in the sentence — not just appear in it. Each mnemonic must be a single plain-text sentence, max 20 words — no markdown, no asterisks, no bold, no italics, no citation markers.',
+  // 3D scene preview (admin-only). Style is the load-bearing variable while we
+  // iterate; the brief title/subtitle/description are appended as user content
+  // at call time so the system prompt can stay style-only.
+  'scene3d.image':           'First-person POV shot from inside a 3D game world.\n\nCamera: positioned at human standing eye-level (~1.7m above the ground), looking horizontally forward into the scene. The viewer is an invisible, disembodied lens. The image frame contains: ground or floor at the bottom edge receding away into the distance, sky or ceiling above, and the subject of the scene placed directly ahead in the middle of the frame with supporting environment fanning out around it.\n\nStyle: low-poly stylised 3D game render — crisp (not blurry), slightly pixelated game-preview look, soft directional lighting, saturated but grounded colour palette. World-rendering reminiscent of Pokémon X/Y, with the camera flipped to first-person view.\n\nComposition: the named subject from the brief details below is the focal point directly ahead. Supporting context (terrain, weather, era-appropriate props, background NPC characters or vehicles, named locations) fills the surrounding environment visible from this central standing position.\n\nAll surfaces in the world are plain, untextured, or carry only abstract patterns, geometric shapes, or natural textures. Materials are clean and unmarked. Surfaces never carry writing, glyphs, or symbols — they are blank or patterned.\n\nBrief details follow.',
 };
 
 // Returns the DB override if set, otherwise the hardcoded default.
@@ -405,7 +409,13 @@ router.get('/stats', async (_req, res) => {
       GameSessionQuizAttempt.countDocuments({ status: 'completed', difficulty: 'medium', percentageCorrect: { $lt: passThresholdMedium } }),
       GameSessionQuizAttempt.countDocuments({ status: 'abandoned' }),
       User.aggregate([{ $group: { _id: null, total: { $sum: '$totalAirstars' } } }]),
-      User.aggregate([{ $group: { _id: null, total: { $sum: { $ifNull: ['$loginStreak', 0] } } } }]),
+      // Only sum "live" streaks (lastStreakDate within today or yesterday) so
+      // that users who set a streak and never returned don't permanently
+      // inflate this total. Matches the per-request normalizeStaleStreak rule.
+      User.aggregate([
+        { $match: { lastStreakDate: { $gte: staleStreakCutoff() } } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$loginStreak', 0] } } } },
+      ]),
       // Quiz: sum time for attempts that have both timeStarted and timeFinished
       GameSessionQuizAttempt.aggregate([
         { $match: { timeFinished: { $ne: null } } },
@@ -1125,6 +1135,7 @@ async function enrichUsersWithStats(users) {
 // GET /api/admin/users — admins first, then oldest registration first
 router.get('/users', async (req, res) => {
   try {
+    await sweepStaleStreaks();
     const users = await User.find().populate('rank').sort({ isAdmin: -1, createdAt: 1 });
     res.json({ status: 'success', data: { users: await enrichUsersWithStats(users) } });
   } catch (err) {
@@ -5360,6 +5371,129 @@ router.post('/ai/generate-image', featureMiddleware('generate-image'), async (re
     }));
 
     res.json({ status: 'success', data: { images, warnings } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── 3D Scene Preview (admin-only, step 1) ────────────────────────────────────
+// Generates a single AI-rendered 3D scene illustration of a brief via
+// OpenRouter's image-capable Gemini model, uploads to Cloudinary, and stores
+// the URL on the brief. One image per brief. The UI exposes a generate +
+// remove flow on the edit page; the image is not yet surfaced anywhere else.
+const SCENE3D_MODEL = 'google/gemini-2.5-flash-image';
+
+// POST /api/admin/briefs/:id/scene3d — generate and persist
+router.post('/briefs/:id/scene3d', featureMiddleware('scene3d-image'), async (req, res) => {
+  try {
+    const briefId = req.params.id;
+    setBrief(briefId);
+
+    const brief = await IntelligenceBrief.findById(briefId);
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+
+    const settings       = await AppSettings.getSettings();
+    const promptTemplate = getPrompt(settings, 'scene3d.image');
+
+    const descText = Array.isArray(brief.descriptionSections)
+      ? brief.descriptionSections
+          .map(s => {
+            if (!s) return '';
+            if (typeof s === 'string') return s;
+            const heading = (s.heading ?? '').trim();
+            const body    = (s.body ?? '').trim();
+            return heading ? `${heading}: ${body}` : body;
+          })
+          .filter(Boolean)
+          .join('\n\n')
+      : '';
+
+    const briefDetails = [
+      `Title: ${brief.title || ''}`,
+      brief.subtitle ? `Subtitle: ${brief.subtitle}` : null,
+      brief.category ? `Category: ${brief.category}${brief.subcategory ? ` · ${brief.subcategory}` : ''}` : null,
+      descText ? `Description:\n${descText}` : null,
+    ].filter(Boolean).join('\n\n');
+
+    // Gemini image-output models weight user content far more heavily than
+    // system content — combining the style/camera frame and the per-brief
+    // details into a single user message anchors the camera instruction
+    // alongside the subject rather than letting it drift. The closing reminder
+    // restates the load-bearing constraints in positive form (no negative
+    // lists, which image models tend to render anyway).
+    const userContent = `${promptTemplate}\n\n${briefDetails}\n\nReminder: first-person POV at standing eye-level inside the scene, looking forward. The camera is invisible — only the world ahead is shown. All surfaces in the world are blank or carry abstract patterns only.`;
+
+    const data = await callOpenRouter({
+      body: {
+        model:      SCENE3D_MODEL,
+        modalities: ['image', 'text'],
+        messages: [
+          { role: 'user', content: userContent },
+        ],
+      },
+    });
+
+    const msg        = data?.choices?.[0]?.message;
+    const imageEntry = Array.isArray(msg?.images) ? msg.images[0] : null;
+    const imageUrl   = imageEntry?.image_url?.url || imageEntry?.url || null;
+    if (!imageUrl) {
+      return res.status(502).json({ message: 'Image model returned no image' });
+    }
+
+    // imageUrl is typically a data: URL (base64). Decode to Buffer for upload.
+    let buffer;
+    if (imageUrl.startsWith('data:')) {
+      const comma = imageUrl.indexOf(',');
+      const b64   = comma >= 0 ? imageUrl.slice(comma + 1) : '';
+      buffer = Buffer.from(b64, 'base64');
+    } else {
+      // Some providers return an https URL — fetch and buffer it.
+      const r = await fetch(imageUrl);
+      if (!r.ok) return res.status(502).json({ message: `Failed to fetch returned image (${r.status})` });
+      buffer = Buffer.from(await r.arrayBuffer());
+    }
+    if (!buffer || buffer.length === 0) {
+      return res.status(502).json({ message: 'Image model returned empty image data' });
+    }
+
+    // Destroy previous Cloudinary asset (if any) before saving the new one.
+    const previousPublicId = brief.scene3dImage?.cloudinaryPublicId || null;
+
+    const uploaded = await uploadBuffer(buffer, { folder: 'brief-scene3d' });
+
+    brief.scene3dImage = {
+      url:                uploaded.secure_url,
+      cloudinaryPublicId: uploaded.public_id,
+      generatedAt:        new Date(),
+    };
+    await brief.save();
+
+    if (previousPublicId) {
+      destroyAsset(previousPublicId).catch(() => {});
+    }
+
+    res.json({ status: 'success', data: { scene3dImage: brief.scene3dImage } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/admin/briefs/:id/scene3d — remove and clear field
+router.delete('/briefs/:id/scene3d', async (req, res) => {
+  try {
+    const brief = await IntelligenceBrief.findById(req.params.id);
+    if (!brief) return res.status(404).json({ message: 'Brief not found' });
+
+    const publicId = brief.scene3dImage?.cloudinaryPublicId || null;
+
+    brief.scene3dImage = { url: null, cloudinaryPublicId: null, generatedAt: null };
+    await brief.save();
+
+    if (publicId) {
+      destroyAsset(publicId).catch(() => {});
+    }
+
+    res.json({ status: 'success', data: { scene3dImage: brief.scene3dImage } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
