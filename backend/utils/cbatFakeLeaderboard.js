@@ -28,7 +28,6 @@ const GAME_OFFSET = {
   'visualisation-2d': 10,
   'dpt':             14,
   'act':             18,
-  'trace-1':         22,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -109,13 +108,9 @@ const FAKE_TUNING = {
     floor: 60, ceiling: 460, seedTime: 226.4, timeStep: 4.3,
     scoreSequence: [460, 420, 380, 350, 320, 295, 270, 245, 220, 195, 175, 155, 135, 120, 105, 95, 85, 75, 68, 60],
   },
-  'trace-1': {
-    // 40 turns × ±1pt = score range [-40, +40]. Top fakes land in the
-    // mid-30s (≥85% accuracy is competitive but not unbeatable). Floor at
-    // 1 follows the "no demo shows a zero" rule (see cbatFakeLeaderboard.test).
-    floor: 1, ceiling: 38, seedTime: 220.0, timeStep: 4.7,
-    scoreSequence: [38, 36, 34, 32, 30, 28, 26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2, 1],
-  },
+  // Note: trace-1 intentionally has no FAKE_TUNING entry. Its leaderboard
+  // shows real scores only — padLeaderboard early-returns when tuning is
+  // absent.
 };
 
 // Fixed delta tables — natural-looking variance without randomness.

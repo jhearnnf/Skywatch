@@ -109,41 +109,30 @@ describe('CBAT Trace 1', () => {
   });
 
   describe('GET /leaderboard', () => {
-    it('returns 20 padded entries when no real scores exist', async () => {
+    it('returns an empty leaderboard when no real scores exist (no demo padding)', async () => {
       const res = await request(app)
         .get(LEADERBOARD_URL)
         .set('Cookie', cookie);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.leaderboard.length).toBe(20);
-      // Top of the trace-1 fake sequence is 38; the worst is 0.
-      const scores = res.body.data.leaderboard.map(e => e.bestScore);
-      expect(scores[0]).toBe(38);
-      expect(Math.min(...scores)).toBeGreaterThanOrEqual(0);
+      expect(res.body.data.leaderboard).toEqual([]);
+      expect(res.body.data.myBest).toBeNull();
     });
 
-    it('places a high real score above fake entries', async () => {
-      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 40, totalTime: 22000 });
+    it('returns only real entries (no demo rows) when scores exist', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 28, totalTime: 22000 });
+      await request(app).post(RESULT_URL).set('Cookie', cookie2).send({ score: 12, totalTime: 24000 });
 
       const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
 
       expect(res.status).toBe(200);
-      const top = res.body.data.leaderboard[0];
-      expect(top.bestScore).toBe(40);
-      expect(top.isFake).toBeFalsy();
+      const board = res.body.data.leaderboard;
+      expect(board).toHaveLength(2);
+      expect(board.every(e => !e.isFake)).toBe(true);
+      expect(board[0].bestScore).toBe(28);
+      expect(board[1].bestScore).toBe(12);
       expect(res.body.data.myBest).toBeTruthy();
-      expect(res.body.data.myBest.bestScore).toBe(40);
-    });
-
-    it('returns a myBest entry when the user is below the top 20', async () => {
-      // Insert a very low real score — below all fake entries.
-      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: -20, totalTime: 28000 });
-
-      const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
-
-      expect(res.status).toBe(200);
-      expect(res.body.data.myBest).toBeTruthy();
-      expect(res.body.data.myBest.bestScore).toBe(-20);
+      expect(res.body.data.myBest.bestScore).toBe(28);
     });
   });
 });
