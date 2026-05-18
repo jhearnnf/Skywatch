@@ -232,7 +232,7 @@ function UserChatView() {
   const isClosed = conversation.status === 'closed'
 
   return (
-    <div className="max-w-2xl mx-auto h-[calc(100vh-8rem)] flex flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+    <div className="max-w-2xl mx-auto h-[calc(100dvh-13.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
         <div className="min-w-0">
@@ -471,9 +471,9 @@ function AdminChatView({ initialUserId }) {
   )
 
   return (
-    <div className="max-w-6xl mx-auto h-[calc(100vh-8rem)] flex gap-3">
-      {/* Left rail */}
-      <div className="w-72 shrink-0 flex flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+    <div className="max-w-6xl mx-auto h-[calc(100dvh-13.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex md:gap-3">
+      {/* Left rail — full-width on mobile when nothing selected, hidden on mobile when viewing a conversation */}
+      <div className={`w-full md:w-72 md:shrink-0 ${selectedId ? 'hidden md:flex' : 'flex'} flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden`}>
         <div className="px-3 py-3 border-b border-slate-200 space-y-2">
           <input
             type="text"
@@ -537,8 +537,8 @@ function AdminChatView({ initialUserId }) {
         </div>
       </div>
 
-      {/* Right pane */}
-      <div className="flex-1 flex flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+      {/* Right pane — full-width on mobile when a conversation is selected, hidden otherwise */}
+      <div className={`flex-1 ${selected ? 'flex' : 'hidden md:flex'} flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden`}>
         {!selected ? (
           <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
             Select a conversation to begin.
@@ -546,14 +546,24 @@ function AdminChatView({ initialUserId }) {
         ) : (
           <>
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-600 uppercase tracking-wider truncate">
-                  {selected.userId?.email || selected.userId?.agentNumber || 'Unknown user'}
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  {selected.status === 'closed' ? 'Closed' : 'Open'} ·
-                  {' '}Started by {selected.startedByRole}
-                </p>
+              <div className="min-w-0 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(null)}
+                  className="md:hidden shrink-0 text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors text-xs font-semibold"
+                  aria-label="Back to conversation list"
+                >
+                  ← Back
+                </button>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-wider truncate">
+                    {selected.userId?.email || selected.userId?.agentNumber || 'Unknown user'}
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    {selected.status === 'closed' ? 'Closed' : 'Open'} ·
+                    {' '}Started by {selected.startedByRole}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {selected.status === 'open' ? (
@@ -623,7 +633,7 @@ export default function Chat() {
   if (!user) return null
 
   return (
-    <div className="px-2 py-4 md:py-6">
+    <div className="px-2 py-4 overflow-hidden">
       <SEO title="Chat" description="Talk to the Skywatch team." />
       {user.isAdmin
         ? <AdminChatView initialUserId={initialUserId} />
