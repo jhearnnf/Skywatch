@@ -2242,6 +2242,30 @@ router.post('/cbat/:gameKey/start', protect, async (req, res) => {
 // CBAT_GAMES is imported from ../constants/cbatGames — the single source of
 // truth for all CBAT games. Adding a new CBAT game = one entry there.
 
+// POST /api/games/cbat/trace-1/result
+router.post('/cbat/trace-1/result', protect, async (req, res) => {
+  try {
+    const { score, correctTurns, totalTurns, roundsCompleted, accuracy, aircraftUsed, totalTime } = req.body;
+    if (typeof score !== 'number') {
+      return res.status(400).json({ message: 'score is required' });
+    }
+    const Trace1 = CBAT_GAMES['trace-1'].Model;
+    const result = await Trace1.create({
+      userId: req.user._id,
+      score,
+      correctTurns: correctTurns ?? 0,
+      totalTurns:   totalTurns   ?? 40,
+      roundsCompleted: roundsCompleted ?? 5,
+      accuracy:     accuracy     ?? 0,
+      aircraftUsed: aircraftUsed || 'Hawk T2',
+      totalTime:    totalTime    ?? 0,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/games/cbat/plane-turn/result
 router.post('/cbat/plane-turn/result', protect, async (req, res) => {
   try {
@@ -2585,6 +2609,7 @@ router.get('/cbat/flag/leaderboard', protect, (req, res) => cbatLeaderboard(req,
 router.get('/cbat/visualisation-2d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-2d'));
 router.get('/cbat/dpt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt'));
 router.get('/cbat/act/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'act'));
+router.get('/cbat/trace-1/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'trace-1'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -2701,5 +2726,6 @@ router.get('/cbat/flag/personal-best', protect, (req, res) => cbatPersonalBest(r
 router.get('/cbat/visualisation-2d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-2d'));
 router.get('/cbat/dpt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt'));
 router.get('/cbat/act/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'act'));
+router.get('/cbat/trace-1/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'trace-1'));
 
 module.exports = router;

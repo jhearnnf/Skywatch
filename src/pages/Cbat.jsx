@@ -66,13 +66,12 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
 
 const IMAGE_GAMES = CBAT_GAMES.filter(g => g.image)
 
-// Display the "NEW GAME" badge on the ACT card until midnight local time at
-// the start of 11 May 2026 (i.e. visible up to and including 10th May; gone from 11th).
-const NEW_GAME_KEY = 'act'
-// Badge shows up to and including May 14 — set deadline to start-of-May-15
-// (month is 0-indexed; 4 = May) so `Date.now() < deadline` is still true
-// at any point on May 14.
-const NEW_GAME_DEADLINE = new Date(2026, 4, 15)
+// Display the "NEW GAME" badge on the TRACE 1/2 card until midnight at the
+// start of 22 May 2026 (i.e. visible up to and including 21st May).
+// Month is 0-indexed (4 = May), so `Date.now() < deadline` is still true at
+// any point on May 21.
+const NEW_GAME_KEY = 'plane-turn'
+const NEW_GAME_DEADLINE = new Date(2026, 4, 22)
 
 export default function Cbat() {
   const { user } = useAuth()

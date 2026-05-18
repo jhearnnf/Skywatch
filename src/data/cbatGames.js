@@ -12,7 +12,7 @@ export const CBAT_GAMES = [
   { key: 'code-duplicates', emoji: '🧩', title: 'Code Duplicates',  desc: 'Memorise a sequence of digits, then count how many times one appeared.', path: '/cbat/code-duplicates', image: '/images/Code Duplicates.png' },
   { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: '/cbat/angles',          image: '/images/Angles.png' },
   { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: '/cbat/instruments',     image: '/images/Instruments.png' },
-  { key: 'plane-turn',      emoji: '🗺️', title: 'Plane Turn',       desc: 'Choose your aircraft, plan your turn and heading with precision.',            path: '/cbat/plane-turn',      image: '/images/Plane Turn.png' },
+  { key: 'plane-turn',      emoji: '🗺️', title: 'TRACE 1/2',         desc: 'Practise your turn and heading, or take the Trace recall test.',             path: '/cbat/trace',           image: '/images/Plane Turn.png' },
   { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png' },
   { key: 'visualisation-2d', emoji: '🧮', title: 'Visualisation 2D', desc: 'Mentally weld labelled shapes into the correct final figure.', path: '/cbat/visualisation-2d', image: '/images/Visualisation 2D.png' },
   { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png' },

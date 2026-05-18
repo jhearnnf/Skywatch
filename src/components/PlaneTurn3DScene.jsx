@@ -17,6 +17,16 @@ const DIR_VECS = [
   { dr: 0,  dc: -1 },
 ]
 
+// Aircraft local nose direction (matches CbatPlaneTurn's MODEL_NOSE).
+const MODEL_NOSE = new THREE.Vector3(-1, 0, 0)
+
+// Soft arena bounds for smooth flight — match the schedule generator's
+// 1-cell margin (world ±3.5, layer 1–8) so the plane visibly stays away
+// from the wireframe walls.
+const ARENA_HALF  = GRID / 2 - 1.5
+const ARENA_FLOOR = 1
+const ARENA_CEIL  = LAYERS - 2
+
 class ErrorCatcher extends Component {
   state = { hasError: false }
   static getDerivedStateFromError() { return { hasError: true } }
@@ -57,6 +67,76 @@ function AircraftModel3D({ url, quat, onReady }) {
   })
 
   return <primitive ref={meshRef} object={clonedScene} scale={[0.7, 0.7, 0.7]} />
+}
+
+// Smooth-flight aircraft used by Trace 1: position integrates each frame so
+// the plane visibly flies between rotation events instead of teleporting
+// grid-cell to grid-cell. Rotation still slerps to the target quaternion.
+function SmoothFlightAircraft({ url, quat, speed, active, resetKey, onReady }) {
+  const { scene } = useGLTF(url)
+  const clonedScene = useMemo(() => scene.clone(), [scene])
+  const meshRef     = useRef()
+  const groupRef    = useRef()
+  const targetQuat  = useRef(new THREE.Quaternion())
+  const currentQuat = useRef(new THREE.Quaternion())
+  // Match the schedule generator's grid origin of (5, 5, 5) → world (0.5, 5, 0.5)
+  // so the planner's bounds projections and the visible position stay aligned.
+  const worldPos    = useRef(new THREE.Vector3(0.5, 5, 0.5))
+  const forwardTmp  = useRef(new THREE.Vector3())
+  const initialised = useRef(false)
+  const lastReset   = useRef(resetKey)
+
+  useEffect(() => { onReady?.() }, [onReady])
+
+  useEffect(() => {
+    if (resetKey !== lastReset.current) {
+      worldPos.current.set(0.5, 5, 0.5)
+      lastReset.current = resetKey
+    }
+  }, [resetKey])
+
+  useEffect(() => {
+    if (!quat || quat.length < 4) return
+    targetQuat.current.set(quat[0], quat[1], quat[2], quat[3])
+    if (!initialised.current) {
+      currentQuat.current.copy(targetQuat.current)
+      initialised.current = true
+    }
+  }, [quat])
+
+  useFrame((_, dt) => {
+    if (!meshRef.current || !groupRef.current) return
+    // Slerp rotation — slightly faster than the legacy 0.18-per-frame so the
+    // turn reads clearly within the smaller per-tick window at higher rounds.
+    currentQuat.current.slerp(targetQuat.current, Math.min(0.3, dt * 9))
+    meshRef.current.quaternion.copy(currentQuat.current)
+
+    if (!active || !speed) {
+      groupRef.current.position.copy(worldPos.current)
+      return
+    }
+
+    // Advance position along the current (slerped) forward direction.
+    forwardTmp.current.copy(MODEL_NOSE).applyQuaternion(currentQuat.current)
+    forwardTmp.current.multiplyScalar(speed * dt)
+    worldPos.current.add(forwardTmp.current)
+
+    // Soft-clamp to arena bounds so the model never punches through the wall.
+    if (worldPos.current.x >  ARENA_HALF)  worldPos.current.x =  ARENA_HALF
+    if (worldPos.current.x < -ARENA_HALF)  worldPos.current.x = -ARENA_HALF
+    if (worldPos.current.z >  ARENA_HALF)  worldPos.current.z =  ARENA_HALF
+    if (worldPos.current.z < -ARENA_HALF)  worldPos.current.z = -ARENA_HALF
+    if (worldPos.current.y > ARENA_CEIL)   worldPos.current.y = ARENA_CEIL
+    if (worldPos.current.y < ARENA_FLOOR)  worldPos.current.y = ARENA_FLOOR
+
+    groupRef.current.position.copy(worldPos.current)
+  })
+
+  return (
+    <group ref={groupRef}>
+      <primitive ref={meshRef} object={clonedScene} scale={[0.7, 0.7, 0.7]} />
+    </group>
+  )
 }
 
 function ArenaWireframe() {
@@ -115,7 +195,16 @@ function NextPosPlane({ position, axis, inBounds }) {
   )
 }
 
-export default function PlaneTurn3DScene({ plane, pkg, modelUrl, onError, onReady }) {
+export default function PlaneTurn3DScene({
+  plane, pkg, modelUrl, onError, onReady,
+  // Trace 1 smooth-flight overrides — when traceFlight is true, the aircraft
+  // integrates position continuously inside the scene rather than snapping to
+  // grid cells. NextPosPlane (a discrete-grid concept) is suppressed.
+  traceFlight = false,
+  traceFlightSpeed = 0,
+  traceFlightActive = false,
+  traceFlightResetKey = 0,
+}) {
   const [px, py, pz] = toWorld(plane.r, plane.c, plane.layer)
 
   // Movement direction (decoupled from visual pitch):
@@ -157,43 +246,79 @@ export default function PlaneTurn3DScene({ plane, pkg, modelUrl, onError, onRead
     nextPlanePos = [xPos, arenaY, 0]
   }
 
+  // Trace mode dollies the camera in and narrows the FOV slightly so the
+  // Hawk T2 reads as a larger, more cinematic subject. Practise keeps the
+  // legacy framing so existing scores stay comparable.
+  //
+  // Constraint: the plane's smooth-flight range is world ±2.9 on x/z and
+  // y ∈ [1.6, 7.4] (margin=2 plus ~0.4 cells of slerp drift). With camera at
+  // (0, 4.5, camera_z) and a vertical FOV, the worst-case visible half-width
+  // at the plane's closest z (+2.9) is (camera_z - 2.9) * tan(fov/2).
+  // We need that ≥ 2.9 with at least ~0.8 cells of margin so the plane
+  // never clips at the corners. z=10 + fov=55 → (10-2.9)*tan(27.5°)=3.70 →
+  // 0.80 of safe margin. Plane appears ~33% larger than the legacy framing.
+  const cameraPos = traceFlight ? [0, arenaY, 10] : [0, arenaY, 12]
+  const cameraFov = traceFlight ? 55 : 60
+
   return (
     <Canvas
-      camera={{ position: [0, arenaY, 12], fov: 60, near: 0.1, far: 100 }}
+      camera={{ position: cameraPos, fov: cameraFov, near: 0.1, far: 100 }}
       gl={{ alpha: true, antialias: true }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
       onCreated={({ camera }) => camera.lookAt(0, arenaY, 0)}
     >
-      <ambientLight intensity={1.5} />
-      <directionalLight position={[5, 8, 10]} intensity={2} />
-      <pointLight position={[0, arenaY, 6]} intensity={1} color="#5baaff" />
+      {/* Trace 1+ uses a brighter sky-toned lighting; Practise keeps the
+          legacy electric-blue point light against the dark grid. */}
+      <ambientLight intensity={traceFlight ? 2.2 : 1.5} />
+      <directionalLight position={[5, 8, 10]} intensity={traceFlight ? 2.4 : 2} color={traceFlight ? '#fff7e6' : '#ffffff'} />
+      {!traceFlight && <pointLight position={[0, arenaY, 6]} intensity={1} color="#5baaff" />}
+      {traceFlight && <hemisphereLight args={['#bfe3ff', '#3a7bbf', 0.9]} />}
 
-      <ArenaWireframe />
-      {/* Floor grid — depth reference (lines perpendicular to Z aid distance perception) */}
-      <gridHelper args={[GRID, GRID, '#13294a', '#0f2440']} position={[0, -0.5, 0]} />
-      {/* Back-wall grid — gives an explicit Z-axis reference at the far end of the arena */}
-      <gridHelper
-        args={[GRID, GRID, '#13294a', '#0f2440']}
-        rotation={[Math.PI / 2, 0, 0]}
-        position={[0, arenaY, -GRID / 2]}
-      />
-
-      <CarePackage r={pkg.r} c={pkg.c} layer={pkg.layer} />
-      <NextPosPlane position={nextPlanePos} axis={nextAxis} inBounds={nextPlaneInBounds} />
+      {/* Wireframe arena + grids only in Practise mode — Trace flies through
+          an open sky, so the cage is hidden and the package never renders. */}
+      {!traceFlight && (
+        <>
+          <ArenaWireframe />
+          <gridHelper args={[GRID, GRID, '#13294a', '#0f2440']} position={[0, -0.5, 0]} />
+          <gridHelper
+            args={[GRID, GRID, '#13294a', '#0f2440']}
+            rotation={[Math.PI / 2, 0, 0]}
+            position={[0, arenaY, -GRID / 2]}
+          />
+          <CarePackage r={pkg.r} c={pkg.c} layer={pkg.layer} />
+          <NextPosPlane position={nextPlanePos} axis={nextAxis} inBounds={nextPlaneInBounds} />
+        </>
+      )}
 
       {modelUrl && (
-        <group position={[px, py, pz]}>
+        traceFlight ? (
           <Suspense fallback={null}>
             <ErrorCatcher onError={onError}>
-              <AircraftModel3D
+              <SmoothFlightAircraft
                 key={modelUrl}
                 url={modelUrl}
                 quat={plane.quat}
+                speed={traceFlightSpeed}
+                active={traceFlightActive}
+                resetKey={traceFlightResetKey}
                 onReady={onReady}
               />
             </ErrorCatcher>
           </Suspense>
-        </group>
+        ) : (
+          <group position={[px, py, pz]}>
+            <Suspense fallback={null}>
+              <ErrorCatcher onError={onError}>
+                <AircraftModel3D
+                  key={modelUrl}
+                  url={modelUrl}
+                  quat={plane.quat}
+                  onReady={onReady}
+                />
+              </ErrorCatcher>
+            </Suspense>
+          </group>
+        )
       )}
     </Canvas>
   )

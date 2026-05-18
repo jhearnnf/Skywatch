@@ -8,8 +8,8 @@ import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
-import { usePlaneTurnMode } from '../hooks/usePlaneTurnMode'
-import PlaneTurnModeToggle from '../components/PlaneTurnModeToggle'
+import { useTraceMode } from '../hooks/useTraceMode'
+import TraceModeSelector from '../components/TraceModeSelector'
 
 // Aircraft control model: full local-frame flight controls.
 //   - Pitch (climb/dive): rotation around the aircraft's local right axis (model -Z).
@@ -80,6 +80,95 @@ const MAX_LEVEL      = 5
 const BASE_INTERVAL  = 500 // ms per move at level 1
 const SPEED_STEP     = 40  // ms faster each level
 
+// ── Trace 1 constants ────────────────────────────────────────────────────────
+// Recall test: autopilot performs one of four turns; player presses the matching
+// arrow within the gap before the next turn. Speed ramps linearly across rounds;
+// round 5 lands at the old level-3 pace (930ms) — challenging but readable.
+const TRACE1_ROUNDS          = 5
+const TRACE1_TURNS_PER_ROUND = 8
+const TRACE1_SPEED_TABLE     = [1870, 1635, 1400, 1165, 930] // ms between turns
+const TRACE1_TOTAL_TURNS     = TRACE1_ROUNDS * TRACE1_TURNS_PER_ROUND
+const TRACE1_AIRCRAFT_SLUG   = 'hawk t2'
+// Keep the plane at least two cells away from each wall at every projected
+// turn moment. With slerp lag the plane can drift up to ~0.4 cells past the
+// projection in the old direction, so margin=2 leaves a full cell of buffer
+// between the worst-case excursion and the scene's soft-clamp at world ±3.5.
+// The schedule + clamp together guarantee the visible aircraft never freezes
+// against the wireframe wall.
+const TRACE1_WALL_MARGIN     = 2
+
+// Each turn is a local-frame quaternion rotation.
+const TRACE1_TURN_DEFS = {
+  yawL:   { axis: MODEL_UP,    angle:  Math.PI / 2, key: 'ArrowLeft',  label: '←' },
+  yawR:   { axis: MODEL_UP,    angle: -Math.PI / 2, key: 'ArrowRight', label: '→' },
+  pitchD: { axis: MODEL_RIGHT, angle: -Math.PI / 2, key: 'ArrowUp',    label: '↑' }, // stick: forward = dive
+  pitchU: { axis: MODEL_RIGHT, angle:  Math.PI / 2, key: 'ArrowDown',  label: '↓' }, // stick: back = climb
+}
+const TRACE1_TURN_KEYS = ['yawL', 'yawR', 'pitchD', 'pitchU']
+
+function trace1KeyToTurn(key) {
+  switch (key) {
+    case 'ArrowLeft':  return 'yawL'
+    case 'ArrowRight': return 'yawR'
+    case 'ArrowUp':    return 'pitchD'
+    case 'ArrowDown':  return 'pitchU'
+    default: return null
+  }
+}
+
+// Simulate `steps` forward cells along `quat`'s heading. Returns the final
+// grid position, or null if any step would cross the margin-tightened bound.
+function simulateForwardSteps(quat, startPos, steps, margin = TRACE1_WALL_MARGIN) {
+  const fwd = getForward(quat)
+  const x = Math.round(fwd.x), y = Math.round(fwd.y), z = Math.round(fwd.z)
+  const out = { r: startPos.r, c: startPos.c, layer: startPos.layer }
+  const min = margin
+  const maxR = GRID  - 1 - margin
+  const maxC = GRID  - 1 - margin
+  const maxL = LAYERS - 1 - margin
+  for (let i = 0; i < steps; i++) {
+    out.layer += y
+    out.c     += x
+    out.r     += z
+    if (out.r < min || out.r > maxR || out.c < min || out.c > maxC || out.layer < min || out.layer > maxL) return null
+  }
+  return out
+}
+
+// Build an 8-turn schedule that keeps the plane inside [margin, GRID-1-margin]
+// on every axis. With a 10-cell arena and the plane starting at centre, at
+// least one of the 4 candidate turns always keeps the path in bounds (the
+// candidates are 4 of the 6 cardinal axes); we score each by how much margin
+// it leaves and pick a random one from the safest pool.
+function buildTrace1Round(initialQuat, initialPos) {
+  const schedule = []
+  let quat = [...initialQuat]
+  let pos  = { ...initialPos }
+  for (let i = 0; i < TRACE1_TURNS_PER_ROUND; i++) {
+    // Evaluate all 4 candidate turns.
+    const evaluated = TRACE1_TURN_KEYS.map(cand => {
+      const def     = TRACE1_TURN_DEFS[cand]
+      const newQuat = applyLocalRot(quat, def.axis, def.angle)
+      const stepped = simulateForwardSteps(newQuat, pos, 2)
+      return { cand, newQuat, stepped }
+    })
+
+    // Prefer candidates that land at least 1 extra cell from any wall.
+    const valid    = evaluated.filter(e => e.stepped)
+    const looseSet = valid.length ? valid : evaluated.map(e => ({
+      ...e,
+      // Force-walked fallback: re-simulate without margin, clamp inside.
+      stepped: simulateForwardSteps(e.newQuat, pos, 2, 0) || pos,
+    }))
+
+    const chosen = looseSet[Math.floor(Math.random() * looseSet.length)]
+    schedule.push(chosen.cand)
+    quat = chosen.newQuat
+    pos  = chosen.stepped || pos
+  }
+  return { schedule, endQuat: quat, endPos: pos }
+}
+
 // Direction vectors: index matches rotation (0=up,1=right,2=down,3=left)
 const DIR = [
   { dr: -1, dc: 0 },
@@ -106,106 +195,179 @@ function randomPackagePos(planeR, planeC) {
 }
 
 // ── Aircraft Selection Screen ────────────────────────────────────────────────
-function AircraftSelect({ aircraft, onSelect, loading, personalBest, gameMode3D }) {
+function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, traceModeSelector }) {
+  const gameMode3D     = mode === '3d'
+  const gameModeTrace1 = mode === 'trace1'
+  const gameModeTrace2 = mode === 'trace2'
+
+  const heading = gameModeTrace1
+    ? 'Trace 1'
+    : gameModeTrace2
+      ? 'Trace 2'
+      : `${gameMode3D ? '3D' : '2D'} Practise`
+  const subheading = gameModeTrace1
+    ? 'Watch the Hawk T2 fly — recall each turn it makes.'
+    : gameModeTrace2
+      ? 'Coming Soon.'
+      : 'Practise for TRACE 1 + 2 CBAT tests.'
+
+  // Personal-best label varies per mode (different scoring shape).
+  const pbLine = gameModeTrace1
+    ? (personalBest && <>Score: <span className="text-brand-300">{personalBest.bestScore}</span></>)
+    : (personalBest && <>{personalBest.bestScore} rotations <span className="text-slate-500 mx-1">·</span> {personalBest.bestTime.toFixed(1)}s</>)
+
+  // Leaderboard target depends on mode.
+  const leaderboardPath = gameModeTrace1 ? '/cbat/trace-1/leaderboard' : '/cbat/plane-turn/leaderboard'
+
   return (
     <div>
-      <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Plane Turn</h2>
-      <p className="text-xs text-slate-400 text-center mb-3">Practise for TRACE 1 + 2 CBAT tests</p>
+      {traceModeSelector && (
+        <div className="mb-4 flex justify-center">{traceModeSelector}</div>
+      )}
 
-      {/* Mode recommendation — explicit nudge so users know the toggle in the
-          header switches between an easier practice mode and the real
-          challenge. Slate/brand/amber scales are inverted on dark theme:
-          high values = light, low values = dark. Use 700–800 for body text. */}
-      <div
-        className={`max-w-md mx-auto mb-3 rounded-lg border-2 p-3 text-sm ${
-          gameMode3D
-            ? 'border-amber-700 bg-amber-100 text-amber-800'
-            : 'border-brand-600 bg-brand-100 text-brand-800'
-        }`}
-      >
-        {gameMode3D ? (
-          <>
-            <span className="font-extrabold uppercase tracking-wide">3D — Hard.</span>{' '}
-            <span className="text-slate-800">Full pitch &amp; yaw with 10 vertical layers. New to this? Switch to</span>{' '}
-            <span className="font-mono font-bold">2D · Practice</span>{' '}
-            <span className="text-slate-800">in the top-right.</span>
-          </>
-        ) : (
-          <>
-            <span className="font-extrabold uppercase tracking-wide">2D — Practice.</span>{' '}
-            <span className="text-slate-800">Flat grid to learn the controls. Ready for the real challenge? Switch to</span>{' '}
-            <span className="font-mono font-bold">3D · Hard</span>{' '}
-            <span className="text-slate-800">in the top-right.</span>
-          </>
-        )}
-      </div>
+      <h2 className="text-lg font-bold text-slate-800 text-center mb-1">{heading}</h2>
+      <p className="text-xs text-slate-400 text-center mb-3">{subheading}</p>
+
+      {/* Mode banner */}
+      {!gameModeTrace2 && (
+        <div
+          className={`max-w-md mx-auto mb-3 rounded-lg border-2 p-3 text-sm ${
+            gameModeTrace1
+              ? 'border-emerald-700 bg-emerald-100 text-emerald-800'
+              : gameMode3D
+                ? 'border-amber-700 bg-amber-100 text-amber-800'
+                : 'border-brand-600 bg-brand-100 text-brand-800'
+          }`}
+        >
+          {gameModeTrace1 ? (
+            <>
+              <span className="font-extrabold uppercase tracking-wide">Trace 1 — Recall.</span>{' '}
+              <span className="text-slate-800">Hawk T2 auto-flies the arena. Press the arrow matching each turn it just made. 5 rounds × 8 turns. +1 correct / −1 wrong.</span>
+            </>
+          ) : gameMode3D ? (
+            <>
+              <span className="font-extrabold uppercase tracking-wide">3D — Hard.</span>{' '}
+              <span className="text-slate-800">Full pitch &amp; yaw with 10 vertical layers. Switch modes above.</span>
+            </>
+          ) : (
+            <>
+              <span className="font-extrabold uppercase tracking-wide">2D — Practice.</span>{' '}
+              <span className="text-slate-800">Flat grid to learn the controls. Switch modes above when you're ready.</span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Instructions */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
-        <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">📦</span>
-          <span>Collect all care packages on each level to advance</span>
+      {!gameModeTrace2 && (
+        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
+          {gameModeTrace1 ? (
+            <>
+              <div className="flex items-start gap-2">
+                <span className="text-brand-300 shrink-0">👀</span>
+                <span>Watch the Hawk T2 fly itself through the 3D arena.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-brand-300 shrink-0">🎮</span>
+                <span>After each turn, press the matching arrow: <span className="font-mono text-slate-300">←</span> yaw left · <span className="font-mono text-slate-300">→</span> yaw right · <span className="font-mono text-slate-300">↑</span> dive · <span className="font-mono text-slate-300">↓</span> climb.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-brand-300 shrink-0">🏆</span>
+                <span>+1 per correct, −1 per wrong or missed. Aim for +40.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-brand-300 shrink-0">⚡</span>
+                <span>5 rounds × 8 turns. Each round flies faster than the last.</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-start gap-2">
+                <span className="text-brand-300 shrink-0">📦</span>
+                <span>Collect all care packages on each level to advance</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-brand-300 shrink-0">🎮</span>
+                {gameMode3D
+                  ? <span><span className="font-mono text-slate-300">←→</span> to turn &middot; <span className="font-mono text-slate-300">↓</span> climb &middot; <span className="font-mono text-slate-300">↑</span> dive (stick convention). Stay within the arena!</span>
+                  : <span>Arrow keys (desktop) or tap buttons (mobile) to rotate</span>
+                }
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-brand-300 shrink-0">🏆</span>
+                <span>Fewer rotations = better score. Time is also tracked.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-brand-300 shrink-0">⚡</span>
+                <span>Speed increases each level — 5 levels total</span>
+              </div>
+            </>
+          )}
         </div>
-        <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">🎮</span>
-          {gameMode3D
-            ? <span><span className="font-mono text-slate-300">←→</span> to turn &middot; <span className="font-mono text-slate-300">↓</span> climb &middot; <span className="font-mono text-slate-300">↑</span> dive (stick convention). Stay within the arena!</span>
-            : <span>Arrow keys (desktop) or tap buttons (mobile) to rotate</span>
-          }
-        </div>
-        <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">🏆</span>
-          <span>Fewer rotations = better score. Time is also tracked.</span>
-        </div>
-        <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">⚡</span>
-          <span>Speed increases each level — 5 levels total</span>
-        </div>
-      </div>
+      )}
 
-      {personalBest && (
+      {gameModeTrace2 && (
+        <div className="max-w-md mx-auto mb-6 bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-6 text-center">
+          <p className="text-3xl mb-2">🛠️</p>
+          <p className="text-base font-bold text-slate-700 mb-1">Trace 2 — Coming Soon</p>
+          <p className="text-xs text-slate-500">Pick Trace 1 or a Practise mode above.</p>
+        </div>
+      )}
+
+      {personalBest && !gameModeTrace2 && (
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-w-md mx-auto mb-2 text-center">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-          <p className="text-lg font-mono font-bold text-brand-300">
-            {personalBest.bestScore} rotations <span className="text-slate-500 mx-1">·</span> {personalBest.bestTime.toFixed(1)}s
-          </p>
+          <p className="text-lg font-mono font-bold text-brand-300">{pbLine}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
         </div>
       )}
 
-      <div className="text-center mb-4">
-        <Link to="/cbat/plane-turn/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
-          View Leaderboard →
-        </Link>
-      </div>
+      {!gameModeTrace2 && (
+        <div className="text-center mb-4">
+          <Link to={leaderboardPath} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+            View Leaderboard →
+          </Link>
+        </div>
+      )}
 
-      <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Choose Your Aircraft</h2>
-      <p className="text-xs text-slate-400 text-center mb-3">Select an aircraft, then navigate through 5 levels.</p>
+      {gameModeTrace2 ? null : (
+        <>
+          <h2 className="text-lg font-bold text-slate-800 text-center mb-1">
+            {gameModeTrace1 ? 'Aircraft' : 'Choose Your Aircraft'}
+          </h2>
+          <p className="text-xs text-slate-400 text-center mb-3">
+            {gameModeTrace1
+              ? 'Trace 1 uses the Hawk T2 — tap to start.'
+              : 'Select an aircraft, then navigate through 5 levels.'}
+          </p>
+        </>
+      )}
 
-      {loading && (
+      {!gameModeTrace2 && loading && (
         <div className="flex flex-col items-center justify-center py-10">
           <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin mb-4" />
           <p className="text-sm text-slate-400">Loading aircraft...</p>
         </div>
       )}
 
-      {!loading && !aircraft.length && (
+      {!gameModeTrace2 && !loading && !aircraft.length && (
         <div className="text-center py-10">
           <p className="text-4xl mb-3">✈️</p>
           <p className="font-bold text-slate-700 mb-1">
-            {gameMode3D ? 'No 3D aircraft available' : 'No aircraft available'}
+            {gameModeTrace1 ? 'Hawk T2 model not loaded' : (gameMode3D ? 'No 3D aircraft available' : 'No aircraft available')}
           </p>
           <p className="text-sm text-slate-400">
-            {gameMode3D
-              ? 'Switch 3D mode off or add .glb files to public/models/.'
-              : 'Aircraft cutout images need to be generated first.'
-            }
+            {gameModeTrace1
+              ? 'Add hawk t2.glb to public/models/ to enable Trace 1.'
+              : (gameMode3D
+                  ? 'Switch 3D mode off or add .glb files to public/models/.'
+                  : 'Aircraft cutout images need to be generated first.')}
           </p>
         </div>
       )}
 
-      {!loading && aircraft.length > 0 && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-w-md mx-auto">
+      {!gameModeTrace2 && !loading && aircraft.length > 0 && (
+        <div className={`grid gap-3 max-w-md mx-auto ${gameModeTrace1 ? 'grid-cols-1 max-w-[180px]' : 'grid-cols-3 sm:grid-cols-4'}`}>
           {aircraft.map((a, i) => (
             <motion.button
               key={a.briefId}
@@ -223,7 +385,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, gameMode3D 
               <img
                 src={a.cutoutUrl}
                 alt={a.title}
-                className="w-14 h-14 object-contain group-hover:scale-110 transition-transform drop-shadow-[0_0_6px_rgba(91,170,255,0.4)]"
+                className={`object-contain group-hover:scale-110 transition-transform drop-shadow-[0_0_6px_rgba(91,170,255,0.4)] ${gameModeTrace1 ? 'w-20 h-20' : 'w-14 h-14'}`}
               />
               <span className="text-[10px] text-slate-400 group-hover:text-brand-300 text-center leading-tight truncate w-full">
                 {a.title}
@@ -283,6 +445,18 @@ function GameOverOverlay({ won, score, level, maxLevel, onRestart, onMenu }) {
   )
 }
 
+// ── Trace 1 HUD ──────────────────────────────────────────────────────────────
+function Trace1HUD({ round, turn, score }) {
+  const scoreColor = score > 0 ? 'text-emerald-300' : score < 0 ? 'text-red-400' : 'text-brand-300'
+  return (
+    <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+      <span className="text-slate-400">ROUND <span className="text-brand-300">{Math.min(round + 1, TRACE1_ROUNDS)}</span>/{TRACE1_ROUNDS}</span>
+      <span className="text-slate-400">TURN <span className="text-brand-300">{Math.min(turn, TRACE1_TURNS_PER_ROUND)}</span>/{TRACE1_TURNS_PER_ROUND}</span>
+      <span className="text-slate-400">SCORE <span className={scoreColor}>{score > 0 ? `+${score}` : score}</span></span>
+    </div>
+  )
+}
+
 // ── HUD ──────────────────────────────────────────────────────────────────────
 function HUD({ collected, rotations, elapsed, level }) {
   return (
@@ -324,16 +498,28 @@ export default function CbatPlaneTurn() {
   const [loadingAircraft, setLoadingAircraft] = useState(true)
   const [selected, setSelected]         = useState(null)
 
-  // Mode toggle
-  const [mode, setMode]                 = usePlaneTurnMode()
+  // Mode (4 values: '2d' | '3d' | 'trace1' | 'trace2'). Single selector;
+  // Practise modes drive the legacy plane-turn loop, Trace 1 drives the new
+  // autopilot loop. Trace 2 is selector-stub only.
+  const [mode, setMode]                 = useTraceMode()
   const gameMode3D                      = mode === '3d'
+  const gameModeTrace1                  = mode === 'trace1'
+  const gameModeTrace2                  = mode === 'trace2'
+  const gameModePractise                = mode === '2d' || mode === '3d'
   const gameMode3DRef                   = useRef(false)
+  const gameModeTrace1Ref               = useRef(false)
   useEffect(() => { gameMode3DRef.current = gameMode3D }, [gameMode3D])
+  useEffect(() => { gameModeTrace1Ref.current = gameModeTrace1 }, [gameModeTrace1])
 
-  // Aircraft filtered for the select screen
-  const displayAircraft = gameMode3D
-    ? aircraft.filter(a => has3DModel(a.briefId, a.title))
-    : aircraft
+  // Aircraft filtered for the select screen.
+  //   Practise 3D → only aircraft with 3D models
+  //   Trace 1    → only the Hawk T2 (single card)
+  //   Practise 2D → everything
+  const displayAircraft = gameModeTrace1
+    ? aircraft.filter(a => /hawk\s*t2/i.test(a.title || ''))
+    : gameMode3D
+      ? aircraft.filter(a => has3DModel(a.briefId, a.title))
+      : aircraft
 
   // Game state
   const [phase, setPhase]               = useState('select')
@@ -359,7 +545,11 @@ export default function CbatPlaneTurn() {
   const [model3DReady, setModel3DReady] = useState(false)
 
   // 3D-only state
-  const [layer, setLayer]               = useState(2)   // vertical position (0–LAYERS-1)
+  // Default to the arena's centre layer so the first 3D-scene frame already
+  // matches the boot effect's setLayer(5). Before this fix the scene rendered
+  // briefly at layer=2 (lower than centre) and then snapped up once the boot
+  // effect's state batch applied — visible as a small upward jump.
+  const [layer, setLayer]               = useState(5)   // vertical position (0–LAYERS-1)
   // Aircraft visual orientation as a quaternion [x, y, z, w]. Updated by local-frame
   // rotations on each arrow press so every input is exactly one 90° rotation around
   // one world axis (whichever the aircraft's local up/right currently points along).
@@ -380,6 +570,30 @@ export default function CbatPlaneTurn() {
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved]     = useState(false)
 
+  // ── Trace 1 state ──────────────────────────────────────────────────────────
+  const [trace1Round, setTrace1Round]         = useState(0)        // 0-indexed
+  const [trace1Turn, setTrace1Turn]           = useState(0)        // 0-indexed within round
+  const [trace1Schedule, setTrace1Schedule]   = useState([])       // current round's turns
+  const [trace1Score, setTrace1Score]         = useState(0)
+  const [trace1Correct, setTrace1Correct]     = useState(0)
+  const [trace1Total, setTrace1Total]         = useState(0)
+  const [trace1Popup, setTrace1Popup]         = useState(null)     // { value: '+1'|'-1', key }
+  const [trace1Banner, setTrace1Banner]       = useState(null)     // round-end banner text
+  const [trace1Generation, setTrace1Generation] = useState(0)      // bump to re-init the loop
+  const trace1AwaitingRef = useRef(false)
+  const trace1LastTurnRef = useRef(null)
+  const trace1ScheduleRef = useRef([])
+  const trace1RoundRef    = useRef(0)
+  const trace1TurnRef     = useRef(0)
+  const trace1StartedAtRef = useRef(0)
+  const trace1ScoreRef    = useRef(0)
+  const trace1CorrectRef  = useRef(0)
+  const trace1TotalRef    = useRef(0)
+  const trace1TickRef     = useRef(null)
+  const trace1PopupSeqRef = useRef(0)
+  const trace1PosRef      = useRef({ r: 5, c: 5, layer: 5 })
+  const trace1QuatRef     = useRef(initialPlaneQuat(0))
+
   const gameRef  = useRef({})
   const timerRef = useRef(null)
   const moveRef  = useRef(null)
@@ -394,11 +608,16 @@ export default function CbatPlaneTurn() {
       .finally(() => setLoadingAircraft(false))
   }, [user])
 
-  // Fetch personal best (re-runs when mode changes)
+  // Fetch personal best (re-runs when mode changes). Trace 1 has its own endpoint;
+  // Trace 2 has no PB (selector stub only).
   useEffect(() => {
     if (!user) return
     setPersonalBest(null)
-    apiFetch(`${API}/api/games/cbat/plane-turn/personal-best?mode=${mode}`)
+    if (mode === 'trace2') return
+    const url = mode === 'trace1'
+      ? `${API}/api/games/cbat/trace-1/personal-best`
+      : `${API}/api/games/cbat/plane-turn/personal-best?mode=${mode}`
+    apiFetch(url)
       .then(r => r.json())
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
@@ -428,6 +647,34 @@ export default function CbatPlaneTurn() {
       })
       .catch(() => {})
   }, [apiFetch, API, mode])
+
+  // Submit Trace 1 score
+  const submitTrace1Score = useCallback((score, correctTurns, totalTurns, elapsedMs) => {
+    setScoreSaved(false)
+    const accuracy = totalTurns > 0 ? Math.round((correctTurns / totalTurns) * 100) : 0
+    apiFetch(`${API}/api/games/cbat/trace-1/result`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        score,
+        correctTurns,
+        totalTurns,
+        roundsCompleted: TRACE1_ROUNDS,
+        accuracy,
+        aircraftUsed: 'Hawk T2',
+        totalTime: elapsedMs,
+      }),
+    })
+      .then(r => r.json())
+      .then(() => {
+        setScoreSaved(true)
+        apiFetch(`${API}/api/games/cbat/trace-1/personal-best`)
+          .then(r => r.json())
+          .then(d => { if (d.data) setPersonalBest(d.data) })
+          .catch(() => {})
+      })
+      .catch(() => {})
+  }, [apiFetch, API])
 
   // Keep gameRef in sync (includes 3D state)
   useEffect(() => {
@@ -460,19 +707,19 @@ export default function CbatPlaneTurn() {
     setPhase('playing')
   }, [])
 
-  // Timer
+  // Timer — Practise modes only (Trace 1 has its own paced loop)
   useEffect(() => {
-    if (phase !== 'playing') { clearInterval(timerRef.current); return }
+    if (phase !== 'playing' || gameModeTrace1Ref.current) { clearInterval(timerRef.current); return }
     const t0 = Date.now() - elapsed * 1000
     timerRef.current = setInterval(() => {
       setElapsed((Date.now() - t0) / 1000)
     }, 100)
     return () => clearInterval(timerRef.current)
-  }, [phase])
+  }, [phase, gameModeTrace1])
 
-  // Movement loop
+  // Movement loop — Practise modes only
   useEffect(() => {
-    if (phase !== 'playing') { clearInterval(moveRef.current); return }
+    if (phase !== 'playing' || gameModeTrace1Ref.current) { clearInterval(moveRef.current); return }
 
     const interval = Math.max(150, BASE_INTERVAL - (level - 1) * SPEED_STEP)
 
@@ -534,9 +781,9 @@ export default function CbatPlaneTurn() {
     return () => clearInterval(moveRef.current)
   }, [phase, level])
 
-  // Keyboard controls
+  // Keyboard controls (Practise modes only; Trace 1 has its own handler below)
   useEffect(() => {
-    if (phase !== 'playing') return
+    if (phase !== 'playing' || gameModeTrace1Ref.current) return
 
     function handleKey(e) {
       if (e.key === 'ArrowLeft') {
@@ -596,16 +843,200 @@ export default function CbatPlaneTurn() {
 
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [phase])
+  }, [phase, gameModeTrace1])
+
+  // ── Trace 1 game loop ──────────────────────────────────────────────────────
+  const trace1Finalize = useCallback(() => {
+    if (trace1TickRef.current) { clearTimeout(trace1TickRef.current); trace1TickRef.current = null }
+    const elapsedMs = performance.now() - trace1StartedAtRef.current
+    setPhase('finished')
+    submitTrace1Score(
+      trace1ScoreRef.current,
+      trace1CorrectRef.current,
+      trace1TotalRef.current,
+      Math.round(elapsedMs),
+    )
+  }, [submitTrace1Score])
+
+  // Apply a turn (rotate the plane) and arm the input window. In smooth-flight
+  // mode the scene integrates position continuously; we still track a grid-based
+  // position internally so the schedule generator can bound future turns to the
+  // arena, but we do NOT push position changes to the visible plane state.
+  const trace1ExecuteTurn = useCallback((turnKey) => {
+    const def = TRACE1_TURN_DEFS[turnKey]
+    const prevQuat = trace1QuatRef.current
+    const newQuat  = applyLocalRot(prevQuat, def.axis, def.angle)
+    trace1QuatRef.current = newQuat
+
+    // Advance the internal simulated position (used only by buildTrace1Round
+    // for next-round bounds checking). The visible plane is driven by the
+    // smooth-flight component, not by these grid coords.
+    const stepped = simulateForwardSteps(newQuat, trace1PosRef.current, 2) || trace1PosRef.current
+    trace1PosRef.current = stepped
+
+    setPlaneQuat(newQuat)
+
+    trace1LastTurnRef.current = turnKey
+    trace1AwaitingRef.current = true
+  }, [])
+
+  const trace1ShowPopup = useCallback((delta) => {
+    trace1PopupSeqRef.current += 1
+    setTrace1Popup({ value: delta > 0 ? '+1' : '−1', key: trace1PopupSeqRef.current })
+  }, [])
+
+  const trace1ApplyScore = useCallback((delta) => {
+    const next = trace1ScoreRef.current + delta
+    trace1ScoreRef.current = next
+    setTrace1Score(next)
+    trace1TotalRef.current += 1
+    setTrace1Total(trace1TotalRef.current)
+    if (delta > 0) {
+      trace1CorrectRef.current += 1
+      setTrace1Correct(trace1CorrectRef.current)
+    }
+    trace1ShowPopup(delta)
+  }, [trace1ShowPopup])
+
+  const trace1ScheduleTick = useCallback((roundIdx, turnIdx) => {
+    const speed = TRACE1_SPEED_TABLE[roundIdx] ?? TRACE1_SPEED_TABLE[TRACE1_SPEED_TABLE.length - 1]
+    trace1TickRef.current = setTimeout(() => {
+      // Settle the previous turn: if user didn't respond, count as miss.
+      if (trace1AwaitingRef.current) {
+        trace1AwaitingRef.current = false
+        trace1ApplyScore(-1)
+      }
+
+      if (turnIdx >= TRACE1_TURNS_PER_ROUND) {
+        // Round complete. Banner, then next round or finish.
+        const completedRound = roundIdx + 1
+        const isLast = completedRound >= TRACE1_ROUNDS
+        const finalScore = trace1ScoreRef.current
+        setTrace1Banner(isLast
+          ? { variant: 'final',    title: 'MISSION COMPLETE', score: finalScore }
+          : { variant: 'roundEnd', title: `ROUND ${completedRound} CLEAR`, score: finalScore, nextRound: completedRound + 1 })
+        trace1TickRef.current = setTimeout(() => {
+          setTrace1Banner(null)
+          if (isLast) { trace1Finalize(); return }
+          const nextRoundIdx = roundIdx + 1
+          const built = buildTrace1Round(trace1QuatRef.current, trace1PosRef.current)
+          trace1ScheduleRef.current = built.schedule
+          setTrace1Schedule(built.schedule)
+          trace1RoundRef.current = nextRoundIdx
+          setTrace1Round(nextRoundIdx)
+          trace1TurnRef.current = 0
+          setTrace1Turn(0)
+          trace1ScheduleTick(nextRoundIdx, 0)
+        }, 2200)
+        return
+      }
+
+      // Execute the scheduled turn.
+      const turnKey = trace1ScheduleRef.current[turnIdx]
+      trace1ExecuteTurn(turnKey)
+      trace1TurnRef.current = turnIdx + 1
+      setTrace1Turn(turnIdx + 1)
+      trace1ScheduleTick(roundIdx, turnIdx + 1)
+    }, speed)
+  }, [trace1ApplyScore, trace1ExecuteTurn, trace1Finalize])
+
+  // Boot the Trace 1 loop whenever we enter the playing phase in trace1 mode.
+  // `trace1Generation` is a manual bump so handlePlayAgain can restart the loop
+  // without round-tripping through 'select'.
+  useEffect(() => {
+    if (phase !== 'playing' || !gameModeTrace1) return
+    // Initial state — smooth-flight component owns the visible position, but
+    // we still init plane state so existing render paths have valid values.
+    trace1QuatRef.current = initialPlaneQuat(0)
+    trace1PosRef.current  = { r: 5, c: 5, layer: 5 }
+    setPlane({ r: 5, c: 5, dir: 0, angle: 0 })
+    setLayer(5)
+    setPlaneQuat(trace1QuatRef.current)
+    setMoveMode(0)
+
+    const built = buildTrace1Round(trace1QuatRef.current, trace1PosRef.current)
+    trace1ScheduleRef.current = built.schedule
+    setTrace1Schedule(built.schedule)
+    trace1RoundRef.current = 0; setTrace1Round(0)
+    trace1TurnRef.current  = 0; setTrace1Turn(0)
+    trace1ScoreRef.current = 0; setTrace1Score(0)
+    trace1CorrectRef.current = 0; setTrace1Correct(0)
+    trace1TotalRef.current = 0; setTrace1Total(0)
+    trace1AwaitingRef.current = false
+    trace1LastTurnRef.current = null
+    trace1StartedAtRef.current = performance.now()
+
+    // Brief settle delay so the user sees the Hawk T2 in the sky before the
+    // autopilot's first turn fires — no overlay, no transition.
+    const startTimeout = setTimeout(() => trace1ScheduleTick(0, 0), 800)
+
+    return () => {
+      clearTimeout(startTimeout)
+      if (trace1TickRef.current) { clearTimeout(trace1TickRef.current); trace1TickRef.current = null }
+    }
+  }, [phase, gameModeTrace1, trace1Generation, trace1ScheduleTick])
+
+  // Trace 1 input — keyboard + D-pad share this handler.
+  const trace1HandleInput = useCallback((turnKey) => {
+    if (!gameModeTrace1Ref.current) return
+    if (phase !== 'playing') return
+    if (!trace1AwaitingRef.current) return
+    const expected = trace1LastTurnRef.current
+    trace1AwaitingRef.current = false
+    trace1ApplyScore(turnKey === expected ? 1 : -1)
+  }, [phase, trace1ApplyScore])
+
+  // Trace 1 keyboard listener
+  useEffect(() => {
+    if (phase !== 'playing' || !gameModeTrace1) return
+    function handleKey(e) {
+      const turn = trace1KeyToTurn(e.key)
+      if (!turn) return
+      e.preventDefault()
+      trace1HandleInput(turn)
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [phase, gameModeTrace1, trace1HandleInput])
+
+  // Auto-dismiss the +1/−1 popup after a short fade
+  useEffect(() => {
+    if (!trace1Popup) return
+    const id = setTimeout(() => setTrace1Popup(null), 600)
+    return () => clearTimeout(id)
+  }, [trace1Popup])
+
+  // Synchronously wipe every Trace 1 display + ref value. Used by handleSelect
+  // / handlePlayAgain so the first paint of phase='playing' is already at
+  // zero — without this the prior run's HUD flashes for one frame because
+  // the boot useEffect's resets don't commit until after first render.
+  const resetTrace1State = useCallback(() => {
+    trace1ScoreRef.current   = 0; setTrace1Score(0)
+    trace1CorrectRef.current = 0; setTrace1Correct(0)
+    trace1TotalRef.current   = 0; setTrace1Total(0)
+    trace1RoundRef.current   = 0; setTrace1Round(0)
+    trace1TurnRef.current    = 0; setTrace1Turn(0)
+    trace1AwaitingRef.current = false
+    trace1LastTurnRef.current = null
+    setTrace1Banner(null)
+    setTrace1Popup(null)
+  }, [])
 
   // Handlers
   const handleSelect = (a) => {
-    recordCbatStart('plane-turn', apiFetch, API)
+    recordCbatStart(gameModeTrace1 ? 'trace-1' : 'plane-turn', apiFetch, API)
     const modelUrl = getModelUrl(a.briefId, a.title)
     setSelected({ ...a, modelUrl })
     setUse3D(true)
     setTotalRotations(0)
     setTotalTime(0)
+    if (gameModeTrace1) {
+      // Wipe any leftover Trace 1 state from a previous run before the new
+      // phase commits so the HUD never paints a stale score for a frame.
+      resetTrace1State()
+      setPhase(introPlayedRef.current ? 'playing' : 'intro')
+      return
+    }
     startGame(1)
     // Logo-boot intro covers the arena while it boots. Skip on replay
     // within the same aircraft pick.
@@ -660,15 +1091,32 @@ export default function CbatPlaneTurn() {
   }
 
   const handlePlayAgain = () => {
-    recordCbatStart('plane-turn', apiFetch, API)
+    recordCbatStart(gameModeTrace1 ? 'trace-1' : 'plane-turn', apiFetch, API)
     setTotalRotations(0)
     setTotalTime(0)
     setScoreSaved(false)
+    if (gameModeTrace1) {
+      // Wipe Trace 1 state before the next paint, then bump generation so the
+      // boot effect re-runs the schedule build + first-turn timer.
+      resetTrace1State()
+      setTrace1Generation(g => g + 1)
+      setPhase('playing')
+      return
+    }
     startGame(1)
   }
 
   const handleRotate = (direction) => {
     if (phase !== 'playing') return
+    if (gameModeTrace1Ref.current) {
+      // Trace 1 reuses the D-pad for input. Map button → turn key.
+      const turn = direction === 'left'  ? 'yawL'
+                 : direction === 'right' ? 'yawR'
+                 : direction === 'up'    ? 'pitchD'
+                 :                         'pitchU'
+      trace1HandleInput(turn)
+      return
+    }
     if (direction === 'up' || direction === 'down') {
       // Stick: ↑ = dive (pitch-1), ↓ = climb (pitch+1). Local rotation around right.
       if (gameMode3DRef.current) {
@@ -731,9 +1179,8 @@ export default function CbatPlaneTurn() {
             ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
             : <button onClick={handleMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
           }
-          <h1 className="text-sm font-extrabold text-slate-900">Plane Turn</h1>
+          <h1 className="text-sm font-extrabold text-slate-900">TRACE 1/2</h1>
         </div>
-        {phase === 'select' && <PlaneTurnModeToggle value={mode} onChange={setMode} />}
       </div>
 
       {/* Not logged in */}
@@ -760,7 +1207,8 @@ export default function CbatPlaneTurn() {
                 onSelect={handleSelect}
                 loading={loadingAircraft}
                 personalBest={personalBest}
-                gameMode3D={gameMode3D}
+                mode={mode}
+                traceModeSelector={<TraceModeSelector value={mode} onChange={setMode} />}
               />
             </div>
           )}
@@ -772,49 +1220,106 @@ export default function CbatPlaneTurn() {
               animate={{ opacity: 1, scale: 1 }}
               className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center"
             >
-              <p className="text-5xl mb-3">🎖️</p>
-              <p className="text-2xl font-extrabold text-white mb-1">All Levels Complete</p>
-              <p className="text-sm text-slate-400 mb-6">You cleared all {MAX_LEVEL} levels.</p>
+              {gameModeTrace1 ? (
+                <>
+                  <p className="text-5xl mb-3">🛩️</p>
+                  <p className="text-2xl font-extrabold text-white mb-1">Trace 1 Complete</p>
+                  <p className="text-sm text-slate-400 mb-6">All 5 rounds finished.</p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-6">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
-                <div className="flex justify-center gap-8">
-                  <div>
-                    <p className="text-3xl font-mono font-bold text-brand-300">{totalRotations}</p>
-                    <p className="text-xs text-slate-500 mt-1">rotations</p>
+                  <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-6">
+                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
+                    <div className="flex justify-center gap-8">
+                      <div>
+                        <p className={`text-3xl font-mono font-bold ${trace1Score > 0 ? 'text-emerald-300' : trace1Score < 0 ? 'text-red-400' : 'text-brand-300'}`}>
+                          {trace1Score > 0 ? `+${trace1Score}` : trace1Score}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">points</p>
+                      </div>
+                      <div className="w-px bg-[#1a3a5c]" />
+                      <div>
+                        <p className="text-3xl font-mono font-bold text-brand-300">{trace1Correct}/{trace1Total}</p>
+                        <p className="text-xs text-slate-500 mt-1">correct</p>
+                      </div>
+                      <div className="w-px bg-[#1a3a5c]" />
+                      <div>
+                        <p className="text-3xl font-mono font-bold text-brand-300">{trace1Total > 0 ? Math.round((trace1Correct / trace1Total) * 100) : 0}%</p>
+                        <p className="text-xs text-slate-500 mt-1">accuracy</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="w-px bg-[#1a3a5c]" />
-                  <div>
-                    <p className="text-3xl font-mono font-bold text-brand-300">{totalTime.toFixed(1)}s</p>
-                    <p className="text-xs text-slate-500 mt-1">total time</p>
-                  </div>
-                </div>
-              </div>
 
-              {scoreSaved && (
-                <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
+                  {scoreSaved && (
+                    <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
+                  )}
+
+                  <div className="flex flex-wrap gap-3 justify-center">
+                    <button
+                      onClick={handlePlayAgain}
+                      className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
+                    >
+                      Play Again
+                    </button>
+                    <Link
+                      to="/cbat/trace-1/leaderboard"
+                      className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
+                    >
+                      🏆 Leaderboard
+                    </Link>
+                    <button
+                      onClick={handleMenu}
+                      className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors"
+                    >
+                      Back to Modes
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-5xl mb-3">🎖️</p>
+                  <p className="text-2xl font-extrabold text-white mb-1">All Levels Complete</p>
+                  <p className="text-sm text-slate-400 mb-6">You cleared all {MAX_LEVEL} levels.</p>
+
+                  <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-6">
+                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
+                    <div className="flex justify-center gap-8">
+                      <div>
+                        <p className="text-3xl font-mono font-bold text-brand-300">{totalRotations}</p>
+                        <p className="text-xs text-slate-500 mt-1">rotations</p>
+                      </div>
+                      <div className="w-px bg-[#1a3a5c]" />
+                      <div>
+                        <p className="text-3xl font-mono font-bold text-brand-300">{totalTime.toFixed(1)}s</p>
+                        <p className="text-xs text-slate-500 mt-1">total time</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {scoreSaved && (
+                    <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
+                  )}
+
+                  <div className="flex flex-wrap gap-3 justify-center">
+                    <button
+                      onClick={handlePlayAgain}
+                      className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
+                    >
+                      Play Again
+                    </button>
+                    <Link
+                      to="/cbat/plane-turn/leaderboard"
+                      className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
+                    >
+                      🏆 Leaderboard
+                    </Link>
+                    <button
+                      onClick={handleMenu}
+                      className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors"
+                    >
+                      Change Aircraft
+                    </button>
+                  </div>
+                </>
               )}
-
-              <div className="flex flex-wrap gap-3 justify-center">
-                <button
-                  onClick={handlePlayAgain}
-                  className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-                >
-                  Play Again
-                </button>
-                <Link
-                  to="/cbat/plane-turn/leaderboard"
-                  className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-                >
-                  🏆 Leaderboard
-                </Link>
-                <button
-                  onClick={handleMenu}
-                  className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors"
-                >
-                  Change Aircraft
-                </button>
-              </div>
             </motion.div>
           )}
 
@@ -824,33 +1329,170 @@ export default function CbatPlaneTurn() {
               intro completes and flips us back to 'playing'. */}
           {(phase === 'playing' || phase === 'over' || phase === 'intro') && selected && (
             <div className="w-full max-w-md">
-              <HUD collected={collected} rotations={rotations} elapsed={elapsed} level={level} />
+              {gameModeTrace1
+                ? <Trace1HUD round={trace1Round} turn={trace1Turn} score={trace1Score} />
+                : <HUD collected={collected} rotations={rotations} elapsed={elapsed} level={level} />}
 
-              {/* ── 3D Game ── */}
-              {gameMode3D ? (
+              {/* ── 3D Game (Practise 3D + Trace 1 share the 3D arena) ── */}
+              {(gameMode3D || gameModeTrace1) ? (
                 <div
-                  className="relative bg-[#060e1a] border-2 border-[#1a3a5c] rounded-xl overflow-hidden shadow-[0_0_30px_rgba(91,170,255,0.08)]"
-                  style={{ width: '100%', aspectRatio: '1' }}
+                  className={`relative border-2 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(91,170,255,0.08)] ${
+                    gameModeTrace1 ? 'border-[#3a7bbf]' : 'bg-[#060e1a] border-[#1a3a5c]'
+                  }`}
+                  style={{
+                    width: '100%',
+                    aspectRatio: '1',
+                    // Sky gradient for Trace modes, dark surface for Practise.
+                    background: gameModeTrace1
+                      ? 'linear-gradient(180deg, #cfe8ff 0%, #8fc4ee 45%, #5398d3 80%, #3a7bbf 100%)'
+                      : undefined,
+                  }}
                 >
                   {/* Aircraft name */}
                   <div className="absolute top-1 left-1 z-30 flex items-center gap-1">
-                    <button onClick={() => cycleAircraft(-1)} className="text-[10px] text-slate-500 hover:text-brand-300 transition-colors px-0.5 cursor-pointer">&larr;</button>
+                    {!gameModeTrace1 && (
+                      <button onClick={() => cycleAircraft(-1)} className="text-[10px] text-slate-500 hover:text-brand-300 transition-colors px-0.5 cursor-pointer">&larr;</button>
+                    )}
                     <span className="text-[10px] text-slate-500 font-mono">{selected.title}</span>
-                    <button onClick={() => cycleAircraft(1)} className="text-[10px] text-slate-500 hover:text-brand-300 transition-colors px-0.5 cursor-pointer">&rarr;</button>
+                    {!gameModeTrace1 && (
+                      <button onClick={() => cycleAircraft(1)} className="text-[10px] text-slate-500 hover:text-brand-300 transition-colors px-0.5 cursor-pointer">&rarr;</button>
+                    )}
                   </div>
 
                   <Suspense fallback={null}>
                     <PlaneTurn3DScene
                       plane={{ ...plane, layer, pitch, moveMode, quat: planeQuat }}
-                      pkg={{ ...pkg, layer: pkgLayer }}
+                      pkg={gameModeTrace1 ? { r: -100, c: -100, layer: -100 } : { ...pkg, layer: pkgLayer }}
                       modelUrl={selected.modelUrl}
                       onError={() => {}}
                       onReady={handle3DReady}
+                      traceFlight={gameModeTrace1}
+                      // 2 cells of forward distance per scheduled turn → speed
+                      // (cells/sec) = 2000 / tickMs. Scales naturally per round.
+                      traceFlightSpeed={gameModeTrace1
+                        ? (2000 / (TRACE1_SPEED_TABLE[trace1Round] ?? TRACE1_SPEED_TABLE[TRACE1_SPEED_TABLE.length - 1]))
+                        : 0}
+                      traceFlightActive={gameModeTrace1 && phase === 'playing'}
+                      traceFlightResetKey={trace1Generation}
                     />
                   </Suspense>
 
+                  {/* Trace 1 +1 / −1 popup */}
                   <AnimatePresence>
-                    {phase === 'over' && (
+                    {gameModeTrace1 && trace1Popup && (
+                      <motion.div
+                        key={trace1Popup.key}
+                        initial={{ opacity: 0, y: 20, scale: 0.6 }}
+                        animate={{ opacity: 1, y: -10, scale: 1 }}
+                        exit={{ opacity: 0, y: -40, scale: 0.9 }}
+                        transition={{ duration: 0.45 }}
+                        className={`absolute inset-0 z-30 flex items-center justify-center text-6xl font-extrabold pointer-events-none ${trace1Popup.value === '+1' ? 'text-emerald-300' : 'text-red-400'}`}
+                        style={{ textShadow: '0 0 18px rgba(0,0,0,0.55)' }}
+                      >
+                        {trace1Popup.value}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Trace 1 round banner — big, gamified overlay between rounds */}
+                  <AnimatePresence>
+                    {gameModeTrace1 && trace1Banner && (
+                      <motion.div
+                        key={trace1Banner.title}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.25 }}
+                        className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"
+                      >
+                        {/* Dim backdrop */}
+                        <div className="absolute inset-0 bg-black/55" />
+
+                        <motion.div
+                          initial={{ scale: 0.6, opacity: 0, y: 24 }}
+                          animate={{ scale: 1, opacity: 1, y: 0 }}
+                          exit={{ scale: 1.05, opacity: 0, y: -10 }}
+                          transition={{ type: 'spring', stiffness: 240, damping: 18 }}
+                          className="relative text-center px-6 py-5 rounded-2xl border-2 bg-[#0a1628]/95 backdrop-blur"
+                          style={{
+                            borderColor: trace1Banner.variant === 'final' ? '#fbbf24' : '#5baaff',
+                            boxShadow: trace1Banner.variant === 'final'
+                              ? '0 0 40px rgba(251,191,36,0.45), inset 0 0 28px rgba(251,191,36,0.18)'
+                              : '0 0 40px rgba(91,170,255,0.45), inset 0 0 28px rgba(91,170,255,0.18)',
+                          }}
+                        >
+                          {/* Heading: ROUND N CLEAR / MISSION COMPLETE */}
+                          <motion.p
+                            initial={{ letterSpacing: '0.6em', opacity: 0 }}
+                            animate={{ letterSpacing: '0.25em', opacity: 1 }}
+                            transition={{ duration: 0.4, delay: 0.05 }}
+                            className={`text-3xl sm:text-4xl font-extrabold uppercase ${
+                              trace1Banner.variant === 'final' ? 'text-amber-200' : 'text-white'
+                            }`}
+                            style={{
+                              textShadow: trace1Banner.variant === 'final'
+                                ? '0 0 18px rgba(251,191,36,0.85)'
+                                : '0 0 16px rgba(91,170,255,0.85)',
+                            }}
+                          >
+                            {trace1Banner.title}
+                          </motion.p>
+
+                          {/* Score line */}
+                          <motion.div
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.25, duration: 0.3 }}
+                            className="mt-2 text-xs uppercase tracking-[0.3em] text-slate-500"
+                          >
+                            Score
+                          </motion.div>
+                          <motion.p
+                            initial={{ scale: 0.7, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ delay: 0.3, type: 'spring', stiffness: 260, damping: 16 }}
+                            className={`font-mono text-5xl sm:text-6xl font-extrabold ${
+                              trace1Banner.score > 0 ? 'text-emerald-300' : trace1Banner.score < 0 ? 'text-red-400' : 'text-slate-300'
+                            }`}
+                            style={{
+                              textShadow: trace1Banner.score > 0
+                                ? '0 0 20px rgba(110,231,183,0.65)'
+                                : trace1Banner.score < 0
+                                  ? '0 0 20px rgba(248,113,113,0.55)'
+                                  : 'none',
+                            }}
+                          >
+                            {trace1Banner.score > 0 ? `+${trace1Banner.score}` : trace1Banner.score}
+                          </motion.p>
+
+                          {/* Next round tagline */}
+                          {trace1Banner.variant === 'roundEnd' && (
+                            <motion.p
+                              initial={{ opacity: 0, y: 4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.55, duration: 0.3 }}
+                              className="mt-3 text-sm sm:text-base font-extrabold uppercase tracking-[0.25em] text-brand-300"
+                            >
+                              Round {trace1Banner.nextRound} <span className="text-amber-300">·</span> Faster
+                            </motion.p>
+                          )}
+                          {trace1Banner.variant === 'final' && (
+                            <motion.p
+                              initial={{ opacity: 0, y: 4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.55, duration: 0.3 }}
+                              className="mt-3 text-sm sm:text-base font-extrabold uppercase tracking-[0.25em] text-amber-300"
+                            >
+                              All 5 Rounds Logged
+                            </motion.p>
+                          )}
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <AnimatePresence>
+                    {!gameModeTrace1 && phase === 'over' && (
                       <GameOverOverlay
                         won={won}
                         score={{ rotations, time: elapsed.toFixed(1) }}
@@ -1052,13 +1694,13 @@ export default function CbatPlaneTurn() {
               )}
 
               {/* ── Mobile controls ── */}
-              {gameMode3D ? (
+              {(gameMode3D || gameModeTrace1) ? (
                 <div className="flex flex-col items-center gap-2 mt-4">
-                  <DpadBtn label="↑" onPress={() => handleRotate('up')} ariaLabel="Dive" />
+                  <DpadBtn label="↑" onPress={() => handleRotate('up')} ariaLabel={gameModeTrace1 ? 'Recall: dive' : 'Dive'} />
                   <div className="flex gap-2">
-                    <DpadBtn label="←" onPress={() => handleRotate('left')}  ariaLabel="Rotate left" />
-                    <DpadBtn label="↓" onPress={() => handleRotate('down')}  ariaLabel="Climb" />
-                    <DpadBtn label="→" onPress={() => handleRotate('right')} ariaLabel="Rotate right" />
+                    <DpadBtn label="←" onPress={() => handleRotate('left')}  ariaLabel={gameModeTrace1 ? 'Recall: yaw left' : 'Rotate left'} />
+                    <DpadBtn label="↓" onPress={() => handleRotate('down')}  ariaLabel={gameModeTrace1 ? 'Recall: climb' : 'Climb'} />
+                    <DpadBtn label="→" onPress={() => handleRotate('right')} ariaLabel={gameModeTrace1 ? 'Recall: yaw right' : 'Rotate right'} />
                   </div>
                 </div>
               ) : (
@@ -1084,9 +1726,11 @@ export default function CbatPlaneTurn() {
 
               {/* Instructions hint */}
               <p className="text-center text-[10px] text-slate-500 mt-3">
-                {gameMode3D
-                  ? <>Use <span className="font-mono text-slate-400">←→</span> to turn &middot; <span className="font-mono text-slate-400">↓</span> climb &middot; <span className="font-mono text-slate-400">↑</span> dive (stick)</>
-                  : <>Use <span className="font-mono text-slate-400">&larr;</span> <span className="font-mono text-slate-400">&rarr;</span> arrow keys or tap the buttons to rotate</>
+                {gameModeTrace1
+                  ? <>After each turn, press the arrow the plane just took</>
+                  : gameMode3D
+                    ? <>Use <span className="font-mono text-slate-400">←→</span> to turn &middot; <span className="font-mono text-slate-400">↓</span> climb &middot; <span className="font-mono text-slate-400">↑</span> dive (stick)</>
+                    : <>Use <span className="font-mono text-slate-400">&larr;</span> <span className="font-mono text-slate-400">&rarr;</span> arrow keys or tap the buttons to rotate</>
                 }
               </p>
             </div>

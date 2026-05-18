@@ -237,7 +237,8 @@ function AppRoutes() {
           <Route path="/play/quiz"              element={<RequireAuth><PageWrapper><QuizBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/play/battle-of-order"   element={<RequireAuth><PageWrapper><BOOBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/cbat"                   element={<PageWrapper><Cbat /></PageWrapper>} />
-          <Route path="/cbat/plane-turn"        element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="plane-turn"        gameTitle="Plane Turn"      ><CbatPlaneTurn       /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/trace"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="plane-turn"        gameTitle="TRACE 1/2"       ><CbatPlaneTurn       /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/plane-turn"        element={<Navigate to="/cbat/trace" replace />} />
           <Route path="/cbat/angles"           element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="angles"            gameTitle="Angles"          ><CbatAngles          /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/code-duplicates" element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="code-duplicates"   gameTitle="Code Duplicates" ><CbatCodeDuplicates  /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/symbols"          element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="symbols"           gameTitle="Symbols"         ><CbatSymbols         /></CbatGameGuard></PageWrapper></RequireAuth>} />

@@ -20,7 +20,7 @@ function timeAgo(iso) {
 const EMOJI_BY_KEY = {
   'target': '🎯', 'ant': '📡', 'symbols': '🔣', 'code-duplicates': '🧩',
   'angles': '📐', 'instruments': '🛫', 'plane-turn': '🗺️', 'flag': '🚩',
-  'visualisation-2d': '🧮', 'dpt': '🛩️', 'act': '🎧',
+  'visualisation-2d': '🧮', 'dpt': '🛩️', 'act': '🎧', 'trace-1': '🛩️',
   'visualisation-3d': '🧊', 'dad': '🧭',
 }
 

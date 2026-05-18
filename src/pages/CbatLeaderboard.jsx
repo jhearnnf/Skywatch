@@ -14,7 +14,16 @@ const GAME_CONFIG = {
     scoreLabel: 'Rotations',
     lowerIsBetter: true,
     formatScore: (s) => `${s}`,
-    backPath: '/cbat/plane-turn',
+    backPath: '/cbat/trace',
+  },
+  'trace-1': {
+    title: 'Trace 1',
+    emoji: '\u{1F6E9}\uFE0F',
+    scoreLabel: 'Score',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}`,
+    backPath: '/cbat/trace',
+    hideTime: true,
   },
   'angles': {
     title: 'Angles',
