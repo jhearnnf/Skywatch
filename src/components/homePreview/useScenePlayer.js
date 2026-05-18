@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 
-// Check prefers-reduced-motion once at import time. SSR-safe.
-const prefersReducedMotion =
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
 // Drives the preview-window scene timeline. Auto-plays and auto-loops; pauses
 // when the tab is hidden so backgrounded landing pages don't burn animation
 // frames. Also pauses when the host element is scrolled out of view (driven by
@@ -19,12 +13,14 @@ const prefersReducedMotion =
 //         flips back to true the current scene replays from frame 0 (rather
 //         than resuming mid-animation) so the user sees a clean first frame.
 //
-// When prefers-reduced-motion is enabled the player still rotates scenes but
-// holds each one for a longer interval so the page is functionally
-// information-equivalent without rapid motion.
+// Note on prefers-reduced-motion: we intentionally do NOT gate autoplay on it.
+// iOS Low Power Mode and Android Battery Saver both flip the media query to
+// `reduce`, which would otherwise leave a large chunk of mobile visitors stuck
+// staring at scene 1 forever. The inner scene components don't honour the
+// query either, so gating only autoplay would be an accessibility theatre at
+// best. Users who want to stop the rotation can hit the pause button.
 export default function useScenePlayer(scenes, { autoplay = true, loop = true, inView = true } = {}) {
-  // Honour reduced motion by starting paused if requested.
-  const effectiveAutoplay = autoplay && !prefersReducedMotion
+  const effectiveAutoplay = autoplay
   const [index,    setIndex]    = useState(0)
   const [isPaused, setIsPaused] = useState(!effectiveAutoplay)
   // Bumps every time we jump or restart — scenes key off this so internal
