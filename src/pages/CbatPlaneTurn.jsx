@@ -139,11 +139,14 @@ function simulateForwardSteps(quat, startPos, steps, margin = TRACE1_WALL_MARGIN
 // on every axis. With a 10-cell arena and the plane starting at centre, at
 // least one of the 4 candidate turns always keeps the path in bounds (the
 // candidates are 4 of the 6 cardinal axes); we score each by how much margin
-// it leaves and pick a random one from the safest pool.
-function buildTrace1Round(initialQuat, initialPos) {
+// it leaves and pick a random one from the safest pool. `prevTail` is the
+// last 1–2 turn keys from the previous round so we can forbid a 3rd identical
+// turn in a row across the round boundary.
+function buildTrace1Round(initialQuat, initialPos, prevTail = []) {
   const schedule = []
   let quat = [...initialQuat]
   let pos  = { ...initialPos }
+  const tail = prevTail.slice(-2)
   for (let i = 0; i < TRACE1_TURNS_PER_ROUND; i++) {
     // Evaluate all 4 candidate turns.
     const evaluated = TRACE1_TURN_KEYS.map(cand => {
@@ -153,20 +156,32 @@ function buildTrace1Round(initialQuat, initialPos) {
       return { cand, newQuat, stepped }
     })
 
+    // If the last two turns were the same, that direction is now forbidden —
+    // taking it would make 3 in a row.
+    const forbidden = (tail.length >= 2 && tail[tail.length - 1] === tail[tail.length - 2])
+      ? tail[tail.length - 1]
+      : null
+    const dropForbidden = (list) => forbidden ? list.filter(e => e.cand !== forbidden) : list
+
     // Prefer candidates that land at least 1 extra cell from any wall.
-    const valid    = evaluated.filter(e => e.stepped)
-    const looseSet = valid.length ? valid : evaluated.map(e => ({
+    const valid    = dropForbidden(evaluated.filter(e => e.stepped))
+    const looseSet = valid.length ? valid : dropForbidden(evaluated.map(e => ({
       ...e,
       // Force-walked fallback: re-simulate without margin, clamp inside.
       stepped: simulateForwardSteps(e.newQuat, pos, 2, 0) || pos,
-    }))
+    })))
+    // Safety net: if the forbidden filter wipes the set (shouldn't happen
+    // with 4 turn options) fall back to the unfiltered list.
+    const finalSet = looseSet.length ? looseSet : evaluated
 
-    const chosen = looseSet[Math.floor(Math.random() * looseSet.length)]
+    const chosen = finalSet[Math.floor(Math.random() * finalSet.length)]
     schedule.push(chosen.cand)
+    tail.push(chosen.cand)
+    if (tail.length > 2) tail.shift()
     quat = chosen.newQuat
     pos  = chosen.stepped || pos
   }
-  return { schedule, endQuat: quat, endPos: pos }
+  return { schedule, endQuat: quat, endPos: pos, tail }
 }
 
 // Direction vectors: index matches rotation (0=up,1=right,2=down,3=left)
@@ -593,6 +608,8 @@ export default function CbatPlaneTurn() {
   const trace1PopupSeqRef = useRef(0)
   const trace1PosRef      = useRef({ r: 5, c: 5, layer: 5 })
   const trace1QuatRef     = useRef(initialPlaneQuat(0))
+  // Last 1–2 turn keys, carried across round boundaries to forbid 3 in a row.
+  const trace1TailRef     = useRef([])
 
   const gameRef  = useRef({})
   const timerRef = useRef(null)
@@ -919,7 +936,8 @@ export default function CbatPlaneTurn() {
           setTrace1Banner(null)
           if (isLast) { trace1Finalize(); return }
           const nextRoundIdx = roundIdx + 1
-          const built = buildTrace1Round(trace1QuatRef.current, trace1PosRef.current)
+          const built = buildTrace1Round(trace1QuatRef.current, trace1PosRef.current, trace1TailRef.current)
+          trace1TailRef.current = built.tail
           trace1ScheduleRef.current = built.schedule
           setTrace1Schedule(built.schedule)
           trace1RoundRef.current = nextRoundIdx
@@ -954,7 +972,9 @@ export default function CbatPlaneTurn() {
     setPlaneQuat(trace1QuatRef.current)
     setMoveMode(0)
 
+    trace1TailRef.current = []
     const built = buildTrace1Round(trace1QuatRef.current, trace1PosRef.current)
+    trace1TailRef.current = built.tail
     trace1ScheduleRef.current = built.schedule
     setTrace1Schedule(built.schedule)
     trace1RoundRef.current = 0; setTrace1Round(0)
@@ -1226,23 +1246,18 @@ export default function CbatPlaneTurn() {
                   <p className="text-2xl font-extrabold text-white mb-1">Trace 1 Complete</p>
                   <p className="text-sm text-slate-400 mb-6">All 5 rounds finished.</p>
 
-                  <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-6">
+                  <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 sm:p-5 mb-6">
                     <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
-                    <div className="flex justify-center gap-8">
-                      <div>
-                        <p className={`text-3xl font-mono font-bold ${trace1Score > 0 ? 'text-emerald-300' : trace1Score < 0 ? 'text-red-400' : 'text-brand-300'}`}>
+                    <div className="flex justify-center items-center gap-4 sm:gap-8">
+                      <div className="min-w-0">
+                        <p className={`text-2xl sm:text-3xl font-mono font-bold ${trace1Score > 0 ? 'text-emerald-300' : trace1Score < 0 ? 'text-red-400' : 'text-brand-300'}`}>
                           {trace1Score > 0 ? `+${trace1Score}` : trace1Score}
                         </p>
                         <p className="text-xs text-slate-500 mt-1">points</p>
                       </div>
-                      <div className="w-px bg-[#1a3a5c]" />
-                      <div>
-                        <p className="text-3xl font-mono font-bold text-brand-300">{trace1Correct}/{trace1Total}</p>
-                        <p className="text-xs text-slate-500 mt-1">correct</p>
-                      </div>
-                      <div className="w-px bg-[#1a3a5c]" />
-                      <div>
-                        <p className="text-3xl font-mono font-bold text-brand-300">{trace1Total > 0 ? Math.round((trace1Correct / trace1Total) * 100) : 0}%</p>
+                      <div className="w-px self-stretch bg-[#1a3a5c]" />
+                      <div className="min-w-0">
+                        <p className="text-2xl sm:text-3xl font-mono font-bold text-brand-300">{trace1Total > 0 ? Math.round((trace1Correct / trace1Total) * 100) : 0}%</p>
                         <p className="text-xs text-slate-500 mt-1">accuracy</p>
                       </div>
                     </div>
