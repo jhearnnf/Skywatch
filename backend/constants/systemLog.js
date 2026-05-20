@@ -6,6 +6,7 @@ const LOG_TYPES = [
   'duplicate_leads_detected',
   'quiz_finish_failure',
   'quiz_result_persist_failure',
+  'account_creation_failure',
 ];
 
 module.exports = { LOG_TYPES };

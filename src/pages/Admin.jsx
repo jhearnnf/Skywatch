@@ -8087,6 +8087,7 @@ function SystemLogsTab({ API, onResolved }) {
     duplicate_leads_detected:    { label: 'Duplicate Leads Detected', color: 'bg-purple-900/40 text-purple-300' },
     quiz_finish_failure:         { label: 'Intel Recall Finish Recovered', color: 'bg-pink-900/40 text-pink-300' },
     quiz_result_persist_failure: { label: 'Intel Recall Result Save Failed', color: 'bg-pink-900/40 text-pink-300' },
+    account_creation_failure:    { label: 'Account Creation Failed',       color: 'bg-red-900/40 text-red-300' },
   }
 
   return (
@@ -8167,6 +8168,15 @@ function SystemLogsTab({ API, onResolved }) {
                         <li key={wi} className="text-[10px] text-yellow-400 font-mono break-words">• {w}</li>
                       ))}
                     </ul>
+                  )}
+
+                  {/* account_creation_failure */}
+                  {log.type === 'account_creation_failure' && log.details && (
+                    <p className="text-xs text-slate-400 mb-1">
+                      {log.details.endpoint && <>Endpoint: <span className="font-mono">{log.details.endpoint}</span></>}
+                      {log.details.email && <> · Email: <span className="font-mono">{log.details.email}</span></>}
+                      {log.details.errorCode != null && <> · Code: <span className="font-mono">{log.details.errorCode}</span></>}
+                    </p>
                   )}
 
                   {/* common error detail */}

@@ -1,8 +1,11 @@
 process.env.JWT_SECRET = 'test_secret';
 
-const request  = require('supertest');
-const app      = require('../../app');
-const db       = require('../helpers/setupDb');
+const request   = require('supertest');
+const mongoose  = require('mongoose');
+const app       = require('../../app');
+const db        = require('../helpers/setupDb');
+const User      = require('../../models/User');
+const SystemLog = require('../../models/SystemLog');
 const { createUser, createSettings, authCookie } = require('../helpers/factories');
 
 beforeAll(async () => {
@@ -53,6 +56,71 @@ describe('POST /api/auth/register', () => {
 
     expect(res.status).toBe(409);
     expect(res.body.message).toMatch(/already registered/i);
+  });
+
+  // Regression: with `displayNameLower: { default: null }` plus the historic
+  // non-partial unique index, the second registration would hit
+  // E11000 dup key { displayNameLower: null }. The schema no longer writes
+  // null (field is omitted on unset users), and the partial index excludes
+  // missing values either way.
+  it('lets many users register without a display name (no null collisions)', async () => {
+    await createSettings(); // afterEach wiped it; instant-register branch needs emailConfirmationEnabled=false
+    for (let i = 0; i < 5; i++) {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({ email: `multi${i}@test.com`, password: 'Password123' });
+      expect(res.status).toBe(201);
+    }
+
+    const users = await User.find({}).lean();
+    expect(users).toHaveLength(5);
+    // Field must be absent — not null — so any legacy non-partial unique
+    // index in prod would also see "missing" rather than colliding nulls.
+    for (const u of users) {
+      expect(u.displayNameLower).toBeUndefined();
+    }
+  });
+
+  // If anything during account creation throws (E11000 / validation / etc.),
+  // the user must see a generic message and the failure must land in
+  // SystemLog so admins can triage from Admin → Intel → System Logs.
+  it('hides raw errors behind a friendly message and writes a SystemLog entry', async () => {
+    await createSettings(); // ensure emailConfirmationEnabled=false so we hit User.create
+
+    // Force the User.create call to throw a duplicate-key error — simulating
+    // the prod failure mode (E11000 on a stale displayNameLower index)
+    // without depending on actual Mongo index state.
+    const realCreate = User.create.bind(User);
+    User.create = async () => {
+      const err = new Error('E11000 duplicate key error collection: skywatch.users index: displayNameLower_1 dup key: { displayNameLower: null }');
+      err.code = 11000;
+      err.name = 'MongoServerError';
+      throw err;
+    };
+
+    try {
+      const res = await request(app)
+        .post('/api/auth/register')
+        .send({ email: 'fresh@test.com', password: 'Password123' });
+
+      expect(res.status).toBe(500);
+      // Generic, user-safe copy — never the raw Mongo message.
+      expect(res.body.message).toMatch(/account registration/i);
+      expect(res.body.message).not.toMatch(/E11000/);
+      expect(res.body.message).not.toMatch(/displayNameLower/);
+    } finally {
+      User.create = realCreate;
+    }
+
+    // Allow the fire-and-forget SystemLog.create to flush.
+    await new Promise(r => setImmediate(r));
+
+    const logs = await SystemLog.find({ type: 'account_creation_failure' }).lean();
+    expect(logs).toHaveLength(1);
+    expect(logs[0].details.endpoint).toBe('register');
+    expect(logs[0].details.email).toBe('fresh@test.com');
+    expect(logs[0].details.errorCode).toBe(11000);
+    expect(logs[0].failureReason).toMatch(/E11000/);
   });
 });
 

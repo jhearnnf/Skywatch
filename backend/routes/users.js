@@ -152,13 +152,15 @@ router.patch('/me/display-name', protect, async (req, res) => {
       }
     }
 
+    // When clearing, $unset displayNameLower entirely — writing null would
+    // collide on a legacy non-partial unique index, and the active partial
+    // index ignores missing values anyway.
+    const update = nextValue
+      ? { $set: { displayName: nextValue, displayNameLower: nextLower, displayNameChangedAt: new Date() } }
+      : { $set: { displayName: null, displayNameChangedAt: new Date() }, $unset: { displayNameLower: 1 } };
     const updated = await User.findByIdAndUpdate(
       req.user._id,
-      {
-        displayName:          nextValue,
-        displayNameLower:     nextLower,
-        displayNameChangedAt: new Date(),
-      },
+      update,
       { returnDocument: 'after' }
     ).populate('rank');
     const user = await withSelectedBadge(updated.toObject({ virtuals: true }));

@@ -25,10 +25,16 @@ const userSchema = new mongoose.Schema(
 
     // User-chosen display name shown on profile + every public leaderboard.
     // displayNameLower mirrors displayName in lowercase to enforce
-    // case-insensitive uniqueness via a sparse unique index.
+    // case-insensitive uniqueness via a partial unique index.
     // displayNameChangedAt drives the 30-day cooldown between changes.
+    //
+    // displayNameLower has NO default — the field is absent on docs without
+    // a name. Writing `null` here collides on any legacy non-partial unique
+    // index that may still exist in the database, and the partial filter
+    // (`$type: 'string'`) on the current index excludes only strings, so a
+    // missing field is the safest representation either way.
     displayName:          { type: String, trim: true, minlength: 3, maxlength: 20, default: null },
-    displayNameLower:     { type: String, default: null },
+    displayNameLower:     { type: String },
     displayNameChangedAt: { type: Date,   default: null },
 
     difficultySetting: { type: String, enum: DIFFICULTY_LEVELS, default: 'easy' },

@@ -9,9 +9,33 @@ const PasswordResetToken     = require('../models/PasswordResetToken');
 const PasswordResetRateLimit = require('../models/PasswordResetRateLimit');
 const AppSettings = require('../models/AppSettings');
 const AirstarLog  = require('../models/AirstarLog');
+const SystemLog   = require('../models/SystemLog');
 const { sendWelcomeEmail, sendConfirmationEmail, sendPasswordResetEmail } = require('../utils/email');
 const { awardCoins }       = require('../utils/awardCoins');
 const { verifyTurnstileToken } = require('../utils/turnstile');
+
+// Generic user-facing message for any unexpected failure during account
+// creation. Raw error messages (E11000 dup key, validation traces, stack
+// fragments) must never reach the client — they expose schema internals
+// and confuse end users. Admins can inspect the real cause in the
+// SystemLog feed at Admin → Intel → System Logs.
+const ACCOUNT_CREATION_USER_MESSAGE =
+  'There is currently an issue with account registration. Please try again shortly — if the problem persists, contact support.';
+
+const logAccountCreationFailure = (endpoint, email, err) => {
+  // Fire-and-forget — failing to write the log must not break the response.
+  SystemLog.create({
+    type:          'account_creation_failure',
+    failureReason: (err && err.message) ? String(err.message).slice(0, 1000) : 'unknown error',
+    details: {
+      endpoint,
+      email:     email ? String(email).toLowerCase() : null,
+      errorCode: err?.code ?? null,
+      errorName: err?.name ?? null,
+    },
+  }).catch(() => {});
+  console.error(`[${endpoint}]`, err);
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -102,7 +126,8 @@ router.post('/register', async (req, res) => {
 
     res.status(200).json({ status: 'pending', email: email.toLowerCase() });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    logAccountCreationFailure('register', req.body?.email, err);
+    res.status(500).json({ message: ACCOUNT_CREATION_USER_MESSAGE });
   }
 });
 
@@ -131,7 +156,8 @@ router.post('/verify-email', async (req, res) => {
     const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
     await sendToken(user, 201, res, { isNew: true, loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    logAccountCreationFailure('verify-email', req.body?.email, err);
+    res.status(500).json({ message: ACCOUNT_CREATION_USER_MESSAGE });
   }
 });
 
@@ -317,6 +343,15 @@ router.post('/google', async (req, res) => {
     const { earned: loginCoins, label: loginLabel } = await recordLogin(user);
     await sendToken(user, 200, res, { ...(isNew ? { isNew: true } : {}), loginAirstarsEarned: loginCoins, loginAirstarLabel: loginLabel });
   } catch (err) {
+    // E11000 / validation / mongoose errors during a new-account branch
+    // are an account-creation failure, not a Google verification failure —
+    // log them and surface the generic registration message. Token-verify
+    // errors keep the existing 401 path.
+    const isCreationError = err && (err.code === 11000 || err.name === 'ValidationError' || err.name === 'MongoServerError');
+    if (isCreationError) {
+      logAccountCreationFailure('google', null, err);
+      return res.status(500).json({ message: ACCOUNT_CREATION_USER_MESSAGE });
+    }
     console.error('Google auth error:', err.message);
     res.status(401).json({ message: 'Google authentication failed' });
   }

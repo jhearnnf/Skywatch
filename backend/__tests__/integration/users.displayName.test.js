@@ -48,7 +48,9 @@ describe('PATCH /api/users/me/display-name', () => {
 
     const fresh = await User.findById(user._id).lean();
     expect(fresh.displayName).toBeNull();
-    expect(fresh.displayNameLower).toBeNull();
+    // displayNameLower is $unset on clear so it never lands in any unique
+    // index (defensive against legacy non-partial indexes).
+    expect(fresh.displayNameLower).toBeUndefined();
   });
 
   describe('validation', () => {

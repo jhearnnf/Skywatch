@@ -29,6 +29,9 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     await require('./seeds/caseFiles')();
     // One-shot reversal of legacy Case File airstar awards. Idempotent.
     await require('./migrations/reverseCaseFileAirstars')();
+    // Reconcile User.displayNameLower index — drops legacy non-partial
+    // unique index that caused E11000 on null when a second user registered.
+    await require('./migrations/syncUserDisplayNameIndex')();
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
