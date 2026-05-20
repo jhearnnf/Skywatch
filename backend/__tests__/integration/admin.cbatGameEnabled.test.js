@@ -2,7 +2,8 @@
  * Admin — CBAT per-game enable/disable validation
  *
  * Covers PATCH /api/admin/settings handling of cbatGameEnabled (Map field):
- *   - rejects unknown game keys
+ *   - silently drops unknown / legacy game keys (e.g. renamed games still
+ *     echoed back by the frontend) instead of failing the whole save
  *   - rejects non-boolean values
  *   - rejects enabling unimplemented games (visualisation-3d / dad)
  *   - persists a valid object
@@ -29,12 +30,21 @@ async function patchSettings(cookie, body) {
 }
 
 describe('PATCH /api/admin/settings — cbatGameEnabled validation', () => {
-  it('rejects an unknown game key', async () => {
+  // The frontend can echo back legacy/renamed keys (e.g. 'audio-interrupt'
+  // before it was renamed to 'act') from the DB. Rejecting the whole save
+  // when an unknown key shows up would silently revert every admin Settings
+  // change — see commit 39b9ab7. Validation now drops unknown keys instead.
+  it('silently drops unknown game keys without failing the save', async () => {
     const admin  = await createAdminUser();
     const cookie = authCookie(admin._id);
-    const res = await patchSettings(cookie, { cbatGameEnabled: { 'not-a-game': true } });
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/unknown game key/);
+    const res = await patchSettings(cookie, {
+      cbatGameEnabled: { 'not-a-game': true, target: false },
+    });
+    expect(res.status).toBe(200);
+
+    const settings = await AppSettings.findOne();
+    expect(settings.cbatGameEnabled.get('not-a-game')).toBeUndefined();
+    expect(settings.cbatGameEnabled.get('target')).toBe(false);
   });
 
   it('rejects a non-boolean value', async () => {
