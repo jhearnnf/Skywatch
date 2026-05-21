@@ -19,9 +19,9 @@ const GAME_CONFIG = {
   'trace-1': {
     title: 'Trace 1',
     emoji: '\u{1F6E9}\uFE0F',
-    scoreLabel: 'Score',
+    scoreLabel: 'Correct',
     lowerIsBetter: false,
-    formatScore: (s) => `${s}`,
+    formatScore: (s) => `${s}/40`,
     backPath: '/cbat/trace',
     hideTime: true,
   },

@@ -102,7 +102,7 @@ describe('CBAT Plane Turn', () => {
   });
 
   describe('GET /leaderboard', () => {
-    it('returns leaderboard sorted by fewest rotations, one row per session', async () => {
+    it('returns leaderboard sorted by fewest rotations, one row per user (best only)', async () => {
       await request(app).post(RESULT_URL).set('Cookie', cookie)
         .send({ totalRotations: 50, totalTime: 40 });
       await request(app).post(RESULT_URL).set('Cookie', cookie)
@@ -119,9 +119,9 @@ describe('CBAT Plane Turn', () => {
 
       expect(leaderboard).toHaveLength(20);
       const real = leaderboard.filter(e => !e.isFake);
-      expect(real).toHaveLength(3);
-      // All three real runs are present — both of pilot1's sessions
-      expect(real.map(r => r.bestScore).sort((a, b) => a - b)).toEqual([20, 30, 50]);
+      // Each user appears once with their best score (pilot1: 30, pilot2: 20)
+      expect(real).toHaveLength(2);
+      expect(real.map(r => r.bestScore).sort((a, b) => a - b)).toEqual([20, 30]);
       // Global sort: lower rotations first, time breaks ties
       for (let i = 1; i < leaderboard.length; i++) {
         expect(leaderboard[i].bestScore).toBeGreaterThanOrEqual(leaderboard[i - 1].bestScore);
@@ -142,11 +142,13 @@ describe('CBAT Plane Turn', () => {
       expect(res.body.data.myBest).toBeNull();
     });
 
-    it('includes every qualifying session from the same user', async () => {
+    it('shows each user only once with their best session', async () => {
       await request(app).post(RESULT_URL).set('Cookie', cookie)
         .send({ totalRotations: 100, totalTime: 60 });
       await request(app).post(RESULT_URL).set('Cookie', cookie)
         .send({ totalRotations: 40, totalTime: 30 });
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalRotations: 70, totalTime: 50 });
 
       const res = await request(app)
         .get(LEADERBOARD_URL)
@@ -154,10 +156,38 @@ describe('CBAT Plane Turn', () => {
 
       expect(res.body.data.leaderboard).toHaveLength(20);
       const real = res.body.data.leaderboard.filter(e => !e.isFake);
-      expect(real).toHaveLength(2);
-      // Both of this user's sessions show up (40 and 100 rotations)
-      expect(real.map(r => r.bestScore).sort((a, b) => a - b)).toEqual([40, 100]);
-      expect(real[0].userId).toBe(real[1].userId);
+      // User has 3 sessions but appears once with their best (40 rotations)
+      expect(real).toHaveLength(1);
+      expect(real[0].bestScore).toBe(40);
+      expect(real[0].bestTime).toBe(30);
+      expect(real[0].userId.toString()).toBe(user._id.toString());
+    });
+
+    it('myBest.rank counts distinct users when user is outside top 20', async () => {
+      // 21 other users with better bests, each submits 2 sessions to prove
+      // duplicate sessions don't inflate the rank.
+      for (let i = 0; i < 21; i++) {
+        const u = await createUser({ agentNumber: `300000${i}`, email: `pt${i}@test.com` });
+        const c = authCookie(u._id);
+        await request(app).post(RESULT_URL).set('Cookie', c)
+          .send({ totalRotations: 10 + i, totalTime: 20 + i });
+        await request(app).post(RESULT_URL).set('Cookie', c)
+          .send({ totalRotations: 50 + i, totalTime: 40 + i });
+      }
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalRotations: 200, totalTime: 90 });
+
+      const res = await request(app)
+        .get(LEADERBOARD_URL)
+        .set('Cookie', cookie);
+
+      const { leaderboard, myBest } = res.body.data;
+      expect(leaderboard).toHaveLength(20);
+      expect(leaderboard.find(e => e.agentNumber === '1000001')).toBeUndefined();
+      expect(myBest).not.toBeNull();
+      expect(myBest.bestScore).toBe(200);
+      // Exactly 21 distinct users beat us — second sessions must not count
+      expect(myBest.rank).toBe(22);
     });
   });
 });

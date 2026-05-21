@@ -2515,6 +2515,19 @@ async function cbatLeaderboard(req, res, gameKey) {
   try {
     const pipeline = [
       ...(mode ? [{ $match: { [cfg.modeField]: mode } }] : []),
+      // Sort first so the $group's $first keeps each user's best session.
+      { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
+      {
+        $group: {
+          _id: '$userId',
+          sessionId: { $first: '$_id' },
+          userId: { $first: '$userId' },
+          [cfg.primaryField]: { $first: `$${cfg.primaryField}` },
+          totalTime: { $first: '$totalTime' },
+          createdAt: { $first: '$createdAt' },
+        },
+      },
+      // $group doesn't preserve order — re-sort the deduped rows.
       { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
       { $limit: 20 },
       {
@@ -2528,7 +2541,7 @@ async function cbatLeaderboard(req, res, gameKey) {
       { $unwind: '$user' },
       {
         $project: {
-          _id: 1,
+          _id: '$sessionId',
           userId: 1,
           agentNumber: '$user.agentNumber',
           displayName: '$user.displayName',
@@ -2562,22 +2575,36 @@ async function cbatLeaderboard(req, res, gameKey) {
         if (best) {
           const scoreVal = best[cfg.primaryField];
           const timeVal = best.totalTime;
-          const countBetter = await cfg.Model.countDocuments({
-            ...modeFilter,
-            ...(cfg.sortDir === 1
-              ? {
-                  $or: [
-                    { [cfg.primaryField]: { $lt: scoreVal } },
-                    { [cfg.primaryField]: scoreVal, totalTime: { $lt: timeVal } },
-                  ],
-                }
-              : {
-                  $or: [
-                    { [cfg.primaryField]: { $gt: scoreVal } },
-                    { [cfg.primaryField]: scoreVal, totalTime: { $lt: timeVal } },
-                  ],
-                }),
-          });
+          // Count distinct users whose *best* session beats this one, so the
+          // out-of-top-20 rank matches the deduped leaderboard above.
+          const betterAgg = await cfg.Model.aggregate([
+            ...(mode ? [{ $match: { [cfg.modeField]: mode } }] : []),
+            { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
+            {
+              $group: {
+                _id: '$userId',
+                [cfg.primaryField]: { $first: `$${cfg.primaryField}` },
+                totalTime: { $first: '$totalTime' },
+              },
+            },
+            {
+              $match: cfg.sortDir === 1
+                ? {
+                    $or: [
+                      { [cfg.primaryField]: { $lt: scoreVal } },
+                      { [cfg.primaryField]: scoreVal, totalTime: { $lt: timeVal } },
+                    ],
+                  }
+                : {
+                    $or: [
+                      { [cfg.primaryField]: { $gt: scoreVal } },
+                      { [cfg.primaryField]: scoreVal, totalTime: { $lt: timeVal } },
+                    ],
+                  },
+            },
+            { $count: 'n' },
+          ]);
+          const countBetter = betterAgg[0]?.n || 0;
           myBest = {
             _id: best._id,
             userId: req.user._id,

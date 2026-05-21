@@ -95,7 +95,7 @@ const CBAT_GAMES = {
   },
   'trace-1': {
     Model: GameSessionCbatTrace1Result,
-    primaryField: 'score',
+    primaryField: 'correctTurns',
     sortDir: -1,           // higher is better
     bestOp: '$max',
     label: 'Trace 1',
