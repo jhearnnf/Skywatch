@@ -15,6 +15,12 @@ import {
   generateDistractorCallsign,
   buildAvoidSequence,
 } from '../utils/cbat/actAudio'
+import {
+  RENDERED_AHEAD,
+  AUDIO_WARMUP_T,
+  generateShapeEvents,
+  generateAudioPlan,
+} from '../utils/cbat/cbatActPlan'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 5
@@ -26,8 +32,9 @@ const MAX_ROT_PER_TICK = 0.9                  // hard cap on per-tick rotation (
 const MAX_FWD_DEVIATION_RAD = Math.PI * 5 / 12   // 75° — half-angle of the cone the ball-forward must stay within around the tunnel's tangent, so the camera can never face perpendicular or backwards
 const MAX_FWD_DEVIATION_COS = Math.cos(MAX_FWD_DEVIATION_RAD)
 const KEYBOARD_RATE_PER_TICK = 4.5            // pixel-equivalent per 16ms keyboard tick
-const AUDIO_WARMUP_T = 0.15                   // no audio cues until ball reaches this fraction along the curve
 const MAX_ROUND_DURATION_S = 150              // safety net — force-end the round if the player gets stuck somehow
+// AUDIO_WARMUP_T, generateShapeEvents, generateAudioPlan, RENDERED_AHEAD live
+// in src/utils/cbat/cbatActPlan.js so they can be unit-tested without R3F.
 
 // Per-round tuning. Speed = world units / second the ball moves along its
 // own forward direction. Distractor density and turn intensity grow with
@@ -35,11 +42,18 @@ const MAX_ROUND_DURATION_S = 150              // safety net — force-end the ro
 const ROUND_CONFIG = [
   // `turns` doubled (was 4/5/6/7/8) so total iterations and curve length
   // double too, giving ~2× round duration at the same speeds.
-  { speed: 4.0, shapes:  8, distractorOdds: 0.30, avoidOdds: 0.18, bleepOdds: 0.10, turns: 12, callsigns: 2 },
-  { speed: 4.5, shapes: 10, distractorOdds: 0.40, avoidOdds: 0.22, bleepOdds: 0.12, turns: 14, callsigns: 2 },
-  { speed: 5.0, shapes: 12, distractorOdds: 0.50, avoidOdds: 0.25, bleepOdds: 0.14, turns: 16, callsigns: 2 },
-  { speed: 5.5, shapes: 14, distractorOdds: 0.55, avoidOdds: 0.28, bleepOdds: 0.16, turns: 18, callsigns: 3 },
-  { speed: 6.5, shapes: 16, distractorOdds: 0.60, avoidOdds: 0.30, bleepOdds: 0.18, turns: 20, callsigns: 3 },
+  //
+  // `shapes` was doubled when triangles were added — ~50% of stream events
+  // are triangle filler, so to keep circle/square encounter density similar
+  // to the pre-triangle stream we generate roughly twice as many events.
+  // distractorOdds and bleepOdds were halved when `shapes` doubled — both are
+  // applied per-event, so without the halving the round would have ~2× as
+  // many distractor cues and bleeps as the original tuning intended.
+  { speed: 4.0, shapes: 16, distractorOdds: 0.15, avoidOdds: 0.18, bleepOdds: 0.05, turns: 12, callsigns: 2 },
+  { speed: 4.5, shapes: 20, distractorOdds: 0.20, avoidOdds: 0.22, bleepOdds: 0.06, turns: 14, callsigns: 2 },
+  { speed: 5.0, shapes: 24, distractorOdds: 0.25, avoidOdds: 0.25, bleepOdds: 0.07, turns: 16, callsigns: 2 },
+  { speed: 5.5, shapes: 28, distractorOdds: 0.28, avoidOdds: 0.28, bleepOdds: 0.08, turns: 18, callsigns: 3 },
+  { speed: 6.5, shapes: 32, distractorOdds: 0.30, avoidOdds: 0.30, bleepOdds: 0.09, turns: 20, callsigns: 3 },
 ]
 
 // Score deltas
@@ -139,52 +153,6 @@ function buildTunnelCurve(roundIdx) {
   return new THREE.CatmullRomCurve3(points, false, 'centripetal')
 }
 
-// World-space buffer (in curve length units) before the first shape. Sized
-// so the ball — which keeps moving forward during the 3-second callsign
-// overlay — can't reach the first shape before the overlay disappears,
-// regardless of round speed. ~45 units = ~7s at the slowest round speed.
-const START_BUFFER_WORLD_UNITS = 45
-const END_MARGIN_T = 0.05
-
-// Per-round probability that the next shape repeats the previous shape.
-// Higher rounds → longer same-type runs → more opposite-type decoys between
-// any "avoid the next X" cue and its target (the runtime resolver always
-// binds to the next visible same-type shape, so the only way to get extra
-// decoys at higher rounds is to make same-type runs longer in the stream).
-// Mean opposite-run length ≈ 1 / (1 − repeatProb). Tuned so R1≈1.4 and
-// R5≈3.6, roughly matching the old AVOID_LEAD_MAX curve.
-const SHAPE_REPEAT_PROB = [0.30, 0.45, 0.55, 0.65, 0.72]
-
-// Place shape events along the curve. The shape stream is a simple Markov
-// chain biased by round (see SHAPE_REPEAT_PROB) so higher rounds produce
-// longer same-type runs. `t` is the curve parameter (0..1).
-function generateShapeEvents(curve, count, roundIdx) {
-  const curveLen = curve.getLength()
-  const startMarginT = Math.min(0.45, START_BUFFER_WORLD_UNITS / curveLen)
-  const repeatProb = SHAPE_REPEAT_PROB[Math.min(roundIdx, 4)]
-  const events = []
-  let prev = null
-  for (let i = 0; i < count; i++) {
-    const t = startMarginT + (1 - END_MARGIN_T - startMarginT) * (i / Math.max(1, count - 1))
-    let shape
-    if (prev !== null && Math.random() < repeatProb) {
-      shape = prev
-    } else {
-      shape = Math.random() < 0.5 ? 'circle' : 'square'
-    }
-    prev = shape
-    const colorIdx = Math.floor(Math.random() * 4)
-    events.push({ id: i, t, shape, colorIdx, threaded: null })
-  }
-  return events
-}
-
-// How many DECOY shapes (of the other type) can sit between an "avoid X"
-// instruction and the actual target X. Higher rounds force the player to
-// hold the instruction in working memory across multiple decoys.
-const AVOID_LEAD_MIN = [0, 0, 0, 1, 1]   // by roundIdx
-const AVOID_LEAD_MAX = [0, 1, 2, 3, 4]
-
 // Per-round chatter-distraction density. Rounds 1 and 3 get nothing.
 // Round 2 = audible-but-spaced; round 4 = near-continuous; round 5 = sparse
 // because static is already playing there. The engine's same-voice rule
@@ -196,134 +164,6 @@ const DISTRACTION_PLAN = [
   { startMs: 1500, gapMs: [400,  1800] },     // round 4
   { startMs: 4000, gapMs: [5000, 11000] },    // round 5 (also has static)
 ]
-
-// Minimum t-space gap between the START of an avoid-instruction's audio and
-// the arrival of its target shape. The audio takes ~2–3s to play (callsigns
-// + combined avoid clip), and the player needs additional processing time
-// to commit the target shape to working memory before steering. 0.30 of t
-// translates to ~7–9s at every round speed, leaving 5–6s of think/steer time
-// AFTER the audio finishes — comfortably above the audio's run length so
-// the cue never feels like a snap reaction test.
-const MIN_AUDIO_TO_TARGET_GAP_T = 0.30
-
-// Build the per-round audio plan: which shapes get an "avoid" instruction
-// (with the player's callsign), which get a distractor, and where bleeps fire.
-// Returns { audioCues } sorted by time-to-fire (curve-t at which to play).
-function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curveLen) {
-  const cues = []
-
-  // Step 1: pick which shapes will be avoid-targets for this round.
-  const avoidIdxs = new Set()
-  for (let i = 0; i < events.length; i++) {
-    if (Math.random() < roundCfg.avoidOdds) avoidIdxs.add(i)
-  }
-
-  // Step 2: schedule each avoid cue with a lead window of N decoy shapes
-  // (of the other type) before the actual target. Lead is capped by how many
-  // consecutive non-matching shapes precede the target in the level.
-  const ri = Math.min(roundIdx, 4)
-  const minLead = AVOID_LEAD_MIN[ri]
-  const maxLead = AVOID_LEAD_MAX[ri]
-  let activeWindowEndT = AUDIO_WARMUP_T          // prevents two avoid cues from overlapping in time
-
-  for (let i = 0; i < events.length; i++) {
-    if (!avoidIdxs.has(i)) continue
-    const ev = events[i]
-
-    // Count consecutive non-matching shapes immediately preceding ev.
-    let nonMatching = 0
-    for (let j = i - 1; j >= 0; j--) {
-      if (events[j].shape === ev.shape) break
-      nonMatching += 1
-    }
-
-    const upperLead = Math.min(maxLead, nonMatching)
-    const lowerLead = Math.min(minLead, upperLead)
-    const lead = lowerLead + Math.floor(Math.random() * (upperLead - lowerLead + 1))
-
-    // audioT is placed before the start of the lead window (or, when lead=0,
-    // far enough before the target itself that the audio finishes with time
-    // to spare). The MIN_AUDIO_TO_TARGET_GAP_T cap guarantees the player has
-    // processing time after hearing the instruction before the shape arrives.
-    const latestAudioT = ev.t - MIN_AUDIO_TO_TARGET_GAP_T
-    let audioT
-    if (lead === 0) {
-      audioT = latestAudioT
-    } else {
-      const earliest = events[i - lead]
-      audioT = Math.min(earliest.t - 0.04, latestAudioT)
-    }
-    const earliestAudioT = Math.max(AUDIO_WARMUP_T, activeWindowEndT)
-    if (audioT < earliestAudioT) continue          // can't fit between warmup/prev-window and the gap
-    if (audioT >= ev.t) continue                   // sanity
-
-    cues.push({ t: audioT, kind: 'avoid', callsigns: userCallsign, shape: ev.shape })
-    activeWindowEndT = ev.t + 0.01
-  }
-
-  // Step 2b: top up avoid cues so the player's callsign is always heard at
-  // least MIN_AVOID_CUES times per round — they need to recognise their own
-  // callsign under stress, and a low avoidOdds roll could otherwise leave
-  // them with 0 or 1 instructions for a whole round. Additions respect the
-  // same window invariant (next cue starts after the previous step-2 cue's
-  // anchor t) so they never overlap step-2 cues at play time. The picked
-  // event is only used to derive a sensible audioT — the actual avoid
-  // target is resolved at cue-fire time against whatever the player sees.
-  const MIN_AVOID_CUES = 2
-  let avoidCueCount = cues.filter(c => c.kind === 'avoid').length
-  const usedAnchorIds = new Set()
-  for (let i = 0; i < events.length && avoidCueCount < MIN_AVOID_CUES; i++) {
-    const ev = events[i]
-    if (usedAnchorIds.has(ev.id)) continue
-    const audioT = Math.max(activeWindowEndT, AUDIO_WARMUP_T, ev.t - MIN_AUDIO_TO_TARGET_GAP_T)
-    if (audioT >= ev.t) continue
-    cues.push({ t: audioT, kind: 'avoid', callsigns: userCallsign, shape: ev.shape })
-    usedAnchorIds.add(ev.id)
-    avoidCueCount += 1
-    activeWindowEndT = ev.t + 0.01
-  }
-
-  // Step 3: distractors — fire near a non-target shape, with a non-matching
-  // callsign. The player should ignore these.
-  for (let i = 0; i < events.length; i++) {
-    if (avoidIdxs.has(i)) continue
-    if (Math.random() >= roundCfg.distractorOdds) continue
-    const distractorSet = generateDistractorCallsign(userCallsign)
-    if (!distractorSet) continue
-    const ev = events[i]
-    const audioT = Math.max(AUDIO_WARMUP_T, ev.t - 0.06)
-    if (audioT >= ev.t) continue
-    const distractorShape = Math.random() < 0.5 ? 'circle' : 'square'
-    cues.push({ t: audioT, kind: 'distractor', callsigns: distractorSet, shape: distractorShape, targetId: null })
-  }
-
-  // Step 4: bleeps — stratified across the round so adjacent bleeps are
-  // always at least 3 s apart in real time. Floor at 5 per round so the
-  // reaction-time check always gets enough reps. Each bleep sits in its
-  // own equal slot of the [warmup, 0.95] t-range; restricting placement
-  // within each slot to leave a `minGapT/2` margin at each end guarantees
-  // neighbouring bleeps never get within minGapT of each other.
-  const bleepCount = Math.max(5, Math.round(roundCfg.shapes * roundCfg.bleepOdds))
-  const bleepRangeStart = AUDIO_WARMUP_T
-  const bleepRangeEnd   = 0.95
-  const bleepRange      = bleepRangeEnd - bleepRangeStart
-  const slotWidth       = bleepRange / bleepCount
-  // Convert "3 seconds" into curve-t units via cfg.speed and curve length.
-  // Cap at slotWidth so the per-slot sub-range never inverts on shorter
-  // rounds; gap is still as large as the slot allows.
-  const minGapT = Math.min(slotWidth, (3 * roundCfg.speed) / Math.max(1, curveLen))
-  for (let i = 0; i < bleepCount; i++) {
-    const slotStart = bleepRangeStart + i * slotWidth
-    const slotEnd   = slotStart + slotWidth
-    const subStart  = i === 0              ? slotStart : slotStart + minGapT / 2
-    const subEnd    = i === bleepCount - 1 ? slotEnd   : slotEnd   - minGapT / 2
-    const t = subStart + Math.random() * Math.max(0, subEnd - subStart)
-    cues.push({ t, kind: 'bleep' })
-  }
-
-  cues.sort((a, b) => a.t - b.t)
-  return cues
-}
 
 const SHAPE_COLORS = [0x5baaff, 0xff7066, 0xffd166, 0x80f0a0]
 
@@ -470,9 +310,9 @@ function ShapeGate({ event, curve, ballT }) {
   const opacity = passed ? 0.15 : 1
   const color = SHAPE_COLORS[event.colorIdx % SHAPE_COLORS.length]
 
-  // Both shapes are pure 3D borders (no inner fill / no invisible black panel),
-  // rendered with an emissive standard material so the player sees the chunky
-  // tube/bar shading rather than a flat ring.
+  // All three shapes are pure 3D borders (no inner fill / no invisible black
+  // panel), rendered with an emissive standard material so the player sees the
+  // chunky tube/bar shading rather than a flat ring.
   if (event.shape === 'circle') {
     return (
       <mesh position={position} quaternion={quaternion}>
@@ -485,6 +325,41 @@ function ShapeGate({ event, curve, ballT }) {
           opacity={opacity}
         />
       </mesh>
+    )
+  }
+  if (event.shape === 'triangle') {
+    // Three chunky 3D bars forming an equilateral triangle frame — vertex up.
+    // Side length = SHAPE_RADIUS * sqrt(3) for an equilateral triangle whose
+    // circumscribed circle has radius SHAPE_RADIUS, matching circle/square
+    // visual size. Each bar is positioned at the midpoint of an edge and
+    // rotated to lie along that edge.
+    const barT = 0.13
+    const sideLen = SHAPE_RADIUS * Math.sqrt(3) + barT
+    // Vertices of the inscribed triangle (z=0 plane, vertex up).
+    const v0 = [0,  SHAPE_RADIUS, 0]                                                // top
+    const v1 = [-SHAPE_RADIUS * Math.sqrt(3) / 2, -SHAPE_RADIUS / 2, 0]              // bottom-left
+    const v2 = [ SHAPE_RADIUS * Math.sqrt(3) / 2, -SHAPE_RADIUS / 2, 0]              // bottom-right
+    const edges = [
+      // [midpoint, rotation-z-radians-around-z-axis]
+      [[(v0[0] + v1[0]) / 2, (v0[1] + v1[1]) / 2, 0], Math.atan2(v1[1] - v0[1], v1[0] - v0[0])],
+      [[(v1[0] + v2[0]) / 2, (v1[1] + v2[1]) / 2, 0], 0],                            // horizontal bottom
+      [[(v0[0] + v2[0]) / 2, (v0[1] + v2[1]) / 2, 0], Math.atan2(v2[1] - v0[1], v2[0] - v0[0])],
+    ]
+    return (
+      <group position={position} quaternion={quaternion}>
+        {edges.map(([pos, rotZ], i) => (
+          <mesh key={i} position={pos} rotation={[0, 0, rotZ]}>
+            <boxGeometry args={[sideLen, barT, barT]} />
+            <meshStandardMaterial
+              color={color}
+              emissive={color}
+              emissiveIntensity={passed ? 0.15 : 0.55}
+              transparent
+              opacity={opacity}
+            />
+          </mesh>
+        ))}
+      </group>
     )
   }
   // Square: 4 chunky 3D bars forming a hollow frame — no inner panel.
@@ -628,7 +503,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
   const cfg     = ROUND_CONFIG[roundIdx]
   const userCallsign = useMemo(() => pickCallsigns(cfg.callsigns), [roundIdx])
   const curve   = useMemo(() => buildTunnelCurve(roundIdx), [roundIdx])
-  const events  = useMemo(() => generateShapeEvents(curve, cfg.shapes, roundIdx), [curve, cfg.shapes, roundIdx])
+  const events  = useMemo(() => generateShapeEvents(curve.getLength(), cfg.shapes, roundIdx), [curve, cfg.shapes, roundIdx])
   const audioCues = useMemo(() => generateAudioPlan(events, cfg, userCallsign, roundIdx, curve.getLength()), [events, cfg, userCallsign, roundIdx, curve])
 
   const ballTRef       = useRef(0)
@@ -964,11 +839,17 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
           // lookahead so it can't land before the audio finishes. If nothing
           // valid is ahead, drop the cue silently (don't play audio that
           // can't be scored coherently).
-          const MIN_LOOKAHEAD_T = 0.08
+          // Off-screen rule: the resolved target must be beyond the rendered
+          // horizon (ActScene renders events[firstUpcoming..firstUpcoming+RENDERED_AHEAD]).
+          // Picking a same-shape that's already rendered would let the player
+          // mistake a visible non-target for the avoid target. The audio
+          // planner already enforces this at scheduling time; this re-check
+          // guards against runtime drift (e.g. player progressing faster than
+          // planned past the cue's audioT).
+          const minIdx = eventIdxRef.current + RENDERED_AHEAD
           let dynTargetId = null
-          for (let k = eventIdxRef.current; k < events.length; k++) {
+          for (let k = minIdx; k < events.length; k++) {
             if (events[k].shape !== cue.shape) continue
-            if (events[k].t < ballTRef.current + MIN_LOOKAHEAD_T) continue
             dynTargetId = events[k].id
             break
           }
@@ -1475,9 +1356,9 @@ function IntroScreen({ personalBest, onStart }) {
       <p className="text-4xl mb-3">🎧</p>
       <p className="text-xl font-extrabold text-white mb-2">Auditory Capacity Test</p>
       <p className="text-sm text-slate-400 mb-5">
-        Steer the ball through every ring and square. Listen for your callsign — when you hear
+        Steer the ball through every shape. Listen for your callsign — when you hear
         <span className="text-brand-300 font-bold"> "avoid the next circle/square" </span>
-        with your full callsign, skip that one. Ignore everything else.
+        with your full callsign, skip that one. Triangles are always default-thread.
       </p>
 
       <div className="bg-amber-500/10 border border-amber-500/40 rounded-lg p-3 mb-5 flex items-start gap-2 text-left">
