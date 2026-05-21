@@ -42,8 +42,9 @@ const SOCIAL_LINKS = [
   {
     platform: 'x',
     label: 'X',
+    href: 'https://x.com/SkyWatchAcademy',
     Icon: XIcon,
-    comingSoon: true,
+    comingSoon: false,
   },
 ]
 

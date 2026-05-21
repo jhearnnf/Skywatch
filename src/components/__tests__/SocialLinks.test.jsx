@@ -21,12 +21,19 @@ describe('SocialLinks', () => {
     expect(tiktok.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
-  it('renders Discord and X as disabled buttons (no anchor)', () => {
+  it('renders the live X link with the SkyWatchAcademy href', () => {
+    render(<SocialLinks source="landing" />)
+    const x = screen.getByLabelText('X')
+    expect(x.tagName).toBe('A')
+    expect(x.getAttribute('href')).toBe('https://x.com/SkyWatchAcademy')
+    expect(x.getAttribute('target')).toBe('_blank')
+    expect(x.getAttribute('rel')).toBe('noopener noreferrer')
+  })
+
+  it('renders Discord as a disabled button (no anchor)', () => {
     render(<SocialLinks source="landing" />)
     const discord = screen.getByLabelText(/Discord — launching soon/i)
-    const x = screen.getByLabelText(/X — launching soon/i)
     expect(discord.tagName).toBe('BUTTON')
-    expect(x.tagName).toBe('BUTTON')
   })
 
   it('shows a "Launching soon" tooltip on hover and hides it on mouse leave', () => {
