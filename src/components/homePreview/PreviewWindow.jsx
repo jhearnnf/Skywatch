@@ -41,6 +41,29 @@ export default function PreviewWindow({ eyebrow, heading, scenes, loop = true, a
   const { index, runKey, currentScene, isPaused, replay, togglePause, jumpTo, total } =
     useScenePlayer(scenesSafe, { loop, autoplay, inView })
 
+  // Swipe-to-advance: track the starting touch X, and on touchend compare to
+  // the final X. ≥40px horizontal motion (with vertical motion < that) counts
+  // as a swipe — left advances, right goes back. Looping so swiping past the
+  // ends wraps around, which matches the autoplay's loop=true default.
+  const swipeRef = useRef({ x: 0, y: 0, t: 0 })
+  const onTouchStart = (e) => {
+    const t = e.touches[0]
+    if (!t) return
+    swipeRef.current = { x: t.clientX, y: t.clientY, t: Date.now() }
+  }
+  const onTouchEnd = (e) => {
+    const start = swipeRef.current
+    const t = e.changedTouches[0]
+    if (!t || !start.t) return
+    const dx = t.clientX - start.x
+    const dy = t.clientY - start.y
+    if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy)) {
+      const dir = dx < 0 ? 1 : -1
+      const next = (index + dir + total) % total
+      jumpTo(next)
+    }
+  }
+
   if (total === 0) return null
 
   const Scene = currentScene?.Component
@@ -59,7 +82,9 @@ export default function PreviewWindow({ eyebrow, heading, scenes, loop = true, a
       <div className="relative">
         <div
           ref={windowRef}
-          className="relative rounded-2xl sm:rounded-3xl overflow-hidden mx-auto aspect-[4/5] sm:aspect-[16/9]"
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+          className="relative rounded-2xl sm:rounded-3xl overflow-hidden mx-auto aspect-[4/5] sm:aspect-[16/9] touch-pan-y"
           style={{
             background:   '#06101e',
             border:       '1px solid rgba(91,170,255,0.25)',

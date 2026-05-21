@@ -146,7 +146,7 @@ export default function Landing() {
       </header>
 
       {/* ── Hero ───────────────────────────────────────────── */}
-      <section className="pt-24 sm:pt-36 pb-16 sm:pb-24 px-5 text-center max-w-3xl mx-auto">
+      <section className="pt-20 sm:pt-36 pb-10 sm:pb-24 px-5 text-center max-w-3xl mx-auto">
         <motion.div
           initial="hidden" animate="visible"
           variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
@@ -183,7 +183,7 @@ export default function Landing() {
             </motion.div>
           )}
 
-          <motion.div variants={fadeUp} custom={4} className="flex flex-col sm:flex-row gap-3 justify-center">
+          <motion.div variants={fadeUp} custom={4} className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center items-center">
             {user ? (
               <Link
                 to="/home"
@@ -203,7 +203,17 @@ export default function Landing() {
             )}
             <Link
               to="/learn-priority"
-              className="bg-surface hover:bg-surface-raised text-slate-700 font-bold px-8 py-4 rounded-2xl text-lg border border-slate-200 transition-all hover:-translate-y-0.5"
+              className="
+                sm:bg-surface sm:hover:bg-surface-raised
+                text-slate-700 sm:font-bold font-semibold
+                sm:px-8 sm:py-4 px-2 py-1
+                sm:rounded-2xl
+                text-sm sm:text-lg
+                sm:border sm:border-slate-200
+                transition-all sm:hover:-translate-y-0.5
+                underline sm:no-underline
+                decoration-slate-500/40 underline-offset-4
+              "
             >
               Browse Subjects
             </Link>
@@ -215,7 +225,7 @@ export default function Landing() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, duration: 0.5 }}
-          className="mt-12 sm:mt-16 flex flex-wrap justify-center gap-4 sm:gap-10 text-center"
+          className="mt-8 sm:mt-16 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-6 max-w-md sm:max-w-none mx-auto text-center"
         >
           {[
             { value: '15',                                                 label: 'Subject Areas'  },
@@ -223,11 +233,11 @@ export default function Landing() {
             { value: questionCount != null ? questionCount.toLocaleString() : '—', label: 'Practice Questions', caption: 'Every brief covered' },
             { value: 'Daily',                                              label: 'Streak System'  },
           ].map(({ value, label, caption }) => (
-            <div key={label} className="relative px-4 py-3" style={{ border: '1px solid rgba(91,170,255,0.12)', borderRadius: 8 }}>
+            <div key={label} className="relative px-2 sm:px-4 py-2 sm:py-3" style={{ border: '1px solid rgba(91,170,255,0.12)', borderRadius: 8 }}>
               <CornerBrackets size={8} />
-              <div className="text-2xl font-extrabold text-brand-600 intel-mono">{value}</div>
-              <div className="text-xs text-slate-500 intel-mono mt-0.5">{label}</div>
-              {caption && <div className="text-[10px] text-slate-500/80 intel-mono mt-0.5">{caption}</div>}
+              <div className="text-xl sm:text-2xl font-extrabold text-brand-600 intel-mono">{value}</div>
+              <div className="text-[11px] sm:text-xs text-slate-500 intel-mono mt-0.5 leading-tight">{label}</div>
+              {caption && <div className="hidden sm:block text-[10px] text-slate-500/80 intel-mono mt-0.5">{caption}</div>}
             </div>
           ))}
         </motion.div>
@@ -241,6 +251,18 @@ export default function Landing() {
             heading="Your training, in 25 seconds"
             scenes={intelBriefScenes}
             dataTestId="preview-window-intel-brief"
+          />
+        </Suspense>
+      )}
+
+      {/* ── CBAT preview window ────────────────────────────── */}
+      {showCbatWindow && (
+        <Suspense fallback={null}>
+          <PreviewWindow
+            eyebrow="CBAT PRACTICE GAMES"
+            heading="Practice every CBAT subtest"
+            scenes={cbatScenes}
+            dataTestId="preview-window-cbat"
           />
         </Suspense>
       )}
@@ -261,7 +283,7 @@ export default function Landing() {
           <p className="text-slate-500 max-w-lg mx-auto">Fifteen subject areas covering the full breadth of modern RAF knowledge.</p>
         </motion.div>
 
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+        <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 sm:gap-3">
           {PREVIEW_CATEGORIES.map(({ emoji, label }, i) => (
             <motion.div
               key={label}
@@ -273,11 +295,11 @@ export default function Landing() {
               <Link
                 to="/learn-priority"
                 state={{ category: label }}
-                className="relative flex flex-col items-center gap-2 rounded-2xl p-4 border transition-all card-intel hover:card-intel hover:-translate-y-0.5 group"
+                className="relative flex flex-col items-center gap-1.5 sm:gap-2 rounded-xl sm:rounded-2xl p-2.5 sm:p-4 border transition-all card-intel hover:card-intel hover:-translate-y-0.5 group"
               >
                 <CornerBrackets size={10} />
-                <span className="text-3xl group-hover:scale-110 transition-transform">{emoji}</span>
-                <span className="text-sm font-semibold text-slate-700">{label}</span>
+                <span className="text-2xl sm:text-3xl group-hover:scale-110 transition-transform">{emoji}</span>
+                <span className="text-[11px] sm:text-sm font-semibold text-slate-700 leading-tight text-center">{label}</span>
               </Link>
             </motion.div>
           ))}
@@ -330,18 +352,6 @@ export default function Landing() {
           ))}
         </div>
       </section>
-
-      {/* ── CBAT preview window ────────────────────────────── */}
-      {showCbatWindow && (
-        <Suspense fallback={null}>
-          <PreviewWindow
-            eyebrow="CBAT PRACTICE GAMES"
-            heading="Practice every CBAT subtest"
-            scenes={cbatScenes}
-            dataTestId="preview-window-cbat"
-          />
-        </Suspense>
-      )}
 
       {/* ── CTA ───────────────────────────────────────────── */}
       <section className="py-12 sm:py-20 px-5">
