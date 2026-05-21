@@ -10,6 +10,8 @@ const POST_TYPE_OPTIONS = [
   { value: 'brand-transparency',  label: 'Brand Transparency (devlog)' },
 ]
 
+const POST_TYPE_LABEL_MAP = Object.fromEntries(POST_TYPE_OPTIONS.map(o => [o.value, o.label]))
+
 const TONE_LABEL = {
   1: 'Military formal',
   2: 'Military formal',
@@ -53,6 +55,21 @@ export default function SocialsSection({ API }) {
   const [imageSource, setImageSource] = useState('none')
   const [uploadedFileDataUrl, setUploadedFileDataUrl] = useState(null)
   const [briefCategoryFilter, setBriefCategoryFilter] = useState('') // daily-recon / daily-recon-info only; '' = all categories
+
+  // Brief listbox state — the visible picker is a custom listbox so we can
+  // show a post-count pill per brief. A hidden native <select> shadows the
+  // listbox to preserve accessibility + existing test selectors.
+  const [listboxOpen, setListboxOpen] = useState(false)
+  const listboxRef = useRef(null)
+
+  // Previous posts for the currently selected brief — surfaces prior coverage
+  // so we don't duplicate. Fetched lazily whenever briefId changes.
+  const [prevPosts, setPrevPosts]         = useState([])
+  const [prevPostsOpen, setPrevPostsOpen] = useState(false)
+  // Guards the prev-posts fetch from re-firing when only apiFetch's identity
+  // changes (the AuthContext mock in tests rebuilds it every render). Mirrors
+  // the briefsLoaded / postsLoaded guards used elsewhere in this file.
+  const lastFetchedBriefIdRef = useRef(null)
 
   // Draft state — three parallel variants, each independently loading. The
   // carousel renders one card per slot and the user picks which one to post.
@@ -137,6 +154,42 @@ export default function SocialsSection({ API }) {
     return () => clearTimeout(t)
   }, [toast])
 
+  // Close the brief listbox on outside click / Escape.
+  useEffect(() => {
+    if (!listboxOpen) return
+    const onDown = (e) => {
+      if (listboxRef.current && !listboxRef.current.contains(e.target)) setListboxOpen(false)
+    }
+    const onKey = (e) => { if (e.key === 'Escape') setListboxOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [listboxOpen])
+
+  // Fetch previous SocialPosts about the currently-selected brief so the admin
+  // can compare and avoid duplicates. Empty briefId clears the list; cancelled
+  // fetches don't overwrite a newer selection. The ref guard prevents repeat
+  // fetches when only apiFetch's identity changes between renders.
+  useEffect(() => {
+    if (!briefId) {
+      lastFetchedBriefIdRef.current = null
+      if (prevPosts.length) setPrevPosts([])
+      setPrevPostsOpen(false)
+      return
+    }
+    if (lastFetchedBriefIdRef.current === briefId) return
+    lastFetchedBriefIdRef.current = briefId
+    let cancelled = false
+    apiFetch(`${API}/api/admin/social/brief/${briefId}/posts`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => { if (!cancelled) setPrevPosts(data?.data || []) })
+      .catch(() => { if (!cancelled) setPrevPosts([]) })
+    return () => { cancelled = true }
+  }, [API, apiFetch, briefId, prevPosts.length])
+
   const selectedBrief = useMemo(
     () => briefs.find(b => b._id === briefId) || (latestNews?._id === briefId ? latestNews : null),
     [briefs, briefId, latestNews]
@@ -148,7 +201,13 @@ export default function SocialsSection({ API }) {
   // back to dateAdded so non-News briefs end up after dated News briefs.
   const briefOptions = useMemo(() => {
     const merged = []
-    if (postType === 'latest-intel' && latestNews) merged.push(latestNews)
+    if (postType === 'latest-intel' && latestNews) {
+      // latestNews is fetched separately and has no postCount of its own —
+      // inherit it from the briefs-for-recon entry so the listbox badge
+      // matches what daily-recon mode would show.
+      const fromBriefs = briefs.find(b => b._id === latestNews._id)
+      merged.push({ ...latestNews, postCount: fromBriefs?.postCount || 0 })
+    }
     for (const b of briefs) {
       if (postType === 'latest-intel' && latestNews?._id === b._id) continue
       merged.push(b)
@@ -358,6 +417,9 @@ export default function SocialsSection({ API }) {
       setSelectedIndex(0)
       setImageUrl(null)
       loadPosts()
+      // Refresh the brief picker so the new post bumps the count pill and
+      // shows up in the previous-posts disclosure on the next selection.
+      loadBriefs()
     } catch (err) {
       setPublishError(err.message || 'publish failed')
     } finally { setPublishing(false) }
@@ -519,25 +581,165 @@ export default function SocialsSection({ API }) {
                         </button>
                       )}
                     </div>
-                    <select
-                      data-testid="brief-select"
-                      value={briefId}
-                      onChange={e => setBriefId(e.target.value)}
-                      className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
-                    >
-                      <option value="">— select —</option>
-                      {filteredBriefOptions.map(b => {
-                        const isLatestNews = postType === 'latest-intel' && latestNews?._id === b._id
-                        const fresh = isLatestNews && latestNews?.isFreshToday
-                        return (
-                          <option key={b._id} value={b._id}>
-                            {b.title}
-                            {fresh ? ' · 🟢 today' : ''}
-                            {!isLatestNews ? ` (${b.category})` : ''}
-                          </option>
-                        )
-                      })}
-                    </select>
+                    <div className="relative" ref={listboxRef}>
+                      {/* Source-of-truth native <select>. Visually hidden but
+                          kept in the DOM so keyboard / screen-reader users
+                          (and tests) can read/write the selection. The
+                          visible listbox below mirrors it for styling. */}
+                      <select
+                        data-testid="brief-select"
+                        value={briefId}
+                        onChange={e => setBriefId(e.target.value)}
+                        aria-label={postType === 'latest-intel' ? 'News brief' : 'Source brief'}
+                        className="sr-only"
+                        tabIndex={-1}
+                      >
+                        <option value="">— select —</option>
+                        {filteredBriefOptions.map(b => {
+                          const isLatestNews = postType === 'latest-intel' && latestNews?._id === b._id
+                          const fresh = isLatestNews && latestNews?.isFreshToday
+                          return (
+                            <option key={b._id} value={b._id}>
+                              {b.title}
+                              {fresh ? ' · 🟢 today' : ''}
+                              {!isLatestNews ? ` (${b.category})` : ''}
+                            </option>
+                          )
+                        })}
+                      </select>
+
+                      {/* Visible listbox trigger */}
+                      <button
+                        type="button"
+                        data-testid="brief-listbox-toggle"
+                        onClick={() => setListboxOpen(o => !o)}
+                        aria-expanded={listboxOpen}
+                        aria-haspopup="listbox"
+                        className="w-full flex items-center justify-between border border-slate-400 rounded-xl px-3 py-2 text-sm bg-surface-raised text-text focus:ring-2 focus:ring-brand-600/40 outline-none"
+                      >
+                        <span className="truncate text-left flex-1">
+                          {(() => {
+                            const sel = filteredBriefOptions.find(b => b._id === briefId)
+                            if (!sel) return <span className="text-slate-400">— select —</span>
+                            const isLatestNews = postType === 'latest-intel' && latestNews?._id === sel._id
+                            const fresh = isLatestNews && latestNews?.isFreshToday
+                            return (
+                              <>
+                                {sel.title}
+                                {fresh ? ' · 🟢 today' : ''}
+                                {!isLatestNews ? <span className="text-slate-400"> ({sel.category})</span> : null}
+                              </>
+                            )
+                          })()}
+                        </span>
+                        <span className="text-slate-400 ml-2 shrink-0">{listboxOpen ? '▲' : '▼'}</span>
+                      </button>
+
+                      {listboxOpen && (
+                        <ul
+                          data-testid="brief-listbox-options"
+                          role="listbox"
+                          className="absolute z-20 w-full mt-1 max-h-72 overflow-y-auto bg-surface-raised border border-slate-400 rounded-xl shadow-xl"
+                        >
+                          {filteredBriefOptions.length === 0 && (
+                            <li className="px-3 py-2 text-xs text-slate-400">No briefs available</li>
+                          )}
+                          {filteredBriefOptions.map(b => {
+                            const isLatestNews = postType === 'latest-intel' && latestNews?._id === b._id
+                            const fresh = isLatestNews && latestNews?.isFreshToday
+                            const count = b.postCount || 0
+                            const isSelected = briefId === b._id
+                            return (
+                              <li key={b._id} role="option" aria-selected={isSelected}>
+                                <button
+                                  type="button"
+                                  data-testid={`brief-option-${b._id}`}
+                                  data-post-count={count}
+                                  onClick={() => { setBriefId(b._id); setListboxOpen(false) }}
+                                  className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-brand-600/10 ${
+                                    isSelected ? 'bg-brand-600/20' : ''
+                                  }`}
+                                >
+                                  <span className="flex-1 truncate text-text">
+                                    {b.title}
+                                    {fresh ? ' · 🟢 today' : ''}
+                                    {!isLatestNews ? <span className="text-slate-400"> ({b.category})</span> : null}
+                                  </span>
+                                  {count > 0 && (
+                                    <span
+                                      data-testid={`brief-option-count-${b._id}`}
+                                      title={`${count} previous post${count === 1 ? '' : 's'} about this brief`}
+                                      className="ml-2 text-[10px] bg-brand-600/20 text-brand-600 rounded-full px-1.5 py-0.5 font-bold shrink-0"
+                                    >
+                                      {count}
+                                    </span>
+                                  )}
+                                </button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </div>
+
+                    {/* Previous-posts disclosure — surfaces prior coverage of
+                        the selected brief so we don't duplicate. */}
+                    {prevPosts.length > 0 && (
+                      <div
+                        data-testid="prev-posts-disclosure"
+                        className="mt-2 border border-slate-700 rounded-lg overflow-hidden"
+                      >
+                        <button
+                          type="button"
+                          data-testid="prev-posts-toggle"
+                          onClick={() => setPrevPostsOpen(o => !o)}
+                          aria-expanded={prevPostsOpen}
+                          className="w-full flex items-center justify-between px-3 py-1.5 bg-surface-raised text-xs font-bold text-brand-600 hover:text-brand-700"
+                        >
+                          <span>
+                            {prevPosts.length} previous post{prevPosts.length === 1 ? '' : 's'} about this brief — review to avoid duplicates
+                          </span>
+                          <span>{prevPostsOpen ? '▲' : '▼'}</span>
+                        </button>
+                        {prevPostsOpen && (
+                          <ul className="divide-y divide-slate-800" data-testid="prev-posts-list">
+                            {prevPosts.map(p => {
+                              const snippet = (p.finalText || '').slice(0, 120)
+                              const truncated = (p.finalText?.length || 0) > 120
+                              return (
+                                <li key={p._id} data-testid={`prev-post-row-${p._id}`} className="px-3 py-2">
+                                  <div className="text-[11px] font-bold text-slate-300">
+                                    {POST_TYPE_LABEL_MAP[p.postType] || p.postType}
+                                    {p.postedAt && ' · ' + new Date(p.postedAt).toLocaleDateString()}
+                                  </div>
+                                  <div className="text-xs text-slate-400 mt-0.5 break-words">
+                                    {snippet}{truncated ? '…' : ''}
+                                  </div>
+                                  {p.externalPostUrl ? (
+                                    <a
+                                      href={p.externalPostUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      data-testid={`prev-post-link-${p._id}`}
+                                      className="inline-block mt-0.5 text-[11px] font-bold text-brand-600 hover:text-brand-700"
+                                    >
+                                      Open on X ↗
+                                    </a>
+                                  ) : (
+                                    <span
+                                      data-testid={`prev-post-nolink-${p._id}`}
+                                      className="inline-block mt-0.5 text-[11px] font-bold text-slate-500"
+                                    >
+                                      (no link)
+                                    </span>
+                                  )}
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

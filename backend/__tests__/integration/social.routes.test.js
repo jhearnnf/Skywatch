@@ -142,6 +142,88 @@ describe('GET /briefs-for-recon', () => {
     expect(titles).toContain('Published B1');
     expect(titles).not.toContain('Stub B2');
   });
+
+  it('attaches postCount per brief, counting only posted + non-deleted', async () => {
+    const a = await createAdminUser();
+    const b1 = await createBrief({ title: 'Hot Brief',   status: 'published' });
+    const b2 = await createBrief({ title: 'Quiet Brief', status: 'published' });
+    await SocialPost.create([
+      { platform: 'x', postType: 'daily-recon-info', tone: 7, briefId: b1._id,
+        draftText: 'a', finalText: 'a', status: 'posted', createdBy: a._id },
+      { platform: 'x', postType: 'daily-recon',      tone: 7, briefId: b1._id,
+        draftText: 'b', finalText: 'b', status: 'posted', createdBy: a._id },
+      // draft — should NOT count
+      { platform: 'x', postType: 'daily-recon-info', tone: 7, briefId: b1._id,
+        draftText: 'c', finalText: 'c', status: 'draft',  createdBy: a._id },
+      // failed — should NOT count
+      { platform: 'x', postType: 'daily-recon-info', tone: 7, briefId: b1._id,
+        draftText: 'd', finalText: 'd', status: 'failed', createdBy: a._id },
+      // soft-deleted — should NOT count
+      { platform: 'x', postType: 'daily-recon-info', tone: 7, briefId: b1._id,
+        draftText: 'e', finalText: 'e', status: 'posted', createdBy: a._id,
+        deletedAt: new Date() },
+    ]);
+    const res = await request(app)
+      .get('/api/admin/social/briefs-for-recon')
+      .set('Cookie', authCookie(a._id));
+    expect(res.status).toBe(200);
+    const byTitle = Object.fromEntries(res.body.data.map(b => [b.title, b.postCount]));
+    expect(byTitle['Hot Brief']).toBe(2);
+    expect(byTitle['Quiet Brief']).toBe(0);
+  });
+});
+
+describe('GET /brief/:briefId/posts', () => {
+  it('returns posted non-deleted posts for the brief, newest first, with allowed fields', async () => {
+    const a = await createAdminUser();
+    const b = await createBrief({ title: 'Brief X', status: 'published' });
+    await SocialPost.create([
+      { platform: 'x', postType: 'daily-recon-info', tone: 7, briefId: b._id,
+        draftText: 'older', finalText: 'older',
+        externalPostUrl: 'https://x.com/sw/status/1', status: 'posted',
+        postedAt: new Date(Date.now() - 60_000), createdBy: a._id },
+      { platform: 'x', postType: 'daily-recon',      tone: 7, briefId: b._id,
+        draftText: 'newer', finalText: 'newer',
+        externalPostUrl: 'https://x.com/sw/status/2', status: 'posted',
+        postedAt: new Date(), createdBy: a._id },
+      // excluded: draft
+      { platform: 'x', postType: 'daily-recon-info', tone: 7, briefId: b._id,
+        draftText: 'draft', finalText: 'draft', status: 'draft', createdBy: a._id },
+      // excluded: soft-deleted
+      { platform: 'x', postType: 'daily-recon-info', tone: 7, briefId: b._id,
+        draftText: 'deleted', finalText: 'deleted', status: 'posted',
+        deletedAt: new Date(), createdBy: a._id },
+    ]);
+    const res = await request(app)
+      .get(`/api/admin/social/brief/${b._id}/posts`)
+      .set('Cookie', authCookie(a._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.data[0].finalText).toBe('newer');
+    expect(res.body.data[1].finalText).toBe('older');
+    // projection: should expose these fields and not, e.g. draftText
+    const keys = Object.keys(res.body.data[0]);
+    expect(keys).toEqual(expect.arrayContaining(['_id', 'postType', 'finalText', 'externalPostUrl', 'postedAt', 'platform']));
+    expect(keys).not.toContain('draftText');
+  });
+
+  it('400s a malformed briefId', async () => {
+    const a = await createAdminUser();
+    const res = await request(app)
+      .get('/api/admin/social/brief/not-an-id/posts')
+      .set('Cookie', authCookie(a._id));
+    expect(res.status).toBe(400);
+  });
+
+  it('returns [] when the brief has no posts', async () => {
+    const a = await createAdminUser();
+    const b = await createBrief({ title: 'Empty', status: 'published' });
+    const res = await request(app)
+      .get(`/api/admin/social/brief/${b._id}/posts`)
+      .set('Cookie', authCookie(a._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
 });
 
 describe('GET /latest-news-brief', () => {

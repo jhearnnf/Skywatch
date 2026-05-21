@@ -768,3 +768,123 @@ describe('SocialsSection — recent posts: mark as deleted + view image', () => 
     expect(screen.queryByTestId('post-image-panel-sp-img')).toBeNull()
   })
 })
+
+// ── Brief listbox: count badge + previous-posts disclosure ──────────────────
+
+describe('SocialsSection — brief listbox + previous-posts disclosure', () => {
+  const BRIEFS_WITH_COUNTS = [
+    { _id: 'hot',   title: 'Hot Brief',   category: 'Aircrafts', postCount: 3 },
+    { _id: 'quiet', title: 'Quiet Brief', category: 'Aircrafts', postCount: 0 },
+    { _id: 'one',   title: 'One Post',    category: 'Aircrafts', postCount: 1 },
+  ]
+  const PREV_POSTS_HOT = [
+    {
+      _id: 'pp1', postType: 'daily-recon-info', platform: 'x',
+      finalText: 'A long tweet about the Hot Brief that should be snippet-truncated in the disclosure row. It goes on past 120 characters easily.',
+      externalPostUrl: 'https://x.com/skywatch_uk/status/111',
+      postedAt: new Date('2026-05-01T10:00:00Z').toISOString(),
+    },
+    {
+      _id: 'pp2', postType: 'daily-recon', platform: 'x',
+      finalText: 'Short poll body',
+      externalPostUrl: null, // <- no link case
+      postedAt: new Date('2026-05-02T10:00:00Z').toISOString(),
+    },
+  ]
+
+  function listboxRouter() {
+    return (url, opts) => {
+      const u = String(url)
+      const method = (opts?.method || 'GET').toUpperCase()
+      if (u.endsWith('/api/admin/social/x/status')) return jsonResp(STATUS_CONNECTED)
+      if (u.endsWith('/api/admin/social/briefs-for-recon')) return jsonResp({ data: BRIEFS_WITH_COUNTS })
+      if (u.endsWith('/api/admin/social/latest-news-brief')) return jsonResp({ data: null })
+      if (method === 'GET' && u.includes('/api/admin/social/posts')) return jsonResp({ data: [] })
+      const m = u.match(/\/api\/admin\/social\/brief\/([^/]+)\/posts$/)
+      if (method === 'GET' && m) {
+        if (m[1] === 'hot') return jsonResp({ data: PREV_POSTS_HOT })
+        return jsonResp({ data: [] })
+      }
+      return jsonResp({})
+    }
+  }
+
+  it('renders a count pill in the listbox for briefs with postCount > 0 and not for postCount === 0', async () => {
+    global.fetch = vi.fn().mockImplementation(listboxRouter())
+    render(<SocialsSection API="" />)
+    fireEvent.click(screen.getByText('Socials'))
+    await screen.findByTestId('post-type-select')
+    // Switch into daily-recon so the brief picker is visible.
+    fireEvent.change(screen.getByTestId('post-type-select'), { target: { value: 'daily-recon' } })
+    fireEvent.click(await screen.findByTestId('brief-listbox-toggle'))
+
+    expect(screen.getByTestId('brief-option-count-hot')).toHaveTextContent('3')
+    expect(screen.getByTestId('brief-option-count-one')).toHaveTextContent('1')
+    expect(screen.queryByTestId('brief-option-count-quiet')).toBeNull()
+  })
+
+  it('clicking an option sets briefId on the hidden select and closes the dropdown', async () => {
+    global.fetch = vi.fn().mockImplementation(listboxRouter())
+    render(<SocialsSection API="" />)
+    fireEvent.click(screen.getByText('Socials'))
+    await screen.findByTestId('post-type-select')
+    fireEvent.change(screen.getByTestId('post-type-select'), { target: { value: 'daily-recon' } })
+    fireEvent.click(await screen.findByTestId('brief-listbox-toggle'))
+    fireEvent.click(screen.getByTestId('brief-option-hot'))
+    await waitFor(() => expect(screen.getByTestId('brief-select').value).toBe('hot'))
+    expect(screen.queryByTestId('brief-option-hot')).toBeNull() // dropdown closed
+  })
+
+  it('selecting a brief with previous posts shows the disclosure with type/date/snippet + working link', async () => {
+    global.fetch = vi.fn().mockImplementation(listboxRouter())
+    render(<SocialsSection API="" />)
+    fireEvent.click(screen.getByText('Socials'))
+    await screen.findByTestId('post-type-select')
+    fireEvent.change(screen.getByTestId('post-type-select'), { target: { value: 'daily-recon' } })
+    // Wait for the auto-random selection to settle, then force-select 'hot' via the listbox.
+    await screen.findByTestId('brief-listbox-toggle')
+    fireEvent.click(screen.getByTestId('brief-listbox-toggle'))
+    fireEvent.click(screen.getByTestId('brief-option-hot'))
+    await screen.findByTestId('prev-posts-disclosure')
+    expect(screen.getByTestId('prev-posts-toggle')).toHaveTextContent('2 previous posts')
+
+    // List is collapsed by default — open it.
+    expect(screen.queryByTestId('prev-posts-list')).toBeNull()
+    fireEvent.click(screen.getByTestId('prev-posts-toggle'))
+    await screen.findByTestId('prev-posts-list')
+
+    // pp1: clickable link
+    const link = screen.getByTestId('prev-post-link-pp1')
+    expect(link.tagName).toBe('A')
+    expect(link.getAttribute('href')).toBe('https://x.com/skywatch_uk/status/111')
+    expect(screen.getByTestId('prev-post-row-pp1')).toHaveTextContent('Daily Recon (info)')
+
+    // pp2: no link — rendered as a (no link) span, not an anchor
+    expect(screen.queryByTestId('prev-post-link-pp2')).toBeNull()
+    const noLink = screen.getByTestId('prev-post-nolink-pp2')
+    expect(noLink.tagName).not.toBe('A')
+    expect(noLink).toHaveTextContent('(no link)')
+
+    // Toggle closed.
+    fireEvent.click(screen.getByTestId('prev-posts-toggle'))
+    expect(screen.queryByTestId('prev-posts-list')).toBeNull()
+  })
+
+  it('selecting a brief with zero previous posts renders no disclosure', async () => {
+    global.fetch = vi.fn().mockImplementation(listboxRouter())
+    render(<SocialsSection API="" />)
+    fireEvent.click(screen.getByText('Socials'))
+    await screen.findByTestId('post-type-select')
+    fireEvent.change(screen.getByTestId('post-type-select'), { target: { value: 'daily-recon' } })
+    await screen.findByTestId('brief-listbox-toggle')
+    fireEvent.click(screen.getByTestId('brief-listbox-toggle'))
+    fireEvent.click(screen.getByTestId('brief-option-quiet'))
+    await waitFor(() => expect(screen.getByTestId('brief-select').value).toBe('quiet'))
+    // Give the fetch a tick to land — endpoint returns []
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/social/brief/quiet/posts'),
+      expect.anything(),
+    ))
+    expect(screen.queryByTestId('prev-posts-disclosure')).toBeNull()
+  })
+})

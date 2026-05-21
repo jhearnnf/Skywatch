@@ -186,7 +186,31 @@ router.get('/briefs-for-recon', async (_req, res, next) => {
       .sort({ dateAdded: -1 })
       .limit(200)
       .lean();
-    res.json({ data: briefs });
+    const counts = await SocialPost.aggregate([
+      { $match: { status: 'posted', deletedAt: null, briefId: { $ne: null } } },
+      { $group: { _id: '$briefId', count: { $sum: 1 } } },
+    ]);
+    const countMap = new Map(counts.map(c => [String(c._id), c.count]));
+    const data = briefs.map(b => ({ ...b, postCount: countMap.get(String(b._id)) || 0 }));
+    res.json({ data });
+  } catch (err) { next(err); }
+});
+
+router.get('/brief/:briefId/posts', async (req, res, next) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.briefId)) {
+      return res.status(400).json({ status: 'error', message: 'invalid briefId' });
+    }
+    const posts = await SocialPost.find({
+      briefId: req.params.briefId,
+      status: 'posted',
+      deletedAt: null,
+    })
+      .select('_id postType finalText externalPostUrl postedAt platform')
+      .sort({ postedAt: -1 })
+      .limit(50)
+      .lean();
+    res.json({ data: posts });
   } catch (err) { next(err); }
 });
 
