@@ -2670,26 +2670,50 @@ async function cbatPersonalBest(req, res, gameKey) {
 }
 
 // GET /api/games/cbat/recent — public-to-signed-in feed of latest scores across every CBAT game.
-// Each row's `rank` is computed against the same game's real (non-padded) sessions, so
-// reuses the same comparator semantics as the per-game leaderboards. Emails are only
-// surfaced to admins; everyone else sees displayName / agentNumber.
+// Scoped to the last 24h and deduped per (user, game, mode) keeping the user's best attempt,
+// so retries don't spam the feed. Each row's `rank` is computed against the same game's real
+// (non-padded) all-time sessions, so reuses the same comparator semantics as the per-game
+// leaderboards. Emails are only surfaced to admins; everyone else sees displayName / agentNumber.
 router.get('/cbat/recent', protect, async (req, res) => {
   const isAdmin = !!req.user?.isAdmin;
   const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  // Same comparator the leaderboard uses: primary field by cfg.sortDir, totalTime as tiebreaker
+  // (lower totalTime always wins ties). Returns true when `next` is strictly better than `prev`.
+  const isBetter = (next, prev, cfg) => {
+    const nextScore = next[cfg.primaryField];
+    const prevScore = prev[cfg.primaryField];
+    if (nextScore !== prevScore) {
+      return cfg.sortDir === 1 ? nextScore < prevScore : nextScore > prevScore;
+    }
+    return (next.totalTime ?? Infinity) < (prev.totalTime ?? Infinity);
+  };
 
   try {
-    // Pull recent sessions from every CBAT collection in parallel.
+    // Pull last-24h sessions from every CBAT collection in parallel. No per-game limit here:
+    // we need the full 24h window so dedupe can pick the true best per (user, game, mode).
     const perGame = await Promise.all(
       Object.entries(CBAT_GAMES).map(async ([gameKey, cfg]) => {
-        const sessions = await cfg.Model.find({})
+        const sessions = await cfg.Model.find({ createdAt: { $gte: cutoff } })
           .sort({ createdAt: -1 })
-          .limit(limit)
           .lean();
         return sessions.map(s => ({ session: s, gameKey, cfg }));
       })
     );
 
-    const merged = perGame.flat()
+    // Dedupe per (user, game, mode) keeping the best session by leaderboard comparator.
+    const bestByKey = new Map();
+    for (const row of perGame.flat()) {
+      const modePart = row.cfg.modeField ? String(row.session[row.cfg.modeField] ?? '') : '';
+      const key = `${row.session.userId}::${row.gameKey}::${modePart}`;
+      const existing = bestByKey.get(key);
+      if (!existing || isBetter(row.session, existing.session, row.cfg)) {
+        bestByKey.set(key, row);
+      }
+    }
+
+    const merged = [...bestByKey.values()]
       .sort((a, b) => new Date(b.session.createdAt) - new Date(a.session.createdAt))
       .slice(0, limit);
 
