@@ -715,14 +715,18 @@ function AircraftButtons({ aircraftList, activeId, onSelectActive }) {
 }
 
 // ── Numpad / L-R / aircraft switcher ────────────────────────────────────────
-function DptControls({
-  aircraftList, activeId, onSelectActive,
+// Memo'd so the 30fps game-loop renders of the parent don't re-reconcile
+// the numpad subtree — that competed with click handling on mobile and
+// caused taps to be dropped in later, busier rounds.
+const DptControls = memo(function DptControls({
   turnDir, onTurnDir,
   inputMode, onInputMode,
-  bearingInput, onDigit, onBackspace,
+  bearingInput, onDigit,
 }) {
-  const has = (id) => aircraftList.some(a => a.id === id)
   const display = bearingInput.padEnd(3, '_')
+  // Track the most recent pointerdown fire so the synthesized click that
+  // follows on some browsers doesn't double-trigger the same digit.
+  const lastPointerFireRef = useRef({ label: '', t: 0 })
 
   // Background tint + accent colour for the numpad area, communicating the
   // current input dispatch at a glance:
@@ -750,7 +754,9 @@ function DptControls({
         className={`w-full h-full py-3 rounded-lg font-mono font-extrabold text-lg border transition-colors ${
           dirDisabled ? disabledCls : isActive ? 'text-white' : inactiveCls
         }`}
-        style={isActive ? { background: accent.solid, borderColor: accent.border } : undefined}
+        style={isActive
+          ? { background: accent.solid, borderColor: accent.border, touchAction: 'manipulation' }
+          : { touchAction: 'manipulation' }}
       >{label}</button>
     )
   }
@@ -772,17 +778,35 @@ function DptControls({
             ? (useAltAccent ? 'text-white' : 'bg-brand-600 border-brand-400 text-white')
             : 'bg-[#0a1628] border-[#1a3a5c] text-brand-300 hover:bg-[#0f2240]'
         }`}
-        style={useAltAccent ? { background: accent.solid, borderColor: accent.border } : undefined}
+        style={useAltAccent
+          ? { background: accent.solid, borderColor: accent.border, touchAction: 'manipulation' }
+          : { touchAction: 'manipulation' }}
       >{label}</button>
     )
   }
 
-  const padBtn = (val, label, onClick) => (
+  // Fires on pointerdown so the digit registers on contact rather than
+  // waiting for the browser's click synthesis — that synthesis was getting
+  // delayed/dropped on mobile when the 30fps game loop saturated the main
+  // thread in later rounds. onClick is kept as a keyboard-activation
+  // fallback (Enter/Space on a focused button), guarded against the
+  // pointer-then-click double fire.
+  const padBtn = (val, label, fire) => (
     <button
       key={label}
       type="button"
-      onClick={onClick}
+      onPointerDown={(e) => {
+        e.preventDefault()
+        lastPointerFireRef.current = { label, t: Date.now() }
+        fire()
+      }}
+      onClick={() => {
+        const r = lastPointerFireRef.current
+        if (r.label === label && Date.now() - r.t < 500) return
+        fire()
+      }}
       className="aspect-square rounded-lg font-mono font-bold text-xl bg-[#0a1628] border border-[#1a3a5c] text-brand-300 hover:bg-[#0f2240] active:bg-[#163055] transition-colors select-none"
+      style={{ touchAction: 'manipulation' }}
     >{label}</button>
   )
 
@@ -819,7 +843,7 @@ function DptControls({
             {[1,2,3,4,5,6,7,8,9].map(n => padBtn(n, String(n), () => onDigit(String(n))))}
             <div />
             {padBtn(0, '0', () => onDigit('0'))}
-            {padBtn('bksp', '⌫', onBackspace)}
+            <div />
           </div>
         </div>
         {dirBtn('R', 'R')}
@@ -830,7 +854,7 @@ function DptControls({
           : <>Type 3 digits in 100s of ft (e.g. <span className="font-mono">035</span> = 3500ft, range 010–100). Press <span className="font-mono">M</span> for heading.</>}
       </p>
       <p className="text-[10px] text-slate-600 mt-1 text-center">
-        Keys: <span className="font-mono">0–9</span>, <span className="font-mono">⌫</span>, <span className="font-mono">←→</span> L/R, <span className="font-mono">↑↓</span> BRG/ALT, <span className="font-mono">A/N/F</span>
+        Keys: <span className="font-mono">0–9</span>, <span className="font-mono">←→</span> L/R, <span className="font-mono">↑↓</span> BRG/ALT, <span className="font-mono">A/N/F</span>
       </p>
 
       {/* Danger-zone legend — replaces the in-circle altitude labels. */}
@@ -854,7 +878,7 @@ function DptControls({
       </div>
     </div>
   )
-}
+})
 
 // ── Aircraft Selection Screen ───────────────────────────────────────────────
 function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
@@ -1761,6 +1785,15 @@ export default function CbatDpt() {
   // outside handleDigit (mode switches, round starts, etc.).
   useEffect(() => { bearingInputRef.current = bearingInput }, [bearingInput])
 
+  // Stable handler so memo(DptControls) doesn't re-render on every parent
+  // tick from a fresh inline lambda.
+  const handleInputModeChange = useCallback((m) => {
+    setInputMode(m)
+    setBearingInput('')
+    if (m === 'ALT') setAltPulseKey(k => k + 1)
+    else if (m === 'BRG') setBrgPulseKey(k => k + 1)
+  }, [])
+
   const handleDigit = useCallback((d) => {
     const prev = bearingInputRef.current
     if (prev.length >= 3) return
@@ -1777,18 +1810,11 @@ export default function CbatDpt() {
     setBearingInput(next)
   }, [commitInput])
 
-  const handleBackspace = useCallback(() => {
-    const next = bearingInputRef.current.slice(0, -1)
-    bearingInputRef.current = next
-    setBearingInput(next)
-  }, [])
-
   // Keyboard shortcuts
   useEffect(() => {
     if (phase !== 'playing') return
     function onKey(e) {
       if (e.key >= '0' && e.key <= '9') { handleDigit(e.key); e.preventDefault(); return }
-      if (e.key === 'Backspace')         { handleBackspace(); e.preventDefault(); return }
       // Arrow keys: ←/→ pick L/R turn direction, ↑/↓ pick BRG/ALT input mode.
       // preventDefault stops the page from scrolling on arrow press during play.
       if (e.key === 'ArrowLeft')  { setTurnDir('L'); e.preventDefault(); return }
@@ -1820,7 +1846,7 @@ export default function CbatDpt() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [phase, handleDigit, handleBackspace])
+  }, [phase, handleDigit])
 
   // Submit score at end of run
   const submitScore = useCallback((finalScore, finalTime, aircraftTitle, finalRound, breakdown) => {
@@ -2055,21 +2081,12 @@ export default function CbatDpt() {
                 whatever viewport space remains. */}
             <div className="w-full max-w-md mt-2 md:mt-0 md:w-[440px] md:flex-shrink-0">
               <DptControls
-                aircraftList={aircraftList}
-                activeId={activeId}
-                onSelectActive={setActiveId}
                 turnDir={turnDir}
                 onTurnDir={setTurnDir}
                 inputMode={inputMode}
-                onInputMode={(m) => {
-                  setInputMode(m)
-                  setBearingInput('')
-                  if (m === 'ALT') setAltPulseKey(k => k + 1)
-                  else if (m === 'BRG') setBrgPulseKey(k => k + 1)
-                }}
+                onInputMode={handleInputModeChange}
                 bearingInput={bearingInput}
                 onDigit={handleDigit}
-                onBackspace={handleBackspace}
               />
             </div>
             </div>
