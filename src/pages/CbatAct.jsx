@@ -67,6 +67,7 @@ const SCORE = {
   BLEEP_MED:       20,   // < 1000ms
   BLEEP_SLOW:      10,   // < 2000ms
   BLEEP_MISS:      -10,
+  BLEEP_FALSE:     -10,  // tap with no bleep playing — selective-inhibition penalty
 }
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
@@ -539,6 +540,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     wallScrapeSeconds: 0,
     bleepHits: 0,
     bleepMisses: 0,
+    bleepFalseAlarms: 0,
     reactionMsList: [],
     score: 0,
   })
@@ -655,7 +657,13 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
       return
     }
     const pending = pendingBleepRef.current
-    if (!pending) return
+    if (!pending) {
+      // False alarm — tap with no bleep playing. Tests selective inhibition;
+      // every impulsive tap costs points, no debounce (spam-clicks compound).
+      statsRef.current.score += SCORE.BLEEP_FALSE
+      statsRef.current.bleepFalseAlarms += 1
+      return
+    }
     const reactionMs = performance.now() - pending.startedAt
     if (reactionMs > 2000) return     // shouldn't be possible (pending auto-clears) but defensive
     let delta
@@ -1097,6 +1105,7 @@ function RoundRecap({ roundIdx, stats, onContinue, isFinal }) {
         <Stat label="Avoid violated"  value={stats.avoidViolated} bad />
         <Stat label="Wall scrape"     value={`${stats.wallScrapeSeconds.toFixed(1)}s`} bad={stats.wallScrapeSeconds > 0} />
         <Stat label="Bleep hits"      value={`${stats.bleepHits}/${stats.bleepHits + stats.bleepMisses}`} good={stats.bleepHits > 0} />
+        <Stat label="False taps"      value={stats.bleepFalseAlarms} bad={stats.bleepFalseAlarms > 0} />
       </div>
 
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
@@ -1380,7 +1389,7 @@ function IntroScreen({ personalBest, onStart }) {
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
           <span className="text-brand-300 font-bold shrink-0">⚡</span>
-          <span>Tap BLEEP fast when you hear it (+25/+20/+10), miss = −10</span>
+          <span>Tap BLEEP fast when you hear it (+25/+20/+10), miss or false tap = −10</span>
         </div>
         <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
           <span className="shrink-0">⚠️</span>
@@ -1555,7 +1564,8 @@ function FinalResults({ allRoundStats, scoreSaved, onPlayAgain }) {
     wallScrapeSeconds: acc.wallScrapeSeconds + s.wallScrapeSeconds,
     bleepHits: acc.bleepHits + s.bleepHits,
     bleepMisses: acc.bleepMisses + s.bleepMisses,
-  }), { score: 0, ringsThreaded: 0, ringsMissed: 0, avoidObeyed: 0, avoidViolated: 0, wallScrapeSeconds: 0, bleepHits: 0, bleepMisses: 0 })
+    bleepFalseAlarms: acc.bleepFalseAlarms + (s.bleepFalseAlarms || 0),
+  }), { score: 0, ringsThreaded: 0, ringsMissed: 0, avoidObeyed: 0, avoidViolated: 0, wallScrapeSeconds: 0, bleepHits: 0, bleepMisses: 0, bleepFalseAlarms: 0 })
 
   const finalScore = Math.max(0, Math.round(totals.score))
 
@@ -1576,6 +1586,7 @@ function FinalResults({ allRoundStats, scoreSaved, onPlayAgain }) {
         <Stat label="Avoid violated"  value={totals.avoidViolated} bad />
         <Stat label="Wall scrape"     value={`${totals.wallScrapeSeconds.toFixed(1)}s`} bad={totals.wallScrapeSeconds > 0} />
         <Stat label="Bleep accuracy"  value={`${totals.bleepHits}/${totals.bleepHits + totals.bleepMisses}`} good={totals.bleepHits > 0} />
+        <Stat label="False taps"      value={totals.bleepFalseAlarms} bad={totals.bleepFalseAlarms > 0} />
       </div>
 
       {scoreSaved && <p className="text-xs text-green-400 mb-4">✓ Score saved</p>}
