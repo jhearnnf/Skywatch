@@ -228,7 +228,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
 
   // Personal-best label varies per mode (different scoring shape).
   const pbLine = gameModeTrace1
-    ? (personalBest && <>Score: <span className="text-brand-300">{personalBest.bestScore}</span></>)
+    ? (personalBest && <>Best: <span className="text-brand-300">{personalBest.bestScore}/40</span></>)
     : (personalBest && <>{personalBest.bestScore} rotations <span className="text-slate-500 mx-1">·</span> {personalBest.bestTime.toFixed(1)}s</>)
 
   // Leaderboard target depends on mode.
@@ -461,13 +461,11 @@ function GameOverOverlay({ won, score, level, maxLevel, onRestart, onMenu }) {
 }
 
 // ── Trace 1 HUD ──────────────────────────────────────────────────────────────
-function Trace1HUD({ round, turn, score }) {
-  const scoreColor = score > 0 ? 'text-emerald-300' : score < 0 ? 'text-red-400' : 'text-brand-300'
+function Trace1HUD({ round, turn }) {
   return (
     <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
       <span className="text-slate-400">ROUND <span className="text-brand-300">{Math.min(round + 1, TRACE1_ROUNDS)}</span>/{TRACE1_ROUNDS}</span>
       <span className="text-slate-400">TURN <span className="text-brand-300">{Math.min(turn, TRACE1_TURNS_PER_ROUND)}</span>/{TRACE1_TURNS_PER_ROUND}</span>
-      <span className="text-slate-400">SCORE <span className={scoreColor}>{score > 0 ? `+${score}` : score}</span></span>
     </div>
   )
 }
@@ -589,10 +587,9 @@ export default function CbatPlaneTurn() {
   const [trace1Round, setTrace1Round]         = useState(0)        // 0-indexed
   const [trace1Turn, setTrace1Turn]           = useState(0)        // 0-indexed within round
   const [trace1Schedule, setTrace1Schedule]   = useState([])       // current round's turns
-  const [trace1Score, setTrace1Score]         = useState(0)
   const [trace1Correct, setTrace1Correct]     = useState(0)
   const [trace1Total, setTrace1Total]         = useState(0)
-  const [trace1Popup, setTrace1Popup]         = useState(null)     // { value: '+1'|'-1', key }
+  const [trace1Popup, setTrace1Popup]         = useState(null)     // { value: '✓'|'✗', key }
   const [trace1Banner, setTrace1Banner]       = useState(null)     // round-end banner text
   const [trace1Generation, setTrace1Generation] = useState(0)      // bump to re-init the loop
   const trace1AwaitingRef = useRef(false)
@@ -899,13 +896,11 @@ export default function CbatPlaneTurn() {
 
   const trace1ShowPopup = useCallback((delta) => {
     trace1PopupSeqRef.current += 1
-    setTrace1Popup({ value: delta > 0 ? '+1' : '−1', key: trace1PopupSeqRef.current })
+    setTrace1Popup({ value: delta > 0 ? '✓' : '✗', key: trace1PopupSeqRef.current })
   }, [])
 
   const trace1ApplyScore = useCallback((delta) => {
-    const next = trace1ScoreRef.current + delta
-    trace1ScoreRef.current = next
-    setTrace1Score(next)
+    trace1ScoreRef.current += delta
     trace1TotalRef.current += 1
     setTrace1Total(trace1TotalRef.current)
     if (delta > 0) {
@@ -928,10 +923,9 @@ export default function CbatPlaneTurn() {
         // Round complete. Banner, then next round or finish.
         const completedRound = roundIdx + 1
         const isLast = completedRound >= TRACE1_ROUNDS
-        const finalScore = trace1ScoreRef.current
         setTrace1Banner(isLast
-          ? { variant: 'final',    title: 'MISSION COMPLETE', score: finalScore }
-          : { variant: 'roundEnd', title: `ROUND ${completedRound} CLEAR`, score: finalScore, nextRound: completedRound + 1 })
+          ? { variant: 'final',    title: 'MISSION COMPLETE' }
+          : { variant: 'roundEnd', title: `ROUND ${completedRound} CLEAR`, nextRound: completedRound + 1 })
         trace1TickRef.current = setTimeout(() => {
           setTrace1Banner(null)
           if (isLast) { trace1Finalize(); return }
@@ -979,7 +973,7 @@ export default function CbatPlaneTurn() {
     setTrace1Schedule(built.schedule)
     trace1RoundRef.current = 0; setTrace1Round(0)
     trace1TurnRef.current  = 0; setTrace1Turn(0)
-    trace1ScoreRef.current = 0; setTrace1Score(0)
+    trace1ScoreRef.current = 0
     trace1CorrectRef.current = 0; setTrace1Correct(0)
     trace1TotalRef.current = 0; setTrace1Total(0)
     trace1AwaitingRef.current = false
@@ -1031,7 +1025,7 @@ export default function CbatPlaneTurn() {
   // zero — without this the prior run's HUD flashes for one frame because
   // the boot useEffect's resets don't commit until after first render.
   const resetTrace1State = useCallback(() => {
-    trace1ScoreRef.current   = 0; setTrace1Score(0)
+    trace1ScoreRef.current   = 0
     trace1CorrectRef.current = 0; setTrace1Correct(0)
     trace1TotalRef.current   = 0; setTrace1Total(0)
     trace1RoundRef.current   = 0; setTrace1Round(0)
@@ -1250,10 +1244,10 @@ export default function CbatPlaneTurn() {
                     <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
                     <div className="flex justify-center items-center gap-4 sm:gap-8">
                       <div className="min-w-0">
-                        <p className={`text-2xl sm:text-3xl font-mono font-bold ${trace1Score > 0 ? 'text-emerald-300' : trace1Score < 0 ? 'text-red-400' : 'text-brand-300'}`}>
-                          {trace1Score > 0 ? `+${trace1Score}` : trace1Score}
+                        <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-300">
+                          {trace1Correct}<span className="text-slate-400">/40</span>
                         </p>
-                        <p className="text-xs text-slate-500 mt-1">points</p>
+                        <p className="text-xs text-slate-500 mt-1">correct</p>
                       </div>
                       <div className="w-px self-stretch bg-[#1a3a5c]" />
                       <div className="min-w-0">
@@ -1345,7 +1339,7 @@ export default function CbatPlaneTurn() {
           {(phase === 'playing' || phase === 'over' || phase === 'intro') && selected && (
             <div className="w-full max-w-md">
               {gameModeTrace1
-                ? <Trace1HUD round={trace1Round} turn={trace1Turn} score={trace1Score} />
+                ? <Trace1HUD round={trace1Round} turn={trace1Turn} />
                 : <HUD collected={collected} rotations={rotations} elapsed={elapsed} level={level} />}
 
               {/* ── 3D Game (Practise 3D + Trace 1 share the 3D arena) ── */}
@@ -1392,7 +1386,7 @@ export default function CbatPlaneTurn() {
                     />
                   </Suspense>
 
-                  {/* Trace 1 +1 / −1 popup */}
+                  {/* Trace 1 tick / cross popup */}
                   <AnimatePresence>
                     {gameModeTrace1 && trace1Popup && (
                       <motion.div
@@ -1401,7 +1395,7 @@ export default function CbatPlaneTurn() {
                         animate={{ opacity: 1, y: -10, scale: 1 }}
                         exit={{ opacity: 0, y: -40, scale: 0.9 }}
                         transition={{ duration: 0.45 }}
-                        className={`absolute inset-0 z-30 flex items-center justify-center text-6xl font-extrabold pointer-events-none ${trace1Popup.value === '+1' ? 'text-emerald-300' : 'text-red-400'}`}
+                        className={`absolute inset-0 z-30 flex items-center justify-center text-7xl font-extrabold pointer-events-none ${trace1Popup.value === '✓' ? 'text-emerald-300' : 'text-red-400'}`}
                         style={{ textShadow: '0 0 18px rgba(0,0,0,0.55)' }}
                       >
                         {trace1Popup.value}
@@ -1451,33 +1445,6 @@ export default function CbatPlaneTurn() {
                             }}
                           >
                             {trace1Banner.title}
-                          </motion.p>
-
-                          {/* Score line */}
-                          <motion.div
-                            initial={{ opacity: 0, y: 6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.25, duration: 0.3 }}
-                            className="mt-2 text-xs uppercase tracking-[0.3em] text-slate-500"
-                          >
-                            Score
-                          </motion.div>
-                          <motion.p
-                            initial={{ scale: 0.7, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ delay: 0.3, type: 'spring', stiffness: 260, damping: 16 }}
-                            className={`font-mono text-5xl sm:text-6xl font-extrabold ${
-                              trace1Banner.score > 0 ? 'text-emerald-300' : trace1Banner.score < 0 ? 'text-red-400' : 'text-slate-300'
-                            }`}
-                            style={{
-                              textShadow: trace1Banner.score > 0
-                                ? '0 0 20px rgba(110,231,183,0.65)'
-                                : trace1Banner.score < 0
-                                  ? '0 0 20px rgba(248,113,113,0.55)'
-                                  : 'none',
-                            }}
-                          >
-                            {trace1Banner.score > 0 ? `+${trace1Banner.score}` : trace1Banner.score}
                           </motion.p>
 
                           {/* Next round tagline */}

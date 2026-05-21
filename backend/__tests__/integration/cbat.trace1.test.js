@@ -95,15 +95,15 @@ describe('CBAT Trace 1', () => {
       expect(res.body.data).toBeNull();
     });
 
-    it('returns highest score across attempts', async () => {
-      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 12, totalTime: 25000 });
-      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 28, totalTime: 23000 });
-      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 18, totalTime: 24000 });
+    it('returns highest correct-turn count across attempts', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 12, correctTurns: 26, totalTime: 25000 });
+      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 28, correctTurns: 34, totalTime: 23000 });
+      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 18, correctTurns: 29, totalTime: 24000 });
 
       const res = await request(app).get(PB_URL).set('Cookie', cookie);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.bestScore).toBe(28);
+      expect(res.body.data.bestScore).toBe(34);
       expect(res.body.data.attempts).toBe(3);
     });
   });
@@ -120,8 +120,8 @@ describe('CBAT Trace 1', () => {
     });
 
     it('returns only real entries (no demo rows) when scores exist', async () => {
-      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 28, totalTime: 22000 });
-      await request(app).post(RESULT_URL).set('Cookie', cookie2).send({ score: 12, totalTime: 24000 });
+      await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 28, correctTurns: 34, totalTime: 22000 });
+      await request(app).post(RESULT_URL).set('Cookie', cookie2).send({ score: 12, correctTurns: 26, totalTime: 24000 });
 
       const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
 
@@ -129,10 +129,10 @@ describe('CBAT Trace 1', () => {
       const board = res.body.data.leaderboard;
       expect(board).toHaveLength(2);
       expect(board.every(e => !e.isFake)).toBe(true);
-      expect(board[0].bestScore).toBe(28);
-      expect(board[1].bestScore).toBe(12);
+      expect(board[0].bestScore).toBe(34);
+      expect(board[1].bestScore).toBe(26);
       expect(res.body.data.myBest).toBeTruthy();
-      expect(res.body.data.myBest.bestScore).toBe(28);
+      expect(res.body.data.myBest.bestScore).toBe(34);
     });
   });
 });
