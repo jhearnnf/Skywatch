@@ -30,34 +30,13 @@ describe('SocialLinks', () => {
     expect(x.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
-  it('renders Discord as a disabled button (no anchor)', () => {
+  it('renders the live Discord link with the invite href', () => {
     render(<SocialLinks source="landing" />)
-    const discord = screen.getByLabelText(/Discord — launching soon/i)
-    expect(discord.tagName).toBe('BUTTON')
-  })
-
-  it('shows a "Launching soon" tooltip on hover and hides it on mouse leave', () => {
-    render(<SocialLinks source="landing" />)
-    const discord = screen.getByLabelText(/Discord — launching soon/i)
-    expect(screen.queryByRole('tooltip')).toBeNull()
-    fireEvent.mouseEnter(discord)
-    expect(screen.getByRole('tooltip')).toHaveTextContent(/launching soon/i)
-    fireEvent.mouseLeave(discord)
-    expect(screen.queryByRole('tooltip')).toBeNull()
-  })
-
-  it('toggles the popover on tap (mobile click) and tracks the event', () => {
-    render(<SocialLinks source="profile" />)
-    const discord = screen.getByLabelText(/Discord — launching soon/i)
-    fireEvent.click(discord)
-    expect(screen.getByRole('tooltip')).toBeInTheDocument()
-    expect(captureMock).toHaveBeenCalledWith('social_click', {
-      platform: 'discord',
-      source: 'profile',
-      coming_soon: true,
-    })
-    fireEvent.click(discord)
-    expect(screen.queryByRole('tooltip')).toBeNull()
+    const discord = screen.getByLabelText('Discord')
+    expect(discord.tagName).toBe('A')
+    expect(discord.getAttribute('href')).toBe('https://discord.gg/dnZsA3R4qZ')
+    expect(discord.getAttribute('target')).toBe('_blank')
+    expect(discord.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
   it('captures social_click for live links with coming_soon=false and the source prop', () => {
@@ -68,18 +47,5 @@ describe('SocialLinks', () => {
       source: 'landing',
       coming_soon: false,
     })
-  })
-
-  it('closes an open popover when the user clicks outside', () => {
-    render(
-      <div>
-        <SocialLinks source="landing" />
-        <button data-testid="outside">outside</button>
-      </div>
-    )
-    fireEvent.click(screen.getByLabelText(/Discord — launching soon/i))
-    expect(screen.getByRole('tooltip')).toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('outside'))
-    expect(screen.queryByRole('tooltip')).toBeNull()
   })
 })

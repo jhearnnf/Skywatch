@@ -36,8 +36,9 @@ const SOCIAL_LINKS = [
   {
     platform: 'discord',
     label: 'Discord',
+    href: 'https://discord.gg/dnZsA3R4qZ',
     Icon: DiscordIcon,
-    comingSoon: true,
+    comingSoon: false,
   },
   {
     platform: 'x',
