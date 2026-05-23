@@ -114,6 +114,18 @@ const appSettingsSchema = new mongoose.Schema({
   volumeTypingSound:       { type: Number, default: 30, min: 0, max: 100 },
   soundEnabledTypingSound: { type: Boolean, default: true },
 
+  // CBAT — ACT (Auditory Capacity Test). 0–100 maps to 0–1 gain in
+  // ActAudioEngine. Defaults preserve the previous hardcoded levels:
+  // commands & chatter at 0.40, static at 0.40, bleep at 0.22.
+  volumeActVoiceCommand:    { type: Number, default: 40, min: 0, max: 100 },
+  volumeActChatter:         { type: Number, default: 40, min: 0, max: 100 },
+  volumeActStatic:          { type: Number, default: 40, min: 0, max: 100 },
+  volumeActBleep:           { type: Number, default: 22, min: 0, max: 100 },
+  soundEnabledActVoiceCommand: { type: Boolean, default: true },
+  soundEnabledActChatter:      { type: Boolean, default: true },
+  soundEnabledActStatic:       { type: Boolean, default: true },
+  soundEnabledActBleep:        { type: Boolean, default: true },
+
   // Blueprint grid-reveal tones (Intel Brief image cell dissolve)
   volumeGridReveal:       { type: Number, default: 30, min: 0, max: 100 },
   soundEnabledGridReveal: { type: Boolean, default: true },

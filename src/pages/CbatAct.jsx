@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
 import { recordCbatStart } from '../utils/cbat/recordStart'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
@@ -678,6 +679,9 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
 
   // Trigger the round-1 bleep tutorial. Plays a single bleep, pauses the
   // game loop, and shows the overlay + button pulse until the player taps.
+  // A separate effect (below) loops the bleep at ~1.4 s intervals while the
+  // tutorial is active so the cue is unmissable for a player who didn't catch
+  // the first one.
   const startBleepTutorial = useCallback(() => {
     tutorialActiveRef.current = true
     setTutorialActive(true)
@@ -685,10 +689,26 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     // Note: pendingBleepRef stays null so this isn't scored as a hit/miss.
   }, [audio])
 
-  // Static-noise distractor on rounds 1, 3, 5 (roundIdx 0, 2, 4).
+  // While the bleep tutorial overlay is up, re-fire the bleep every ~1.4 s
+  // (just longer than the bleep's 0.46 s tail, so consecutive bleeps don't
+  // overlap). Cleared the moment the player taps BLEEP (onBleepTap flips
+  // tutorialActive false) or the round unmounts.
+  useEffect(() => {
+    if (!tutorialActive) return
+    const id = setInterval(() => {
+      if (!tutorialActiveRef.current) return
+      audio.playBleep()
+    }, 1400)
+    return () => clearInterval(id)
+  }, [tutorialActive, audio])
+
+  // Static-noise distractor on rounds 1, 3, 5 (roundIdx 0, 2, 4). Volume is
+  // pulled from the engine's admin-configured value (set via setVolumes from
+  // the main page) — same level as the voice clips by default so the static
+  // genuinely masks voices instead of sitting underneath them.
   useEffect(() => {
     const useStatic = roundIdx % 2 === 0
-    if (useStatic) audio.startStatic({ volume: 0.06 })
+    if (useStatic) audio.startStatic()
     return () => audio.stopStatic()
   }, [roundIdx, audio])
 
@@ -1136,6 +1156,8 @@ function Stat({ label, value, good, bad }) {
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function CbatAct() {
   const { user, apiFetch, API } = useAuth()
+  const appSettings = useAppSettings()
+  const settings = appSettings?.settings
   const [phase, setPhase] = useState('intro')   // intro | logoIntro | callsign | playing | recap | results
   const [roundIdx, setRoundIdx] = useState(0)
   const [allRoundStats, setAllRoundStats] = useState([])
@@ -1144,6 +1166,28 @@ export default function CbatAct() {
   const [scoreSaved, setScoreSaved]     = useState(false)
   const [audioReady, setAudioReady]     = useState(false)
   const audioRef = useRef(null)
+
+  // Push admin-configured ACT volumes into the engine whenever settings or the
+  // engine become available. Re-applies on settings refresh, so an admin
+  // changing a slider in another tab + reloading takes effect on the next
+  // round start (without needing a full page reload).
+  useEffect(() => {
+    if (!audioRef.current || !settings) return
+    audioRef.current.setVolumes({
+      volumes: {
+        voiceCommand: (settings.volumeActVoiceCommand ?? 40) / 100,
+        chatter:      (settings.volumeActChatter      ?? 40) / 100,
+        staticNoise:  (settings.volumeActStatic       ?? 40) / 100,
+        bleep:        (settings.volumeActBleep        ?? 22) / 100,
+      },
+      enabled: {
+        voiceCommand: settings.soundEnabledActVoiceCommand !== false,
+        chatter:      settings.soundEnabledActChatter      !== false,
+        staticNoise:  settings.soundEnabledActStatic       !== false,
+        bleep:        settings.soundEnabledActBleep        !== false,
+      },
+    })
+  }, [audioReady, settings])
 
   // Skywatch logo curtain — plays once per page mount on the first
   // start. Subsequent Play Again's skip it for snappy replays.

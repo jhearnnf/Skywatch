@@ -119,6 +119,138 @@ export function previewTypingSound(sliderValue, durationMs) {
   _playTypingOscillator(Math.min(1, (sliderValue ?? 30) / 100), durationMs ?? 3)
 }
 
+// ── ACT (CBAT Auditory Capacity Test) preview helpers ───────────────────────
+// Each preview plays for ~3 seconds at the configured volume. Cancellable: the
+// admin row stops the previous preview before starting a new one via
+// stopActPreview(). Static + bleep are synthesised here (matching the engine's
+// envelope so the admin hears what the player will hear); the voice + chatter
+// previews load a representative MP3 fresh each call.
+
+let _actPreviewAudio = null
+let _actPreviewStaticNodes = null
+let _actPreviewBleepTimer = null
+
+export function stopActPreview() {
+  if (_actPreviewAudio) {
+    try { _actPreviewAudio.pause(); _actPreviewAudio.currentTime = 0 } catch {}
+    _actPreviewAudio = null
+  }
+  if (_actPreviewStaticNodes) {
+    const { source, lfoTimer, gain, ctx } = _actPreviewStaticNodes
+    try { clearInterval(lfoTimer) } catch {}
+    try {
+      const t = ctx.currentTime
+      gain.gain.cancelScheduledValues(t)
+      gain.gain.setValueAtTime(gain.gain.value, t)
+      gain.gain.linearRampToValueAtTime(0, t + 0.1)
+      source.stop(t + 0.12)
+    } catch {}
+    _actPreviewStaticNodes = null
+  }
+  if (_actPreviewBleepTimer) {
+    clearTimeout(_actPreviewBleepTimer)
+    _actPreviewBleepTimer = null
+  }
+}
+
+function _playActMp3(url, sliderValue, durationMs = 3000) {
+  stopActPreview()
+  const vol = Math.min(1, (sliderValue ?? 40) / 100)
+  if (vol <= 0) return
+  try {
+    const audio = new Audio(url)
+    audio.volume = vol
+    _actPreviewAudio = audio
+    audio.play().catch(() => {})
+    _actPreviewBleepTimer = setTimeout(() => {
+      if (_actPreviewAudio === audio) {
+        try { audio.pause(); audio.currentTime = 0 } catch {}
+        _actPreviewAudio = null
+      }
+    }, durationMs)
+  } catch {}
+}
+
+// One short spoken sample — covers the bulk of what avoid + distractor cues
+// sound like in-game (callsign + "avoid the next circle"). Voice picked
+// randomly so the admin doesn't always hear the same speaker.
+export function previewActVoiceCommand(sliderValue) {
+  const voice = Math.random() < 0.5 ? 'male' : 'female'
+  const file  = `${voice}_avoid the next circle`
+  const url   = `/sounds/act/${encodeURIComponent(file)}.mp3`
+  _playActMp3(url, sliderValue, 3000)
+}
+
+// Background chatter — plays from the same long recording the engine slices
+// for distractor playback. Auto-stopped after 3 s.
+export function previewActChatter(sliderValue) {
+  const voice = Math.random() < 0.5 ? 'male' : 'female'
+  const url   = `/sounds/act/distractions_${voice}.mp3`
+  _playActMp3(url, sliderValue, 3000)
+}
+
+// Synthesised bandpassed noise — mirrors ActAudioEngine.startStatic so the
+// admin hears the in-game texture (centre-frequency wobble included). Auto
+// stops after 3 s.
+export function previewActStatic(sliderValue) {
+  stopActPreview()
+  const vol = Math.min(1, (sliderValue ?? 40) / 100)
+  if (vol <= 0) return
+  getRunningAudioCtx().then(ctx => {
+    try {
+      const bufferLen = Math.floor(ctx.sampleRate * 2)
+      const buffer = ctx.createBuffer(1, bufferLen, ctx.sampleRate)
+      const channel = buffer.getChannelData(0)
+      for (let i = 0; i < bufferLen; i++) channel[i] = Math.random() * 2 - 1
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      source.loop = true
+      const filter = ctx.createBiquadFilter()
+      filter.type = 'bandpass'
+      filter.frequency.value = 1200
+      filter.Q.value = 0.8
+      const gain = ctx.createGain()
+      gain.gain.value = vol
+      source.connect(filter).connect(gain).connect(ctx.destination)
+      source.start()
+      const lfoTimer = setInterval(() => {
+        try {
+          const next = 400 + Math.random() * 2000
+          const rampTo = ctx.currentTime + 0.25 + Math.random() * 0.4
+          filter.frequency.cancelScheduledValues(ctx.currentTime)
+          filter.frequency.linearRampToValueAtTime(next, rampTo)
+        } catch {}
+      }, 400)
+      _actPreviewStaticNodes = { source, filter, gain, lfoTimer, ctx }
+      _actPreviewBleepTimer = setTimeout(stopActPreview, 3000)
+    } catch {}
+  })
+}
+
+// Synthesised sine bleep — mirrors ActAudioEngine.playBleep envelope so the
+// admin hears exactly what scoring will hear. Single 0.46 s bleep; total
+// preview wraps in ~3 s of dead air so consecutive previews don't pile up.
+export function previewActBleep(sliderValue) {
+  stopActPreview()
+  const vol = Math.min(1, (sliderValue ?? 22) / 100)
+  if (vol <= 0) return
+  getRunningAudioCtx().then(ctx => {
+    try {
+      const now = ctx.currentTime
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = 660
+      gain.gain.setValueAtTime(0.0001, now)
+      gain.gain.exponentialRampToValueAtTime(vol, now + 0.020)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.44)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(now)
+      osc.stop(now + 0.46)
+    } catch {}
+  })
+}
+
 const OUT_OF_AMMO_VARIANTS = ['out_of_ammo_1.mp3', 'out_of_ammo_2.mp3', 'out_of_ammo_3.mp3']
 
 // Module-level settings cache

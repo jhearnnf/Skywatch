@@ -41,6 +41,8 @@ vi.mock('../../context/AppTutorialContext', () => ({
 
 vi.mock('../../utils/sound', () => ({
   invalidateSoundSettings: vi.fn(), previewTypingSound: vi.fn(), previewGridRevealTone: vi.fn(),
+  previewActVoiceCommand: vi.fn(), previewActChatter: vi.fn(),
+  previewActStatic: vi.fn(), previewActBleep: vi.fn(), stopActPreview: vi.fn(),
 }))
 
 vi.mock('framer-motion', () => ({

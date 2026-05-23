@@ -68,6 +68,16 @@ export function computeDistractionSegments(totalDuration, count = DISTRACTION_SE
   return segs;
 }
 
+// Default per-sound gain values when admin settings haven't been applied. Match
+// the legacy hardcoded values so an admin who never touches the sliders gets
+// exactly the previous behaviour.
+const DEFAULT_VOLUMES = {
+  voiceCommand: 0.40,
+  chatter:      0.40,
+  staticNoise:  0.40,
+  bleep:        0.22,
+};
+
 export class ActAudioEngine {
   constructor() {
     this.ctx = null;
@@ -80,6 +90,32 @@ export class ActAudioEngine {
     this.distractionBuffers = new Map();        // voice → AudioBuffer (full chatter file)
     this._distractionSegments = new Map();      // voice → [{ offset, duration }, …]
     this._distractionBusyUntil = { male: 0, female: 0 };   // audio-ctx time per voice
+    // Per-sound gain (0–1) + on/off flags. Updated by CbatAct after reading
+    // AppSettings — see setVolumes(). Each play method honours these unless an
+    // explicit volume override is passed (kept for the preview path).
+    this._volumes = { ...DEFAULT_VOLUMES };
+    this._enabled = { voiceCommand: true, chatter: true, staticNoise: true, bleep: true };
+  }
+
+  // Apply admin-configured per-sound levels. Pass any subset; missing keys are
+  // left at their previous values. `volumes` are 0–1 gains; `enabled` flips
+  // an entire sound off without zeroing the slider.
+  setVolumes({ volumes = {}, enabled = {} } = {}) {
+    this._volumes = { ...this._volumes, ...volumes };
+    this._enabled = { ...this._enabled, ...enabled };
+    // Live-update the running static node (if any) so an admin slider change
+    // takes effect without restarting the round. Cancel any scheduled fade
+    // first — otherwise an in-flight fade-in would keep ramping toward the
+    // old target and overwrite the new value a moment later.
+    if (this._staticNodes && this.ctx) {
+      try {
+        const target = this._enabled.staticNoise ? this._volumes.staticNoise : 0;
+        const g = this._staticNodes.gain.gain;
+        const t = this.ctx.currentTime;
+        g.cancelScheduledValues(t);
+        g.setValueAtTime(target, t);
+      } catch {}
+    }
   }
 
   // Lazy-init AudioContext on first user gesture (browsers block autoplay).
@@ -138,11 +174,20 @@ export class ActAudioEngine {
   // `exclusive: true` makes this call skip if another exclusive sequence is
   // currently playing — used for callsign instructions so two voices never
   // overlap.
-  playSequence(names, { gap = 0.04, volume = 0.40, exclusive = false, voice } = {}) {
+  playSequence(names, { gap = 0.04, volume, exclusive = false, voice } = {}) {
     if (!this.ctx) return { promise: Promise.resolve(), cancel: () => {}, played: false };
 
     if (exclusive && this._instructionPlayingUntil > this.ctx.currentTime + 0.01) {
       return { promise: Promise.resolve(), cancel: () => {}, played: false };
+    }
+
+    // Apply admin-configured volume + enabled flag. Explicit `volume` override
+    // wins (preview path); otherwise the engine's stored voice-command gain
+    // applies. When the sound is disabled we bail with `played: false` so the
+    // exclusive-instruction window isn't reserved for a silent call.
+    if (volume === undefined) {
+      if (!this._enabled.voiceCommand) return { promise: Promise.resolve(), cancel: () => {}, played: false };
+      volume = this._volumes.voiceCommand;
     }
 
     // One voice per sequence so a sentence doesn't flip speakers mid-utterance.
@@ -190,18 +235,28 @@ export class ActAudioEngine {
     };
   }
 
-  // Synthesised square-wave bleep — sharp attack, ~440ms total, E5 (660Hz).
+  // Synthesised sine-wave bleep — softened attack, ~440ms total, E5 (660Hz).
+  // Sine (was square) drops the bright odd harmonics that punch through the
+  // bandpassed static; the slower 20 ms attack (was 5 ms) removes the audible
+  // click on onset; peak gain is admin-configurable (default 0.22) so the
+  // noise floor partially masks the tone. Still detectable for reaction-time
+  // scoring — just no longer obvious over the static.
   // Notifies all bleep listeners with the precise audio-context start time so
   // the game can score reaction time relative to the actual onset.
-  playBleep() {
+  playBleep({ volume } = {}) {
     if (!this.ctx) return;
+    if (volume === undefined) {
+      if (!this._enabled.bleep) return;
+      volume = this._volumes.bleep;
+    }
+    if (volume <= 0) return;
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
-    osc.type = 'square';
+    osc.type = 'sine';
     osc.frequency.value = 660;
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.32, now + 0.005);
+    gain.gain.exponentialRampToValueAtTime(volume, now + 0.020);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.44);
     osc.connect(gain).connect(this.ctx.destination);
     osc.start(now);
@@ -227,9 +282,14 @@ export class ActAudioEngine {
   // two female) chatter clips never overlap. Distraction voices are different
   // speakers from the instruction voices, so this does not consult
   // `_instructionPlayingUntil` — chatter freely overlaps instruction audio.
-  playDistraction({ voice, volume = 0.40 } = {}) {
+  playDistraction({ voice, volume } = {}) {
     if (!this.ctx) return { played: false, cancel: () => {} };
     if (!voice || !VOICES.includes(voice)) return { played: false, cancel: () => {} };
+
+    if (volume === undefined) {
+      if (!this._enabled.chatter) return { played: false, cancel: () => {} };
+      volume = this._volumes.chatter;
+    }
 
     const buf = this.distractionBuffers.get(voice);
     const segments = this._distractionSegments.get(voice);
@@ -278,9 +338,15 @@ export class ActAudioEngine {
   // Plays continuous filtered white noise as a background distractor.
   // The filter's centre frequency wobbles randomly so the texture shifts
   // (like an ill-tuned radio), making it harder to focus on instruction audio.
-  startStatic({ volume = 0.07 } = {}) {
+  startStatic({ volume, fadeInMs = 5000 } = {}) {
     if (!this.ctx) return;
     if (this._staticNodes) return;          // already playing — idempotent
+
+    if (volume === undefined) {
+      if (!this._enabled.staticNoise) return;
+      volume = this._volumes.staticNoise;
+    }
+    if (volume <= 0) return;
 
     // Generate ~2 seconds of white noise into a buffer; loop it.
     const bufferLen = Math.floor(this.ctx.sampleRate * 2);
@@ -297,11 +363,29 @@ export class ActAudioEngine {
     filter.frequency.value = 1200;
     filter.Q.value = 0.8;
 
+    // Fade in from silence to `volume` over `fadeInMs` so the player isn't
+    // hit by a wall of noise the instant a static-round begins. Bypassed when
+    // fadeInMs is 0 (preview path or any caller that wants the legacy behaviour).
+    //
+    // Order matters here: GainNode defaults to gain=1, so we must set the
+    // immediate value to 0 BEFORE connecting and starting the source.
+    // Otherwise the audio thread renders one or more sample blocks at unity
+    // gain before the scheduled setValueAtTime(0) takes effect, producing
+    // the audible "full-volume blip" we got with the previous order.
+    // Scheduling the source ~30 ms in the future gives the param schedule
+    // time to commit ahead of any sample output.
     const gain = this.ctx.createGain();
-    gain.gain.value = volume;
+    gain.gain.value = 0;
+    const startTime = this.ctx.currentTime + 0.03;
+    if (fadeInMs > 0) {
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(volume, startTime + fadeInMs / 1000);
+    } else {
+      gain.gain.setValueAtTime(volume, startTime);
+    }
 
     source.connect(filter).connect(gain).connect(this.ctx.destination);
-    source.start();
+    source.start(startTime);
 
     // Modulate the filter centre frequency every 350–800ms to a new value
     // in [400, 2400] Hz, ramping smoothly so the texture audibly shifts.

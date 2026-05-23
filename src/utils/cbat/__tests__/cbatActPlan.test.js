@@ -6,6 +6,7 @@ import {
   POST_TARGET_GAP_S,
   AUDIO_WARMUP_T,
   TRIANGLE_FRACTION,
+  MAX_AVOID_CUES,
   generateShapeEvents,
   generateAudioPlan,
 } from '../cbatActPlan'
@@ -199,6 +200,19 @@ describe('generateAudioPlan — invariants', () => {
             expect(cue.t).toBeGreaterThanOrEqual(AUDIO_WARMUP_T - 1e-6)
           }
         }
+      }
+    }
+  })
+
+  it('never schedules more than MAX_AVOID_CUES avoid cues per round', () => {
+    for (let trial = 0; trial < 200; trial++) {
+      for (let r = 0; r < 5; r++) {
+        const cfg = ROUND_CONFIG[r]
+        const curveLen = approxCurveLen(r)
+        const events = generateShapeEvents(curveLen, cfg.shapes, r)
+        const cues = generateAudioPlan(events, cfg, USER_CALLSIGN, r, curveLen)
+        const avoidCount = cues.filter(c => c.kind === 'avoid').length
+        expect(avoidCount).toBeLessThanOrEqual(MAX_AVOID_CUES)
       }
     }
   })

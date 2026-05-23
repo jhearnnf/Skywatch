@@ -63,6 +63,11 @@ export const TRIANGLE_FRACTION = 0.5
 // at least this many times so they can train recognition under stress.
 export const MIN_AVOID_CUES = 2
 
+// Ceiling on per-round avoid cue count — even when avoidOdds rolls high, no
+// round should ship more than this many avoids. Keeps round duration honest
+// and prevents pile-ups when the same-shape stream happens to be dense.
+export const MAX_AVOID_CUES = 5
+
 // ── Shape stream ────────────────────────────────────────────────────────────
 
 // Produce the in-tunnel shape sequence for one round. Returns events in
@@ -151,6 +156,18 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
   for (let i = 0; i < events.length; i++) {
     if (events[i].shape === 'triangle') continue
     if (Math.random() < roundCfg.avoidOdds) avoidIdxs.add(i)
+  }
+  // Cap at MAX_AVOID_CUES — randomly cull rather than truncating from the
+  // tail, so the surviving cues stay spread across the round instead of all
+  // clustering early.
+  if (avoidIdxs.size > MAX_AVOID_CUES) {
+    const arr = [...avoidIdxs]
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[arr[i], arr[j]] = [arr[j], arr[i]]
+    }
+    avoidIdxs.clear()
+    for (let i = 0; i < MAX_AVOID_CUES; i++) avoidIdxs.add(arr[i])
   }
 
   // Derived spacing in t-units.

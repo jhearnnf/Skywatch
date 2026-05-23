@@ -6,7 +6,16 @@ import { useAuth } from '../context/AuthContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
-import { invalidateSoundSettings, previewTypingSound, previewGridRevealTone } from '../utils/sound'
+import {
+  invalidateSoundSettings,
+  previewTypingSound,
+  previewGridRevealTone,
+  previewActVoiceCommand,
+  previewActChatter,
+  previewActStatic,
+  previewActBleep,
+  stopActPreview,
+} from '../utils/sound'
 import { applyTierCascade } from '../utils/tierCascade'
 import RankBadge from '../components/RankBadge'
 import SocialsSection from '../components/admin/SocialsSection'
@@ -935,6 +944,15 @@ const SOUND_GROUPS = [
       { key: 'volumeTypingSound', enabledKey: 'soundEnabledTypingSound', durationKey: 'durationTypingSound', durationMax: 40, durationDefault: 3, label: 'Typing Sound', sound: '__typing__' },
     ],
   },
+  {
+    title: 'CBAT — ACT (Auditory Capacity Test)',
+    sounds: [
+      { key: 'volumeActVoiceCommand', enabledKey: 'soundEnabledActVoiceCommand', label: 'Voice Command (avoid + distractor)', sound: '__act_voice__'   },
+      { key: 'volumeActChatter',      enabledKey: 'soundEnabledActChatter',      label: 'Background Chatter',                 sound: '__act_chatter__' },
+      { key: 'volumeActStatic',       enabledKey: 'soundEnabledActStatic',       label: 'White Noise / Static',               sound: '__act_static__'  },
+      { key: 'volumeActBleep',        enabledKey: 'soundEnabledActBleep',        label: 'Reaction Bleep',                     sound: '__act_bleep__'   },
+    ],
+  },
 ]
 
 const ALL_SOUND_KEYS = SOUND_GROUPS.flatMap(g => g.sounds.flatMap(s => [s.key, s.enabledKey, s.durationKey].filter(Boolean)))
@@ -1032,6 +1050,7 @@ function SoundRowV2({ label, sound, value, onChange, enabled, onToggle, duration
   const preview = () => {
     invalidateSoundSettings()
     stopCurrentPreviewAudio()
+    stopActPreview()
     if (sound === '__typing__') {
       previewTypingSound(value ?? 30, durationValue)
       return
@@ -1040,6 +1059,10 @@ function SoundRowV2({ label, sound, value, onChange, enabled, onToggle, duration
       previewGridRevealTone(value ?? 30, durationValue)
       return
     }
+    if (sound === '__act_voice__')   { previewActVoiceCommand(value ?? 40); return }
+    if (sound === '__act_chatter__') { previewActChatter(value ?? 40);      return }
+    if (sound === '__act_static__')  { previewActStatic(value ?? 40);       return }
+    if (sound === '__act_bleep__')   { previewActBleep(value ?? 22);        return }
     try {
       const file = sound === 'out_of_ammo'
         ? OUT_OF_AMMO_VARIANTS[Math.floor(Math.random() * OUT_OF_AMMO_VARIANTS.length)]
