@@ -21,12 +21,15 @@ const mongoose = require('mongoose');
 // Minimal payload satisfying the union of required fields across every CBAT
 // schema. If a new CBAT game adds a required field not listed here, tests that
 // seed these docs will fail loudly — signalling the helper needs updating.
+// Extra keys are ignored by Mongoose strict mode on schemas that don't declare
+// them, so this stays safe across the registry.
 function seedCbatDoc(cfg, userId) {
   return cfg.Model.create({
     userId,
     [cfg.primaryField]: 1,
     totalTime: 1,
     roundsPlayed: 1,
+    score: 0, // required by GameSessionCbatTrace1Result; stripped by others
   });
 }
 
