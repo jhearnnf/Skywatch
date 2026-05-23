@@ -23,6 +23,7 @@ import BriefReelReviewPanel from '../components/briefReel/admin/BriefReelReviewP
 import ReportChart, { ChartSkeleton } from '../components/admin/ReportChart'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 import TutorialsEditor from './admin/TutorialsEditor'
+import UpdateNotificationsEditor from './admin/UpdateNotificationsEditor'
 import SEO from '../components/SEO'
 import { has3DModel } from '../data/aircraftModels'
 import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } from '../../backend/constants/categories.json'
@@ -3694,6 +3695,15 @@ function ContentTab({ API }) {
         Toast={Toast}
         CollapsibleBox={CollapsibleBox}
       />
+
+      {/* ── Update Notifications ──────────────────────────────────── */}
+      <Section title="Update Notifications" collapsible>
+        <UpdateNotificationsEditor
+          API={API}
+          ConfirmModal={ConfirmModal}
+          Toast={Toast}
+        />
+      </Section>
 
       {/* ── Generated Content ─────────────────────────────────────── */}
       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Generated Content</p>

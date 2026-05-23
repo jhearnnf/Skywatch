@@ -29,6 +29,11 @@ const ACTION_TYPES = [
   'chat_close',
   'chat_reopen',
   'chat_start',
+  'create_update_notification',
+  'edit_update_notification',
+  'delete_update_notification',
+  'reset_update_notification',
+  'reset_update_notification_for_user',
 ];
 
 const adminActionSchema = new mongoose.Schema({

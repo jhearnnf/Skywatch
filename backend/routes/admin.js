@@ -5863,4 +5863,309 @@ router.get('/email-logs', async (req, res) => {
   }
 });
 
+// ── Update Notifications ──────────────────────────────────────────────────────
+// Admin CRUD + reset helpers + AI summarize-from-GitHub. Each state-changing
+// endpoint requires a reason and logs an AdminAction for auditability, matching
+// the existing tutorial/brief/economy admin patterns.
+
+const UpdateNotification = require('../models/UpdateNotification');
+const { getRecentCommits } = require('../utils/github');
+
+const UPDATE_NOTIF_IMAGE_MODES = ['none', 'placeholder', 'custom', 'upload'];
+
+// Normalize the editor payload before save. Strips imageUrl when mode is 'none'
+// or 'placeholder', coerces empty strings on date fields to null, trims strings,
+// validates required shape. Returns either { ok: true, payload } or { ok: false, error }.
+function parseUpdateNotificationPayload(body) {
+  const title = (body.title ?? '').toString().trim();
+  if (!title) return { ok: false, error: 'Title is required' };
+  const text = (body.body ?? '').toString();
+  if (!text.trim()) return { ok: false, error: 'Body is required' };
+
+  const imageMode = UPDATE_NOTIF_IMAGE_MODES.includes(body.imageMode) ? body.imageMode : 'none';
+  const usesUrl = imageMode === 'custom' || imageMode === 'upload';
+  let imageUrl = usesUrl ? (body.imageUrl ?? '').toString().trim() : '';
+  if (usesUrl && !imageUrl) {
+    return {
+      ok: false,
+      error: imageMode === 'upload'
+        ? 'Upload an image before saving'
+        : 'Image URL is required when using a custom image',
+    };
+  }
+
+  const toDate = (v) => {
+    if (v === '' || v === null || v === undefined) return null;
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  const validFrom = toDate(body.validFrom);
+  const expiresAt = toDate(body.expiresAt);
+  if (validFrom && expiresAt && expiresAt <= validFrom) {
+    return { ok: false, error: 'expiresAt must be after validFrom' };
+  }
+
+  return {
+    ok: true,
+    payload: {
+      title,
+      body:       text,
+      imageMode,
+      imageUrl,
+      enabled:    body.enabled !== undefined ? !!body.enabled : true,
+      validFrom,
+      expiresAt,
+      targetPath: (body.targetPath ?? '').toString().trim(),
+      responsesEnabled: !!body.responsesEnabled,
+    },
+  };
+}
+
+// GET /api/admin/update-notifications?page=1&limit=20
+router.get('/update-notifications', async (req, res) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+
+    const [docs, total] = await Promise.all([
+      UpdateNotification.find({})
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('createdBy', 'agentNumber email')
+        .lean(),
+      UpdateNotification.countDocuments({}),
+    ]);
+
+    // Shape rows for the admin table — include the views count without leaking
+    // the full viewedBy array (viewers are loaded on demand via /viewers).
+    const rows = docs.map(d => ({
+      ...d,
+      viewersCount: Array.isArray(d.viewedBy) ? d.viewedBy.length : 0,
+      viewedBy: undefined,
+    }));
+
+    res.json({
+      status: 'success',
+      data: { notifications: rows, total, page, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/update-notifications
+router.post('/update-notifications', requireReason, async (req, res) => {
+  try {
+    const parsed = parseUpdateNotificationPayload(req.body);
+    if (!parsed.ok) return res.status(400).json({ message: parsed.error });
+
+    const doc = await UpdateNotification.create({
+      ...parsed.payload,
+      createdBy: req.user._id,
+    });
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'create_update_notification',
+      reason:     req.body.reason,
+    });
+
+    res.status(201).json({ status: 'success', data: { notification: doc.toObject() } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/admin/update-notifications/:id
+router.put('/update-notifications/:id', requireReason, async (req, res) => {
+  try {
+    const existing = await UpdateNotification.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: 'Not found' });
+
+    const parsed = parseUpdateNotificationPayload(req.body);
+    if (!parsed.ok) return res.status(400).json({ message: parsed.error });
+
+    Object.assign(existing, parsed.payload);
+    await existing.save();
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'edit_update_notification',
+      reason:     req.body.reason,
+    });
+
+    res.json({ status: 'success', data: { notification: existing.toObject() } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/admin/update-notifications/:id
+router.delete('/update-notifications/:id', requireReason, async (req, res) => {
+  try {
+    const doc = await UpdateNotification.findByIdAndDelete(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'delete_update_notification',
+      reason:     req.body.reason,
+    });
+
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/update-notifications/:id/reset — wipe viewedBy for everyone.
+router.post('/update-notifications/:id/reset', requireReason, async (req, res) => {
+  try {
+    const doc = await UpdateNotification.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+
+    doc.viewedBy = [];
+    await doc.save();
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'reset_update_notification',
+      reason:     req.body.reason,
+    });
+
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/update-notifications/:id/reset-user — drop a single user's view record.
+router.post('/update-notifications/:id/reset-user', requireReason, async (req, res) => {
+  try {
+    const targetUserId = req.body.userId;
+    if (!mongoose.isValidObjectId(targetUserId)) {
+      return res.status(400).json({ message: 'Invalid userId' });
+    }
+
+    const doc = await UpdateNotification.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+
+    const before = doc.viewedBy.length;
+    doc.viewedBy = doc.viewedBy.filter(v => String(v.userId) !== String(targetUserId));
+    if (doc.viewedBy.length !== before) {
+      await doc.save();
+    }
+
+    await AdminAction.create({
+      userId:       req.user._id,
+      actionType:   'reset_update_notification_for_user',
+      reason:       req.body.reason,
+      targetUserId,
+    });
+
+    res.json({ status: 'success', data: { removed: before - doc.viewedBy.length } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/update-notifications/:id/viewers — list of users who have seen this notification.
+router.get('/update-notifications/:id/viewers', async (req, res) => {
+  try {
+    const doc = await UpdateNotification.findById(req.params.id)
+      .populate('viewedBy.userId', 'agentNumber email displayName')
+      .lean();
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+
+    const viewers = (doc.viewedBy || []).map(v => ({
+      user:     v.userId,
+      viewedAt: v.viewedAt,
+      response: v.response || '',
+    }));
+    res.json({ status: 'success', data: { viewers } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/update-notifications/upload-image
+// Accepts a base64 data URL in the JSON body, uploads it to Cloudinary, and
+// returns the resulting secure_url for the admin form to drop into imageUrl.
+// Body: { dataUrl: 'data:image/png;base64,…' } — max 10MB (matches the global
+// express.json limit). No reason audit required: the asset is not yet attached
+// to any notification at this point; the eventual create/edit call carries the
+// reason.
+router.post('/update-notifications/upload-image', async (req, res) => {
+  try {
+    const dataUrl = (req.body?.dataUrl ?? '').toString();
+    if (!dataUrl.startsWith('data:image/')) {
+      return res.status(400).json({ message: 'dataUrl must be an image data URL' });
+    }
+    const comma = dataUrl.indexOf(',');
+    const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : '';
+    const buffer = Buffer.from(b64, 'base64');
+    if (!buffer.length) return res.status(400).json({ message: 'Empty image payload' });
+
+    const uploaded = await uploadBuffer(buffer, { folder: 'update-notifications' });
+    res.json({
+      status: 'success',
+      data: {
+        url:      uploaded.secure_url,
+        publicId: uploaded.public_id,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/update-notifications/ai-summarize
+// Fetches recent GitHub commits and asks OpenRouter to summarize them into 2–3
+// sentences the admin can paste into a notification body. Does NOT save a draft
+// — the admin copies the returned summary into the editor manually (per spec).
+router.post('/update-notifications/ai-summarize', async (req, res) => {
+  try {
+    const sinceDays = Math.min(60, Math.max(1, parseInt(req.body.sinceDays, 10) || 14));
+    const commits   = await getRecentCommits({ sinceDays });
+
+    if (commits.length === 0) {
+      return res.json({
+        status: 'success',
+        data: { summary: '', commitsUsed: 0, message: 'No recent non-noise commits found.' },
+      });
+    }
+
+    const commitLines = commits.map(c => `- ${c.message}`).join('\n');
+
+    const data = await callOpenRouter({
+      key:     'main',
+      feature: 'update-notification-summary',
+      body: {
+        // Haiku 4.5 is plenty for a 2–3 sentence summary and keeps spend low.
+        model: 'anthropic/claude-haiku-4-5',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You write short product-update notes for end users of a web app called Skywatch. ' +
+              'Given a list of recent commit messages, produce 2 to 3 friendly, plain-English sentences ' +
+              'summarizing what is new — no SHAs, no internal jargon, no bullet lists, no markdown. ' +
+              'Skip refactors, dependency bumps, and tests. Focus on user-visible improvements.',
+          },
+          {
+            role: 'user',
+            content: `Recent commits (newest first):\n\n${commitLines}\n\nWrite the summary.`,
+          },
+        ],
+      },
+    });
+
+    const summary = data?.choices?.[0]?.message?.content?.trim() || '';
+    res.json({ status: 'success', data: { summary, commitsUsed: commits.length } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
