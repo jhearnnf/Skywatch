@@ -1,6 +1,15 @@
 const mongoose = require('mongoose');
 const { LOG_TYPES } = require('../constants/systemLog');
 
+// `remove` is a reserved Mongoose schema pathname (it shadows Model.remove()), but we use it here
+// purely as a string field name for AI-detected duplicate lead IDs. Suppress the warning on this
+// subdoc rather than renaming, since the field name is also baked into AI prompts and consumers.
+const duplicateEntrySchema = new mongoose.Schema({
+  keep:   { type: String, default: '' },
+  remove: { type: String, default: '' },
+  reason: { type: String, default: '' },
+}, { suppressReservedKeysWarning: true });
+
 const systemLogSchema = new mongoose.Schema({
   type: { type: String, enum: LOG_TYPES, required: true },
 
@@ -30,11 +39,7 @@ const systemLogSchema = new mongoose.Schema({
 
   // ── duplicate_leads_detected ──────────────────────────────────────────────
   // AI-detected potential duplicate leads that the admin should review/merge
-  duplicates: [{
-    keep:   { type: String, default: '' },
-    remove: { type: String, default: '' },
-    reason: { type: String, default: '' },
-  }],
+  duplicates: [duplicateEntrySchema],
 
   // ── quiz_finish_failure + quiz_result_persist_failure ─────────────────────
   userId:        { type: mongoose.Schema.Types.ObjectId, ref: 'User',                   default: null },

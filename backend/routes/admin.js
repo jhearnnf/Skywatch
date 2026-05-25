@@ -925,7 +925,7 @@ router.patch('/case-files/:slug', requireReason, async (req, res) => {
     const caseDoc = await GameCaseFile.findOneAndUpdate(
       { slug },
       { $set: { tiers } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!caseDoc) return res.status(404).json({ message: 'Case file not found' });
 

@@ -39,7 +39,7 @@ async function awardCoins(userId, amount, reason, label, briefId = null) {
   const incremented = await User.findByIdAndUpdate(
     userId,
     { $inc: { totalAirstars: amount, cycleAirstars: amount } },
-    { new: true },
+    { returnDocument: 'after' },
   ).populate('rank');
   if (!incremented) throw new Error('User not found');
 
@@ -78,7 +78,7 @@ async function awardCoins(userId, amount, reason, label, briefId = null) {
         $inc: { cycleAirstars: cycleAdjustment },
         ...(rankPromotion ? { $set: { rank: newRankId } } : {}),
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     // If the guard failed (concurrent award promoted the user out from under
     // us), the cycle correction is now wrong relative to the current state. We
