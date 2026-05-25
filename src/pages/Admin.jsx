@@ -817,7 +817,7 @@ function ReportsTab({ API }) {
                   colors={['#5baaff']}
                   height={220}
                   formatX={v => v}
-                  dimX={window === 'today' || window === '7d' ? ['0'] : undefined}
+                  dimX={['0']}
                 />
               </ChartCard>
 
