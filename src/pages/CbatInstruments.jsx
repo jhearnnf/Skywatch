@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import InstrumentPanel from '../components/cbat/InstrumentPanel'
@@ -213,6 +213,7 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, scoreSaved }) {
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CbatInstruments() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   const [phase, setPhase] = useState('intro') // intro | calibrating | playing | feedback | results
   const { enterImmersive, exitImmersive } = useGameChrome()
@@ -266,6 +267,7 @@ export default function CbatInstruments() {
     const correct = finalAnswers.filter(a => a.correct).length
     const grade = gradeFor(correct)
     setScoreSaved(false)
+    markGameCompleted({ score: correct, round: finalAnswers.length })
     apiFetch(`${API}/api/games/cbat/instruments/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -341,7 +343,7 @@ export default function CbatInstruments() {
   }, [])
 
   const startGame = useCallback(() => {
-    recordCbatStart('instruments', apiFetch, API)
+    startTracking('instruments')
     setAnswers([])
     answersRef.current = []
     setElapsed(0)

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } fro
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
@@ -740,6 +740,7 @@ function Intro({ onStart, personalBest, aircraftReady }) {
 // ── Main ─────────────────────────────────────────────────────────────────────
 export default function CbatTarget() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
   const { settings } = useAppSettings()
   const shapeScale = useShapeScale()
 
@@ -814,7 +815,7 @@ export default function CbatTarget() {
   // ── Start game ─────────────────────────────────────────────────────────────
   const startGame = useCallback(() => {
     if (aircraftList.length < 1) return
-    recordCbatStart('target', apiFetch, API)
+    startTracking('target')
     resetPlacements()
     const { targets, shapes } = planGame()
     setShapes(shapes)
@@ -978,6 +979,7 @@ export default function CbatTarget() {
     const finalTime = GAME_MS / 1000
     const grade = computeGrade(stats.totalScore)
     setScoreSaved(false)
+    markGameCompleted({ score: stats.totalScore })
     apiFetch(`${API}/api/games/cbat/target/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

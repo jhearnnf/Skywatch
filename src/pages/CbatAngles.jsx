@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 
@@ -258,6 +258,7 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, onMenu, scoreSaved }) 
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CbatAngles() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
   const { enterImmersive, exitImmersive } = useGameChrome()
@@ -295,6 +296,7 @@ export default function CbatAngles() {
     const grade = pct >= 90 ? 'Outstanding' : pct >= 70 ? 'Good' : pct >= 50 ? 'Needs Work' : 'Failed'
 
     setScoreSaved(false)
+    markGameCompleted({ score: correct })
     apiFetch(`${API}/api/games/cbat/angles/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -338,7 +340,7 @@ export default function CbatAngles() {
   }, [phase])
 
   const startGame = useCallback(() => {
-    recordCbatStart('angles', apiFetch, API)
+    startTracking('angles')
     setQuestions(buildQuestions())
     setCurrentIdx(0)
     setAnswers([])

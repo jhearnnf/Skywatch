@@ -5,7 +5,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
@@ -50,11 +50,11 @@ const ROUND_CONFIG = [
   // distractorOdds and bleepOdds were halved when `shapes` doubled — both are
   // applied per-event, so without the halving the round would have ~2× as
   // many distractor cues and bleeps as the original tuning intended.
-  { speed: 4.0, shapes: 16, distractorOdds: 0.15, avoidOdds: 0.18, bleepOdds: 0.05, turns: 12, callsigns: 2 },
-  { speed: 4.5, shapes: 20, distractorOdds: 0.20, avoidOdds: 0.22, bleepOdds: 0.06, turns: 14, callsigns: 2 },
-  { speed: 5.0, shapes: 24, distractorOdds: 0.25, avoidOdds: 0.25, bleepOdds: 0.07, turns: 16, callsigns: 2 },
-  { speed: 5.5, shapes: 28, distractorOdds: 0.28, avoidOdds: 0.28, bleepOdds: 0.08, turns: 18, callsigns: 3 },
-  { speed: 6.5, shapes: 32, distractorOdds: 0.30, avoidOdds: 0.30, bleepOdds: 0.09, turns: 20, callsigns: 3 },
+  { speed: 4.0, shapes: 16, distractorOdds: 0.15, avoidOdds: 0.55, bleepOdds: 0.05, turns: 12, callsigns: 2 },
+  { speed: 4.5, shapes: 20, distractorOdds: 0.20, avoidOdds: 0.60, bleepOdds: 0.06, turns: 14, callsigns: 2 },
+  { speed: 5.0, shapes: 24, distractorOdds: 0.25, avoidOdds: 0.65, bleepOdds: 0.07, turns: 16, callsigns: 2 },
+  { speed: 5.5, shapes: 28, distractorOdds: 0.28, avoidOdds: 0.70, bleepOdds: 0.08, turns: 18, callsigns: 3 },
+  { speed: 6.5, shapes: 32, distractorOdds: 0.30, avoidOdds: 0.75, bleepOdds: 0.09, turns: 20, callsigns: 3 },
 ]
 
 // Score deltas
@@ -1156,6 +1156,7 @@ function Stat({ label, value, good, bad }) {
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function CbatAct() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, setRound: trackRound, markCompleted: markGameCompleted } = useCbatTracking()
   const appSettings = useAppSettings()
   const settings = appSettings?.settings
   const [phase, setPhase] = useState('intro')   // intro | logoIntro | callsign | playing | recap | results
@@ -1226,7 +1227,7 @@ export default function CbatAct() {
 
   const startGame = useCallback(async () => {
     await initAudio()
-    recordCbatStart('act', apiFetch, API)
+    startTracking('act')
     setRoundIdx(0)
     setAllRoundStats([])
     setLatestStats(null)
@@ -1245,6 +1246,10 @@ export default function CbatAct() {
     const t = setTimeout(() => setPhase('playing'), 3000)
     return () => clearTimeout(t)
   }, [phase, roundIdx])
+
+  useEffect(() => {
+    if (phase === 'playing') trackRound(roundIdx + 1)
+  }, [phase, roundIdx, trackRound])
 
   const onRoundComplete = useCallback((stats) => {
     setLatestStats(stats)
@@ -1283,6 +1288,7 @@ export default function CbatAct() {
       return sum + curveLen / ROUND_CONFIG[i].speed
     }, 0)
 
+    markGameCompleted({ score: Math.max(0, Math.round(totals.score)), round: allRoundStats.length })
     apiFetch(`${API}/api/games/cbat/act/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 
@@ -123,6 +123,7 @@ function ResultsScreen({ rounds, totalTime, onPlayAgain, scoreSaved }) {
 // ── Main Component ──────────────────────────────────────────────────────────
 export default function CbatCodeDuplicates() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   // phase: intro | displaying | answering | feedback | results
   const [phase, setPhase] = useState('intro')
@@ -170,6 +171,7 @@ export default function CbatCodeDuplicates() {
     const grade = pct >= 90 ? 'Outstanding' : pct >= 70 ? 'Good' : pct >= 50 ? 'Needs Work' : 'Failed'
 
     setScoreSaved(false)
+    markGameCompleted({ score: correct })
     apiFetch(`${API}/api/games/cbat/code-duplicates/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -258,7 +260,7 @@ export default function CbatCodeDuplicates() {
   }, [])
 
   const startGame = useCallback(() => {
-    recordCbatStart('code-duplicates', apiFetch, API)
+    startTracking('code-duplicates')
     setRoundResults([])
     setElapsed(0)
     startRound(1)

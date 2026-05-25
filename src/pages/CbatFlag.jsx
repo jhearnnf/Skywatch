@@ -5,7 +5,7 @@ import { useGLTF } from '@react-three/drei'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import { generateMath } from './CbatFlag/mathBank'
 import { generateUniqueSymbols } from './CbatFlag/symbols'
@@ -212,6 +212,7 @@ function IntroScreen({ onStart, personalBest, aircraftList, aircraftLoading }) {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function CbatFlag() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
   const { settings } = useAppSettings()
   const { enterImmersive, exitImmersive } = useGameChrome()
 
@@ -451,6 +452,7 @@ export default function CbatFlag() {
       resultSubmittedRef.current = true
       const grade = computeGrade(finalStats.totalScore)
       setScoreSaved(false)
+      markGameCompleted({ score: finalStats.totalScore })
       apiFetch(`${API}/api/games/cbat/flag/result`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -625,7 +627,7 @@ export default function CbatFlag() {
     setScoreSaved(false)
     gameTimeRef.current = 0
     resultSubmittedRef.current = false
-    recordCbatStart('flag', apiFetch, API)
+    startTracking('flag')
     setPhase('playing')
   }, [aircraftList, apiFetch, API])
 

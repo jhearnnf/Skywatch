@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as THREE from 'three'
 import { useAuth } from '../context/AuthContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
@@ -505,6 +505,7 @@ function DpadBtn({ label, onPress, ariaLabel }) {
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CbatPlaneTurn() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   // Aircraft selection
   const [aircraft, setAircraft]         = useState([])
@@ -640,6 +641,7 @@ export default function CbatPlaneTurn() {
   // Submit score
   const submitScore = useCallback((finalRotations, finalTime, aircraftTitle) => {
     setScoreSaved(false)
+    markGameCompleted({ score: finalRotations })
     apiFetch(`${API}/api/games/cbat/plane-turn/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -666,6 +668,7 @@ export default function CbatPlaneTurn() {
   const submitTrace1Score = useCallback((score, correctTurns, totalTurns, elapsedMs) => {
     setScoreSaved(false)
     const accuracy = totalTurns > 0 ? Math.round((correctTurns / totalTurns) * 100) : 0
+    markGameCompleted({ score: correctTurns })
     apiFetch(`${API}/api/games/cbat/trace-1/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1038,7 +1041,7 @@ export default function CbatPlaneTurn() {
 
   // Handlers
   const handleSelect = (a) => {
-    recordCbatStart(gameModeTrace1 ? 'trace-1' : 'plane-turn', apiFetch, API)
+    startTracking(gameModeTrace1 ? 'trace-1' : 'plane-turn', { mode })
     const modelUrl = getModelUrl(a.briefId, a.title)
     setSelected({ ...a, modelUrl })
     setUse3D(true)
@@ -1105,7 +1108,7 @@ export default function CbatPlaneTurn() {
   }
 
   const handlePlayAgain = () => {
-    recordCbatStart(gameModeTrace1 ? 'trace-1' : 'plane-turn', apiFetch, API)
+    startTracking(gameModeTrace1 ? 'trace-1' : 'plane-turn', { mode })
     setTotalRotations(0)
     setTotalTime(0)
     setScoreSaved(false)

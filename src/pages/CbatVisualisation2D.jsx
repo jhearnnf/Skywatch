@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import {
@@ -462,6 +462,7 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, scoreSaved }) {
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CbatVisualisation2D() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
   const { enterImmersive, exitImmersive } = useGameChrome()
@@ -517,6 +518,7 @@ export default function CbatVisualisation2D() {
     const grade = pct >= 90 ? 'Outstanding' : pct >= 70 ? 'Good' : pct >= 50 ? 'Needs Work' : 'Failed'
 
     setScoreSaved(false)
+    markGameCompleted({ score: correct })
     apiFetch(`${API}/api/games/cbat/visualisation-2d/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -643,7 +645,7 @@ export default function CbatVisualisation2D() {
   }, [phase, currentIdx])
 
   const startGame = useCallback(() => {
-    recordCbatStart('visualisation-2d', apiFetch, API)
+    startTracking('visualisation-2d')
     setRounds(buildRounds(TOTAL_ROUNDS))
     setCurrentIdx(0)
     setAnswers([])

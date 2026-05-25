@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import SkywatchLogoIntro, { SKYWATCH_LOGO_INTRO_MS } from '../components/SkywatchLogoIntro'
@@ -1018,6 +1018,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
 // ── Main Component ──────────────────────────────────────────────────────────
 export default function CbatDpt() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   // Aircraft selection — only 3D-enabled aircraft per spec
   const [aircraft, setAircraft]               = useState([])
@@ -1851,6 +1852,7 @@ export default function CbatDpt() {
   // Submit score at end of run
   const submitScore = useCallback((finalScore, finalTime, aircraftTitle, finalRound, breakdown) => {
     setScoreSaved(false)
+    markGameCompleted({ score: finalScore, round: finalRound })
     apiFetch(`${API}/api/games/cbat/dpt/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1876,7 +1878,7 @@ export default function CbatDpt() {
   // Handlers
   const handleSelect = useCallback((a) => {
     setSelected(a)
-    recordCbatStart('dpt', apiFetch, API)
+    startTracking('dpt')
     setRound(1)
     setTotalScore(0)
     setGatesHit(0)

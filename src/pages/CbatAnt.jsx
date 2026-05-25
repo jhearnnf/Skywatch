@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import {
@@ -295,6 +295,7 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function CbatAnt() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
   const { enterImmersive, exitImmersive } = useGameChrome()
@@ -339,6 +340,7 @@ export default function CbatAnt() {
     const missCount = finalAnswers.length - exactCount - partialCount
     const grade = gradeForScore(totalScore)
     setScoreSaved(false)
+    markGameCompleted({ score: totalScore })
     apiFetch(`${API}/api/games/cbat/ant/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -443,7 +445,7 @@ export default function CbatAnt() {
   }, [phase, round, answerInput, startRound, endGame])
 
   const startGame = useCallback(() => {
-    recordCbatStart('ant', apiFetch, API)
+    startTracking('ant')
     setAnswers([])
     answersRef.current = []
     setTotalElapsed(0)

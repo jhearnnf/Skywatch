@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
-import { recordCbatStart } from '../utils/cbat/recordStart'
+import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 
@@ -175,6 +175,7 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, scoreSaved }) {
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CbatSymbols() {
   const { user, apiFetch, API } = useAuth()
+  const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
   const { enterImmersive, exitImmersive } = useGameChrome()
@@ -216,6 +217,7 @@ export default function CbatSymbols() {
     const grade = pct >= 90 ? 'Outstanding' : pct >= 70 ? 'Good' : pct >= 50 ? 'Needs Work' : 'Failed'
 
     setScoreSaved(false)
+    markGameCompleted({ score: correct })
     apiFetch(`${API}/api/games/cbat/symbols/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -264,7 +266,7 @@ export default function CbatSymbols() {
   }, [])
 
   const startGame = useCallback(() => {
-    recordCbatStart('symbols', apiFetch, API)
+    startTracking('symbols')
     setRounds(buildRounds())
     setCurrentIdx(0)
     setAnswers([])
