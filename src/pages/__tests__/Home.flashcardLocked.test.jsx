@@ -110,6 +110,38 @@ describe('Home — Flashcard Round locked card', () => {
     })
   })
 
+  it('appends forFlashcard=true to the pathway endpoint so backend can skip News', async () => {
+    global.fetch = makeFetch({ availableCount: 0, nextPathway: { briefId: 'next-brief-id', category: 'Equipment' } })
+    render(<Home />)
+
+    const btn = await screen.findByTestId('home-flashcard-btn')
+    fireEvent.click(btn)
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/briefs/next-pathway-brief?forFlashcard=true'),
+        expect.any(Object),
+      )
+    })
+  })
+
+  it('shows "News briefs don\'t have flashcards" microcopy when newsFlashcardsEnabled is false', async () => {
+    mockUseSettings.mockReturnValue({ settings: { ...SETTINGS, newsFlashcardsEnabled: false } })
+    global.fetch = makeFetch({ availableCount: 2, nextPathway: { briefId: 'next-id', category: 'Equipment' } })
+    render(<Home />)
+
+    await waitFor(() => expect(screen.getByText("News briefs don't have flashcards")).toBeDefined())
+  })
+
+  it('does NOT show the News-disabled microcopy when newsFlashcardsEnabled is true', async () => {
+    mockUseSettings.mockReturnValue({ settings: { ...SETTINGS, newsFlashcardsEnabled: true } })
+    global.fetch = makeFetch({ availableCount: 2, nextPathway: { briefId: 'next-id', category: 'News' } })
+    render(<Home />)
+
+    await waitFor(() => expect(screen.getByText('Complete 3 more briefs to unlock')).toBeDefined())
+    expect(screen.queryByText("News briefs don't have flashcards")).toBeNull()
+  })
+
   it('falls back to /learn-priority when the endpoint has no brief to return', async () => {
     global.fetch = makeFetch({ availableCount: 0, nextPathway: null })
     render(<Home />)

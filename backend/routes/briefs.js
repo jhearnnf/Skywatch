@@ -441,6 +441,14 @@ router.get('/next-pathway-brief', protect, async (req, res) => {
       finalCategories = pathway;
     }
 
+    // When steering the user toward the Flashcard Round unlock, drop News if
+    // News flashcards are disabled — reading a News brief wouldn't advance the
+    // unlock count, so the click would be a dead end.
+    const excludeNews = req.query.forFlashcard === 'true' && settings.newsFlashcardsEnabled === false;
+    if (excludeNews && finalCategories !== null) {
+      finalCategories = finalCategories.filter(c => c !== 'News');
+    }
+
     // Exclude any brief the user has a read record for — completed OR in-progress.
     // In-progress briefs are surfaced by the Jump Back In card instead.
     const reads = await IntelligenceBriefRead.find({ userId: req.user._id })
@@ -452,6 +460,7 @@ router.get('/next-pathway-brief', protect, async (req, res) => {
       'descriptionSections.0': { $exists: true },
     };
     if (finalCategories !== null) filter.category = { $in: finalCategories };
+    else if (excludeNews)         filter.category = { $ne: 'News' };
     if (excludeIds.length)        filter._id      = { $nin: excludeIds };
 
     // Find the set of categories that have at least one eligible brief, then pick one at random

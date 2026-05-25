@@ -42,7 +42,7 @@ export default function Home() {
   const { user, API, apiFetch, notifQueue = [] } = useAuth()
   const { start }      = useAppTutorial()
   const navigate       = useNavigate()
-  const { levels: liveLevels } = useAppSettings()
+  const { levels: liveLevels, settings } = useAppSettings()
   const [latestBriefs,      setLatestBriefs]      = useState([])
   const [showCROFlow,       setShowCROFlow]       = useState(false)
   const [missionLoading,    setMissionLoading]    = useState(false)
@@ -607,14 +607,16 @@ export default function Home() {
               if (user && flashcardAvail === null) return null
               const locked = user && flashcardAvail < 5
               const needed = locked ? 5 - flashcardAvail : 0
+              const newsFlashcardsDisabled = settings?.newsFlashcardsEnabled === false
               // Locked-state action: instead of a dead-end, route the user to
               // the next priority brief so the card becomes a forward path
-              // toward unlocking Flashcard Round.
+              // toward unlocking Flashcard Round. forFlashcard=true tells the
+              // backend to skip News when News flashcards are disabled.
               const handleLockedClick = async () => {
                 if (unlockReadBusyRef.current) return
                 unlockReadBusyRef.current = true
                 try {
-                  const res = await apiFetch(`${API}/api/briefs/next-pathway-brief`, { credentials: 'include' })
+                  const res = await apiFetch(`${API}/api/briefs/next-pathway-brief?forFlashcard=true`, { credentials: 'include' })
                   const data = await res.json()
                   if (data.status === 'success') {
                     navigate(`/brief/${data.data.briefId}`)
@@ -664,6 +666,11 @@ export default function Home() {
                           ? `Complete ${needed} more brief${needed === 1 ? '' : 's'} to unlock`
                           : 'Identify briefs from content alone — title hidden'}
                       </p>
+                      {locked && newsFlashcardsDisabled && (
+                        <p className="text-[11px] text-amber-600/60 mt-0.5">
+                          News briefs don't have flashcards
+                        </p>
+                      )}
                     </div>
                     <span className="text-xs font-bold px-3 py-1.5 rounded-xl shrink-0 bg-amber-500 text-white">
                       {locked ? 'Read →' : 'Play →'}

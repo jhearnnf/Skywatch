@@ -237,6 +237,48 @@ describe('GET /api/briefs/next-pathway-brief', () => {
     const res = await request(app).get('/api/briefs/next-pathway-brief');
     expect(res.status).toBe(401);
   });
+
+  describe('forFlashcard=true + newsFlashcardsEnabled=false', () => {
+    it('excludes News briefs and returns a non-News brief instead', async () => {
+      // Default createSettings leaves newsFlashcardsEnabled at the schema default (false)
+      const user = await makeUser();
+      const news = await createBrief({ category: 'News',      title: 'News 1', priorityNumber: 1 });
+      const ac   = await createBrief({ category: 'Aircrafts', title: 'AC 1',   priorityNumber: 2 });
+
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const res = await request(app)
+          .get('/api/briefs/next-pathway-brief?forFlashcard=true')
+          .set('Cookie', authCookie(user._id));
+        expect(res.status).toBe(200);
+        expect(String(res.body.data.briefId)).toBe(String(ac._id));
+        expect(res.body.data.category).not.toBe('News');
+      }
+      // sanity: without forFlashcard the News brief is still reachable
+      expect(news).toBeTruthy();
+    });
+
+    it('returns 404 when the only candidates are News briefs', async () => {
+      const user = await makeUser();
+      await createBrief({ category: 'News', title: 'News 1', priorityNumber: 1 });
+
+      const res = await request(app)
+        .get('/api/briefs/next-pathway-brief?forFlashcard=true')
+        .set('Cookie', authCookie(user._id));
+      expect(res.status).toBe(404);
+    });
+
+    it('still returns News briefs when newsFlashcardsEnabled is true', async () => {
+      await createSettings({ newsFlashcardsEnabled: true });
+      const user = await makeUser();
+      const news = await createBrief({ category: 'News', title: 'News 1', priorityNumber: 1 });
+
+      const res = await request(app)
+        .get('/api/briefs/next-pathway-brief?forFlashcard=true')
+        .set('Cookie', authCookie(user._id));
+      expect(res.status).toBe(200);
+      expect(String(res.body.data.briefId)).toBe(String(news._id));
+    });
+  });
 });
 
 // ── random-in-progress priority ordering ──────────────────────────────────────
