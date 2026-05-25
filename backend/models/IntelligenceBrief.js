@@ -50,6 +50,16 @@ const intelligenceBriefSchema = new mongoose.Schema(
 
     media: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Media' }],
 
+    // AI-generated 3D scene preview (admin-only feature, not yet surfaced to users).
+    // One per brief. Managed exclusively by POST/DELETE /briefs/:id/scene3d — do
+    // not write through the generic PATCH /briefs/:id endpoint.
+    scene3dImage: {
+      url:                { type: String, default: null },
+      cloudinaryPublicId: { type: String, default: null },
+      generatedAt:        { type: Date,   default: null },
+      _id: false,
+    },
+
     title:       { type: String, required: true, trim: true },
     nickname:    { type: String, trim: true },   // informal/popular name (e.g. "Typhoon" for Eurofighter)
     subtitle:    { type: String, trim: true },

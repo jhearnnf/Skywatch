@@ -4902,6 +4902,9 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [questionsChanged, setQuestionsChanged] = useState(false)
   const [media,         setMedia]         = useState([])
   const [pendingImages, setPendingImages] = useState([])
+  // AI-generated 3D scene preview — admin-only field, managed via dedicated
+  // /scene3d POST/DELETE routes (not through the brief PATCH endpoint).
+  const [scene3dImage,  setScene3dImage]  = useState(null)
   const [imageSources,  setImageSources]  = useState(['dvids', 'commons', 'wikipedia'])
   const [extractingMediaId, setExtractingMediaId] = useState(null) // mediaId currently running subject extraction
   const [originalPreviewIds, setOriginalPreviewIds] = useState(() => new Set()) // per-row toggle: user explicitly chose to view the original instead of the cutout
@@ -4925,7 +4928,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
   const [staleSourceWarning,    setStaleSourceWarning]    = useState(false)
   const [missingGameDataWarning, setMissingGameDataWarning] = useState(false)
   // Section open/close
-  const [openSections,  setOpenSections]  = useState({ core: true, desc: false, keywords: false, questions: false, images: false, sources: false, stats: false, linkedBriefs: false })
+  const [openSections,  setOpenSections]  = useState({ core: true, desc: false, keywords: false, questions: false, images: false, scene3d: false, sources: false, stats: false, linkedBriefs: false })
   const [allBasesBriefs,     setAllBasesBriefs]     = useState([]) // Bases briefs for Aircraft/Squadrons picker
   const [allSquadronsBriefs, setAllSquadronsBriefs] = useState([]) // Squadrons briefs for Bases/Aircraft picker
   const [allAircraftBriefs,  setAllAircraftBriefs]  = useState([]) // Aircraft briefs for Bases/Squadrons/Tech picker
@@ -5134,6 +5137,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     setQuestionsChanged(false)
     setMedia(br.media ?? [])
     setPendingImages([])
+    setScene3dImage(br.scene3dImage?.url ? br.scene3dImage : null)
     setBriefId(String(br._id))
     setQTab('easy')
     setSaveStatus(null)
@@ -5186,6 +5190,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     setQuestionsChanged(false)
     setMedia([])
     setPendingImages([])
+    setScene3dImage(null)
     setBriefId(null)
     setQTab('easy')
     setSaveStatus(null)
@@ -5339,6 +5344,7 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     setQuestionsChanged(false)
     setMedia([])
     setPendingImages([])
+    setScene3dImage(null)
     setBriefId(null)
     setPendingLead(lead ? lead.title : null)
     setStaleSourceWarning(briefData.staleSourceWarning ?? false)
@@ -5564,6 +5570,48 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
     setQuestionsChanged(true)
   }
 
+
+  // ── AI: Generate / remove 3D scene preview ────────────────────────────────
+  const generateScene3d = async () => {
+    if (!briefId) return
+    setGenerating('scene3d')
+    try {
+      const res  = await apiFetch(`${API}/api/admin/briefs/${briefId}/scene3d`, {
+        method: 'POST', credentials: 'include',
+      })
+      const data = await res.json()
+      if (data.status === 'success' && data.data?.scene3dImage?.url) {
+        setScene3dImage(data.data.scene3dImage)
+        setToast('3D scene generated')
+      } else {
+        setToast(`3D scene failed: ${data.message ?? 'unknown error'}`)
+      }
+    } catch (err) {
+      setToast(`3D scene failed: ${err.message}`)
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  const removeScene3d = async () => {
+    if (!briefId) return
+    setGenerating('scene3d')
+    try {
+      const res  = await apiFetch(`${API}/api/admin/briefs/${briefId}/scene3d`, {
+        method: 'DELETE', credentials: 'include',
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setScene3dImage(null)
+      } else {
+        setToast(`Remove failed: ${data.message ?? 'unknown error'}`)
+      }
+    } catch (err) {
+      setToast(`Remove failed: ${err.message}`)
+    } finally {
+      setGenerating(null)
+    }
+  }
 
   // ── AI: Generate images ───────────────────────────────────────────────────
   const generateImages = async () => {
@@ -6858,6 +6906,69 @@ function BriefsTab({ API, initialSearch = '', openLeads = false, editBriefIdOnMo
               </div>
             )}
             </>)}
+          </div>
+        )}
+      </div>
+
+      {/* ── Section D: 3D Scene (admin-only preview generation) ──────────── */}
+      <div className="relative bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
+        {generating === 'scene3d' && <GeneratingOverlay />}
+        <button
+          onClick={() => toggleSection('scene3d')}
+          className="w-full flex items-center justify-between px-5 py-4 border-b border-slate-300 text-left"
+        >
+          <h3 className="font-bold text-slate-800">3D Scene</h3>
+          <span className="text-slate-400 text-xs">{openSections.scene3d ? '▲' : '▼'}</span>
+        </button>
+        {openSections.scene3d && (
+          <div className="px-5 py-4">
+            {!briefId && (
+              <p className="text-sm text-slate-400 italic">Save the brief first, then generate a 3D scene preview.</p>
+            )}
+            {briefId && (
+              <>
+                {scene3dImage?.url ? (
+                  <div className="mb-3">
+                    <div className="relative inline-block">
+                      <img
+                        src={scene3dImage.url}
+                        alt="AI-generated 3D scene preview"
+                        className="w-full max-w-md rounded-xl border border-slate-200"
+                      />
+                      {scene3dImage.generatedAt && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/60 rounded-b-xl px-2 py-1 pointer-events-none">
+                          <p className="text-[10px] text-white truncate">
+                            Generated {new Date(scene3dImage.generatedAt).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 mb-3">No 3D scene yet.</p>
+                )}
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={generateScene3d}
+                    disabled={generating === 'scene3d'}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-brand-300 bg-brand-50 text-brand-700 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
+                  >
+                    {generating === 'scene3d'
+                      ? 'Generating…'
+                      : (scene3dImage?.url ? 'Regenerate 3D Preview' : 'Generate 3D Preview Image')}
+                  </button>
+                  {scene3dImage?.url && (
+                    <button
+                      onClick={removeScene3d}
+                      disabled={generating === 'scene3d'}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-red-300 bg-red-50 text-red-700 font-semibold hover:bg-red-100 transition-colors disabled:opacity-40"
+                    >
+                      ✕ Remove
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
