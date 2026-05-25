@@ -2,6 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { PAGE_OPTIONS, pageLabelForValue } from '../../constants/pages'
+import Overlay from '../../components/ui/Overlay'
+
+function resolvePreviewImageSrc(notif) {
+  if (!notif) return null
+  if (notif.imageMode === 'placeholder') return '/images/placeholder-brief.svg'
+  if (notif.imageMode === 'custom' || notif.imageMode === 'upload') return notif.imageUrl || null
+  return null
+}
 
 const EMPTY_DRAFT = {
   title:      '',
@@ -45,6 +53,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
   const [uploadBusy,  setUploadBusy]  = useState(false)
   const [confirmOp,   setConfirmOp]   = useState(null) // { label, run }
   const [viewersFor,  setViewersFor]  = useState(null) // { notif, viewers }
+  const [previewNotif, setPreviewNotif] = useState(null)
   const [toast,       setToast]       = useState('')
 
   const load = useCallback(() => {
@@ -291,6 +300,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                 </div>
                 <div className="flex flex-wrap gap-1 justify-end">
                   <button onClick={() => openEdit(n)}     className="text-[11px] font-bold px-2 py-1 rounded bg-brand-50 text-brand-700 hover:bg-brand-100">Edit</button>
+                  <button onClick={() => setPreviewNotif(n)} className="text-[11px] font-bold px-2 py-1 rounded bg-sky-50 text-sky-700 hover:bg-sky-100">Preview</button>
                   <button onClick={() => openViewers(n)}  className="text-[11px] font-bold px-2 py-1 rounded bg-slate-50 text-slate-700 hover:bg-slate-100">Viewers</button>
                   <button onClick={() => askResetAll(n)}  className="text-[11px] font-bold px-2 py-1 rounded bg-amber-50 text-amber-700 hover:bg-amber-100">Reset all</button>
                   <button onClick={() => askDelete(n)}    className="text-[11px] font-bold px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100">Delete</button>
@@ -511,6 +521,68 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Preview (read-only — does not mark as viewed) */}
+      {previewNotif && (() => {
+        const imgSrc = resolvePreviewImageSrc(previewNotif)
+        return (
+          <Overlay
+            zIndex={70}
+            backdrop="rgba(8, 14, 30, 0.78)"
+            lockBodyScroll
+            onDismiss={() => setPreviewNotif(null)}
+            className="backdrop-blur-sm flex items-center justify-center p-4"
+            data-testid="update-notification-preview-overlay"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1,    y: 0 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
+              className="relative bg-surface-raised border border-slate-300 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="absolute top-3 left-3 z-10 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">
+                Preview
+              </div>
+              {imgSrc && (
+                <img src={imgSrc} alt="" className="w-full max-h-48 object-cover rounded-t-2xl" />
+              )}
+              <div className="p-5 sm:p-6">
+                <button
+                  aria-label="Close preview"
+                  onClick={() => setPreviewNotif(null)}
+                  className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 text-slate-600 hover:bg-slate-200"
+                >
+                  ×
+                </button>
+                <h2 className="text-xl font-extrabold text-brand-700 pr-8">{previewNotif.title}</h2>
+                <p className="mt-3 text-sm leading-relaxed text-text whitespace-pre-wrap">
+                  {previewNotif.body}
+                </p>
+                {previewNotif.responsesEnabled && (
+                  <div className="mt-4">
+                    <label className="block text-xs font-semibold text-slate-500 mb-1.5">
+                      Have your say (optional)
+                    </label>
+                    <textarea
+                      rows={3}
+                      disabled
+                      placeholder="Type your thoughts…"
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-surface text-text outline-none resize-none opacity-70"
+                    />
+                  </div>
+                )}
+                <button
+                  onClick={() => setPreviewNotif(null)}
+                  className="mt-5 w-full px-4 py-2.5 rounded-xl bg-brand-600 text-white font-bold text-sm hover:brightness-110"
+                >
+                  Got it
+                </button>
+              </div>
+            </motion.div>
+          </Overlay>
+        )
+      })()}
 
       {/* Reason-gated confirm */}
       {confirmOp && (
