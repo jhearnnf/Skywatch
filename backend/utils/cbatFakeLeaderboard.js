@@ -26,7 +26,6 @@ const GAME_OFFSET = {
   'ant':             2,
   'flag':            6,
   'visualisation-2d': 10,
-  'visualisation-3d': 11,
   'dpt':             14,
   'act':             18,
 };
@@ -90,14 +89,9 @@ const FAKE_TUNING = {
     scoreSequence: [70, 65, 60, 55, 50, 50, 45, 45, 40, 40, 35, 35, 30, 30, 25, 25, 20, 20, 15, 15],
   },
   'visualisation-2d': { floor: 1, ceiling: 7, seedScore: 7, seedTime: 70.5, scoreStep: 1, timeStep: 4.3 },
-  'visualisation-3d': {
-    // Ceiling 6 — a scoreStep-walked seed produced only {6,5,4,2,1} (5
-    // unique) and tripped the "varied spread > 5 distinct" leaderboard
-    // test. Use an explicit sequence so every integer 1..6 appears at
-    // least once across the 20-row demo board.
-    floor: 1, ceiling: 6, seedTime: 95.3, timeStep: 5.1,
-    scoreSequence: [6, 5, 5, 4, 4, 3, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1],
-  },
+  // visualisation-3d intentionally has no FAKE_TUNING entry — real scores
+  // only, matching trace-1. padLeaderboard short-circuits when tuning is
+  // absent.
   'flag': {
     floor: 55, ceiling: 104, seedTime: 60, timeStep: 0,
     // 20 values, monotonically non-increasing, max 104, min 55. Higher is

@@ -1,5 +1,4 @@
 import { Canvas } from '@react-three/fiber'
-import { Edges } from '@react-three/drei'
 import { COMPOSITES, PRIMITIVES, compositeCorners } from '../../utils/cbat/visualisation3DPuzzle'
 
 // Static fixed-camera Three Fiber canvas. Renders one composite shape with one
@@ -26,8 +25,7 @@ export default function Visualisation3DShape({
   const corners = compositeCorners(composite)
   const dotCorner = corners.find((c) => c.id === dotCornerId)
 
-  const shapeColor = accent === 'prompt' ? '#5baaff' : '#7e94b3'
-  const edgeColor  = '#0a1424'
+  const shapeColor = accent === 'prompt' ? '#5baaff' : '#94a8c4'
 
   return (
     <Canvas
@@ -36,9 +34,13 @@ export default function Visualisation3DShape({
       camera={{ position: [3, 2.6, 4.2], fov: 32 }}
       style={{ width: size, height: size }}
     >
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[5, 8, 6]} intensity={0.9} />
-      <directionalLight position={[-4, 2, -3]} intensity={0.25} />
+      {/* Low ambient keeps faces shaded enough to read silhouettes by contrast;
+          the bright key light from the upper-right + softer back-fill carve
+          each face with a distinct value so the union looks volumetric without
+          any outline. */}
+      <ambientLight intensity={0.35} />
+      <directionalLight position={[6, 9, 5]}   intensity={1.4} />
+      <directionalLight position={[-5, 3, -4]} intensity={0.35} />
       <group rotation={rotation}>
         {comp.parts.map((part, partIdx) => (
           <PrimitiveMesh
@@ -47,7 +49,6 @@ export default function Visualisation3DShape({
             offset={part.offset}
             scale={part.scale}
             color={shapeColor}
-            edgeColor={edgeColor}
           />
         ))}
         {dotCorner && (
@@ -61,7 +62,7 @@ export default function Visualisation3DShape({
   )
 }
 
-function PrimitiveMesh({ primKey, offset, scale, color, edgeColor }) {
+function PrimitiveMesh({ primKey, offset, scale, color }) {
   const prim = PRIMITIVES[primKey]
   if (!prim) return null
 
@@ -92,8 +93,7 @@ function PrimitiveMesh({ primKey, offset, scale, color, edgeColor }) {
   return (
     <mesh position={offset} scale={scale} rotation={meshRotation}>
       {geometry}
-      <meshStandardMaterial color={color} flatShading roughness={0.85} />
-      <Edges threshold={15} color={edgeColor} />
+      <meshStandardMaterial color={color} flatShading roughness={0.8} />
     </mesh>
   )
 }
