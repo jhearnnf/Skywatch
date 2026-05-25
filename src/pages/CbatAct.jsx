@@ -298,14 +298,19 @@ function TunnelStripes({ curve, proximityRef, ballPosRef }) {
 
 function ShapeGate({ event, curve, ballT }) {
   // Compute world position + orientation along the curve at this event's t.
+  // Lateral offset (event.offsetU/V) is in the shape's local cross-section
+  // frame — applying the quaternion rotates it into world space so shapes
+  // sit off-centre in the tunnel instead of all on the centreline.
   const { position, quaternion } = useMemo(() => {
     const pos = curve.getPointAt(event.t)
     const tan = curve.getTangentAt(event.t).normalize()
     const up  = new THREE.Vector3(0, 1, 0)
     const m   = new THREE.Matrix4().lookAt(new THREE.Vector3(0, 0, 0), tan, up)
     const q   = new THREE.Quaternion().setFromRotationMatrix(m)
+    const local = new THREE.Vector3(event.offsetU || 0, event.offsetV || 0, 0)
+    pos.add(local.applyQuaternion(q))
     return { position: pos, quaternion: q }
-  }, [event.t, curve])
+  }, [event.t, event.offsetU, event.offsetV, curve])
 
   // Shapes ahead of the ball glow brighter; ones behind dim out.
   const passed = ballT > event.t
@@ -909,6 +914,15 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
         const ev = events[eventIdxRef.current++]
         const shapeCentre  = curve.getPointAt(ev.t)
         const shapeTangent = curve.getTangentAt(ev.t)
+        // Apply the same lateral offset the renderer uses so the threading
+        // check matches what the player sees.
+        if (ev.offsetU || ev.offsetV) {
+          const upRef = new THREE.Vector3(0, 1, 0)
+          const evMat = new THREE.Matrix4().lookAt(new THREE.Vector3(0, 0, 0), shapeTangent.clone().normalize(), upRef)
+          const evQuat = new THREE.Quaternion().setFromRotationMatrix(evMat)
+          const offsetLocal = new THREE.Vector3(ev.offsetU || 0, ev.offsetV || 0, 0).applyQuaternion(evQuat)
+          shapeCentre.add(offsetLocal)
+        }
         // Project ball→shape onto the cross-section perpendicular to the curve
         // at ev.t. This measures the LATERAL offset only — the same thing the
         // wall-snap uses — so a small tangential offset (which can happen when

@@ -55,9 +55,21 @@ export const END_MARGIN_T = 0.05
 // circle/square — triangles always intermix freely.
 export const SHAPE_REPEAT_PROB = [0.30, 0.45, 0.55, 0.65, 0.72]
 
-// Shape mix in the stream. Triangles dominate so there's always plenty of
-// inert filler between any two circles or any two squares.
-export const TRIANGLE_FRACTION = 0.5
+// Shape mix in the stream — the INITIAL roll probability for triangles.
+// The spacing invariant (≥ RENDERED_AHEAD+1 between same-shape events) forces
+// additional triangles when both circle and square are blocked, so the actual
+// triangle ratio ends up ~15-20 points higher than this value. Keep this low
+// enough that round 1 has enough non-triangle events to support 2+ avoid
+// cues (each avoid needs a non-triangle target at index ≥ RENDERED_AHEAD+1).
+export const TRIANGLE_FRACTION = 0.30
+
+// Max lateral offset of a shape from the curve centreline, in world units.
+// Each event gets a random {offsetU, offsetV} within a disc of this radius —
+// the renderer applies it through the shape's local cross-section frame, so
+// shapes appear off-centre in the tunnel instead of all sitting dead-centre.
+// Tunnel radius is 2.0 and shape radius is 0.7, so 0.7 keeps the shape edge
+// at ≤ 1.4 from the wall — still comfortably threadable.
+export const MAX_SHAPE_OFFSET = 0.7
 
 // Floor on per-round avoid cue count — the player must hear their callsign
 // at least this many times so they can train recognition under stress.
@@ -66,109 +78,140 @@ export const MIN_AVOID_CUES = 2
 // Ceiling on per-round avoid cue count — even when avoidOdds rolls high, no
 // round should ship more than this many avoids. Keeps round duration honest
 // and prevents pile-ups when the same-shape stream happens to be dense.
-export const MAX_AVOID_CUES = 5
+export const MAX_AVOID_CUES = 7
 
 // ── Shape stream ────────────────────────────────────────────────────────────
 
 // Produce the in-tunnel shape sequence for one round. Returns events in
 // strict t-order with ids 0..count-1.
+//
+// Spacing invariant: any two same-shape circle/square events are at least
+// RENDERED_AHEAD + 2 apart in index. The audio planner rejects any avoid
+// target with prevSameShape >= i - RENDERED_AHEAD - 1, so prevSameShape
+// must satisfy i - prevSameShape > RENDERED_AHEAD + 1. Without this
+// invariant the constraint rejects ~70% of candidates and rounds end up
+// with only 1 avoid cue.
 export function generateShapeEvents(curveLen, count, roundIdx) {
   const startMarginT = Math.min(0.45, START_BUFFER_WORLD_UNITS / curveLen)
   const repeatProb = SHAPE_REPEAT_PROB[Math.min(roundIdx, 4)]
   const events = []
   let prev = null
+  let lastCircleIdx = -Infinity
+  let lastSquareIdx = -Infinity
   for (let i = 0; i < count; i++) {
     const t = startMarginT + (1 - END_MARGIN_T - startMarginT) * (i / Math.max(1, count - 1))
+    const canCircle = i - lastCircleIdx > RENDERED_AHEAD + 1
+    const canSquare = i - lastSquareIdx > RENDERED_AHEAD + 1
     let shape
-    if (Math.random() < TRIANGLE_FRACTION) {
+    if (Math.random() < TRIANGLE_FRACTION || (!canCircle && !canSquare)) {
       shape = 'triangle'
-    } else if (prev === 'circle' || prev === 'square') {
-      // Repeat-bias only applies when the previous shape was a circle/square.
-      // After a triangle, we always pick a fresh circle/square at 50/50 so
-      // the avoid-target pool stays balanced.
-      shape = Math.random() < repeatProb
-        ? prev
-        : (prev === 'circle' ? 'square' : 'circle')
+    } else if (canCircle && canSquare) {
+      if (prev === 'circle' || prev === 'square') {
+        // Repeat-bias only applies when the previous shape was a
+        // circle/square; after a triangle, fresh 50/50 keeps the
+        // avoid-target pool balanced.
+        shape = Math.random() < repeatProb
+          ? prev
+          : (prev === 'circle' ? 'square' : 'circle')
+      } else {
+        shape = Math.random() < 0.5 ? 'circle' : 'square'
+      }
+    } else if (canCircle) {
+      shape = 'circle'
     } else {
-      shape = Math.random() < 0.5 ? 'circle' : 'square'
+      shape = 'square'
     }
+    if (shape === 'circle') lastCircleIdx = i
+    else if (shape === 'square') lastSquareIdx = i
     prev = shape
     const colorIdx = Math.floor(Math.random() * 4)
-    events.push({ id: i, t, shape, colorIdx, threaded: null })
+    // Random lateral offset within a disc of radius MAX_SHAPE_OFFSET — sqrt
+    // on the magnitude gives uniform area density so offsets don't bunch up
+    // toward the centre. offsetU/offsetV are in the shape's local cross-
+    // section frame; the renderer + threading check transform them to world.
+    const offsetAngle = Math.random() * Math.PI * 2
+    const offsetMag = Math.sqrt(Math.random()) * MAX_SHAPE_OFFSET
+    const offsetU = Math.cos(offsetAngle) * offsetMag
+    const offsetV = Math.sin(offsetAngle) * offsetMag
+    events.push({ id: i, t, shape, colorIdx, offsetU, offsetV, threaded: null })
   }
   return events
 }
 
 // ── Audio plan ──────────────────────────────────────────────────────────────
 
-// Returns null if no valid audioT exists for this candidate target under the
-// off-screen / think-time / no-overlap constraints, else { audioT,
-// newActiveWindowEnd }. Pure function — caller decides whether to commit the
-// cue.
-function tryScheduleAvoidCue(events, targetIdx, activeWindowEndT, params) {
+// Returns the natural audio-T window for this candidate target — the window
+// dictated by off-screen + same-shape + think-time constraints, IGNORING any
+// already-scheduled cues. Returns null if no such window exists. Callers
+// further intersect this with the "free" intervals around existing cues.
+function naturalAudioWindow(events, targetIdx, params) {
   const target = events[targetIdx]
-  const { minCueToTargetGapT, postTargetGapT } = params
+  const { minCueToTargetGapT } = params
 
-  // Find the previous same-shape event index (largest k < targetIdx with
-  // matching shape). The earliest the avoid audio can start is just after
-  // this event — any earlier and the player would see a same-shape that
-  // isn't the target.
   let prevSameShape = -1
   for (let k = targetIdx - 1; k >= 0; k--) {
     if (events[k].shape === target.shape) { prevSameShape = k; break }
   }
 
-  // The target's off-screen entry point is events[targetIdx - RENDERED_AHEAD - 1].
-  // If audioT < that t, the target is still beyond the render horizon at audio
-  // start. Need at least RENDERED_AHEAD + 1 events between firstUpcoming and target.
   const offscreenAnchorIdx = targetIdx - RENDERED_AHEAD - 1
   if (offscreenAnchorIdx < 0) return null
-  if (prevSameShape !== -1 && prevSameShape >= offscreenAnchorIdx) {
-    // A same-shape sits inside what would otherwise be the off-screen buffer.
-    // Can't schedule without violating "first same-shape player sees IS the
-    // target".
-    return null
-  }
+  if (prevSameShape !== -1 && prevSameShape >= offscreenAnchorIdx) return null
 
   const lower = Math.max(
     AUDIO_WARMUP_T,
-    activeWindowEndT,
     prevSameShape >= 0 ? events[prevSameShape].t + 0.002 : 0
   )
-  const upperByOffscreen = events[offscreenAnchorIdx].t - 0.002
-  const upperByGap = target.t - minCueToTargetGapT
-  const upper = Math.min(upperByOffscreen, upperByGap)
-
+  const upper = Math.min(
+    events[offscreenAnchorIdx].t - 0.002,
+    target.t - minCueToTargetGapT
+  )
   if (upper <= lower) return null
+  return { lower, upper, targetT: target.t }
+}
 
-  // Place audioT randomly inside the valid window. Random placement keeps the
-  // game from feeling metronomic.
-  const audioT = lower + Math.random() * (upper - lower)
-  return { audioT, newActiveWindowEnd: target.t + postTargetGapT }
+// Find an audioT that fits in the natural window AND doesn't overlap any
+// already-scheduled avoid cue's active span [audioT, targetT + postGap]. The
+// new cue may sit BEFORE or AFTER each existing one — that's what lets the
+// top-up loop slot extra cues into gaps that the greedy primary pass left
+// behind. Returns null if no valid audioT exists.
+function findAudioTAroundExisting(window, candidateTargetT, existingCues, postTargetGapT) {
+  const candidateEnd = candidateTargetT + postTargetGapT
+  // Free intervals (so far) start as the entire natural window.
+  let free = [{ start: window.lower, end: window.upper }]
+  for (const c of existingCues) {
+    const blockStart = c.audioT
+    const blockEnd   = c.targetT + postTargetGapT
+    // New cue ends before block starts → no conflict with this block, leave
+    // the free intervals untouched.
+    if (candidateEnd <= blockStart) continue
+    // New cue's target sits inside/after block → audioT must start past
+    // blockEnd, so trim each free interval to [max(start, blockEnd), end].
+    const next = []
+    for (const f of free) {
+      if (f.end <= blockEnd) continue
+      next.push({ start: Math.max(f.start, blockEnd), end: f.end })
+    }
+    free = next
+    if (!free.length) return null
+  }
+  const usable = free.filter(f => f.end > f.start)
+  if (!usable.length) return null
+  // Pick one slot weighted by length, then a random audioT inside it.
+  let total = 0
+  for (const f of usable) total += f.end - f.start
+  let pick = usable[0]
+  let r = Math.random() * total
+  for (const f of usable) {
+    const len = f.end - f.start
+    if (r < len) { pick = f; break }
+    r -= len
+  }
+  return pick.start + Math.random() * (pick.end - pick.start)
 }
 
 // Build the per-round audio plan. Returns cues sorted by t.
 export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curveLen) {
   const cues = []
-
-  // Step 1: roll for avoid targets — circles/squares only.
-  const avoidIdxs = new Set()
-  for (let i = 0; i < events.length; i++) {
-    if (events[i].shape === 'triangle') continue
-    if (Math.random() < roundCfg.avoidOdds) avoidIdxs.add(i)
-  }
-  // Cap at MAX_AVOID_CUES — randomly cull rather than truncating from the
-  // tail, so the surviving cues stay spread across the round instead of all
-  // clustering early.
-  if (avoidIdxs.size > MAX_AVOID_CUES) {
-    const arr = [...avoidIdxs]
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[arr[i], arr[j]] = [arr[j], arr[i]]
-    }
-    avoidIdxs.clear()
-    for (let i = 0; i < MAX_AVOID_CUES; i++) avoidIdxs.add(arr[i])
-  }
 
   // Derived spacing in t-units.
   const safeCurveLen = Math.max(1, curveLen)
@@ -176,49 +219,134 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
   const postTargetGapT = (POST_TARGET_GAP_S * roundCfg.speed) / safeCurveLen
   const params = { minCueToTargetGapT, postTargetGapT }
 
-  // Step 2: schedule each rolled-avoid cue. Drop any that can't satisfy the
-  // off-screen + think-time invariants — better to lose a cue than to ship
-  // one that's ambiguous to the player.
-  let activeWindowEndT = AUDIO_WARMUP_T
-  for (let i = 0; i < events.length; i++) {
-    if (!avoidIdxs.has(i)) continue
-    const result = tryScheduleAvoidCue(events, i, activeWindowEndT, params)
-    if (!result) continue
-    cues.push({ t: result.audioT, kind: 'avoid', callsigns: userCallsign, shape: events[i].shape })
-    activeWindowEndT = result.newActiveWindowEnd
+  // Tracks placed avoid cues so subsequent placements can slot between them.
+  const placed = []
+  const placedIdxs = new Set()
+
+  function placeAvoid(i) {
+    if (placedIdxs.has(i)) return false
+    const win = naturalAudioWindow(events, i, params)
+    if (!win) return false
+    const audioT = findAudioTAroundExisting(win, win.targetT, placed, postTargetGapT)
+    if (audioT == null) return false
+    placed.push({ audioT, targetT: win.targetT, shape: events[i].shape })
+    placedIdxs.add(i)
+    return true
   }
 
-  // Step 2b: top up until we have MIN_AVOID_CUES. Iterate over non-triangle
-  // events that weren't already used. The picked event is purely for timing
-  // anchoring; the runtime resolver re-binds the actual target to whatever
-  // the player will see first.
-  let avoidCueCount = cues.filter(c => c.kind === 'avoid').length
-  const usedAnchorIds = new Set()
-  for (let i = 0; i < events.length && avoidCueCount < MIN_AVOID_CUES; i++) {
-    const ev = events[i]
-    if (ev.shape === 'triangle') continue
-    if (avoidIdxs.has(i)) continue
-    if (usedAnchorIds.has(ev.id)) continue
-    const result = tryScheduleAvoidCue(events, i, activeWindowEndT, params)
-    if (!result) continue
-    cues.push({ t: result.audioT, kind: 'avoid', callsigns: userCallsign, shape: ev.shape })
-    usedAnchorIds.add(ev.id)
-    avoidCueCount += 1
-    activeWindowEndT = result.newActiveWindowEnd
+  // Step 1: roll for avoid targets — circles/squares only.
+  const rolled = []
+  for (let i = 0; i < events.length; i++) {
+    if (events[i].shape === 'triangle') continue
+    if (Math.random() < roundCfg.avoidOdds) rolled.push(i)
+  }
+  // Cap at MAX_AVOID_CUES — randomly cull rather than truncating from the
+  // tail, so the surviving cues stay spread across the round.
+  if (rolled.length > MAX_AVOID_CUES) {
+    for (let i = rolled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[rolled[i], rolled[j]] = [rolled[j], rolled[i]]
+    }
+    rolled.length = MAX_AVOID_CUES
+    rolled.sort((a, b) => a - b)
+  }
+
+  // Step 2: place each rolled candidate. Slot-finder picks an audioT that
+  // doesn't overlap any previously-placed cue's active span — so the order
+  // of placement doesn't matter for correctness.
+  for (const i of rolled) placeAvoid(i)
+
+  // Step 2b: top up until we have MIN_AVOID_CUES. Try every remaining non-
+  // triangle event in a randomised order so we don't always pull from the
+  // start — late events have wider natural windows and are more likely to
+  // succeed once the round is partly filled.
+  if (placed.length < MIN_AVOID_CUES) {
+    const remaining = []
+    for (let i = 0; i < events.length; i++) {
+      if (events[i].shape === 'triangle') continue
+      if (placedIdxs.has(i)) continue
+      remaining.push(i)
+    }
+    for (let i = remaining.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[remaining[i], remaining[j]] = [remaining[j], remaining[i]]
+    }
+    for (const i of remaining) {
+      if (placed.length >= MIN_AVOID_CUES) break
+      if (placed.length >= MAX_AVOID_CUES) break
+      placeAvoid(i)
+    }
+  }
+
+  // Step 2c: brute-force pair fallback. When Step 2 happens to land a cue
+  // in the middle of the round, its block can lock out every later event's
+  // natural window (next-anchor sits inside the block). Step 2b then can't
+  // top up. As a last resort, scan every (A, B) pair of eligible events
+  // and adopt the first pair that fits — even if it means discarding what
+  // we've placed so far. The floor is more important than preserving any
+  // particular cue.
+  if (placed.length < MIN_AVOID_CUES) {
+    const eligible = []
+    for (let i = 0; i < events.length; i++) {
+      if (events[i].shape === 'triangle') continue
+      const win = naturalAudioWindow(events, i, params)
+      if (!win) continue
+      eligible.push({ i, win, shape: events[i].shape })
+    }
+    for (let a = 0; a < eligible.length; a++) {
+      for (let b = a + 1; b < eligible.length; b++) {
+        const A = eligible[a]
+        const B = eligible[b]
+        // A's target.t < B's target.t (eligible is sorted by index/t).
+        // Place A as early as possible, then check B's effective window.
+        const effBLower = Math.max(B.win.lower, A.win.targetT + postTargetGapT)
+        if (effBLower >= B.win.upper) continue
+        // Also check A's upper doesn't conflict with B going first:
+        // A's audio must end before B's audio starts. Since A.target.t <
+        // B.audio (by effBLower), A's block ends at A.target.t + postGap ≤
+        // effBLower ≤ B.audio. OK.
+        placed.length = 0
+        placedIdxs.clear()
+        const audioA = A.win.lower + Math.random() * (A.win.upper - A.win.lower) * 0.4
+        const audioB = effBLower + Math.random() * (B.win.upper - effBLower)
+        placed.push({ audioT: audioA, targetT: A.win.targetT, shape: A.shape })
+        placedIdxs.add(A.i)
+        placed.push({ audioT: audioB, targetT: B.win.targetT, shape: B.shape })
+        placedIdxs.add(B.i)
+        a = eligible.length
+        break
+      }
+    }
+  }
+
+  // Commit placed avoids into the cue list.
+  for (const p of placed) {
+    cues.push({ t: p.audioT, kind: 'avoid', callsigns: userCallsign, shape: p.shape })
   }
 
   // Step 3: distractors — fire near non-target events with a non-matching
   // callsign. Distractors always use circle/square shape names since the
   // audio engine has no "avoid the next triangle" clip; saying it would
   // play just the callsigns and feel broken.
+  //
+  // Skip any distractor whose audio span [audioT, ev.t] overlaps a placed
+  // avoid cue's span [audioT, targetT + postGap] — the runtime's exclusive
+  // audio engine would silently drop whichever fires second, and losing the
+  // avoid is the bad case (player misses an instruction they should obey).
   for (let i = 0; i < events.length; i++) {
-    if (avoidIdxs.has(i)) continue
+    if (placedIdxs.has(i)) continue
     if (Math.random() >= roundCfg.distractorOdds) continue
     const distractorSet = generateDistractorCallsign(userCallsign)
     if (!distractorSet) continue
     const ev = events[i]
     const audioT = Math.max(AUDIO_WARMUP_T, ev.t - 0.06)
     if (audioT >= ev.t) continue
+    let conflicts = false
+    for (const p of placed) {
+      const pEnd = p.targetT + postTargetGapT
+      if (audioT < pEnd && ev.t > p.audioT) { conflicts = true; break }
+    }
+    if (conflicts) continue
     const distractorShape = Math.random() < 0.5 ? 'circle' : 'square'
     cues.push({ t: audioT, kind: 'distractor', callsigns: distractorSet, shape: distractorShape, targetId: null })
   }
