@@ -23,11 +23,15 @@ const mongoose = require('mongoose');
 // seed these docs will fail loudly — signalling the helper needs updating.
 // Extra keys are ignored by Mongoose strict mode on schemas that don't declare
 // them, so this stays safe across the registry.
+// modeFilter is spread in so split-game registry entries (e.g. plane-turn-2d
+// and plane-turn-3d share one collection but require mode='2d'/'3d') seed docs
+// that match their cfg's filter.
 function seedCbatDoc(cfg, userId) {
   return cfg.Model.create({
     userId,
     [cfg.primaryField]: 1,
     totalTime: 1,
+    ...(cfg.modeFilter ?? {}),
     roundsPlayed: 1,
     score: 0, // required by GameSessionCbatTrace1Result; stripped by others
   });

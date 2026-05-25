@@ -207,9 +207,11 @@ const appSettingsSchema = new mongoose.Schema({
     of: Boolean,
     default: () => ({
       target: true, ant: true, symbols: true, 'code-duplicates': true,
-      angles: true, instruments: true, 'plane-turn': true, flag: true,
-      'visualisation-2d': true, dpt: true, act: true,
-      'visualisation-3d': false, dad: false,
+      angles: true, instruments: true,
+      'plane-turn-2d': true, 'plane-turn-3d': true,
+      flag: true, 'visualisation-2d': true, 'visualisation-3d': true,
+      dpt: true, act: true,
+      dad: false,
     }),
   },
 
@@ -391,21 +393,36 @@ appSettingsSchema.statics.getSettings = async function () {
     // Backfill cbatGameEnabled — ensure every known CBAT game key is present.
     // Implemented games default to enabled; the 3 unimplemented (path=null on FE)
     // default to disabled. Saves Mongoose Map shape directly.
+    //
+    // Migration: legacy 'plane-turn' single key is split into 'plane-turn-2d' and
+    // 'plane-turn-3d'. Its prior value (enabled/disabled) is copied to BOTH new
+    // keys so admins keep whatever state they had, then the legacy key is dropped.
     {
       const KNOWN_KEYS = {
         target: true, ant: true, symbols: true, 'code-duplicates': true,
-        angles: true, instruments: true, 'plane-turn': true, flag: true,
-        'visualisation-2d': true, dpt: true, act: true,
-        'visualisation-3d': false, dad: false,
+        angles: true, instruments: true,
+        'plane-turn-2d': true, 'plane-turn-3d': true,
+        flag: true, 'visualisation-2d': true, 'visualisation-3d': true,
+        dpt: true, act: true,
+        dad: false,
       };
       const current = settings.cbatGameEnabled;
       let touched = false;
       const next = {};
-      // Preserve existing entries
+      let legacyPlaneTurn;
       if (current && typeof current.forEach === 'function') {
-        current.forEach((v, k) => { next[k] = v; });
+        current.forEach((v, k) => {
+          if (k === 'plane-turn') { legacyPlaneTurn = v; touched = true; return; }
+          next[k] = v;
+        });
       }
       for (const [k, v] of Object.entries(KNOWN_KEYS)) {
+        if (k === 'plane-turn-2d' && !(k in next) && legacyPlaneTurn !== undefined) {
+          next[k] = legacyPlaneTurn; continue;
+        }
+        if (k === 'plane-turn-3d' && !(k in next) && legacyPlaneTurn !== undefined) {
+          next[k] = legacyPlaneTurn; continue;
+        }
         if (!(k in next)) { next[k] = v; touched = true; }
       }
       if (touched) updates.cbatGameEnabled = next;

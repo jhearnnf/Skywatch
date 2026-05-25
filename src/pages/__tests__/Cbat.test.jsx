@@ -38,21 +38,21 @@ function renderWithUser(user = { _id: '1', name: 'Test' }) {
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('CBAT_GAMES data', () => {
-  it('has 13 games with images and 0 without', () => {
-    expect(GAMES_WITH_IMAGES.length).toBe(13)
+  it('has 12 games with images and 0 without', () => {
+    expect(GAMES_WITH_IMAGES.length).toBe(12)
     expect(GAMES_WITHOUT_IMAGES.length).toBe(0)
   })
 
   it('image paths match expected filenames', () => {
     const expected = {
-      'target':           '/images/Target.png',
-      'ant':              '/images/ANT.png',
-      'symbols':          '/images/Symbols.png',
-      'code-duplicates':  '/images/Code Duplicates.png',
-      'angles':           '/images/Angles.png',
-      'instruments':      '/images/Instruments.png',
-      'plane-turn':       '/images/Plane Turn.png',
-      'visualisation-2d': '/images/Visualisation 2D.png',
+      'target':          '/images/Target.png',
+      'ant':             '/images/ANT.png',
+      'symbols':         '/images/Symbols.png',
+      'code-duplicates': '/images/Code Duplicates.png',
+      'angles':          '/images/Angles.png',
+      'instruments':     '/images/Instruments.png',
+      'plane-turn':      '/images/Plane Turn.png',
+      'visualisation':   '/images/Visualisation 2D.png',
     }
     for (const [key, path] of Object.entries(expected)) {
       const game = CBAT_GAMES.find(g => g.key === key)
@@ -61,7 +61,7 @@ describe('CBAT_GAMES data', () => {
   })
 
   it('coming-soon games use the placeholder image', () => {
-    const comingSoonKeys = ['dad', 'visualisation-3d']
+    const comingSoonKeys = ['dad']
     for (const key of comingSoonKeys) {
       const game = CBAT_GAMES.find(g => g.key === key)
       expect(game.image).toBe('/images/placeholder-brief.svg')
@@ -85,7 +85,7 @@ describe('Cbat page — background images', () => {
 
   it('renders a bg image for coming-soon games using the placeholder', () => {
     renderWithUser()
-    const placeholderKeys = ['dad', 'visualisation-3d']
+    const placeholderKeys = ['dad']
     for (const key of placeholderKeys) {
       const img = screen.getByTestId(`card-bg-image-${key}`)
       expect(img).toBeInTheDocument()

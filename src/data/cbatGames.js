@@ -14,9 +14,28 @@ export const CBAT_GAMES = [
   { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: '/cbat/instruments',     image: '/images/Instruments.png' },
   { key: 'plane-turn',      emoji: '🗺️', title: 'TRACE 1/2',         desc: 'Practise your turn and heading, or take the Trace recall test.',             path: '/cbat/trace',           image: '/images/Plane Turn.png' },
   { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png' },
-  { key: 'visualisation-2d', emoji: '🧮', title: 'Visualisation 2D', desc: 'Mentally weld labelled shapes into the correct final figure.', path: '/cbat/visualisation-2d', image: '/images/Visualisation 2D.png' },
+  { key: 'visualisation',    emoji: '🧮', title: 'Visualisation 2D/3D', desc: 'Mentally weld 2D shapes or mentally rotate 3D composites to spot the matching figure.', path: '/cbat/visualisation',    image: '/images/Visualisation 2D.png' },
   { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png' },
   { key: 'act',              emoji: '🎧', title: 'ACT',              desc: 'Auditory Capacity Test — track callsigns, steer through the right gates, react to bleeps.', path: '/cbat/act',             image: '/images/ACT.png' },
-  { key: 'visualisation-3d', emoji: '🧊', title: 'Visualisation 3D', desc: 'Rotate and reason about 3D shapes — coming soon.',      path: null,                    image: '/images/placeholder-brief.svg' },
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — coming soon.',               path: null,                    image: '/images/placeholder-brief.svg' },
 ]
+
+// Admin-side list — one entry per backend cbatGameEnabled key. Diverges from
+// CBAT_GAMES at TRACE 1/2 and Visualisation 2D/3D: the hub shows one tile each
+// linking to a combined page, but the backend registry splits those keys into
+// separate 2D/3D entries, so admins get an independent enable/disable per mode.
+export const CBAT_ADMIN_GAMES = CBAT_GAMES.flatMap(g => {
+  if (g.key === 'plane-turn') {
+    return [
+      { ...g, key: 'plane-turn-2d', title: 'Plane Turn 2D' },
+      { ...g, key: 'plane-turn-3d', title: 'Plane Turn 3D' },
+    ]
+  }
+  if (g.key === 'visualisation') {
+    return [
+      { ...g, key: 'visualisation-2d', title: 'Visualisation 2D' },
+      { ...g, key: 'visualisation-3d', title: 'Visualisation 3D' },
+    ]
+  }
+  return [g]
+})

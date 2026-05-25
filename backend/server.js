@@ -32,6 +32,9 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     // Reconcile User.displayNameLower index — drops legacy non-partial
     // unique index that caused E11000 on null when a second user registered.
     await require('./migrations/syncUserDisplayNameIndex')();
+    // Split legacy GameSessionCbatStart docs (gameKey:'plane-turn') into
+    // 'plane-turn-2d' to match the registry split. Idempotent.
+    await require('./migrations/splitPlaneTurnStarts')({ db: mongoose.connection.db });
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })

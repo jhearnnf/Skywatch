@@ -59,7 +59,7 @@ import CbatTarget       from './pages/CbatTarget'
 import CbatInstruments  from './pages/CbatInstruments'
 import CbatAnt from './pages/CbatAnt'
 import CbatFlag from './pages/CbatFlag'
-import CbatVisualisation2D from './pages/CbatVisualisation2D'
+import CbatVisualisation from './pages/CbatVisualisation'
 import CbatDpt from './pages/CbatDpt'
 import CbatAct from './pages/CbatAct'
 import CbatLeaderboard from './pages/CbatLeaderboard'
@@ -240,6 +240,7 @@ function AppRoutes() {
           <Route path="/cbat"                   element={<PageWrapper><Cbat /></PageWrapper>} />
           <Route path="/cbat/trace"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="plane-turn"        gameTitle="TRACE 1/2"       ><CbatPlaneTurn       /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/plane-turn"        element={<Navigate to="/cbat/trace" replace />} />
+          <Route path="/cbat/plane-turn/leaderboard" element={<Navigate to="/cbat/plane-turn-2d/leaderboard" replace />} />
           <Route path="/cbat/angles"           element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="angles"            gameTitle="Angles"          ><CbatAngles          /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/code-duplicates" element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="code-duplicates"   gameTitle="Code Duplicates" ><CbatCodeDuplicates  /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/symbols"          element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="symbols"           gameTitle="Symbols"         ><CbatSymbols         /></CbatGameGuard></PageWrapper></RequireAuth>} />
@@ -247,7 +248,9 @@ function AppRoutes() {
           <Route path="/cbat/instruments"      element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="instruments"       gameTitle="Instruments"     ><CbatInstruments     /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/ant"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="ant"               gameTitle="ANT"             ><CbatAnt             /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/flag"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="flag"              gameTitle="FLAG"            ><CbatFlag            /></CbatGameGuard></PageWrapper></RequireAuth>} />
-          <Route path="/cbat/visualisation-2d" element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="visualisation-2d"  gameTitle="Visualisation 2D"><CbatVisualisation2D /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/visualisation"    element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="visualisation"     gameTitle="Visualisation 2D/3D"><CbatVisualisation /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/visualisation-2d" element={<Navigate to="/cbat/visualisation" replace />} />
+          <Route path="/cbat/visualisation-3d" element={<Navigate to="/cbat/visualisation" replace />} />
           <Route path="/cbat/dpt"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="dpt"               gameTitle="DPT"             ><CbatDpt             /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/act"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="act"               gameTitle="ACT"             ><CbatAct             /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/:gameKey/leaderboard" element={<RequireAuth><PageWrapper><CbatLeaderboard /></PageWrapper></RequireAuth>} />

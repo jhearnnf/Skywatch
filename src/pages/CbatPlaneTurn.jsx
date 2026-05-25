@@ -231,8 +231,11 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
     ? (personalBest && <>Best: <span className="text-brand-300">{personalBest.bestScore}/40</span></>)
     : (personalBest && <>{personalBest.bestScore} rotations <span className="text-slate-500 mx-1">·</span> {personalBest.bestTime.toFixed(1)}s</>)
 
-  // Leaderboard target depends on mode.
-  const leaderboardPath = gameModeTrace1 ? '/cbat/trace-1/leaderboard' : '/cbat/plane-turn/leaderboard'
+  // Leaderboard target depends on mode. Plane Turn 2D and 3D are separate
+  // backend games with their own leaderboards.
+  const leaderboardPath = gameModeTrace1
+    ? '/cbat/trace-1/leaderboard'
+    : `/cbat/plane-turn-${gameMode3D ? '3d' : '2d'}/leaderboard`
 
   return (
     <div>
@@ -631,18 +634,19 @@ export default function CbatPlaneTurn() {
     if (mode === 'trace2') return
     const url = mode === 'trace1'
       ? `${API}/api/games/cbat/trace-1/personal-best`
-      : `${API}/api/games/cbat/plane-turn/personal-best?mode=${mode}`
+      : `${API}/api/games/cbat/plane-turn-${mode}/personal-best`
     apiFetch(url)
       .then(r => r.json())
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
   }, [user, mode])
 
-  // Submit score
+  // Submit score — mode determines the backend gameKey, which fixes the mode
+  // on the saved doc server-side (body no longer needs to send it).
   const submitScore = useCallback((finalRotations, finalTime, aircraftTitle) => {
     setScoreSaved(false)
     markGameCompleted({ score: finalRotations })
-    apiFetch(`${API}/api/games/cbat/plane-turn/result`, {
+    apiFetch(`${API}/api/games/cbat/plane-turn-${mode}/result`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -650,13 +654,12 @@ export default function CbatPlaneTurn() {
         totalTime: finalTime,
         levelsCompleted: MAX_LEVEL,
         aircraftUsed: aircraftTitle,
-        mode,
       }),
     })
       .then(r => r.json())
       .then(() => {
         setScoreSaved(true)
-        apiFetch(`${API}/api/games/cbat/plane-turn/personal-best?mode=${mode}`)
+        apiFetch(`${API}/api/games/cbat/plane-turn-${mode}/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
           .catch(() => {})
@@ -1041,7 +1044,7 @@ export default function CbatPlaneTurn() {
 
   // Handlers
   const handleSelect = (a) => {
-    startTracking(gameModeTrace1 ? 'trace-1' : 'plane-turn', { mode })
+    startTracking(gameModeTrace1 ? 'trace-1' : `plane-turn-${mode}`, { mode })
     const modelUrl = getModelUrl(a.briefId, a.title)
     setSelected({ ...a, modelUrl })
     setUse3D(true)
@@ -1108,7 +1111,7 @@ export default function CbatPlaneTurn() {
   }
 
   const handlePlayAgain = () => {
-    startTracking(gameModeTrace1 ? 'trace-1' : 'plane-turn', { mode })
+    startTracking(gameModeTrace1 ? 'trace-1' : `plane-turn-${mode}`, { mode })
     setTotalRotations(0)
     setTotalTime(0)
     setScoreSaved(false)
@@ -1318,7 +1321,7 @@ export default function CbatPlaneTurn() {
                       Play Again
                     </button>
                     <Link
-                      to="/cbat/plane-turn/leaderboard"
+                      to={leaderboardPath}
                       className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
                     >
                       🏆 Leaderboard

@@ -766,10 +766,10 @@ router.patch('/settings', requireReason, async (req, res) => {
     // The 3 unimplemented games cannot be enabled — no backend route exists yet.
     const CBAT_KNOWN_KEYS = new Set([
       'target', 'ant', 'symbols', 'code-duplicates', 'angles', 'instruments',
-      'plane-turn', 'flag', 'visualisation-2d', 'dpt', 'act',
-      'visualisation-3d', 'dad',
+      'plane-turn-2d', 'plane-turn-3d', 'flag', 'visualisation-2d', 'visualisation-3d',
+      'dpt', 'act', 'dad',
     ]);
-    const CBAT_UNIMPLEMENTED = new Set(['visualisation-3d', 'dad']);
+    const CBAT_UNIMPLEMENTED = new Set(['dad']);
     if ('cbatGameEnabled' in updates) {
       const v = updates.cbatGameEnabled;
       if (!v || typeof v !== 'object' || Array.isArray(v)) {
@@ -1088,7 +1088,7 @@ async function enrichUsersWithStats(users) {
       { $group: { _id: '$userId', count: { $sum: 1 } } },
     ]),
     ...cbatConfigs.map(cfg => cfg.Model.aggregate([
-      { $match: { userId: { $in: userIds } } },
+      { $match: { ...(cfg.modeFilter ?? {}), userId: { $in: userIds } } },
       { $group: { _id: '$userId', count: { $sum: 1 } } },
     ])),
   ]);
@@ -1449,7 +1449,7 @@ router.get('/users/:id/cbat-history', protect, adminOnly, async (req, res) => {
 
     const [allStarts, ...finishesPerGame] = await Promise.all([
       GameSessionCbatStart.find({ userId: uid }).lean(),
-      ...cbatEntries.map(([, cfg]) => cfg.Model.find({ userId: uid }).lean()),
+      ...cbatEntries.map(([, cfg]) => cfg.Model.find({ ...(cfg.modeFilter ?? {}), userId: uid }).lean()),
     ]);
 
     const startsByGame = {};

@@ -5,7 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 
 const GAME_LABELS = {
-  'plane-turn':       'Plane Turn',
+  'plane-turn-2d':    'Plane Turn 2D',
+  'plane-turn-3d':    'Plane Turn 3D',
   'angles':           'Angles',
   'code-duplicates':  'Code Duplicates',
   'symbols':          'Symbols',
@@ -14,6 +15,7 @@ const GAME_LABELS = {
   'ant':              'Airborne Numerical Test',
   'flag':             'FLAG',
   'visualisation-2d': 'Visualisation 2D',
+  'visualisation-3d': 'Visualisation 3D',
   'dpt':              'DPT',
 }
 

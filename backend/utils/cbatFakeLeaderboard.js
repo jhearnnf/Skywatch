@@ -16,8 +16,8 @@ const FAKE_AGENTS = [
 ];
 
 const GAME_OFFSET = {
-  'plane-turn:2d':   0,
-  'plane-turn:3d':   1,
+  'plane-turn-2d':   0,
+  'plane-turn-3d':   1,
   'angles':          4,
   'code-duplicates': 8,
   'symbols':        12,
@@ -26,6 +26,7 @@ const GAME_OFFSET = {
   'ant':             2,
   'flag':            6,
   'visualisation-2d': 10,
+  'visualisation-3d': 11,
   'dpt':             14,
   'act':             18,
 };
@@ -48,11 +49,11 @@ const GAME_OFFSET = {
 // instead of every demo row showing a .0 second tie. Exception: `flag` is a
 // fixed-60s game where every real run also displays 60.0, so its fakes match.
 const FAKE_TUNING = {
-  'plane-turn:2d': {
+  'plane-turn-2d': {
     floor: 42, ceiling: 107, seedTime: 80.4, timeStep: 3.3,
     scoreSequence: [42, 45, 48, 52, 55, 58, 62, 65, 68, 72, 75, 78, 82, 85, 88, 92, 95, 98, 102, 107],
   },
-  'plane-turn:3d': {
+  'plane-turn-3d': {
     // 3D adds vertical navigation, climbs/dives, and quaternion rotations —
     // real best runs land closer to ~180 rotations, not the ~65 the early
     // tuning assumed. Top demo of 180 keeps the board feeling competitive
@@ -89,6 +90,14 @@ const FAKE_TUNING = {
     scoreSequence: [70, 65, 60, 55, 50, 50, 45, 45, 40, 40, 35, 35, 30, 30, 25, 25, 20, 20, 15, 15],
   },
   'visualisation-2d': { floor: 1, ceiling: 7, seedScore: 7, seedTime: 70.5, scoreStep: 1, timeStep: 4.3 },
+  'visualisation-3d': {
+    // Ceiling 6 — a scoreStep-walked seed produced only {6,5,4,2,1} (5
+    // unique) and tripped the "varied spread > 5 distinct" leaderboard
+    // test. Use an explicit sequence so every integer 1..6 appears at
+    // least once across the 20-row demo board.
+    floor: 1, ceiling: 6, seedTime: 95.3, timeStep: 5.1,
+    scoreSequence: [6, 5, 5, 4, 4, 3, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1],
+  },
   'flag': {
     floor: 55, ceiling: 104, seedTime: 60, timeStep: 0,
     // 20 values, monotonically non-increasing, max 104, min 55. Higher is
@@ -117,8 +126,8 @@ const FAKE_TUNING = {
 const SCORE_STEPS = [1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1, 1];
 const TIME_STEPS  = [1, 1, 2, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1];
 
-function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin, tuningKey }) {
-  const offset = GAME_OFFSET[tuningKey ?? gameKey] ?? GAME_OFFSET[gameKey] ?? 0;
+function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
+  const offset = GAME_OFFSET[gameKey] ?? 0;
   const fakes = [];
   let runScore = tuning.seedScore;
   let runTime = tuning.seedTime;
@@ -138,8 +147,8 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin, tuningKey
       runTime += timeDelta;
     }
     const entry = {
-      _id: `fake-${tuningKey ?? gameKey}-${i}`,
-      userId: `fake-user-${tuningKey ?? gameKey}-${i}`,
+      _id: `fake-${gameKey}-${i}`,
+      userId: `fake-user-${gameKey}-${i}`,
       agentNumber: FAKE_AGENTS[(offset + i) % FAKE_AGENTS.length],
       bestScore: runScore,
       bestTime: Number(runTime.toFixed(1)),
@@ -159,10 +168,9 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin, tuningKey
 // and short-circuit when real already fills the board.
 const FULL_SEQUENCE_GAMES = new Set(['ant', 'code-duplicates', 'flag']);
 
-function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false, mode = null } = {}) {
+function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
   const cfg = CBAT_GAMES[gameKey];
-  const tuningKey = mode ? (`${gameKey}:${mode}` in FAKE_TUNING ? `${gameKey}:${mode}` : gameKey) : gameKey;
-  const tuning = FAKE_TUNING[tuningKey];
+  const tuning = FAKE_TUNING[gameKey];
 
   // No tuning for this game → just rank real entries as-is.
   if (!cfg || !tuning) {
@@ -182,7 +190,7 @@ function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false, mode = nul
 
   const lowerBetter = cfg.sortDir === 1;
   const needed = isFullSequence ? tuning.scoreSequence.length : (limit - real.length);
-  const fakes = generateFakes(gameKey, needed, { lowerBetter, tuning, isAdmin, tuningKey });
+  const fakes = generateFakes(gameKey, needed, { lowerBetter, tuning, isAdmin });
 
   // Merge real + fakes, then sort by points-priority, time-on-ties.
   const merged = [...real, ...fakes].sort((a, b) => {

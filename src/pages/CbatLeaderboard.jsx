@@ -1,20 +1,29 @@
 import { useState, useEffect } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
-import { usePlaneTurnMode } from '../hooks/usePlaneTurnMode'
 import PlaneTurnModeToggle from '../components/PlaneTurnModeToggle'
 
 // ── Game config — add new CBAT games here ────────────────────────────────────
 const GAME_CONFIG = {
-  'plane-turn': {
-    title: 'Plane Turn',
+  'plane-turn-2d': {
+    title: 'Plane Turn 2D',
     emoji: '\u{1F5FA}\uFE0F',
     scoreLabel: 'Rotations',
     lowerIsBetter: true,
     formatScore: (s) => `${s}`,
     backPath: '/cbat/trace',
+    planeTurnMode: '2d',
+  },
+  'plane-turn-3d': {
+    title: 'Plane Turn 3D',
+    emoji: '\u{1F5FA}\uFE0F',
+    scoreLabel: 'Rotations',
+    lowerIsBetter: true,
+    formatScore: (s) => `${s}`,
+    backPath: '/cbat/trace',
+    planeTurnMode: '3d',
   },
   'trace-1': {
     title: 'Trace 1',
@@ -90,7 +99,15 @@ const GAME_CONFIG = {
     scoreLabel: 'Correct',
     lowerIsBetter: false,
     formatScore: (s) => `${s}/8`,
-    backPath: '/cbat/visualisation-2d',
+    backPath: '/cbat/visualisation',
+  },
+  'visualisation-3d': {
+    title: 'Visualisation 3D',
+    emoji: '\u{1F9CA}',
+    scoreLabel: 'Correct',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}/8`,
+    backPath: '/cbat/visualisation',
   },
   'dpt': {
     title: 'DPT',
@@ -113,19 +130,19 @@ const GAME_CONFIG = {
 
 export default function CbatLeaderboard() {
   const { gameKey } = useParams()
+  const navigate = useNavigate()
   const { user, apiFetch, API } = useAuth()
   const [leaderboard, setLeaderboard] = useState([])
   const [myBest, setMyBest] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [mode, setMode] = usePlaneTurnMode()
 
   const cfg = GAME_CONFIG[gameKey]
+  const planeTurnMode = cfg?.planeTurnMode ?? null
 
   useEffect(() => {
     if (!user || !cfg) return
     setLoading(true)
-    const modeParam = gameKey === 'plane-turn' ? `?mode=${mode}` : ''
-    apiFetch(`${API}/api/games/cbat/${gameKey}/leaderboard${modeParam}`)
+    apiFetch(`${API}/api/games/cbat/${gameKey}/leaderboard`)
       .then(r => r.json())
       .then(d => {
         setLeaderboard(d.data?.leaderboard || [])
@@ -133,7 +150,13 @@ export default function CbatLeaderboard() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [user, gameKey, mode])
+  }, [user, gameKey])
+
+  // Plane Turn 2D and 3D are separate leaderboard URLs; the inline toggle
+  // navigates between them so users can flip without going back to the hub.
+  const handlePlaneTurnModeChange = (nextMode) => {
+    navigate(`/cbat/plane-turn-${nextMode}/leaderboard`)
+  }
 
   if (!cfg) {
     return (
@@ -157,11 +180,11 @@ export default function CbatLeaderboard() {
           <Link to={cfg.backPath} className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; Instructions</Link>
           <h1 className="text-sm font-extrabold text-slate-900">{cfg.emoji} {cfg.title} Leaderboard</h1>
         </div>
-        {gameKey === 'plane-turn' && <PlaneTurnModeToggle value={mode} onChange={setMode} />}
+        {planeTurnMode && <PlaneTurnModeToggle value={planeTurnMode} onChange={handlePlaneTurnModeChange} />}
       </div>
 
-      {gameKey === 'plane-turn' && (
-        <p className="text-[11px] text-slate-500 mb-2">Showing {mode === '3d' ? '3D' : '2D'} scores · best rotations through 5 levels</p>
+      {planeTurnMode && (
+        <p className="text-[11px] text-slate-500 mb-2">Showing {planeTurnMode === '3d' ? '3D' : '2D'} scores · best rotations through 5 levels</p>
       )}
 
       {loading ? (
@@ -222,7 +245,7 @@ export default function CbatLeaderboard() {
                       </span>
                       <span className="text-right font-mono font-bold text-brand-600">
                         {cfg.formatScore(entry.bestScore)}
-                        {gameKey === 'plane-turn' && mode === '3d' && (
+                        {planeTurnMode === '3d' && (
                           <span className="ml-1 text-[8px] font-bold px-1 py-0.5 rounded bg-brand-600/80 text-white leading-none align-middle">3D</span>
                         )}
                       </span>
@@ -248,7 +271,7 @@ export default function CbatLeaderboard() {
                     >{myBest.displayName || (myBest.email ? myBest.email : `Agent ${myBest.agentNumber || '???'}`)} (you)</span>
                     <span className="text-right font-mono font-bold text-brand-600">
                       {cfg.formatScore(myBest.bestScore)}
-                      {gameKey === 'plane-turn' && mode === '3d' && (
+                      {planeTurnMode === '3d' && (
                         <span className="ml-1 text-[8px] font-bold px-1 py-0.5 rounded bg-brand-600/80 text-white leading-none align-middle">3D</span>
                       )}
                     </span>

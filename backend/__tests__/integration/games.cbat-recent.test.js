@@ -7,7 +7,8 @@ const { createUser, createSettings, authCookie } = require('../helpers/factories
 const GameSessionCbatPlaneTurnResult = require('../../models/GameSessionCbatPlaneTurnResult');
 
 const ROUTE              = '/api/games/cbat/recent';
-const PLANE_TURN_RESULT  = '/api/games/cbat/plane-turn/result';
+const PLANE_TURN_RESULT     = '/api/games/cbat/plane-turn-2d/result';
+const PLANE_TURN_3D_RESULT  = '/api/games/cbat/plane-turn-3d/result';
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => { await createSettings(); });
@@ -140,20 +141,20 @@ describe('GET /api/games/cbat/recent — dedupe + 24h window', () => {
     expect(rows[0].score).toBe(35); // the 26h-old 10-rotation attempt is excluded
   });
 
-  it('keeps a separate row per mode for plane-turn', async () => {
+  it('keeps a separate row per mode for plane-turn (now distinct gameKeys)', async () => {
     const user = await createUser({ agentNumber: '3100004' });
     const cookie = authCookie(user._id);
 
     await request(app).post(PLANE_TURN_RESULT).set('Cookie', cookie)
-      .send({ totalRotations: 30, totalTime: 25, mode: '2d' });
-    await request(app).post(PLANE_TURN_RESULT).set('Cookie', cookie)
-      .send({ totalRotations: 28, totalTime: 24, mode: '3d' });
+      .send({ totalRotations: 30, totalTime: 25 });
+    await request(app).post(PLANE_TURN_3D_RESULT).set('Cookie', cookie)
+      .send({ totalRotations: 28, totalTime: 24 });
 
     const res = await request(app).get(ROUTE).set('Cookie', cookie);
     const rows = res.body.data.recent.filter(r => r.userId === String(user._id));
     expect(rows).toHaveLength(2);
-    const modes = rows.map(r => r.mode).sort();
-    expect(modes).toEqual(['2d', '3d']);
+    const keys = rows.map(r => r.gameKey).sort();
+    expect(keys).toEqual(['plane-turn-2d', 'plane-turn-3d']);
   });
 
   it('keeps separate rows for different users on the same game', async () => {
@@ -168,7 +169,7 @@ describe('GET /api/games/cbat/recent — dedupe + 24h window', () => {
       .send({ totalRotations: 32, totalTime: 27 });
 
     const res = await request(app).get(ROUTE).set('Cookie', cookieA);
-    const planeRows = res.body.data.recent.filter(r => r.gameKey === 'plane-turn');
+    const planeRows = res.body.data.recent.filter(r => r.gameKey === 'plane-turn-2d');
     expect(planeRows).toHaveLength(2);
     expect(planeRows.map(r => r.userId).sort())
       .toEqual([String(userA._id), String(userB._id)].sort());

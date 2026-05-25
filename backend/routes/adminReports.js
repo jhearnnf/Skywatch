@@ -57,8 +57,10 @@ function emptyDailyBuckets(start, end, extraKeys = []) {
 }
 
 // Mongo aggregation: group events by UTC day, return [{ date, count }].
-async function dailyCount(Model, dateField, since) {
-  const match = since ? { [dateField]: { $gte: since } } : {};
+// extraMatch lets callers narrow the collection (e.g. cfg.modeFilter to scope
+// shared-model registry entries like plane-turn-2d vs plane-turn-3d).
+async function dailyCount(Model, dateField, since, extraMatch = {}) {
+  const match = { ...extraMatch, ...(since ? { [dateField]: { $gte: since } } : {}) };
   const rows = await Model.aggregate([
     { $match: match },
     { $group: {
@@ -72,8 +74,8 @@ async function dailyCount(Model, dateField, since) {
 }
 
 // Mongo aggregation: per UTC day, count distinct userIds.
-async function dailyDistinctUsers(Model, dateField, userField, since) {
-  const match = since ? { [dateField]: { $gte: since } } : {};
+async function dailyDistinctUsers(Model, dateField, userField, since, extraMatch = {}) {
+  const match = { ...extraMatch, ...(since ? { [dateField]: { $gte: since } } : {}) };
   const rows = await Model.aggregate([
     { $match: match },
     { $group: {
@@ -104,7 +106,7 @@ function mergeDailyDistinctUsers(streams) {
 // All event streams that count as "user activity" for DAU.
 async function activityStreams(since) {
   const cbatStreams = await Promise.all(
-    Object.values(CBAT_GAMES).map(g => dailyDistinctUsers(g.Model, 'createdAt', 'userId', since))
+    Object.values(CBAT_GAMES).map(g => dailyDistinctUsers(g.Model, 'createdAt', 'userId', since, g.modeFilter ?? {}))
   );
   const [quiz, boo, wta, flash, apt, briefs] = await Promise.all([
     dailyDistinctUsers(GameSessionQuizAttempt,         'timeStarted', 'userId', since),
@@ -123,9 +125,9 @@ async function cbatStreams(since) {
     Object.entries(CBAT_GAMES).map(async ([key, g]) => ({
       key,
       label: g.label,
-      events: await dailyDistinctUsers(g.Model, 'createdAt', 'userId', since),
+      events: await dailyDistinctUsers(g.Model, 'createdAt', 'userId', since, g.modeFilter ?? {}),
       // also need raw count per day (sessions, not distinct-users)
-      sessionsByDay: await dailyCount(g.Model, 'createdAt', since),
+      sessionsByDay: await dailyCount(g.Model, 'createdAt', since, g.modeFilter ?? {}),
     }))
   );
 }
@@ -242,6 +244,7 @@ router.get('/window', async (req, res) => {
       const userIdsObj = newUsers.map(u => u._id);
       const cbatDocs = await Promise.all(
         Object.values(CBAT_GAMES).map(g => g.Model.find({
+          ...(g.modeFilter ?? {}),
           userId: { $in: userIdsObj },
         }).select('userId createdAt').lean())
       );
@@ -314,7 +317,7 @@ router.get('/cbat', async (req, res) => {
     // Need per-user session counts across ALL CBAT games.
     const perUserCountsAgg = await Promise.all(
       Object.values(CBAT_GAMES).map(g => g.Model.aggregate([
-        { $match: { createdAt: { $gte: wStart } } },
+        { $match: { ...(g.modeFilter ?? {}), createdAt: { $gte: wStart } } },
         { $group: { _id: '$userId', count: { $sum: 1 } } },
       ]))
     );
@@ -343,6 +346,7 @@ router.get('/cbat', async (req, res) => {
     const firstSessionByUser = new Map(); // userId → earliest createdAt across all CBAT
     const allFirstAgg = await Promise.all(
       Object.values(CBAT_GAMES).map(g => g.Model.aggregate([
+        ...(g.modeFilter ? [{ $match: g.modeFilter }] : []),
         { $group: { _id: '$userId', first: { $min: '$createdAt' }, last: { $max: '$createdAt' } } },
       ]))
     );
@@ -370,9 +374,10 @@ router.get('/cbat', async (req, res) => {
       const sessions = Array.from(g.sessionsByDay.values()).reduce((s, n) => s + n, 0);
       const players = new Set(g.events.map(e => e.userId)).size;
       // Abandon % = (starts - results) / starts within window.
+      const cfg = CBAT_GAMES[g.key];
       const [starts, results] = await Promise.all([
         GameSessionCbatStart.countDocuments({ gameKey: g.key, startedAt: { $gte: wStart } }),
-        CBAT_GAMES[g.key].Model.countDocuments({ createdAt: { $gte: wStart } }),
+        cfg.Model.countDocuments({ ...(cfg.modeFilter ?? {}), createdAt: { $gte: wStart } }),
       ]);
       const abandoned = Math.max(0, starts - results);
       const abandonPct = starts ? abandoned / starts : 0;

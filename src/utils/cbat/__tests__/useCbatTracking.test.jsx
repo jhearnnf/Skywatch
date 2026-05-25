@@ -108,13 +108,13 @@ describe('useCbatTracking', () => {
 
   it('meta from start flows into started/completed/abandoned events', () => {
     const { result } = renderHook(() => useCbatTracking())
-    act(() => { result.current.start('plane-turn', { mode: '3d' }) })
-    expect(mockCapture).toHaveBeenCalledWith('game_started', { gameKey: 'plane-turn', mode: '3d' })
+    act(() => { result.current.start('plane-turn-3d', { mode: '3d' }) })
+    expect(mockCapture).toHaveBeenCalledWith('game_started', { gameKey: 'plane-turn-3d', mode: '3d' })
 
     act(() => { vi.advanceTimersByTime(1500) })
     act(() => { result.current.markCompleted({ score: 42 }) })
     expect(mockCapture).toHaveBeenLastCalledWith('game_completed', {
-      gameKey: 'plane-turn',
+      gameKey: 'plane-turn-3d',
       durationMs: 1500,
       mode: '3d',
       score: 42,
@@ -123,11 +123,11 @@ describe('useCbatTracking', () => {
 
   it('meta is included on abandon', () => {
     const { result, unmount } = renderHook(() => useCbatTracking())
-    act(() => { result.current.start('plane-turn', { mode: '2d' }) })
+    act(() => { result.current.start('plane-turn-2d', { mode: '2d' }) })
     act(() => { vi.advanceTimersByTime(800) })
     unmount()
     expect(mockCapture).toHaveBeenCalledWith('game_abandoned', expect.objectContaining({
-      gameKey: 'plane-turn',
+      gameKey: 'plane-turn-2d',
       mode: '2d',
       reason: 'unmount',
     }))

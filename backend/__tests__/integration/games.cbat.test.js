@@ -30,11 +30,13 @@ beforeEach(async () => {
 afterEach(async () => db.clearDatabase());
 afterAll(async () => db.closeDatabase());
 
-// ── Plane Turn ───────────────────────────────────────────────────────────────
-describe('CBAT Plane Turn', () => {
-  const RESULT_URL = '/api/games/cbat/plane-turn/result';
-  const LEADERBOARD_URL = '/api/games/cbat/plane-turn/leaderboard';
-  const PB_URL = '/api/games/cbat/plane-turn/personal-best';
+// ── Plane Turn 2D ────────────────────────────────────────────────────────────
+// (Plane Turn 3D mirrors the same endpoints under /plane-turn-3d/* and stores
+// docs with mode:'3d'; covered by games.cbat-recent split-mode test.)
+describe('CBAT Plane Turn 2D', () => {
+  const RESULT_URL = '/api/games/cbat/plane-turn-2d/result';
+  const LEADERBOARD_URL = '/api/games/cbat/plane-turn-2d/leaderboard';
+  const PB_URL = '/api/games/cbat/plane-turn-2d/personal-best';
 
   describe('POST /result', () => {
     it('saves a result and returns 201', async () => {

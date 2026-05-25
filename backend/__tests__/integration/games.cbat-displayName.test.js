@@ -5,8 +5,8 @@ const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createSettings, authCookie } = require('../helpers/factories');
 
-const RESULT_URL       = '/api/games/cbat/plane-turn/result';
-const LEADERBOARD_URL  = '/api/games/cbat/plane-turn/leaderboard';
+const RESULT_URL       = '/api/games/cbat/plane-turn-2d/result';
+const LEADERBOARD_URL  = '/api/games/cbat/plane-turn-2d/leaderboard';
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => { await createSettings(); });

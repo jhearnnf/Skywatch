@@ -29,6 +29,7 @@ function seedCbatFinish(cfg, userId, overrides = {}) {
     [cfg.primaryField]: overrides[cfg.primaryField] ?? 1,
     totalTime:    overrides.totalTime    ?? 1,
     roundsPlayed: overrides.roundsPlayed ?? 1,
+    ...(cfg.modeFilter ?? {}),
     ...overrides,
   });
 }

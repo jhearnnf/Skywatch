@@ -6,6 +6,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
 import RecentCbatScores from '../components/RecentCbatScores'
 import { CBAT_GAMES } from '../data/cbatGames'
+import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
 export { CBAT_GAMES }
@@ -79,7 +80,7 @@ export default function Cbat() {
   const [flickeringKey, setFlickeringKey] = useState(null)
   const showNewBadge = Date.now() < NEW_GAME_DEADLINE.getTime()
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
-  const isGameEnabled = (key) => cbatGameEnabled[key] !== false
+  const isGameEnabled = (key) => isCbatGameEnabled(cbatGameEnabled, key)
 
   // Signed-in users get a Recent Scores side column on lg+ — widen the page
   // shell so the existing 2-column game grid keeps its natural width instead

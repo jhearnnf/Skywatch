@@ -1,4 +1,5 @@
 import { lazy } from 'react'
+import { isCbatGameEnabled } from '../../../utils/cbat/isCbatGameEnabled'
 
 // Phase 3 will replace these placeholders with one scene per CBAT game.
 // The registry is built dynamically from src/data/cbatGames.js (lifted from
@@ -18,8 +19,8 @@ const CbatDptScene         = lazy(() => import('../scenes/cbat/CbatDptScene'))
 const CbatActScene         = lazy(() => import('../scenes/cbat/CbatActScene'))
 
 // Mapping from CBAT_GAMES key (in src/data/cbatGames.js) → scene component.
-// If a key has no entry here it is silently skipped — useful for the 2
-// unimplemented placeholders (visualisation-3d, dad).
+// If a key has no entry here it is silently skipped — useful for the
+// unimplemented placeholders (dad).
 const SCENE_BY_KEY = {
   target:            CbatTargetScene,
   ant:               CbatAntScene,
@@ -29,7 +30,7 @@ const SCENE_BY_KEY = {
   instruments:       CbatInstrumentsScene,
   'plane-turn':      CbatPlaneTurnScene,
   flag:              CbatFlagScene,
-  'visualisation-2d': CbatVisualisation2DScene,
+  visualisation:     CbatVisualisation2DScene,
   dpt:               CbatDptScene,
   act:               CbatActScene,
 }
@@ -43,7 +44,7 @@ const TITLE_BY_KEY = {
   instruments:       'READ THE COCKPIT',
   'plane-turn':      'PLAN YOUR TURN',
   flag:              'PUSH THE LIMITS',
-  'visualisation-2d':'FIT THE PIECES',
+  visualisation:     'FIT THE PIECES',
   dpt:               'VECTOR THE FIGHTERS',
   act:               'TUNE YOUR EAR',
 }
@@ -72,7 +73,7 @@ export function buildCbatScenes(settings, user, cbatGames) {
     const Component = SCENE_BY_KEY[game.key]
     if (!Component) continue              // no scene built (e.g. coming-soon)
     if (!game.path) continue              // game has no live route — skip
-    const enabled = cbatGameEnabled[game.key] !== false
+    const enabled = isCbatGameEnabled(cbatGameEnabled, game.key)
     if (!enabled && !isAdmin) continue    // admin disabled it for non-admins
     scenes.push({
       id: `cbat-${game.key}`,

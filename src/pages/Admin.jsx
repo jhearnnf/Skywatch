@@ -28,6 +28,7 @@ import SEO from '../components/SEO'
 import { has3DModel } from '../data/aircraftModels'
 import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } from '../../backend/constants/categories.json'
 import { CBAT_GAMES } from './Cbat'
+import { CBAT_ADMIN_GAMES } from '../data/cbatGames'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -2529,7 +2530,7 @@ function SettingsTab({ API }) {
                   Enable CBAT Games above to configure individual game settings.
                 </p>
               ) : (
-                CBAT_GAMES.map(game => {
+                CBAT_ADMIN_GAMES.map(game => {
                   const isImpl   = !!game.path
                   const enabled  = isGameEnabled(game.key)
                   const open     = !!cbatGameRowsOpen[game.key]

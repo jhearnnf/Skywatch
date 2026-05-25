@@ -23,7 +23,7 @@ const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { CBAT_GAMES } = require('../constants/cbatGames');
 const { padLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
-const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn'].Model;
+const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn-2d'].Model;
 const GameSessionCbatAnglesResult         = CBAT_GAMES['angles'].Model;
 const GameSessionCbatCodeDuplicatesResult = CBAT_GAMES['code-duplicates'].Model;
 const GameSessionCbatSymbolsResult        = CBAT_GAMES['symbols'].Model;
@@ -32,6 +32,7 @@ const GameSessionCbatInstrumentsResult    = CBAT_GAMES['instruments'].Model;
 const GameSessionCbatAntResult            = CBAT_GAMES['ant'].Model;
 const GameSessionCbatFlagResult           = CBAT_GAMES['flag'].Model;
 const GameSessionCbatVisualisation2DResult = CBAT_GAMES['visualisation-2d'].Model;
+const GameSessionCbatVisualisation3DResult = CBAT_GAMES['visualisation-3d'].Model;
 const GameSessionCbatDptResult             = CBAT_GAMES['dpt'].Model;
 const GameSessionCbatActResult             = CBAT_GAMES['act'].Model;
 
@@ -2266,11 +2267,12 @@ router.post('/cbat/trace-1/result', protect, async (req, res) => {
   }
 });
 
-// POST /api/games/cbat/plane-turn/result
-router.post('/cbat/plane-turn/result', protect, async (req, res) => {
+// POST /api/games/cbat/plane-turn-2d/result and /plane-turn-3d/result
+// Mode is fixed by the gameKey suffix — the body's `mode` (if any) is ignored
+// so the doc's mode field always matches the gameKey registry entry.
+async function submitPlaneTurnResult(req, res, mode) {
   try {
-    const { totalRotations, totalTime, levelsCompleted, aircraftUsed, mode: rawMode } = req.body;
-    const mode = ['2d', '3d'].includes(rawMode) ? rawMode : '2d';
+    const { totalRotations, totalTime, levelsCompleted, aircraftUsed } = req.body;
     const result = await GameSessionCbatPlaneTurnResult.create({
       userId: req.user._id,
       totalRotations,
@@ -2283,7 +2285,9 @@ router.post('/cbat/plane-turn/result', protect, async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
-});
+}
+router.post('/cbat/plane-turn-2d/result', protect, (req, res) => submitPlaneTurnResult(req, res, '2d'));
+router.post('/cbat/plane-turn-3d/result', protect, (req, res) => submitPlaneTurnResult(req, res, '3d'));
 
 // POST /api/games/cbat/angles/result
 router.post('/cbat/angles/result', protect, async (req, res) => {
@@ -2446,6 +2450,24 @@ router.post('/cbat/visualisation-2d/result', protect, async (req, res) => {
   }
 });
 
+// POST /api/games/cbat/visualisation-3d/result
+router.post('/cbat/visualisation-3d/result', protect, async (req, res) => {
+  try {
+    const { correctCount, tier1Correct, tier2Correct, totalTime, grade } = req.body;
+    const result = await GameSessionCbatVisualisation3DResult.create({
+      userId: req.user._id,
+      correctCount,
+      tier1Correct,
+      tier2Correct,
+      totalTime,
+      grade,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/games/cbat/dpt/result — Dynamic Projection Test
 router.post('/cbat/dpt/result', protect, async (req, res) => {
   try {
@@ -2507,14 +2529,11 @@ async function cbatLeaderboard(req, res, gameKey) {
   if (!cfg) return res.status(400).json({ message: 'Unknown game' });
 
   const isAdmin = !!req.user?.isAdmin;
-
-  const mode = cfg.modeField
-    ? (['2d', '3d'].includes(req.query.mode) ? req.query.mode : '2d')
-    : null;
+  const modeFilter = cfg.modeFilter ?? null;
 
   try {
     const pipeline = [
-      ...(mode ? [{ $match: { [cfg.modeField]: mode } }] : []),
+      ...(modeFilter ? [{ $match: modeFilter }] : []),
       // Sort first so the $group's $first keeps each user's best session.
       { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
       {
@@ -2557,7 +2576,7 @@ async function cbatLeaderboard(req, res, gameKey) {
     // Pad with demo rows and re-sort so points-priority order holds across the
     // merged list. padLeaderboard reassigns each row's rank based on its
     // position after sort (real and fake interleaved by score / time).
-    const padded = padLeaderboard(leaderboard, gameKey, { limit: 20, isAdmin, mode });
+    const padded = padLeaderboard(leaderboard, gameKey, { limit: 20, isAdmin });
 
     // Surface the user's entry from the padded list when they're in view; fall
     // back to a real-only rank computation when they're outside the top 20.
@@ -2567,8 +2586,7 @@ async function cbatLeaderboard(req, res, gameKey) {
       if (myEntry) {
         myBest = myEntry;
       } else {
-        const modeFilter = mode ? { [cfg.modeField]: mode } : {};
-        const [best] = await cfg.Model.find({ userId: req.user._id, ...modeFilter })
+        const [best] = await cfg.Model.find({ ...(modeFilter ?? {}), userId: req.user._id })
           .sort({ [cfg.primaryField]: cfg.sortDir, totalTime: 1 })
           .limit(1)
           .lean();
@@ -2578,7 +2596,7 @@ async function cbatLeaderboard(req, res, gameKey) {
           // Count distinct users whose *best* session beats this one, so the
           // out-of-top-20 rank matches the deduped leaderboard above.
           const betterAgg = await cfg.Model.aggregate([
-            ...(mode ? [{ $match: { [cfg.modeField]: mode } }] : []),
+            ...(modeFilter ? [{ $match: modeFilter }] : []),
             { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
             {
               $group: {
@@ -2625,7 +2643,8 @@ async function cbatLeaderboard(req, res, gameKey) {
   }
 }
 
-router.get('/cbat/plane-turn/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'plane-turn'));
+router.get('/cbat/plane-turn-2d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'plane-turn-2d'));
+router.get('/cbat/plane-turn-3d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'plane-turn-3d'));
 router.get('/cbat/angles/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'angles'));
 router.get('/cbat/code-duplicates/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'code-duplicates'));
 router.get('/cbat/symbols/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'symbols'));
@@ -2634,6 +2653,7 @@ router.get('/cbat/instruments/leaderboard', protect, (req, res) => cbatLeaderboa
 router.get('/cbat/ant/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant'));
 router.get('/cbat/flag/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag'));
 router.get('/cbat/visualisation-2d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-2d'));
+router.get('/cbat/visualisation-3d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-3d'));
 router.get('/cbat/dpt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt'));
 router.get('/cbat/act/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'act'));
 router.get('/cbat/trace-1/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'trace-1'));
@@ -2643,19 +2663,16 @@ async function cbatPersonalBest(req, res, gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return res.status(400).json({ message: 'Unknown game' });
 
-  const mode = cfg.modeField
-    ? (['2d', '3d'].includes(req.query.mode) ? req.query.mode : '2d')
-    : null;
-  const modeFilter = mode ? { [cfg.modeField]: mode } : {};
+  const modeFilter = cfg.modeFilter ?? {};
 
   try {
-    const [best] = await cfg.Model.find({ userId: req.user._id, ...modeFilter })
+    const [best] = await cfg.Model.find({ ...modeFilter, userId: req.user._id })
       .sort({ [cfg.primaryField]: cfg.sortDir, totalTime: 1 })
       .limit(1)
       .lean();
     if (!best) return res.json({ status: 'success', data: null });
 
-    const attempts = await cfg.Model.countDocuments({ userId: req.user._id, ...modeFilter });
+    const attempts = await cfg.Model.countDocuments({ ...modeFilter, userId: req.user._id });
     res.json({
       status: 'success',
       data: {
@@ -2695,18 +2712,19 @@ router.get('/cbat/recent', protect, async (req, res) => {
     // we need the full 24h window so dedupe can pick the true best per (user, game, mode).
     const perGame = await Promise.all(
       Object.entries(CBAT_GAMES).map(async ([gameKey, cfg]) => {
-        const sessions = await cfg.Model.find({ createdAt: { $gte: cutoff } })
+        const sessions = await cfg.Model.find({ ...(cfg.modeFilter ?? {}), createdAt: { $gte: cutoff } })
           .sort({ createdAt: -1 })
           .lean();
         return sessions.map(s => ({ session: s, gameKey, cfg }));
       })
     );
 
-    // Dedupe per (user, game, mode) keeping the best session by leaderboard comparator.
+    // Dedupe per (user, gameKey) — the registry already encodes mode in the
+    // gameKey (e.g. plane-turn-2d / plane-turn-3d), so the gameKey alone is
+    // the per-game-per-mode identifier.
     const bestByKey = new Map();
     for (const row of perGame.flat()) {
-      const modePart = row.cfg.modeField ? String(row.session[row.cfg.modeField] ?? '') : '';
-      const key = `${row.session.userId}::${row.gameKey}::${modePart}`;
+      const key = `${row.session.userId}::${row.gameKey}`;
       const existing = bestByKey.get(key);
       if (!existing || isBetter(row.session, existing.session, row.cfg)) {
         bestByKey.set(key, row);
@@ -2724,7 +2742,7 @@ router.get('/cbat/recent', protect, async (req, res) => {
     const recent = await Promise.all(merged.map(async ({ session, gameKey, cfg }) => {
       const scoreVal = session[cfg.primaryField];
       const timeVal  = session.totalTime;
-      const modeFilter = cfg.modeField ? { [cfg.modeField]: session[cfg.modeField] } : {};
+      const modeFilter = cfg.modeFilter ?? {};
 
       const countBetter = await cfg.Model.countDocuments({
         ...modeFilter,
@@ -2756,7 +2774,6 @@ router.get('/cbat/recent', protect, async (req, res) => {
         time:        timeVal,
         rank:        countBetter + 1,
         achievedAt:  session.createdAt,
-        ...(cfg.modeField ? { mode: session[cfg.modeField] } : {}),
       };
     }));
 
@@ -2766,7 +2783,8 @@ router.get('/cbat/recent', protect, async (req, res) => {
   }
 });
 
-router.get('/cbat/plane-turn/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'plane-turn'));
+router.get('/cbat/plane-turn-2d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'plane-turn-2d'));
+router.get('/cbat/plane-turn-3d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'plane-turn-3d'));
 router.get('/cbat/angles/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'angles'));
 router.get('/cbat/code-duplicates/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'code-duplicates'));
 router.get('/cbat/symbols/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'symbols'));
@@ -2775,6 +2793,7 @@ router.get('/cbat/instruments/personal-best', protect, (req, res) => cbatPersona
 router.get('/cbat/ant/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant'));
 router.get('/cbat/flag/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag'));
 router.get('/cbat/visualisation-2d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-2d'));
+router.get('/cbat/visualisation-3d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-3d'));
 router.get('/cbat/dpt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt'));
 router.get('/cbat/act/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'act'));
 router.get('/cbat/trace-1/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'trace-1'));

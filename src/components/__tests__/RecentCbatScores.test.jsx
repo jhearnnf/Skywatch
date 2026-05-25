@@ -32,7 +32,7 @@ describe('RecentCbatScores — current-user highlight', () => {
     setupAuth({
       userId: 'me',
       apiFetch: mockFetch([
-        { _id: 'r1', userId: 'other', gameKey: 'plane-turn', gameLabel: 'Plane Turn', rank: 1, agentNumber: 'A999', displayName: 'Maverick', achievedAt: new Date().toISOString() },
+        { _id: 'r1', userId: 'other', gameKey: 'plane-turn-2d', gameLabel: 'Plane Turn 2D', rank: 1, agentNumber: 'A999', displayName: 'Maverick', achievedAt: new Date().toISOString() },
         { _id: 'r2', userId: 'me',    gameKey: 'angles',     gameLabel: 'Angles',     rank: 4, agentNumber: 'A001', displayName: 'Goose',    achievedAt: new Date().toISOString() },
       ]),
     })
@@ -46,7 +46,7 @@ describe('RecentCbatScores — current-user highlight', () => {
     setupAuth({
       userId: 'me',
       apiFetch: mockFetch([
-        { _id: 'r1', userId: 'other', gameKey: 'plane-turn', gameLabel: 'Plane Turn', rank: 1, agentNumber: 'A999', displayName: 'Maverick', achievedAt: new Date().toISOString() },
+        { _id: 'r1', userId: 'other', gameKey: 'plane-turn-2d', gameLabel: 'Plane Turn 2D', rank: 1, agentNumber: 'A999', displayName: 'Maverick', achievedAt: new Date().toISOString() },
       ]),
     })
     render(<RecentCbatScores />)

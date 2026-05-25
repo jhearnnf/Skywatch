@@ -19,7 +19,7 @@ function timeAgo(iso) {
 // (which itself imports this component) and keeps the side column self-contained.
 const EMOJI_BY_KEY = {
   'target': '🎯', 'ant': '📡', 'symbols': '🔣', 'code-duplicates': '🧩',
-  'angles': '📐', 'instruments': '🛫', 'plane-turn': '🗺️', 'flag': '🚩',
+  'angles': '📐', 'instruments': '🛫', 'plane-turn-2d': '🗺️', 'plane-turn-3d': '🗺️', 'flag': '🚩',
   'visualisation-2d': '🧮', 'dpt': '🛩️', 'act': '🎧', 'trace-1': '🛩️',
   'visualisation-3d': '🧊', 'dad': '🧭',
 }
