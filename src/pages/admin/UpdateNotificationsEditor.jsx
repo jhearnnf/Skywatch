@@ -21,6 +21,7 @@ const EMPTY_DRAFT = {
   expiresAt:  '',
   targetPath: '',
   responsesEnabled: false,
+  applyToExistingOnly: false,
 }
 
 // Convert an ISO date string (or null) to the value expected by
@@ -86,6 +87,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
       expiresAt:  toLocalInput(n.expiresAt),
       targetPath: n.targetPath ?? '',
       responsesEnabled: !!n.responsesEnabled,
+      applyToExistingOnly: !!n.applyToExistingOnly,
     })
     setAiOutput('')
     setEditorOpen(true)
@@ -290,6 +292,14 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                     {n.enabled
                       ? <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">on</span>
                       : <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-50 text-slate-700">off</span>}
+                    {n.applyToExistingOnly && (
+                      <span
+                        className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700"
+                        title="Only users registered before the cutoff see this"
+                      >
+                        existing only
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
                     {pageLabelForValue(n.targetPath)} · views {n.viewersCount}
@@ -438,6 +448,20 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                   onChange={e => setDraft(d => ({ ...d, responsesEnabled: e.target.checked }))}
                 />
                 <span>Allow user responses ("have your say" text input)</span>
+              </label>
+
+              <label className="flex items-start gap-2 mt-2 text-sm text-text">
+                <input
+                  type="checkbox" checked={draft.applyToExistingOnly}
+                  onChange={e => setDraft(d => ({ ...d, applyToExistingOnly: e.target.checked }))}
+                  className="mt-0.5"
+                />
+                <span>
+                  Apply to existing users only
+                  <span className="block text-[11px] text-slate-500 mt-0.5">
+                    Users registered after {draft.validFrom ? '"Valid from"' : 'this notification is saved'} won't see it.
+                  </span>
+                </span>
               </label>
 
               {/* AI summary helper */}

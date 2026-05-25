@@ -5,6 +5,21 @@ const UpdateNotification = require('../models/UpdateNotification');
 // All endpoints require an authenticated user.
 router.use(protect);
 
+// "Apply to existing users only" gate. Cutoff per notification = validFrom if
+// set, else createdAt (frozen at save time). A user qualifies when their
+// account existed at or before that cutoff. Split-OR avoids $expr so the
+// indexed query path stays simple.
+function existingOnlyClause(user) {
+  const userCreatedAt = user?.createdAt ?? new Date(0);
+  return {
+    $or: [
+      { applyToExistingOnly: { $ne: true } },
+      { applyToExistingOnly: true, validFrom: { $ne: null, $gte: userCreatedAt } },
+      { applyToExistingOnly: true, validFrom: null, createdAt: { $gte: userCreatedAt } },
+    ],
+  };
+}
+
 // GET /api/update-notifications/current?path=<pathname>
 // Returns the single newest active notification matching this path's scope,
 // but only if the current user has NOT already seen it. There is intentionally
@@ -26,6 +41,7 @@ router.get('/current', async (req, res) => {
       $and: [
         ...(active.$and || []),
         { $or: [{ targetPath: '' }, { targetPath: path }] },
+        existingOnlyClause(req.user),
       ],
     };
 
@@ -54,10 +70,18 @@ router.get('/current', async (req, res) => {
 // All currently-active notifications, newest first. Used by the modal's
 // Previous/Next browser. Excludes viewedBy to keep the payload small and to
 // avoid leaking other users' view records.
-router.get('/history', async (_req, res) => {
+router.get('/history', async (req, res) => {
   try {
+    const active = UpdateNotification.activeFilter();
+    const filter = {
+      ...active,
+      $and: [
+        ...(active.$and || []),
+        existingOnlyClause(req.user),
+      ],
+    };
     const docs = await UpdateNotification
-      .find(UpdateNotification.activeFilter(), { viewedBy: 0 })
+      .find(filter, { viewedBy: 0 })
       .sort({ createdAt: -1 })
       .lean();
     res.json({ status: 'success', data: { notifications: docs } });

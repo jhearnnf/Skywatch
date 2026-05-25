@@ -18,6 +18,13 @@ const {
 } = require('../helpers/factories');
 
 const UpdateNotification = require('../../models/UpdateNotification');
+const User               = require('../../models/User');
+
+// Mongoose's timestamps plugin protects createdAt from $set in mongoose's
+// updateOne path. Bypass via the raw driver so the field actually changes.
+async function setUserCreatedAt(user, when) {
+  await User.collection.updateOne({ _id: user._id }, { $set: { createdAt: when } });
+}
 
 beforeAll(async () => { await db.connect(); });
 afterEach(async () => { await db.clearDatabase(); });
@@ -159,6 +166,94 @@ describe('GET /api/update-notifications/current', () => {
       .get('/api/update-notifications/current?path=/home')
       .set('Cookie', authCookie(user._id));
     expect(onHome.body.data.notification.title).toBe('home-only');
+  });
+
+  describe('applyToExistingOnly', () => {
+    it('hides the notification from users who registered after notification.createdAt when no validFrom is set', async () => {
+      const oldUser = await createUser();
+      await setUserCreatedAt(oldUser, new Date('2024-01-01T00:00:00Z'));
+
+      // Notification created "now" — anchor is its own createdAt.
+      const notif = await createNotification({
+        title: 'existing-only-no-validfrom',
+        applyToExistingOnly: true,
+      });
+
+      // New user signs up AFTER the notification was created.
+      const newUser = await createUser();
+      await setUserCreatedAt(newUser, new Date(notif.createdAt.getTime() + 60_000));
+
+      const oldRes = await request(app)
+        .get('/api/update-notifications/current')
+        .set('Cookie', authCookie(oldUser._id));
+      expect(oldRes.body.data.notification?.title).toBe('existing-only-no-validfrom');
+
+      const newRes = await request(app)
+        .get('/api/update-notifications/current')
+        .set('Cookie', authCookie(newUser._id));
+      expect(newRes.body.data.notification).toBeNull();
+    });
+
+    it('uses validFrom as the cutoff when set, regardless of notification.createdAt', async () => {
+      const cutoff = new Date('2025-06-15T00:00:00Z');
+
+      const oldUser = await createUser();
+      await setUserCreatedAt(oldUser, new Date('2025-06-01T00:00:00Z'));
+      const newUser = await createUser();
+      await setUserCreatedAt(newUser, new Date('2025-06-20T00:00:00Z'));
+
+      await createNotification({
+        title: 'existing-only-with-validfrom',
+        applyToExistingOnly: true,
+        validFrom: cutoff,
+      });
+
+      const oldRes = await request(app)
+        .get('/api/update-notifications/current')
+        .set('Cookie', authCookie(oldUser._id));
+      expect(oldRes.body.data.notification?.title).toBe('existing-only-with-validfrom');
+
+      const newRes = await request(app)
+        .get('/api/update-notifications/current')
+        .set('Cookie', authCookie(newUser._id));
+      expect(newRes.body.data.notification).toBeNull();
+    });
+
+    it('does not affect users when applyToExistingOnly is false (default)', async () => {
+      const notif = await createNotification({ title: 'open-to-all' });
+      const newUser = await createUser();
+      await setUserCreatedAt(newUser, new Date(notif.createdAt.getTime() + 60_000));
+
+      const res = await request(app)
+        .get('/api/update-notifications/current')
+        .set('Cookie', authCookie(newUser._id));
+      expect(res.body.data.notification?.title).toBe('open-to-all');
+    });
+
+    it('also filters /history for users who registered after the cutoff', async () => {
+      const oldUser = await createUser();
+      await setUserCreatedAt(oldUser, new Date('2024-01-01T00:00:00Z'));
+
+      await createNotification({ title: 'open' });
+      const restricted = await createNotification({
+        title: 'restricted',
+        applyToExistingOnly: true,
+      });
+
+      // New user signs up AFTER restricted was created.
+      const newUser = await createUser();
+      await setUserCreatedAt(newUser, new Date(restricted.createdAt.getTime() + 60_000));
+
+      const oldRes = await request(app)
+        .get('/api/update-notifications/history')
+        .set('Cookie', authCookie(oldUser._id));
+      expect(oldRes.body.data.notifications.map(n => n.title)).toEqual(['restricted', 'open']);
+
+      const newRes = await request(app)
+        .get('/api/update-notifications/history')
+        .set('Cookie', authCookie(newUser._id));
+      expect(newRes.body.data.notifications.map(n => n.title)).toEqual(['open']);
+    });
   });
 
   it('isolates viewed state per user', async () => {

@@ -143,6 +143,19 @@ describe('POST /api/admin/update-notifications', () => {
     expect(fresh.responsesEnabled).toBe(true);
   });
 
+  it('persists applyToExistingOnly when toggled on', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/update-notifications')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 't', body: 'b', applyToExistingOnly: true, reason: 'r' });
+    expect(res.status).toBe(201);
+    expect(res.body.data.notification.applyToExistingOnly).toBe(true);
+
+    const fresh = await UpdateNotification.findById(res.body.data.notification._id);
+    expect(fresh.applyToExistingOnly).toBe(true);
+  });
+
   it('clears imageUrl when imageMode is not custom', async () => {
     const admin = await createAdminUser();
     const res = await request(app)

@@ -5917,6 +5917,7 @@ function parseUpdateNotificationPayload(body) {
       expiresAt,
       targetPath: (body.targetPath ?? '').toString().trim(),
       responsesEnabled: !!body.responsesEnabled,
+      applyToExistingOnly: !!body.applyToExistingOnly,
     },
   };
 }

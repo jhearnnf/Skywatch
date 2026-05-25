@@ -40,6 +40,12 @@ const updateNotificationSchema = new mongoose.Schema({
   // for any path (after the user dismisses, it's gone for them).
   targetPath: { type: String, default: '' },
 
+  // When true, this notification only reaches users who already existed at the
+  // cutoff time: validFrom if set, otherwise the notification's createdAt.
+  // Users registered after that cutoff never see it. Intended for announcements
+  // that don't make sense to new joiners ("we just launched X").
+  applyToExistingOnly: { type: Boolean, default: false },
+
   createdBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
   viewedBy:   { type: [viewedBySchema], default: [] },
