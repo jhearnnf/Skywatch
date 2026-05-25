@@ -9,6 +9,9 @@ import {
   Legend,
 } from 'recharts'
 
+const DIM_OPACITY = 0.05
+const DIM_LABEL_OPACITY = 0.3
+
 // Token-aligned palette. Inverted scales on this dark theme — use the lighter end (600+) for primary marks.
 const COLORS = {
   brand:   '#5baaff',
@@ -84,6 +87,7 @@ export function ChartSkeleton({ height = 220 }) {
  * labels: optional map { key: humanLabel } for legends/tooltips
  * height: pixel height (default 220)
  * formatX / formatY: optional formatters
+ * dimX: array of xKey values whose bars + tick labels render at reduced opacity (bar charts only)
  */
 export default function ReportChart({
   type = 'line',
@@ -96,12 +100,23 @@ export default function ReportChart({
   formatX,
   formatY,
   showLegend = false,
+  dimX,
 }) {
   if (isAllZero(data, keys)) return <EmptyState height={height} />
 
   const seriesColors = colors ?? keys.map((_, i) => SERIES_PALETTE[i % SERIES_PALETTE.length])
   const xFmt = formatX ?? (xKey === 'date' ? shortDate : (v => v))
   const yFmt = formatY ?? (v => v)
+  const dimSet = dimX && dimX.length ? new Set(dimX.map(String)) : null
+  const isDimRow = row => !!dimSet && dimSet.has(String(row?.[xKey]))
+  const dimTick = ({ x, y, payload }) => {
+    const dim = !!dimSet && dimSet.has(String(payload?.value))
+    return (
+      <text x={x} y={y + 12} fill={COLORS.axis} fontSize={11} textAnchor="middle" opacity={dim ? DIM_LABEL_OPACITY : 1}>
+        {xFmt(payload?.value)}
+      </text>
+    )
+  }
 
   if (type === 'donut') {
     const palette = colors ?? [COLORS.brand, COLORS.amber, COLORS.emerald, COLORS.red, COLORS.slate]
@@ -139,7 +154,13 @@ export default function ReportChart({
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
           <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey={xKey} stroke={COLORS.axis} fontSize={11} tickFormatter={xFmt} />
+          <XAxis
+            dataKey={xKey}
+            stroke={COLORS.axis}
+            fontSize={11}
+            tickFormatter={xFmt}
+            tick={dimSet ? dimTick : undefined}
+          />
           <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
           <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />
           {showLegend && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} />}
@@ -151,7 +172,13 @@ export default function ReportChart({
               name={labels?.[k] ?? k}
               stackId={type === 'stackedBar' ? 'a' : undefined}
               radius={i === keys.length - 1 ? [4, 4, 0, 0] : 0}
-            />
+            >
+              {dimSet
+                ? data.map((row, idx) => (
+                    <Cell key={idx} fill={seriesColors[i]} fillOpacity={isDimRow(row) ? DIM_OPACITY : 1} />
+                  ))
+                : null}
+            </Bar>
           ))}
         </BarChart>
       </ResponsiveContainer>
