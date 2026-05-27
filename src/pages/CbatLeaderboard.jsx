@@ -126,6 +126,14 @@ const GAME_CONFIG = {
     backPath: '/cbat/act',
     hideTime: true,
   },
+  'numerical-ops': {
+    title: 'Numerical Operations',
+    emoji: '\u{1F9EE}',
+    scoreLabel: 'Correct %',
+    lowerIsBetter: false,
+    formatScore: (s) => `${s}%`,
+    backPath: '/cbat/numerical-ops',
+  },
 }
 
 export default function CbatLeaderboard() {

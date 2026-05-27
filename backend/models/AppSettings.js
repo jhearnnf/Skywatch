@@ -211,6 +211,7 @@ const appSettingsSchema = new mongoose.Schema({
       'plane-turn-2d': true, 'plane-turn-3d': true,
       flag: true, 'visualisation-2d': true, 'visualisation-3d': true,
       dpt: true, act: true,
+      'numerical-ops': true,
       dad: false,
     }),
   },
@@ -404,6 +405,7 @@ appSettingsSchema.statics.getSettings = async function () {
         'plane-turn-2d': true, 'plane-turn-3d': true,
         flag: true, 'visualisation-2d': true, 'visualisation-3d': true,
         dpt: true, act: true,
+        'numerical-ops': true,
         dad: false,
       };
       const current = settings.cbatGameEnabled;

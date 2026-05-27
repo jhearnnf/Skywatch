@@ -11,6 +11,7 @@ const GameSessionCbatVisualisation3DResult = require('../models/GameSessionCbatV
 const GameSessionCbatDptResult           = require('../models/GameSessionCbatDptResult');
 const GameSessionCbatActResult           = require('../models/GameSessionCbatActResult');
 const GameSessionCbatTrace1Result        = require('../models/GameSessionCbatTrace1Result');
+const GameSessionCbatNumericalOpsResult  = require('../models/GameSessionCbatNumericalOpsResult');
 
 // Single source of truth for CBAT games. Adding a new CBAT game = add one entry
 // here and it automatically flows through submission routes, leaderboards,
@@ -121,6 +122,13 @@ const CBAT_GAMES = {
     sortDir: -1,           // higher is better
     bestOp: '$max',
     label: 'Trace 1',
+  },
+  'numerical-ops': {
+    Model: GameSessionCbatNumericalOpsResult,
+    primaryField: 'correctPercentage',
+    sortDir: -1,           // higher is better
+    bestOp: '$max',
+    label: 'Numerical Operations',
   },
 };
 

@@ -35,6 +35,7 @@ const GameSessionCbatVisualisation2DResult = CBAT_GAMES['visualisation-2d'].Mode
 const GameSessionCbatVisualisation3DResult = CBAT_GAMES['visualisation-3d'].Model;
 const GameSessionCbatDptResult             = CBAT_GAMES['dpt'].Model;
 const GameSessionCbatActResult             = CBAT_GAMES['act'].Model;
+const GameSessionCbatNumericalOpsResult    = CBAT_GAMES['numerical-ops'].Model;
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -2307,6 +2308,31 @@ router.post('/cbat/angles/result', protect, async (req, res) => {
   }
 });
 
+// POST /api/games/cbat/numerical-ops/result
+router.post('/cbat/numerical-ops/result', protect, async (req, res) => {
+  try {
+    const {
+      correctCount, correctPercentage,
+      round1Correct, round2Correct, round3Correct, round4Correct,
+      totalTime, avgTimePerQuestionMs,
+    } = req.body;
+    const result = await GameSessionCbatNumericalOpsResult.create({
+      userId: req.user._id,
+      correctCount,
+      correctPercentage,
+      round1Correct,
+      round2Correct,
+      round3Correct,
+      round4Correct,
+      totalTime,
+      avgTimePerQuestionMs,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/games/cbat/code-duplicates/result
 router.post('/cbat/code-duplicates/result', protect, async (req, res) => {
   try {
@@ -2657,6 +2683,7 @@ router.get('/cbat/visualisation-3d/leaderboard', protect, (req, res) => cbatLead
 router.get('/cbat/dpt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt'));
 router.get('/cbat/act/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'act'));
 router.get('/cbat/trace-1/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'trace-1'));
+router.get('/cbat/numerical-ops/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'numerical-ops'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -2797,5 +2824,6 @@ router.get('/cbat/visualisation-3d/personal-best', protect, (req, res) => cbatPe
 router.get('/cbat/dpt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt'));
 router.get('/cbat/act/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'act'));
 router.get('/cbat/trace-1/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'trace-1'));
+router.get('/cbat/numerical-ops/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'numerical-ops'));
 
 module.exports = router;
