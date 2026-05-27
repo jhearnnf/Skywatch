@@ -1213,8 +1213,12 @@ body.play-mode .card-shadow {
     gap: 6px;
   }
 
-  /* Row 1 — info (full width, sizes to its content) */
+  /* Row 1 — info (full width, sizes to its content)
+     InfoPanel root uses `h-full` so it stretches inside fixed desktop rows; on
+     mobile the row is auto, so override to height:auto and let the legend
+     drive the row height (otherwise wrapped chips on narrow phones clip). */
   .cbat-target-grid > .grid-info          { grid-column: 1 / span 2; grid-row: 1; }
+  .cbat-target-grid > .grid-info > div    { height: auto; }
 
   /* Row 2 — light + scan (both above the scene) */
   .cbat-target-grid > .grid-light         { grid-column: 1 / span 1; grid-row: 2; height: 56px; }
