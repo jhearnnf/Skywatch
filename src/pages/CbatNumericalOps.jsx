@@ -13,7 +13,10 @@ const TOTAL_QUESTIONS = ROUNDS * QUESTIONS_PER_ROUND
 const PER_QUESTION_MS = 20000
 const FEEDBACK_MS = 900
 const ROUND_MAX = [10, 25, 50, 99]
-const OPS = ['+', '-', '*', '/']
+// Weighted op pool — division is harder to satisfy (needs a clean integer
+// result) and tends to dominate when picked uniformly, so it's deliberately
+// rarer here: ÷ shows up ~1/7 of the time vs ~2/7 each for + − ×.
+const OPS = ['+', '+', '-', '-', '*', '*', '/']
 
 // ── Question generation ──────────────────────────────────────────────────────
 function randInt(min, max) {
@@ -70,22 +73,27 @@ function formatOp(op) {
 }
 
 // ── Keypad ───────────────────────────────────────────────────────────────────
-function Keypad({ onDigit, onBackspace, onSubmit, disabled, canSubmit }) {
-  const Btn = ({ children, onClick, accent, disabled: btnDisabled }) => (
+// NOTE: KeyButton is defined at module scope, NOT inside Keypad. The game's
+// per-question countdown re-renders this subtree ~10×/second; a component
+// defined inline would get a new type identity on every render, forcing React
+// to unmount/remount every button each tick — which makes them visibly flash
+// and swallows clicks (the node is replaced between mousedown and mouseup).
+function KeyButton({ children, onClick, accent, disabled, canSubmit }) {
+  return (
     <button
       type="button"
       onClick={onClick}
-      disabled={btnDisabled}
+      disabled={disabled}
       className={`py-4 rounded-lg border-2 font-mono font-bold text-xl transition-all ${
         accent === 'submit'
-          ? (canSubmit && !btnDisabled
+          ? (canSubmit && !disabled
               ? 'bg-brand-600 hover:bg-brand-700 border-brand-600 text-white cursor-pointer'
               : 'bg-[#0a1628] border-[#1a3a5c] text-[#5a6a80] cursor-not-allowed')
           : accent === 'back'
-            ? (btnDisabled
+            ? (disabled
                 ? 'bg-[#0a1628] border-[#1a3a5c] text-[#5a6a80] cursor-not-allowed'
                 : 'bg-[#1a3a5c] hover:bg-[#254a6e] border-[#1a3a5c] text-white cursor-pointer')
-            : (btnDisabled
+            : (disabled
                 ? 'bg-[#0a1628] border-[#1a3a5c] text-[#5a6a80] cursor-not-allowed'
                 : 'bg-[#0a1628] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240] cursor-pointer')
       }`}
@@ -93,14 +101,17 @@ function Keypad({ onDigit, onBackspace, onSubmit, disabled, canSubmit }) {
       {children}
     </button>
   )
+}
+
+function Keypad({ onDigit, onBackspace, onSubmit, disabled, canSubmit }) {
   return (
     <div className="grid grid-cols-3 gap-2 mt-3">
       {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-        <Btn key={d} onClick={() => onDigit(String(d))} disabled={disabled}>{d}</Btn>
+        <KeyButton key={d} onClick={() => onDigit(String(d))} disabled={disabled}>{d}</KeyButton>
       ))}
-      <Btn accent="back" onClick={onBackspace} disabled={disabled}>⌫</Btn>
-      <Btn onClick={() => onDigit('0')} disabled={disabled}>0</Btn>
-      <Btn accent="submit" onClick={onSubmit} disabled={disabled || !canSubmit}>⏎</Btn>
+      <KeyButton accent="back" onClick={onBackspace} disabled={disabled}>⌫</KeyButton>
+      <KeyButton onClick={() => onDigit('0')} disabled={disabled}>0</KeyButton>
+      <KeyButton accent="submit" onClick={onSubmit} disabled={disabled || !canSubmit} canSubmit={canSubmit}>⏎</KeyButton>
     </div>
   )
 }
