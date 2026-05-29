@@ -208,7 +208,7 @@ const appSettingsSchema = new mongoose.Schema({
     default: () => ({
       target: true, ant: true, symbols: true, 'code-duplicates': true,
       angles: true, instruments: true,
-      'plane-turn-2d': true, 'plane-turn-3d': true,
+      'plane-turn-2d': true, 'plane-turn-3d': true, 'trace-1': true,
       flag: true, 'visualisation-2d': true, 'visualisation-3d': true,
       dpt: true, act: true,
       'numerical-ops': true,
@@ -402,7 +402,7 @@ appSettingsSchema.statics.getSettings = async function () {
       const KNOWN_KEYS = {
         target: true, ant: true, symbols: true, 'code-duplicates': true,
         angles: true, instruments: true,
-        'plane-turn-2d': true, 'plane-turn-3d': true,
+        'plane-turn-2d': true, 'plane-turn-3d': true, 'trace-1': true,
         flag: true, 'visualisation-2d': true, 'visualisation-3d': true,
         dpt: true, act: true,
         'numerical-ops': true,

@@ -77,6 +77,19 @@ describe('PATCH /api/admin/settings — cbatGameEnabled validation', () => {
     expect(settings.cbatGameEnabled.get('dpt')).toBe(true);
   });
 
+  it('persists trace-1 and numerical-ops toggles (known keys, not dropped)', async () => {
+    const admin  = await createAdminUser();
+    const cookie = authCookie(admin._id);
+    const res = await patchSettings(cookie, {
+      cbatGameEnabled: { 'trace-1': false, 'numerical-ops': false },
+    });
+    expect(res.status).toBe(200);
+
+    const settings = await AppSettings.findOne();
+    expect(settings.cbatGameEnabled.get('trace-1')).toBe(false);
+    expect(settings.cbatGameEnabled.get('numerical-ops')).toBe(false);
+  });
+
   it('allows empty cbatTargetAircraftBriefIds when target is per-game disabled', async () => {
     const admin  = await createAdminUser();
     const cookie = authCookie(admin._id);

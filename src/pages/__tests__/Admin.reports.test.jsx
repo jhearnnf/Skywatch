@@ -109,7 +109,7 @@ const MOCK_CBAT = {
       { date: '2026-05-02', 'plane-turn-2d': 5, 'plane-turn-3d': 2, target: 3, angles: 1 },
     ],
     gameKeys: ['plane-turn-2d', 'plane-turn-3d', 'target', 'angles'],
-    gameLabels: { 'plane-turn-2d': 'Plane Turn 2D', 'plane-turn-3d': 'Plane Turn 3D', target: 'Target', angles: 'Angles' },
+    gameLabels: { 'plane-turn-2d': 'Trace Practise 2D', 'plane-turn-3d': 'Trace Practise 3D', target: 'Target', angles: 'Angles' },
     sessionsPerPlayerBuckets: [
       { bucket: '0', users: 21 },
       { bucket: '1', users: 4 },
@@ -118,8 +118,8 @@ const MOCK_CBAT = {
       { bucket: '10+', users: 0 },
     ],
     perGame: [
-      { key: 'plane-turn-2d', label: 'Plane Turn 2D', sessions: 12, players: 4, avgPerPlayer: 3, starts: 15, abandonPct: 0.2 },
-      { key: 'plane-turn-3d', label: 'Plane Turn 3D', sessions: 6,  players: 2, avgPerPlayer: 3, starts: 7,  abandonPct: 0.143 },
+      { key: 'plane-turn-2d', label: 'Trace Practise 2D', sessions: 12, players: 4, avgPerPlayer: 3, starts: 15, abandonPct: 0.2 },
+      { key: 'plane-turn-3d', label: 'Trace Practise 3D', sessions: 6,  players: 2, avgPerPlayer: 3, starts: 7,  abandonPct: 0.143 },
       { key: 'target',        label: 'Target',         sessions: 15, players: 4, avgPerPlayer: 3.75, starts: 17, abandonPct: 0.12 },
       { key: 'angles',        label: 'Angles',         sessions: 14, players: 6, avgPerPlayer: 2.33, starts: 16, abandonPct: 0.125 },
     ],
@@ -186,8 +186,8 @@ describe('Admin — Reports tab', () => {
     expect(screen.getByText('Unique Players')).toBeInTheDocument()
     expect(screen.getByText('D1 Retention')).toBeInTheDocument()
     expect(screen.getByText('D7 Retention')).toBeInTheDocument()
-    expect(screen.getByText('Plane Turn 2D')).toBeInTheDocument()
-    expect(screen.getByText('Plane Turn 3D')).toBeInTheDocument()
+    expect(screen.getByText('Trace Practise 2D')).toBeInTheDocument()
+    expect(screen.getByText('Trace Practise 3D')).toBeInTheDocument()
     expect(screen.getByText('Target')).toBeInTheDocument()
     expect(screen.getByText('Angles')).toBeInTheDocument()
   })

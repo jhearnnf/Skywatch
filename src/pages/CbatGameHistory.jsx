@@ -5,8 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 
 const GAME_LABELS = {
-  'plane-turn-2d':    'Plane Turn 2D',
-  'plane-turn-3d':    'Plane Turn 3D',
+  'plane-turn-2d':    'Trace Practise 2D',
+  'plane-turn-3d':    'Trace Practise 3D',
   'angles':           'Angles',
   'code-duplicates':  'Code Duplicates',
   'symbols':          'Symbols',
@@ -17,6 +17,9 @@ const GAME_LABELS = {
   'visualisation-2d': 'Visualisation 2D',
   'visualisation-3d': 'Visualisation 3D',
   'dpt':              'DPT',
+  'act':              'ACT',
+  'trace-1':          'Trace 1',
+  'numerical-ops':    'Numerical Operations',
 }
 
 const PRIMARY_LABELS = {

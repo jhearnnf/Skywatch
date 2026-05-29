@@ -49,4 +49,27 @@ describe('TraceModeSelector', () => {
     render(<TraceModeSelector value="3d" onChange={onChange} />)
     expect(screen.getByText('SOON')).toBeInTheDocument()
   })
+
+  it('hides a playable mode when isModeEnabled returns false', () => {
+    render(<TraceModeSelector value="trace1" onChange={onChange} isModeEnabled={(m) => m !== '3d'} />)
+    expect(screen.queryByText('3D Practise')).not.toBeInTheDocument()
+    expect(screen.getByText('2D Practise')).toBeInTheDocument()
+    expect(screen.getByText('Trace 1')).toBeInTheDocument()
+    // Trace 2 is a coming-soon stub and is unaffected by gating.
+    expect(screen.getByText('Trace 2')).toBeInTheDocument()
+  })
+
+  it('drops the Practise group when both practise modes are disabled', () => {
+    render(<TraceModeSelector value="trace1" onChange={onChange} isModeEnabled={(m) => m === 'trace1'} />)
+    expect(screen.queryByText('Practise')).not.toBeInTheDocument()
+    expect(screen.queryByText('2D Practise')).not.toBeInTheDocument()
+    expect(screen.queryByText('3D Practise')).not.toBeInTheDocument()
+    expect(screen.getByText('Trace 1')).toBeInTheDocument()
+  })
+
+  it('hides Trace 1 when disabled but keeps the coming-soon Trace 2', () => {
+    render(<TraceModeSelector value="2d" onChange={onChange} isModeEnabled={(m) => m !== 'trace1'} />)
+    expect(screen.queryByText('Trace 1')).not.toBeInTheDocument()
+    expect(screen.getByText('Trace 2')).toBeInTheDocument()
+  })
 })

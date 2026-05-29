@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as THREE from 'three'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
@@ -508,6 +509,7 @@ function DpadBtn({ label, onPress, ariaLabel }) {
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CbatPlaneTurn() {
   const { user, apiFetch, API } = useAuth()
+  const { settings } = useAppSettings()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   // Aircraft selection
@@ -527,6 +529,22 @@ export default function CbatPlaneTurn() {
   const gameModeTrace1Ref               = useRef(false)
   useEffect(() => { gameMode3DRef.current = gameMode3D }, [gameMode3D])
   useEffect(() => { gameModeTrace1Ref.current = gameModeTrace1 }, [gameModeTrace1])
+
+  // Per-mode admin gating. Admins always see every mode; everyone else only
+  // sees a mode whose cbatGameEnabled flag isn't explicitly false. Trace 2 is a
+  // coming-soon stub and is never auto-selected. If the persisted mode has been
+  // disabled, fall back to the first one still on (Trace 1 is the headline).
+  const isAdmin = !!user?.isAdmin
+  const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
+  const MODE_KEY = { '2d': 'plane-turn-2d', '3d': 'plane-turn-3d', trace1: 'trace-1' }
+  const isModeEnabled = (m) => isAdmin || m === 'trace2' || cbatGameEnabled[MODE_KEY[m]] !== false
+  useEffect(() => {
+    if (isAdmin || !settings || mode === 'trace2') return
+    if (cbatGameEnabled[MODE_KEY[mode]] === false) {
+      const fallback = ['trace1', '2d', '3d'].find(m => cbatGameEnabled[MODE_KEY[m]] !== false)
+      if (fallback) setMode(fallback)
+    }
+  }, [mode, settings, isAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Aircraft filtered for the select screen.
   //   Practise 3D → only aircraft with 3D models
@@ -1190,7 +1208,7 @@ export default function CbatPlaneTurn() {
 
   return (
     <div className="cbat-plane-turn-page">
-      <SEO title="Plane Turn — CBAT" description="Navigate your aircraft to collect care packages." />
+      <SEO title="Trace — CBAT" description="Practise your turn and heading, or take the Trace recall test." />
 
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
@@ -1228,7 +1246,7 @@ export default function CbatPlaneTurn() {
                 loading={loadingAircraft}
                 personalBest={personalBest}
                 mode={mode}
-                traceModeSelector={<TraceModeSelector value={mode} onChange={setMode} />}
+                traceModeSelector={<TraceModeSelector value={mode} onChange={setMode} isModeEnabled={isModeEnabled} />}
               />
             </div>
           )}

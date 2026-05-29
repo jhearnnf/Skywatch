@@ -61,24 +61,30 @@ describe('CbatGameGuard', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  // plane-turn is the hub-level alias for the split 'plane-turn-2d' /
-  // 'plane-turn-3d' backend keys. The guard treats the alias as enabled if
-  // EITHER underlying mode is on, so disabling both is the only way to hide
-  // the TRACE 1/2 page.
+  // plane-turn is the hub-level alias for the three modes hosted on /cbat/trace:
+  // 'plane-turn-2d', 'plane-turn-3d' and 'trace-1'. The guard treats the alias
+  // as enabled if ANY of them is on, so disabling all three is the only way to
+  // hide the TRACE 1/2 page.
   it('plane-turn alias is enabled when only 2D mode is on', () => {
-    mockSettings = { cbatGameEnabled: { 'plane-turn-2d': true, 'plane-turn-3d': false } }
+    mockSettings = { cbatGameEnabled: { 'plane-turn-2d': true, 'plane-turn-3d': false, 'trace-1': false } }
     renderGuard({ gameKey: 'plane-turn', gameTitle: 'TRACE 1/2' })
     expect(screen.getByTestId('game-content')).toBeTruthy()
   })
 
   it('plane-turn alias is enabled when only 3D mode is on', () => {
-    mockSettings = { cbatGameEnabled: { 'plane-turn-2d': false, 'plane-turn-3d': true } }
+    mockSettings = { cbatGameEnabled: { 'plane-turn-2d': false, 'plane-turn-3d': true, 'trace-1': false } }
     renderGuard({ gameKey: 'plane-turn', gameTitle: 'TRACE 1/2' })
     expect(screen.getByTestId('game-content')).toBeTruthy()
   })
 
-  it('plane-turn alias is disabled only when BOTH modes are off', () => {
-    mockSettings = { cbatGameEnabled: { 'plane-turn-2d': false, 'plane-turn-3d': false } }
+  it('plane-turn alias is enabled when only Trace 1 is on', () => {
+    mockSettings = { cbatGameEnabled: { 'plane-turn-2d': false, 'plane-turn-3d': false, 'trace-1': true } }
+    renderGuard({ gameKey: 'plane-turn', gameTitle: 'TRACE 1/2' })
+    expect(screen.getByTestId('game-content')).toBeTruthy()
+  })
+
+  it('plane-turn alias is disabled only when ALL three modes are off', () => {
+    mockSettings = { cbatGameEnabled: { 'plane-turn-2d': false, 'plane-turn-3d': false, 'trace-1': false } }
     renderGuard({ gameKey: 'plane-turn', gameTitle: 'TRACE 1/2' })
     expect(screen.queryByTestId('game-content')).toBeNull()
     expect(screen.getByText(/TRACE 1\/2 OFFLINE/)).toBeTruthy()

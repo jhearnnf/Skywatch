@@ -24,12 +24,14 @@ export const CBAT_GAMES = [
 // Admin-side list — one entry per backend cbatGameEnabled key. Diverges from
 // CBAT_GAMES at TRACE 1/2 and Visualisation 2D/3D: the hub shows one tile each
 // linking to a combined page, but the backend registry splits those keys into
-// separate 2D/3D entries, so admins get an independent enable/disable per mode.
+// separate per-mode entries, so admins get an independent enable/disable per
+// mode. The TRACE 1/2 tile fans out into the two Practise modes plus Trace 1.
 export const CBAT_ADMIN_GAMES = CBAT_GAMES.flatMap(g => {
   if (g.key === 'plane-turn') {
     return [
-      { ...g, key: 'plane-turn-2d', title: 'Plane Turn 2D' },
-      { ...g, key: 'plane-turn-3d', title: 'Plane Turn 3D' },
+      { ...g, key: 'plane-turn-2d', title: 'Trace Practise 2D' },
+      { ...g, key: 'plane-turn-3d', title: 'Trace Practise 3D' },
+      { ...g, key: 'trace-1',       title: 'Trace 1' },
     ]
   }
   if (g.key === 'visualisation') {

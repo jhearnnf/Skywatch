@@ -2403,7 +2403,7 @@ function SettingsTab({ API }) {
           <span className="text-brand-600 text-xs">{gameGroupsOpen.cbat ? '▲' : '▼'}</span>
         </button>
         {gameGroupsOpen.cbat && (() => {
-          const CBAT_UNIMPL = new Set(['visualisation-3d', 'dad'])
+          const CBAT_UNIMPL = new Set(['dad'])
           const gameEnabledMap = draft.cbatGameEnabled ?? {}
           const isGameEnabled = (key) => {
             const v = gameEnabledMap[key]

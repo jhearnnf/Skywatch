@@ -28,7 +28,7 @@ const CBAT_GAMES = {
     primaryField: 'totalRotations',
     sortDir: 1,            // lower is better
     bestOp: '$min',
-    label: 'Plane Turn 2D',
+    label: 'Trace Practise 2D',
     modeFilter: { mode: '2d' },
   },
   'plane-turn-3d': {
@@ -36,7 +36,7 @@ const CBAT_GAMES = {
     primaryField: 'totalRotations',
     sortDir: 1,
     bestOp: '$min',
-    label: 'Plane Turn 3D',
+    label: 'Trace Practise 3D',
     modeFilter: { mode: '3d' },
   },
   'angles': {

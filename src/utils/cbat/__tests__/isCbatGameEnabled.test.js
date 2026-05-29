@@ -10,10 +10,12 @@ describe('isCbatGameEnabled', () => {
     expect(isCbatGameEnabled({ angles: false }, 'angles')).toBe(false)
   })
 
-  it('plane-turn alias: enabled if either 2d or 3d is enabled', () => {
-    expect(isCbatGameEnabled({ 'plane-turn-2d': false, 'plane-turn-3d': false }, 'plane-turn')).toBe(false)
-    expect(isCbatGameEnabled({ 'plane-turn-2d': false, 'plane-turn-3d': true  }, 'plane-turn')).toBe(true)
-    expect(isCbatGameEnabled({ 'plane-turn-2d': true,  'plane-turn-3d': false }, 'plane-turn')).toBe(true)
+  it('plane-turn alias: enabled if any of 2d, 3d or trace-1 is enabled', () => {
+    const allOff = { 'plane-turn-2d': false, 'plane-turn-3d': false, 'trace-1': false }
+    expect(isCbatGameEnabled(allOff, 'plane-turn')).toBe(false)
+    expect(isCbatGameEnabled({ ...allOff, 'plane-turn-3d': true }, 'plane-turn')).toBe(true)
+    expect(isCbatGameEnabled({ ...allOff, 'plane-turn-2d': true }, 'plane-turn')).toBe(true)
+    expect(isCbatGameEnabled({ ...allOff, 'trace-1': true }, 'plane-turn')).toBe(true)
     expect(isCbatGameEnabled({}, 'plane-turn')).toBe(true)
   })
 

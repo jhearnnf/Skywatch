@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
@@ -441,8 +442,24 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, scoreSaved, leaderboar
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CbatVisualisation() {
   const { user, apiFetch, API } = useAuth()
+  const { settings } = useAppSettings()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
   const [mode, setMode] = useVisualisationMode()
+
+  // Per-mode admin gating. Admins always see both modes; everyone else only
+  // sees a mode whose cbatGameEnabled flag isn't explicitly false. If the
+  // persisted mode has been disabled, fall back to whichever one is still on.
+  const isAdmin = !!user?.isAdmin
+  const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
+  const isModeEnabled = (m) => isAdmin || cbatGameEnabled[`visualisation-${m}`] !== false
+  useEffect(() => {
+    if (isAdmin || !settings) return
+    if (cbatGameEnabled[`visualisation-${mode}`] === false) {
+      if (cbatGameEnabled['visualisation-2d'] !== false) setMode('2d')
+      else if (cbatGameEnabled['visualisation-3d'] !== false) setMode('3d')
+    }
+  }, [mode, settings, isAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const is3D = mode === '3d'
   const gameKey = is3D ? 'visualisation-3d' : 'visualisation-2d'
   const leaderboardHref = `/cbat/${gameKey}/leaderboard`
@@ -703,7 +720,7 @@ export default function CbatVisualisation() {
               className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
             >
               <div className="flex justify-center mb-3">
-                <VisualisationModeSelector value={mode} onChange={setMode} />
+                <VisualisationModeSelector value={mode} onChange={setMode} isModeEnabled={isModeEnabled} />
               </div>
               <p className="text-4xl mb-3">{is3D ? '\u{1F9CA}' : '\u{1F9EE}'}</p>
               <p className="text-xl font-extrabold text-white mb-2">

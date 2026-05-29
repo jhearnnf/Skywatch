@@ -8,7 +8,7 @@ import PlaneTurnModeToggle from '../components/PlaneTurnModeToggle'
 // ── Game config — add new CBAT games here ────────────────────────────────────
 const GAME_CONFIG = {
   'plane-turn-2d': {
-    title: 'Plane Turn 2D',
+    title: 'Trace Practise 2D',
     emoji: '\u{1F5FA}\uFE0F',
     scoreLabel: 'Rotations',
     lowerIsBetter: true,
@@ -17,7 +17,7 @@ const GAME_CONFIG = {
     planeTurnMode: '2d',
   },
   'plane-turn-3d': {
-    title: 'Plane Turn 3D',
+    title: 'Trace Practise 3D',
     emoji: '\u{1F5FA}\uFE0F',
     scoreLabel: 'Rotations',
     lowerIsBetter: true,

@@ -763,11 +763,15 @@ router.patch('/settings', requireReason, async (req, res) => {
     }
 
     // cbatGameEnabled must be a plain object, keys ∈ known game keys, values boolean.
-    // The 3 unimplemented games cannot be enabled — no backend route exists yet.
+    // Unimplemented games (CBAT_UNIMPLEMENTED) cannot be enabled — no backend route yet.
+    // Keep this in sync with AppSettings.cbatGameEnabled defaults; an unlisted key is
+    // treated as legacy and silently dropped, so a real game missing here means its
+    // admin toggle never persists.
     const CBAT_KNOWN_KEYS = new Set([
       'target', 'ant', 'symbols', 'code-duplicates', 'angles', 'instruments',
-      'plane-turn-2d', 'plane-turn-3d', 'flag', 'visualisation-2d', 'visualisation-3d',
-      'dpt', 'act', 'dad',
+      'plane-turn-2d', 'plane-turn-3d', 'trace-1', 'flag',
+      'visualisation-2d', 'visualisation-3d',
+      'dpt', 'act', 'numerical-ops', 'dad',
     ]);
     const CBAT_UNIMPLEMENTED = new Set(['dad']);
     if ('cbatGameEnabled' in updates) {
