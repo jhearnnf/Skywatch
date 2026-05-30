@@ -81,29 +81,27 @@ export default function RecentCbatScores() {
             const rankBadge = r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : `#${r.rank}`
             const isMe = user && r.userId && r.userId === user._id
             return (
-              <div
+              <Link
                 key={r._id}
-                className={`px-4 py-2.5 text-sm grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center ${
+                to={leaderboardPath}
+                title={`${title} leaderboard`}
+                className={`px-4 py-2.5 text-sm grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center no-underline hover:bg-[#102040] transition-colors ${
                   isMe ? 'bg-brand-600/10 border-l-2 border-l-brand-400' : ''
                 }`}
               >
                 <span className={`truncate ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`} title={r.email || ''}>
                   {r.displayName || r.email || `Agent ${r.agentNumber || '???'}`}{isMe ? ' (you)' : ''}
                 </span>
-                <Link
-                  to={leaderboardPath}
-                  className="font-mono text-[11px] text-brand-600 hover:text-brand-400 no-underline shrink-0"
-                  title={`${title} leaderboard`}
-                >
+                <span className="font-mono text-[11px] text-brand-600 shrink-0">
                   {rankBadge}
-                </Link>
+                </span>
                 <span className="text-xs text-slate-400 truncate">
                   <span className="mr-1">{emoji}</span>{title}
                 </span>
                 <span className="text-[10px] text-slate-500 shrink-0" title={new Date(r.achievedAt).toLocaleString()}>
                   {timeAgo(r.achievedAt)}
                 </span>
-              </div>
+              </Link>
             )
           })}
         </div>
