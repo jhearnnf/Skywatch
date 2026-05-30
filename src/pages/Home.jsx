@@ -350,23 +350,31 @@ export default function Home() {
           sticky bottom positioning below, not by this min-h. */}
       <div className="relative min-h-[calc(100dvh_-_184px)] md:min-h-[calc(100dvh_-_128px)] flex flex-col">
       <motion.div
-        className="relative z-10"
+        className={`relative z-10${!user ? ' flex-1 flex flex-col justify-center' : ''}`}
         style={{ opacity: topOpacity, y: topTranslateY }}
       >
       {/* Greeting + stats */}
-      <div className="relative mb-6">
-        {/* Eyebrow — asymmetric section-break treatment (leading line + trailing fade) */}
-        <div className="flex items-center gap-3 mb-2">
-          <div className="h-px w-8" style={{ background: 'rgba(91,170,255,0.35)' }} />
+      <div className={`relative ${user ? 'mb-6' : 'text-center'}`}>
+        {/* Eyebrow — asymmetric section-break treatment (leading line + trailing
+            fade) when signed in. Logged-out centers the whole hero, so the
+            eyebrow gets symmetric fades + centered alignment to match. */}
+        <div className={`flex items-center gap-3 mb-2 ${user ? '' : 'justify-center'}`}>
+          <div
+            className="h-px w-8"
+            style={{ background: user ? 'rgba(91,170,255,0.35)' : 'linear-gradient(90deg, transparent, rgba(91,170,255,0.35))' }}
+          />
           <span
             className="text-[10px] font-bold uppercase tracking-[0.35em] whitespace-nowrap"
             style={{ color: 'rgba(91,170,255,0.7)' }}
           >
             {today}
           </span>
-          <div className="h-px flex-1" style={{ background: 'linear-gradient(90deg, rgba(91,170,255,0.25), transparent)' }} />
+          <div
+            className={user ? 'h-px flex-1' : 'h-px w-8'}
+            style={{ background: 'linear-gradient(90deg, rgba(91,170,255,0.25), transparent)' }}
+          />
         </div>
-        <h1 className="text-3xl font-black text-slate-900 leading-tight tracking-tight">
+        <h1 className={`font-black text-slate-900 leading-tight tracking-tight ${user ? 'text-3xl' : 'text-4xl sm:text-5xl'}`}>
           {greetPrefix}
           {user && (
             <>
@@ -376,20 +384,26 @@ export default function Home() {
           )}
         </h1>
         {!user && (
-          <div className="flex gap-3 mt-4">
-            <button
-              onClick={() => setShowCROFlow(true)}
-              className="flex-1 text-center text-sm font-bold bg-brand-600 text-slate-900 px-4 py-2.5 rounded-xl hover:bg-brand-500 transition-colors"
-            >
-              Start for Free
-            </button>
-            <Link
-              to="/login"
-              className="flex-1 text-center text-sm font-semibold border border-brand-300/60 text-brand-600 px-4 py-2.5 rounded-xl hover:border-brand-400 transition-colors"
-            >
-              Sign In
-            </Link>
-          </div>
+          <>
+            <p className="mt-4 text-base sm:text-lg text-slate-600 leading-relaxed max-w-sm mx-auto">
+              Structured, gamified RAF knowledge — intel briefs, live debriefs, and daily streaks.
+            </p>
+            <div className="mt-7 flex flex-col items-center gap-3">
+              <button
+                onClick={() => setShowCROFlow(true)}
+                className="w-full max-w-xs text-center text-base font-bold bg-brand-600 text-slate-900 px-6 py-3.5 rounded-2xl hover:bg-brand-500 hover:-translate-y-0.5 transition-all"
+                style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)' }}
+              >
+                Start for Free →
+              </button>
+              <Link
+                to="/login"
+                className="text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors"
+              >
+                Already enlisted? <span className="text-brand-600">Sign In</span>
+              </Link>
+            </div>
+          </>
         )}
       </div>
 

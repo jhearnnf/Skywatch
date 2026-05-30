@@ -140,3 +140,31 @@ describe('Home — stale brief read-state cleared on logout', () => {
     await waitFor(() => expect(screen.getByText('Eurofighter Typhoon')).toBeDefined())
   })
 })
+
+describe('Home — logged-out hero fills the page', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  beforeEach(() => {
+    global.fetch = makeFetch({ briefs: [UNREAD_BRIEF] })
+    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: (...args) => fetch(...args) })
+    mockUseSettings.mockReturnValue({ settings: SETTINGS })
+  })
+
+  it('shows the guest greeting, value-prop line, and a prominent CTA pair', () => {
+    render(<Home />)
+
+    // Greeting (no name for guests)
+    expect(screen.getByText('Good to see you')).toBeDefined()
+    // Value-prop subline that fills the previously-bare hero
+    expect(screen.getByText(/Structured, gamified RAF knowledge/i)).toBeDefined()
+    // Primary CTA + quiet secondary sign-in link
+    expect(screen.getByRole('button', { name: /Start for Free/i })).toBeDefined()
+    expect(screen.getByText(/Already enlisted\?/i)).toBeDefined()
+  })
+
+  it('does not render the logged-in level/streak card for guests', () => {
+    render(<Home />)
+    // "Level N" label only renders inside the signed-in XP card
+    expect(screen.queryByText(/^Level \d+$/)).toBeNull()
+  })
+})
