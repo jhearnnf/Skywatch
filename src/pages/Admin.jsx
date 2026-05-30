@@ -211,7 +211,7 @@ function StatsSection({ title, defaultOpen = false, children }) {
   )
 }
 
-function StatsTab({ API, onViewEmailLog }) {
+function StatsTab({ API, onViewEmailLog, onViewUsers }) {
   const { apiFetch } = useAuth()
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
@@ -254,7 +254,13 @@ function StatsTab({ API, onViewEmailLog }) {
       {/* Users */}
       <StatsSection title="Users" defaultOpen>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Users Online"      value={`${fmtNum(users.onlineUsers ?? 0)} / ${fmtNum(users.totalUsers)}`} color="brand" />
+          <button
+            type="button"
+            onClick={() => onViewUsers?.()}
+            className="flex w-full text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-brand-300 rounded-2xl [&>div]:flex-1"
+          >
+            <StatCard label="Users Online"      value={`${fmtNum(users.onlineUsers ?? 0)} / ${fmtNum(users.totalUsers)}`} color="brand" />
+          </button>
           <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate" />
           <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber" />
           <StatCard label="Paying Subscribers" value={fmtNum(users.subscribedUsers)}   color="emerald" />
@@ -2974,7 +2980,7 @@ function UsersTab({ API }) {
               role="button"
               tabIndex={0}
               aria-expanded={isExpanded}
-              aria-label={`${isExpanded ? 'Collapse' : 'Expand'} Agent ${u.agentNumber}`}
+              aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${u.displayName || `Agent ${u.agentNumber}`}`}
               onClick={() => toggleExpanded(u._id)}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(u._id) } }}
               className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-raised/40 transition-colors"
@@ -2991,7 +2997,7 @@ function UsersTab({ API }) {
                       />
                     )
                   })()}
-                  Agent {u.agentNumber}
+                  {u.displayName || `Agent ${u.agentNumber}`}
                   {u.isAdmin && <span className="ml-2 text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-bold">ADMIN</span>}
                   {u.isBanned && <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">BANNED</span>}
                 </p>
@@ -8509,7 +8515,7 @@ export default function Admin() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
           >
-            {tab === 'stats'    && <StatsTab    API={API} onViewEmailLog={openEmailLog} />}
+            {tab === 'stats'    && <StatsTab    API={API} onViewEmailLog={openEmailLog} onViewUsers={() => setTab('users')} />}
             {tab === 'reports'  && <ReportsTab  API={API} />}
             {tab === 'settings' && <SettingsTab API={API} />}
             {tab === 'users'    && <UsersTab    API={API} />}
