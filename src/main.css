@@ -191,6 +191,16 @@ body::before {
   }
 }
 
+/* Lock everything while the 3D World is mounted — full viewport canvas,
+   no scroll, no rubber-band, joystick swallows touch. Distinct class from
+   cbat-vis2d-locked to avoid breaking CBAT-only scroll guards. */
+body.world3d-locked {
+  overflow: hidden;
+  height: 100dvh;
+  overscroll-behavior: contain;
+  touch-action: none;
+}
+
 /* ── RSVP speed-reader blur/dim ──────────────────────────────────────── */
 body[data-rsvp-active] > *:not(.rsvp-overlay) {
   filter: blur(2px);
@@ -1186,6 +1196,84 @@ body.play-mode .card-shadow {
 
 .cbat-target-grid > div {
   min-width: 0;
+}
+
+/* ── Tutorial / practice mode ───────────────────────────────────────────── */
+/* Pulsing glow used to draw the eye to the panel(s) a tutorial step is about. */
+.cbat-tutorial-pulse {
+  position: relative;
+  z-index: 2;
+  border-radius: 8px;
+  animation: tutorialGlowPulse 2.2s ease-in-out infinite;
+}
+/* Panels not yet unlocked in the current tutorial step. */
+.cbat-tutorial-disabled {
+  opacity: 0.4;
+  filter: grayscale(1);
+  pointer-events: none;
+}
+/* Rapid triple-pulse used to call out a specific value (a chip / legend item)
+   within a highlighted panel — three quick pulses, then a rest, looping. */
+@keyframes cbatTriplePulse {
+  0%   { transform: scale(1);   box-shadow: 0 0 0 0 rgba(91, 170, 255, 0); }
+  6%   { transform: scale(1.22); box-shadow: 0 0 12px 3px rgba(91, 170, 255, 0.85); }
+  12%  { transform: scale(1);   box-shadow: 0 0 0 0 rgba(91, 170, 255, 0); }
+  18%  { transform: scale(1.22); box-shadow: 0 0 12px 3px rgba(91, 170, 255, 0.85); }
+  24%  { transform: scale(1);   box-shadow: 0 0 0 0 rgba(91, 170, 255, 0); }
+  30%  { transform: scale(1.22); box-shadow: 0 0 12px 3px rgba(91, 170, 255, 0.85); }
+  36%  { transform: scale(1);   box-shadow: 0 0 0 0 rgba(91, 170, 255, 0); }
+  100% { transform: scale(1);   box-shadow: 0 0 0 0 rgba(91, 170, 255, 0); }
+}
+.cbat-triple-pulse {
+  position: relative;
+  z-index: 3;
+  border-radius: 6px;
+  animation: cbatTriplePulse 2.2s ease-in-out infinite;
+}
+/* Rapid triple-flash for an action button (LOCK / ID) when its panel matches the
+   target — brightens + glows three times quickly, then rests, looping. */
+@keyframes cbatBtnFlash {
+  0%        { box-shadow: 0 0 0 0 rgba(91, 170, 255, 0);    filter: brightness(1); }
+  6%        { box-shadow: 0 0 14px 4px rgba(91, 170, 255, 0.9); filter: brightness(1.7); }
+  12%       { box-shadow: 0 0 0 0 rgba(91, 170, 255, 0);    filter: brightness(1); }
+  18%       { box-shadow: 0 0 14px 4px rgba(91, 170, 255, 0.9); filter: brightness(1.7); }
+  24%       { box-shadow: 0 0 0 0 rgba(91, 170, 255, 0);    filter: brightness(1); }
+  30%       { box-shadow: 0 0 14px 4px rgba(91, 170, 255, 0.9); filter: brightness(1.7); }
+  36%, 100% { box-shadow: 0 0 0 0 rgba(91, 170, 255, 0);    filter: brightness(1); }
+}
+.cbat-btn-flash {
+  animation: cbatBtnFlash 1.3s ease-in-out infinite;
+}
+
+/* Rapid blink for a system-feed row when the target code scrolls into view. */
+@keyframes cbatRowFlash {
+  0%, 100% { background-color: rgba(91, 170, 255, 0);   color: #ddeaf8; }
+  50%      { background-color: rgba(91, 170, 255, 0.95); color: #04101f; }
+}
+.cbat-row-flash {
+  animation: cbatRowFlash 0.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+/* Bouncing arrow pointing down at a scene target. left/top set inline; the
+   class owns the transform so the centering offset survives the animation. */
+@keyframes cbatArrowBounce {
+  0%, 100% { transform: translate(-50%, -112%); }
+  50%       { transform: translate(-50%, -138%); }
+}
+.cbat-tutorial-arrow {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  filter: drop-shadow(0 0 4px rgba(91, 170, 255, 0.6));
+  animation: cbatArrowBounce 0.85s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbat-tutorial-pulse,
+  .cbat-triple-pulse,
+  .cbat-btn-flash,
+  .cbat-row-flash { animation: none; }
+  .cbat-tutorial-arrow { animation: none; transform: translate(-50%, -120%); }
 }
 
 .grid-info          { grid-column: 1  / span 4;  grid-row: 1; }

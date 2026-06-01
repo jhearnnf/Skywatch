@@ -370,9 +370,9 @@ function Shape({ shape, scale = 1 }) {
 }
 
 // ── Info panel: legend/key ───────────────────────────────────────────────────
-function InfoPanel() {
-  const Item = ({ icon, label }) => (
-    <span className="flex items-center gap-1 whitespace-nowrap">
+function InfoPanel({ highlightUnknown = false } = {}) {
+  const Item = ({ icon, label, className = '' }) => (
+    <span className={`flex items-center gap-1 whitespace-nowrap ${className}`}>
       {icon}<span>{label}</span>
     </span>
   )
@@ -388,7 +388,7 @@ function InfoPanel() {
         <Item icon={outlineSvg(<circle cx="0" cy="0" r="4.5" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="truck" />
         <Item icon={outlineSvg(<rect x="-4.5" y="-4.5" width="9" height="9" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="tank" />
         <Item icon={outlineSvg(<polygon points="0,-5.2 -4.5,2.6 4.5,2.6" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="building" />
-        <Item icon={outlineSvg(<rect x="-3.5" y="-3.5" width="7" height="7" fill="none" stroke="#facc15" strokeWidth="1.3" transform="rotate(45)" />)} label="unknown" />
+        <Item className={highlightUnknown ? 'cbat-triple-pulse' : ''} icon={outlineSvg(<rect x="-3.5" y="-3.5" width="7" height="7" fill="none" stroke="#facc15" strokeWidth="1.3" transform="rotate(45)" />)} label="unknown" />
         <Item icon={<span className="text-red-300 font-bold">✕</span>} label="damaged" />
         <Item icon={outlineSvg(
           <g stroke="#5baaff" strokeWidth="1.5" strokeLinecap="round">
@@ -404,7 +404,7 @@ function InfoPanel() {
 }
 
 // ── Light panel ──────────────────────────────────────────────────────────────
-function LightPanel({ pattern, flash, onPress }) {
+function LightPanel({ pattern, flash, onPress, lockPulse = false }) {
   return (
     <div className={`h-full w-full bg-[#0a1628] border rounded-lg p-2 flex items-center justify-around gap-2 transition-colors ${flash ? 'border-green-400 bg-green-500/15' : 'border-[#1a3a5c]'}`}>
       <div className="flex gap-2">
@@ -415,7 +415,7 @@ function LightPanel({ pattern, flash, onPress }) {
       </div>
       <button
         onClick={onPress}
-        className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold rounded transition-colors cursor-pointer"
+        className={`px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold rounded transition-colors cursor-pointer ${lockPulse ? 'cbat-btn-flash' : ''}`}
       >
         LOCK
       </button>
@@ -473,7 +473,7 @@ function ScanRadar() {
   )
 }
 
-function ScanPanel({ aircraft, onPress, flash }) {
+function ScanPanel({ aircraft, onPress, flash, idPulse = false }) {
   return (
     <div className={`h-full w-full bg-[#0a1628] border rounded-lg p-1 flex items-center gap-1 transition-colors ${flash ? 'border-green-400 bg-green-500/15' : 'border-[#1a3a5c]'}`}>
       <div className="flex-1 h-full relative">
@@ -493,7 +493,7 @@ function ScanPanel({ aircraft, onPress, flash }) {
       </div>
       <button
         onClick={onPress}
-        className="px-2 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-bold rounded transition-colors cursor-pointer shrink-0"
+        className={`px-2 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-bold rounded transition-colors cursor-pointer shrink-0 ${idPulse ? 'cbat-btn-flash' : ''}`}
       >
         ID
       </button>
@@ -519,7 +519,7 @@ function ScanTargetPanel({ aircraft }) {
 }
 
 // ── Scene target panel ───────────────────────────────────────────────────────
-function SceneTargetPanel({ labels, diamondsActive }) {
+function SceneTargetPanel({ labels, diamondsActive, highlightUnknown = false }) {
   const all = [
     ...(diamondsActive ? [{ id: '__unknown', text: 'unknown' }] : []),
     ...labels.map(l => ({ id: l.id, text: labelFor(l) })),
@@ -530,7 +530,7 @@ function SceneTargetPanel({ labels, diamondsActive }) {
       <div className="flex flex-wrap gap-1 overflow-hidden">
         {all.length === 0 && <p className="text-[10px] text-slate-600 italic">none yet…</p>}
         {all.map(l => (
-          <span key={l.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#060e1a] border border-[#1a3a5c] rounded text-[10px] text-[#ddeaf8]">
+          <span key={l.id} className={`inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#060e1a] border border-[#1a3a5c] rounded text-[10px] text-[#ddeaf8] ${highlightUnknown && l.id === '__unknown' ? 'cbat-triple-pulse' : ''}`}>
             {l.text}
           </span>
         ))}
@@ -540,7 +540,7 @@ function SceneTargetPanel({ labels, diamondsActive }) {
 }
 
 // ── System panel ─────────────────────────────────────────────────────────────
-function SystemPanel({ columns, highlights, onClickCode }) {
+function SystemPanel({ columns, highlights, onClickCode, flashCode = null }) {
   return (
     <div className="h-full w-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-1 overflow-hidden">
       <div className="grid grid-cols-3 gap-1 h-full">
@@ -554,13 +554,14 @@ function SystemPanel({ columns, highlights, onClickCode }) {
               {[...col.codes, ...col.codes].map((code, ri) => {
                 const actualRow = ri % col.codes.length
                 const isGreen = highlights.has(`${ci}:${actualRow}`)
+                const isFlash = flashCode && code === flashCode
                 return (
                   <button
                     key={ri}
                     onClick={() => onClickCode(ci, actualRow, code)}
                     className={`sys-row w-full text-center font-mono text-[12px] cursor-pointer transition-colors ${
                       isGreen ? 'bg-green-500/40 text-green-200' : 'text-[#ddeaf8] hover:bg-[#0f2240]'
-                    }`}
+                    }${isFlash ? ' cbat-row-flash' : ''}`}
                   >
                     {code}
                   </button>
@@ -671,7 +672,7 @@ function ResultsScreen({ stats, onPlayAgain, scoreSaved }) {
 }
 
 // ── Intro ────────────────────────────────────────────────────────────────────
-function Intro({ onStart, personalBest, aircraftReady }) {
+function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -726,14 +727,526 @@ function Intro({ onStart, personalBest, aircraftReady }) {
         </Link>
       </div>
 
+      <div className="flex flex-wrap gap-3 justify-center">
+        <button
+          onClick={onTutorial}
+          className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm cursor-pointer"
+        >
+          Tutorial
+        </button>
+        <button
+          onClick={onStart}
+          disabled={!aircraftReady}
+          className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
+        >
+          {aircraftReady ? 'Start' : 'Loading aircraft…'}
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Tutorial / practice mode ─────────────────────────────────────────────────
+// Progressive walkthrough: panels unlock one step at a time. Each step lists the
+// panels it enables and the panels it pulses to draw the eye. More steps will be
+// appended here one at a time.
+// `enabled` is cumulative — each section keeps earlier panels unlocked and adds
+// its own. Sections advance automatically as the user completes the task.
+const TUTORIAL_STEPS = [
+  {
+    enabled: { info: true, scene: true, sceneTarget: true },
+    // Cycle the spotlight through these panels in order, looping. The matching
+    // "unknown" value inside the focused panel gets a rapid triple-pulse, and
+    // when the scene is focused, arrows point at each unknown target.
+    sequence: ['sceneTarget', 'info', 'scene'],
+    title: 'Spot the targets',
+    body: (
+      <>
+        When the game begins, read the <b className="text-brand-300">Scene Targets</b> panel,
+        then click the matching targets you see in the <b className="text-brand-300">scene</b>.
+        The first target is always <b className="text-brand-300">unknown</b> — check the{' '}
+        <b className="text-brand-300">key</b> to work out which shape that is (a diamond),
+        then click every one you can find.
+      </>
+    ),
+  },
+  {
+    enabled: { info: true, scene: true, sceneTarget: true, light: true, lightTarget: true },
+    highlight: ['lightTarget', 'light'],
+    title: 'Match the lights',
+    body: (
+      <>
+        Now watch the <b className="text-brand-300">Light Target</b> pattern. The moment your{' '}
+        <b className="text-brand-300">Light</b> panel shows the same three colours,
+        press <b className="text-brand-300">LOCK</b>.
+      </>
+    ),
+  },
+  {
+    enabled: {
+      info: true, scene: true, sceneTarget: true,
+      light: true, lightTarget: true, scan: true, scanTarget: true,
+    },
+    highlight: ['scanTarget', 'scan'],
+    title: 'Identify the aircraft',
+    body: (
+      <>
+        The <b className="text-brand-300">Scan Target</b> shows an aircraft to find. Watch the{' '}
+        <b className="text-brand-300">Scan</b> radar — when the aircraft on it matches the target,
+        press <b className="text-brand-300">ID</b>.
+      </>
+    ),
+  },
+  {
+    enabled: {
+      info: true, scene: true, sceneTarget: true,
+      light: true, lightTarget: true, scan: true, scanTarget: true,
+      system: true, systemTarget: true,
+    },
+    highlight: ['systemTarget', 'system'],
+    title: 'Catch the code',
+    body: (
+      <>
+        The <b className="text-brand-300">System Target</b> shows a code. Watch the{' '}
+        <b className="text-brand-300">System</b> feed — when that code scrolls into view it will
+        flash. Click it before it scrolls away.
+      </>
+    ),
+  },
+]
+
+const NO_HIGHLIGHTS = new Set()
+
+// Build a small, fixed practice scene for the first step: a handful of unknown
+// diamonds (the only valid targets here) mixed with non-target distractors.
+function planTutorialScene() {
+  resetPlacements()
+  const shapes = []
+  const diamonds = randRange(5, 6)
+  for (let i = 0; i < diamonds; i++) {
+    shapes.push({
+      id: uid(), kind: 'unknown', color: 'neutral',
+      damaged: false, highPriority: false, direction: null,
+      spawnAt: 0, fake: false, ...placeRandom(),
+    })
+  }
+  const distractors = randRange(7, 9)
+  for (let i = 0; i < distractors; i++) {
+    shapes.push({
+      id: uid(), kind: pick(SHAPE_KINDS), color: pick(SHAPE_COLOURS),
+      damaged: Math.random() < 0.3, highPriority: Math.random() < 0.3,
+      direction: Math.random() < 0.3 ? pick(DIRECTIONS) : null,
+      spawnAt: 0, fake: false, ...placeRandom(),
+    })
+  }
+  const fakes = randRange(3, 4)
+  for (let i = 0; i < fakes; i++) {
+    const fakeKind = Math.random() < 0.5 ? 'octagon' : 'pentagon'
+    shapes.push({
+      id: uid(), kind: fakeKind, color: pick(SHAPE_COLOURS),
+      damaged: false, highPriority: false, direction: null,
+      spawnAt: 0, fake: true, ...placeRandom(),
+    })
+  }
+  return shapes
+}
+
+// Bouncing arrow pointing down at a scene target. Positioned with the same
+// percentage scheme as Shape so it tracks the target across viewport sizes.
+function TutorialArrow({ x, y }) {
+  const leftPct = (x / 1000) * 100
+  const topPct  = (y / 800) * 100
+  return (
+    <div
+      className="cbat-tutorial-arrow"
+      style={{ left: `${leftPct}%`, top: `${topPct}%` }}
+      aria-hidden
+    >
+      <svg width="24" height="28" viewBox="0 0 24 28" style={{ display: 'block' }}>
+        <path
+          d="M12 27 L3 15 H9 V2 H15 V15 H21 Z"
+          fill="#5baaff"
+          stroke="#06101e"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  )
+}
+
+function TutorialDisabledPanel({ label }) {
+  return (
+    <div className="cbat-tutorial-disabled w-full h-full bg-[#0a1628] border border-[#15293f] rounded-lg flex items-center justify-center select-none">
+      <span className="text-[10px] uppercase tracking-wide text-slate-600 flex items-center gap-1">
+        {'\u{1F512}'} {label}
+      </span>
+    </div>
+  )
+}
+
+function TutorialComplete({ onExit }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+    >
+      <p className="text-5xl mb-3">✅</p>
+      <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
+      <p className="text-sm text-slate-400 mb-6">Nice work — you've got the basics down.</p>
       <button
-        onClick={onStart}
-        disabled={!aircraftReady}
-        className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
+        onClick={onExit}
+        className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
       >
-        {aircraftReady ? 'Start' : 'Loading aircraft…'}
+        Back to Briefing
       </button>
     </motion.div>
+  )
+}
+
+function TargetTutorial({ onExit, shapeScale, aircraftList = [] }) {
+  const [stepIdx, setStepIdx] = useState(0)
+  const [done, setDone] = useState(false)
+  const [shapes] = useState(() => planTutorialScene())
+  const [clicked, setClicked] = useState(() => new Set())
+  const [missFlash, setMissFlash] = useState(false)
+
+  // Section 2 (Light) state.
+  const [lightPattern, setLightPattern] = useState(() => randomLightPattern())
+  const [lightTarget] = useState(() => randomLightPattern())
+  const [lightFlash, setLightFlash] = useState(false)
+
+  // Section 3 (Scan) state. The target is the first available aircraft; the
+  // scan panel cycles aircraft and periodically shows the target.
+  const [scanPanelAc, setScanPanelAc] = useState(null)
+  const [scanFlash, setScanFlash] = useState(false)
+  const scanTargetAc = aircraftList[0] || null
+
+  // Section 4 (System) state. Target code is injected below the visible fold so
+  // it scrolls into view; an IntersectionObserver flashes it once it's visible.
+  const systemRef = useRef(null)
+  const [sysColumns, setSysColumns] = useState(() => initSysColumns())
+  const [sysTarget, setSysTarget] = useState(null)
+  const [sysTargetPlaced, setSysTargetPlaced] = useState(false)
+  const [sysTargetInView, setSysTargetInView] = useState(false)
+
+  // Coach card height animates as the per-section copy changes, so the panels
+  // below slide rather than jump when the text length differs between sections.
+  const coachRef = useRef(null)
+  const [coachHeight, setCoachHeight] = useState('auto')
+  useEffect(() => {
+    const el = coachRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setCoachHeight(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const step = TUTORIAL_STEPS[stepIdx]
+  const enabled = step?.enabled || {}
+  const sequence = step?.sequence || null
+
+  // Once the user starts clicking targets, freeze the guided spotlight cycle and
+  // let them finish clicking the remaining unknown targets at their own pace.
+  const [engaged, setEngaged] = useState(false)
+  // Cycle the spotlight through the step's sequence (looping). Falls back to a
+  // static highlight set for steps that don't define a sequence. The index grows
+  // unbounded and is wrapped with modulo so it stays valid across step changes.
+  const [focusIdx, setFocusIdx] = useState(0)
+  useEffect(() => {
+    if (engaged || !sequence || sequence.length < 2) return
+    const id = setInterval(() => setFocusIdx(i => i + 1), 2600)
+    return () => clearInterval(id)
+  }, [stepIdx, sequence, engaged])
+  const focus = engaged ? null : (sequence ? sequence[focusIdx % sequence.length] : null)
+
+  const isPulsing = (panel) => (!engaged && (sequence ? focus === panel : step?.highlight?.includes(panel)))
+  const pulse = (panel) => (isPulsing(panel) ? ' cbat-tutorial-pulse' : '')
+
+  // Which section's task is currently active — gates each panel's button flash
+  // and completion so e.g. the Light LOCK stops flashing/advancing once the user
+  // has moved on to the Scan section.
+  const lightActive  = !!step?.highlight?.includes('light')
+  const scanActive   = !!step?.highlight?.includes('scan')
+  const systemActive = !!step?.highlight?.includes('system')
+
+  // Section 2: cycle the player's light pattern so a match periodically appears.
+  // Mirrors the live game — when the current pattern matches the target, hold it
+  // noticeably longer so the player has time to spot it and press LOCK. The
+  // effect re-runs whenever the pattern changes, re-scheduling the next change.
+  useEffect(() => {
+    if (!enabled.light) return
+    const matching = lightPattern.every((c, i) => c === lightTarget[i])
+    const delay = matching ? 3600 : 1600
+    const id = setTimeout(() => {
+      setLightPattern(Math.random() < 0.4 ? [...lightTarget] : randomLightPattern())
+    }, delay)
+    return () => clearTimeout(id)
+  }, [enabled.light, lightPattern, lightTarget])
+
+  // Section 3: cycle the scan panel aircraft, holding a match longer (mirrors
+  // the light cycle). Re-runs on each panel change to re-schedule.
+  useEffect(() => {
+    if (!enabled.scan || !scanTargetAc) return
+    const matching = scanPanelAc && scanPanelAc.briefId === scanTargetAc.briefId
+    const delay = matching ? 3600 : (scanPanelAc ? 1800 : 0)
+    const id = setTimeout(() => {
+      const pickAc = Math.random() < 0.45 ? scanTargetAc : pick(aircraftList)
+      setScanPanelAc(scanFrame(pickAc))
+    }, delay)
+    return () => clearTimeout(id)
+  }, [enabled.scan, scanPanelAc, scanTargetAc, aircraftList])
+
+  // Section 4: once the System panel is shown, measure the visible height and
+  // inject the target code just below the fold so it scrolls into view rather
+  // than starting on screen. Runs inside rAF so it reads post-layout sizes.
+  useEffect(() => {
+    if (!enabled.system || sysTargetPlaced) return
+    const raf = requestAnimationFrame(() => {
+      const colEl = systemRef.current?.querySelector('.sys-column')
+      if (!colEl) return
+      const visibleRows = Math.max(1, Math.floor(colEl.clientHeight / 26))
+      const targetRow = Math.min(sysColumns[0].codes.length - 1, visibleRows + 1)
+      const code = randomCode()
+      setSysColumns(prev => {
+        const next = prev.map(c => ({ ...c, codes: [...c.codes] }))
+        next[0].codes[targetRow] = code
+        return next
+      })
+      setSysTarget({ id: uid(), code })
+      setSysTargetPlaced(true)
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [enabled.system, sysTargetPlaced, sysColumns])
+
+  // Flash the target row only while it's actually scrolled into the viewport.
+  useEffect(() => {
+    if (!enabled.system || !sysTarget || typeof IntersectionObserver === 'undefined') return
+    const rootEl = systemRef.current
+    const nodes = rootEl
+      ? Array.from(rootEl.querySelectorAll('.sys-row')).filter(n => n.textContent === sysTarget.code)
+      : []
+    if (!nodes.length) return
+    const io = new IntersectionObserver(
+      (entries) => setSysTargetInView(entries.some(e => e.isIntersecting)),
+      { root: nodes[0].closest('.sys-column'), threshold: 0.85 },
+    )
+    nodes.forEach(n => io.observe(n))
+    return () => io.disconnect()
+  }, [enabled.system, sysTarget])
+
+  const visibleShapes = shapes.filter(s => !clicked.has(s.id))
+
+  // Advance to the next section, or finish the tutorial after the last one.
+  const advance = () => {
+    if (stepIdx < TUTORIAL_STEPS.length - 1) {
+      setEngaged(false)
+      setFocusIdx(0)
+      setStepIdx(stepIdx + 1)
+    } else {
+      setDone(true)
+    }
+  }
+
+  // Manual section navigation via the coach-card arrows. Resets the per-section
+  // guidance state so the chosen section plays from its start.
+  const goToStep = (idx) => {
+    if (idx < 0 || idx > TUTORIAL_STEPS.length - 1) return
+    setEngaged(false)
+    setFocusIdx(0)
+    setStepIdx(idx)
+  }
+
+  const onSceneClick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+    const clickX = e.clientX - rect.left
+    const clickY = e.clientY - rect.top
+    const scaleX = rect.width / 1000
+    const scaleY = rect.height / 800
+    const hits = visibleShapes.filter(s => {
+      const sx = s.x * scaleX
+      const sy = s.y * scaleY
+      const half = SHAPE_R_BASE * shapeScale * (KIND_SCALE[s.kind] || 1) + 8
+      return Math.abs(sx - clickX) <= half && Math.abs(sy - clickY) <= half
+    })
+    if (hits.length === 0) return
+    // Prefer an unknown diamond when several shapes overlap the click.
+    hits.sort((a, b) => {
+      const p = (b.kind === 'unknown' ? 1 : 0) - (a.kind === 'unknown' ? 1 : 0)
+      if (p !== 0) return p
+      const da = Math.hypot(a.x * scaleX - clickX, a.y * scaleY - clickY)
+      const db = Math.hypot(b.x * scaleX - clickX, b.y * scaleY - clickY)
+      return da - db
+    })
+    const hit = hits[0]
+    if (hit.kind === 'unknown') {
+      setClicked(prev => new Set(prev).add(hit.id))
+      setEngaged(true)
+      // When the last unknown target is cleared, move on to the next section.
+      const remaining = visibleShapes.filter(s => s.kind === 'unknown' && s.id !== hit.id).length
+      if (remaining === 0) advance()
+    } else {
+      setMissFlash(true)
+      setTimeout(() => setMissFlash(false), 300)
+    }
+  }
+
+  const onLightPress = () => {
+    if (lightActive && lightPattern.every((c, i) => c === lightTarget[i])) {
+      setLightFlash(true)
+      setTimeout(() => setLightFlash(false), 300)
+      advance()
+    }
+  }
+
+  const onScanPress = () => {
+    if (scanActive && scanPanelAc && scanTargetAc && scanPanelAc.briefId === scanTargetAc.briefId) {
+      setScanFlash(true)
+      setTimeout(() => setScanFlash(false), 300)
+      advance()
+    }
+  }
+
+  const onSysCodeClick = (ci, row, code) => {
+    if (systemActive && sysTarget && code === sysTarget.code) advance()
+  }
+
+  if (done) {
+    return (
+      <div className="flex flex-col items-center">
+        <TutorialComplete onExit={onExit} />
+      </div>
+    )
+  }
+
+  const diamondsActive = visibleShapes.some(s => s.kind === 'unknown')
+  const lightsMatch = lightActive && lightPattern.every((c, i) => c === lightTarget[i])
+  const scanMatch = scanActive && scanPanelAc && scanTargetAc &&
+    scanPanelAc.briefId === scanTargetAc.briefId
+
+  return (
+    <div>
+      {/* Coach card — height animates as the per-section copy changes so the
+          panels below slide smoothly instead of snapping. */}
+      <motion.div
+        animate={{ height: coachHeight }}
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        style={{ overflow: 'hidden' }}
+        className="mb-3"
+      >
+        <div ref={coachRef} className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] uppercase tracking-wide text-brand-300 font-bold">Practice Mode</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => goToStep(stepIdx - 1)}
+                disabled={stepIdx === 0}
+                aria-label="Previous section"
+                className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+              >
+                {'‹'}
+              </button>
+              <span className="text-[10px] text-slate-500 tabular-nums">{stepIdx + 1} / {TUTORIAL_STEPS.length}</span>
+              <button
+                onClick={() => goToStep(stepIdx + 1)}
+                disabled={stepIdx === TUTORIAL_STEPS.length - 1}
+                aria-label="Next section"
+                className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+              >
+                {'›'}
+              </button>
+            </div>
+          </div>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={stepIdx}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+            >
+              <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
+              <p className="text-sm text-[#ddeaf8] leading-relaxed">{step.body}</p>
+            </motion.div>
+          </AnimatePresence>
+          <div className="flex items-center gap-3 mt-4">
+            <button
+              onClick={onExit}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors bg-transparent border-0 cursor-pointer"
+            >
+              Exit practice
+            </button>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Practice arena — same grid as the live game; locked panels greyed out */}
+      <div className="cbat-target-arena">
+        <div className="cbat-target-grid">
+          <div className={`grid-info${pulse('info')}`}>
+            {enabled.info ? <InfoPanel highlightUnknown={focus === 'info'} /> : <TutorialDisabledPanel label="Key" />}
+          </div>
+          <div className={`grid-light${pulse('light')}`}>
+            {enabled.light
+              ? <LightPanel pattern={lightPattern} flash={lightFlash} onPress={onLightPress} lockPulse={lightsMatch} />
+              : <TutorialDisabledPanel label="Light" />}
+          </div>
+          <div className={`grid-scan${pulse('scan')}`}>
+            {enabled.scan
+              ? <ScanPanel aircraft={scanPanelAc} onPress={onScanPress} flash={scanFlash} idPulse={scanMatch} />
+              : <TutorialDisabledPanel label="Scan" />}
+          </div>
+          <div ref={systemRef} className={`grid-system${pulse('system')}`}>
+            {enabled.system
+              ? <SystemPanel
+                  columns={sysColumns}
+                  highlights={NO_HIGHLIGHTS}
+                  onClickCode={onSysCodeClick}
+                  flashCode={sysTargetInView ? sysTarget?.code : null}
+                />
+              : <TutorialDisabledPanel label="System" />}
+          </div>
+          <div className={`grid-scene${pulse('scene')}`}>
+            {enabled.scene ? (
+              <div
+                className={`cbat-target-scene relative w-full h-full border rounded-lg overflow-hidden cursor-pointer transition-colors ${missFlash ? 'border-red-500' : 'border-[#1a3a5c]'}`}
+                onClick={onSceneClick}
+              >
+                <Compass />
+                {visibleShapes.map(s => (
+                  <Shape key={s.id} shape={s} scale={shapeScale} />
+                ))}
+                {(engaged || focus === 'scene') && visibleShapes
+                  .filter(s => s.kind === 'unknown')
+                  .map(s => <TutorialArrow key={`arrow-${s.id}`} x={s.x} y={s.y} />)}
+              </div>
+            ) : <TutorialDisabledPanel label="Scene" />}
+          </div>
+          <div className={`grid-scene-target${pulse('sceneTarget')}`}>
+            {enabled.sceneTarget
+              ? <SceneTargetPanel labels={[]} diamondsActive={diamondsActive} highlightUnknown={focus === 'sceneTarget'} />
+              : <TutorialDisabledPanel label="Scene Targets" />}
+          </div>
+          <div className={`grid-light-target${pulse('lightTarget')}`}>
+            {enabled.lightTarget
+              ? <LightTargetPanel pattern={lightTarget} />
+              : <TutorialDisabledPanel label="Light Target" />}
+          </div>
+          <div className={`grid-scan-target${pulse('scanTarget')}`}>
+            {enabled.scanTarget
+              ? <ScanTargetPanel aircraft={scanTargetAc} />
+              : <TutorialDisabledPanel label="Scan Target" />}
+          </div>
+          <div className={`grid-system-target${pulse('systemTarget')}`}>
+            {enabled.systemTarget
+              ? <SystemTargetPanel targets={sysTarget ? [sysTarget] : []} />
+              : <TutorialDisabledPanel label="System Target" />}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -744,10 +1257,11 @@ export default function CbatTarget() {
   const { settings } = useAppSettings()
   const shapeScale = useShapeScale()
 
-  const [phase, setPhase] = useState('intro')         // intro | playing | results
+  const [phase, setPhase] = useState('intro')         // intro | playing | tutorial | results
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
-    if (phase === 'playing') enterImmersive()
+    // Hide the nav chrome during the live game and the practice tutorial.
+    if (phase === 'playing' || phase === 'tutorial') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
@@ -1203,12 +1717,16 @@ export default function CbatTarget() {
       {user && (phase === 'intro' || phase === 'results') && (
         <div className="flex flex-col items-center">
           {phase === 'intro' && (
-            <Intro onStart={startGame} personalBest={personalBest} aircraftReady={aircraftList.length > 0} />
+            <Intro onStart={startGame} onTutorial={() => setPhase('tutorial')} personalBest={personalBest} aircraftReady={aircraftList.length > 0} />
           )}
           {phase === 'results' && (
             <ResultsScreen stats={stats} onPlayAgain={() => setPhase('intro')} scoreSaved={scoreSaved} />
           )}
         </div>
+      )}
+
+      {user && phase === 'tutorial' && (
+        <TargetTutorial onExit={() => setPhase('intro')} shapeScale={shapeScale} aircraftList={aircraftList} />
       )}
 
       {user && phase === 'playing' && (
