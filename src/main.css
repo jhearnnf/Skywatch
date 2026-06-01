@@ -1268,11 +1268,27 @@ body.play-mode .card-shadow {
   filter: drop-shadow(0 0 4px rgba(91, 170, 255, 0.6));
   animation: cbatArrowBounce 0.85s ease-in-out infinite;
 }
+/* Reduced-motion: don't animate, but keep the cue visible — swap each pulsing /
+   flashing effect for a steady highlight so the tutorial still communicates. */
 @media (prefers-reduced-motion: reduce) {
-  .cbat-tutorial-pulse,
-  .cbat-triple-pulse,
-  .cbat-btn-flash,
-  .cbat-row-flash { animation: none; }
+  .cbat-tutorial-pulse {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(91, 170, 255, 0.75), 0 0 26px 7px rgba(99, 155, 255, 0.35);
+  }
+  .cbat-triple-pulse {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(91, 170, 255, 0.95);
+    background-color: rgba(91, 170, 255, 0.18);
+  }
+  .cbat-btn-flash {
+    animation: none;
+    box-shadow: 0 0 0 2px #5baaff, 0 0 14px 4px rgba(91, 170, 255, 0.7);
+  }
+  .cbat-row-flash {
+    animation: none;
+    background-color: rgba(91, 170, 255, 0.9);
+    color: #04101f;
+  }
   .cbat-tutorial-arrow { animation: none; transform: translate(-50%, -120%); }
 }
 
