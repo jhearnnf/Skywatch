@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Capacitor } from '@capacitor/core'
 import { storeNativeToken } from '../context/AuthContext'
 import { useAuth } from '../context/AuthContext'
+import { captureEvent } from '../lib/posthog'
 import { consumePendingBrief } from '../utils/pendingBrief'
 import { PENDING_BRIEF_KEY, POST_LOGIN_DEST_KEY } from '../utils/storageKeys'
 import { resolveLoginDest } from '../utils/loginRedirect'
@@ -152,7 +153,11 @@ export default function LoginPage() {
 
   // New users always start on Standard difficulty — set it silently, no screen shown.
   // JWT cookie is set by the auth response before this runs, so all fetches work.
-  const finishNewUser = async (userObj) => {
+  const finishNewUser = async (userObj, method) => {
+    // Acquisition attribution: this fires once per brand-new account (both Google
+    // and email-verified paths funnel through here). PostHog auto-attaches the
+    // person's $initial_referring_domain / $initial_utm_* so signups segment by source.
+    captureEvent('signup_completed', { method })
     try {
       await apiFetch(`${API}/api/users/me/difficulty`, {
         method: 'PATCH', credentials: 'include',
@@ -186,7 +191,7 @@ export default function LoginPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
       storeNativeToken(data.data?.token)
-      if (data.data.isNew) { await finishNewUser(data.data.user); return }
+      if (data.data.isNew) { await finishNewUser(data.data.user, 'google'); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief({ API, setUser, navigate })
       const dest = resolveLoginDest(briefId)
@@ -242,7 +247,7 @@ export default function LoginPage() {
         return
       }
       storeNativeToken(data.data?.token)
-      if (data.data.isNew) { await finishNewUser(data.data.user); return }
+      if (data.data.isNew) { await finishNewUser(data.data.user, 'email'); return }
       setUser(data.data.user)
       const briefId = await consumePendingBrief({ API, setUser, navigate })
       const dest = resolveLoginDest(briefId)
@@ -267,7 +272,7 @@ export default function LoginPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.message); return }
       storeNativeToken(data.data?.token)
-      await finishNewUser(data.data.user)
+      await finishNewUser(data.data.user, 'email')
     } catch {
       setError('Connection failed. Is the server running?')
     } finally {
