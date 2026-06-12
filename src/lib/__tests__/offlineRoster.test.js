@@ -63,4 +63,12 @@ describe('getAircraftRoster', () => {
     // fell through to cache → filtered to offline pair
     expect(data).toHaveLength(2)
   })
+
+  it('offline with NO cached roster still returns both bundled aircraft (fresh install)', async () => {
+    isOnline.mockReturnValue(false) // cache is empty
+    const { data } = await getAircraftRoster('aircraft-cutouts', { apiFetch: vi.fn() })
+    expect(data.map((a) => a.title).sort()).toEqual(['Eurofighter Typhoon FGR4', 'Hawk T2'])
+    // no dynamic data → synthetic entries: null briefId, null cutout, model still resolvable by title
+    expect(data.every((a) => a.briefId === null && a.cutoutUrl === null)).toBe(true)
+  })
 })

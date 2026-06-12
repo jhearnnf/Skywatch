@@ -5,13 +5,15 @@
 //   • Eurofighter Typhoon FGR4 — the default frontline fighter (DPT, Target,
 //     Flag, Plane Turn aircraft select).
 //
-// The GLB models are tiny (~50–70 KB) and bundled in the build; this list also
-// drives the PWA precache (GLBs) and the offline roster filter (slugs). The
-// slugs MUST match titleToSlug() output from src/data/aircraftModels.js.
-
-export const OFFLINE_AIRCRAFT_SLUGS = ['eurofighter typhoon fgr4', 'hawk t2']
-
-export const OFFLINE_AIRCRAFT_GLBS = [
-  'eurofighter typhoon fgr4.glb',
-  'hawk t2.glb',
+// `title` MUST slugify (via titleToSlug) to `slug`, and `slug` MUST equal the
+// GLB filename (minus .glb) — that's how getModelUrl/has3DModel resolve the
+// bundled model. These titles are used as a STATIC fallback so the offline
+// roster always offers both aircraft even on a fresh install that never cached
+// the dynamic /aircraft-cutouts roster (the GLBs are always bundled).
+export const OFFLINE_AIRCRAFT = [
+  { title: 'Eurofighter Typhoon FGR4', slug: 'eurofighter typhoon fgr4', glb: 'eurofighter typhoon fgr4.glb' },
+  { title: 'Hawk T2',                  slug: 'hawk t2',                  glb: 'hawk t2.glb' },
 ]
+
+export const OFFLINE_AIRCRAFT_SLUGS = OFFLINE_AIRCRAFT.map((a) => a.slug)
+export const OFFLINE_AIRCRAFT_GLBS  = OFFLINE_AIRCRAFT.map((a) => a.glb)

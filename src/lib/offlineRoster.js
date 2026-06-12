@@ -13,7 +13,7 @@
 
 import { isOnline } from './net'
 import { cacheGet, cacheSet } from './offlineStore'
-import { OFFLINE_AIRCRAFT_SLUGS } from './offlineAircraft'
+import { OFFLINE_AIRCRAFT } from './offlineAircraft'
 import { titleToSlug } from '../data/aircraftModels'
 
 const cacheKey = (endpoint) => `roster:${endpoint}`
@@ -31,17 +31,28 @@ export function transformCutoutUrl(url) {
   return url.replace('/upload/', '/upload/w_400,f_auto,q_auto/')
 }
 
-// Offline: keep only aircraft whose assets are available offline, and swap each
-// cutout URL for its cached data URL (warmOfflineAssets). Falls back to the
-// transformed Cloudinary URL if a data URL wasn't cached — on web the SW may
-// still have it; on Android it just won't render (graceful).
-async function filterToOffline(list) {
-  const allowed = new Set(OFFLINE_AIRCRAFT_SLUGS)
-  const offline = (list || []).filter((a) => a?.title && allowed.has(titleToSlug(a.title)))
+// Build the offline roster. ALWAYS returns both offline aircraft (their GLBs are
+// bundled in the build/APK), so Trace 1 and the 3D games work offline even on a
+// fresh install that never cached the dynamic roster. Each entry is enriched
+// from the cached roster when present (real briefId) and its cutout image is the
+// cached data URL (warmOfflineAssets) when present, else the transformed
+// Cloudinary URL (web SW may have it) — never blocks the game on a missing
+// cutout, since the model itself is local.
+async function buildOfflineRoster(cachedList) {
+  const bySlug = new Map(
+    (cachedList || [])
+      .filter((a) => a?.title)
+      .map((a) => [titleToSlug(a.title), a]),
+  )
   return Promise.all(
-    offline.map(async (a) => {
-      const dataUrl = await cacheGet(cutoutCacheKey(titleToSlug(a.title)))
-      return { ...a, cutoutUrl: dataUrl || transformCutoutUrl(a.cutoutUrl) }
+    OFFLINE_AIRCRAFT.map(async (def) => {
+      const real = bySlug.get(def.slug)
+      const dataUrl = await cacheGet(cutoutCacheKey(def.slug))
+      return {
+        briefId:   real?.briefId ?? null,
+        title:     real?.title ?? def.title,
+        cutoutUrl: dataUrl || (real ? transformCutoutUrl(real.cutoutUrl) : null),
+      }
     }),
   )
 }
@@ -60,5 +71,5 @@ export async function getAircraftRoster(endpoint, { apiFetch, API }) {
     }
   }
   const cached = await cacheGet(cacheKey(endpoint))
-  return { data: await filterToOffline(cached) }
+  return { data: await buildOfflineRoster(cached) }
 }
