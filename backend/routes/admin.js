@@ -832,7 +832,7 @@ router.patch('/settings', requireReason, async (req, res) => {
     // featureFlags — tri-state ('off' | 'admin' | 'everyone') keyed by known
     // flag names. Same Mongoose-Map quirk as cbatGameEnabled: extract here,
     // apply via mutate+save below.
-    const KNOWN_FLAG_KEYS = new Set(['rsvpReader', 'briefReel']);
+    const KNOWN_FLAG_KEYS = new Set(['rsvpReader', 'briefReel', 'world3d']);
     const VALID_FLAG_VALUES = new Set(['off', 'admin', 'everyone']);
     if ('featureFlags' in updates) {
       const v = updates.featureFlags;

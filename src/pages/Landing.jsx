@@ -260,7 +260,7 @@ export default function Landing() {
         <Suspense fallback={null}>
           <PreviewWindow
             eyebrow="CBAT PRACTICE GAMES"
-            heading="Practice every CBAT subtest"
+            heading="Train for CBAT"
             scenes={cbatScenes}
             dataTestId="preview-window-cbat"
           />

@@ -166,7 +166,7 @@ const appSettingsSchema = new mongoose.Schema({
   featureFlags: {
     type: Map,
     of: String,
-    default: () => ({ rsvpReader: 'off', briefReel: 'off' }),
+    default: () => ({ rsvpReader: 'off', briefReel: 'off', world3d: 'off' }),
   },
 
   // Flashcards feature — when false, News-category briefs skip the flashcard
@@ -378,6 +378,7 @@ appSettingsSchema.statics.getSettings = async function () {
       const KNOWN_FLAG_KEYS = {
         rsvpReader: 'off',
         briefReel:  'off',
+        world3d:    'off',
       };
       const current = settings.featureFlags;
       let touched = false;

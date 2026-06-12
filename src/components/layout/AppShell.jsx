@@ -5,7 +5,7 @@ import BottomNav from './BottomNav'
 import { useGameChrome } from '../../context/GameChromeContext'
 
 // Pages where we want no chrome at all (full-screen experiences)
-const BARE_PAGES = ['/', '/login', '/register']
+const BARE_PAGES = ['/', '/login', '/register', '/immerse']
 
 export default function AppShell({ children }) {
   const { pathname } = useLocation()

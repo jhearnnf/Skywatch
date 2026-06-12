@@ -82,6 +82,7 @@ import NotFound       from './pages/NotFound'
 import Admin          from './pages/Admin'
 import OpenRouterUsage from './pages/OpenRouterUsage'
 import AptitudeSync   from './pages/AptitudeSync'
+import World3DRoute  from './components/world3d/World3DRoute'
 
 import { playSound } from './utils/sound'
 import useHeartbeat from './hooks/useHeartbeat'
@@ -271,6 +272,9 @@ function AppRoutes() {
           <Route path="/intel-brief-history"   element={<RequireAuth><PageWrapper><IntelBriefHistory /></PageWrapper></RequireAuth>} />
           <Route path="/admin"             element={<RequireAuth><PageWrapper><Admin /></PageWrapper></RequireAuth>} />
           <Route path="/admin/openrouter-usage" element={<RequireAuth><PageWrapper><OpenRouterUsage /></PageWrapper></RequireAuth>} />
+
+          {/* 3D World (feature-flagged) */}
+          <Route path="/immerse" element={<World3DRoute />} />
 
           {/* 404 */}
           <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
