@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGLTF } from '@react-three/drei'
 import { useAuth } from '../context/AuthContext'
+import { submitCbatResult } from '../lib/cbatOutbox'
+import { getAircraftRoster } from '../lib/offlineRoster'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
@@ -279,8 +281,7 @@ export default function CbatFlag() {
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
 
-    apiFetch(`${API}/api/games/cbat/aircraft-cutouts`)
-      .then(r => r.json())
+    getAircraftRoster('aircraft-cutouts', { apiFetch, API })
       .then(d => {
         const allowlist = new Set((settings?.cbatFlagAircraftBriefIds ?? []).map(String))
         const list = (d.data || [])
@@ -453,10 +454,7 @@ export default function CbatFlag() {
       const grade = computeGrade(finalStats.totalScore)
       setScoreSaved(false)
       markGameCompleted({ score: finalStats.totalScore })
-      apiFetch(`${API}/api/games/cbat/flag/result`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      submitCbatResult(`flag`, {
           totalScore: finalStats.totalScore,
           mathCorrect: finalStats.mathCorrect,
           mathWrong: finalStats.mathWrong,
@@ -470,9 +468,7 @@ export default function CbatFlag() {
           aircraftBriefId: aircraftList.find(a => a.modelUrl === modelUrl)?.briefId ?? null,
           totalTime: GAME_DURATION,
           grade,
-        }),
-      })
-        .then(r => r.json())
+        }, { apiFetch, API })
         .then(() => {
           setScoreSaved(true)
           apiFetch(`${API}/api/games/cbat/flag/personal-best`)
@@ -700,13 +696,11 @@ export default function CbatFlag() {
                     />
                   </div>
 
-                  {/* Controls — numpad + aircraft question */}
+                  {/* Controls — numpad + aircraft question.
+                      In normal flow below the play field on every size; centered
+                      and width-capped so it sits just under the game on desktop. */}
                   <div
-                    className="
-                      max-[600px]:w-full max-[600px]:max-w-[280px] max-[600px]:mx-auto max-[600px]:static max-[600px]:shrink-0
-                      min-[600px]:absolute min-[600px]:right-4 min-[600px]:bottom-4
-                      min-[600px]:w-52 z-10
-                    "
+                    className="w-full max-w-[280px] mx-auto shrink-0 z-10"
                   >
                     <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 max-[600px]:p-1.5 flex flex-col gap-3 max-[600px]:gap-1.5">
                       <Numpad

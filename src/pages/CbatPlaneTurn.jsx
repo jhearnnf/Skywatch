@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as THREE from 'three'
 import { useAuth } from '../context/AuthContext'
+import { submitCbatResult } from '../lib/cbatOutbox'
+import { getAircraftRoster } from '../lib/offlineRoster'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
@@ -637,8 +639,7 @@ export default function CbatPlaneTurn() {
   // Fetch aircraft on mount
   useEffect(() => {
     if (!user) return
-    apiFetch(`${API}/api/games/cbat/aircraft-cutouts`)
-      .then(res => res.json())
+    getAircraftRoster('aircraft-cutouts', { apiFetch, API })
       .then(d => setAircraft(d.data || []))
       .catch(() => {})
       .finally(() => setLoadingAircraft(false))
@@ -664,17 +665,12 @@ export default function CbatPlaneTurn() {
   const submitScore = useCallback((finalRotations, finalTime, aircraftTitle) => {
     setScoreSaved(false)
     markGameCompleted({ score: finalRotations })
-    apiFetch(`${API}/api/games/cbat/plane-turn-${mode}/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    submitCbatResult(`plane-turn-${mode}`, {
         totalRotations: finalRotations,
         totalTime: finalTime,
         levelsCompleted: MAX_LEVEL,
         aircraftUsed: aircraftTitle,
-      }),
-    })
-      .then(r => r.json())
+      }, { apiFetch, API })
       .then(() => {
         setScoreSaved(true)
         apiFetch(`${API}/api/games/cbat/plane-turn-${mode}/personal-best`)
@@ -690,10 +686,7 @@ export default function CbatPlaneTurn() {
     setScoreSaved(false)
     const accuracy = totalTurns > 0 ? Math.round((correctTurns / totalTurns) * 100) : 0
     markGameCompleted({ score: correctTurns })
-    apiFetch(`${API}/api/games/cbat/trace-1/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    submitCbatResult(`trace-1`, {
         score,
         correctTurns,
         totalTurns,
@@ -701,9 +694,7 @@ export default function CbatPlaneTurn() {
         accuracy,
         aircraftUsed: 'Hawk T2',
         totalTime: elapsedMs,
-      }),
-    })
-      .then(r => r.json())
+      }, { apiFetch, API })
       .then(() => {
         setScoreSaved(true)
         apiFetch(`${API}/api/games/cbat/trace-1/personal-best`)

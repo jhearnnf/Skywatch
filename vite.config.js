@@ -1,9 +1,28 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { optimizeGlbFile } from './scripts/optimize-models.mjs'
+import { OFFLINE_AIRCRAFT_GLBS } from './src/lib/offlineAircraft.js'
+
+// Precache exactly the offline aircraft GLBs (Typhoon + Hawk T2) — the heavy
+// World3D character/scene models are deliberately left out. Each entry needs a
+// revision so the service worker re-fetches when the model changes.
+function offlineGlbPrecacheEntries() {
+  return OFFLINE_AIRCRAFT_GLBS.map((file) => {
+    const abs = path.resolve(__dirname, 'public/models', file)
+    let revision = null
+    try {
+      revision = crypto.createHash('md5').update(fs.readFileSync(abs)).digest('hex')
+    } catch {
+      /* model not present at build time — skip revision */
+    }
+    return { url: `/models/${file}`, revision }
+  })
+}
 
 function publicModelsManifest() {
   const virtualId = 'virtual:public-models'
@@ -93,7 +112,63 @@ function publicModelsManifest() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), publicModelsManifest()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    publicModelsManifest(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      injectRegister: false, // registered manually (web only) in src/main.jsx
+      manifest: false,       // keep the existing public/manifest.webmanifest
+      workbox: {
+        // Precache the app shell. GLBs are added explicitly below so the heavy
+        // World3D models (character/scene) are never precached.
+        globPatterns: ['**/*.{js,css,html,svg,woff,woff2,png,ico}'],
+        globIgnores: ['**/models/**'],
+        additionalManifestEntries: offlineGlbPrecacheEntries(),
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 3D/vendor chunks
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            // Aircraft cutout images live on Cloudinary — cache on first use so
+            // the warm step (and any online play) makes them available offline.
+            urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'sw-cloudinary-cutouts',
+              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // CBAT aircraft roster JSON — serve fresh when online, fall back to
+            // the last cached copy offline.
+            urlPattern: ({ url }) =>
+              url.pathname.includes('/api/games/cbat/aircraft-cutouts') ||
+              url.pathname.includes('/api/games/cbat/fighter-aircraft'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'sw-cbat-roster',
+              networkTimeoutSeconds: 5,
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Any aircraft GLB requested at runtime — belt-and-suspenders on top
+            // of the precached offline pair.
+            urlPattern: ({ url }) => url.pathname.startsWith('/models/') && url.pathname.endsWith('.glb'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'sw-aircraft-models',
+              expiration: { maxEntries: 12, maxAgeSeconds: 60 * 60 * 24 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
+      devOptions: { enabled: false },
+    }),
+  ],
   server: {
     proxy: {
       '/api': 'http://localhost:5000',

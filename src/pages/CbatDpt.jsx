@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { submitCbatResult } from '../lib/cbatOutbox'
+import { getAircraftRoster } from '../lib/offlineRoster'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
@@ -1156,8 +1158,7 @@ export default function CbatDpt() {
   // Fetch aircraft on mount (filter to 3D-enabled only)
   useEffect(() => {
     if (!user) return
-    apiFetch(`${API}/api/games/cbat/aircraft-cutouts`)
-      .then(res => res.json())
+    getAircraftRoster('aircraft-cutouts', { apiFetch, API })
       .then(d => {
         const all = d.data || []
         setAircraft(all.filter(a => has3DModel(a.briefId, a.title)))
@@ -1172,8 +1173,7 @@ export default function CbatDpt() {
   // so we filter to 3D-modelled briefs here via the Vite virtual module.
   useEffect(() => {
     if (!user) return
-    apiFetch(`${API}/api/games/cbat/fighter-aircraft`)
-      .then(res => res.json())
+    getAircraftRoster('fighter-aircraft', { apiFetch, API })
       .then(d => setFighterPool((d.data || []).filter(a => has3DModel(a.briefId, a.title))))
       .catch(() => {})
   }, [user])
@@ -1853,18 +1853,13 @@ export default function CbatDpt() {
   const submitScore = useCallback((finalScore, finalTime, aircraftTitle, finalRound, breakdown) => {
     setScoreSaved(false)
     markGameCompleted({ score: finalScore, round: finalRound })
-    apiFetch(`${API}/api/games/cbat/dpt/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    submitCbatResult(`dpt`, {
         totalScore: finalScore,
         totalTime:  finalTime,
         finalRound,
         aircraftUsed: aircraftTitle,
         ...breakdown,
-      }),
-    })
-      .then(r => r.json())
+      }, { apiFetch, API })
       .then(() => {
         setScoreSaved(true)
         apiFetch(`${API}/api/games/cbat/dpt/personal-best`)

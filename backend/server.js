@@ -35,6 +35,9 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     // Split legacy GameSessionCbatStart docs (gameKey:'plane-turn') into
     // 'plane-turn-2d' to match the registry split. Idempotent.
     await require('./migrations/splitPlaneTurnStarts')({ db: mongoose.connection.db });
+    // Add the clientResultId path/index to CBAT result schemas so offline score
+    // submissions can be deduplicated on flush retries.
+    require('./utils/cbatResult').ensureCbatResultPaths();
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })

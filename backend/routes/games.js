@@ -21,6 +21,7 @@ const GameOrderOfBattle = require('../models/GameOrderOfBattle');
 const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/GameOrderOfBattle');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { CBAT_GAMES } = require('../constants/cbatGames');
+const { saveCbatResult } = require('../utils/cbatResult');
 const { padLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn-2d'].Model;
@@ -2252,8 +2253,7 @@ router.post('/cbat/trace-1/result', protect, async (req, res) => {
       return res.status(400).json({ message: 'score is required' });
     }
     const Trace1 = CBAT_GAMES['trace-1'].Model;
-    const result = await Trace1.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(Trace1, req, {
       score,
       correctTurns: correctTurns ?? 0,
       totalTurns:   totalTurns   ?? 40,
@@ -2274,14 +2274,13 @@ router.post('/cbat/trace-1/result', protect, async (req, res) => {
 async function submitPlaneTurnResult(req, res, mode) {
   try {
     const { totalRotations, totalTime, levelsCompleted, aircraftUsed } = req.body;
-    const result = await GameSessionCbatPlaneTurnResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatPlaneTurnResult, req, {
       totalRotations,
       totalTime,
       levelsCompleted: levelsCompleted ?? 5,
       aircraftUsed,
       mode,
-    });
+    }, { mode });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -2294,8 +2293,7 @@ router.post('/cbat/plane-turn-3d/result', protect, (req, res) => submitPlaneTurn
 router.post('/cbat/angles/result', protect, async (req, res) => {
   try {
     const { correctCount, round1Correct, round2Correct, totalTime, grade } = req.body;
-    const result = await GameSessionCbatAnglesResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatAnglesResult, req, {
       correctCount,
       round1Correct,
       round2Correct,
@@ -2316,8 +2314,7 @@ router.post('/cbat/numerical-ops/result', protect, async (req, res) => {
       round1Correct, round2Correct, round3Correct, round4Correct,
       totalTime, avgTimePerQuestionMs,
     } = req.body;
-    const result = await GameSessionCbatNumericalOpsResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatNumericalOpsResult, req, {
       correctCount,
       correctPercentage,
       round1Correct,
@@ -2337,8 +2334,7 @@ router.post('/cbat/numerical-ops/result', protect, async (req, res) => {
 router.post('/cbat/code-duplicates/result', protect, async (req, res) => {
   try {
     const { correctCount, easyCorrect, mediumCorrect, hardCorrect, totalTime, grade } = req.body;
-    const result = await GameSessionCbatCodeDuplicatesResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatCodeDuplicatesResult, req, {
       correctCount,
       easyCorrect,
       mediumCorrect,
@@ -2356,8 +2352,7 @@ router.post('/cbat/code-duplicates/result', protect, async (req, res) => {
 router.post('/cbat/symbols/result', protect, async (req, res) => {
   try {
     const { correctCount, tier1Correct, tier2Correct, tier3Correct, totalTime, grade } = req.body;
-    const result = await GameSessionCbatSymbolsResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatSymbolsResult, req, {
       correctCount,
       tier1Correct,
       tier2Correct,
@@ -2375,8 +2370,7 @@ router.post('/cbat/symbols/result', protect, async (req, res) => {
 router.post('/cbat/instruments/result', protect, async (req, res) => {
   try {
     const { correctCount, roundsPlayed, totalTime, grade } = req.body;
-    const result = await GameSessionCbatInstrumentsResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatInstrumentsResult, req, {
       correctCount,
       roundsPlayed,
       totalTime,
@@ -2392,8 +2386,7 @@ router.post('/cbat/instruments/result', protect, async (req, res) => {
 router.post('/cbat/ant/result', protect, async (req, res) => {
   try {
     const { totalScore, exactCount, partialCount, missCount, roundsPlayed, totalTime, grade } = req.body;
-    const result = await GameSessionCbatAntResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatAntResult, req, {
       totalScore,
       exactCount,
       partialCount,
@@ -2419,8 +2412,7 @@ router.post('/cbat/flag/result', protect, async (req, res) => {
       aircraftsSeen, aircraftBriefId,
       totalTime, grade,
     } = req.body;
-    const result = await GameSessionCbatFlagResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatFlagResult, req, {
       totalScore,
       mathCorrect, mathWrong, mathTimeout,
       aircraftCorrect, aircraftWrong, aircraftMissed,
@@ -2443,8 +2435,7 @@ router.post('/cbat/target/result', protect, async (req, res) => {
       scanMatches, scanMisclicks, systemMatches, systemMisclicks,
       totalTime, grade,
     } = req.body;
-    const result = await GameSessionCbatTargetResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatTargetResult, req, {
       totalScore,
       sceneScore, lightScore, scanScore, systemScore,
       sceneHits, sceneMisses, lightMatches, lightMisclicks,
@@ -2462,8 +2453,7 @@ router.post('/cbat/target/result', protect, async (req, res) => {
 router.post('/cbat/visualisation-2d/result', protect, async (req, res) => {
   try {
     const { correctCount, tier1Correct, tier2Correct, totalTime, grade } = req.body;
-    const result = await GameSessionCbatVisualisation2DResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatVisualisation2DResult, req, {
       correctCount,
       tier1Correct,
       tier2Correct,
@@ -2480,8 +2470,7 @@ router.post('/cbat/visualisation-2d/result', protect, async (req, res) => {
 router.post('/cbat/visualisation-3d/result', protect, async (req, res) => {
   try {
     const { correctCount, tier1Correct, tier2Correct, totalTime, grade } = req.body;
-    const result = await GameSessionCbatVisualisation3DResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatVisualisation3DResult, req, {
       correctCount,
       tier1Correct,
       tier2Correct,
@@ -2502,8 +2491,7 @@ router.post('/cbat/dpt/result', protect, async (req, res) => {
       gatesHit, dangerZoneViolations, separationViolations, interceptions,
       aircraftUsed,
     } = req.body;
-    const result = await GameSessionCbatDptResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatDptResult, req, {
       totalScore:           Math.max(0, Math.round(totalScore ?? 0)),
       totalTime:            totalTime ?? 0,
       finalRound:           finalRound ?? 1,
@@ -2527,8 +2515,7 @@ router.post('/cbat/act/result', protect, async (req, res) => {
       ringsThreaded, ringsMissed, avoidObeyed, avoidViolated,
       wallScrapeSeconds, bleepHits, bleepMisses, avgBleepReactionMs,
     } = req.body;
-    const result = await GameSessionCbatActResult.create({
-      userId: req.user._id,
+    const result = await saveCbatResult(GameSessionCbatActResult, req, {
       totalScore:         Math.max(0, Math.round(totalScore ?? 0)),
       totalTime:          totalTime ?? 0,
       finalRound:         finalRound ?? 1,

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
@@ -259,16 +260,11 @@ export default function CbatNumericalOps() {
 
     setScoreSaved(false)
     markGameCompleted({ score: correctCount })
-    apiFetch(`${API}/api/games/cbat/numerical-ops/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    submitCbatResult(`numerical-ops`, {
         correctCount, correctPercentage,
         round1Correct, round2Correct, round3Correct, round4Correct,
         totalTime, avgTimePerQuestionMs,
-      }),
-    })
-      .then(r => r.json())
+      }, { apiFetch, API })
       .then(() => {
         setScoreSaved(true)
         apiFetch(`${API}/api/games/cbat/numerical-ops/personal-best`)

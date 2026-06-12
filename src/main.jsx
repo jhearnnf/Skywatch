@@ -16,6 +16,14 @@ if (Capacitor.isNativePlatform()) {
   }
 }
 
+// Register the PWA service worker for offline support — web only (Capacitor
+// already serves the bundle from the device) and only in production builds.
+if (!Capacitor.isNativePlatform() && import.meta.env.PROD) {
+  import('virtual:pwa-register')
+    .then(({ registerSW }) => registerSW({ immediate: true }))
+    .catch(() => { /* SW unavailable — app still works online */ })
+}
+
 window.addEventListener('vite:preloadError', () => {
   if (!sessionStorage.getItem('skywatch-reload-on-preload-error')) {
     sessionStorage.setItem('skywatch-reload-on-preload-error', '1')

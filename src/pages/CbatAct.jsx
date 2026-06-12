@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useAuth } from '../context/AuthContext'
+import { submitCbatResult } from '../lib/cbatOutbox'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
@@ -1303,10 +1304,7 @@ export default function CbatAct() {
     }, 0)
 
     markGameCompleted({ score: Math.max(0, Math.round(totals.score)), round: allRoundStats.length })
-    apiFetch(`${API}/api/games/cbat/act/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    submitCbatResult(`act`, {
         totalScore:         Math.max(0, Math.round(totals.score)),
         totalTime,
         finalRound:         allRoundStats.length,
@@ -1318,9 +1316,7 @@ export default function CbatAct() {
         bleepHits:          totals.bleepHits,
         bleepMisses:        totals.bleepMisses,
         avgBleepReactionMs: Math.round(avgReaction),
-      }),
-    })
-      .then(r => r.json())
+      }, { apiFetch, API })
       .then(() => {
         setScoreSaved(true)
         apiFetch(`${API}/api/games/cbat/act/personal-best`)

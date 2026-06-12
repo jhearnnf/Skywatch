@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
@@ -341,10 +342,7 @@ export default function CbatAnt() {
     const grade = gradeForScore(totalScore)
     setScoreSaved(false)
     markGameCompleted({ score: totalScore })
-    apiFetch(`${API}/api/games/cbat/ant/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    submitCbatResult(`ant`, {
         totalScore,
         exactCount,
         partialCount,
@@ -352,9 +350,7 @@ export default function CbatAnt() {
         roundsPlayed: finalAnswers.length,
         totalTime: finalTime,
         grade,
-      }),
-    })
-      .then(r => r.json())
+      }, { apiFetch, API })
       .then(() => {
         setScoreSaved(true)
         apiFetch(`${API}/api/games/cbat/ant/personal-best`)

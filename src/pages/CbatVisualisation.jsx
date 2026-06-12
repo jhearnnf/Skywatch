@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { submitCbatResult } from '../lib/cbatOutbox'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
@@ -519,18 +520,13 @@ export default function CbatVisualisation() {
 
     setScoreSaved(false)
     markGameCompleted({ score: correct })
-    apiFetch(`${API}/api/games/cbat/${gameKey}/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    submitCbatResult(`${gameKey}`, {
         correctCount: correct,
         tier1Correct: tier1,
         tier2Correct: tier2,
         totalTime: finalTime,
         grade,
-      }),
-    })
-      .then(r => r.json())
+      }, { apiFetch, API })
       .then(() => {
         setScoreSaved(true)
         apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)

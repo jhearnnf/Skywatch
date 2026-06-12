@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
@@ -268,17 +269,12 @@ export default function CbatInstruments() {
     const grade = gradeFor(correct)
     setScoreSaved(false)
     markGameCompleted({ score: correct, round: finalAnswers.length })
-    apiFetch(`${API}/api/games/cbat/instruments/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    submitCbatResult(`instruments`, {
         correctCount: correct,
         roundsPlayed: finalAnswers.length,
         totalTime: finalTime,
         grade,
-      }),
-    })
-      .then(r => r.json())
+      }, { apiFetch, API })
       .then(() => {
         setScoreSaved(true)
         apiFetch(`${API}/api/games/cbat/instruments/personal-best`)

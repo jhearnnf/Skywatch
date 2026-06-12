@@ -10,7 +10,7 @@ const MODEL_MAP = {
   // e.g. 'some-brief-id': 'eurofighter_typhoon_fgr4.glb'
 }
 
-function titleToSlug(title) {
+export function titleToSlug(title) {
   return title.toLowerCase().replace(/[^a-z0-9\-]+/g, ' ').trim()
 }
 

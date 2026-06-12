@@ -3,6 +3,10 @@ import { Capacitor } from '@capacitor/core'
 import { getLevelNumber } from '../utils/levelUtils'
 import { AUTH_TOKEN_KEY, tutorialKey, tutorialClearedKey } from '../utils/storageKeys'
 import { identifyUser, resetPostHog } from '../lib/posthog'
+import { flushOutbox } from '../lib/cbatOutbox'
+import { onNetworkChange } from '../lib/net'
+import { getAircraftRoster } from '../lib/offlineRoster'
+import { warmOfflineAssets } from '../lib/warmOfflineAssets'
 
 const AuthContext = createContext(null)
 
@@ -101,6 +105,23 @@ export function AuthProvider({ children }) {
       .catch(() => {})
       .finally(() => { clearTimeout(timeoutId); setLoading(false) })
   }, [])
+
+  // Flush any CBAT scores queued while offline — on first load (once a user is
+  // known) and whenever connectivity returns. Auth is required for the result
+  // endpoints, so we gate on `user`; queued items survive until a logged-in
+  // session can sync them.
+  useEffect(() => {
+    if (!user) return
+    flushOutbox({ apiFetch, API })
+    // Prime offline caches in the background: roster JSON → cutout images + GLBs.
+    getAircraftRoster('aircraft-cutouts', { apiFetch, API })
+      .then(() => warmOfflineAssets())
+      .catch(() => {})
+    const off = onNetworkChange((online) => {
+      if (online) flushOutbox({ apiFetch, API })
+    })
+    return off
+  }, [user, apiFetch])
 
   const logout = async () => {
     await fetch(`${API}/api/auth/logout`, { method: 'POST', headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }) })

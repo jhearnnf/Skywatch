@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } fro
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { submitCbatResult } from '../lib/cbatOutbox'
+import { getAircraftRoster } from '../lib/offlineRoster'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
@@ -1313,8 +1315,7 @@ export default function CbatTarget() {
       .then(r => r.json())
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
-    apiFetch(`${API}/api/games/cbat/aircraft-cutouts`)
-      .then(r => r.json())
+    getAircraftRoster('aircraft-cutouts', { apiFetch, API })
       .then(d => {
         const allowlist = new Set((settings?.cbatTargetAircraftBriefIds ?? []).map(String))
         const list = (d.data || [])
@@ -1494,12 +1495,7 @@ export default function CbatTarget() {
     const grade = computeGrade(stats.totalScore)
     setScoreSaved(false)
     markGameCompleted({ score: stats.totalScore })
-    apiFetch(`${API}/api/games/cbat/target/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...stats, totalTime: finalTime, grade }),
-    })
-      .then(r => r.json())
+    submitCbatResult(`target`, { ...stats, totalTime: finalTime, grade }, { apiFetch, API })
       .then(() => {
         setScoreSaved(true)
         apiFetch(`${API}/api/games/cbat/target/personal-best`)

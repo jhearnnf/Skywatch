@@ -28,6 +28,7 @@ import CategoryUnlockNotification          from './components/CategoryUnlockNoti
 import LearnNavFlasher                     from './components/LearnNavFlasher'
 import PlayNavFlasher                      from './components/PlayNavFlasher'
 import UpdateNotificationModal             from './components/UpdateNotificationModal'
+import OfflineStatus                        from './components/OfflineStatus'
 import { captureLoginReturn, resolveLoginDest } from './utils/loginRedirect'
 
 // v2 pages
@@ -367,6 +368,7 @@ export default function App() {
                   <GameChromeProvider>
                     <AppRoutes />
                     <NotifLayer />
+                    <OfflineStatus />
                     <UpdateNotificationModal />
                     <LearnNavFlasher />
                     <PlayNavFlasher />

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
@@ -172,19 +173,14 @@ export default function CbatCodeDuplicates() {
 
     setScoreSaved(false)
     markGameCompleted({ score: correct })
-    apiFetch(`${API}/api/games/cbat/code-duplicates/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    submitCbatResult(`code-duplicates`, {
         correctCount: correct,
         easyCorrect,
         mediumCorrect,
         hardCorrect,
         totalTime: finalTime,
         grade,
-      }),
-    })
-      .then(r => r.json())
+      }, { apiFetch, API })
       .then(() => {
         setScoreSaved(true)
         apiFetch(`${API}/api/games/cbat/code-duplicates/personal-best`)
