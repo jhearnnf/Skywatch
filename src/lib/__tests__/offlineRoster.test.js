@@ -47,6 +47,15 @@ describe('getAircraftRoster', () => {
     expect(data.every((a) => a.cutoutUrl.includes('/upload/w_400,'))).toBe(true)
   })
 
+  it('offline: serves the cached data-URL cutout when present (SW-less Android path)', async () => {
+    cache.set('roster:aircraft-cutouts', roster)
+    cache.set('cutout:hawk t2', 'data:image/png;base64,AAAA')
+    isOnline.mockReturnValue(false)
+    const { data } = await getAircraftRoster('aircraft-cutouts', { apiFetch: vi.fn() })
+    const hawk = data.find((a) => a.title === 'Hawk T2')
+    expect(hawk.cutoutUrl).toBe('data:image/png;base64,AAAA')
+  })
+
   it('falls back to the cached roster if the live fetch fails', async () => {
     cache.set('roster:aircraft-cutouts', roster)
     const apiFetch = vi.fn().mockRejectedValue(new Error('down'))

@@ -18,20 +18,32 @@ import { titleToSlug } from '../data/aircraftModels'
 
 const cacheKey = (endpoint) => `roster:${endpoint}`
 
+// Key under which warmOfflineAssets stores each aircraft's cutout image as a
+// data URL (so the cutout renders offline on web AND the SW-less Android build).
+export const cutoutCacheKey = (slug) => `cutout:${slug}`
+
 // Insert Cloudinary transforms so the offline-cached cutout is small (~20–60 KB
-// instead of full-res). The warm step fetches this exact URL, so offline the
-// game requests the same (cached) URL. No-op for non-Cloudinary URLs.
+// instead of full-res). The warm step fetches this exact URL. No-op for
+// non-Cloudinary URLs.
 export function transformCutoutUrl(url) {
   if (!url || !url.includes('res.cloudinary.com') || !url.includes('/upload/')) return url
   if (url.includes('/upload/w_')) return url // already transformed
   return url.replace('/upload/', '/upload/w_400,f_auto,q_auto/')
 }
 
-function filterToOffline(list) {
+// Offline: keep only aircraft whose assets are available offline, and swap each
+// cutout URL for its cached data URL (warmOfflineAssets). Falls back to the
+// transformed Cloudinary URL if a data URL wasn't cached — on web the SW may
+// still have it; on Android it just won't render (graceful).
+async function filterToOffline(list) {
   const allowed = new Set(OFFLINE_AIRCRAFT_SLUGS)
-  return (list || [])
-    .filter((a) => a?.title && allowed.has(titleToSlug(a.title)))
-    .map((a) => ({ ...a, cutoutUrl: transformCutoutUrl(a.cutoutUrl) }))
+  const offline = (list || []).filter((a) => a?.title && allowed.has(titleToSlug(a.title)))
+  return Promise.all(
+    offline.map(async (a) => {
+      const dataUrl = await cacheGet(cutoutCacheKey(titleToSlug(a.title)))
+      return { ...a, cutoutUrl: dataUrl || transformCutoutUrl(a.cutoutUrl) }
+    }),
+  )
 }
 
 // endpoint — 'aircraft-cutouts' or 'fighter-aircraft'
@@ -48,5 +60,5 @@ export async function getAircraftRoster(endpoint, { apiFetch, API }) {
     }
   }
   const cached = await cacheGet(cacheKey(endpoint))
-  return { data: filterToOffline(cached) }
+  return { data: await filterToOffline(cached) }
 }
