@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import ProfileBadge from '../ProfileBadge'
+import OfflineBadge from './OfflineBadge'
 
 function CrosshairLogo() {
   return (
@@ -25,12 +26,15 @@ export default function TopBar() {
       <div className="max-w-6xl mx-auto px-4 h-full flex items-center justify-between gap-3">
 
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 shrink-0">
-          <CrosshairLogo />
-          <span className="font-bold text-lg tracking-widest text-brand-600 hidden sm:block">
-            SKYWATCH
-          </span>
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          <Link to="/" className="flex items-center gap-2">
+            <CrosshairLogo />
+            <span className="font-bold text-lg tracking-widest text-brand-600 hidden sm:block">
+              SKYWATCH
+            </span>
+          </Link>
+          <OfflineBadge />
+        </div>
 
         {/* Right side */}
         <div className="flex items-center gap-2">

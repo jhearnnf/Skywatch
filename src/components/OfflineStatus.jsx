@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { isOnline, onNetworkChange } from '../lib/net'
 import { onOutboxChange, pendingCount } from '../lib/cbatOutbox'
 
-// Thin connectivity/sync indicator for CBAT offline support:
-//   • Offline      → persistent banner reassuring the user scores are saved.
-//   • Back online  → transient "syncing N score(s)" note while the outbox drains.
+// Score-sync feedback for CBAT offline support. The persistent "OFFLINE" state
+// is owned by the badge next to the logo (OfflineBadge); this banner only
+// surfaces when there are queued scores, so the two never say the same thing:
+//   • Offline + pending → "N score(s) saved — will sync when you reconnect".
+//   • Back online + pending → transient "syncing N score(s)" while it drains.
 // Self-contained styling using the dark RAF theme tokens; mounted once globally.
 export default function OfflineStatus() {
   const [online, setOnline]   = useState(isOnline())
@@ -27,11 +29,12 @@ export default function OfflineStatus() {
     return () => clearTimeout(t)
   }, [online])
 
-  if (online && pending === 0) return null
+  // Pure-offline state is shown by OfflineBadge; this banner is sync feedback.
+  if (pending === 0) return null
 
-  const text = !online
-    ? `Offline — scores will sync when you reconnect${pending ? ` (${pending} pending)` : ''}`
-    : `Syncing ${pending} score${pending === 1 ? '' : 's'}…`
+  const text = online
+    ? `Syncing ${pending} score${pending === 1 ? '' : 's'}…`
+    : `${pending} score${pending === 1 ? '' : 's'} saved — will sync when you reconnect`
 
   return (
     <div

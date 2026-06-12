@@ -1,4 +1,5 @@
 export const AUTH_TOKEN_KEY          = 'sw_auth_token'
+export const USER_CACHE_KEY          = 'sw_user_cache'
 export const PENDING_BRIEF_KEY       = 'sw_pending_brief'
 export const PENDING_ONBOARDING_KEY  = 'sw_pending_onboarding'
 export const POST_LOGIN_DEST_KEY     = 'sw_post_login_destination'

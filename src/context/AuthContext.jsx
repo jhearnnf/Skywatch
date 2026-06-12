@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getLevelNumber } from '../utils/levelUtils'
-import { AUTH_TOKEN_KEY, tutorialKey, tutorialClearedKey } from '../utils/storageKeys'
+import { AUTH_TOKEN_KEY, USER_CACHE_KEY, tutorialKey, tutorialClearedKey } from '../utils/storageKeys'
 import { identifyUser, resetPostHog } from '../lib/posthog'
 import { flushOutbox } from '../lib/cbatOutbox'
 import { onNetworkChange } from '../lib/net'
@@ -24,8 +24,16 @@ const nativeHeaders = () => {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+// Cache the last-known signed-in user so the app stays authenticated offline.
+// The mount-time /auth/me call fails with no network, which would otherwise
+// null out `user` and bounce the user to /login — blocking offline CBAT play.
+// On reconnect /auth/me re-validates and corrects (e.g. clears a dead session).
+const readCachedUser = () => {
+  try { return JSON.parse(localStorage.getItem(USER_CACHE_KEY)) || null } catch { return null }
+}
+
 export function AuthProvider({ children }) {
-  const [user,       setUser]       = useState(null)
+  const [user,       setUser]       = useState(readCachedUser)
   const [loading,    setLoading]    = useState(true)
   const [notifQueue, setNotifQueue] = useState([]) // [{ id, type, ...data }]
   const [isLoading,       setIsLoading]       = useState(false)
@@ -34,6 +42,15 @@ export function AuthProvider({ children }) {
   const userRef   = useRef(null)
   const levelsRef = useRef(null)
   useEffect(() => { userRef.current = user }, [user])
+
+  // Keep the offline user cache in sync: persist while signed in, clear on
+  // logout/session-loss so an offline launch reflects the real auth state.
+  useEffect(() => {
+    try {
+      if (user) localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user))
+      else localStorage.removeItem(USER_CACHE_KEY)
+    } catch { /* storage unavailable */ }
+  }, [user])
 
   // Fetch levels once for level-up detection in awardAirstars
   useEffect(() => {
