@@ -207,6 +207,16 @@ export default function Cbat() {
           </aside>
         )}
       </div>
+
+      {/* Quiet report link — a game misbehaving? Send it to the team. */}
+      <div className="mt-10 pt-6 border-t border-slate-200 text-center">
+        <p className="text-xs text-slate-500">
+          A game not working right?{' '}
+          <Link to="/report" className="font-semibold text-slate-600 hover:text-brand-600 underline underline-offset-2 transition-colors">
+            Report a problem
+          </Link>
+        </p>
+      </div>
     </div>
   )
 }

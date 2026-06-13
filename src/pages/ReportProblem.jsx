@@ -120,12 +120,15 @@ export default function ReportProblem() {
           ← Back
         </button>
         <h1 className="text-2xl font-extrabold text-slate-900">Report a Problem</h1>
-        <p className="text-sm text-slate-500 mt-1">Something not working? Let us know and we'll fix it.</p>
+        <p className="text-sm text-slate-500 mt-1">Two ways to reach us — pick whichever suits. Chat live with the team, or send a written report.</p>
       </div>
 
-      <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow mb-4">
-        <p className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Talk to a real person</p>
-        <p className="text-sm text-slate-500 mb-3">Get a fast reply from the Skywatch team — usually within a few hours.</p>
+      <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow">
+        <div className="flex items-center gap-2.5 mb-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">1</span>
+          <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Talk to a real person</p>
+        </div>
+        <p className="text-sm text-slate-500 mb-3">Best for back-and-forth. Get a fast reply from the Skywatch team — usually within a few hours.</p>
         <button
           type="button"
           onClick={startChat}
@@ -136,7 +139,19 @@ export default function ReportProblem() {
         </button>
       </div>
 
+      {/* Either/or divider — these two cards are alternatives, not steps */}
+      <div className="flex items-center gap-3 my-4">
+        <div className="flex-1 h-px bg-slate-200" />
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">or</span>
+        <div className="flex-1 h-px bg-slate-200" />
+      </div>
+
       <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow">
+        <div className="flex items-center gap-2.5 mb-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">2</span>
+          <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Send a written report</p>
+        </div>
+        <p className="text-sm text-slate-500 mb-4">No reply needed — describe what went wrong and we'll look into it.</p>
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
           {briefId && (
             <div className="flex items-start justify-between gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200">
