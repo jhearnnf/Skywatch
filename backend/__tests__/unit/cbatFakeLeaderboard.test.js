@@ -1,4 +1,5 @@
-const { padLeaderboard, FAKE_TUNING } = require('../../utils/cbatFakeLeaderboard');
+const { padLeaderboard, padWeeklyLeaderboard, FAKE_TUNING } = require('../../utils/cbatFakeLeaderboard');
+const { CBAT_GAMES } = require('../../constants/cbatGames');
 
 // Per-game hard constraints every fake must satisfy.
 const GAME_MAX = {
@@ -178,5 +179,34 @@ describe('padLeaderboard', () => {
       expect(out).toHaveLength(20);
       expect(out.every(e => e.isFake)).toBe(true);
     }
+  });
+});
+
+describe('padWeeklyLeaderboard', () => {
+  // The product rule: no weekly board may show 0–1 players. EVERY leaderboard
+  // game must produce demo rows when the week is empty.
+  it('pads every CBAT game with demo rows on an empty week', () => {
+    for (const gameKey of Object.keys(CBAT_GAMES)) {
+      const out = padWeeklyLeaderboard([], gameKey, {});
+      expect(out.length).toBeGreaterThanOrEqual(4); // "a few players", not 0 or 1
+      expect(out.every(e => e.isFake)).toBe(true);
+      // Demo rows look like a few light players: low play counts, positive totals.
+      for (const row of out) {
+        expect(row.plays).toBeGreaterThanOrEqual(1);
+        expect(row.plays).toBeLessThanOrEqual(3);
+        expect(row.weekTotal).toBeGreaterThan(0);
+      }
+      // Ranked, sorted by weekTotal descending.
+      const totals = out.map(e => e.weekTotal);
+      expect(totals).toEqual([...totals].sort((a, b) => b - a));
+      expect(out.map(e => e.rank)).toEqual(out.map((_, i) => i + 1));
+    }
+  });
+
+  it('still tops up a board with a single real player', () => {
+    const real = [{ _id: 'r1', userId: 'u1', agentNumber: '1000000', weekTotal: 999999, plays: 1, rank: 1 }];
+    const out = padWeeklyLeaderboard(real, 'target', {});
+    expect(out.length).toBeGreaterThan(1);
+    expect(out.filter(e => e.isFake).length).toBeGreaterThanOrEqual(4);
   });
 });

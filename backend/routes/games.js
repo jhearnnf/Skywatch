@@ -22,8 +22,10 @@ const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/Ga
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { CBAT_GAMES } = require('../constants/cbatGames');
 const { saveCbatResult } = require('../utils/cbatResult');
-const { padLeaderboard } = require('../utils/cbatFakeLeaderboard');
+const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
+const { startOfWeekUTC, nextResetAt } = require('../utils/weekWindow');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
+const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn-2d'].Model;
 const GameSessionCbatAnglesResult         = CBAT_GAMES['angles'].Model;
 const GameSessionCbatCodeDuplicatesResult = CBAT_GAMES['code-duplicates'].Model;
@@ -2241,6 +2243,43 @@ router.post('/cbat/:gameKey/start', protect, async (req, res) => {
   }
 });
 
+// POST /api/games/cbat/:gameKey/tutorial
+// Records progress through a game's in-app tutorial / practice mode. One row per
+// playthrough (keyed on clientRunId); called on entry, on each section change,
+// and on completion. furthestStep is monotonic ($max) and `completed` only ever
+// flips to true, so out-of-order or retried reports converge correctly. Used by
+// the admin Reports page to build a per-step drop-off funnel.
+router.post('/cbat/:gameKey/tutorial', protect, async (req, res) => {
+  try {
+    const { gameKey } = req.params;
+    if (!CBAT_GAMES[gameKey]) return res.status(400).json({ message: 'Unknown game' });
+
+    const { clientRunId } = req.body || {};
+    if (!clientRunId) return res.status(400).json({ message: 'clientRunId is required' });
+
+    const step = Number(req.body.furthestStep);
+    const total = Number(req.body.totalSteps);
+    const completed = req.body.completed === true;
+
+    const update = {
+      $setOnInsert: { userId: req.user._id, gameKey, clientRunId, startedAt: new Date() },
+      $set: { updatedAt: new Date() },
+      $max: { furthestStep: Number.isFinite(step) ? Math.max(0, step) : 0 },
+    };
+    if (Number.isFinite(total) && total > 0) update.$max.totalSteps = total;
+    if (completed) update.$set.completed = true;
+
+    const doc = await GameSessionCbatTutorial.findOneAndUpdate(
+      { userId: req.user._id, clientRunId },
+      update,
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+    );
+    res.status(200).json({ status: 'success', data: doc });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ── CBAT — Score submission, leaderboards & personal bests ──────────────────
 // CBAT_GAMES is imported from ../constants/cbatGames — the single source of
 // truth for all CBAT games. Adding a new CBAT game = one entry there.
@@ -2541,6 +2580,11 @@ async function cbatLeaderboard(req, res, gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return res.status(400).json({ message: 'Unknown game' });
 
+  // The API default stays the legacy all-time best-score board (backward
+  // compatible for existing clients); ?period=weekly opts into the weekly board.
+  // The frontend leaderboard page requests weekly by default as its first tab.
+  if (req.query.period === 'weekly') return cbatWeeklyLeaderboard(req, res, gameKey, cfg);
+
   const isAdmin = !!req.user?.isAdmin;
   const modeFilter = cfg.modeFilter ?? null;
 
@@ -2650,11 +2694,183 @@ async function cbatLeaderboard(req, res, gameKey) {
       }
     }
 
-    res.json({ status: 'success', data: { leaderboard: padded, myBest } });
+    res.json({ status: 'success', data: { period: 'all-time', leaderboard: padded, myBest } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 }
+
+// Weekly CBAT leaderboard — ranks users by points accumulated since the most
+// recent Monday 00:00 UTC. Every replay adds to the user's weekTotal, so the
+// board rewards practice volume (the gamification loop = the practice loop).
+// Higher-is-better games sum their primaryField; lower-is-better games supply a
+// derived higher-is-better cfg.weeklyExpr (see CBAT_GAMES). Weekly is always
+// ranked weekTotal-desc regardless of the all-time sortDir.
+async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
+  const isAdmin = !!req.user?.isAdmin;
+  const modeFilter = cfg.modeFilter ?? null;
+  const weekStart = startOfWeekUTC();
+  const valueExpr = cfg.weeklyExpr || `$${cfg.primaryField}`;
+
+  const groupStage = {
+    $group: {
+      _id: '$userId',
+      userId: { $first: '$userId' },
+      weekTotal: { $sum: valueExpr },
+      plays: { $sum: 1 },
+      lastPlayed: { $max: '$createdAt' },
+    },
+  };
+
+  try {
+    const pipeline = [
+      { $match: { ...(modeFilter ?? {}), createdAt: { $gte: weekStart } } },
+      groupStage,
+      { $sort: { weekTotal: -1, lastPlayed: -1 } },
+      { $limit: 20 },
+      { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
+      { $unwind: '$user' },
+      {
+        $project: {
+          _id: '$userId',
+          userId: 1,
+          agentNumber: '$user.agentNumber',
+          displayName: '$user.displayName',
+          ...(isAdmin ? { email: '$user.email' } : {}),
+          weekTotal: 1,
+          plays: 1,
+        },
+      },
+    ];
+
+    const real = await cfg.Model.aggregate(pipeline);
+    const padded = padWeeklyLeaderboard(real, gameKey, { limit: 20, isAdmin });
+
+    // Locate the user — prefer the padded top-20 row; otherwise compute their
+    // real-only weekly standing the same way the all-time board does.
+    let myWeekly = null;
+    if (req.user) {
+      const inView = padded.find(e => !e.isFake && e.userId?.toString() === req.user._id.toString());
+      if (inView) {
+        myWeekly = inView;
+      } else {
+        const [mine] = await cfg.Model.aggregate([
+          { $match: { ...(modeFilter ?? {}), userId: req.user._id, createdAt: { $gte: weekStart } } },
+          { $group: { _id: '$userId', weekTotal: { $sum: valueExpr }, plays: { $sum: 1 } } },
+        ]);
+        if (mine) {
+          const betterAgg = await cfg.Model.aggregate([
+            { $match: { ...(modeFilter ?? {}), createdAt: { $gte: weekStart } } },
+            { $group: { _id: '$userId', weekTotal: { $sum: valueExpr } } },
+            { $match: { weekTotal: { $gt: mine.weekTotal } } },
+            { $count: 'n' },
+          ]);
+          myWeekly = {
+            _id: req.user._id,
+            userId: req.user._id,
+            agentNumber: req.user.agentNumber,
+            displayName: req.user.displayName,
+            ...(isAdmin ? { email: req.user.email } : {}),
+            weekTotal: mine.weekTotal,
+            plays: mine.plays,
+            rank: (betterAgg[0]?.n || 0) + 1,
+          };
+        }
+      }
+    }
+
+    res.json({
+      status: 'success',
+      data: { period: 'weekly', resetsAt: nextResetAt(), leaderboard: padded, myBest: myWeekly },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+
+// Post-game reveal: the signed-in user's weekly standing for one game plus a
+// small "chase window" of the players ranked just above and below them. Fired
+// right after a successful score submit. When the week is sparse the board is
+// topped up with demo rows so there's always a target to chase.
+async function cbatWeeklyMe(req, res, gameKey) {
+  const cfg = CBAT_GAMES[gameKey];
+  if (!cfg) return res.status(400).json({ message: 'Unknown game' });
+
+  const isAdmin = !!req.user?.isAdmin;
+  const modeFilter = cfg.modeFilter ?? {};
+  const weekStart = startOfWeekUTC();
+  const valueExpr = cfg.weeklyExpr || `$${cfg.primaryField}`;
+
+  try {
+    const board = await cfg.Model.aggregate([
+      { $match: { ...modeFilter, createdAt: { $gte: weekStart } } },
+      {
+        $group: {
+          _id: '$userId',
+          userId: { $first: '$userId' },
+          weekTotal: { $sum: valueExpr },
+          plays: { $sum: 1 },
+          lastPlayed: { $max: '$createdAt' },
+        },
+      },
+      { $sort: { weekTotal: -1, lastPlayed: -1 } },
+      { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
+      { $unwind: '$user' },
+      {
+        $project: {
+          _id: '$userId',
+          userId: 1,
+          agentNumber: '$user.agentNumber',
+          displayName: '$user.displayName',
+          ...(isAdmin ? { email: '$user.email' } : {}),
+          weekTotal: 1,
+          plays: 1,
+        },
+      },
+    ]);
+
+    // Rank the full real board (not just top 20) and top it up when sparse so a
+    // quiet week still surfaces a chase target.
+    const ranked = padWeeklyLeaderboard(board, gameKey, { limit: Math.max(20, board.length), isAdmin });
+    const idx = ranked.findIndex(e => !e.isFake && e.userId?.toString() === req.user._id.toString());
+
+    if (idx === -1) {
+      return res.json({
+        status: 'success',
+        data: { played: false, rank: null, weekTotal: 0, plays: 0, totalPlayers: ranked.length, resetsAt: nextResetAt(), neighbors: [] },
+      });
+    }
+
+    const me = ranked[idx];
+    // Name precedence mirrors the leaderboard: displayName, then admin-only
+    // email, then agent number.
+    const neighbors = ranked.slice(Math.max(0, idx - 2), idx + 3).map(e => ({
+      rank: e.rank,
+      weekTotal: e.weekTotal,
+      plays: e.plays,
+      name: e.displayName || (isAdmin && e.email ? e.email : `Agent ${e.agentNumber || '???'}`),
+      isMe: !e.isFake && e.userId?.toString() === req.user._id.toString(),
+    }));
+
+    res.json({
+      status: 'success',
+      data: {
+        played: true,
+        rank: me.rank,
+        weekTotal: me.weekTotal,
+        plays: me.plays,
+        totalPlayers: ranked.length,
+        resetsAt: nextResetAt(),
+        neighbors,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+
+// One param route covers every game (cfg resolved from CBAT_GAMES at call time).
+router.get('/cbat/:gameKey/weekly/me', protect, (req, res) => cbatWeeklyMe(req, res, req.params.gameKey));
 
 router.get('/cbat/plane-turn-2d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'plane-turn-2d'));
 router.get('/cbat/plane-turn-3d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'plane-turn-3d'));

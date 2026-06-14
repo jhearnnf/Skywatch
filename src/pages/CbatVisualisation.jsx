@@ -8,6 +8,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import CbatGameOver from '../components/CbatGameOver'
 import {
   buildRounds,
   regularPolygonVertices,
@@ -345,7 +346,7 @@ function computeAnimationData(round, correctIdx, promptSvgs, tileSvgs) {
 }
 
 // ── Results screen ───────────────────────────────────────────────────────────
-function ResultsScreen({ answers, totalTime, onPlayAgain, scoreSaved, leaderboardHref }) {
+function ResultsScreen({ answers, totalTime }) {
   const correct = answers.filter(a => a.correct).length
   const pct = Math.round((correct / TOTAL_ROUNDS) * 100)
   const tierCorrect = [0, 1].map(t => ({
@@ -363,34 +364,10 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, scoreSaved, leaderboar
     : { label: 'Failed', emoji: '\u{1F4A5}', color: 'text-red-400' }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center"
-    >
+    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{grade.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Visualisation Complete</p>
-
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
-        <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
-        <div className="flex justify-center gap-8 items-end">
-          <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{pct}%</p>
-            <p className="text-sm text-slate-400">{correct} / {TOTAL_ROUNDS} correct</p>
-          </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
-          <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(1)}s</p>
-            <p className="text-sm text-slate-400">total time</p>
-          </div>
-        </div>
-        {correctTimes.length > 0 && (
-          <p className="text-xs text-slate-500 mt-3">
-            Avg solve time: <span className="text-brand-300 font-mono">{avgTime.toFixed(2)}s</span>
-          </p>
-        )}
-      </div>
 
       <div className="grid grid-cols-2 gap-2 mb-6">
         {['Tier 1', 'Tier 2'].map((label, i) => (
@@ -418,25 +395,12 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, scoreSaved, leaderboar
         </div>
       </div>
 
-      {scoreSaved && (
-        <p className="text-xs text-green-400 mb-4">{'✓'} Score saved</p>
+      {correctTimes.length > 0 && (
+        <p className="text-xs text-slate-500 mb-4">
+          Avg solve time: <span className="text-brand-300 font-mono">{avgTime.toFixed(2)}s</span>
+        </p>
       )}
-
-      <div className="flex flex-wrap gap-3 justify-center">
-        <button
-          onClick={onPlayAgain}
-          className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-        >
-          Play Again
-        </button>
-        <Link
-          to={leaderboardHref}
-          className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-        >
-          {'\u{1F3C6}'} Leaderboard
-        </Link>
-      </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -496,6 +460,7 @@ export default function CbatVisualisation() {
   const roundTimeoutRef = useRef(null)
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
+  const [queued, setQueued] = useState(false)
   const [animationData, setAnimationData] = useState(null)
   const promptSvgRefs = useRef([])
   const tileSvgRefs = useRef([])
@@ -519,6 +484,7 @@ export default function CbatVisualisation() {
     const grade = pct >= 90 ? 'Outstanding' : pct >= 70 ? 'Good' : pct >= 50 ? 'Needs Work' : 'Failed'
 
     setScoreSaved(false)
+    setQueued(false)
     markGameCompleted({ score: correct })
     submitCbatResult(`${gameKey}`, {
         correctCount: correct,
@@ -527,8 +493,9 @@ export default function CbatVisualisation() {
         totalTime: finalTime,
         grade,
       }, { apiFetch, API })
-      .then(() => {
-        setScoreSaved(true)
+      .then((r) => {
+        setScoreSaved(!!r?.synced)
+        setQueued(!!r?.queued)
         apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -1028,13 +995,19 @@ export default function CbatVisualisation() {
           )}
 
           {phase === 'results' && (
-            <ResultsScreen
-              answers={answers}
-              totalTime={elapsed}
-              onPlayAgain={() => { setScoreSaved(false); startGame() }}
+            <CbatGameOver
+              gameKey={gameKey}
+              score={answers.filter(a => a.correct).length}
               scoreSaved={scoreSaved}
-              leaderboardHref={leaderboardHref}
-            />
+              queued={queued}
+              personalBest={personalBest}
+              onPlayAgain={() => { setScoreSaved(false); startGame() }}
+            >
+              <ResultsScreen
+                answers={answers}
+                totalTime={elapsed}
+              />
+            </CbatGameOver>
           )}
         </div>
       )}

@@ -9,6 +9,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import CbatGameOver from '../components/CbatGameOver'
 import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import {
   ActAudioEngine,
@@ -1180,6 +1181,7 @@ export default function CbatAct() {
   const [latestStats, setLatestStats]   = useState(null)
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved]     = useState(false)
+  const [queued, setQueued]             = useState(false)
   const [audioReady, setAudioReady]     = useState(false)
   const audioRef = useRef(null)
 
@@ -1303,6 +1305,7 @@ export default function CbatAct() {
       return sum + curveLen / ROUND_CONFIG[i].speed
     }, 0)
 
+    setQueued(false)
     markGameCompleted({ score: Math.max(0, Math.round(totals.score)), round: allRoundStats.length })
     submitCbatResult(`act`, {
         totalScore:         Math.max(0, Math.round(totals.score)),
@@ -1317,8 +1320,9 @@ export default function CbatAct() {
         bleepMisses:        totals.bleepMisses,
         avgBleepReactionMs: Math.round(avgReaction),
       }, { apiFetch, API })
-      .then(() => {
-        setScoreSaved(true)
+      .then((r) => {
+        setScoreSaved(!!r?.synced)
+        setQueued(!!r?.queued)
         apiFetch(`${API}/api/games/cbat/act/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -1402,11 +1406,18 @@ export default function CbatAct() {
           )}
 
           {phase === 'results' && (
-            <FinalResults
-              allRoundStats={allRoundStats}
+            <CbatGameOver
+              gameKey="act"
+              score={Math.max(0, Math.round(allRoundStats.reduce((acc, s) => acc + s.score, 0)))}
               scoreSaved={scoreSaved}
+              queued={queued}
+              personalBest={personalBest}
               onPlayAgain={startGame}
-            />
+            >
+              <FinalResults
+                allRoundStats={allRoundStats}
+              />
+            </CbatGameOver>
           )}
         </div>
       )}
@@ -1614,7 +1625,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
 }
 
 // ── Final results ────────────────────────────────────────────────────────────
-function FinalResults({ allRoundStats, scoreSaved, onPlayAgain }) {
+function FinalResults({ allRoundStats }) {
   const totals = allRoundStats.reduce((acc, s) => ({
     score: acc.score + s.score,
     ringsThreaded: acc.ringsThreaded + s.ringsThreaded,
@@ -1627,19 +1638,12 @@ function FinalResults({ allRoundStats, scoreSaved, onPlayAgain }) {
     bleepFalseAlarms: acc.bleepFalseAlarms + (s.bleepFalseAlarms || 0),
   }), { score: 0, ringsThreaded: 0, ringsMissed: 0, avoidObeyed: 0, avoidViolated: 0, wallScrapeSeconds: 0, bleepHits: 0, bleepMisses: 0, bleepFalseAlarms: 0 })
 
-  const finalScore = Math.max(0, Math.round(totals.score))
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
-    >
+    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
       <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Mission Debrief</p>
       <p className="text-xl font-extrabold text-white mb-4">Final score</p>
-      <p className="text-5xl font-mono font-extrabold text-brand-300 mb-5">{finalScore}</p>
 
-      <div className="grid grid-cols-2 gap-2 mb-5 text-left">
+      <div className="grid grid-cols-2 gap-2 text-left">
         <Stat label="Threaded"        value={totals.ringsThreaded} good />
         <Stat label="Missed"          value={totals.ringsMissed} bad />
         <Stat label="Avoid obeyed"    value={totals.avoidObeyed} good />
@@ -1648,23 +1652,6 @@ function FinalResults({ allRoundStats, scoreSaved, onPlayAgain }) {
         <Stat label="Bleep accuracy"  value={`${totals.bleepHits}/${totals.bleepHits + totals.bleepMisses}`} good={totals.bleepHits > 0} />
         <Stat label="False taps"      value={totals.bleepFalseAlarms} bad={totals.bleepFalseAlarms > 0} />
       </div>
-
-      {scoreSaved && <p className="text-xs text-green-400 mb-4">✓ Score saved</p>}
-
-      <div className="flex flex-wrap gap-3 justify-center">
-        <button
-          onClick={onPlayAgain}
-          className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-        >
-          Play Again
-        </button>
-        <Link
-          to="/cbat/act/leaderboard"
-          className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-        >
-          🏆 Leaderboard
-        </Link>
-      </div>
-    </motion.div>
+    </div>
   )
 }

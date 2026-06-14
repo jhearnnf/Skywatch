@@ -6,6 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import CbatGameOver from '../components/CbatGameOver'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const ROUNDS = 4
@@ -118,7 +119,7 @@ function Keypad({ onDigit, onBackspace, onSubmit, disabled, canSubmit }) {
 }
 
 // ── Results screen ───────────────────────────────────────────────────────────
-function ResultsScreen({ answers, totalTime, onPlayAgain, scoreSaved }) {
+function ResultsScreen({ answers, totalTime }) {
   const correct = answers.filter(a => a.correct).length
   const pct = Math.round((correct / TOTAL_QUESTIONS) * 100)
   const perRound = [1, 2, 3, 4].map(r => ({
@@ -132,11 +133,7 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, scoreSaved }) {
     : { label: 'Failed', emoji: '💥', color: 'text-red-400' }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center"
-    >
+    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{grade.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Numerical Operations Complete</p>
@@ -183,25 +180,7 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, scoreSaved }) {
         </div>
       </div>
 
-      {scoreSaved && (
-        <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
-      )}
-
-      <div className="flex flex-wrap gap-3 justify-center">
-        <button
-          onClick={onPlayAgain}
-          className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-        >
-          Play Again
-        </button>
-        <Link
-          to="/cbat/numerical-ops/leaderboard"
-          className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-white text-sm font-bold rounded-lg transition-colors no-underline"
-        >
-          🏆 Leaderboard
-        </Link>
-      </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -227,6 +206,7 @@ export default function CbatNumericalOps() {
   const [totalElapsedMs, setTotalElapsedMs] = useState(0)
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
+  const [queued, setQueued] = useState(false)
 
   const qStartRef = useRef(null)
   const tickRef = useRef(null)
@@ -259,14 +239,16 @@ export default function CbatNumericalOps() {
     const avgTimePerQuestionMs = Math.round(finalTotalMs / TOTAL_QUESTIONS)
 
     setScoreSaved(false)
+    setQueued(false)
     markGameCompleted({ score: correctCount })
     submitCbatResult(`numerical-ops`, {
         correctCount, correctPercentage,
         round1Correct, round2Correct, round3Correct, round4Correct,
         totalTime, avgTimePerQuestionMs,
       }, { apiFetch, API })
-      .then(() => {
-        setScoreSaved(true)
+      .then((r) => {
+        setScoreSaved(!!r?.synced)
+        setQueued(!!r?.queued)
         apiFetch(`${API}/api/games/cbat/numerical-ops/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -616,12 +598,19 @@ export default function CbatNumericalOps() {
 
           {/* Results */}
           {phase === 'results' && (
-            <ResultsScreen
-              answers={answers}
-              totalTime={totalElapsedMs / 1000}
-              onPlayAgain={() => { setScoreSaved(false); startGame() }}
+            <CbatGameOver
+              gameKey="numerical-ops"
+              score={Math.round((answers.filter(a => a.correct).length / TOTAL_QUESTIONS) * 100)}
               scoreSaved={scoreSaved}
-            />
+              queued={queued}
+              personalBest={personalBest}
+              onPlayAgain={() => { setScoreSaved(false); startGame() }}
+            >
+              <ResultsScreen
+                answers={answers}
+                totalTime={totalElapsedMs / 1000}
+              />
+            </CbatGameOver>
           )}
         </div>
       )}

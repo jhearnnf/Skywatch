@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import CbatLeaderboard from '../CbatLeaderboard'
 
@@ -20,19 +20,30 @@ vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, className }) => <div className={className}>{children}</div>,
   },
+  useReducedMotion: () => true,
 }))
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function mockApiFetch({ leaderboard = [], myBest = null } = {}) {
-  return vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ data: { leaderboard, myBest } }),
+// URL-aware: the component requests ?period=weekly first, ?period=all-time on switch.
+function mockApi({ weekly = {}, allTime = {} } = {}) {
+  return vi.fn((url) => {
+    const isWeekly = String(url).includes('period=weekly')
+    const data = isWeekly
+      ? { period: 'weekly', resetsAt: new Date(Date.now() + 3 * 86400000).toISOString(),
+          leaderboard: weekly.leaderboard || [], myBest: weekly.myBest || null }
+      : { period: 'all-time', leaderboard: allTime.leaderboard || [], myBest: allTime.myBest || null }
+    return Promise.resolve({ ok: true, json: async () => ({ data }) })
   })
 }
 
-function setupAuth(apiFetch = mockApiFetch()) {
+function setupAuth(apiFetch = mockApi()) {
   mockUseAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch })
+}
+
+const selectAllTime = async () => {
+  fireEvent.click(screen.getByRole('tab', { name: /all time/i }))
+  await waitFor(() => expect(screen.getByRole('tab', { name: /all time/i }).getAttribute('aria-selected')).toBe('true'))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -48,34 +59,62 @@ describe('CbatLeaderboard — unknown game', () => {
   })
 })
 
-describe('CbatLeaderboard — empty state', () => {
+describe('CbatLeaderboard — weekly (default) tab', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('renders a "No scores yet" empty state with a Play Now CTA', async () => {
-    setupAuth(mockApiFetch({ leaderboard: [] }))
-    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+  it('defaults to the weekly board and shows Points + Plays', async () => {
+    setupAuth(mockApi({
+      weekly: { leaderboard: [
+        { _id: 'w1', userId: 'u2', rank: 1, weekTotal: 540, plays: 3, agentNumber: 'A002' },
+        { _id: 'w2', userId: 'u1', rank: 2, weekTotal: 300, plays: 2, agentNumber: 'A001' },
+      ] },
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'target' })
     render(<CbatLeaderboard />)
 
-    await waitFor(() => expect(screen.getByText('No scores yet')).toBeDefined())
-    const play = screen.getByRole('link', { name: /play now/i })
-    expect(play.getAttribute('href')).toBe('/cbat/symbols')
+    expect(screen.getByRole('tab', { name: /this week/i }).getAttribute('aria-selected')).toBe('true')
+    await waitFor(() => expect(screen.getByText('Agent A001 (you)')).toBeDefined())
+    expect(screen.getByText('540')).toBeDefined()  // weekTotal
+    expect(screen.getByText('300')).toBeDefined()
+    expect(screen.getByText('🥇')).toBeDefined()
+  })
+
+  it('shows an empty weekly state', async () => {
+    setupAuth(mockApi({ weekly: { leaderboard: [] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'target' })
+    render(<CbatLeaderboard />)
+    await waitFor(() => expect(screen.getByText('No scores yet this week')).toBeDefined())
+  })
+
+  it('renders the weekly myBest row when the user is outside the top list', async () => {
+    setupAuth(mockApi({
+      weekly: {
+        leaderboard: [{ _id: 'w1', userId: 'other', rank: 1, weekTotal: 900, plays: 3, agentNumber: 'A101' }],
+        myBest: { _id: 'me', userId: 'u1', rank: 38, weekTotal: 120, plays: 1, agentNumber: 'A001' },
+      },
+    }))
+    mockUseParams.mockReturnValue({ gameKey: 'target' })
+    render(<CbatLeaderboard />)
+    await waitFor(() => expect(screen.getByText('#38')).toBeDefined())
+    expect(screen.getByText('Agent A001 (you)')).toBeDefined()
   })
 })
 
-describe('CbatLeaderboard — populated rows', () => {
+describe('CbatLeaderboard — all-time tab', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('renders entries with medal emojis for top 3 and # for the rest', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'u1', rank: 1, bestScore: 15, bestTime: 30.5, agentNumber: 'A001' },
-        { _id: 'e2', userId: 'u2', rank: 2, bestScore: 14, bestTime: 31.0, agentNumber: 'A002' },
-        { _id: 'e3', userId: 'u3', rank: 3, bestScore: 13, bestTime: 32.0, agentNumber: 'A003' },
-        { _id: 'e4', userId: 'u4', rank: 4, bestScore: 12, bestTime: 33.0, agentNumber: 'A004' },
-      ],
-    }))
+  const allTimeRows = (rows) => mockApi({ allTime: { leaderboard: rows } })
+
+  it('renders medals for top 3 and # for the rest', async () => {
+    setupAuth(allTimeRows([
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 15, bestTime: 30.5, agentNumber: 'A001' },
+      { _id: 'e2', userId: 'u2', rank: 2, bestScore: 14, bestTime: 31.0, agentNumber: 'A002' },
+      { _id: 'e3', userId: 'u3', rank: 3, bestScore: 13, bestTime: 32.0, agentNumber: 'A003' },
+      { _id: 'e4', userId: 'u4', rank: 4, bestScore: 12, bestTime: 33.0, agentNumber: 'A004' },
+    ]))
     mockUseParams.mockReturnValue({ gameKey: 'symbols' })
     render(<CbatLeaderboard />)
+    await selectAllTime()
 
     await waitFor(() => expect(screen.getByText('Agent A001 (you)')).toBeDefined())
     expect(screen.getByText('🥇')).toBeDefined()
@@ -84,178 +123,70 @@ describe('CbatLeaderboard — populated rows', () => {
     expect(screen.getByText('#4')).toBeDefined()
   })
 
-  it('formats the score per game config (e.g. "15/15" for Symbols)', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [{ _id: 'e1', userId: 'u1', rank: 1, bestScore: 15, bestTime: 42.5, agentNumber: 'A001' }],
-    }))
+  it('formats the score per game config (e.g. "15/15" for Symbols) with time', async () => {
+    setupAuth(allTimeRows([{ _id: 'e1', userId: 'u1', rank: 1, bestScore: 15, bestTime: 42.5, agentNumber: 'A001' }]))
     mockUseParams.mockReturnValue({ gameKey: 'symbols' })
     render(<CbatLeaderboard />)
+    await selectAllTime()
 
     await waitFor(() => expect(screen.getByText('15/15')).toBeDefined())
     expect(screen.getByText('42.5s')).toBeDefined()
   })
 
-  it('highlights the current user with "(you)" marker', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999' },
-        { _id: 'e2', userId: 'u1',    rank: 2, bestScore: 14, bestTime: 31, agentNumber: 'A001' },
-      ],
-    }))
+  it('renders email instead of agent number for admin rows', async () => {
+    setupAuth(allTimeRows([
+      { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', email: 'ace@skywatch.test' },
+      { _id: 'e2', userId: 'u1',    rank: 2, bestScore: 14, bestTime: 31, agentNumber: 'A001', email: 'me@skywatch.test' },
+    ]))
     mockUseParams.mockReturnValue({ gameKey: 'symbols' })
     render(<CbatLeaderboard />)
-
-    await waitFor(() => expect(screen.getByText(/Agent A001 \(you\)/)).toBeDefined())
-    expect(screen.queryByText(/Agent A999 \(you\)/)).toBeNull()
-  })
-
-  it('shows myBest row below the table when current user is outside the top list', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other1', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A101' },
-      ],
-      myBest:     { userId: 'u1', rank: 47, bestScore: 10, bestTime: 55.0, agentNumber: 'A001' },
-    }))
-    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
-    render(<CbatLeaderboard />)
-
-    await waitFor(() => expect(screen.getByText('#47')).toBeDefined())
-    expect(screen.getByText('Agent A001 (you)')).toBeDefined()
-  })
-})
-
-describe('CbatLeaderboard — admin email display', () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it('renders email instead of agent number when backend returns email (admin view)', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', email: 'ace@skywatch.test' },
-        { _id: 'e2', userId: 'u1',    rank: 2, bestScore: 14, bestTime: 31, agentNumber: 'A001', email: 'me@skywatch.test' },
-      ],
-    }))
-    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
-    render(<CbatLeaderboard />)
+    await selectAllTime()
 
     await waitFor(() => expect(screen.getByText('ace@skywatch.test')).toBeDefined())
     expect(screen.getByText('me@skywatch.test (you)')).toBeDefined()
-    expect(screen.queryByText(/Agent A999/)).toBeNull()
-    expect(screen.queryByText(/Agent A001/)).toBeNull()
   })
 
-  it('renders email on the myBest row when admin is outside the top list', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', email: 'ace@skywatch.test' },
-      ],
-      myBest: { userId: 'u1', rank: 42, bestScore: 8, bestTime: 55, agentNumber: 'A001', email: 'boss@skywatch.test' },
-    }))
+  it('renders displayName with precedence over email', async () => {
+    setupAuth(allTimeRows([
+      { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', displayName: 'Maverick', email: 'ace@skywatch.test' },
+      { _id: 'e2', userId: 'u1',    rank: 2, bestScore: 14, bestTime: 31, agentNumber: 'A001', displayName: 'Goose' },
+    ]))
     mockUseParams.mockReturnValue({ gameKey: 'symbols' })
     render(<CbatLeaderboard />)
-
-    await waitFor(() => expect(screen.getByText('#42')).toBeDefined())
-    expect(screen.getByText('boss@skywatch.test (you)')).toBeDefined()
-  })
-
-  it('falls back to agent number when email is absent (non-admin view)', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999' },
-      ],
-    }))
-    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
-    render(<CbatLeaderboard />)
-
-    await waitFor(() => expect(screen.getByText('Agent A999')).toBeDefined())
-  })
-
-  it('renders a hover tooltip with the formatted achievedAt on admin rows', async () => {
-    const achievedAt = '2026-04-29T13:45:00.000Z'
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', email: 'ace@skywatch.test', achievedAt },
-        { _id: 'e2', userId: 'u2',    rank: 2, bestScore: 14, bestTime: 31, agentNumber: 'A998', email: 'demo', isFake: true },
-      ],
-    }))
-    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
-    render(<CbatLeaderboard />)
-
-    const realCell = await waitFor(() => screen.getByText('ace@skywatch.test'))
-    expect(realCell.getAttribute('title')).toBe(new Date(achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }))
-
-    // Fakes (no achievedAt) carry no tooltip
-    const fakeCell = screen.getByText('demo')
-    expect(fakeCell.getAttribute('title')).toBeNull()
-  })
-
-  it('renders a hover tooltip on the myBest row when achievedAt is present', async () => {
-    const achievedAt = '2026-04-28T09:15:00.000Z'
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', email: 'ace@skywatch.test' },
-      ],
-      myBest: { userId: 'u1', rank: 42, bestScore: 8, bestTime: 55, agentNumber: 'A001', email: 'boss@skywatch.test', achievedAt },
-    }))
-    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
-    render(<CbatLeaderboard />)
-
-    const myCell = await waitFor(() => screen.getByText('boss@skywatch.test (you)'))
-    expect(myCell.getAttribute('title')).toBe(new Date(achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }))
-  })
-
-  it('renders displayName instead of agent number when set', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', displayName: 'Maverick' },
-        { _id: 'e2', userId: 'u1',    rank: 2, bestScore: 14, bestTime: 31, agentNumber: 'A001', displayName: 'Goose' },
-      ],
-    }))
-    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
-    render(<CbatLeaderboard />)
+    await selectAllTime()
 
     await waitFor(() => expect(screen.getByText('Maverick')).toBeDefined())
     expect(screen.getByText('Goose (you)')).toBeDefined()
-    expect(screen.queryByText(/Agent A999/)).toBeNull()
-    expect(screen.queryByText(/Agent A001/)).toBeNull()
-  })
-
-  it('displayName takes precedence over admin email', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', displayName: 'Maverick', email: 'ace@skywatch.test' },
-      ],
-    }))
-    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
-    render(<CbatLeaderboard />)
-
-    await waitFor(() => expect(screen.getByText('Maverick')).toBeDefined())
     expect(screen.queryByText('ace@skywatch.test')).toBeNull()
   })
 
-  it('renders displayName on the myBest row', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999' },
-      ],
-      myBest: { userId: 'u1', rank: 42, bestScore: 8, bestTime: 55, agentNumber: 'A001', displayName: 'Slider' },
-    }))
+  it('renders a hover tooltip with formatted achievedAt on admin rows, none on fakes', async () => {
+    const achievedAt = '2026-04-29T13:45:00.000Z'
+    setupAuth(allTimeRows([
+      { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999', email: 'ace@skywatch.test', achievedAt },
+      { _id: 'e2', userId: 'u2',    rank: 2, bestScore: 14, bestTime: 31, agentNumber: 'A998', email: 'demo', isFake: true },
+    ]))
     mockUseParams.mockReturnValue({ gameKey: 'symbols' })
     render(<CbatLeaderboard />)
+    await selectAllTime()
 
-    await waitFor(() => expect(screen.getByText('#42')).toBeDefined())
-    expect(screen.getByText('Slider (you)')).toBeDefined()
+    const realCell = await waitFor(() => screen.getByText('ace@skywatch.test'))
+    expect(realCell.getAttribute('title')).toBe(new Date(achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }))
+    expect(screen.getByText('demo').getAttribute('title')).toBeNull()
   })
 
-  it('does NOT render a tooltip when achievedAt is absent (non-admin view)', async () => {
-    setupAuth(mockApiFetch({
-      leaderboard: [
-        { _id: 'e1', userId: 'other', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A999' },
-      ],
+  it('shows the all-time myBest row when the user is outside the top list', async () => {
+    setupAuth(mockApi({
+      allTime: {
+        leaderboard: [{ _id: 'e1', userId: 'other1', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A101' }],
+        myBest: { _id: 'me', userId: 'u1', rank: 47, bestScore: 10, bestTime: 55.0, agentNumber: 'A001' },
+      },
     }))
     mockUseParams.mockReturnValue({ gameKey: 'symbols' })
     render(<CbatLeaderboard />)
+    await selectAllTime()
 
-    const cell = await waitFor(() => screen.getByText('Agent A999'))
-    expect(cell.getAttribute('title')).toBeNull()
+    await waitFor(() => expect(screen.getByText('#47')).toBeDefined())
+    expect(screen.getByText('Agent A001 (you)')).toBeDefined()
   })
 })

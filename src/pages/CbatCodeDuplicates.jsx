@@ -6,6 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import CbatGameOver from '../components/CbatGameOver'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 15
@@ -32,7 +33,7 @@ function countOccurrences(sequence, digit) {
 }
 
 // ── Results screen ──────────────────────────────────────────────────────────
-function ResultsScreen({ rounds, totalTime, onPlayAgain, scoreSaved }) {
+function ResultsScreen({ rounds, totalTime }) {
   const correct = rounds.filter(r => r.correct).length
   const pct = Math.round((correct / TOTAL_ROUNDS) * 100)
 
@@ -49,11 +50,7 @@ function ResultsScreen({ rounds, totalTime, onPlayAgain, scoreSaved }) {
   })
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center"
-    >
+    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{grade.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Code Duplicates Assessment Complete</p>
@@ -99,25 +96,7 @@ function ResultsScreen({ rounds, totalTime, onPlayAgain, scoreSaved }) {
         </div>
       </div>
 
-      {scoreSaved && (
-        <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
-      )}
-
-      <div className="flex flex-wrap gap-3 justify-center">
-        <button
-          onClick={onPlayAgain}
-          className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-        >
-          Play Again
-        </button>
-        <Link
-          to="/cbat/code-duplicates/leaderboard"
-          className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-        >
-          🏆 Leaderboard
-        </Link>
-      </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -150,6 +129,7 @@ export default function CbatCodeDuplicates() {
   const inputRef = useRef(null)
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
+  const [queued, setQueued] = useState(false)
 
   const tierLabel = round <= 5 ? 'Easy' : round <= 10 ? 'Medium' : 'Hard'
 
@@ -172,6 +152,7 @@ export default function CbatCodeDuplicates() {
     const grade = pct >= 90 ? 'Outstanding' : pct >= 70 ? 'Good' : pct >= 50 ? 'Needs Work' : 'Failed'
 
     setScoreSaved(false)
+    setQueued(false)
     markGameCompleted({ score: correct })
     submitCbatResult(`code-duplicates`, {
         correctCount: correct,
@@ -181,8 +162,9 @@ export default function CbatCodeDuplicates() {
         totalTime: finalTime,
         grade,
       }, { apiFetch, API })
-      .then(() => {
-        setScoreSaved(true)
+      .then((r) => {
+        setScoreSaved(!!r?.synced)
+        setQueued(!!r?.queued)
         apiFetch(`${API}/api/games/cbat/code-duplicates/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -582,12 +564,19 @@ export default function CbatCodeDuplicates() {
 
           {/* Results */}
           {phase === 'results' && (
-            <ResultsScreen
-              rounds={roundResults}
-              totalTime={elapsed}
-              onPlayAgain={() => { setScoreSaved(false); startGame() }}
+            <CbatGameOver
+              gameKey="code-duplicates"
+              score={roundResults.filter(r => r.correct).length}
               scoreSaved={scoreSaved}
-            />
+              queued={queued}
+              personalBest={personalBest}
+              onPlayAgain={() => { setScoreSaved(false); startGame() }}
+            >
+              <ResultsScreen
+                rounds={roundResults}
+                totalTime={elapsed}
+              />
+            </CbatGameOver>
           )}
         </div>
       )}

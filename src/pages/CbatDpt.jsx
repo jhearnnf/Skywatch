@@ -7,6 +7,7 @@ import { getAircraftRoster } from '../lib/offlineRoster'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import CbatGameOver from '../components/CbatGameOver'
 import SkywatchLogoIntro, { SKYWATCH_LOGO_INTRO_MS } from '../components/SkywatchLogoIntro'
 import { has3DModel, getModelUrl } from '../data/aircraftModels'
 import DptAircraftLayer from '../components/DptAircraftLayer'
@@ -1061,6 +1062,7 @@ export default function CbatDpt() {
 
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved]     = useState(false)
+  const [queued, setQueued]             = useState(false)
   // Admin cheats — round-skip (111/222/.../888) and aircraft-size (9XX).
   // Either one flips cheatUsed for the rest of the run, suppressing score
   // tracking and leaderboard submission.
@@ -1852,6 +1854,7 @@ export default function CbatDpt() {
   // Submit score at end of run
   const submitScore = useCallback((finalScore, finalTime, aircraftTitle, finalRound, breakdown) => {
     setScoreSaved(false)
+    setQueued(false)
     markGameCompleted({ score: finalScore, round: finalRound })
     submitCbatResult(`dpt`, {
         totalScore: finalScore,
@@ -1860,8 +1863,9 @@ export default function CbatDpt() {
         aircraftUsed: aircraftTitle,
         ...breakdown,
       }, { apiFetch, API })
-      .then(() => {
-        setScoreSaved(true)
+      .then((r) => {
+        setScoreSaved(!!r?.synced)
+        setQueued(!!r?.queued)
         apiFetch(`${API}/api/games/cbat/dpt/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -2092,61 +2096,33 @@ export default function CbatDpt() {
           {/* Final score */}
           <AnimatePresence>
             {phase === 'finished' && selected && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center"
+              <CbatGameOver
+                gameKey="dpt"
+                score={totalScore}
+                scoreSaved={scoreSaved}
+                queued={queued}
+                personalBest={personalBest}
+                onPlayAgain={handlePlayAgain}
               >
-                <p className="text-5xl mb-3">🎖️</p>
-                <p className="text-2xl font-extrabold text-white mb-1">Run Complete</p>
-                <p className="text-sm text-slate-400 mb-6">Reached round {round} of {TOTAL_ROUNDS}.</p>
+                <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+                  <p className="text-5xl mb-3">🎖️</p>
+                  <p className="text-2xl font-extrabold text-white mb-1">Run Complete</p>
+                  <p className="text-sm text-slate-400 mb-6">Reached round {round} of {TOTAL_ROUNDS}.</p>
 
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-6">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
-                  <div className="flex justify-center gap-8 mb-4">
-                    <div>
-                      <p className="text-3xl font-mono font-bold text-brand-300">{totalScore}</p>
-                      <p className="text-xs text-slate-500 mt-1">points</p>
-                    </div>
-                    <div className="w-px bg-[#1a3a5c]" />
-                    <div>
-                      <p className="text-3xl font-mono font-bold text-brand-300">{elapsed.toFixed(1)}s</p>
-                      <p className="text-xs text-slate-500 mt-1">total time</p>
+                  <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-6">
+                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+                      <div className="flex justify-between"><span>Gates hit</span><span className="text-brand-300 font-mono">{gatesHit}</span></div>
+                      <div className="flex justify-between"><span>Intercepts</span><span className="text-brand-300 font-mono">{interceptions}</span></div>
+                      <div className="flex justify-between"><span>Danger zones</span><span className="text-red-400 font-mono">{dangerZoneViolations}</span></div>
+                      <div className="flex justify-between"><span>Separation</span><span className="text-red-400 font-mono">{separationViolations}</span></div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
-                    <div className="flex justify-between"><span>Gates hit</span><span className="text-brand-300 font-mono">{gatesHit}</span></div>
-                    <div className="flex justify-between"><span>Intercepts</span><span className="text-brand-300 font-mono">{interceptions}</span></div>
-                    <div className="flex justify-between"><span>Danger zones</span><span className="text-red-400 font-mono">{dangerZoneViolations}</span></div>
-                    <div className="flex justify-between"><span>Separation</span><span className="text-red-400 font-mono">{separationViolations}</span></div>
-                  </div>
-                </div>
 
-                {cheatUsed
-                  ? <p className="text-xs text-amber-400 mb-4">DEBUG MODE · run not submitted to leaderboard</p>
-                  : scoreSaved && <p className="text-xs text-green-400 mb-4">✓ Score saved</p>}
+                  {cheatUsed && <p className="text-xs text-amber-400 mb-4">DEBUG MODE · run not submitted to leaderboard</p>}
 
-                <div className="flex flex-wrap gap-3 justify-center">
-                  <button
-                    onClick={handlePlayAgain}
-                    className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-                  >
-                    Play Again
-                  </button>
-                  <Link
-                    to="/cbat/dpt/leaderboard"
-                    className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-                  >
-                    🏆 Leaderboard
-                  </Link>
-                  <button
-                    onClick={handleMenu}
-                    className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors"
-                  >
-                    Change Aircraft
-                  </button>
                 </div>
-              </motion.div>
+              </CbatGameOver>
             )}
           </AnimatePresence>
 

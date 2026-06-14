@@ -9,6 +9,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import CbatGameOver from '../components/CbatGameOver'
 import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import { useTraceMode } from '../hooks/useTraceMode'
@@ -606,6 +607,7 @@ export default function CbatPlaneTurn() {
 
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved]     = useState(false)
+  const [queued, setQueued]             = useState(false)
 
   // ── Trace 1 state ──────────────────────────────────────────────────────────
   const [trace1Round, setTrace1Round]         = useState(0)        // 0-indexed
@@ -664,6 +666,7 @@ export default function CbatPlaneTurn() {
   // on the saved doc server-side (body no longer needs to send it).
   const submitScore = useCallback((finalRotations, finalTime, aircraftTitle) => {
     setScoreSaved(false)
+    setQueued(false)
     markGameCompleted({ score: finalRotations })
     submitCbatResult(`plane-turn-${mode}`, {
         totalRotations: finalRotations,
@@ -671,8 +674,9 @@ export default function CbatPlaneTurn() {
         levelsCompleted: MAX_LEVEL,
         aircraftUsed: aircraftTitle,
       }, { apiFetch, API })
-      .then(() => {
-        setScoreSaved(true)
+      .then((r) => {
+        setScoreSaved(!!r?.synced)
+        setQueued(!!r?.queued)
         apiFetch(`${API}/api/games/cbat/plane-turn-${mode}/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -684,6 +688,7 @@ export default function CbatPlaneTurn() {
   // Submit Trace 1 score
   const submitTrace1Score = useCallback((score, correctTurns, totalTurns, elapsedMs) => {
     setScoreSaved(false)
+    setQueued(false)
     const accuracy = totalTurns > 0 ? Math.round((correctTurns / totalTurns) * 100) : 0
     markGameCompleted({ score: correctTurns })
     submitCbatResult(`trace-1`, {
@@ -695,8 +700,9 @@ export default function CbatPlaneTurn() {
         aircraftUsed: 'Hawk T2',
         totalTime: elapsedMs,
       }, { apiFetch, API })
-      .then(() => {
-        setScoreSaved(true)
+      .then((r) => {
+        setScoreSaved(!!r?.synced)
+        setQueued(!!r?.queued)
         apiFetch(`${API}/api/games/cbat/trace-1/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -1124,6 +1130,7 @@ export default function CbatPlaneTurn() {
     setTotalRotations(0)
     setTotalTime(0)
     setScoreSaved(false)
+    setQueued(false)
     if (gameModeTrace1) {
       // Wipe Trace 1 state before the next paint, then bump generation so the
       // boot effect re-runs the schedule build + first-turn timer.
@@ -1242,109 +1249,74 @@ export default function CbatPlaneTurn() {
             </div>
           )}
 
-          {/* Final score screen */}
-          {phase === 'finished' && selected && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center"
+          {/* Final score screen — Trace 1 */}
+          {phase === 'finished' && selected && gameModeTrace1 && (
+            <CbatGameOver
+              gameKey="trace-1"
+              score={trace1Correct}
+              scoreSaved={scoreSaved}
+              queued={queued}
+              personalBest={personalBest}
+              onPlayAgain={handlePlayAgain}
+              extraActions={[{ label: 'Back to Modes', onClick: handleMenu }]}
             >
-              {gameModeTrace1 ? (
-                <>
-                  <p className="text-5xl mb-3">🛩️</p>
-                  <p className="text-2xl font-extrabold text-white mb-1">Trace 1 Complete</p>
-                  <p className="text-sm text-slate-400 mb-6">All 5 rounds finished.</p>
+              <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+                <p className="text-4xl mb-2">🛩️</p>
+                <p className="text-xl font-extrabold text-white mb-1">Trace 1 Complete</p>
+                <p className="text-sm text-slate-400 mb-5">All 5 rounds finished.</p>
 
-                  <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 sm:p-5 mb-6">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
-                    <div className="flex justify-center items-center gap-4 sm:gap-8">
-                      <div className="min-w-0">
-                        <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-300">
-                          {trace1Correct}<span className="text-slate-400">/40</span>
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">correct</p>
-                      </div>
-                      <div className="w-px self-stretch bg-[#1a3a5c]" />
-                      <div className="min-w-0">
-                        <p className="text-2xl sm:text-3xl font-mono font-bold text-brand-300">{trace1Total > 0 ? Math.round((trace1Correct / trace1Total) * 100) : 0}%</p>
-                        <p className="text-xs text-slate-500 mt-1">accuracy</p>
-                      </div>
+                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 sm:p-5">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
+                  <div className="flex justify-center items-center gap-4 sm:gap-8">
+                    <div className="min-w-0">
+                      <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-300">
+                        {trace1Correct}<span className="text-slate-400">/40</span>
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">correct</p>
+                    </div>
+                    <div className="w-px self-stretch bg-[#1a3a5c]" />
+                    <div className="min-w-0">
+                      <p className="text-2xl sm:text-3xl font-mono font-bold text-brand-300">{trace1Total > 0 ? Math.round((trace1Correct / trace1Total) * 100) : 0}%</p>
+                      <p className="text-xs text-slate-500 mt-1">accuracy</p>
                     </div>
                   </div>
+                </div>
+              </div>
+            </CbatGameOver>
+          )}
 
-                  {scoreSaved && (
-                    <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
-                  )}
+          {/* Final score screen — Practise (2D / 3D) */}
+          {phase === 'finished' && selected && !gameModeTrace1 && (
+            <CbatGameOver
+              gameKey={`plane-turn-${mode}`}
+              score={totalRotations}
+              scoreSaved={scoreSaved}
+              queued={queued}
+              personalBest={personalBest}
+              onPlayAgain={handlePlayAgain}
+              extraActions={[{ label: 'Change Aircraft', onClick: handleMenu }]}
+            >
+              <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+                <p className="text-4xl mb-2">🎖️</p>
+                <p className="text-xl font-extrabold text-white mb-1">All Levels Complete</p>
+                <p className="text-sm text-slate-400 mb-5">You cleared all {MAX_LEVEL} levels.</p>
 
-                  <div className="flex flex-wrap gap-3 justify-center">
-                    <button
-                      onClick={handlePlayAgain}
-                      className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-                    >
-                      Play Again
-                    </button>
-                    <Link
-                      to="/cbat/trace-1/leaderboard"
-                      className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-                    >
-                      🏆 Leaderboard
-                    </Link>
-                    <button
-                      onClick={handleMenu}
-                      className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors"
-                    >
-                      Back to Modes
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="text-5xl mb-3">🎖️</p>
-                  <p className="text-2xl font-extrabold text-white mb-1">All Levels Complete</p>
-                  <p className="text-sm text-slate-400 mb-6">You cleared all {MAX_LEVEL} levels.</p>
-
-                  <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-6">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
-                    <div className="flex justify-center gap-8">
-                      <div>
-                        <p className="text-3xl font-mono font-bold text-brand-300">{totalRotations}</p>
-                        <p className="text-xs text-slate-500 mt-1">rotations</p>
-                      </div>
-                      <div className="w-px bg-[#1a3a5c]" />
-                      <div>
-                        <p className="text-3xl font-mono font-bold text-brand-300">{totalTime.toFixed(1)}s</p>
-                        <p className="text-xs text-slate-500 mt-1">total time</p>
-                      </div>
+                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
+                  <div className="flex justify-center gap-8">
+                    <div>
+                      <p className="text-3xl font-mono font-bold text-brand-300">{totalRotations}</p>
+                      <p className="text-xs text-slate-500 mt-1">rotations</p>
+                    </div>
+                    <div className="w-px bg-[#1a3a5c]" />
+                    <div>
+                      <p className="text-3xl font-mono font-bold text-brand-300">{totalTime.toFixed(1)}s</p>
+                      <p className="text-xs text-slate-500 mt-1">total time</p>
                     </div>
                   </div>
-
-                  {scoreSaved && (
-                    <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
-                  )}
-
-                  <div className="flex flex-wrap gap-3 justify-center">
-                    <button
-                      onClick={handlePlayAgain}
-                      className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-                    >
-                      Play Again
-                    </button>
-                    <Link
-                      to={leaderboardPath}
-                      className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-                    >
-                      🏆 Leaderboard
-                    </Link>
-                    <button
-                      onClick={handleMenu}
-                      className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors"
-                    >
-                      Change Aircraft
-                    </button>
-                  </div>
-                </>
-              )}
-            </motion.div>
+                </div>
+              </div>
+            </CbatGameOver>
           )}
 
           {/* Game board — mounted during 'intro' too so it sits ready behind

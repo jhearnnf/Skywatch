@@ -6,6 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import CbatGameOver from '../components/CbatGameOver'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const ROUND_1_COUNT = 10
@@ -169,7 +170,7 @@ function AngleDiagram({ angle, size = CANVAS_SIZE }) {
 }
 
 // ── Results screen ───────────────────────────────────────────────────────────
-function ResultsScreen({ answers, totalTime, onPlayAgain, onMenu, scoreSaved }) {
+function ResultsScreen({ answers, totalTime }) {
   const correct = answers.filter(a => a.correct).length
   const pct = Math.round((correct / TOTAL_QUESTIONS) * 100)
   const r1 = answers.filter(a => a.round === 1)
@@ -183,11 +184,7 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, onMenu, scoreSaved }) 
     : { label: 'Failed', emoji: '💥', color: 'text-red-400' }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center"
-    >
+    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{grade.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Bearing Angle Assessment Complete</p>
@@ -233,26 +230,7 @@ function ResultsScreen({ answers, totalTime, onPlayAgain, onMenu, scoreSaved }) 
           ))}
         </div>
       </div>
-
-      {scoreSaved && (
-        <p className="text-xs text-green-400 mb-4">✓ Score saved</p>
-      )}
-
-      <div className="flex flex-wrap gap-3 justify-center">
-        <button
-          onClick={onPlayAgain}
-          className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-        >
-          Play Again
-        </button>
-        <Link
-          to="/cbat/angles/leaderboard"
-          className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-        >
-          🏆 Leaderboard
-        </Link>
-      </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -278,6 +256,7 @@ export default function CbatAngles() {
   const startTimeRef = useRef(null)
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
+  const [queued, setQueued] = useState(false)
 
   // Fetch personal best
   useEffect(() => {
@@ -297,6 +276,7 @@ export default function CbatAngles() {
     const grade = pct >= 90 ? 'Outstanding' : pct >= 70 ? 'Good' : pct >= 50 ? 'Needs Work' : 'Failed'
 
     setScoreSaved(false)
+    setQueued(false)
     markGameCompleted({ score: correct })
     submitCbatResult(`angles`, {
         correctCount: correct,
@@ -305,8 +285,9 @@ export default function CbatAngles() {
         totalTime: finalTime,
         grade,
       }, { apiFetch, API })
-      .then(() => {
-        setScoreSaved(true)
+      .then((r) => {
+        setScoreSaved(!!r?.synced)
+        setQueued(!!r?.queued)
         apiFetch(`${API}/api/games/cbat/angles/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -608,12 +589,19 @@ export default function CbatAngles() {
 
           {/* Results */}
           {phase === 'results' && (
-            <ResultsScreen
-              answers={answers}
-              totalTime={elapsed}
-              onPlayAgain={() => { setScoreSaved(false); startGame() }}
+            <CbatGameOver
+              gameKey="angles"
+              score={answers.filter(a => a.correct).length}
               scoreSaved={scoreSaved}
-            />
+              queued={queued}
+              personalBest={personalBest}
+              onPlayAgain={() => { setScoreSaved(false); startGame() }}
+            >
+              <ResultsScreen
+                answers={answers}
+                totalTime={elapsed}
+              />
+            </CbatGameOver>
           )}
         </div>
       )}

@@ -199,4 +199,88 @@ function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
   return trimmed;
 }
 
-module.exports = { padLeaderboard, FAKE_AGENTS, FAKE_TUNING };
+// ── Weekly leaderboard demo padding ──────────────────────────────────────────
+// The weekly board sums points earned since Monday, so demo rows must look like
+// a few real players who've each played only a couple of games this week —
+// modest weekTotals built from a low play count, NOT single big all-time scores.
+//
+// WEEKLY_PER_PLAY is a typical "decent single run" value per game, in the same
+// space as that game's weekly total: primaryField points for higher-is-better
+// games, and derived weeklyExpr points for the lower-is-better trace games.
+// EVERY leaderboard game has an entry so no weekly board is ever left with just
+// 0–1 real players — sparse weeks always get a few demo rows (unlike the
+// all-time board, which leaves some games real-only). Values sit a little below
+// the real median single run (queried from production) so engaged real players
+// can still outrank the demos.
+const WEEKLY_PER_PLAY = {
+  'plane-turn-2d':   150,  // derived points space (≈ real median run, see cfg.weeklyExpr)
+  'plane-turn-3d':   165,
+  'angles':           14,  // real med 16
+  'code-duplicates':  11,  // real med 12
+  'symbols':          13,  // real med 15
+  'target':          520,  // real med 602
+  'instruments':       4,  // real med 3
+  'ant':              45,  // real med 50
+  'visualisation-2d':  4,  // real med 3
+  'visualisation-3d':  4,  // real med 4
+  'flag':            220,  // real med 246
+  'dpt':            3400,  // real med 3850
+  'act':            1300,  // real med 1482
+  'trace-1':          26,  // real med 29 (correctTurns /40)
+  'numerical-ops':    80,  // real med 90 (correctPercentage)
+};
+
+// Six deterministic demo players: a couple of active ones, the rest light.
+// plays + factor are paired by index; factor varies the per-play average so
+// totals aren't exact multiples and the ordering looks organic.
+const WEEKLY_PLAYS   = [3, 2, 2, 1, 3, 1];
+const WEEKLY_FACTORS = [1.18, 1.05, 0.96, 0.88, 0.78, 0.70];
+
+// Below this many real weekly entries the board counts as "sparse" and gets
+// topped up with demo rows; at or above it the week is busy enough to stand on
+// its own (and we don't risk demo rows displacing real players).
+const WEEKLY_SPARSE_THRESHOLD = 8;
+
+function generateWeeklyFakes(gameKey, perPlay, isAdmin) {
+  const offset = GAME_OFFSET[gameKey] ?? 0;
+  const fakes = [];
+  for (let i = 0; i < WEEKLY_PLAYS.length; i++) {
+    const plays = WEEKLY_PLAYS[i];
+    const entry = {
+      _id: `fake-weekly-${gameKey}-${i}`,
+      userId: `fake-weekly-user-${gameKey}-${i}`,
+      agentNumber: FAKE_AGENTS[(offset + i) % FAKE_AGENTS.length],
+      weekTotal: Math.round(perPlay * plays * WEEKLY_FACTORS[i]),
+      plays,
+      isFake: true,
+    };
+    if (isAdmin) entry.email = 'demo';
+    fakes.push(entry);
+  }
+  return fakes;
+}
+
+// Pad a weekly leaderboard (already sorted weekTotal-desc) with demo rows when
+// the week is sparse, then resort and assign ranks. Demo rows can interleave
+// with — or, for very low-activity real entries, outrank — real ones, exactly
+// like the all-time padder.
+function padWeeklyLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
+  const perPlay = WEEKLY_PER_PLAY[gameKey];
+
+  // No demo tuning, board already full, or week busy enough → real only.
+  if (perPlay == null || real.length >= limit || real.length >= WEEKLY_SPARSE_THRESHOLD) {
+    real.forEach((e, i) => { e.rank = i + 1; });
+    return real;
+  }
+
+  const fakes = generateWeeklyFakes(gameKey, perPlay, isAdmin);
+  const merged = [...real, ...fakes].sort((a, b) => {
+    if (a.weekTotal !== b.weekTotal) return b.weekTotal - a.weekTotal;
+    return (b.plays || 0) - (a.plays || 0);
+  });
+  const trimmed = merged.slice(0, limit);
+  trimmed.forEach((e, i) => { e.rank = i + 1; });
+  return trimmed;
+}
+
+module.exports = { padLeaderboard, padWeeklyLeaderboard, FAKE_AGENTS, FAKE_TUNING, WEEKLY_PER_PLAY };

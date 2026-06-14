@@ -16,6 +16,7 @@ import PlayField from './CbatFlag/PlayField'
 import Numpad from './CbatFlag/Numpad'
 import AircraftQuestion from './CbatFlag/AircraftQuestion'
 import SEO from '../components/SEO'
+import CbatGameOver from '../components/CbatGameOver'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const GAME_DURATION = 60
@@ -92,7 +93,7 @@ const GRADE_STYLE = {
 }
 
 // ── Results screen ────────────────────────────────────────────────────────────
-function ResultsScreen({ stats, onPlayAgain, scoreSaved }) {
+function ResultsScreen({ stats }) {
   const grade = computeGrade(stats.totalScore)
   const gs = GRADE_STYLE[grade]
 
@@ -105,45 +106,17 @@ function ResultsScreen({ stats, onPlayAgain, scoreSaved }) {
   )
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-lg bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
-    >
+    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
       <p className="text-5xl mb-3">{gs.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${gs.color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-5">FLAG Assessment Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4">
-        <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Total Score</p>
-        <p className={`text-4xl font-mono font-bold ${stats.totalScore >= 0 ? 'text-brand-300' : 'text-red-400'}`}>
-          {stats.totalScore}
-        </p>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 mb-5">
+      <div className="grid grid-cols-3 gap-2">
         {row('Maths', stats.mathScore, `${stats.mathCorrect}✓ ${stats.mathWrong}✗ ${stats.mathTimeout}⏱`)}
         {row('Aircraft', stats.aircraftScore, `${stats.aircraftCorrect}✓ ${stats.aircraftWrong}✗`)}
         {row('Targets', stats.targetScore, `${stats.targetHits}✓ ${stats.targetMisses}✗`)}
       </div>
-
-      {scoreSaved && <p className="text-xs text-green-400 mb-4">✓ Score saved</p>}
-
-      <div className="flex flex-wrap gap-3 justify-center">
-        <button
-          onClick={onPlayAgain}
-          className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors cursor-pointer"
-        >
-          Play Again
-        </button>
-        <Link
-          to="/cbat/flag/leaderboard"
-          className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-        >
-          🏆 Leaderboard
-        </Link>
-      </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -221,6 +194,7 @@ export default function CbatFlag() {
   const [phase, setPhase] = useState('intro')
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
+  const [queued, setQueued] = useState(false)
   const [aircraftList, setAircraftList] = useState([])
   const [aircraftLoading, setAircraftLoading] = useState(true)
   const [modelUrl, setModelUrl] = useState(null)
@@ -453,6 +427,7 @@ export default function CbatFlag() {
       resultSubmittedRef.current = true
       const grade = computeGrade(finalStats.totalScore)
       setScoreSaved(false)
+      setQueued(false)
       markGameCompleted({ score: finalStats.totalScore })
       submitCbatResult(`flag`, {
           totalScore: finalStats.totalScore,
@@ -469,8 +444,9 @@ export default function CbatFlag() {
           totalTime: GAME_DURATION,
           grade,
         }, { apiFetch, API })
-        .then(() => {
-          setScoreSaved(true)
+        .then((r) => {
+          setScoreSaved(!!r?.synced)
+          setQueued(!!r?.queued)
           apiFetch(`${API}/api/games/cbat/flag/personal-best`)
             .then(r => r.json())
             .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -736,11 +712,18 @@ export default function CbatFlag() {
             )}
 
             {phase === 'results' && (
-              <ResultsScreen
-                stats={stats}
-                onPlayAgain={() => { setPhase('intro') }}
+              <CbatGameOver
+                gameKey="flag"
+                score={stats.totalScore}
                 scoreSaved={scoreSaved}
-              />
+                queued={queued}
+                personalBest={personalBest}
+                onPlayAgain={() => { setPhase('intro') }}
+              >
+                <ResultsScreen
+                  stats={stats}
+                />
+              </CbatGameOver>
             )}
           </div>
         </>

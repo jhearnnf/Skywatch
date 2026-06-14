@@ -6,6 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import CbatGameOver from '../components/CbatGameOver'
 import {
   buildRound,
   scoreAnswer,
@@ -203,7 +204,7 @@ function DataTable({ round }) {
 }
 
 // ── Results screen ────────────────────────────────────────────────────────────
-function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved }) {
+function ResultsScreen({ answers, totalTime, totalScore }) {
   const exact = answers.filter(a => a.exact).length
   const partial = answers.filter(a => a.partial).length
   const miss = answers.length - exact - partial
@@ -217,23 +218,13 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
     : { emoji: '\u{1F4A5}', color: 'text-red-400' }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center"
-    >
+    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{gradeStyle.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${gradeStyle.color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-6">ANT Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
-        <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
+      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4">
         <div className="flex justify-center gap-8 items-end">
-          <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalScore}</p>
-            <p className="text-sm text-slate-400">pts / {maxScore}</p>
-          </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
             <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">accuracy</p>
@@ -250,7 +241,7 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
         </p>
       </div>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-6 max-h-56 overflow-y-auto">
+      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-h-56 overflow-y-auto">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Round Review</p>
         <div className="space-y-1">
           {answers.map((a, i) => {
@@ -270,26 +261,7 @@ function ResultsScreen({ answers, totalTime, totalScore, onPlayAgain, scoreSaved
           })}
         </div>
       </div>
-
-      {scoreSaved && (
-        <p className="text-xs text-green-400 mb-4">{'✓'} Score saved</p>
-      )}
-
-      <div className="flex flex-wrap gap-3 justify-center">
-        <button
-          onClick={onPlayAgain}
-          className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-        >
-          Play Again
-        </button>
-        <Link
-          to="/cbat/ant/leaderboard"
-          className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-        >
-          {'\u{1F3C6}'} Leaderboard
-        </Link>
-      </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -314,6 +286,7 @@ export default function CbatAnt() {
   const [feedback, setFeedback] = useState(null) // { points, exact, partial, correct, user }
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
+  const [queued, setQueued] = useState(false)
 
   const answersRef = useRef([])
   const roundIndexRef = useRef(0)
@@ -341,6 +314,7 @@ export default function CbatAnt() {
     const missCount = finalAnswers.length - exactCount - partialCount
     const grade = gradeForScore(totalScore)
     setScoreSaved(false)
+    setQueued(false)
     markGameCompleted({ score: totalScore })
     submitCbatResult(`ant`, {
         totalScore,
@@ -351,8 +325,9 @@ export default function CbatAnt() {
         totalTime: finalTime,
         grade,
       }, { apiFetch, API })
-      .then(() => {
-        setScoreSaved(true)
+      .then((r) => {
+        setScoreSaved(!!r?.synced)
+        setQueued(!!r?.queued)
         apiFetch(`${API}/api/games/cbat/ant/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -705,13 +680,20 @@ export default function CbatAnt() {
 
           {/* Results */}
           {phase === 'results' && (
-            <ResultsScreen
-              answers={answers}
-              totalTime={totalElapsed}
-              totalScore={finalTotalScore}
-              onPlayAgain={startGame}
+            <CbatGameOver
+              gameKey="ant"
+              score={finalTotalScore}
               scoreSaved={scoreSaved}
-            />
+              queued={queued}
+              personalBest={personalBest}
+              onPlayAgain={startGame}
+            >
+              <ResultsScreen
+                answers={answers}
+                totalTime={totalElapsed}
+                totalScore={finalTotalScore}
+              />
+            </CbatGameOver>
           )}
         </div>
       )}

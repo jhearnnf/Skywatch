@@ -9,6 +9,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import SEO from '../components/SEO'
+import CbatGameOver from '../components/CbatGameOver'
 
 const AircraftTopDown = lazy(() => import('../components/AircraftTopDown'))
 
@@ -612,7 +613,7 @@ function Compass() {
 }
 
 // ── Results screen ───────────────────────────────────────────────────────────
-function ResultsScreen({ stats, onPlayAgain, scoreSaved }) {
+function ResultsScreen({ stats }) {
   const grade = computeGrade(stats.totalScore)
   const gradeStyle = {
     'Outstanding': { emoji: '\u{1F396}\uFE0F', color: 'text-green-400' },
@@ -630,46 +631,18 @@ function ResultsScreen({ stats, onPlayAgain, scoreSaved }) {
   )
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-lg bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
-    >
-      <p className="text-5xl mb-3">{gradeStyle.emoji}</p>
-      <p className={`text-2xl font-extrabold mb-1 ${gradeStyle.color}`}>{grade}</p>
-      <p className="text-sm text-slate-400 mb-5">Target Complete</p>
+    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
+      <p className="text-4xl mb-2">{gradeStyle.emoji}</p>
+      <p className={`text-xl font-extrabold mb-1 ${gradeStyle.color}`}>{grade}</p>
+      <p className="text-sm text-slate-400 mb-4">Target Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4">
-        <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Total Score</p>
-        <p className={`text-4xl font-mono font-bold ${stats.totalScore >= 0 ? 'text-brand-300' : 'text-red-400'}`}>
-          {stats.totalScore}
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 mb-5">
+      <div className="grid grid-cols-2 gap-2">
         {row('Scene', stats.sceneScore, `${stats.sceneHits} hit / ${stats.sceneMisses} miss`)}
         {row('Light', stats.lightScore, `${stats.lightMatches} match / ${stats.lightMisclicks} miss`)}
         {row('Scan',  stats.scanScore,  `${stats.scanMatches} match / ${stats.scanMisclicks} miss`)}
         {row('System',stats.systemScore,`${stats.systemMatches} match / ${stats.systemMisclicks} miss`)}
       </div>
-
-      {scoreSaved && <p className="text-xs text-green-400 mb-4">{'\u2713'} Score saved</p>}
-
-      <div className="flex flex-wrap gap-3 justify-center">
-        <button
-          onClick={onPlayAgain}
-          className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
-        >
-          Play Again
-        </button>
-        <Link
-          to="/cbat/target/leaderboard"
-          className="px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline"
-        >
-          {'\u{1F3C6}'} Leaderboard
-        </Link>
-      </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -907,9 +880,31 @@ function TutorialComplete({ onExit }) {
   )
 }
 
-function TargetTutorial({ onExit, shapeScale, aircraftList = [] }) {
+// Per-playthrough id for tutorial usage tracking. Stamped once per tutorial
+// mount; the backend dedupes/upserts on it so repeated progress reports for the
+// same playthrough never create a second row.
+function makeTutorialRunId() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  } catch { /* fall through */ }
+  return `tut_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [done, setDone] = useState(false)
+  const [runId] = useState(makeTutorialRunId)
+
+  // Report tutorial usage for admin stats (per-step drop-off funnel). Fires on
+  // entry (step 0) and on every section change — forward via auto-advance or the
+  // coach-card arrows, and backward jumps too (the backend's $max keeps the
+  // recorded reach monotonic). Completion is reported separately below.
+  useEffect(() => {
+    onProgress?.({ clientRunId: runId, furthestStep: stepIdx, totalSteps: TUTORIAL_STEPS.length, completed: false })
+  }, [stepIdx, runId, onProgress])
+  useEffect(() => {
+    if (done) onProgress?.({ clientRunId: runId, furthestStep: TUTORIAL_STEPS.length - 1, totalSteps: TUTORIAL_STEPS.length, completed: true })
+  }, [done, runId, onProgress])
   const [shapes] = useState(() => planTutorialScene())
   const [clicked, setClicked] = useState(() => new Set())
   const [missFlash, setMissFlash] = useState(false)
@@ -1260,6 +1255,17 @@ export default function CbatTarget() {
   const shapeScale = useShapeScale()
 
   const [phase, setPhase] = useState('intro')         // intro | playing | tutorial | results
+
+  // Fire-and-forget tutorial usage tracking (admin Reports per-step drop-off).
+  // Online-only by design — a learning aid, not a score, so no offline outbox.
+  const reportTutorialProgress = useCallback((body) => {
+    if (!user) return
+    apiFetch(`${API}/api/games/cbat/target/tutorial`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})
+  }, [user, apiFetch, API])
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
     // Hide the nav chrome during the live game and the practice tutorial.
@@ -1270,6 +1276,7 @@ export default function CbatTarget() {
   const [elapsedMs, setElapsedMs] = useState(0)
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
+  const [queued, setQueued] = useState(false)
   const [aircraftList, setAircraftList] = useState([])
 
   // Game state
@@ -1494,10 +1501,12 @@ export default function CbatTarget() {
     const finalTime = GAME_MS / 1000
     const grade = computeGrade(stats.totalScore)
     setScoreSaved(false)
+    setQueued(false)
     markGameCompleted({ score: stats.totalScore })
     submitCbatResult(`target`, { ...stats, totalTime: finalTime, grade }, { apiFetch, API })
-      .then(() => {
-        setScoreSaved(true)
+      .then((r) => {
+        setScoreSaved(!!r?.synced)
+        setQueued(!!r?.queued)
         apiFetch(`${API}/api/games/cbat/target/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
@@ -1716,13 +1725,22 @@ export default function CbatTarget() {
             <Intro onStart={startGame} onTutorial={() => setPhase('tutorial')} personalBest={personalBest} aircraftReady={aircraftList.length > 0} />
           )}
           {phase === 'results' && (
-            <ResultsScreen stats={stats} onPlayAgain={() => setPhase('intro')} scoreSaved={scoreSaved} />
+            <CbatGameOver
+              gameKey="target"
+              score={stats.totalScore}
+              scoreSaved={scoreSaved}
+              queued={queued}
+              personalBest={personalBest}
+              onPlayAgain={() => setPhase('intro')}
+            >
+              <ResultsScreen stats={stats} />
+            </CbatGameOver>
           )}
         </div>
       )}
 
       {user && phase === 'tutorial' && (
-        <TargetTutorial onExit={() => setPhase('intro')} shapeScale={shapeScale} aircraftList={aircraftList} />
+        <TargetTutorial onExit={() => setPhase('intro')} shapeScale={shapeScale} aircraftList={aircraftList} onProgress={reportTutorialProgress} />
       )}
 
       {user && phase === 'playing' && (

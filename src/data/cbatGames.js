@@ -21,6 +21,33 @@ export const CBAT_GAMES = [
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — coming soon.',               path: null,                    image: '/images/placeholder-brief.svg' },
 ]
 
+// Per-leaderboard display config, keyed by the backend leaderboard gameKey
+// (the URL segment, e.g. 'plane-turn-2d', 'trace-1', 'target'). Shared by the
+// leaderboard page (src/pages/CbatLeaderboard.jsx) and the post-game reveal
+// (src/components/CbatGameOver.jsx) so score formatting lives in one place.
+// Adding a new game = one entry here + one entry in the backend CBAT_GAMES
+// registry, and both the board and the reveal pick it up.
+//   lowerIsBetter — all-time board direction (weekly is always higher-better,
+//                   because lower-better games sum a derived points value).
+//   hideTime      — game has no meaningful per-run time column.
+export const CBAT_LEADERBOARD_CONFIG = {
+  'plane-turn-2d':   { title: 'Trace Practise 2D', emoji: '🗺️', scoreLabel: 'Rotations', lowerIsBetter: true,  formatScore: (s) => `${s}`,     backPath: '/cbat/trace',          planeTurnMode: '2d' },
+  'plane-turn-3d':   { title: 'Trace Practise 3D', emoji: '🗺️', scoreLabel: 'Rotations', lowerIsBetter: true,  formatScore: (s) => `${s}`,     backPath: '/cbat/trace',          planeTurnMode: '3d' },
+  'trace-1':         { title: 'Trace 1',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/40`,  backPath: '/cbat/trace',          hideTime: true },
+  'angles':          { title: 'Angles',            emoji: '📐',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/20`,  backPath: '/cbat/angles' },
+  'code-duplicates': { title: 'Code Duplicates',   emoji: '🧩',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/15`,  backPath: '/cbat/code-duplicates' },
+  'symbols':         { title: 'Symbols',           emoji: '🔣',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/15`,  backPath: '/cbat/symbols' },
+  'target':          { title: 'Target',            emoji: '🎯',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/target',         hideTime: true },
+  'instruments':     { title: 'Instruments',       emoji: '🛫',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/instruments',    hideTime: true },
+  'ant':             { title: 'ANT',               emoji: '📡',  scoreLabel: 'Points',    lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/ant' },
+  'flag':            { title: 'FLAG',              emoji: '🚩',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/flag',           hideTime: true },
+  'visualisation-2d':{ title: 'Visualisation 2D',  emoji: '🧮',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
+  'visualisation-3d':{ title: 'Visualisation 3D',  emoji: '🧊',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
+  'dpt':             { title: 'DPT',               emoji: '🛩️', scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/dpt' },
+  'act':             { title: 'ACT',               emoji: '🎧',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/act',            hideTime: true },
+  'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops' },
+}
+
 // Admin-side list — one entry per backend cbatGameEnabled key. Diverges from
 // CBAT_GAMES at TRACE 1/2 and Visualisation 2D/3D: the hub shows one tile each
 // linking to a combined page, but the backend registry splits those keys into
