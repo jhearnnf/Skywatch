@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import Overlay from './ui/Overlay'
 import useUpdateNotification from '../hooks/useUpdateNotification'
+import renderBodyWithLinks from '../utils/renderBodyWithLinks'
 
 // Resolves what to render for the image given the notification's imageMode.
 function resolveImageSrc(notif) {
@@ -97,7 +98,7 @@ export default function UpdateNotificationModal() {
             </button>
             <h2 className="text-xl font-extrabold text-brand-700 pr-8">{viewing.title}</h2>
             <p className="mt-3 text-sm leading-relaxed text-text whitespace-pre-wrap">
-              {viewing.body}
+              {renderBodyWithLinks(viewing.body)}
             </p>
 
             {showResponseInput && (

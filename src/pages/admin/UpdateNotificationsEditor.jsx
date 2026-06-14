@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { PAGE_OPTIONS, pageLabelForValue } from '../../constants/pages'
 import Overlay from '../../components/ui/Overlay'
+import renderBodyWithLinks from '../../utils/renderBodyWithLinks'
 
 function resolvePreviewImageSrc(notif) {
   if (!notif) return null
@@ -49,6 +50,8 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
   const [editorOpen,  setEditorOpen]  = useState(false)
   const [editingId,   setEditingId]   = useState(null)
   const [draft,       setDraft]       = useState(EMPTY_DRAFT)
+  const [savedDraft,  setSavedDraft]  = useState(EMPTY_DRAFT) // snapshot to detect unsaved edits
+  const [discardOpen, setDiscardOpen] = useState(false)
   const [aiBusy,      setAiBusy]      = useState(false)
   const [aiOutput,    setAiOutput]    = useState('')
   const [uploadBusy,  setUploadBusy]  = useState(false)
@@ -71,13 +74,14 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
   function openNew() {
     setEditingId(null)
     setDraft(EMPTY_DRAFT)
+    setSavedDraft(EMPTY_DRAFT)
     setAiOutput('')
     setEditorOpen(true)
   }
 
   function openEdit(n) {
     setEditingId(n._id)
-    setDraft({
+    const next = {
       title:      n.title ?? '',
       body:       n.body ?? '',
       imageMode:  n.imageMode ?? 'none',
@@ -88,9 +92,26 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
       targetPath: n.targetPath ?? '',
       responsesEnabled: !!n.responsesEnabled,
       applyToExistingOnly: !!n.applyToExistingOnly,
-    })
+    }
+    setDraft(next)
+    setSavedDraft(next)
     setAiOutput('')
     setEditorOpen(true)
+  }
+
+  // True when the form has edits that would be lost on close.
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(savedDraft)
+
+  // Guarded close: a clean form closes immediately; a dirty one asks first so a
+  // stray backdrop click can't wipe everything the admin just typed.
+  function attemptClose() {
+    if (isDirty) setDiscardOpen(true)
+    else setEditorOpen(false)
+  }
+
+  function confirmDiscard() {
+    setDiscardOpen(false)
+    setEditorOpen(false)
   }
 
   async function handleFileUpload(file) {
@@ -327,7 +348,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => setEditorOpen(false)}
+            onClick={attemptClose}
           >
             <motion.div
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -352,6 +373,9 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                   onChange={e => setDraft(d => ({ ...d, body: e.target.value }))}
                   className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-surface text-text outline-none focus:ring-2 focus:ring-brand-600/40 resize-none"
                 />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Links work: paste a URL (https://…) or write <code className="text-slate-600">[label](https://…)</code> for a labelled link.
+                </p>
               </Field>
 
               <Field label="Image">
@@ -360,7 +384,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                     { v: 'none',        label: 'None' },
                     { v: 'placeholder', label: 'Use placeholder image' },
                     { v: 'upload',      label: 'Upload image' },
-                    { v: 'custom',      label: 'Custom URL' },
+                    { v: 'custom',      label: 'Custom image URL' },
                   ].map(opt => (
                     <label key={opt.v} className="flex items-center gap-2 text-sm text-text">
                       <input
@@ -391,13 +415,18 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                     </div>
                   )}
                   {draft.imageMode === 'custom' && (
-                    <input
-                      type="url"
-                      value={draft.imageUrl}
-                      placeholder="https://…"
-                      onChange={e => setDraft(d => ({ ...d, imageUrl: e.target.value }))}
-                      className="mt-2 w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-surface text-text outline-none focus:ring-2 focus:ring-brand-600/40"
-                    />
+                    <div className="mt-2">
+                      <input
+                        type="url"
+                        value={draft.imageUrl}
+                        placeholder="https://example.com/banner.png"
+                        onChange={e => setDraft(d => ({ ...d, imageUrl: e.target.value }))}
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-surface text-text outline-none focus:ring-2 focus:ring-brand-600/40"
+                      />
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Direct link to an image file (jpg, png, gif, webp) — not a web page. It shows as the banner at the top of the notification.
+                      </p>
+                    </div>
                   )}
                   {(draft.imageMode === 'custom' && draft.imageUrl) && (
                     <img src={draft.imageUrl} alt="" className="mt-2 max-h-32 rounded object-cover" />
@@ -491,8 +520,34 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
               </div>
 
               <div className="mt-5 flex justify-end gap-2">
-                <button onClick={() => setEditorOpen(false)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold">Cancel</button>
+                <button onClick={attemptClose} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold">Cancel</button>
                 <button onClick={saveDraft} className="px-3 py-2 rounded-xl bg-brand-600 text-white text-sm font-bold">Save</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Discard-changes guard — blocks accidental data loss on backdrop click */}
+      <AnimatePresence>
+        {discardOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setDiscardOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="bg-surface-raised border border-slate-200 rounded-2xl max-w-sm w-full p-5"
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="text-base font-bold text-text">Discard unsaved changes?</h3>
+              <p className="text-sm text-slate-500 mt-1">
+                You have edits that haven’t been saved. Closing now will lose them.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button onClick={() => setDiscardOpen(false)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold">Keep editing</button>
+                <button onClick={confirmDiscard} className="px-3 py-2 rounded-xl bg-red-600 text-white text-sm font-bold hover:brightness-110">Discard</button>
               </div>
             </motion.div>
           </motion.div>
@@ -581,7 +636,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                 </button>
                 <h2 className="text-xl font-extrabold text-brand-700 pr-8">{previewNotif.title}</h2>
                 <p className="mt-3 text-sm leading-relaxed text-text whitespace-pre-wrap">
-                  {previewNotif.body}
+                  {renderBodyWithLinks(previewNotif.body)}
                 </p>
                 {previewNotif.responsesEnabled && (
                   <div className="mt-4">
