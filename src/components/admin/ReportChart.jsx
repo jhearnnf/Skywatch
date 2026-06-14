@@ -88,6 +88,9 @@ export function ChartSkeleton({ height = 220 }) {
  * height: pixel height (default 220)
  * formatX / formatY: optional formatters
  * dimX: array of xKey values whose bars + tick labels render at reduced opacity (bar charts only)
+ * dimLabels: array of series/category LABELS to render greyed — legend entries
+ *            (line/bar/stacked) and category-axis ticks (horizontalBar). Used to
+ *            mark tutorial/practice games on the Reports page.
  */
 export default function ReportChart({
   type = 'line',
@@ -101,6 +104,7 @@ export default function ReportChart({
   formatY,
   showLegend = false,
   dimX,
+  dimLabels,
 }) {
   if (isAllZero(data, keys)) return <EmptyState height={height} />
 
@@ -117,6 +121,24 @@ export default function ReportChart({
       </text>
     )
   }
+
+  // Greying of practice/tutorial game names (by their human label).
+  const dimLabelSet = dimLabels && dimLabels.length ? new Set(dimLabels.map(String)) : null
+  // Category-axis tick for horizontalBar — greys the label when it's a practice game.
+  const dimCategoryTick = ({ x, y, payload }) => {
+    const dim = !!dimLabelSet && dimLabelSet.has(String(payload?.value))
+    return (
+      <text x={x} y={y} dy={4} fill={COLORS.axis} fontSize={11} textAnchor="end" opacity={dim ? DIM_LABEL_OPACITY : 1}>
+        {payload?.value}
+      </text>
+    )
+  }
+  // Legend entry formatter — greys practice game series names.
+  const legendFormatter = dimLabelSet
+    ? (value) => (
+        <span style={{ color: COLORS.axis, opacity: dimLabelSet.has(String(value)) ? DIM_LABEL_OPACITY : 1 }}>{value}</span>
+      )
+    : undefined
 
   if (type === 'donut') {
     const palette = colors ?? [COLORS.brand, COLORS.amber, COLORS.emerald, COLORS.red, COLORS.slate]
@@ -139,7 +161,7 @@ export default function ReportChart({
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, left: 12, bottom: 4 }}>
           <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" horizontal={false} />
           <XAxis type="number" stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} />
-          <YAxis type="category" dataKey={xKey} stroke={COLORS.axis} fontSize={11} width={120} />
+          <YAxis type="category" dataKey={xKey} stroke={COLORS.axis} fontSize={11} width={120} tick={dimLabelSet ? dimCategoryTick : undefined} />
           <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} />
           {keys.map((k, i) => (
             <Bar key={k} dataKey={k} fill={seriesColors[i]} name={labels?.[k] ?? k} radius={[0, 4, 4, 0]} />
@@ -163,7 +185,7 @@ export default function ReportChart({
           />
           <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
           <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />
-          {showLegend && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} />}
+          {showLegend && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} formatter={legendFormatter} />}
           {keys.map((k, i) => (
             <Bar
               key={k}

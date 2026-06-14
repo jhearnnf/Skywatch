@@ -8,7 +8,20 @@ const GameSessionWhereAircraftResult = require('../models/GameSessionWhereAircra
 const GameSessionFlashcardRecallResult = require('../models/GameSessionFlashcardRecallResult');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
+const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const { CBAT_GAMES } = require('../constants/cbatGames');
+
+// Games whose names render greyed on the Reports page — tutorial/practice modes
+// that aren't the scored test. The frontend dims any perGame/legend/axis label
+// whose key is in `practiceKeys` (built from these + the tutorial entries).
+const PRACTICE_GAME_KEYS = ['plane-turn-2d', 'plane-turn-3d'];
+
+// In-app tutorials surfaced on the Reports page. `key` is a display-only pseudo
+// game key; `gameKey` is the real CBAT game the tutorial belongs to (what the
+// GameSessionCbatTutorial rows store).
+const TUTORIAL_GAMES = [
+  { key: 'target-tutorial', gameKey: 'target', label: 'Target (tutorial)' },
+];
 
 router.use(protect, adminOnly);
 
@@ -130,6 +143,54 @@ async function cbatStreams(since) {
       sessionsByDay: await dailyCount(g.Model, 'createdAt', since, g.modeFilter ?? {}),
     }))
   );
+}
+
+// Tutorial / practice-mode usage per game, with a per-step drop-off funnel.
+// Kept separate from score-result streams: tutorials are a learning aid and are
+// deliberately excluded from the engagement headlines (sessions, retention,
+// activation). Volume is low, so reading the rows and reducing in JS is simplest.
+async function tutorialUsage(since) {
+  return Promise.all(TUTORIAL_GAMES.map(async (t) => {
+    const docs = await GameSessionCbatTutorial
+      .find({ gameKey: t.gameKey, startedAt: { $gte: since } })
+      .select('userId furthestStep totalSteps completed startedAt')
+      .lean();
+
+    const sessions = docs.length;
+    const players = new Set(docs.map(d => String(d.userId))).size;
+    const completed = docs.filter(d => d.completed).length;
+    const totalSteps = docs.reduce((m, d) => Math.max(m, d.totalSteps || 0), 0);
+
+    // reached[step] = playthroughs whose furthest section is at least `step`.
+    const funnel = [];
+    for (let step = 0; step < totalSteps; step++) {
+      funnel.push({ step, reached: docs.filter(d => (d.furthestStep || 0) >= step).length });
+    }
+    // dropOff = reached this step but not the next (the final step's "next" is completion).
+    for (let i = 0; i < funnel.length; i++) {
+      const next = i + 1 < funnel.length ? funnel[i + 1].reached : completed;
+      funnel[i].dropOff = Math.max(0, funnel[i].reached - next);
+    }
+
+    const dayMap = new Map();
+    for (const d of docs) dayMap.set(ymd(d.startedAt), (dayMap.get(ymd(d.startedAt)) ?? 0) + 1);
+
+    return {
+      key: t.key,
+      label: t.label,
+      gameKey: t.gameKey,
+      sessions,
+      players,
+      avgPerPlayer: players ? sessions / players : 0,
+      starts: sessions,
+      completed,
+      completionRate: sessions ? completed / sessions : 0,
+      abandonPct: sessions ? 1 - completed / sessions : 0,
+      totalSteps,
+      funnel,
+      sessionsByDay: dayMap,
+    };
+  }));
 }
 
 // ── GET /api/admin/reports/snapshot ───────────────────────────────────────────
@@ -292,10 +353,14 @@ router.get('/cbat', async (req, res) => {
     const now = new Date();
     const wStart = windowStart(window);
 
-    // Per-game streams + sessions-by-day.
-    const games = await cbatStreams(wStart);
+    // Per-game streams + sessions-by-day, plus tutorial/practice usage.
+    const [games, tutorials] = await Promise.all([
+      cbatStreams(wStart),
+      tutorialUsage(wStart),
+    ]);
 
-    // Total sessions and unique players in window.
+    // Total sessions and unique players in window — scored games only; tutorials
+    // are a learning aid and stay out of the engagement headlines.
     const playerSet = new Set();
     let totalSessions = 0;
     for (const g of games) {
@@ -304,12 +369,19 @@ router.get('/cbat', async (req, res) => {
     }
     const uniquePlayers = playerSet.size;
 
-    // Daily sessions stacked by game (zero-filled).
+    // Daily sessions stacked by game (zero-filled) — scored games + tutorials,
+    // so the tutorial series shows on the chart (greyed in the legend client-side).
     const gameKeys = games.map(g => g.key);
-    const stackedDaily = emptyDailyBuckets(wStart, now, gameKeys);
+    const stackedKeys = [...gameKeys, ...tutorials.map(t => t.key)];
+    const stackedDaily = emptyDailyBuckets(wStart, now, stackedKeys);
     for (const g of games) {
       for (const row of stackedDaily) {
         row[g.key] = g.sessionsByDay.get(row.date) ?? 0;
+      }
+    }
+    for (const t of tutorials) {
+      for (const row of stackedDaily) {
+        row[t.key] = t.sessionsByDay.get(row.date) ?? 0;
       }
     }
 
@@ -391,7 +463,24 @@ router.get('/cbat', async (req, res) => {
         abandonPct,
       };
     }));
+    // Append tutorial rows (Abandon % = didn't finish the tutorial) so they sit
+    // in the per-game table alongside the real games, greyed client-side.
+    for (const t of tutorials) {
+      perGame.push({
+        key: t.key,
+        label: t.label,
+        sessions: t.sessions,
+        players: t.players,
+        avgPerPlayer: t.avgPerPlayer,
+        starts: t.starts,
+        abandonPct: t.abandonPct,
+        isTutorial: true,
+      });
+    }
     perGame.sort((a, b) => b.sessions - a.sessions);
+
+    // Keys whose names render greyed on the Reports page (tutorial + practice).
+    const practiceKeys = [...tutorials.map(t => t.key), ...PRACTICE_GAME_KEYS];
 
     res.json({
       status: 'success',
@@ -406,10 +495,25 @@ router.get('/cbat', async (req, res) => {
           totalUsers,
         },
         dailySessions: stackedDaily,
-        gameKeys,
-        gameLabels: Object.fromEntries(games.map(g => [g.key, g.label])),
+        gameKeys: stackedKeys,
+        gameLabels: {
+          ...Object.fromEntries(games.map(g => [g.key, g.label])),
+          ...Object.fromEntries(tutorials.map(t => [t.key, t.label])),
+        },
+        practiceKeys,
         sessionsPerPlayerBuckets,
         perGame,
+        tutorials: tutorials.map(t => ({
+          key: t.key,
+          label: t.label,
+          gameKey: t.gameKey,
+          sessions: t.sessions,
+          players: t.players,
+          completed: t.completed,
+          completionRate: t.completionRate,
+          totalSteps: t.totalSteps,
+          funnel: t.funnel,
+        })),
       },
     });
   } catch (err) {

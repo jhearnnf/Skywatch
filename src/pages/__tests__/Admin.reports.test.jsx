@@ -108,8 +108,9 @@ const MOCK_CBAT = {
       { date: '2026-05-01', 'plane-turn-2d': 2, 'plane-turn-3d': 1, target: 1, angles: 0 },
       { date: '2026-05-02', 'plane-turn-2d': 5, 'plane-turn-3d': 2, target: 3, angles: 1 },
     ],
-    gameKeys: ['plane-turn-2d', 'plane-turn-3d', 'target', 'angles'],
-    gameLabels: { 'plane-turn-2d': 'Trace Practise 2D', 'plane-turn-3d': 'Trace Practise 3D', target: 'Target', angles: 'Angles' },
+    gameKeys: ['plane-turn-2d', 'plane-turn-3d', 'target', 'angles', 'target-tutorial'],
+    gameLabels: { 'plane-turn-2d': 'Trace Practise 2D', 'plane-turn-3d': 'Trace Practise 3D', target: 'Target', angles: 'Angles', 'target-tutorial': 'Target (tutorial)' },
+    practiceKeys: ['target-tutorial', 'plane-turn-2d', 'plane-turn-3d'],
     sessionsPerPlayerBuckets: [
       { bucket: '0', users: 21 },
       { bucket: '1', users: 4 },
@@ -122,6 +123,19 @@ const MOCK_CBAT = {
       { key: 'plane-turn-3d', label: 'Trace Practise 3D', sessions: 6,  players: 2, avgPerPlayer: 3, starts: 7,  abandonPct: 0.143 },
       { key: 'target',        label: 'Target',         sessions: 15, players: 4, avgPerPlayer: 3.75, starts: 17, abandonPct: 0.12 },
       { key: 'angles',        label: 'Angles',         sessions: 14, players: 6, avgPerPlayer: 2.33, starts: 16, abandonPct: 0.125 },
+      { key: 'target-tutorial', label: 'Target (tutorial)', sessions: 8, players: 3, avgPerPlayer: 2.67, starts: 8, abandonPct: 0.375, isTutorial: true },
+    ],
+    tutorials: [
+      {
+        key: 'target-tutorial', label: 'Target (tutorial)', gameKey: 'target',
+        sessions: 8, players: 3, completed: 5, completionRate: 0.625, totalSteps: 4,
+        funnel: [
+          { step: 0, reached: 8, dropOff: 1 },
+          { step: 1, reached: 7, dropOff: 1 },
+          { step: 2, reached: 6, dropOff: 0 },
+          { step: 3, reached: 6, dropOff: 1 },
+        ],
+      },
     ],
   },
 }
@@ -190,6 +204,31 @@ describe('Admin — Reports tab', () => {
     expect(screen.getByText('Trace Practise 3D')).toBeInTheDocument()
     expect(screen.getByText('Target')).toBeInTheDocument()
     expect(screen.getByText('Angles')).toBeInTheDocument()
+  })
+
+  it('shows the Target (tutorial) entry and a per-step Tutorial Drop-off funnel', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Total Sessions')).toBeInTheDocument())
+    // Tutorial surfaces as its own entry (table + funnel both render the label).
+    expect(screen.getAllByText('Target (tutorial)').length).toBeGreaterThan(0)
+    // Per-step drop-off funnel.
+    expect(screen.getByText('Tutorial Drop-off')).toBeInTheDocument()
+    expect(screen.getByText(/8 plays · 5 completed/)).toBeInTheDocument()
+    expect(screen.getByText('Step 1')).toBeInTheDocument()
+    expect(screen.getByText('Completed')).toBeInTheDocument()
+  })
+
+  it('greys the names of tutorial/practice games in the per-game table', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Total Sessions')).toBeInTheDocument())
+
+    // Practice/tutorial names render greyed; the scored test (Target) does not.
+    const tutorialCell = screen.getAllByText('Target (tutorial)').find(el => el.tagName === 'TD')
+    expect(tutorialCell.className).toContain('text-slate-400')
+    const trace2dCell = screen.getByText('Trace Practise 2D')
+    expect(trace2dCell.className).toContain('text-slate-400')
+    const targetCell = screen.getByText('Target')
+    expect(targetCell.className).not.toContain('text-slate-400')
   })
 
   it('refetches window + cbat (but NOT snapshot) when window changes', async () => {

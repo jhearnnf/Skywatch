@@ -637,6 +637,12 @@ function ReportsTab({ API }) {
   const windowedDimmed = windowedLoading && windowed ? 'opacity-60 transition-opacity' : ''
   const cbatDimmed     = cbatLoading     && cbat     ? 'opacity-60 transition-opacity' : ''
 
+  // Tutorial / practice games render their names greyed throughout the CBAT
+  // report so it's obvious they aren't the scored test. The backend sends the
+  // set of keys; map them to labels for the chart legend/axis greying.
+  const practiceKeySet  = new Set(cbat?.practiceKeys ?? [])
+  const practiceLabels  = (cbat?.practiceKeys ?? []).map(k => cbat?.gameLabels?.[k]).filter(Boolean)
+
   return (
     <div className="space-y-8">
       {/* ── SNAPSHOT (no window) ──────────────────────────────────────────── */}
@@ -808,6 +814,7 @@ function ReportsTab({ API }) {
                 xKey="date"
                 keys={cbat.gameKeys}
                 labels={cbat.gameLabels}
+                dimLabels={practiceLabels}
                 height={260}
                 showLegend
               />
@@ -835,6 +842,7 @@ function ReportsTab({ API }) {
                   xKey="label"
                   keys={['sessions']}
                   colors={['#5baaff']}
+                  dimLabels={practiceLabels}
                   height={Math.max(220, cbat.perGame.length * 28)}
                 />
               </ChartCard>
@@ -861,7 +869,7 @@ function ReportsTab({ API }) {
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {cbat.perGame.map(g => (
                       <tr key={g.key}>
-                        <td className="px-3 py-2 font-semibold">{g.label}</td>
+                        <td className={`px-3 py-2 font-semibold ${practiceKeySet.has(g.key) ? 'text-slate-400' : ''}`}>{g.label}</td>
                         <td className="px-3 py-2 text-right">{fmtNum(g.sessions)}</td>
                         <td className="px-3 py-2 text-right">{fmtNum(g.players)}</td>
                         <td className="px-3 py-2 text-right">{g.avgPerPlayer.toFixed(1)}</td>
@@ -873,6 +881,56 @@ function ReportsTab({ API }) {
                 </table>
               </div>
             </div>
+
+            {/* Tutorial / practice-mode per-step drop-off */}
+            {cbat.tutorials?.length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-surface overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-200">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tutorial Drop-off</h4>
+                  <p className="text-[10px] text-slate-400 mt-0.5">practice-mode usage · window: {window}</p>
+                </div>
+                <div className="p-4 space-y-5">
+                  {cbat.tutorials.map(t => {
+                    const base = t.funnel?.[0]?.reached || t.sessions || 0
+                    return (
+                      <div key={t.key}>
+                        <div className="flex items-baseline justify-between mb-2 gap-3">
+                          {/* Greyed — these are tutorials, not the scored test */}
+                          <span className="text-sm font-semibold text-slate-400">{t.label}</span>
+                          <span className="text-[11px] text-slate-500 text-right">
+                            {fmtNum(t.sessions)} plays · {fmtNum(t.completed)} completed ({fmtPct(t.completionRate)})
+                          </span>
+                        </div>
+                        {base === 0 ? (
+                          <p className="text-xs text-slate-500">No tutorial plays in this window.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {t.funnel.map(s => (
+                              <div key={s.step} className="flex items-center gap-2">
+                                <span className="w-16 shrink-0 text-[11px] text-slate-500">Step {s.step + 1}</span>
+                                <div className="flex-1 h-4 rounded bg-slate-100 overflow-hidden">
+                                  <div className="h-full" style={{ width: `${(s.reached / base) * 100}%`, backgroundColor: '#5baaff' }} />
+                                </div>
+                                <span className="w-10 shrink-0 text-right text-[11px] text-slate-600">{fmtNum(s.reached)}</span>
+                                <span className="w-12 shrink-0 text-right text-[11px] text-red-400">{s.dropOff > 0 ? `−${fmtNum(s.dropOff)}` : ''}</span>
+                              </div>
+                            ))}
+                            <div className="flex items-center gap-2">
+                              <span className="w-16 shrink-0 text-[11px] text-emerald-400">Completed</span>
+                              <div className="flex-1 h-4 rounded bg-slate-100 overflow-hidden">
+                                <div className="h-full" style={{ width: `${(t.completed / base) * 100}%`, backgroundColor: '#34d399' }} />
+                              </div>
+                              <span className="w-10 shrink-0 text-right text-[11px] text-slate-600">{fmtNum(t.completed)}</span>
+                              <span className="w-12 shrink-0" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </StatsSection>
