@@ -212,7 +212,7 @@ const appSettingsSchema = new mongoose.Schema({
       flag: true, 'visualisation-2d': true, 'visualisation-3d': true,
       dpt: true, act: true,
       'numerical-ops': true,
-      dad: false,
+      dad: true,
     }),
   },
 
@@ -393,8 +393,8 @@ appSettingsSchema.statics.getSettings = async function () {
     }
 
     // Backfill cbatGameEnabled — ensure every known CBAT game key is present.
-    // Implemented games default to enabled; the 3 unimplemented (path=null on FE)
-    // default to disabled. Saves Mongoose Map shape directly.
+    // Every game is now implemented and defaults to enabled. Saves Mongoose Map
+    // shape directly.
     //
     // Migration: legacy 'plane-turn' single key is split into 'plane-turn-2d' and
     // 'plane-turn-3d'. Its prior value (enabled/disabled) is copied to BOTH new
@@ -407,7 +407,7 @@ appSettingsSchema.statics.getSettings = async function () {
         flag: true, 'visualisation-2d': true, 'visualisation-3d': true,
         dpt: true, act: true,
         'numerical-ops': true,
-        dad: false,
+        dad: true,
       };
       const current = settings.cbatGameEnabled;
       let touched = false;

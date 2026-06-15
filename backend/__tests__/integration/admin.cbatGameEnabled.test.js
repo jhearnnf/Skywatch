@@ -5,8 +5,7 @@
  *   - silently drops unknown / legacy game keys (e.g. renamed games still
  *     echoed back by the frontend) instead of failing the whole save
  *   - rejects non-boolean values
- *   - rejects enabling unimplemented games (dad — only remaining placeholder)
- *   - persists a valid object
+ *   - persists a valid object (every game is now implemented and toggleable)
  *   - relaxes min-aircraft enforcement when target/flag is per-game disabled
  */
 process.env.JWT_SECRET = 'test_secret';
@@ -55,12 +54,14 @@ describe('PATCH /api/admin/settings — cbatGameEnabled validation', () => {
     expect(res.body.message).toMatch(/must be a boolean/);
   });
 
-  it('rejects enabling an unimplemented game (dad)', async () => {
+  it('persists enabling dad (now implemented with a backend route)', async () => {
     const admin  = await createAdminUser();
     const cookie = authCookie(admin._id);
     const res = await patchSettings(cookie, { cbatGameEnabled: { dad: true } });
-    expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/no backend route yet/);
+    expect(res.status).toBe(200);
+
+    const settings = await AppSettings.findOne();
+    expect(settings.cbatGameEnabled.get('dad')).toBe(true);
   });
 
   it('accepts and persists a valid object', async () => {

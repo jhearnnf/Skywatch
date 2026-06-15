@@ -108,18 +108,23 @@ describe('CBAT Trace 1', () => {
     });
   });
 
+  // Trace 1 uses padLeaderboard with demo tuning (correctTurns 12–37): up to 20
+  // demo entries render when the board is sparse, interleaved with real entries
+  // by correctTurns then totalTime.
   describe('GET /leaderboard', () => {
-    it('returns an empty leaderboard when no real scores exist (no demo padding)', async () => {
+    it('returns 20 demo entries when no real scores exist; myBest is null', async () => {
       const res = await request(app)
         .get(LEADERBOARD_URL)
         .set('Cookie', cookie);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.leaderboard).toEqual([]);
-      expect(res.body.data.myBest).toBeNull();
+      const { leaderboard, myBest } = res.body.data;
+      expect(leaderboard).toHaveLength(20);
+      expect(leaderboard.every(e => e.isFake)).toBe(true);
+      expect(myBest).toBeNull();
     });
 
-    it('returns only real entries (no demo rows) when scores exist', async () => {
+    it('orders real entries by correctTurns DESC, interleaved with demos; myBest tracks the user', async () => {
       await request(app).post(RESULT_URL).set('Cookie', cookie).send({ score: 28, correctTurns: 34, totalTime: 22000 });
       await request(app).post(RESULT_URL).set('Cookie', cookie2).send({ score: 12, correctTurns: 26, totalTime: 24000 });
 
@@ -127,10 +132,12 @@ describe('CBAT Trace 1', () => {
 
       expect(res.status).toBe(200);
       const board = res.body.data.leaderboard;
-      expect(board).toHaveLength(2);
-      expect(board.every(e => !e.isFake)).toBe(true);
-      expect(board[0].bestScore).toBe(34);
-      expect(board[1].bestScore).toBe(26);
+      expect(board).toHaveLength(20);
+      // The higher real score (34, user1) ranks above the lower one (26, user2).
+      const p1Idx = board.findIndex(e => e.agentNumber === '1000001');
+      const p2Idx = board.findIndex(e => e.agentNumber === '1000002');
+      expect(p1Idx).toBeGreaterThanOrEqual(0);
+      expect(p1Idx).toBeLessThan(p2Idx);
       expect(res.body.data.myBest).toBeTruthy();
       expect(res.body.data.myBest.bestScore).toBe(34);
     });

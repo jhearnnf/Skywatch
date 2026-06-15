@@ -43,7 +43,9 @@
       "WebFetch(domain:www.militaryaptitudetests.org)",
       "WebFetch(domain:flightschoolwingman.com)",
       "WebFetch(domain:www.reddit.com)",
-      "WebFetch(domain:old.reddit.com)"
+      "WebFetch(domain:old.reddit.com)",
+      "PowerShell(npx vitest run src/pages/__tests__/Home.logout.test.jsx)",
+      "PowerShell(git push *)"
     ]
   }
 }

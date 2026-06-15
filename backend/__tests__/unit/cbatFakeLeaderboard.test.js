@@ -12,6 +12,12 @@ const GAME_MAX = {
   'instruments':     null,   // time-limited, no fixed max
   'ant':             80,
   'flag':            null,   // accumulating score, no fixed ceiling
+  'visualisation-2d': null,  // small count, no ceiling assertion needed
+  'visualisation-3d': 8,     // 8 rounds, one point each
+  'dpt':             null,   // accumulating score, no fixed ceiling
+  'trace-1':         40,     // 5 rounds × 8 turns
+  'numerical-ops':   100,    // percentage 0–100
+  'dad':             15,     // 15 questions, one point each
 };
 const LOWER_BETTER = { 'plane-turn-2d': true, 'plane-turn-3d': true };
 
@@ -132,6 +138,13 @@ describe('padLeaderboard', () => {
 
   it('uses only multiples of 5 for ANT fakes (real game awards 0/5/10 per round)', () => {
     const out = padLeaderboard([], 'ant');
+    out.filter(e => e.isFake).forEach(f => {
+      expect(f.bestScore % 5).toBe(0);
+    });
+  });
+
+  it('uses only multiples of 5 for numerical-ops fakes (correctPercentage = correctCount/20 × 100)', () => {
+    const out = padLeaderboard([], 'numerical-ops');
     out.filter(e => e.isFake).forEach(f => {
       expect(f.bestScore % 5).toBe(0);
     });

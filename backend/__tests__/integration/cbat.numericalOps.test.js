@@ -90,18 +90,23 @@ describe('CBAT Numerical Operations', () => {
     });
   });
 
+  // Numerical Ops uses padLeaderboard with demo tuning (percentages 35–95, all
+  // multiples of 5): up to 20 demo entries render when the board is sparse,
+  // interleaved with real entries by correctPercentage then totalTime.
   describe('GET /leaderboard', () => {
-    it('returns an empty leaderboard when no real scores exist (no demo padding)', async () => {
+    it('returns 20 demo entries when no real scores exist; myBest is null', async () => {
       const res = await request(app)
         .get(LEADERBOARD_URL)
         .set('Cookie', cookie);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.leaderboard).toEqual([]);
-      expect(res.body.data.myBest).toBeNull();
+      const { leaderboard, myBest } = res.body.data;
+      expect(leaderboard).toHaveLength(20);
+      expect(leaderboard.every(e => e.isFake)).toBe(true);
+      expect(myBest).toBeNull();
     });
 
-    it('orders by correctPercentage DESC and uses totalTime as tiebreaker', async () => {
+    it('orders real entries by correctPercentage DESC, interleaved with demos; myBest tracks the user', async () => {
       // user2 has a higher percentage but slower time — still ranks above user1.
       await request(app).post(RESULT_URL).set('Cookie', cookie).send(sample({ correctPercentage: 80, totalTime: 100 }));
       await request(app).post(RESULT_URL).set('Cookie', cookie2).send(sample({ correctPercentage: 95, totalTime: 200 }));
@@ -110,10 +115,11 @@ describe('CBAT Numerical Operations', () => {
 
       expect(res.status).toBe(200);
       const board = res.body.data.leaderboard;
-      expect(board).toHaveLength(2);
-      expect(board.every(e => !e.isFake)).toBe(true);
-      expect(board[0].bestScore).toBe(95);
-      expect(board[1].bestScore).toBe(80);
+      expect(board).toHaveLength(20);
+      const p2Idx = board.findIndex(e => e.agentNumber === '1000002');
+      const p1Idx = board.findIndex(e => e.agentNumber === '1000001');
+      expect(p2Idx).toBeGreaterThanOrEqual(0);
+      expect(p2Idx).toBeLessThan(p1Idx);
 
       expect(res.body.data.myBest).toBeTruthy();
       expect(res.body.data.myBest.bestScore).toBe(80);
@@ -127,9 +133,12 @@ describe('CBAT Numerical Operations', () => {
 
       expect(res.status).toBe(200);
       const board = res.body.data.leaderboard;
-      expect(board).toHaveLength(2);
-      expect(board[0].bestTime).toBe(120);
-      expect(board[1].bestTime).toBe(150);
+      expect(board).toHaveLength(20);
+      // Same score (90) — the faster real run (120s, user2) ranks above the slower (150s, user1).
+      const p2Idx = board.findIndex(e => e.agentNumber === '1000002');
+      const p1Idx = board.findIndex(e => e.agentNumber === '1000001');
+      expect(p2Idx).toBeGreaterThanOrEqual(0);
+      expect(p2Idx).toBeLessThan(p1Idx);
     });
   });
 });

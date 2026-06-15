@@ -26,8 +26,12 @@ const GAME_OFFSET = {
   'ant':             2,
   'flag':            6,
   'visualisation-2d': 10,
+  'visualisation-3d': 11,
   'dpt':             14,
+  'trace-1':         13,
+  'numerical-ops':   15,
   'act':             18,
+  'dad':             22,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -89,9 +93,15 @@ const FAKE_TUNING = {
     scoreSequence: [70, 65, 60, 55, 50, 50, 45, 45, 40, 40, 35, 35, 30, 30, 25, 25, 20, 20, 15, 15],
   },
   'visualisation-2d': { floor: 1, ceiling: 7, seedScore: 7, seedTime: 70.5, scoreStep: 1, timeStep: 4.3 },
-  // visualisation-3d intentionally has no FAKE_TUNING entry — real scores
-  // only, matching trace-1. padLeaderboard short-circuits when tuning is
-  // absent.
+  'visualisation-3d': {
+    // 8 rounds of 3D shape-matching, one correct answer per round (max 8).
+    // 3D is harder than 2D so the top demo sits at 7, not 8, and runs a touch
+    // longer (30s/round timer × 8 = ~240s baseline + feedback → ~250–320s).
+    // Explicit sequence (not the stepped generator) so the narrow 2–7 band
+    // still spans 6 distinct values.
+    floor: 2, ceiling: 8, seedTime: 248.5, timeStep: 2.8,
+    scoreSequence: [7, 7, 7, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2, 2],
+  },
   'flag': {
     floor: 55, ceiling: 104, seedTime: 60, timeStep: 0,
     // 20 values, monotonically non-increasing, max 104, min 55. Higher is
@@ -111,9 +121,38 @@ const FAKE_TUNING = {
     floor: 60, ceiling: 460, seedTime: 226.4, timeStep: 4.3,
     scoreSequence: [460, 420, 380, 350, 320, 295, 270, 245, 220, 195, 175, 155, 135, 120, 105, 95, 85, 75, 68, 60],
   },
-  // Note: trace-1 intentionally has no FAKE_TUNING entry. Its leaderboard
-  // shows real scores only — padLeaderboard early-returns when tuning is
-  // absent.
+  'dpt': {
+    // totalScore accumulates across 8 rounds: +100/gate, +250/intercept,
+    // +50×round completion bonus, minus danger-zone (-10/s) and bad-hit (-150)
+    // penalties — a perfect no-penalty run tops out near ~5,750. Top demo of
+    // 4,820 is a strong-but-beatable run; the rest trail toward ~1,100. Scores
+    // land on multiples of 10 (the danger-zone penalty is per-second), so the
+    // sequence keeps that granularity. Runs are long (~900–1,200s / 15–20 min).
+    floor: 1100, ceiling: 5750, seedTime: 915.4, timeStep: 11.3,
+    scoreSequence: [4820, 4560, 4300, 4050, 3800, 3540, 3290, 3030, 2780, 2530, 2280, 2030, 1860, 1700, 1560, 1440, 1340, 1250, 1170, 1100],
+  },
+  'trace-1': {
+    // correctTurns out of 40 (5 rounds × 8 turns), higher is better. Top demo
+    // of 37 stays just under the 40 ceiling; the roster trails to 12. Rounds
+    // speed up each pass (turn intervals 1.87s → 0.93s), so a full run is
+    // short — ~60–120s.
+    floor: 12, ceiling: 40, seedTime: 64.7, timeStep: 2.1,
+    scoreSequence: [37, 36, 35, 34, 33, 31, 30, 29, 27, 26, 24, 23, 21, 20, 18, 17, 16, 15, 14, 12],
+  },
+  'numerical-ops': {
+    // correctPercentage = round(correctCount / 20 × 100), so every real value
+    // is a multiple of 5. Top demo of 95% stays under a perfect 100%; the
+    // roster trails to 35%. 20 questions × 20s timer + feedback → ~300–420s.
+    floor: 35, ceiling: 100, seedTime: 312.4, timeStep: 4.3,
+    scoreSequence: [95, 90, 90, 85, 85, 80, 75, 75, 70, 65, 65, 60, 55, 55, 50, 50, 45, 40, 40, 35],
+  },
+  'dad': {
+    // correctCount out of 15 (Directions and Distances), higher is better. Top
+    // demo of 14 stays under a perfect 15; the roster trails to 4. No hard
+    // timer — 15 reading-comprehension questions run ~120–300s.
+    floor: 4, ceiling: 15, seedTime: 128.6, timeStep: 6.3,
+    scoreSequence: [14, 13, 13, 12, 12, 11, 11, 11, 10, 10, 9, 9, 9, 8, 8, 7, 7, 6, 5, 4],
+  },
 };
 
 // Fixed delta tables — natural-looking variance without randomness.
@@ -228,6 +267,7 @@ const WEEKLY_PER_PLAY = {
   'act':            1300,  // real med 1482
   'trace-1':          26,  // real med 29 (correctTurns /40)
   'numerical-ops':    80,  // real med 90 (correctPercentage)
+  'dad':               9,  // correctCount /15 — a little below a decent single run
 };
 
 // Six deterministic demo players: a couple of active ones, the rest light.
