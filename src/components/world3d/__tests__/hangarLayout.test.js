@@ -39,9 +39,13 @@ describe('hangar layout integrity', () => {
     }
   })
 
-  it('CBAT arcade has enough cabinet slots for every CBAT_GAMES entry', () => {
-    // Soft contract — if CBAT_GAMES grows past 13, the world drops the tail.
-    // Failure here means the slot grid in CbatArcadeHangar needs new rows.
+  // ❌ INTENTIONAL FAILURE until SAT launches.
+  // The arcade has 13 cabinet slots but 14 games are registered (SAT is hidden,
+  // so it gets no cabinet today). Launching SAT means adding a 14th slot row in
+  // CbatArcadeHangar and bumping this expectation — at which point it goes green
+  // again. Keeping it red is a forcing reminder that the world lacks capacity
+  // for the full game list.
+  it('CBAT arcade has a cabinet slot for every registered CBAT game', () => {
     expect(CBAT_GAMES.length).toBeLessThanOrEqual(13)
   })
 })

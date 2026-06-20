@@ -1,5 +1,6 @@
 import {
   ResponsiveContainer,
+  ComposedChart,
   LineChart, Line,
   BarChart, Bar,
   PieChart, Pie, Cell,
@@ -91,6 +92,9 @@ export function ChartSkeleton({ height = 220 }) {
  * dimLabels: array of series/category LABELS to render greyed — legend entries
  *            (line/bar/stacked) and category-axis ticks (horizontalBar). Used to
  *            mark tutorial/practice games on the Reports page.
+ * compareKey: optional data field plotted as a dashed "previous period" overlay
+ *             line on top of line/bar/stackedBar charts (prior-period comparison).
+ * compareLabel: legend/tooltip name for the compare line (default 'Prev period').
  */
 export default function ReportChart({
   type = 'line',
@@ -105,8 +109,13 @@ export default function ReportChart({
   showLegend = false,
   dimX,
   dimLabels,
+  compareKey,
+  compareLabel = 'Prev period',
 }) {
-  if (isAllZero(data, keys)) return <EmptyState height={height} />
+  // When comparing, a period that's empty now but had prior activity should still
+  // render (so the dashed baseline shows), so fold compareKey into the zero check.
+  const zeroKeys = compareKey ? [...keys, compareKey] : keys
+  if (isAllZero(data, zeroKeys)) return <EmptyState height={height} />
 
   const seriesColors = colors ?? keys.map((_, i) => SERIES_PALETTE[i % SERIES_PALETTE.length])
   const xFmt = formatX ?? (xKey === 'date' ? shortDate : (v => v))
@@ -171,10 +180,28 @@ export default function ReportChart({
     )
   }
 
+  // Dashed prior-period overlay line, shared by bar/stacked/line when compareKey set.
+  const compareLine = compareKey ? (
+    <Line
+      type="monotone"
+      dataKey={compareKey}
+      stroke={COLORS.slate}
+      strokeWidth={1.5}
+      strokeDasharray="4 3"
+      dot={false}
+      activeDot={{ r: 3 }}
+      name={compareLabel}
+      legendType="line"
+    />
+  ) : null
+
   if (type === 'bar' || type === 'stackedBar') {
+    // ComposedChart so the comparison Line can sit over the Bars; it renders the
+    // bars identically to BarChart, so non-compare charts are visually unchanged.
+    const Chart = compareKey ? ComposedChart : BarChart
     return (
       <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+        <Chart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
           <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
           <XAxis
             dataKey={xKey}
@@ -185,7 +212,7 @@ export default function ReportChart({
           />
           <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
           <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />
-          {showLegend && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} formatter={legendFormatter} />}
+          {(showLegend || compareKey) && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} formatter={legendFormatter} />}
           {keys.map((k, i) => (
             <Bar
               key={k}
@@ -202,7 +229,8 @@ export default function ReportChart({
                 : null}
             </Bar>
           ))}
-        </BarChart>
+          {compareLine}
+        </Chart>
       </ResponsiveContainer>
     )
   }
@@ -215,7 +243,7 @@ export default function ReportChart({
         <XAxis dataKey={xKey} stroke={COLORS.axis} fontSize={11} tickFormatter={xFmt} />
         <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
         <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />
-        {showLegend && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} />}
+        {(showLegend || compareKey) && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} />}
         {keys.map((k, i) => (
           <Line
             key={k}
@@ -228,6 +256,7 @@ export default function ReportChart({
             name={labels?.[k] ?? k}
           />
         ))}
+        {compareLine}
       </LineChart>
     </ResponsiveContainer>
   )

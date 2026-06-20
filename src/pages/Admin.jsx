@@ -170,7 +170,32 @@ function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger = false, o
   )
 }
 
-function StatCard({ label, value, sub, color = 'slate', disabled = false }) {
+// Relative-change chip for prior-period comparison. `good` encodes whether an
+// increase is desirable (e.g. retention up = good, abandon-rate up = bad) so the
+// colour reflects health, not direction. A null/NaN delta renders nothing.
+function DeltaBadge({ value, good = true }) {
+  if (value == null || Number.isNaN(value)) return null
+  const flat = value === 0
+  const up = value > 0
+  const healthy = flat ? null : (up === good)
+  const tone = flat
+    ? 'bg-slate-100 text-slate-500'
+    : healthy
+      ? 'bg-emerald-50 text-emerald-700'
+      : 'bg-red-50 text-red-700'
+  const arrow = flat ? '→' : up ? '▲' : '▼'
+  const pct = `${Math.abs(value * 100).toFixed(0)}%`
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold ${tone}`}
+      title="vs previous period"
+    >
+      <span aria-hidden>{arrow}</span>{pct}
+    </span>
+  )
+}
+
+function StatCard({ label, value, sub, color = 'slate', disabled = false, delta, deltaGood = true }) {
   const colors = {
     slate:  'bg-slate-50  border-slate-200  text-slate-700',
     brand:  'bg-brand-50  border-brand-200  text-brand-700',
@@ -179,12 +204,16 @@ function StatCard({ label, value, sub, color = 'slate', disabled = false }) {
     red:    'bg-red-50    border-red-200    text-red-700',
   }
   const palette = disabled ? colors.slate : (colors[color] ?? colors.slate)
+  const showDelta = !disabled && delta != null && !Number.isNaN(delta)
   return (
     <div
       className={`rounded-2xl border p-4 ${palette} ${disabled ? 'opacity-50 grayscale pointer-events-none' : ''}`}
       aria-disabled={disabled || undefined}
     >
-      <p className="text-xl font-extrabold mb-0.5">{disabled ? '—' : (value ?? '—')}</p>
+      <div className="flex items-start justify-between gap-2 mb-0.5">
+        <p className="text-xl font-extrabold">{disabled ? '—' : (value ?? '—')}</p>
+        {showDelta && <DeltaBadge value={delta} good={deltaGood} />}
+      </div>
       <p className="text-xs font-semibold uppercase tracking-wider opacity-70">{label}</p>
       {sub && <p className="text-[10px] opacity-50 mt-0.5 whitespace-nowrap">{sub}</p>}
     </div>
@@ -501,6 +530,51 @@ function WindowPicker({ value, onChange }) {
   )
 }
 
+// Opt-in "compare to previous period" switch. Disabled for all-time (no prior
+// period to compare against) — the parent also forces compare off in that case.
+function ComparePicker({ value, onChange, disabled }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      disabled={disabled}
+      onClick={() => onChange(!value)}
+      title={disabled ? 'No prior period for all-time' : 'Overlay the previous period'}
+      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all mb-4
+        ${disabled
+          ? 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'
+          : value
+            ? 'border-brand-300 bg-brand-600 text-white shadow-sm'
+            : 'border-slate-200 bg-surface text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+        }`}
+    >
+      <span
+        className={`inline-flex h-4 w-7 items-center rounded-full p-0.5 transition-colors
+          ${value && !disabled ? 'bg-white/80' : 'bg-slate-200'}`}
+      >
+        <span className={`h-3 w-3 rounded-full bg-brand-600 transition-transform ${value && !disabled ? 'translate-x-3' : ''}`} />
+      </span>
+      Compare to previous
+    </button>
+  )
+}
+
+// Human-readable "this period vs prior period" date label. Mirrors the backend
+// window maths (rolling N days ending now); all-time has no prior period.
+function compareRanges(window) {
+  const days = { today: 1, '7d': 7, '30d': 30 }[window]
+  if (!days) return null
+  const D = 24 * 60 * 60 * 1000
+  const now = new Date()
+  const curStart = window === 'today'
+    ? new Date(new Date().setUTCHours(0, 0, 0, 0))
+    : new Date(now.getTime() - days * D)
+  const prevStart = new Date(curStart.getTime() - days * D)
+  const fmt = d => d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  return `${fmt(curStart)}–${fmt(now)} vs ${fmt(prevStart)}–${fmt(curStart)}`
+}
+
 function WindowChip({ window }) {
   const labels = { today: 'TODAY', '7d': '7D', '30d': '30D', all: 'ALL-TIME' }
   return (
@@ -518,11 +592,26 @@ function FixedChip() {
   )
 }
 
-function ChartCard({ title, sub, children }) {
+// Small muted tag marking a panel that has no prior-period equivalent, so it
+// reads as "intentionally not compared" rather than disabled/broken.
+function CurrentOnlyChip() {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-surface p-4">
+    <span className="inline-block px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-slate-100 text-slate-500 tracking-widest align-middle border border-slate-200 whitespace-nowrap">
+      CURRENT ONLY
+    </span>
+  )
+}
+
+// `dim` de-emphasises (not disables) a card whose data isn't part of the active
+// comparison; `tag` renders a chip beside the title (e.g. the "current only" mark).
+function ChartCard({ title, sub, tag, dim = false, children }) {
+  return (
+    <div className={`rounded-2xl border border-slate-200 bg-surface p-4 transition-opacity ${dim ? 'opacity-60' : ''}`}>
       <div className="mb-3">
-        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">{title}</h4>
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">{title}</h4>
+          {tag}
+        </div>
         {sub && <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>}
       </div>
       {children}
@@ -584,6 +673,7 @@ function PerGameTableSkeleton() {
 function ReportsTab({ API }) {
   const { apiFetch } = useAuth()
   const [window, setWindow] = useState('7d')
+  const [compare, setCompare] = useState(false)
   const [snapshot, setSnapshot] = useState(null)
   const [windowed, setWindowed] = useState(null)
   const [cbat, setCbat] = useState(null)
@@ -605,13 +695,17 @@ function ReportsTab({ API }) {
     return () => { cancelled = true }
   }, [API])
 
+  // All-time has no prior period — comparison is forced off there.
+  const compareActive = compare && window !== 'all'
+  const cmpQuery = compareActive ? '&compare=1' : ''
+
   // Window-driven data — stale-while-revalidate: previous data stays in place,
   // skeletons only appear on the very first load.
   useEffect(() => {
     let cancelled = false
     setWindowedLoading(true)
     setCbatLoading(true)
-    apiFetch(`${API}/api/admin/reports/window?window=${window}`, { credentials: 'include' })
+    apiFetch(`${API}/api/admin/reports/window?window=${window}${cmpQuery}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         if (cancelled) return
@@ -620,7 +714,7 @@ function ReportsTab({ API }) {
       })
       .catch(() => { if (!cancelled) setError(e => e || 'Failed to load reports') })
       .finally(() => { if (!cancelled) setWindowedLoading(false) })
-    apiFetch(`${API}/api/admin/reports/cbat?window=${window}`, { credentials: 'include' })
+    apiFetch(`${API}/api/admin/reports/cbat?window=${window}${cmpQuery}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         if (cancelled) return
@@ -630,7 +724,7 @@ function ReportsTab({ API }) {
       .catch(() => { if (!cancelled) setError(e => e || 'Failed to load reports') })
       .finally(() => { if (!cancelled) setCbatLoading(false) })
     return () => { cancelled = true }
-  }, [API, window])
+  }, [API, window, cmpQuery])
 
   if (error) return <p className="text-sm text-red-500 py-8 text-center">{error}</p>
 
@@ -642,6 +736,12 @@ function ReportsTab({ API }) {
   // set of keys; map them to labels for the chart legend/axis greying.
   const practiceKeySet  = new Set(cbat?.practiceKeys ?? [])
   const practiceLabels  = (cbat?.practiceKeys ?? []).map(k => cbat?.gameLabels?.[k]).filter(Boolean)
+
+  // Comparison data is only present when the backend honoured the compare flag
+  // (i.e. compareActive AND the response carries it). Guard on both.
+  const wCmp = compareActive ? windowed?.comparison : null
+  const cCmp = compareActive ? cbat?.comparison : null
+  const rangeLabel = compareActive ? compareRanges(window) : null
 
   return (
     <div className="space-y-8">
@@ -716,13 +816,21 @@ function ReportsTab({ API }) {
 
       {/* ── WINDOW PICKER ─────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-brand-200 bg-brand-50/30 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-1">
           <div>
             <h3 className="text-sm font-bold text-slate-700">Time window</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">Filters <strong>Activity &amp; Growth</strong> and <strong>CBAT Engagement</strong> below.</p>
           </div>
-          <WindowPicker value={window} onChange={setWindow} />
+          <div className="flex flex-wrap items-center gap-2">
+            <WindowPicker value={window} onChange={setWindow} />
+            <ComparePicker value={compare} onChange={setCompare} disabled={window === 'all'} />
+          </div>
         </div>
+        {rangeLabel && (
+          <p className="text-[11px] font-semibold text-brand-700">
+            Comparing <span className="text-slate-600">{rangeLabel}</span>
+          </p>
+        )}
       </div>
 
       {/* ── ACTIVITY & GROWTH ─────────────────────────────────────────────── */}
@@ -743,17 +851,19 @@ function ReportsTab({ API }) {
                 label="Signups (window)"
                 value={fmtNum(windowed.headlines.signupsInWindow)}
                 color="emerald"
-                sub={fmtDelta(windowed.headlines.signupsDelta) ?? 'no prior data'}
+                sub={compareActive ? 'new sign-ups' : (fmtDelta(windowed.headlines.signupsDelta) ?? 'no prior data')}
+                delta={wCmp?.signups?.delta}
               />
               <StatCard
                 label="Active in Window"
                 value={fmtNum(windowed.headlines.activeInWindow)}
                 color="brand"
                 sub={`${fmtPct(windowed.headlines.activeRate)} of users`}
+                delta={wCmp?.active?.delta}
               />
             </div>
 
-            <ChartCard title="Daily Signups" sub={`window: ${window}`}>
+            <ChartCard title="Daily Signups" sub={compareActive ? `window: ${window} · dashed = previous period` : `window: ${window}`}>
               <ReportChart
                 type="bar"
                 data={windowed.dailySignups}
@@ -761,6 +871,8 @@ function ReportsTab({ API }) {
                 keys={['count']}
                 colors={['#34d399']}
                 height={200}
+                compareKey={compareActive ? 'prev' : undefined}
+                compareLabel="Previous period"
               />
             </ChartCard>
           </div>
@@ -796,18 +908,23 @@ function ReportsTab({ API }) {
                 value={windowed ? fmtPct(windowed.headlines.activationRate) : '—'}
                 color="amber"
                 sub="first CBAT within 24h"
+                delta={wCmp?.activation?.delta}
               />
-              <StatCard label="Total Sessions"  value={fmtNum(cbat.headlines.totalSessions)} color="brand" sub="all CBAT games combined" />
+              <StatCard label="Total Sessions"  value={fmtNum(cbat.headlines.totalSessions)} color="brand" sub="all CBAT games combined"
+                delta={cCmp?.totalSessions?.delta} />
               <StatCard label="Unique Players"  value={fmtNum(cbat.headlines.uniquePlayers)} color="brand"
-                sub={`${fmtPct(cbat.headlines.totalUsers ? cbat.headlines.uniquePlayers / cbat.headlines.totalUsers : 0)} of users`} />
+                sub={`${fmtPct(cbat.headlines.totalUsers ? cbat.headlines.uniquePlayers / cbat.headlines.totalUsers : 0)} of users`}
+                delta={cCmp?.uniquePlayers?.delta} />
               <StatCard label="D1 Retention"    value={fmtPct(cbat.headlines.d1Retention)} color="emerald"
-                sub={`cohort: ${fmtNum(cbat.headlines.cohortSize)}`} />
+                sub={`cohort: ${fmtNum(cbat.headlines.cohortSize)}`}
+                delta={cCmp?.d1Retention?.delta} />
               <StatCard label="D7 Retention"    value={fmtPct(cbat.headlines.d7Retention)} color="emerald"
-                sub="played again 7d+ later" />
+                sub="played again 7d+ later"
+                delta={cCmp?.d7Retention?.delta} />
             </div>
 
             {/* Daily sessions stacked by game */}
-            <ChartCard title="Daily CBAT Sessions" sub={`stacked by game · window: ${window}`}>
+            <ChartCard title="Daily CBAT Sessions" sub={compareActive ? `stacked by game · window: ${window} · dashed = previous period total` : `stacked by game · window: ${window}`}>
               <ReportChart
                 type="stackedBar"
                 data={cbat.dailySessions}
@@ -817,12 +934,19 @@ function ReportsTab({ API }) {
                 dimLabels={practiceLabels}
                 height={260}
                 showLegend
+                compareKey={compareActive ? '_prevTotal' : undefined}
+                compareLabel="Prev period total"
               />
             </ChartCard>
 
             {/* Distribution + per-game side by side on lg */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ChartCard title="Sessions per User" sub={`distribution across all ${fmtNum(cbat.headlines.totalUsers)} users`}>
+              <ChartCard
+                title="Sessions per User"
+                sub={`distribution across all ${fmtNum(cbat.headlines.totalUsers)} users`}
+                dim={compareActive}
+                tag={compareActive ? <CurrentOnlyChip /> : null}
+              >
                 <ReportChart
                   type="bar"
                   data={cbat.sessionsPerPlayerBuckets}
@@ -835,7 +959,12 @@ function ReportsTab({ API }) {
                 />
               </ChartCard>
 
-              <ChartCard title="Sessions by Game" sub={`window: ${window}`}>
+              <ChartCard
+                title="Sessions by Game"
+                sub={`window: ${window}`}
+                dim={compareActive}
+                tag={compareActive ? <CurrentOnlyChip /> : null}
+              >
                 <ReportChart
                   type="horizontalBar"
                   data={cbat.perGame.map(g => ({ label: g.label, sessions: g.sessions }))}
@@ -852,7 +981,7 @@ function ReportsTab({ API }) {
             <div className="rounded-2xl border border-slate-200 bg-surface overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-200">
                 <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Per-game Breakdown</h4>
-                <p className="text-[10px] text-slate-400 mt-0.5">window: {window}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">window: {window}{compareActive ? ' · Δ = sessions vs previous period' : ''}</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -860,6 +989,7 @@ function ReportsTab({ API }) {
                     <tr>
                       <th className="text-left  px-3 py-2 font-bold">Game</th>
                       <th className="text-right px-3 py-2 font-bold">Sessions</th>
+                      {compareActive && <th className="text-right px-3 py-2 font-bold">Δ vs prev</th>}
                       <th className="text-right px-3 py-2 font-bold">Players</th>
                       <th className="text-right px-3 py-2 font-bold">Avg/Player</th>
                       <th className="text-right px-3 py-2 font-bold">Starts</th>
@@ -871,6 +1001,11 @@ function ReportsTab({ API }) {
                       <tr key={g.key}>
                         <td className={`px-3 py-2 font-semibold ${practiceKeySet.has(g.key) ? 'text-slate-400' : ''}`}>{g.label}</td>
                         <td className="px-3 py-2 text-right">{fmtNum(g.sessions)}</td>
+                        {compareActive && (
+                          <td className="px-3 py-2 text-right">
+                            {g.sessionsDelta != null ? <DeltaBadge value={g.sessionsDelta} good /> : <span className="text-slate-300">—</span>}
+                          </td>
+                        )}
                         <td className="px-3 py-2 text-right">{fmtNum(g.players)}</td>
                         <td className="px-3 py-2 text-right">{g.avgPerPlayer.toFixed(1)}</td>
                         <td className="px-3 py-2 text-right">{fmtNum(g.starts)}</td>
@@ -884,9 +1019,12 @@ function ReportsTab({ API }) {
 
             {/* Tutorial / practice-mode per-step drop-off */}
             {cbat.tutorials?.length > 0 && (
-              <div className="rounded-2xl border border-slate-200 bg-surface overflow-hidden">
+              <div className={`rounded-2xl border border-slate-200 bg-surface overflow-hidden transition-opacity ${compareActive ? 'opacity-60' : ''}`}>
                 <div className="px-4 py-3 border-b border-slate-200">
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tutorial Drop-off</h4>
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tutorial Drop-off</h4>
+                    {compareActive && <CurrentOnlyChip />}
+                  </div>
                   <p className="text-[10px] text-slate-400 mt-0.5">practice-mode usage · window: {window}</p>
                 </div>
                 <div className="p-4 space-y-5">

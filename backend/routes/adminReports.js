@@ -50,6 +50,23 @@ function windowDays(window) {
   return null; // all-time → variable
 }
 
+// The fixed-length period immediately before the selected window, used for
+// "compare to previous period". Returns null for all-time (no prior period).
+function priorWindow(window) {
+  const days = windowDays(window);
+  if (!days) return null;
+  const end = windowStart(window);                          // prior ends where current begins
+  const start = new Date(end.getTime() - days * DAY_MS);    // …and is the same length
+  return { start, end };
+}
+
+// Relative change, matching the existing signupsDelta semantics. null when there's
+// no prior baseline to divide by (avoids a misleading +100% / Infinity).
+function relDelta(curr, prev) {
+  if (prev == null || prev === 0) return null;
+  return (curr - prev) / prev;
+}
+
 function ymd(date) {
   const x = new Date(date);
   return x.toISOString().slice(0, 10);
@@ -72,8 +89,11 @@ function emptyDailyBuckets(start, end, extraKeys = []) {
 // Mongo aggregation: group events by UTC day, return [{ date, count }].
 // extraMatch lets callers narrow the collection (e.g. cfg.modeFilter to scope
 // shared-model registry entries like plane-turn-2d vs plane-turn-3d).
-async function dailyCount(Model, dateField, since, extraMatch = {}) {
-  const match = { ...extraMatch, ...(since ? { [dateField]: { $gte: since } } : {}) };
+async function dailyCount(Model, dateField, since, extraMatch = {}, until = null) {
+  const dateCond = {};
+  if (since)  dateCond.$gte = since;
+  if (until)  dateCond.$lt  = until;
+  const match = { ...extraMatch, ...(Object.keys(dateCond).length ? { [dateField]: dateCond } : {}) };
   const rows = await Model.aggregate([
     { $match: match },
     { $group: {
@@ -87,8 +107,11 @@ async function dailyCount(Model, dateField, since, extraMatch = {}) {
 }
 
 // Mongo aggregation: per UTC day, count distinct userIds.
-async function dailyDistinctUsers(Model, dateField, userField, since, extraMatch = {}) {
-  const match = { ...extraMatch, ...(since ? { [dateField]: { $gte: since } } : {}) };
+async function dailyDistinctUsers(Model, dateField, userField, since, extraMatch = {}, until = null) {
+  const dateCond = {};
+  if (since)  dateCond.$gte = since;
+  if (until)  dateCond.$lt  = until;
+  const match = { ...extraMatch, ...(Object.keys(dateCond).length ? { [dateField]: dateCond } : {}) };
   const rows = await Model.aggregate([
     { $match: match },
     { $group: {
@@ -117,30 +140,30 @@ function mergeDailyDistinctUsers(streams) {
 }
 
 // All event streams that count as "user activity" for DAU.
-async function activityStreams(since) {
+async function activityStreams(since, until = null) {
   const cbatStreams = await Promise.all(
-    Object.values(CBAT_GAMES).map(g => dailyDistinctUsers(g.Model, 'createdAt', 'userId', since, g.modeFilter ?? {}))
+    Object.values(CBAT_GAMES).map(g => dailyDistinctUsers(g.Model, 'createdAt', 'userId', since, g.modeFilter ?? {}, until))
   );
   const [quiz, boo, wta, flash, apt, briefs] = await Promise.all([
-    dailyDistinctUsers(GameSessionQuizAttempt,         'timeStarted', 'userId', since),
-    dailyDistinctUsers(GameSessionOrderOfBattleResult, 'createdAt',   'userId', since),
-    dailyDistinctUsers(GameSessionWhereAircraftResult, 'createdAt',   'userId', since),
-    dailyDistinctUsers(GameSessionFlashcardRecallResult,'createdAt',  'userId', since),
-    dailyDistinctUsers(AptitudeSyncUsage,              'createdAt',   'userId', since),
-    dailyDistinctUsers(IntelligenceBriefRead,          'createdAt',   'userId', since),
+    dailyDistinctUsers(GameSessionQuizAttempt,         'timeStarted', 'userId', since, {}, until),
+    dailyDistinctUsers(GameSessionOrderOfBattleResult, 'createdAt',   'userId', since, {}, until),
+    dailyDistinctUsers(GameSessionWhereAircraftResult, 'createdAt',   'userId', since, {}, until),
+    dailyDistinctUsers(GameSessionFlashcardRecallResult,'createdAt',  'userId', since, {}, until),
+    dailyDistinctUsers(AptitudeSyncUsage,              'createdAt',   'userId', since, {}, until),
+    dailyDistinctUsers(IntelligenceBriefRead,          'createdAt',   'userId', since, {}, until),
   ]);
   return [...cbatStreams, quiz, boo, wta, flash, apt, briefs];
 }
 
 // CBAT-only event streams (used by /cbat).
-async function cbatStreams(since) {
+async function cbatStreams(since, until = null) {
   return Promise.all(
     Object.entries(CBAT_GAMES).map(async ([key, g]) => ({
       key,
       label: g.label,
-      events: await dailyDistinctUsers(g.Model, 'createdAt', 'userId', since, g.modeFilter ?? {}),
+      events: await dailyDistinctUsers(g.Model, 'createdAt', 'userId', since, g.modeFilter ?? {}, until),
       // also need raw count per day (sessions, not distinct-users)
-      sessionsByDay: await dailyCount(g.Model, 'createdAt', since, g.modeFilter ?? {}),
+      sessionsByDay: await dailyCount(g.Model, 'createdAt', since, g.modeFilter ?? {}, until),
     }))
   );
 }
@@ -191,6 +214,35 @@ async function tutorialUsage(since) {
       sessionsByDay: dayMap,
     };
   }));
+}
+
+// Activation for a signup cohort: of users who registered in [start, end),
+// the share who played any CBAT game within 24h of signing up.
+async function computeActivation(start, end = null) {
+  const createdAt = { $gte: start, ...(end ? { $lt: end } : {}) };
+  const newUsers = await User.find({ createdAt }).select('_id createdAt').lean();
+  if (newUsers.length === 0) return { rate: 0, cohort: 0, activated: 0 };
+
+  const userIdsObj = newUsers.map(u => u._id);
+  const cbatDocs = await Promise.all(
+    Object.values(CBAT_GAMES).map(g => g.Model.find({
+      ...(g.modeFilter ?? {}),
+      userId: { $in: userIdsObj },
+    }).select('userId createdAt').lean())
+  );
+  const earliestPlay = new Map();
+  for (const docs of cbatDocs) {
+    for (const d of docs) {
+      const k = String(d.userId);
+      if (!earliestPlay.has(k) || d.createdAt < earliestPlay.get(k)) earliestPlay.set(k, d.createdAt);
+    }
+  }
+  let activated = 0;
+  for (const u of newUsers) {
+    const first = earliestPlay.get(String(u._id));
+    if (first && (first - u.createdAt) <= DAY_MS) activated++;
+  }
+  return { rate: activated / newUsers.length, cohort: newUsers.length, activated };
 }
 
 // ── GET /api/admin/reports/snapshot ───────────────────────────────────────────
@@ -265,30 +317,31 @@ router.get('/snapshot', async (_req, res) => {
 router.get('/window', async (req, res) => {
   try {
     const window = req.query.window || '7d';
+    const compare = req.query.compare === '1' || req.query.compare === 'true';
     const now = new Date();
     const wStart = windowStart(window);
+    const prior = priorWindow(window);              // null for all-time
+    const wantCompare = compare && !!prior;
 
     const [signupsInWindow, prevSignups] = await Promise.all([
       User.countDocuments({ createdAt: { $gte: wStart } }),
-      (() => {
-        const days = windowDays(window);
-        if (!days) return Promise.resolve(0);
-        const priorStart = new Date(wStart.getTime() - days * DAY_MS);
-        return User.countDocuments({ createdAt: { $gte: priorStart, $lt: wStart } });
-      })(),
+      prior
+        ? User.countDocuments({ createdAt: { $gte: prior.start, $lt: prior.end } })
+        : Promise.resolve(0),
     ]);
 
     // Activity streams limited to window for active-in-window calc.
-    const streams = await activityStreams(wStart);
-    const dailyMap = mergeDailyDistinctUsers(streams);
-    const activeInWindow = (() => {
+    const distinctInRange = (dailyMap) => {
       const set = new Set();
       for (const users of dailyMap.values()) for (const u of users) set.add(u);
       return set.size;
-    })();
+    };
+    const streams = await activityStreams(wStart);
+    const activeInWindow = distinctInRange(mergeDailyDistinctUsers(streams));
     const totalUsers = await User.countDocuments();
 
-    // Daily signups for window (zero-filled).
+    // Daily signups for window (zero-filled). When comparing, overlay the prior
+    // period's signups aligned by day-offset (prior day 1 → current day 1).
     const signupsByDay = await dailyCount(User, 'createdAt', wStart);
     const dailySignups = (window === 'all'
       ? Array.from(signupsByDay.entries()).sort().map(([date, count]) => ({ date, count }))
@@ -297,31 +350,34 @@ router.get('/window', async (req, res) => {
           count: signupsByDay.get(b.date) ?? 0,
         }))
     );
+    if (wantCompare) {
+      const priorSignupsByDay = await dailyCount(User, 'createdAt', prior.start, {}, prior.end);
+      const priorBuckets = emptyDailyBuckets(prior.start, new Date(prior.end.getTime() - DAY_MS));
+      dailySignups.forEach((row, i) => {
+        const pb = priorBuckets[i];
+        row.prev = pb ? (priorSignupsByDay.get(pb.date) ?? 0) : 0;
+      });
+    }
 
     // Activation: cohort = signups in window, % who played CBAT within 24h of signup.
-    const newUsers = await User.find({ createdAt: { $gte: wStart } }).select('_id createdAt').lean();
-    let activated = 0;
-    if (newUsers.length > 0) {
-      const userIdsObj = newUsers.map(u => u._id);
-      const cbatDocs = await Promise.all(
-        Object.values(CBAT_GAMES).map(g => g.Model.find({
-          ...(g.modeFilter ?? {}),
-          userId: { $in: userIdsObj },
-        }).select('userId createdAt').lean())
-      );
-      const earliestPlay = new Map();
-      for (const docs of cbatDocs) {
-        for (const d of docs) {
-          const k = String(d.userId);
-          if (!earliestPlay.has(k) || d.createdAt < earliestPlay.get(k)) earliestPlay.set(k, d.createdAt);
-        }
-      }
-      for (const u of newUsers) {
-        const first = earliestPlay.get(String(u._id));
-        if (first && (first - u.createdAt) <= DAY_MS) activated++;
-      }
+    const activation = await computeActivation(wStart);
+
+    // Prior-period metrics for the comparison badges.
+    let comparison = null;
+    if (wantCompare) {
+      const [priorStreams, priorActivation] = await Promise.all([
+        activityStreams(prior.start, prior.end),
+        computeActivation(prior.start, prior.end),
+      ]);
+      const prevActive = distinctInRange(mergeDailyDistinctUsers(priorStreams));
+      comparison = {
+        period:      { start: wStart, end: now },
+        priorPeriod: { start: prior.start, end: prior.end },
+        signups:    { prev: prevSignups,        delta: relDelta(signupsInWindow, prevSignups) },
+        active:     { prev: prevActive,         delta: relDelta(activeInWindow, prevActive) },
+        activation: { prev: priorActivation.rate, delta: relDelta(activation.rate, priorActivation.rate) },
+      };
     }
-    const activationRate = newUsers.length ? activated / newUsers.length : 0;
 
     res.json({
       status: 'success',
@@ -329,13 +385,14 @@ router.get('/window', async (req, res) => {
         window,
         headlines: {
           signupsInWindow,
-          signupsDelta: prevSignups > 0 ? (signupsInWindow - prevSignups) / prevSignups : null,
+          signupsDelta: relDelta(signupsInWindow, prevSignups),
           activeInWindow,
           activeRate: totalUsers ? activeInWindow / totalUsers : 0,
-          activationRate,
-          newUsersInWindow: newUsers.length,
-          activatedUsersInWindow: activated,
+          activationRate: activation.rate,
+          newUsersInWindow: activation.cohort,
+          activatedUsersInWindow: activation.activated,
         },
+        comparison,
         dailySignups,
       },
     });
@@ -350,8 +407,11 @@ router.get('/window', async (req, res) => {
 router.get('/cbat', async (req, res) => {
   try {
     const window = req.query.window || '7d';
+    const compare = req.query.compare === '1' || req.query.compare === 'true';
     const now = new Date();
     const wStart = windowStart(window);
+    const prior = priorWindow(window);              // null for all-time
+    const wantCompare = compare && !!prior;
 
     // Per-game streams + sessions-by-day, plus tutorial/practice usage.
     const [games, tutorials] = await Promise.all([
@@ -441,6 +501,56 @@ router.get('/cbat', async (req, res) => {
     const d1Retention = cohort ? retainedD1 / cohort : 0;
     const d7Retention = cohort ? retainedD7 / cohort : 0;
 
+    // ── Prior-period comparison (gated behind compare + a prior period existing) ──
+    // Reuses the all-time first/last maps above for retention, so only the
+    // windowed session streams need an extra fetch.
+    let comparison = null;
+    let prevSessionsByGame = new Map();
+    if (wantCompare) {
+      const priorGames = await cbatStreams(prior.start, prior.end);
+      const prevPlayerSet = new Set();
+      const prevDailyTotal = new Map();      // date → total sessions across games
+      let prevTotalSessions = 0;
+      for (const g of priorGames) {
+        let gTotal = 0;
+        for (const [date, cnt] of g.sessionsByDay) {
+          gTotal += cnt;
+          prevTotalSessions += cnt;
+          prevDailyTotal.set(date, (prevDailyTotal.get(date) ?? 0) + cnt);
+        }
+        prevSessionsByGame.set(g.key, gTotal);
+        for (const ev of g.events) prevPlayerSet.add(ev.userId);
+      }
+
+      // Prior cohort retention — same definition, prior signup-of-first-play window.
+      let pCohort = 0, pD1 = 0, pD7 = 0;
+      for (const [userId, first] of firstSessionByUser.entries()) {
+        if (first < prior.start || first >= prior.end) continue;
+        pCohort++;
+        const last = userLast.get(userId);
+        if (last && (last - first) >= DAY_MS)     pD1++;
+        if (last && (last - first) >= 7 * DAY_MS) pD7++;
+      }
+      const prevD1 = pCohort ? pD1 / pCohort : 0;
+      const prevD7 = pCohort ? pD7 / pCohort : 0;
+
+      // Overlay prior daily totals onto the current buckets, aligned by day-offset.
+      const priorBuckets = emptyDailyBuckets(prior.start, new Date(prior.end.getTime() - DAY_MS));
+      stackedDaily.forEach((row, i) => {
+        const pb = priorBuckets[i];
+        row._prevTotal = pb ? (prevDailyTotal.get(pb.date) ?? 0) : 0;
+      });
+
+      comparison = {
+        period:      { start: wStart, end: now },
+        priorPeriod: { start: prior.start, end: prior.end },
+        totalSessions: { prev: prevTotalSessions,    delta: relDelta(totalSessions, prevTotalSessions) },
+        uniquePlayers: { prev: prevPlayerSet.size,   delta: relDelta(uniquePlayers, prevPlayerSet.size) },
+        d1Retention:   { prev: prevD1,               delta: relDelta(d1Retention, prevD1) },
+        d7Retention:   { prev: prevD7,               delta: relDelta(d7Retention, prevD7) },
+      };
+    }
+
     // Per-game table: sessions, unique players, avg per player, abandon %.
     const perGame = await Promise.all(games.map(async g => {
       const sessions = Array.from(g.sessionsByDay.values()).reduce((s, n) => s + n, 0);
@@ -453,6 +563,7 @@ router.get('/cbat', async (req, res) => {
       ]);
       const abandoned = Math.max(0, starts - results);
       const abandonPct = starts ? abandoned / starts : 0;
+      const prevSessions = wantCompare ? (prevSessionsByGame.get(g.key) ?? 0) : null;
       return {
         key: g.key,
         label: g.label,
@@ -461,6 +572,7 @@ router.get('/cbat', async (req, res) => {
         avgPerPlayer: players ? sessions / players : 0,
         starts,
         abandonPct,
+        ...(wantCompare ? { prevSessions, sessionsDelta: relDelta(sessions, prevSessions) } : {}),
       };
     }));
     // Append tutorial rows (Abandon % = didn't finish the tutorial) so they sit
@@ -494,6 +606,7 @@ router.get('/cbat', async (req, res) => {
           cohortSize: cohort,
           totalUsers,
         },
+        comparison,
         dailySessions: stackedDaily,
         gameKeys: stackedKeys,
         gameLabels: {

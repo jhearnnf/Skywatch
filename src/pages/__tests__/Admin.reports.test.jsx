@@ -140,16 +140,47 @@ const MOCK_CBAT = {
   },
 }
 
+// Compare-mode payloads — only returned when the request carries compare=1.
+const MOCK_WINDOW_CMP = {
+  status: 'success',
+  data: {
+    ...MOCK_WINDOW.data,
+    comparison: {
+      signups:    { prev: 4, delta: 0.5 },
+      active:     { prev: 10, delta: 0.4 },
+      activation: { prev: 0.5, delta: -0.34 },
+    },
+    dailySignups: MOCK_WINDOW.data.dailySignups.map((r, i) => ({ ...r, prev: i })),
+  },
+}
+
+const MOCK_CBAT_CMP = {
+  status: 'success',
+  data: {
+    ...MOCK_CBAT.data,
+    comparison: {
+      totalSessions: { prev: 40, delta: 0.175 },
+      uniquePlayers: { prev: 8,  delta: 0.125 },
+      d1Retention:   { prev: 0.5, delta: -0.2 },
+      d7Retention:   { prev: 0.25, delta: -0.2 },
+    },
+    dailySessions: MOCK_CBAT.data.dailySessions.map((r, i) => ({ ...r, _prevTotal: i + 1 })),
+    perGame: MOCK_CBAT.data.perGame.map(g => ({ ...g, prevSessions: 5, sessionsDelta: 0.3 })),
+  },
+}
+
 function setupFetch(overrides = {}) {
   return vi.fn().mockImplementation((url) => {
     if (url.includes('/api/admin/reports/snapshot')) {
       return Promise.resolve({ ok: true, json: async () => overrides.snapshot ?? MOCK_SNAPSHOT })
     }
     if (url.includes('/api/admin/reports/window')) {
-      return Promise.resolve({ ok: true, json: async () => overrides.windowed ?? MOCK_WINDOW })
+      const cmp = url.includes('compare=1')
+      return Promise.resolve({ ok: true, json: async () => overrides.windowed ?? (cmp ? MOCK_WINDOW_CMP : MOCK_WINDOW) })
     }
     if (url.includes('/api/admin/reports/cbat')) {
-      return Promise.resolve({ ok: true, json: async () => overrides.cbat ?? MOCK_CBAT })
+      const cmp = url.includes('compare=1')
+      return Promise.resolve({ ok: true, json: async () => overrides.cbat ?? (cmp ? MOCK_CBAT_CMP : MOCK_CBAT) })
     }
     if (url.includes('/api/admin/stats')) {
       return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: {}, games: {}, briefs: {}, tutorials: {}, server: {} } }) })
@@ -257,6 +288,59 @@ describe('Admin — Reports tab', () => {
 
     // Snapshot should NOT have been re-fetched.
     expect(snapshotCalls()).toBe(1)
+  })
+
+  it('requests compare data and shows the date-range label when Compare is toggled on', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Total Sessions')).toBeInTheDocument())
+
+    // No compare param initially.
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('compare=1'), expect.any(Object),
+    )
+
+    fireEvent.click(screen.getByRole('switch', { name: /Compare to previous/i }))
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/admin/reports/window?window=7d&compare=1'),
+        expect.any(Object),
+      )
+    })
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/reports/cbat?window=7d&compare=1'),
+      expect.any(Object),
+    )
+    // Date-range label + per-game delta column header surface in compare mode.
+    await waitFor(() => expect(screen.getByText(/Comparing/i)).toBeInTheDocument())
+    expect(screen.getByText(/Δ vs prev/i)).toBeInTheDocument()
+    // Non-comparable panels (distribution, sessions-by-game, tutorial drop-off)
+    // are tagged "current only" rather than hidden.
+    expect(screen.getAllByText(/current only/i).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('disables Compare for the all-time window and forces it off', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Total Sessions')).toBeInTheDocument())
+
+    // Turn compare on, then switch to All — compare must not be requested for all-time.
+    fireEvent.click(screen.getByRole('switch', { name: /Compare to previous/i }))
+    await waitFor(() => expect(screen.getByText(/Comparing/i)).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/admin/reports/cbat?window=all'),
+        expect.any(Object),
+      )
+    })
+    // The all-time request must NOT carry compare=1.
+    const allCalls = global.fetch.mock.calls.filter(c => String(c[0]).includes('window=all'))
+    expect(allCalls.length).toBeGreaterThan(0)
+    expect(allCalls.every(c => !String(c[0]).includes('compare=1'))).toBe(true)
+    // Switch is disabled for all-time.
+    expect(screen.getByRole('switch', { name: /Compare to previous/i })).toBeDisabled()
   })
 
   it('shows error state if fetch fails', async () => {

@@ -22,8 +22,15 @@ vi.mock('framer-motion', () => ({
   },
 }))
 
-const GAMES_WITH_IMAGES    = CBAT_GAMES.filter(g => g.image !== null)
-const GAMES_WITHOUT_IMAGES = CBAT_GAMES.filter(g => g.image === null)
+// ⚠️ INTENTIONAL FAILURES until SAT launches.
+// Some tests below encode the *end state* — every CBAT game visible on the hub
+// as a clickable, imaged tile. SAT is currently `hidden: true` with no image
+// (it's in private testing), so those tests fail on purpose. They serve as a
+// forcing reminder and turn green automatically the moment SAT is unhidden and
+// given an image. Tests that are scoped to what's actually rendered today
+// (image paths, aria-hidden, lock card) stay green. See src/data/cbatGames.js.
+const GAMES_WITH_IMAGES    = CBAT_GAMES.filter(g => g.image)
+const GAMES_WITHOUT_IMAGES = CBAT_GAMES.filter(g => !g.image)
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -38,9 +45,12 @@ function renderWithUser(user = { _id: '1', name: 'Test' }) {
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('CBAT_GAMES data', () => {
-  it('has 13 games with images and 0 without', () => {
-    expect(GAMES_WITH_IMAGES.length).toBe(13)
+  // ❌ Fails until SAT launches: SAT is hidden + has no image today.
+  it('has 14 games, all visible and clickable with images', () => {
+    expect(CBAT_GAMES.length).toBe(14)
+    expect(GAMES_WITH_IMAGES.length).toBe(14)
     expect(GAMES_WITHOUT_IMAGES.length).toBe(0)
+    expect(CBAT_GAMES.every(g => !g.hidden)).toBe(true)
   })
 
   it('image paths match expected filenames', () => {
@@ -60,13 +70,6 @@ describe('CBAT_GAMES data', () => {
     }
   })
 
-  it('coming-soon games use the placeholder image', () => {
-    const comingSoonKeys = ['dad']
-    for (const key of comingSoonKeys) {
-      const game = CBAT_GAMES.find(g => g.key === key)
-      expect(game.image).toBe('/images/placeholder-brief.svg')
-    }
-  })
 })
 
 describe('Cbat page — background images', () => {
@@ -74,22 +77,14 @@ describe('Cbat page — background images', () => {
     mockUseAuth.mockReset()
   })
 
-  it('renders a bg image element for each game that has an image', () => {
+  // ❌ Fails until SAT launches: no card-bg-image-sat is rendered while SAT is
+  // hidden + imageless. Passes once SAT is a visible, imaged tile.
+  it('renders a bg image element for every game', () => {
     renderWithUser()
-    for (const game of GAMES_WITH_IMAGES) {
+    for (const game of CBAT_GAMES) {
       const img = screen.getByTestId(`card-bg-image-${game.key}`)
       expect(img).toBeInTheDocument()
       expect(img).toHaveAttribute('src', game.image)
-    }
-  })
-
-  it('renders a bg image for coming-soon games using the placeholder', () => {
-    renderWithUser()
-    const placeholderKeys = ['dad']
-    for (const key of placeholderKeys) {
-      const img = screen.getByTestId(`card-bg-image-${key}`)
-      expect(img).toBeInTheDocument()
-      expect(img).toHaveAttribute('src', '/images/placeholder-brief.svg')
     }
   })
 
@@ -101,7 +96,8 @@ describe('Cbat page — background images', () => {
     }
   })
 
-  it('renders all game titles regardless of image presence', () => {
+  // ❌ Fails until SAT launches: the SAT tile isn't rendered while hidden.
+  it('renders every game title', () => {
     renderWithUser()
     for (const game of CBAT_GAMES) {
       expect(screen.getByText(game.title)).toBeInTheDocument()

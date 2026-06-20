@@ -5,9 +5,10 @@ import ArcadeCabinet from '../props/ArcadeCabinet'
 import Interactable from '../interaction/Interactable'
 
 // Cabinet slots laid out around the hangar interior. Local coordinates
-// (relative to the hangar centre). 13 slots — matches CBAT_GAMES length. If
-// the list ever grows beyond 13, slots after the array end simply don't get
-// a cabinet (no overflow, no crowding).
+// (relative to the hangar centre). 13 slots — matches the count of *visible*
+// CBAT games (hidden games like SAT never get a cabinet). If the visible list
+// ever grows beyond 13, slots after the array end simply don't get a cabinet
+// (no overflow, no crowding).
 
 const SLOTS = [
   // Back row, screens facing the door (-Z local). 5 cabinets.
@@ -51,7 +52,7 @@ export default function CbatArcadeHangar({ spec }) {
 
   return (
     <>
-      {CBAT_GAMES.slice(0, SLOTS.length).map((game, i) => {
+      {CBAT_GAMES.filter(g => !g.hidden).slice(0, SLOTS.length).map((game, i) => {
         const slot = SLOTS[i]
         const enabled = isGameEnabled(game, cbatGameEnabled)
         return (
