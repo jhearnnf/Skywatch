@@ -153,6 +153,13 @@ const FAKE_TUNING = {
     floor: 4, ceiling: 15, seedTime: 128.6, timeStep: 6.3,
     scoreSequence: [14, 13, 13, 12, 12, 11, 11, 11, 10, 10, 9, 9, 9, 8, 8, 7, 7, 6, 5, 4],
   },
+  'sat': {
+    // correctCount out of 18 (Situational Awareness Test), higher is better. Top
+    // demo of 17 stays under a perfect 18; the roster trails to 5. Three
+    // observe+recall situations (~18s observe + 6 questions each) → ~180–260s.
+    floor: 5, ceiling: 18, seedTime: 204.6, timeStep: 5.4,
+    scoreSequence: [17, 16, 16, 15, 15, 14, 14, 13, 12, 12, 11, 11, 10, 9, 9, 8, 8, 7, 6, 5],
+  },
 };
 
 // Fixed delta tables — natural-looking variance without randomness.
@@ -268,6 +275,7 @@ const WEEKLY_PER_PLAY = {
   'trace-1':          26,  // real med 29 (correctTurns /40)
   'numerical-ops':    80,  // real med 90 (correctPercentage)
   'dad':               9,  // correctCount /15 — a little below a decent single run
+  'sat':              11,  // correctCount /18 — a little below a decent single run
 };
 
 // Six deterministic demo players: a couple of active ones, the rest light.

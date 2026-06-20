@@ -213,6 +213,7 @@ const appSettingsSchema = new mongoose.Schema({
       dpt: true, act: true,
       'numerical-ops': true,
       dad: true,
+      sat: true,
     }),
   },
 
@@ -408,6 +409,7 @@ appSettingsSchema.statics.getSettings = async function () {
         dpt: true, act: true,
         'numerical-ops': true,
         dad: true,
+        sat: true,
       };
       const current = settings.cbatGameEnabled;
       let touched = false;

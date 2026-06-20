@@ -132,7 +132,7 @@ export default function Cbat() {
 
       {/* Game grid — blurred when not signed in */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4${!user ? ' opacity-40 pointer-events-none select-none blur-sm' : ''}`} style={{ rowGap: '2rem' }}>
-        {CBAT_GAMES.map((game, i) => {
+        {CBAT_GAMES.filter(g => !g.hidden).map((game, i) => {
           const isImplemented = !!game.path
           const enabled       = isGameEnabled(game.key)
           // Admins always click through to test, regardless of toggle state.

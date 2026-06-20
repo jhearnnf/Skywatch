@@ -13,6 +13,7 @@ const GameSessionCbatActResult           = require('../models/GameSessionCbatAct
 const GameSessionCbatTrace1Result        = require('../models/GameSessionCbatTrace1Result');
 const GameSessionCbatNumericalOpsResult  = require('../models/GameSessionCbatNumericalOpsResult');
 const GameSessionCbatDADResult           = require('../models/GameSessionCbatDADResult');
+const GameSessionCbatSatResult           = require('../models/GameSessionCbatSatResult');
 
 // Single source of truth for CBAT games. Adding a new CBAT game = add one entry
 // here and it automatically flows through submission routes, leaderboards,
@@ -173,6 +174,13 @@ const CBAT_GAMES = {
     sortDir: -1,           // higher is better
     bestOp: '$max',
     label: 'Directions and Distances',
+  },
+  'sat': {
+    Model: GameSessionCbatSatResult,
+    primaryField: 'correctCount',
+    sortDir: -1,           // higher is better
+    bestOp: '$max',
+    label: 'Situational Awareness Test',
   },
 };
 

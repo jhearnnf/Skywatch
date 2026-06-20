@@ -18,6 +18,7 @@ const GAME_MAX = {
   'trace-1':         40,     // 5 rounds × 8 turns
   'numerical-ops':   100,    // percentage 0–100
   'dad':             15,     // 15 questions, one point each
+  'sat':             18,     // 18 questions (3 situations × 6), one point each
 };
 const LOWER_BETTER = { 'plane-turn-2d': true, 'plane-turn-3d': true };
 
