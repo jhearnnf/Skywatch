@@ -11,13 +11,7 @@
 
 import { isOnline } from './net'
 import { outboxPut, outboxDelete, outboxAll, outboxCount } from './offlineStore'
-
-function makeId() {
-  try {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
-  } catch { /* fall through */ }
-  return `cri_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
-}
+import { makeClientId } from './clientId'
 
 const resultUrl = (API, gameKey) => `${API}/api/games/cbat/${gameKey}/result`
 
@@ -51,7 +45,7 @@ export function pendingCount() {
 //   ctx     — { apiFetch, API } from useAuth()
 // Returns { synced, queued, res }.
 export async function submitCbatResult(gameKey, payload, { apiFetch, API }) {
-  const clientResultId = makeId()
+  const clientResultId = makeClientId()
   const playedAt = new Date().toISOString()
   const body = { ...payload, clientResultId, playedAt }
   const item = { clientResultId, gameKey, body, queuedAt: Date.now() }

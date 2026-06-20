@@ -2238,7 +2238,19 @@ router.post('/cbat/:gameKey/start', protect, async (req, res) => {
         return res.status(403).json({ message: 'This CBAT game is currently disabled.', reason: 'gameDisabled' });
       }
     }
-    const result = await GameSessionCbatStart.create({ userId: req.user._id, gameKey });
+    // Idempotent on clientStartId — a replayed offline beacon is a no-op.
+    const { clientStartId, startedAt } = req.body || {};
+    if (clientStartId) {
+      const existing = await GameSessionCbatStart.findOne({ userId: req.user._id, clientStartId });
+      if (existing) return res.status(200).json({ status: 'success', data: existing });
+    }
+    const doc = { userId: req.user._id, gameKey };
+    if (clientStartId) doc.clientStartId = clientStartId;
+    if (startedAt) {
+      const d = new Date(startedAt);
+      if (!Number.isNaN(d.getTime())) doc.startedAt = d;
+    }
+    const result = await GameSessionCbatStart.create(doc);
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
     res.status(500).json({ message: err.message });

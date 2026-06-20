@@ -1,19 +1,21 @@
 // Thin IndexedDB layer for offline CBAT support, built on idb-keyval.
 //
-// Two logical stores in one database:
-//   • outbox — queued score submissions awaiting sync (key = clientResultId)
-//   • cache  — durable snapshots that survive reloads (aircraft roster,
-//              entitlement). localStorage would also work for the cache, but
-//              keeping everything in IndexedDB avoids a second code path and
-//              handles larger payloads.
+// Three logical stores in one database:
+//   • outbox   — queued score submissions awaiting sync (key = clientResultId)
+//   • startbox — queued game-start beacons awaiting sync (key = clientStartId)
+//   • cache    — durable snapshots that survive reloads (aircraft roster,
+//                entitlement). localStorage would also work for the cache, but
+//                keeping everything in IndexedDB avoids a second code path and
+//                handles larger payloads.
 //
 // Every call is wrapped so a storage failure (private mode, quota, no IDB)
 // degrades to a no-op rather than throwing into game/UI code.
 
 import { get, set, del, keys, createStore } from 'idb-keyval'
 
-const outboxStore = createStore('skywatch-offline', 'outbox')
-const cacheStore  = createStore('skywatch-offline', 'cache')
+const outboxStore   = createStore('skywatch-offline', 'outbox')
+const startboxStore  = createStore('skywatch-offline', 'startbox')
+const cacheStore    = createStore('skywatch-offline', 'cache')
 
 // ── Outbox ──────────────────────────────────────────────────────────────────
 
@@ -39,6 +41,29 @@ export async function outboxDelete(clientResultId) {
 
 export async function outboxCount() {
   try { return (await keys(outboxStore)).length } catch { return 0 }
+}
+
+// ── Startbox ──────────────────────────────────────────────────────────────────
+// Game-start beacons queued while offline / on failure. Keyed by clientStartId.
+
+export async function startboxPut(item) {
+  try { await set(item.clientStartId, item, startboxStore) } catch { /* ignore */ }
+}
+
+export async function startboxAll() {
+  try {
+    const ids = await keys(startboxStore)
+    const items = await Promise.all(ids.map((id) => get(id, startboxStore)))
+    return items
+      .filter(Boolean)
+      .sort((a, b) => (a.queuedAt || 0) - (b.queuedAt || 0)) // oldest first
+  } catch {
+    return []
+  }
+}
+
+export async function startboxDelete(clientStartId) {
+  try { await del(clientStartId, startboxStore) } catch { /* ignore */ }
 }
 
 // ── Cache ───────────────────────────────────────────────────────────────────

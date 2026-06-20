@@ -82,6 +82,55 @@ describe('POST /api/games/cbat/:gameKey/start — success', () => {
   });
 });
 
+describe('POST /api/games/cbat/:gameKey/start — offline-sync idempotency', () => {
+  it('dedupes on clientStartId so a replayed beacon creates only one doc', async () => {
+    const body = { clientStartId: 'csi-abc-123', startedAt: '2026-06-19T10:00:00.000Z' };
+
+    const first = await request(app)
+      .post('/api/games/cbat/target/start')
+      .set('Cookie', cookie)
+      .send(body);
+    expect(first.status).toBe(201);
+
+    const second = await request(app)
+      .post('/api/games/cbat/target/start')
+      .set('Cookie', cookie)
+      .send(body);
+    expect(second.status).toBe(200); // idempotent replay
+    expect(second.body.data._id).toBe(first.body.data._id);
+
+    const count = await GameSessionCbatStart.countDocuments({ userId: user._id });
+    expect(count).toBe(1);
+  });
+
+  it('stamps startedAt from the body when provided (queued-while-offline time)', async () => {
+    await request(app)
+      .post('/api/games/cbat/symbols/start')
+      .set('Cookie', cookie)
+      .send({ clientStartId: 'csi-time', startedAt: '2026-06-18T08:30:00.000Z' });
+
+    const doc = await GameSessionCbatStart.findOne({ userId: user._id, clientStartId: 'csi-time' });
+    expect(doc.startedAt.toISOString()).toBe('2026-06-18T08:30:00.000Z');
+  });
+
+  it('still creates a doc with no clientStartId (legacy / online beacon)', async () => {
+    const res = await request(app)
+      .post('/api/games/cbat/angles/start')
+      .set('Cookie', cookie)
+      .send({});
+    expect(res.status).toBe(201);
+    const count = await GameSessionCbatStart.countDocuments({ userId: user._id });
+    expect(count).toBe(1);
+  });
+
+  it('different clientStartIds create separate docs', async () => {
+    await request(app).post('/api/games/cbat/act/start').set('Cookie', cookie).send({ clientStartId: 'csi-1' });
+    await request(app).post('/api/games/cbat/act/start').set('Cookie', cookie).send({ clientStartId: 'csi-2' });
+    const count = await GameSessionCbatStart.countDocuments({ userId: user._id });
+    expect(count).toBe(2);
+  });
+});
+
 describe('POST /api/games/cbat/:gameKey/start — per-game gate', () => {
   it('returns 403 reason=gameDisabled when the game is per-game disabled (non-admin)', async () => {
     await AppSettings.findOneAndUpdate(

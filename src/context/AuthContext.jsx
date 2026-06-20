@@ -4,6 +4,7 @@ import { getLevelNumber } from '../utils/levelUtils'
 import { AUTH_TOKEN_KEY, USER_CACHE_KEY, tutorialKey, tutorialClearedKey } from '../utils/storageKeys'
 import { identifyUser, resetPostHog } from '../lib/posthog'
 import { flushOutbox } from '../lib/cbatOutbox'
+import { flushStartOutbox } from '../utils/cbat/recordStart'
 import { onNetworkChange } from '../lib/net'
 import { getAircraftRoster } from '../lib/offlineRoster'
 import { warmOfflineAssets } from '../lib/warmOfflineAssets'
@@ -123,19 +124,23 @@ export function AuthProvider({ children }) {
       .finally(() => { clearTimeout(timeoutId); setLoading(false) })
   }, [])
 
-  // Flush any CBAT scores queued while offline — on first load (once a user is
-  // known) and whenever connectivity returns. Auth is required for the result
-  // endpoints, so we gate on `user`; queued items survive until a logged-in
-  // session can sync them.
+  // Flush any CBAT scores + start beacons queued while offline — on first load
+  // (once a user is known) and whenever connectivity returns. Auth is required
+  // for these endpoints, so we gate on `user`; queued items survive until a
+  // logged-in session can sync them.
   useEffect(() => {
     if (!user) return
     flushOutbox({ apiFetch, API })
+    flushStartOutbox({ apiFetch, API })
     // Prime offline caches in the background: roster JSON → cutout images + GLBs.
     getAircraftRoster('aircraft-cutouts', { apiFetch, API })
       .then(() => warmOfflineAssets())
       .catch(() => {})
     const off = onNetworkChange((online) => {
-      if (online) flushOutbox({ apiFetch, API })
+      if (online) {
+        flushOutbox({ apiFetch, API })
+        flushStartOutbox({ apiFetch, API })
+      }
     })
     return off
   }, [user, apiFetch])
