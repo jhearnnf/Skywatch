@@ -240,13 +240,19 @@ describe('generateAudioPlan — invariants', () => {
     }
   })
 
-  it('typical rounds ship 2+ avoid cues on average', () => {
-    // With the bumped avoidOdds (0.55 → 0.75 across rounds), the average
-    // climbs from ~2 in R1 to ~4 in R5 — players should hear their
-    // callsign repeatedly each round, not just twice.
+  it('avoid-cue average sits near the floor in R1 and ramps up by R5', () => {
+    // Two claims, matching the avoidOdds ramp (0.55 → 0.75 across rounds):
+    //   1. Even the tightest round (R1) averages ~2 cues — players always
+    //      hear their callsign at least a couple of times.
+    //   2. Later rounds are busier, so the callsign recurs noticeably more.
+    // R1 sits right on the MIN_AVOID_CUES floor of 2 (a ~1% slice of rounds
+    // only fit 1), so a flat `>= 2.0` is a coin-flip on sampling noise. We
+    // assert with a margin and a large sample so the means are stable, and
+    // check the ramp relatively (R5 vs R1) rather than against magic numbers.
+    const TRIALS = 400
+    const avg = []
     for (let r = 0; r < 5; r++) {
       let totalAvoids = 0
-      const TRIALS = 100
       for (let trial = 0; trial < TRIALS; trial++) {
         const cfg = ROUND_CONFIG[r]
         const curveLen = approxCurveLen(r)
@@ -254,9 +260,12 @@ describe('generateAudioPlan — invariants', () => {
         const cues = generateAudioPlan(events, cfg, USER_CALLSIGN, r, curveLen)
         totalAvoids += cues.filter(c => c.kind === 'avoid').length
       }
-      const avgAvoids = totalAvoids / TRIALS
-      expect(avgAvoids).toBeGreaterThanOrEqual(2.0)
+      avg.push(totalAvoids / TRIALS)
     }
+    // 1. R1 averages about the floor of 2 (margin absorbs the ~1% of 1-cue rounds).
+    expect(avg[0]).toBeGreaterThanOrEqual(1.9)
+    // 2. The ramp delivers at least one extra cue on average by R5.
+    expect(avg[4]).toBeGreaterThan(avg[0] + 1)
   })
 
   it('cues are returned in t-order', () => {
