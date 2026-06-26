@@ -268,6 +268,18 @@ body.cbat-dpt-fullwidth .app-shell-content {
   }
 }
 
+/* SAT is in beta. While CbatSat is mounted it adds `cbat-sat-beta` to <body>
+   (mirrors the cbat-dpt-fullwidth pattern). We swap the cool dark-blue shell
+   backdrop for a warm amber wash watermarked with endlessly repeating "beta",
+   so the whole game reads as unfinished/experimental. Kept subtle — the dark
+   gameplay cards still sit cleanly on top and stay fully legible. The body
+   background propagates to fill the viewport, so it's full-bleed behind the
+   navbar and content. */
+body.cbat-sat-beta {
+  background-color: #1c1305;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='180'%20height='72'%3E%3Ctext%20x='6'%20y='28'%20font-family='monospace'%20font-size='26'%20font-weight='700'%20fill='%23f59e0b'%20fill-opacity='0.06'%20letter-spacing='2'%3EBETA%3C/text%3E%3Ctext%20x='96'%20y='62'%20font-family='monospace'%20font-size='26'%20font-weight='700'%20fill='%23f59e0b'%20fill-opacity='0.06'%20letter-spacing='2'%3EBETA%3C/text%3E%3C/svg%3E");
+}
+
 /* DPT — yellow pulse used for edge-warning highlights and aircraft halos
    whenever a player aircraft enters the edge buffer (auto-turn zone). */
 @keyframes dpt-edge-pulse {

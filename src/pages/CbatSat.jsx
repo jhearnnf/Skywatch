@@ -437,6 +437,15 @@ export default function CbatSat() {
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
 
+  // SAT is in beta — swap the shell's cool dark-blue backdrop for a warm,
+  // "beta"-watermarked wash while this page is mounted, so the game visibly
+  // reads as unfinished. Styled via body.cbat-sat-beta in main.css (mirrors
+  // the cbat-dpt-fullwidth body-class pattern).
+  useEffect(() => {
+    document.body.classList.add('cbat-sat-beta')
+    return () => document.body.classList.remove('cbat-sat-beta')
+  }, [])
+
   // Fire-and-forget tutorial usage tracking (admin Reports per-step drop-off).
   // Online-only by design — a learning aid, not a score, so no offline outbox.
   const reportTutorialProgress = useCallback((body) => {

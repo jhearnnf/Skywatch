@@ -18,7 +18,7 @@ import {
 import { buildRounds as buildRounds3D } from '../utils/cbat/visualisation3DPuzzle'
 import { useVisualisationMode } from '../hooks/useVisualisationMode'
 import VisualisationModeSelector from '../components/VisualisationModeSelector'
-import Visualisation3DShape from '../components/cbat/Visualisation3DShape'
+import Visualisation3DShape, { VisualisationShapeCanvas } from '../components/cbat/Visualisation3DShape'
 
 const TOTAL_ROUNDS = 8
 const ROUND_TIMER_S = 30
@@ -877,6 +877,11 @@ export default function CbatVisualisation() {
 
               {is3D && (
                 <>
+                  {/* One shared WebGL context for every 3D shape below — see
+                      Visualisation3DShape.jsx. Mounted only during 3D rounds so
+                      the fixed overlay isn't live on the results/menu screens. */}
+                  <VisualisationShapeCanvas />
+
                   {/* 3D prompt shapes */}
                   <motion.div
                     key={`prompt3d-${currentIdx}`}

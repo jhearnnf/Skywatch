@@ -228,7 +228,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
     ? 'Watch the Hawk T2 fly — recall each turn it makes.'
     : gameModeTrace2
       ? 'Coming Soon.'
-      : 'Practise for TRACE 1 + 2 CBAT tests.'
+      : 'Practise for Trace 1 + 2 CBAT tests.'
 
   // Personal-best label varies per mode (different scoring shape).
   const pbLine = gameModeTrace1
@@ -507,6 +507,16 @@ function DpadBtn({ label, onPress, ariaLabel }) {
       {label}
     </button>
   )
+}
+
+// Header title per mode. The combined "Trace 1/2" identity only makes sense on
+// the mode-select menu; once a specific mode is being played the heading names
+// it (e.g. "Trace 1" rather than the umbrella "Trace 1/2").
+const TITLE_BY_MODE = {
+  '2d':   'Trace Practise 2D',
+  '3d':   'Trace Practise 3D',
+  trace1: 'Trace 1',
+  trace2: 'Trace 2',
 }
 
 // ── Main Component ───────────────────────────────────────────────────────────
@@ -1215,7 +1225,9 @@ export default function CbatPlaneTurn() {
             ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
             : <button onClick={handleMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
           }
-          <h1 className="text-sm font-extrabold text-slate-900">TRACE 1/2</h1>
+          <h1 className="text-sm font-extrabold text-slate-900">
+            {phase === 'select' ? 'Trace 1/2' : (TITLE_BY_MODE[mode] ?? 'Trace 1/2')}
+          </h1>
         </div>
       </div>
 

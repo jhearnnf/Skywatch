@@ -243,7 +243,7 @@ function AppRoutes() {
           <Route path="/play/quiz"              element={<RequireAuth><PageWrapper><QuizBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/play/battle-of-order"   element={<RequireAuth><PageWrapper><BOOBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/cbat"                   element={<PageWrapper><Cbat /></PageWrapper>} />
-          <Route path="/cbat/trace"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="plane-turn"        gameTitle="TRACE 1/2"       ><CbatPlaneTurn       /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/trace"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="plane-turn"        gameTitle="Trace 1/2"       ><CbatPlaneTurn       /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/plane-turn"        element={<Navigate to="/cbat/trace" replace />} />
           <Route path="/cbat/plane-turn/leaderboard" element={<Navigate to="/cbat/plane-turn-2d/leaderboard" replace />} />
           <Route path="/cbat/angles"           element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="angles"            gameTitle="Angles"          ><CbatAngles          /></CbatGameGuard></PageWrapper></RequireAuth>} />

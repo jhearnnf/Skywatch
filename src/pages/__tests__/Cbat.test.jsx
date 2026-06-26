@@ -22,13 +22,8 @@ vi.mock('framer-motion', () => ({
   },
 }))
 
-// ⚠️ INTENTIONAL FAILURES until SAT launches.
-// Some tests below encode the *end state* — every CBAT game visible on the hub
-// as a clickable, imaged tile. SAT is currently `hidden: true` with no image
-// (it's in private testing), so those tests fail on purpose. They serve as a
-// forcing reminder and turn green automatically the moment SAT is unhidden and
-// given an image. Tests that are scoped to what's actually rendered today
-// (image paths, aria-hidden, lock card) stay green. See src/data/cbatGames.js.
+// Every CBAT game is visible on the hub as a clickable, imaged tile — no
+// `hidden` entries. These tests assert that end state across the whole list.
 const GAMES_WITH_IMAGES    = CBAT_GAMES.filter(g => g.image)
 const GAMES_WITHOUT_IMAGES = CBAT_GAMES.filter(g => !g.image)
 
@@ -45,7 +40,6 @@ function renderWithUser(user = { _id: '1', name: 'Test' }) {
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('CBAT_GAMES data', () => {
-  // ❌ Fails until SAT launches: SAT is hidden + has no image today.
   it('has 14 games, all visible and clickable with images', () => {
     expect(CBAT_GAMES.length).toBe(14)
     expect(GAMES_WITH_IMAGES.length).toBe(14)
@@ -77,8 +71,6 @@ describe('Cbat page — background images', () => {
     mockUseAuth.mockReset()
   })
 
-  // ❌ Fails until SAT launches: no card-bg-image-sat is rendered while SAT is
-  // hidden + imageless. Passes once SAT is a visible, imaged tile.
   it('renders a bg image element for every game', () => {
     renderWithUser()
     for (const game of CBAT_GAMES) {
@@ -96,7 +88,6 @@ describe('Cbat page — background images', () => {
     }
   })
 
-  // ❌ Fails until SAT launches: the SAT tile isn't rendered while hidden.
   it('renders every game title', () => {
     renderWithUser()
     for (const game of CBAT_GAMES) {

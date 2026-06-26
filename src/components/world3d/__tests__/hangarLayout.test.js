@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { HANGARS } from '../data/hangarLayout'
 import { CBAT_GAMES } from '../../../data/cbatGames'
+import { SLOTS } from '../hangars/CbatArcadeHangar'
 
 describe('hangar layout integrity', () => {
   it('declares all four hangars by kind', () => {
@@ -39,13 +40,10 @@ describe('hangar layout integrity', () => {
     }
   })
 
-  // ❌ INTENTIONAL FAILURE until SAT launches.
-  // The arcade has 13 cabinet slots but 14 games are registered (SAT is hidden,
-  // so it gets no cabinet today). Launching SAT means adding a 14th slot row in
-  // CbatArcadeHangar and bumping this expectation — at which point it goes green
-  // again. Keeping it red is a forcing reminder that the world lacks capacity
-  // for the full game list.
-  it('CBAT arcade has a cabinet slot for every registered CBAT game', () => {
-    expect(CBAT_GAMES.length).toBeLessThanOrEqual(13)
+  // The arcade must have a cabinet slot for every *visible* CBAT game, so no
+  // launched game is left without a cabinet. Hidden games never get one.
+  it('CBAT arcade has a cabinet slot for every visible CBAT game', () => {
+    const visible = CBAT_GAMES.filter(g => !g.hidden)
+    expect(SLOTS.length).toBeGreaterThanOrEqual(visible.length)
   })
 })

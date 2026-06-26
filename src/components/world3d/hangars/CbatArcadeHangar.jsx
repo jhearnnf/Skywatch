@@ -5,12 +5,13 @@ import ArcadeCabinet from '../props/ArcadeCabinet'
 import Interactable from '../interaction/Interactable'
 
 // Cabinet slots laid out around the hangar interior. Local coordinates
-// (relative to the hangar centre). 13 slots — matches the count of *visible*
-// CBAT games (hidden games like SAT never get a cabinet). If the visible list
-// ever grows beyond 13, slots after the array end simply don't get a cabinet
-// (no overflow, no crowding).
+// (relative to the hangar centre, which is 16 wide × 14 deep — so x ∈ [-8, 8],
+// z ∈ [-7, 7] with the door on the front/-Z face). 14 slots — one per *visible*
+// CBAT game (hidden games never get a cabinet). If the visible list ever grows
+// beyond SLOTS.length, slots after the array end simply don't get a cabinet
+// (no overflow, no crowding). hangarLayout.test.js asserts the slots keep up.
 
-const SLOTS = [
+export const SLOTS = [
   // Back row, screens facing the door (-Z local). 5 cabinets.
   { x: -6, z: 5.5, rot: 0 },
   { x: -3, z: 5.5, rot: 0 },
@@ -27,6 +28,9 @@ const SLOTS = [
   { x:  6.5, z:  1, rot:  Math.PI / 2 },
   { x:  6.5, z: -2, rot:  Math.PI / 2 },
   { x:  6.5, z: -5, rot:  Math.PI / 2 },
+  // Front wall, left of the doorway, screen facing interior (+Z). 1 cabinet.
+  // Clear of the door gap (x ∈ [-2, 2]) and the z=-5 wall cabinets.
+  { x: -5, z: -6, rot: Math.PI },
 ]
 
 function isGameEnabled(game, cbatGameEnabled) {

@@ -156,6 +156,14 @@ export default function Cbat() {
                     hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5 no-underline overflow-hidden"
                 >
                   <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
+                  {game.beta && (
+                    <span
+                      className="absolute top-2 left-2 px-2.5 py-1 rounded-lg bg-amber-600 text-[#1a1200] text-[10px] font-extrabold tracking-wider uppercase ring-2 ring-amber-700/60 shadow-[0_0_12px_rgba(245,158,11,0.6)]"
+                      style={{ zIndex: 4 }}
+                    >
+                      Beta
+                    </span>
+                  )}
                   {showNewBadge && game.key === NEW_GAME_KEY && enabled && (
                     <span
                       className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
@@ -183,6 +191,14 @@ export default function Cbat() {
                   className="relative flex items-center gap-4 bg-surface rounded-2xl p-6 border border-slate-200 transition-all card-shadow h-full min-h-[130px] w-full opacity-60 overflow-hidden"
                 >
                   <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} dimmed />
+                  {game.beta && (
+                    <span
+                      className="absolute top-2 left-2 px-2.5 py-1 rounded-lg bg-amber-600 text-[#1a1200] text-[10px] font-extrabold tracking-wider uppercase ring-2 ring-amber-700/60 shadow-[0_0_12px_rgba(245,158,11,0.6)]"
+                      style={{ zIndex: 4 }}
+                    >
+                      Beta
+                    </span>
+                  )}
                   <span className="text-4xl shrink-0" style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
                   <div className="min-w-0" style={{ position: 'relative', zIndex: 3 }}>
                     <p className="font-bold text-slate-800 mb-0.5">{game.title}</p>

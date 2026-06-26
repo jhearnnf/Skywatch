@@ -45,7 +45,30 @@
       "WebFetch(domain:www.reddit.com)",
       "WebFetch(domain:old.reddit.com)",
       "PowerShell(npx vitest run src/pages/__tests__/Home.logout.test.jsx)",
-      "PowerShell(git push *)"
+      "PowerShell(git push *)",
+      "PowerShell(npm *)",
+      "PowerShell(npx vite build 2>&1 | Select-Object -Last 12)",
+      "PowerShell(npx vitest run src/components/cbat src/pages/__tests__/Cbat.test.jsx 2>&1 | Select-Object -Last 12)",
+      "PowerShell(npx vitest run components/cbat pages/__tests__/Cbat.test.jsx --root \"C:/Users/James/Desktop/Cursor Projects/Skywatch\" 2>&1 | Select-Object -Last 12)",
+      "PowerShell(npx vitest:*)",
+      "PowerShell(npx vite:*)",
+      "PowerShell(npx jest:*)",
+      "PowerShell(npx:*)",
+      "PowerShell(npm:*)",
+      "PowerShell(git:*)",
+      "PowerShell(node:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx vite:*)",
+      "Bash(npx jest:*)",
+      "Bash(npx:*)",
+      "Bash(npm:*)",
+      "Bash(cd:*)",
+      "Bash(for:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(echo:*)",
+      "Bash(git:*)"
     ]
   }
 }
