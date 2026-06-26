@@ -68,7 +68,9 @@
       "Bash(cat:*)",
       "Bash(find:*)",
       "Bash(echo:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "PowerShell(1..6 | ForEach-Object { $r = npx vitest run src/utils/cbat/__tests__/cbatActPlan.test.js 2>&1 | Select-String -Pattern \"Tests\\\\s+\\\\d+ \\(passed|failed\\)\"; Write-Output \"Run $_`: $r\" })",
+      "PowerShell(1..6 | ForEach-Object { $out = npx vitest run src/utils/cbat/__tests__/cbatActPlan.test.js 2>&1 | Out-String; if \\($out -match \"\\(\\\\d+\\) failed\"\\) { Write-Output \"Run $_`: FAILED\" } elseif \\($out -match \"Test Files\\\\s+\\(\\\\d+\\) passed\"\\) { Write-Output \"Run $_`: PASS\" } else { Write-Output \"Run $_`: ??\" } })"
     ]
   }
 }
