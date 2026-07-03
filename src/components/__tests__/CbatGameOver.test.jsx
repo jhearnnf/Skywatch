@@ -5,7 +5,9 @@ import CbatGameOver from '../CbatGameOver'
 const mockUseAuth = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
-  Link: ({ children, to }) => <a href={to}>{children}</a>,
+  Link: ({ children, to, state }) => (
+    <a href={to} data-state={state ? JSON.stringify(state) : undefined}>{children}</a>
+  ),
 }))
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('framer-motion', () => ({
@@ -59,6 +61,13 @@ describe('CbatGameOver', () => {
     expect(screen.getByRole('link', { name: /view leaderboard/i })).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: /change aircraft/i }))
     expect(onExtra).toHaveBeenCalled()
+  })
+
+  it('the View Leaderboard link carries fromGame state so the destination can play the rank-move slide', () => {
+    setup()
+    render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+    const link = screen.getByRole('link', { name: /view leaderboard/i })
+    expect(link.getAttribute('data-state')).toBe(JSON.stringify({ fromGame: true }))
   })
 
   it('flags a personal best when the run beats the previous best', () => {

@@ -170,7 +170,7 @@ export default function CbatGameOver({
         >
           Play Again
         </button>
-        <Link to={`/cbat/${gameKey}/leaderboard`} className={secondaryBtn}>🏆 View Leaderboard</Link>
+        <Link to={`/cbat/${gameKey}/leaderboard`} state={{ fromGame: true }} className={secondaryBtn}>🏆 View Leaderboard</Link>
         {extraActions.map((a, i) => (
           a.to
             ? <Link key={i} to={a.to} className={secondaryBtn}>{a.label}</Link>

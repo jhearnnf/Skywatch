@@ -12,6 +12,11 @@ export const tutorialKey        = (userId, name) => `sw_tut_v2_${userId}_${name}
 export const tutorialClearedKey = (userId) => `sw_tut_cleared_at_${userId}`
 export const lastSeenStreakKey  = (userId) => `sw_last_seen_streak_${userId}`
 
+// Remembers the user's most recent weekly-leaderboard rank per CBAT game, so the
+// leaderboard page can animate their row from its previous position to the new
+// one after they finish a game. Written each time the board shows their rank.
+export const cbatLastRankKey    = (gameKey) => `sw_cbat_last_rank_${gameKey}`
+
 // CRO "first brief" flag — set when the user picks a category in the welcome
 // flow so BriefReader can suppress in-brief navigation that would derail the
 // funnel. TTL keeps a stale flag from leaking into a later session.

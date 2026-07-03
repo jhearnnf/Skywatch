@@ -10,6 +10,8 @@
 // Name precedence matches everywhere: a precomputed `entry.name` (reveal
 // neighbours) wins, else displayName → admin email → agent number.
 
+import { motion } from 'framer-motion'
+
 export const rowCols = (variant, cfg) =>
   variant === 'weekly'
     ? 'grid-cols-[3rem_1fr_5rem_4rem]'
@@ -18,19 +20,34 @@ export const rowCols = (variant, cfg) =>
 const agentName = (e) =>
   e.name || e.displayName || (e.email ? e.email : `Agent ${e.agentNumber || '???'}`)
 
-export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false, divider = false, mode3d = false }) {
+// `layout` opts a row into framer's FLIP reordering (used only during the
+// leaderboard's post-game rank slide). `delta` is the change in position for the
+// user's own row during that slide (positive = climbed) and renders a small
+// ↑/↓ badge next to the rank; both are inert everywhere else.
+export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false, divider = false, mode3d = false, layout = false, delta = null }) {
   const achievedAtTitle = entry.achievedAt
     ? new Date(entry.achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
     : null
 
   return (
-    <div
+    <motion.div
+      layout={layout}
+      transition={{ layout: { duration: 0.6, ease: [0.4, 0, 0.2, 1] } }}
       className={`grid ${rowCols(variant, cfg)} gap-2 px-4 py-2.5 text-sm ${divider ? 'border-t border-[#1a3a5c]' : ''} ${
         isMe ? 'bg-brand-600/10 border-l-2 border-l-brand-400' : ''
       }`}
     >
-      <span className="font-mono font-bold text-slate-400">
+      <span className="font-mono font-bold text-slate-400 flex items-center gap-1">
         {entry.rank <= 3 ? ['🥇', '🥈', '🥉'][entry.rank - 1] : `#${entry.rank}`}
+        {delta != null && delta !== 0 && (
+          <motion.span
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={`text-[10px] font-bold ${delta > 0 ? 'text-green-400' : 'text-red-400'}`}
+          >
+            {delta > 0 ? `▲${delta}` : `▼${Math.abs(delta)}`}
+          </motion.span>
+        )}
       </span>
       <span
         className={`truncate ${achievedAtTitle ? 'cursor-help' : ''} ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}
@@ -54,6 +71,6 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
           {!cfg.hideTime && <span className="text-right font-mono text-slate-400">{entry.bestTime.toFixed(1)}s</span>}
         </>
       )}
-    </div>
+    </motion.div>
   )
 }

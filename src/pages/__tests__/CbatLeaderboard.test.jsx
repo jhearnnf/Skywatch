@@ -10,6 +10,7 @@ const mockUseParams = vi.hoisted(() => vi.fn())
 vi.mock('react-router-dom', () => ({
   useParams: () => mockUseParams(),
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ state: null, pathname: '/cbat/x/leaderboard', search: '', hash: '' }),
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 
