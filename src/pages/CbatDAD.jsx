@@ -16,10 +16,16 @@ const PER_QUESTION_MS = 45000
 function legCountFor(idx) {
   return 3 + Math.floor(idx / 4)
 }
+// Intercardinal headings (NE/SE/SW/NW) and 45° turns only appear in the final
+// rounds (10–15, i.e. 0-indexed ≥ 9); earlier rounds stay cardinal-only with
+// 90° turns.
+const DIAGONALS_FROM = 9
 
 function buildQuestions() {
   const out = []
-  for (let i = 0; i < TOTAL_QUESTIONS; i++) out.push(generateDadQuestion(legCountFor(i)))
+  for (let i = 0; i < TOTAL_QUESTIONS; i++) {
+    out.push(generateDadQuestion(legCountFor(i), undefined, { diagonals: i >= DIAGONALS_FROM }))
+  }
   return out
 }
 
@@ -47,11 +53,18 @@ function PathReveal({ path, youLabel = 'YOU' }) {
   const minX = Math.min(0, ...xs), maxX = Math.max(0, ...xs)
   const minY = Math.min(0, ...ys), maxY = Math.max(0, ...ys)
   const span = Math.max(maxX - minX, maxY - minY, 1)
-  // Generous margin so the START / object labels never clip against the edge.
+  // Fit every route into the SAME square viewBox, centred on the route's
+  // bounding box, so the reveal always renders at the same aspect ratio (and
+  // therefore the same height) whether a question's path is wide, tall or
+  // square. `span` (the content extent) still drives marker/label sizing, which
+  // keeps those a constant on-screen size across questions. The 0.3 margin keeps
+  // the START / object labels clear of the edge.
   const pad = span * 0.3
-  const x0 = minX - pad, x1 = maxX + pad
-  const y0 = minY - pad, y1 = maxY + pad
-  const W = x1 - x0, H = y1 - y0
+  const side = span + pad * 2
+  const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2
+  const x0 = midX - side / 2, x1 = midX + side / 2
+  const y0 = midY - side / 2, y1 = midY + side / 2
+  const W = side, H = side
   const SX = (x) => x - x0
   const SY = (y) => y1 - y // flip so North (+y) is up
   const r = span * 0.028
@@ -119,7 +132,7 @@ function PathReveal({ path, youLabel = 'YOU' }) {
   const tipY = eyS - (vy / L) * r * 1.8
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Plotted route from the start to the object's final position">
+    <svg viewBox={`0 0 ${W} ${H}`} className="block w-full h-auto max-w-[min(300px,34vh)] mx-auto" role="img" aria-label="Plotted route from the start to the object's final position">
       <defs>
         <pattern id="dadgrid" width="1" height="1" patternUnits="userSpaceOnUse">
           <path d="M1 0 L0 0 0 1" fill="none" stroke="#13294a" strokeWidth={span * 0.004} />
@@ -419,6 +432,10 @@ export default function CbatDAD() {
                   <span className="text-brand-300 font-bold shrink-0">3.</span>
                   <span>The route is then drawn so you can check your answer.</span>
                 </div>
+                <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
+                  <span className="shrink-0">🧭</span>
+                  <span>Later rounds add diagonal headings (NE/SE/SW/NW) and 45° turns.</span>
+                </div>
                 <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1">
                   <span className="shrink-0">⏱</span>
                   <span>{TOTAL_QUESTIONS} questions · 45s each — running out counts as wrong</span>
@@ -483,11 +500,11 @@ export default function CbatDAD() {
                 key={currentIdx}
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5 mb-3"
+                className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 sm:p-5 mb-2 sm:mb-3"
               >
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">The Route</p>
-                <p className="text-base sm:text-lg text-[#ddeaf8] leading-relaxed">{currentQuestion.prose}</p>
-                <p className="text-sm font-bold text-brand-300 mt-4">
+                <p className="text-sm sm:text-lg text-[#ddeaf8] leading-relaxed">{currentQuestion.prose}</p>
+                <p className="text-sm font-bold text-brand-300 mt-3 sm:mt-4">
                   Which direction is {objectPhrase(currentQuestion.subject)} from the start point?
                 </p>
               </motion.div>
@@ -507,7 +524,7 @@ export default function CbatDAD() {
                       type="button"
                       onClick={() => handlePick(opt)}
                       disabled={phase === 'feedback'}
-                      className={`py-4 rounded-lg border-2 font-mono font-bold text-lg transition-all ${cls}`}
+                      className={`py-2.5 sm:py-4 rounded-lg border-2 font-mono font-bold text-base sm:text-lg transition-all ${cls}`}
                     >
                       {opt}
                     </button>
@@ -522,21 +539,21 @@ export default function CbatDAD() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="mt-3"
+                    className="mt-2 sm:mt-3"
                   >
-                    <div className={`text-center text-sm font-bold mb-2 ${feedback.correct ? 'text-green-400' : 'text-red-400'}`}>
+                    <div className={`text-center text-sm font-bold mb-1.5 sm:mb-2 ${feedback.correct ? 'text-green-400' : 'text-red-400'}`}>
                       {feedback.correct
                         ? '✓ Correct'
                         : feedback.picked === null
                           ? `⏱ Timeout — the answer was ${feedback.answer}`
                           : `✗ The answer was ${feedback.answer}`}
                     </div>
-                    <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 overflow-hidden">
+                    <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-2 sm:p-3 overflow-hidden">
                       <PathReveal path={currentQuestion.path} youLabel={objectLabel(currentQuestion.subject)} />
                     </div>
                     <button
                       onClick={goNext}
-                      className="w-full mt-3 px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
+                      className="w-full mt-2 sm:mt-3 px-6 py-2.5 sm:py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
                     >
                       {currentIdx + 1 >= TOTAL_QUESTIONS ? 'See Results' : 'Next'}
                     </button>
