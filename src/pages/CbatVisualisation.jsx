@@ -659,7 +659,7 @@ export default function CbatVisualisation() {
           ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
           : <button onClick={goToIntro} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
         }
-        <h1 className="text-sm font-extrabold text-slate-900">Visualisation 2D/3D</h1>
+        <h1 className="text-sm font-extrabold text-slate-900">Visualisation {is3D ? '3D' : '2D'}</h1>
       </div>
 
       {!user && (
