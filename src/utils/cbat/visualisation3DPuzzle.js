@@ -11,133 +11,24 @@
 //   Tier 1 (rounds 4–7): full cube-rotation group (24 orientations) across all
 //   composite templates.
 
-// ─── Primitives ──────────────────────────────────────────────────────────────
-// Each primitive is centred on the origin in its own local frame. Corner IDs
-// are stable identifiers used to track which corner a dot sits on across
-// rotations.
-export const PRIMITIVES = {
-  cuboid: {
-    corners: [
-      { id: 'c0', pos: [-0.5, -0.5, -0.5] },
-      { id: 'c1', pos: [ 0.5, -0.5, -0.5] },
-      { id: 'c2', pos: [ 0.5,  0.5, -0.5] },
-      { id: 'c3', pos: [-0.5,  0.5, -0.5] },
-      { id: 'c4', pos: [-0.5, -0.5,  0.5] },
-      { id: 'c5', pos: [ 0.5, -0.5,  0.5] },
-      { id: 'c6', pos: [ 0.5,  0.5,  0.5] },
-      { id: 'c7', pos: [-0.5,  0.5,  0.5] },
-    ],
-    render: { kind: 'box' },
-  },
-  triangularPrism: {
-    // Equilateral triangle in XZ (side 1, circumradius 1/√3 ≈ 0.577),
-    // extruded along Y by 1.
-    corners: [
-      { id: 'c0', pos: [-0.5, -0.5, -0.289] },
-      { id: 'c1', pos: [ 0.5, -0.5, -0.289] },
-      { id: 'c2', pos: [ 0.0, -0.5,  0.577] },
-      { id: 'c3', pos: [-0.5,  0.5, -0.289] },
-      { id: 'c4', pos: [ 0.5,  0.5, -0.289] },
-      { id: 'c5', pos: [ 0.0,  0.5,  0.577] },
-    ],
-    render: { kind: 'prism' },
-  },
-  squarePyramid: {
-    // Base 1×1 in XZ, apex at (0, 0.5, 0).
-    corners: [
-      { id: 'c0', pos: [-0.5, -0.5, -0.5] },
-      { id: 'c1', pos: [ 0.5, -0.5, -0.5] },
-      { id: 'c2', pos: [ 0.5, -0.5,  0.5] },
-      { id: 'c3', pos: [-0.5, -0.5,  0.5] },
-      { id: 'c4', pos: [ 0.0,  0.5,  0.0] },
-    ],
-    render: { kind: 'pyramid' },
-  },
-}
+// ─── Shapes ──────────────────────────────────────────────────────────────────
+// Composites are clean manifold polyhedra defined in visualisation3DShapes.js
+// (see that file for why: no CSG, no T-junctions, coplanar faces merged). Each
+// exposes its vertices as stable corners for dot placement. We re-export SHAPES
+// as COMPOSITES and shapeCorners as compositeCorners so the puzzle/round logic
+// below is unchanged.
+export { SHAPES as COMPOSITES } from './visualisation3DShapes'
+export { shapeCorners as compositeCorners } from './visualisation3DShapes'
 
-// ─── Composite templates ─────────────────────────────────────────────────────
-// Each composite is two PRIMITIVES placed in a parent frame. We aggregate
-// their corners into one list with stable IDs prefixed by part index.
-//
-// Offsets are tuned so the two primitives slightly overlap (by ~0.04 units) at
-// the joining face. With depth-tested edges, the buried seam edges disappear
-// inside the other primitive — the rendered composite reads as one continuous
-// shape with a single silhouette outline instead of two stacked tiles.
-export const COMPOSITES = {
-  // Tier-1 (rounds 0–3 use these in order). All cuboid-only first, then
-  // mixed shapes.
-  cubeStack: {
-    label: 'Cube on cube',
-    parts: [
-      { prim: 'cuboid', offset: [0, 0, 0],    scale: [1.0, 1.0, 1.0] },
-      { prim: 'cuboid', offset: [0, 0.76, 0], scale: [0.6, 0.6, 0.6] },
-    ],
-  },
-  cubeStep: {
-    label: 'Stepped cube',
-    parts: [
-      { prim: 'cuboid', offset: [0, 0, 0],          scale: [1.0, 1.0, 1.0] },
-      { prim: 'cuboid', offset: [0.55, 0.36, 0],    scale: [0.6, 0.6, 1.0] },
-    ],
-  },
-  // Tier-1 (rounds 2–3 add these mixed shapes).
-  cubePrismRoof: {
-    label: 'Cube + roof',
-    parts: [
-      { prim: 'cuboid',          offset: [0, 0, 0],    scale: [1.0, 1.0, 1.0] },
-      { prim: 'triangularPrism', offset: [0, 0.71, 0], scale: [1.0, 0.5, 1.0] },
-    ],
-  },
-  cubePyramidTop: {
-    label: 'Cube + pyramid',
-    parts: [
-      { prim: 'cuboid',        offset: [0, 0, 0],    scale: [1.0, 1.0, 1.0] },
-      { prim: 'squarePyramid', offset: [0, 0.76, 0], scale: [1.0, 0.6, 1.0] },
-    ],
-  },
-  // Tier-2 (rounds 4–7 unlock more variety).
-  pyramidStack: {
-    label: 'Pyramid stack',
-    parts: [
-      { prim: 'cuboid',        offset: [0, 0, 0],    scale: [1.0, 0.6, 1.0] },
-      { prim: 'squarePyramid', offset: [0, 0.76, 0], scale: [1.0, 1.0, 1.0] },
-    ],
-  },
-  prismOnPrism: {
-    label: 'Prism stack',
-    parts: [
-      { prim: 'triangularPrism', offset: [0, 0, 0],    scale: [1.0, 1.0, 1.0] },
-      { prim: 'cuboid',          offset: [0, 0.76, 0], scale: [0.6, 0.6, 0.6] },
-    ],
-  },
-}
+import { SHAPES } from './visualisation3DShapes'
+import { shapeCorners as compositeCorners, shapeOrbits } from './visualisation3DShapes'
 
-const TIER1_EARLY = ['cubeStack', 'cubeStep']
-const TIER1_LATE  = ['cubeStack', 'cubeStep', 'cubePrismRoof', 'cubePyramidTop']
-const TIER2_ALL   = Object.keys(COMPOSITES)
-
-// ─── Composite corner enumeration ────────────────────────────────────────────
-// Each entry is { id, pos, partIdx, primCornerId } — pos is in composite-local
-// coords (before any composite-level rotation).
-export function compositeCorners(compositeKey) {
-  const comp = COMPOSITES[compositeKey]
-  const corners = []
-  comp.parts.forEach((part, partIdx) => {
-    const prim = PRIMITIVES[part.prim]
-    prim.corners.forEach((corner) => {
-      const [x, y, z] = corner.pos
-      const [sx, sy, sz] = part.scale
-      const [ox, oy, oz] = part.offset
-      corners.push({
-        id: `p${partIdx}_${corner.id}`,
-        pos: [x * sx + ox, y * sy + oy, z * sz + oz],
-        partIdx,
-        primCornerId: corner.id,
-      })
-    })
-  })
-  return corners
-}
+// Difficulty pools. Easy rounds use simple square-based shapes; later rounds add
+// the full varied set (triangles, pentagons, hexagons; stacks, caps, tents,
+// tapers, a house).
+const TIER1_EARLY = ['cubeStack', 'pyramidTop']
+const TIER1_LATE  = ['cubeStack', 'pyramidTop', 'houseSquare', 'taperBlock', 'triTent']
+const TIER2_ALL   = Object.keys(SHAPES)
 
 // ─── Rotation generators ─────────────────────────────────────────────────────
 // Each rotation is an Euler triplet [rx, ry, rz] in radians.
@@ -237,8 +128,25 @@ export function buildRound(roundIdx, rng = Math.random) {
   const correctRotA = pick(rng, rotationPool)
   const correctRotB = pick(rng, rotationPool)
 
-  const wrongPoolA = cornersA.map((c) => c.id).filter((id) => id !== dotA)
-  const wrongPoolB = cornersB.map((c) => c.id).filter((id) => id !== dotB)
+  // A distractor's "wrong" corner must be UNAMBIGUOUSLY different from the
+  // correct one, or the option looks just as correct. Two guards:
+  //   • different symmetry orbit — a corner in the same orbit is a rotated copy
+  //     of the correct corner and is visually identical (the ambiguity bug);
+  //   • not spatially near the correct corner — even different orbits can sit
+  //     close enough to be hard to tell apart once rotated.
+  // Fall back to orbit-only if the distance filter would empty the pool.
+  const MIN_SEP = 0.33
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
+  function wrongPool(corners, orbits, dotId) {
+    const dotPos = corners.find((c) => c.id === dotId).pos
+    const diffOrbit = corners.filter((c) => orbits[c.id] !== orbits[dotId])
+    const separated = diffOrbit.filter((c) => dist(c.pos, dotPos) >= MIN_SEP)
+    return (separated.length ? separated : diffOrbit).map((c) => c.id)
+  }
+  const orbitsA = shapeOrbits(compA)
+  const orbitsB = shapeOrbits(compB)
+  const wrongPoolA = wrongPool(cornersA, orbitsA, dotA)
+  const wrongPoolB = wrongPool(cornersB, orbitsB, dotB)
 
   // Build 4 distractors with varied "wrongness" so guesses can't shortcut on a
   // single mismatch pattern.

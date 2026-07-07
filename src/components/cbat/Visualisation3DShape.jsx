@@ -1,6 +1,7 @@
 import { Canvas } from '@react-three/fiber'
 import { View } from '@react-three/drei'
-import { COMPOSITES, PRIMITIVES, compositeCorners } from '../../utils/cbat/visualisation3DPuzzle'
+import { COMPOSITES, compositeCorners } from '../../utils/cbat/visualisation3DPuzzle'
+import { getCompositeGeometry } from '../../utils/cbat/visualisation3DGeometry'
 
 // Visualisation 3D CBAT shapes — a round shows ~12 of these at once
 // (2 prompt + 5 options × 2 shapes).
@@ -29,7 +30,11 @@ export function VisualisationShapeCanvas() {
   return (
     <Canvas
       dpr={1}
-      camera={{ position: [3, 2.6, 4.2], fov: 32 }}
+      // Pulled in from [3,2.6,4.2]/fov32 along the same iso direction so shapes
+      // fill more of each box and read clearly. Distance ~4.7 + fov 26 keeps
+      // even a shape rotated onto its space diagonal (~1.96 across) inside the
+      // frame — closer/wider than this clips rotated answer options.
+      camera={{ position: [2.44, 2.11, 3.42], fov: 26 }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -66,6 +71,7 @@ export default function Visualisation3DShape({
   const comp = COMPOSITES[composite]
   if (!comp) return null
 
+  const geometry = getCompositeGeometry(composite)
   const corners = compositeCorners(composite)
   const dotCorner = corners.find((c) => c.id === dotCornerId)
 
@@ -83,58 +89,42 @@ export default function Visualisation3DShape({
       <directionalLight position={[6, 9, 5]}   intensity={1.4} />
       <directionalLight position={[-5, 3, -4]} intensity={0.35} />
       <group rotation={rotation}>
-        {comp.parts.map((part, partIdx) => (
-          <PrimitiveMesh
-            key={partIdx}
-            primKey={part.prim}
-            offset={part.offset}
-            scale={part.scale}
-            color={shapeColor}
-          />
-        ))}
+        {/* One unioned solid per composite (see visualisation3DGeometry.js):
+            the two primitives are merged into a single watertight geometry so
+            the shape reads as one cohesive object, not two overlapping blocks. */}
+        <mesh geometry={geometry}>
+          <meshStandardMaterial color={shapeColor} flatShading roughness={0.8} />
+        </mesh>
         {dotCorner && (
-          <mesh position={dotCorner.pos} renderOrder={2}>
-            <sphereGeometry args={[0.11, 16, 16]} />
-            <meshBasicMaterial color="#ff4444" depthTest={false} />
-          </mesh>
+          // The marked corner must ALWAYS be readable (this is a rotation test,
+          // not a hidden-object test) while still conveying depth. So we draw
+          // the dot twice:
+          //   • a faint "ghost" that ignores depth and always paints — so a dot
+          //     on a BACK corner stays visible instead of vanishing;
+          //   • a bright solid dot that IS depth-tested and draws on top — so a
+          //     dot on a FRONT corner reads as a crisp solid marker covering
+          //     the ghost.
+          // Net effect: front corners = solid red, back corners = faint red.
+          // Never "on top of the wrong corner" (the old always-on-top bug) and
+          // never invisible (fully-occluded bug).
+          <group position={dotCorner.pos}>
+            <mesh renderOrder={1}>
+              <sphereGeometry args={[0.1, 16, 16]} />
+              <meshBasicMaterial
+                color="#ff4444"
+                transparent
+                opacity={0.32}
+                depthTest={false}
+                depthWrite={false}
+              />
+            </mesh>
+            <mesh renderOrder={2}>
+              <sphereGeometry args={[0.11, 16, 16]} />
+              <meshBasicMaterial color="#ff4444" />
+            </mesh>
+          </group>
         )}
       </group>
     </View>
-  )
-}
-
-function PrimitiveMesh({ primKey, offset, scale, color }) {
-  const prim = PRIMITIVES[primKey]
-  if (!prim) return null
-
-  // Geometry rotations align Three.js geometry defaults with our axis-aligned
-  // corner definitions in visualisation3DPuzzle.js. The X==Z scale on prism /
-  // pyramid composites is uniform horizontally so this Y-rotation commutes
-  // with mesh.scale and the corner positions stay consistent.
-  let geometry
-  let meshRotation = [0, 0, 0]
-  if (prim.render.kind === 'box') {
-    geometry = <boxGeometry args={[1, 1, 1]} />
-  } else if (prim.render.kind === 'prism') {
-    // CylinderGeometry(radius, radius, height, 3 segments) with radius =
-    // 1/√3 gives a unit-edge equilateral triangular prism. Rotate -90° about
-    // Y so the apex points +Z (matches our corner def).
-    geometry = <cylinderGeometry args={[0.5774, 0.5774, 1, 3]} />
-    meshRotation = [0, -Math.PI / 2, 0]
-  } else if (prim.render.kind === 'pyramid') {
-    // ConeGeometry(radius, height, 4 segments) with radius = √2/2 gives a
-    // square pyramid of base side 1 at 45°; rotate +45° about Y to
-    // align base corners to (±0.5, ±0.5).
-    geometry = <coneGeometry args={[0.7071, 1, 4]} />
-    meshRotation = [0, Math.PI / 4, 0]
-  } else {
-    return null
-  }
-
-  return (
-    <mesh position={offset} scale={scale} rotation={meshRotation}>
-      {geometry}
-      <meshStandardMaterial color={color} flatShading roughness={0.8} />
-    </mesh>
   )
 }
