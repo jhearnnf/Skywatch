@@ -1226,7 +1226,7 @@ export default function CbatPlaneTurn() {
             : <button onClick={handleMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
           }
           <h1 className="text-sm font-extrabold text-slate-900">
-            {phase === 'select' ? 'Trace 1/2' : (TITLE_BY_MODE[mode] ?? 'Trace 1/2')}
+            {TITLE_BY_MODE[mode] ?? 'Trace 1/2'}
           </h1>
         </div>
       </div>

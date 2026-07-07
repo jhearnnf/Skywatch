@@ -1715,7 +1715,7 @@ export default function CbatTarget() {
             ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
             : <button onClick={goToIntro} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
           }
-          <h1 className="text-sm font-extrabold text-slate-900">Target</h1>
+          <h1 className="text-sm font-extrabold text-slate-900">{phase === 'tutorial' ? 'Target Tutorial' : 'Target'}</h1>
         </div>
       )}
 
