@@ -30,7 +30,7 @@ import PlayNavFlasher                      from './components/PlayNavFlasher'
 import UpdateNotificationModal             from './components/UpdateNotificationModal'
 import OfflineStatus                        from './components/OfflineStatus'
 import { captureLoginReturn, resolveLoginDest } from './utils/loginRedirect'
-import { isSlimAllowed } from './utils/appMode'
+import { isSlimAllowed, SLIM_APP } from './utils/appMode'
 import { useSlimMode } from './hooks/useSlimMode'
 
 // v2 pages
@@ -216,10 +216,17 @@ function AppRoutes() {
 
   if (loading) return <LoadingScreen />
 
+  // The native app opens straight to the CBAT games page — skip the slimmed
+  // landing (which only serves the web when an admin enables slim site-wide).
+  if (SLIM_APP && location.pathname === '/') {
+    return <Navigate to="/cbat" replace />
+  }
+
   // Slim ("CBAT-only") mode: native app always, or web when an admin enables
   // it site-wide. Any path outside the slim allow-list (learning content,
-  // other games, etc.) redirects to the CBAT games home, which also serves as
-  // the startup/landing page.
+  // other games, etc.) redirects to the CBAT games home. On the web the
+  // slimmed landing at `/` is allow-listed and rendered; on native it is
+  // handled by the redirect above.
   if (slim && !isSlimAllowed(location.pathname)) {
     return <Navigate to="/cbat" replace />
   }
