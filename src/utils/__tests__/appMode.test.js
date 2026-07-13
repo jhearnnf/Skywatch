@@ -22,6 +22,7 @@ describe('appMode', () => {
         '/cbat-game-history',
         '/airstar-history',
         '/report',
+        '/share',
         '/privacy',
       ]) {
         expect(isSlimAllowed(p)).toBe(true)

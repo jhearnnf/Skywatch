@@ -29,6 +29,7 @@ const SLIM_ALLOWED_PREFIXES = [
   '/cbat-game-history',  // CBAT score history
   '/airstar-history',    // airstars earned in CBAT
   '/report',             // "report a problem" (linked from CBAT + profile)
+  '/share',              // "share SkyWatch" QR-code page (linked from profile Help)
   '/privacy',            // store-compliance page
 ]
 

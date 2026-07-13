@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
+import { SLIM_APP } from '../utils/appMode'
 
 export default function ReportProblem() {
   const { user, API, apiFetch } = useAuth()
@@ -120,35 +121,43 @@ export default function ReportProblem() {
           ← Back
         </button>
         <h1 className="text-2xl font-extrabold text-slate-900">Report a Problem</h1>
-        <p className="text-sm text-slate-500 mt-1">Two ways to reach us — pick whichever suits. Chat live with the team, or send a written report.</p>
+        <p className="text-sm text-slate-500 mt-1">
+          {SLIM_APP
+            ? 'Describe what went wrong and we\'ll look into it.'
+            : 'Two ways to reach us — pick whichever suits. Chat live with the team, or send a written report.'}
+        </p>
       </div>
 
-      <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow">
-        <div className="flex items-center gap-2.5 mb-2">
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">1</span>
-          <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Talk to a real person</p>
+      {/* Live-chat option — hidden in slim (native) mode, where /chat is not
+          reachable. Only the one-way written report is offered there. */}
+      {!SLIM_APP && (<>
+        <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow">
+          <div className="flex items-center gap-2.5 mb-2">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">1</span>
+            <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Talk to a real person</p>
+          </div>
+          <p className="text-sm text-slate-500 mb-3">Best for back-and-forth. Get a fast reply from the Skywatch team — usually within a few hours.</p>
+          <button
+            type="button"
+            onClick={startChat}
+            disabled={chatBusy}
+            className="w-full py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold rounded-2xl text-sm transition-colors"
+          >
+            {chatBusy ? 'Opening…' : 'Start a chat'}
+          </button>
         </div>
-        <p className="text-sm text-slate-500 mb-3">Best for back-and-forth. Get a fast reply from the Skywatch team — usually within a few hours.</p>
-        <button
-          type="button"
-          onClick={startChat}
-          disabled={chatBusy}
-          className="w-full py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold rounded-2xl text-sm transition-colors"
-        >
-          {chatBusy ? 'Opening…' : 'Start a chat'}
-        </button>
-      </div>
 
-      {/* Either/or divider — these two cards are alternatives, not steps */}
-      <div className="flex items-center gap-3 my-4">
-        <div className="flex-1 h-px bg-slate-200" />
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">or</span>
-        <div className="flex-1 h-px bg-slate-200" />
-      </div>
+        {/* Either/or divider — these two cards are alternatives, not steps */}
+        <div className="flex items-center gap-3 my-4">
+          <div className="flex-1 h-px bg-slate-200" />
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">or</span>
+          <div className="flex-1 h-px bg-slate-200" />
+        </div>
+      </>)}
 
       <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow">
         <div className="flex items-center gap-2.5 mb-2">
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">2</span>
+          {!SLIM_APP && <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">2</span>}
           <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Send a written report</p>
         </div>
         <p className="text-sm text-slate-500 mb-4">No reply needed — describe what went wrong and we'll look into it.</p>
