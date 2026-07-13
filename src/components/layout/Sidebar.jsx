@@ -116,7 +116,7 @@ export default function Sidebar() {
           )
         })()}
 
-        {!slim && user?.isAdmin && (() => {
+        {user?.isAdmin && (() => {
           const isActive = activeNavTo === '/admin'
           return (
             <Link

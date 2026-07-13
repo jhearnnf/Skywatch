@@ -8,12 +8,8 @@ vi.mock('../../utils/appMode', () => ({
 }))
 
 const settingsRef = vi.hoisted(() => ({ value: {} }))
-const authRef     = vi.hoisted(() => ({ value: {} }))
 vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({ settings: settingsRef.value }),
-}))
-vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => authRef.value,
 }))
 
 import { useSlimMode } from '../useSlimMode'
@@ -22,7 +18,6 @@ describe('useSlimMode', () => {
   beforeEach(() => {
     slimAppRef.value = false
     settingsRef.value = {}
-    authRef.value = { user: null }
   })
 
   it('is false on the web with the flag off', () => {
@@ -36,24 +31,16 @@ describe('useSlimMode', () => {
     expect(result.current).toBe(true)
   })
 
-  it('is true on the web when an admin enables the site-wide flag (for a non-admin user)', () => {
+  it('is true on the web when an admin enables the site-wide flag', () => {
     settingsRef.value = { slimModeEnabled: true }
-    authRef.value = { user: { isAdmin: false } }
     const { result } = renderHook(() => useSlimMode())
     expect(result.current).toBe(true)
   })
 
-  it('exempts admins from the settings-driven slim (so they keep /admin access)', () => {
+  it('does NOT exempt anyone — the flag slims all clients (admins included)', () => {
+    // Admin exemption was removed: /admin stays reachable instead, so admins
+    // can still turn the flag off. The hook itself is user-agnostic.
     settingsRef.value = { slimModeEnabled: true }
-    authRef.value = { user: { isAdmin: true } }
-    const { result } = renderHook(() => useSlimMode())
-    expect(result.current).toBe(false)
-  })
-
-  it('still slims an admin on the native app (native flag ignores the exemption)', () => {
-    slimAppRef.value = true
-    settingsRef.value = { slimModeEnabled: false }
-    authRef.value = { user: { isAdmin: true } }
     const { result } = renderHook(() => useSlimMode())
     expect(result.current).toBe(true)
   })

@@ -1,6 +1,5 @@
 import { SLIM_APP } from '../utils/appMode'
 import { useAppSettings } from '../context/AppSettingsContext'
-import { useAuth } from '../context/AuthContext'
 
 // Effective slim ("CBAT-only") mode for the current client.
 //
@@ -9,11 +8,11 @@ import { useAuth } from '../context/AuthContext'
 // - On the web it can additionally be turned on site-wide by an admin via the
 //   AppSettings.slimModeEnabled feature flag (off by default).
 //
-// Admins are deliberately exempt from the settings-driven slim so that enabling
-// it can never lock an admin out of /admin (which the slim router guard would
-// otherwise redirect to /cbat). The native flag still applies to everyone.
+// Admins are NOT exempt — they see the slimmed site too, so they can preview
+// it. To avoid a lockout, `/admin` stays in the slim route allow-list and the
+// Admin nav link stays visible in slim mode, so an admin can always reach
+// Settings to turn the flag back off.
 export function useSlimMode() {
   const { settings } = useAppSettings() ?? {}
-  const { user } = useAuth() ?? {}
-  return SLIM_APP || (Boolean(settings?.slimModeEnabled) && !user?.isAdmin)
+  return SLIM_APP || Boolean(settings?.slimModeEnabled)
 }

@@ -40,7 +40,7 @@ export default function BottomNav() {
 
   let items = slim ? [...SLIM_NAV_ITEMS] : [...NAV_ITEMS]
   if (showChatNav) items = [...items, CHAT_ITEM]
-  if (!slim && user?.isAdmin) items = [...items, ADMIN_ITEM]
+  if (user?.isAdmin) items = [...items, ADMIN_ITEM]
   const location = useLocation()
   const navigate = useNavigate()
 

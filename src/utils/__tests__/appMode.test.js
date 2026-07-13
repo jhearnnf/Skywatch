@@ -24,6 +24,8 @@ describe('appMode', () => {
         '/report',
         '/share',
         '/privacy',
+        '/admin',
+        '/admin/openrouter-usage',
       ]) {
         expect(isSlimAllowed(p)).toBe(true)
       }
@@ -40,7 +42,6 @@ describe('appMode', () => {
         '/case-files',
         '/quiz/abc',
         '/chat',
-        '/admin',
         '/intel-brief-history',
       ]) {
         expect(isSlimAllowed(p)).toBe(false)
@@ -61,6 +62,11 @@ describe('appMode', () => {
       expect(slimNavActiveTo('/profile/badge')).toBe('/profile')
       expect(slimNavActiveTo('/airstar-history')).toBe('/profile')
       expect(slimNavActiveTo('/game-history')).toBe('/profile')
+    })
+
+    it('highlights admin for /admin surfaces', () => {
+      expect(slimNavActiveTo('/admin')).toBe('/admin')
+      expect(slimNavActiveTo('/admin/openrouter-usage')).toBe('/admin')
     })
 
     it('highlights CBAT for everything else', () => {

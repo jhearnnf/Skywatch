@@ -2953,7 +2953,7 @@ function SettingsTab({ API }) {
         />
         <Toggle
           label="Slim (CBAT-only) Site Mode"
-          hint="When on, the whole website is slimmed to the CBAT-only experience (like the Android app): landing/learning/other games are hidden and everything redirects to CBAT. Admins are exempt so you keep full access. The native app is always slim regardless."
+          hint="When on, the whole website is slimmed to the CBAT-only experience (like the Android app): landing/learning/other games are hidden and everything redirects to CBAT. Applies to everyone including admins, but the Admin nav + /admin stay reachable so you can turn it back off. The native app is always slim regardless."
           checked={draft.slimModeEnabled ?? false}
           onChange={v => set('slimModeEnabled', v)}
         />

@@ -31,6 +31,7 @@ const SLIM_ALLOWED_PREFIXES = [
   '/report',             // "report a problem" (linked from CBAT + profile)
   '/share',              // "share SkyWatch" QR-code page (linked from profile Help)
   '/privacy',            // store-compliance page
+  '/admin',              // admins can still reach Settings to toggle slim off
 ]
 
 export function isSlimAllowed(pathname) {
@@ -47,6 +48,9 @@ export const SLIM_NAV_ITEMS = [
 
 // Which slim nav item should be highlighted for a given pathname.
 export function slimNavActiveTo(pathname) {
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    return '/admin'
+  }
   if (
     pathname === '/profile' || pathname.startsWith('/profile/') ||
     pathname === '/airstar-history' || pathname === '/game-history'
