@@ -218,6 +218,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
   const gameMode3D     = mode === '3d'
   const gameModeTrace1 = mode === 'trace1'
   const gameModeTrace2 = mode === 'trace2'
+  const gameMode2D     = !gameMode3D && !gameModeTrace1 && !gameModeTrace2
 
   const heading = gameModeTrace1
     ? 'Trace 1'
@@ -399,7 +400,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
               onClick={() => onSelect(a)}
               className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-[#1a3a5c] bg-[#0a1628] hover:border-[#5baaff] hover:bg-[#0f2240] transition-all group cursor-pointer"
             >
-              {has3DModel(a.briefId, a.title) && (
+              {!gameMode2D && has3DModel(a.briefId, a.title) && (
                 <span className="absolute top-1 right-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-brand-600/80 text-white leading-none">
                   3D
                 </span>
