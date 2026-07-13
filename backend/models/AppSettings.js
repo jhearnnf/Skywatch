@@ -220,6 +220,12 @@ const appSettingsSchema = new mongoose.Schema({
   // Chat (user↔admin help) feature
   chatEnabled:                { type: Boolean,  default: true },
 
+  // Slim "CBAT-only" mode applied site-wide (web). The native Android app is
+  // always slim regardless of this flag; this only forces the same slimmed
+  // experience on the website. Admins are exempt on the client so enabling it
+  // can't lock them out of /admin. Off by default.
+  slimModeEnabled:            { type: Boolean,  default: false },
+
   // Home-page preview windows (Landing.jsx). Each window can be hidden
   // independently by an admin. Per-game gates inside each window still apply
   // (e.g. disabling Aptitude Sync via aptitudeSyncEnabled drops its scene).

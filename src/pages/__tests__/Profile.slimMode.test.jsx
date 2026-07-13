@@ -9,10 +9,8 @@ const mockUseAuth  = vi.hoisted(() => vi.fn())
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-// Force the slimmed native app mode for this whole file.
-vi.mock('../../utils/appMode', () => ({
-  SLIM_APP: true,
-}))
+// Force slim ("CBAT-only") mode for this whole file.
+vi.mock('../../hooks/useSlimMode', () => ({ useSlimMode: () => true }))
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),

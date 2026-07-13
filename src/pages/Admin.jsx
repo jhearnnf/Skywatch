@@ -2920,7 +2920,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -2950,6 +2950,12 @@ function SettingsTab({ API }) {
           hint="When off, the Chat nav entry, Help-page chat card, and /chat page are hidden, and the chat API returns 503. Existing conversations are retained."
           checked={draft.chatEnabled !== false}
           onChange={v => set('chatEnabled', v)}
+        />
+        <Toggle
+          label="Slim (CBAT-only) Site Mode"
+          hint="When on, the whole website is slimmed to the CBAT-only experience (like the Android app): landing/learning/other games are hidden and everything redirects to CBAT. Admins are exempt so you keep full access. The native app is always slim regardless."
+          checked={draft.slimModeEnabled ?? false}
+          onChange={v => set('slimModeEnabled', v)}
         />
       </Section>
 

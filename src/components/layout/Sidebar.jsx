@@ -8,7 +8,8 @@ import ProfileBadge from '../ProfileBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
 import { getActiveNavTo } from '../../utils/navSections'
-import { SLIM_APP, SLIM_NAV_ITEMS, slimNavActiveTo } from '../../utils/appMode'
+import { SLIM_NAV_ITEMS, slimNavActiveTo } from '../../utils/appMode'
+import { useSlimMode } from '../../hooks/useSlimMode'
 
 const NAV_ITEMS = [
   { to: '/home',          emoji: '🏠', label: 'Home'       },
@@ -36,14 +37,15 @@ export default function Sidebar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const navItems = SLIM_APP ? SLIM_NAV_ITEMS : NAV_ITEMS
-  const activeNavTo = SLIM_APP ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname)
+  const slim = useSlimMode()
+  const navItems = slim ? SLIM_NAV_ITEMS : NAV_ITEMS
+  const activeNavTo = slim ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname)
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
   const { hasAnyOpenChat: chatVisible, hasUnread: chatUnread } = useChatUnread() ?? {}
   const { levels: liveLevels, settings } = useAppSettings() ?? {}
-  const showChatNav = !SLIM_APP && user && settings?.chatEnabled !== false && chatVisible
+  const showChatNav = !slim && user && settings?.chatEnabled !== false && chatVisible
   const levelInfo = user ? getLevelInfo(user.cycleAirstars ?? 0, liveLevels) : null
 
   return (
@@ -114,7 +116,7 @@ export default function Sidebar() {
           )
         })()}
 
-        {!SLIM_APP && user?.isAdmin && (() => {
+        {!slim && user?.isAdmin && (() => {
           const isActive = activeNavTo === '/admin'
           return (
             <Link

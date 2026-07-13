@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import ProfileBadge from '../ProfileBadge'
 import OfflineBadge from './OfflineBadge'
-import { SLIM_APP } from '../../utils/appMode'
+import { useSlimMode } from '../../hooks/useSlimMode'
 
 function CrosshairLogo() {
   return (
@@ -21,6 +21,7 @@ function CrosshairLogo() {
 export default function TopBar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const slim = useSlimMode()
 
   return (
     <header className="app-topbar fixed top-0 left-0 right-0 z-[1001] bg-slate-50/90 backdrop-blur-md border-b border-slate-200/60 h-14">
@@ -42,7 +43,7 @@ export default function TopBar() {
           {user ? (
             <>
               {/* Streak — hidden in slim (native) mode */}
-              {!SLIM_APP && (
+              {!slim && (
                 <button
                   onClick={() => navigate('/profile')}
                   className="flex items-center gap-1 bg-brand-50 rounded-full px-3 py-1 border border-brand-200 hover:bg-brand-100 hover:border-brand-300 transition-colors outline-none focus:outline-none"
@@ -54,7 +55,7 @@ export default function TopBar() {
               )}
 
               {/* Airstars — hidden in slim (native) mode */}
-              {!SLIM_APP && (
+              {!slim && (
                 <button
                   onClick={() => navigate('/rankings')}
                   className="flex items-center gap-1 bg-slate-200 rounded-full px-3 py-1 border border-slate-300 hover:bg-slate-300 hover:border-slate-400 transition-colors outline-none focus:outline-none"
@@ -69,14 +70,14 @@ export default function TopBar() {
                   badge routes to RAF ranks and an aircraft cutout to the badge picker. */}
               {(() => {
                 const hasCutout = Boolean(user?.selectedBadge?.cutoutUrl)
-                const onClick = SLIM_APP
+                const onClick = slim
                   ? () => navigate(hasCutout ? '/profile/badge' : '/profile')
                   : () => navigate(hasCutout ? '/profile/badge' : '/rankings', hasCutout ? undefined : { state: { tab: 'ranks' } })
                 return (
                   <button
                     onClick={onClick}
                     className="w-8 h-8 rounded-full bg-brand-100 border-2 border-brand-200 flex items-center justify-center text-sm font-bold text-brand-700 hover:border-brand-400 transition-colors outline-none focus:outline-none"
-                    aria-label={hasCutout ? 'Change profile badge' : SLIM_APP ? 'View profile' : 'View RAF ranks'}
+                    aria-label={hasCutout ? 'Change profile badge' : slim ? 'View profile' : 'View RAF ranks'}
                   >
                     <ProfileBadge user={user} size={hasCutout ? 26 : 20} />
                   </button>

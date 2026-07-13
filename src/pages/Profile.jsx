@@ -12,7 +12,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import ProfileBadge from '../components/ProfileBadge'
 import SocialLinks from '../components/SocialLinks'
 import SEO from '../components/SEO'
-import { SLIM_APP } from '../utils/appMode'
+import { useSlimMode } from '../hooks/useSlimMode'
 
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
   const Tag = onClick && !loading ? 'button' : 'div'
@@ -63,6 +63,7 @@ const TUTORIAL_LABELS = [
 export default function Profile() {
   const { user, setUser, API, apiFetch, logout } = useAuth()
   const navigate = useNavigate()
+  const slim = useSlimMode()
   const { start, replay, resetAll } = useAppTutorial()
 
   const { levels: liveLevels, settings: appSettings } = useAppSettings()
@@ -215,12 +216,12 @@ export default function Profile() {
               <p className="font-extrabold text-lg text-slate-800 leading-tight truncate">
                 {user.displayName || `Agent #${user.agentNumber ?? '———'}`}
               </p>
-              {!SLIM_APP && <p className="text-slate-600 text-sm">{rankDisplay}</p>}
+              {!slim && <p className="text-slate-600 text-sm">{rankDisplay}</p>}
               {user.displayName && (
                 <p className="text-slate-500 text-xs mt-0.5 intel-mono">#{user.agentNumber ?? '———'}</p>
               )}
             </div>
-            {!SLIM_APP && (
+            {!slim && (
               <div className="text-right shrink-0">
                 <p className="text-xs text-slate-500 intel-mono">Streak</p>
                 <p className="text-2xl font-extrabold text-brand-700">{user.loginStreak ?? 0}</p>
@@ -230,7 +231,7 @@ export default function Profile() {
           </div>
 
           {/* XP bar */}
-          {!SLIM_APP && levelInfo && (
+          {!slim && levelInfo && (
             <div className="mt-4">
               <div className="flex justify-between text-xs text-slate-600 mb-1 intel-mono">
                 <span>Level {levelInfo.level}</span>
@@ -265,7 +266,7 @@ export default function Profile() {
           { key: 'leaderboard', label: '🏆 Ranks' },
           { key: 'settings',    label: '⚙️ Settings' },
           { key: 'tutorials',   label: '💡 Help' },
-        ].filter(t => !(SLIM_APP && t.key === 'leaderboard')).map(t => (
+        ].filter(t => !(slim && t.key === 'leaderboard')).map(t => (
           <button
             key={t.key}
             data-tutorial-target={t.key === 'settings' ? 'profile-tab-settings' : undefined}
@@ -281,11 +282,11 @@ export default function Profile() {
       {/* Stats tab */}
       {tab === 'stats' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          <div className={`grid ${SLIM_APP ? 'grid-cols-1' : 'grid-cols-2'} gap-3 ${!user ? 'opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
-            {!SLIM_APP && <StatCard loading={user && statsLoading} label="Briefs Read"  value={stats.brifsRead}           icon="📋" onClick={user ? () => navigate('/intel-brief-history') : undefined} badge={stats.flashcardsCollected} badgeLabel="flashcards" />}
-            <StatCard loading={user && statsLoading} label="Games Played" value={stats.gamesPlayed} icon="🎯" badge={stats.abandonedGames} onClick={user && !SLIM_APP ? () => navigate('/game-history') : undefined} />
-            {!SLIM_APP && <StatCard loading={user && statsLoading} label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />}
-            {!SLIM_APP && <StatCard loading={user && statsLoading} label="Airstars"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/airstar-history') : undefined} />}
+          <div className={`grid ${slim ? 'grid-cols-1' : 'grid-cols-2'} gap-3 ${!user ? 'opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
+            {!slim && <StatCard loading={user && statsLoading} label="Briefs Read"  value={stats.brifsRead}           icon="📋" onClick={user ? () => navigate('/intel-brief-history') : undefined} badge={stats.flashcardsCollected} badgeLabel="flashcards" />}
+            <StatCard loading={user && statsLoading} label="Games Played" value={stats.gamesPlayed} icon="🎯" badge={stats.abandonedGames} onClick={user && !slim ? () => navigate('/game-history') : undefined} />
+            {!slim && <StatCard loading={user && statsLoading} label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />}
+            {!slim && <StatCard loading={user && statsLoading} label="Airstars"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/airstar-history') : undefined} />}
           </div>
           <SocialLinks source="profile" className="mt-6 pt-4 border-t border-slate-200" />
         </motion.div>
@@ -380,7 +381,7 @@ export default function Profile() {
           </div>
 
           {/* Difficulty */}
-          {!SLIM_APP && (
+          {!slim && (
           <div data-tutorial-target="profile-difficulty" className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recall Difficulty</p>
             <div className="flex gap-2">
@@ -461,7 +462,7 @@ export default function Profile() {
           </div>
 
           {/* Subscription — hidden in slim (native) mode and while beta tester auto-gold is active */}
-          {!SLIM_APP && !appSettings?.betaTesterAutoGold && (() => {
+          {!slim && !appSettings?.betaTesterAutoGold && (() => {
             const tier        = user.subscriptionTier ?? 'free'
             const isGold      = tier === 'gold'
             const isSilver    = tier === 'silver'
@@ -568,7 +569,7 @@ export default function Profile() {
               <span className="text-slate-400">→</span>
             </Link>
           </div>
-          {!SLIM_APP && (<>
+          {!slim && (<>
           <p className="text-sm text-slate-500 mb-1">Replay any tutorial to revisit how a feature works.</p>
           <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
             {TUTORIAL_LABELS.map((tut, i) => (

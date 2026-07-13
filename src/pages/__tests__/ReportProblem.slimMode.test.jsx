@@ -4,8 +4,8 @@ import ReportProblem from '../ReportProblem'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
-// Force the slimmed native app mode for this whole file.
-vi.mock('../../utils/appMode', () => ({ SLIM_APP: true }))
+// Force slim ("CBAT-only") mode for this whole file.
+vi.mock('../../hooks/useSlimMode', () => ({ useSlimMode: () => true }))
 
 let searchParamsState = new URLSearchParams('')
 const setSearchParamsMock = vi.fn()

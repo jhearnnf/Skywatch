@@ -3,11 +3,12 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
-import { SLIM_APP } from '../utils/appMode'
+import { useSlimMode } from '../hooks/useSlimMode'
 
 export default function ReportProblem() {
   const { user, API, apiFetch } = useAuth()
   const navigate = useNavigate()
+  const slim = useSlimMode()
   const [searchParams, setSearchParams] = useSearchParams()
   const briefId = searchParams.get('briefId') || null
 
@@ -122,7 +123,7 @@ export default function ReportProblem() {
         </button>
         <h1 className="text-2xl font-extrabold text-slate-900">Report a Problem</h1>
         <p className="text-sm text-slate-500 mt-1">
-          {SLIM_APP
+          {slim
             ? 'Describe what went wrong and we\'ll look into it.'
             : 'Two ways to reach us — pick whichever suits. Chat live with the team, or send a written report.'}
         </p>
@@ -130,7 +131,7 @@ export default function ReportProblem() {
 
       {/* Live-chat option — hidden in slim (native) mode, where /chat is not
           reachable. Only the one-way written report is offered there. */}
-      {!SLIM_APP && (<>
+      {!slim && (<>
         <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow">
           <div className="flex items-center gap-2.5 mb-2">
             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">1</span>
@@ -157,7 +158,7 @@ export default function ReportProblem() {
 
       <div className="bg-surface rounded-2xl border border-slate-200 p-5 card-shadow">
         <div className="flex items-center gap-2.5 mb-2">
-          {!SLIM_APP && <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">2</span>}
+          {!slim && <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">2</span>}
           <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Send a written report</p>
         </div>
         <p className="text-sm text-slate-500 mb-4">No reply needed — describe what went wrong and we'll look into it.</p>
