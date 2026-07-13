@@ -283,7 +283,7 @@ export default function Profile() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <div className={`grid ${SLIM_APP ? 'grid-cols-1' : 'grid-cols-2'} gap-3 ${!user ? 'opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
             {!SLIM_APP && <StatCard loading={user && statsLoading} label="Briefs Read"  value={stats.brifsRead}           icon="📋" onClick={user ? () => navigate('/intel-brief-history') : undefined} badge={stats.flashcardsCollected} badgeLabel="flashcards" />}
-            <StatCard loading={user && statsLoading} label="Games Played" value={stats.gamesPlayed} icon="🎯" badge={stats.abandonedGames} onClick={user ? () => navigate(SLIM_APP ? '/cbat-game-history' : '/game-history') : undefined} />
+            <StatCard loading={user && statsLoading} label="Games Played" value={stats.gamesPlayed} icon="🎯" badge={stats.abandonedGames} onClick={user && !SLIM_APP ? () => navigate('/game-history') : undefined} />
             {!SLIM_APP && <StatCard loading={user && statsLoading} label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />}
             {!SLIM_APP && <StatCard loading={user && statsLoading} label="Airstars"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/airstar-history') : undefined} />}
           </div>
@@ -380,6 +380,7 @@ export default function Profile() {
           </div>
 
           {/* Difficulty */}
+          {!SLIM_APP && (
           <div data-tutorial-target="profile-difficulty" className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recall Difficulty</p>
             <div className="flex gap-2">
@@ -427,6 +428,7 @@ export default function Profile() {
               </p>
             )}
           </div>
+          )}
 
           {/* Volume */}
           <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${isIOS ? ' opacity-50' : ''}`}>
@@ -458,8 +460,8 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Subscription — hidden while beta tester auto-gold is active */}
-          {!appSettings?.betaTesterAutoGold && (() => {
+          {/* Subscription — hidden in slim (native) mode and while beta tester auto-gold is active */}
+          {!SLIM_APP && !appSettings?.betaTesterAutoGold && (() => {
             const tier        = user.subscriptionTier ?? 'free'
             const isGold      = tier === 'gold'
             const isSilver    = tier === 'silver'
@@ -566,6 +568,7 @@ export default function Profile() {
               <span className="text-slate-400">→</span>
             </Link>
           </div>
+          {!SLIM_APP && (<>
           <p className="text-sm text-slate-500 mb-1">Replay any tutorial to revisit how a feature works.</p>
           <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
             {TUTORIAL_LABELS.map((tut, i) => (
@@ -590,6 +593,7 @@ export default function Profile() {
           >
             {resetDone ? '✓ Tutorials reset — they\'ll show again as you navigate' : '🔄 Reset All Tutorials'}
           </button>
+          </>)}
         </motion.div>
       )}
 

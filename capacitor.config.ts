@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'academy.skywatch.app',
-  appName: 'SkyWatch',
+  appName: 'SkyWatch CBAT',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

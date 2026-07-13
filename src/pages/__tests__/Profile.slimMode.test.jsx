@@ -28,7 +28,12 @@ vi.mock('../../utils/sound', () => ({
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 
 vi.mock('../../context/AppTutorialContext', () => ({
-  useAppTutorial: () => ({ start: vi.fn(), replay: vi.fn() }),
+  useAppTutorial: () => ({ start: vi.fn(), replay: vi.fn(), resetAll: vi.fn() }),
+}))
+
+vi.mock('../../utils/subscription', () => ({
+  displayTier: () => 'Free',
+  isFreeUser: () => true,
 }))
 
 vi.mock('../../components/tutorial/TutorialModal', () => ({ default: () => null }))
@@ -109,10 +114,32 @@ describe('Profile — slim (native) mode', () => {
     expect(screen.queryByText(/Level \d/)).toBeNull()
   })
 
-  it('Games Played card links to the CBAT history, not the full game history', async () => {
+  it('Games Played card is not clickable (renders as a div, no navigation)', async () => {
     render(<Profile />)
     await waitFor(() => screen.getByText('Games Played'))
-    fireEvent.click(screen.getByText('Games Played').closest('button'))
-    expect(mockNavigate).toHaveBeenCalledWith('/cbat-game-history')
+    // With no onClick the StatCard renders as a plain div, not a button.
+    expect(screen.getByText('Games Played').closest('button')).toBeNull()
+    fireEvent.click(screen.getByText('Games Played'))
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('Settings tab hides Recall Difficulty and Subscription but keeps Display Name and Volume', async () => {
+    render(<Profile />)
+    await waitFor(() => screen.getByText('Games Played'))
+    fireEvent.click(screen.getByText('⚙️ Settings'))
+    await waitFor(() => screen.getByText('Display Name'))
+    expect(screen.getByText('Skywatch Volume')).toBeDefined()
+    expect(screen.queryByText('Recall Difficulty')).toBeNull()
+    expect(screen.queryByText('Subscription')).toBeNull()
+  })
+
+  it('Help tab hides the Replay Tutorials section but keeps Share / Report links', async () => {
+    render(<Profile />)
+    await waitFor(() => screen.getByText('Games Played'))
+    fireEvent.click(screen.getByText('💡 Help'))
+    await waitFor(() => screen.getByText('📤 Share SkyWatch'))
+    expect(screen.getByText('⚠️ Report a Problem')).toBeDefined()
+    expect(screen.queryByText(/Replay any tutorial/)).toBeNull()
+    expect(screen.queryByText(/Reset All Tutorials/)).toBeNull()
   })
 })
