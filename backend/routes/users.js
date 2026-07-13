@@ -17,6 +17,8 @@ const Level = require('../models/Level');
 const Rank = require('../models/Rank');
 const AirstarLog = require('../models/AirstarLog');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
+const GameSessionCbatStart = require('../models/GameSessionCbatStart');
+const { CBAT_GAMES } = require('../constants/cbatGames');
 const { withSelectedBadge } = require('../utils/selectedBadge');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 
@@ -63,8 +65,22 @@ router.get('/stats', protect, async (req, res) => {
     const aptitudeSyncPlayed    = await AptitudeSyncUsage.countDocuments({ userId: req.user._id, completedAt: { $ne: null } });
     const aptitudeSyncAbandoned = aptitudeSyncTotal - aptitudeSyncPlayed;
 
-    const gamesPlayed    = completedQuizAttempts + booPlayed + wtaPlayed + flashPlayed + aptitudeSyncPlayed;
-    const abandonedGames = abandonedQuizAttempts + booAbandoned + wtaAbandoned + flashAbandoned + aptitudeSyncAbandoned;
+    // CBAT games: each result doc is one completed play. Abandoned = games
+    // started (GameSessionCbatStart) without a completed result. Floored at 0
+    // so legacy completes that predate start-tracking never make it negative.
+    // modeFilter is spread so entries sharing a Model (plane-turn-2d/3d) don't
+    // double-count.
+    const cbatCompletedCounts = await Promise.all(
+      Object.values(CBAT_GAMES).map(cfg =>
+        cfg.Model.countDocuments({ ...(cfg.modeFilter ?? {}), userId: req.user._id })
+      )
+    );
+    const cbatPlayed    = cbatCompletedCounts.reduce((sum, n) => sum + n, 0);
+    const cbatStarts    = await GameSessionCbatStart.countDocuments({ userId: req.user._id });
+    const cbatAbandoned = Math.max(0, cbatStarts - cbatPlayed);
+
+    const gamesPlayed    = completedQuizAttempts + booPlayed + wtaPlayed + flashPlayed + aptitudeSyncPlayed + cbatPlayed;
+    const abandonedGames = abandonedQuizAttempts + booAbandoned + wtaAbandoned + flashAbandoned + aptitudeSyncAbandoned + cbatAbandoned;
     const totalDataPoints = quizAnswered + booPlayed + wtaPlayed + flashTotal;
     const winPercent = totalDataPoints > 0 ? Math.round((quizCorrect + booWins + wtaWins + flashRecalled) / totalDataPoints * 100) : 0;
 

@@ -30,6 +30,7 @@ import PlayNavFlasher                      from './components/PlayNavFlasher'
 import UpdateNotificationModal             from './components/UpdateNotificationModal'
 import OfflineStatus                        from './components/OfflineStatus'
 import { captureLoginReturn, resolveLoginDest } from './utils/loginRedirect'
+import { SLIM_APP, isSlimAllowed } from './utils/appMode'
 
 // v2 pages
 import Landing        from './pages/Landing'
@@ -212,6 +213,13 @@ function AppRoutes() {
   }, [])
 
   if (loading) return <LoadingScreen />
+
+  // Native slim mode: keep the Android app to login/profile/CBAT only. Any
+  // path outside the slim allow-list (learning content, other games, etc.)
+  // redirects to the CBAT games home, which also serves as the startup page.
+  if (SLIM_APP && !isSlimAllowed(location.pathname)) {
+    return <Navigate to="/cbat" replace />
+  }
 
   return (
     <AppShell>

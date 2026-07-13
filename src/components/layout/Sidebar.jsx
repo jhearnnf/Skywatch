@@ -8,6 +8,7 @@ import ProfileBadge from '../ProfileBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
 import { getActiveNavTo } from '../../utils/navSections'
+import { SLIM_APP, SLIM_NAV_ITEMS, slimNavActiveTo } from '../../utils/appMode'
 
 const NAV_ITEMS = [
   { to: '/home',          emoji: '🏠', label: 'Home'       },
@@ -35,20 +36,21 @@ export default function Sidebar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const activeNavTo = getActiveNavTo(location.pathname)
+  const navItems = SLIM_APP ? SLIM_NAV_ITEMS : NAV_ITEMS
+  const activeNavTo = SLIM_APP ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname)
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
   const { hasAnyOpenChat: chatVisible, hasUnread: chatUnread } = useChatUnread() ?? {}
   const { levels: liveLevels, settings } = useAppSettings() ?? {}
-  const showChatNav = user && settings?.chatEnabled !== false && chatVisible
+  const showChatNav = !SLIM_APP && user && settings?.chatEnabled !== false && chatVisible
   const levelInfo = user ? getLevelInfo(user.cycleAirstars ?? 0, liveLevels) : null
 
   return (
     <aside className="hidden md:flex flex-col fixed left-0 top-14 bottom-0 w-56 bg-slate-50 border-r border-slate-200 z-30">
       {/* Nav items */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {NAV_ITEMS.map(({ to, emoji, label }) => {
+        {navItems.map(({ to, emoji, label }) => {
           const isPlay     = to === '/play'
           const isLearn    = to === '/learn-priority'
           const showPlayBadge     = isPlay  && hasAnyNew         && user
@@ -112,7 +114,7 @@ export default function Sidebar() {
           )
         })()}
 
-        {user?.isAdmin && (() => {
+        {!SLIM_APP && user?.isAdmin && (() => {
           const isActive = activeNavTo === '/admin'
           return (
             <Link

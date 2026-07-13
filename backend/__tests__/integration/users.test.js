@@ -94,6 +94,58 @@ describe('GET /api/users/stats', () => {
     expect(data.gamesPlayed).toBe(2);    // only completed quiz attempts
     expect(data.abandonedGames).toBe(3); // 1 quiz + 1 BOO + 1 WTA
   });
+
+  it('counts CBAT completed results in gamesPlayed and starts-without-result in abandonedGames', async () => {
+    const GameSessionCbatStart        = require('../../models/GameSessionCbatStart');
+    const GameSessionCbatTargetResult = require('../../models/GameSessionCbatTargetResult');
+    const GameSessionCbatPlaneTurnResult = require('../../models/GameSessionCbatPlaneTurnResult');
+
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    // 2 completed Target games + 1 completed Trace 2D + 1 completed Trace 3D = 4 played
+    await GameSessionCbatTargetResult.create({ userId: user._id, totalScore: 100, totalTime: 60 });
+    await GameSessionCbatTargetResult.create({ userId: user._id, totalScore: 120, totalTime: 55 });
+    await GameSessionCbatPlaneTurnResult.create({ userId: user._id, totalRotations: 50, totalTime: 80, mode: '2d' });
+    await GameSessionCbatPlaneTurnResult.create({ userId: user._id, totalRotations: 180, totalTime: 170, mode: '3d' });
+
+    // 6 starts total → 6 − 4 completed = 2 abandoned
+    await GameSessionCbatStart.create([
+      { userId: user._id, gameKey: 'target' },
+      { userId: user._id, gameKey: 'target' },
+      { userId: user._id, gameKey: 'plane-turn-2d' },
+      { userId: user._id, gameKey: 'plane-turn-3d' },
+      { userId: user._id, gameKey: 'angles' },
+      { userId: user._id, gameKey: 'symbols' },
+    ]);
+
+    const res = await request(app)
+      .get('/api/users/stats')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const { data } = res.body;
+    expect(data.gamesPlayed).toBe(4);    // Trace 2D + 3D counted once each, not double
+    expect(data.abandonedGames).toBe(2); // 6 starts − 4 completed
+  });
+
+  it('never reports negative CBAT abandoned when completes predate start-tracking', async () => {
+    const GameSessionCbatTargetResult = require('../../models/GameSessionCbatTargetResult');
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    // 3 completed results, no start rows at all (legacy data)
+    await GameSessionCbatTargetResult.create([
+      { userId: user._id, totalScore: 90,  totalTime: 70 },
+      { userId: user._id, totalScore: 110, totalTime: 65 },
+      { userId: user._id, totalScore: 130, totalTime: 60 },
+    ]);
+
+    const res = await request(app).get('/api/users/stats').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data.gamesPlayed).toBe(3);
+    expect(res.body.data.abandonedGames).toBe(0); // floored, not -3
+  });
 });
 
 // ── PATCH /api/users/me/difficulty ────────────────────────────────────────

@@ -9,6 +9,7 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
 import { getActiveNavTo } from '../../utils/navSections'
+import { SLIM_APP, SLIM_NAV_ITEMS, slimNavActiveTo } from '../../utils/appMode'
 
 // Slightly longer than the 300ms slide-in transition in main.css so the flash
 // starts after the BottomNav is on-screen.
@@ -33,11 +34,11 @@ export default function BottomNav() {
   const { unsolvedCount } = useUnsolvedReports()
   const { hasAnyOpenChat: chatVisible, hasUnread: chatUnread } = useChatUnread() ?? {}
   const { settings } = useAppSettings() ?? {}
-  const showChatNav = user && settings?.chatEnabled !== false && chatVisible
+  const showChatNav = !SLIM_APP && user && settings?.chatEnabled !== false && chatVisible
 
-  let items = [...NAV_ITEMS]
+  let items = SLIM_APP ? [...SLIM_NAV_ITEMS] : [...NAV_ITEMS]
   if (showChatNav) items = [...items, CHAT_ITEM]
-  if (user?.isAdmin) items = [...items, ADMIN_ITEM]
+  if (!SLIM_APP && user?.isAdmin) items = [...items, ADMIN_ITEM]
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -67,7 +68,7 @@ export default function BottomNav() {
     <nav className="app-bottomnav fixed bottom-0 left-0 right-0 z-40 md:hidden bg-slate-50/95 backdrop-blur-md border-t border-slate-200 safe-area-bottom">
       <div className="flex items-stretch h-16">
         {items.map(({ to, emoji, label }) => {
-          const active = getActiveNavTo(location.pathname) === to
+          const active = (SLIM_APP ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname)) === to
           const isLearn = to === '/learn-priority'
           const showBadge = to === '/play' && hasAnyNew && user
           const showCategoryBadge = isLearn && hasAnyNewCategory && user
@@ -86,7 +87,7 @@ export default function BottomNav() {
               key={to}
               ref={to === '/play' ? playBtnRef : undefined}
               data-nav={to === '/play' ? 'play' : isLearn ? 'learn' : undefined}
-              to={user || to === '/home' || to === '/rankings' ? to : '/login'}
+              to={SLIM_APP || user || to === '/home' || to === '/rankings' ? to : '/login'}
               onClick={handleLearnClick}
               className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors
                 ${active
