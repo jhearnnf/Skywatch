@@ -23,6 +23,7 @@ export const SLIM_APP = (() => {
 // so '/cbat-game-history' does not get swallowed by the '/cbat' prefix (it is
 // allow-listed separately below).
 const SLIM_ALLOWED_PREFIXES = [
+  '/',                   // slimmed CBAT-focused landing page (Landing.jsx)
   '/login',              // register + sign in
   '/cbat',               // games home + all games + leaderboards
   '/profile',            // profile + badge picker

@@ -13,6 +13,7 @@ describe('appMode', () => {
   describe('isSlimAllowed', () => {
     it('allows login, profile and CBAT surfaces', () => {
       for (const p of [
+        '/',
         '/login',
         '/cbat',
         '/cbat/target',
@@ -33,7 +34,6 @@ describe('appMode', () => {
 
     it('blocks learning content and other games', () => {
       for (const p of [
-        '/',
         '/home',
         '/learn-priority',
         '/play',

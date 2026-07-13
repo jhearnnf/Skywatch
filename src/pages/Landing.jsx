@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
+import { useSlimMode } from '../hooks/useSlimMode'
 import { captureEvent } from '../lib/posthog'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import SocialLinks from '../components/SocialLinks'
@@ -78,6 +79,7 @@ function CornerBrackets({ size = 18, color = '#5baaff', opacity = 0.4 }) {
 export default function Landing() {
   const { user, API } = useAuth()
   const { settings } = useAppSettings()
+  const slim = useSlimMode()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [liveStats, setLiveStats] = useState(null)
   // Imported lazily inside the registry; here we just need the metadata list
@@ -100,7 +102,9 @@ export default function Landing() {
     [settings, user, cbatGamesMeta],
   )
 
-  const showIntelBriefWindow = (settings?.previewWindowIntelBriefEnabled !== false) && intelBriefScenes.length > 0
+  // In slim (CBAT-only) mode the intel-brief preview is irrelevant — only the
+  // CBAT preview window is shown.
+  const showIntelBriefWindow = !slim && (settings?.previewWindowIntelBriefEnabled !== false) && intelBriefScenes.length > 0
   const showCbatWindow       = (settings?.previewWindowCbatEnabled       !== false) && cbatScenes.length > 0
 
   useEffect(() => {
@@ -117,7 +121,9 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen" style={{ background: '#06101e' }}>
-      <SEO description="Master military aviation knowledge with structured intel briefs, quizzes, and interactive games. Study aircraft, bases, ranks, and operations." />
+      <SEO description={slim
+        ? 'Practise for the RAF CBAT with targeted training games — sharpen the aptitude subtests and track your scores.'
+        : 'Master military aviation knowledge with structured intel briefs, quizzes, and interactive games. Study aircraft, bases, ranks, and operations.'} />
 
       {/* ── Header ─────────────────────────────────────────── */}
       <header className="fixed top-0 inset-x-0 z-40 bg-slate-50/80 backdrop-blur-md border-b border-slate-200/50">
@@ -128,8 +134,8 @@ export default function Landing() {
           </div>
           <div className="flex items-center gap-3">
             {user ? (
-              <Link to="/home" className="bg-brand-600 hover:bg-brand-700 text-slate-50 text-sm font-bold px-4 py-1.5 rounded-full transition-colors">
-                Continue Learning
+              <Link to={slim ? '/cbat' : '/home'} className="bg-brand-600 hover:bg-brand-700 text-slate-50 text-sm font-bold px-4 py-1.5 rounded-full transition-colors">
+                {slim ? 'Play CBAT' : 'Continue Learning'}
               </Link>
             ) : (
               <>
@@ -153,20 +159,25 @@ export default function Landing() {
         >
           {/* Classified badge row */}
           <motion.div variants={fadeUp} custom={0} className="flex items-center justify-center gap-2 mb-8">
-            <span className="classified-tag">CLASSIFIED</span>
+            <span className="classified-tag">{slim ? 'CBAT TRAINING' : 'CLASSIFIED'}</span>
             <span className="intel-tag">FREE TO START</span>
           </motion.div>
 
           <motion.h1 variants={fadeUp} custom={1} className="text-5xl sm:text-6xl font-extrabold text-slate-900 mb-5 leading-tight tracking-tight">
-            Master{' '}
-            <span className="text-gradient">RAF Knowledge</span>
+            {slim ? (
+              <>Train for the{' '}<span className="text-gradient">RAF CBAT</span></>
+            ) : (
+              <>Master{' '}<span className="text-gradient">RAF Knowledge</span></>
+            )}
           </motion.h1>
 
           <motion.p variants={fadeUp} custom={2} className="text-lg sm:text-xl text-slate-600 mb-6 max-w-xl mx-auto leading-relaxed">
-            Not a Wikipedia article. A structured, gamified path through RAF aircraft, operations, doctrine, and more.
+            {slim
+              ? 'Targeted practice games for the RAF Computer-Based Aptitude Test. Sharpen each subtest, track your scores, and build the speed the real thing demands.'
+              : 'Not a Wikipedia article. A structured, gamified path through RAF aircraft, operations, doctrine, and more.'}
           </motion.p>
 
-          {settings?.cbatEnabled && (
+          {!slim && settings?.cbatEnabled && (
             <motion.div variants={fadeUp} custom={3} className="flex justify-center mb-10">
               <Link
                 to="/cbat"
@@ -186,11 +197,19 @@ export default function Landing() {
           <motion.div variants={fadeUp} custom={4} className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center items-center">
             {user ? (
               <Link
-                to="/home"
+                to={slim ? '/cbat' : '/home'}
                 className="bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-all hover:shadow-lg hover:-translate-y-0.5"
                 style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)' }}
               >
-                Continue Learning
+                {slim ? 'Play CBAT Games' : 'Continue Learning'}
+              </Link>
+            ) : slim ? (
+              <Link
+                to="/login?tab=register"
+                className="bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-all hover:shadow-lg hover:-translate-y-0.5"
+                style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)' }}
+              >
+                Start Practising Free →
               </Link>
             ) : (
               <button
@@ -201,26 +220,29 @@ export default function Landing() {
                 Start for Free →
               </button>
             )}
-            <Link
-              to="/learn-priority"
-              className="
-                sm:bg-surface sm:hover:bg-surface-raised
-                text-slate-700 sm:font-bold font-semibold
-                sm:px-8 sm:py-4 px-2 py-1
-                sm:rounded-2xl
-                text-sm sm:text-lg
-                sm:border sm:border-slate-200
-                transition-all sm:hover:-translate-y-0.5
-                underline sm:no-underline
-                decoration-slate-500/40 underline-offset-4
-              "
-            >
-              Browse Subjects
-            </Link>
+            {!slim && (
+              <Link
+                to="/learn-priority"
+                className="
+                  sm:bg-surface sm:hover:bg-surface-raised
+                  text-slate-700 sm:font-bold font-semibold
+                  sm:px-8 sm:py-4 px-2 py-1
+                  sm:rounded-2xl
+                  text-sm sm:text-lg
+                  sm:border sm:border-slate-200
+                  transition-all sm:hover:-translate-y-0.5
+                  underline sm:no-underline
+                  decoration-slate-500/40 underline-offset-4
+                "
+              >
+                Browse Subjects
+              </Link>
+            )}
           </motion.div>
         </motion.div>
 
-        {/* Stats strip */}
+        {/* Stats strip — RAF-learning oriented, hidden in slim CBAT mode */}
+        {!slim && (
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -241,6 +263,7 @@ export default function Landing() {
             </div>
           ))}
         </motion.div>
+        )}
       </section>
 
       {/* ── Intel Brief preview window ─────────────────────── */}
@@ -267,6 +290,8 @@ export default function Landing() {
         </Suspense>
       )}
 
+      {/* Subject areas + Features — RAF-learning sections, hidden in slim CBAT mode */}
+      {!slim && (<>
       {/* ── Subject areas ──────────────────────────────────── */}
       <section className="py-16 px-5 max-w-4xl mx-auto">
         <motion.div
@@ -352,6 +377,7 @@ export default function Landing() {
           ))}
         </div>
       </section>
+      </>)}
 
       {/* ── CTA ───────────────────────────────────────────── */}
       <section className="py-12 sm:py-20 px-5">
@@ -373,17 +399,27 @@ export default function Landing() {
           </div>
 
           <div className="text-5xl mb-4">🎯</div>
-          <h2 className="text-3xl font-extrabold mb-3" style={{ color: '#ffffff' }}>Aim Higher.</h2>
+          <h2 className="text-3xl font-extrabold mb-3" style={{ color: '#ffffff' }}>{slim ? 'Sharpen Your Edge.' : 'Aim Higher.'}</h2>
           <p className="text-lg mb-8 max-w-md mx-auto" style={{ color: '#a8c4e0' }}>
-            Stop skimming Wikipedia. Start actually knowing the RAF.
+            {slim
+              ? 'Practise the real CBAT subtests and walk in ready.'
+              : 'Stop skimming Wikipedia. Start actually knowing the RAF.'}
           </p>
           {user ? (
             <Link
-              to="/home"
+              to={slim ? '/cbat' : '/home'}
               className="inline-block bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-colors"
               style={{ boxShadow: '0 0 20px rgba(91,170,255,0.3)' }}
             >
-              Access the Briefings →
+              {slim ? 'Play CBAT Games →' : 'Access the Briefings →'}
+            </Link>
+          ) : slim ? (
+            <Link
+              to="/login?tab=register"
+              className="inline-block bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-colors"
+              style={{ boxShadow: '0 0 20px rgba(91,170,255,0.3)' }}
+            >
+              Start Practising Free →
             </Link>
           ) : (
             <button
