@@ -17,8 +17,12 @@ vi.mock('../../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('../../../context/NewGameUnlockContext', () => ({ useNewGameUnlock: () => ({ hasAnyNew: false }) }))
 vi.mock('../../../context/NewCategoryUnlockContext', () => ({ useNewCategoryUnlock: () => ({ hasAnyNew: false, firstNewCategory: null }) }))
 vi.mock('../../../context/UnsolvedReportsContext', () => ({ useUnsolvedReports: () => ({ unsolvedCount: 0 }) }))
+const mockSlim = vi.hoisted(() => ({ value: false }))
 vi.mock('../../../context/AppSettingsContext', () => ({
-  useAppSettings: () => ({ levels: [{ levelNumber: 1, cumulativeAirstars: 0, airstarsToNextLevel: 100 }] }),
+  useAppSettings: () => ({
+    levels: [{ levelNumber: 1, cumulativeAirstars: 0, airstarsToNextLevel: 100 }],
+    settings: { slimModeEnabled: mockSlim.value },
+  }),
 }))
 
 function setupUser(overrides = {}) {
@@ -36,7 +40,7 @@ function setupUser(overrides = {}) {
 }
 
 describe('Sidebar — bottom user widget badge navigation', () => {
-  beforeEach(() => { mockNavigate.mockClear() })
+  beforeEach(() => { mockNavigate.mockClear(); mockSlim.value = false })
   afterEach(() => { vi.restoreAllMocks() })
 
   it('navigates to /rankings with ranks tab when user has the default rank badge', () => {
@@ -54,6 +58,25 @@ describe('Sidebar — bottom user widget badge navigation', () => {
     render(<Sidebar />)
     fireEvent.click(screen.getByLabelText('Change profile badge'))
     expect(mockNavigate).toHaveBeenCalledWith('/profile/badge', undefined)
+  })
+
+  it('hides the Airstars level meter in slim (CBAT-only) mode', () => {
+    mockSlim.value = true
+    setupUser({ selectedBadge: null, cycleAirstars: 50 })
+    render(<Sidebar />)
+    // No level text, no Airstars progression count in slim mode
+    expect(screen.queryByText(/^Level \d+$/)).toBeNull()
+    expect(screen.queryByText(/Airstars$/)).toBeNull()
+    // Name + sign out remain
+    expect(screen.getByText('Agent')).toBeInTheDocument()
+  })
+
+  it('routes the badge to /profile (not /rankings) in slim mode', () => {
+    mockSlim.value = true
+    setupUser({ selectedBadge: null })
+    render(<Sidebar />)
+    fireEvent.click(screen.getByLabelText('View profile'))
+    expect(mockNavigate).toHaveBeenCalledWith('/profile')
   })
 
   it('renders the aircraft cutout image when selectedBadge is set', () => {

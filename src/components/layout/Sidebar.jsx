@@ -140,17 +140,22 @@ export default function Sidebar() {
         })()}
       </nav>
 
-      {/* User stats at bottom */}
-      {user && levelInfo && (
+      {/* User stats at bottom — slim mode shows only name + sign out (no Airstars levels) */}
+      {user && (slim || levelInfo) && (
         <div className="border-t border-slate-200 p-4">
           <div className="flex items-center gap-2 mb-2">
             {(() => {
               const hasCutout = Boolean(user?.selectedBadge?.cutoutUrl)
+              // Slim (CBAT-only) mode has no RAF ranks page, so the badge routes
+              // to the profile / badge picker instead of /rankings.
+              const onClick = slim
+                ? () => navigate(hasCutout ? '/profile/badge' : '/profile')
+                : () => navigate(hasCutout ? '/profile/badge' : '/rankings', hasCutout ? undefined : { state: { tab: 'ranks' } })
               return (
                 <button
                   type="button"
-                  onClick={() => navigate(hasCutout ? '/profile/badge' : '/rankings', hasCutout ? undefined : { state: { tab: 'ranks' } })}
-                  aria-label={hasCutout ? 'Change profile badge' : 'View RAF ranks'}
+                  onClick={onClick}
+                  aria-label={hasCutout ? 'Change profile badge' : slim ? 'View profile' : 'View RAF ranks'}
                   className="w-8 h-8 rounded-full bg-brand-200 border-2 border-brand-300 flex items-center justify-center shrink-0 hover:border-brand-600 transition-colors"
                 >
                   <ProfileBadge user={user} size={hasCutout ? 28 : 18} />
@@ -161,20 +166,25 @@ export default function Sidebar() {
               <p className="text-sm font-semibold text-slate-800 truncate">
                 {user.displayName || 'Agent'}
               </p>
-              <p className="text-xs text-slate-500">Level {levelInfo.level}</p>
+              {/* Level / Airstars progression is hidden in slim (CBAT-only) mode */}
+              {!slim && <p className="text-xs text-slate-500">Level {levelInfo.level}</p>}
             </div>
           </div>
 
-          {/* XP bar */}
-          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-brand-600 rounded-full transition-all duration-500"
-              style={{ width: `${levelInfo.progress}%` }}
-            />
-          </div>
-          <p className="text-[10px] text-slate-400 mt-1 text-right">
-            {levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Airstars
-          </p>
+          {/* XP bar — hidden in slim (CBAT-only) mode, which has no Airstars levels */}
+          {!slim && (
+            <>
+              <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-brand-600 rounded-full transition-all duration-500"
+                  style={{ width: `${levelInfo.progress}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1 text-right">
+                {levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Airstars
+              </p>
+            </>
+          )}
 
           <button
             onClick={logout}
