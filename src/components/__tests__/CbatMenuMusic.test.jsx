@@ -1,0 +1,66 @@
+import { render, cleanup } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+const updateCbatMusic = vi.fn()
+vi.mock('../../utils/cbat/menuMusic', () => ({ updateCbatMusic: (...a) => updateCbatMusic(...a) }))
+
+let mockPath = '/cbat'
+let mockImmersive = false
+vi.mock('react-router-dom', () => ({ useLocation: () => ({ pathname: mockPath }) }))
+vi.mock('../../context/GameChromeContext', () => ({ useGameChrome: () => ({ immersive: mockImmersive }) }))
+
+import CbatMenuMusic from '../CbatMenuMusic'
+
+function lastZone() {
+  return updateCbatMusic.mock.calls.at(-1)?.[0]
+}
+
+beforeEach(() => {
+  updateCbatMusic.mockClear()
+  mockPath = '/cbat'
+  mockImmersive = false
+})
+afterEach(cleanup)
+
+describe('<CbatMenuMusic> zone mapping', () => {
+  it('menu zone on the CBAT selection page', () => {
+    mockPath = '/cbat'
+    render(<CbatMenuMusic />)
+    expect(lastZone()).toBe('menu')
+  })
+
+  it('instructions zone on a game route while not immersive', () => {
+    mockPath = '/cbat/dad'
+    mockImmersive = false
+    render(<CbatMenuMusic />)
+    expect(lastZone()).toBe('instructions')
+  })
+
+  it('silent (null) on a game route while immersive (in game)', () => {
+    mockPath = '/cbat/dad'
+    mockImmersive = true
+    render(<CbatMenuMusic />)
+    expect(lastZone()).toBe(null)
+  })
+
+  it('menu zone on a game leaderboard route', () => {
+    mockPath = '/cbat/dad/leaderboard'
+    mockImmersive = false
+    render(<CbatMenuMusic />)
+    expect(lastZone()).toBe('menu')
+  })
+
+  it('silent (null) off the CBAT area', () => {
+    mockPath = '/home'
+    render(<CbatMenuMusic />)
+    expect(lastZone()).toBe(null)
+  })
+
+  it('stops the music on unmount', () => {
+    mockPath = '/cbat'
+    const { unmount } = render(<CbatMenuMusic />)
+    updateCbatMusic.mockClear()
+    unmount()
+    expect(updateCbatMusic).toHaveBeenCalledWith(null)
+  })
+})

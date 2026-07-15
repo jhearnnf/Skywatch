@@ -19,6 +19,7 @@ import { UnsolvedReportsProvider }          from './context/UnsolvedReportsConte
 import { ChatUnreadProvider }                from './context/ChatUnreadContext'
 import { GameChromeProvider }                from './context/GameChromeContext'
 import TutorialPickerOverlay                  from './components/TutorialPickerOverlay'
+import CbatMenuMusic                          from './components/CbatMenuMusic'
 import AppShell                            from './components/layout/AppShell'
 import ScrollToTop                         from './components/ScrollToTop'
 import AirstarNotification                 from './components/AirstarNotification'
@@ -393,6 +394,7 @@ export default function App() {
                 <ChatUnreadProvider>
                   <GameChromeProvider>
                     <AppRoutes />
+                    <CbatMenuMusic />
                     <NotifLayer />
                     <OfflineStatus />
                     <UpdateNotificationModal />
