@@ -3,6 +3,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatGameOver from '../CbatGameOver'
 
 const mockUseAuth = vi.hoisted(() => vi.fn())
+const mockChrome = vi.hoisted(() => ({ enterGameOver: vi.fn(), exitGameOver: vi.fn() }))
 
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to, state }) => (
@@ -10,6 +11,7 @@ vi.mock('react-router-dom', () => ({
   ),
 }))
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
+vi.mock('../../context/GameChromeContext', () => ({ useGameChrome: () => mockChrome }))
 vi.mock('framer-motion', () => ({
   motion: { div: ({ children, className }) => <div className={className}>{children}</div> },
 }))
@@ -115,5 +117,14 @@ describe('CbatGameOver', () => {
     render(<CbatGameOver {...baseProps} onPlayAgain={onPlayAgain}><div /></CbatGameOver>)
     fireEvent.click(screen.getByRole('button', { name: /play again/i }))
     expect(onPlayAgain).toHaveBeenCalled()
+  })
+
+  it('signals game-over chrome while mounted (so the menu music returns to full volume)', () => {
+    setup()
+    const { unmount } = render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+    expect(mockChrome.enterGameOver).toHaveBeenCalled()
+    expect(mockChrome.exitGameOver).not.toHaveBeenCalled()
+    unmount()
+    expect(mockChrome.exitGameOver).toHaveBeenCalled()
   })
 })

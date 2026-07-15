@@ -12,9 +12,12 @@
 
 import { motion } from 'framer-motion'
 
-export const rowCols = (variant, cfg) =>
+// `compact` narrows the fixed columns for constrained containers (the post-game
+// weekly-chase window, which is nested inside several layers of padding on a
+// phone) so the flexible Agent column keeps enough room for names.
+export const rowCols = (variant, cfg, compact = false) =>
   variant === 'weekly'
-    ? 'grid-cols-[3rem_1fr_5rem_4rem]'
+    ? (compact ? 'grid-cols-[2.25rem_1fr_3.25rem_2.25rem]' : 'grid-cols-[3rem_1fr_5rem_4rem]')
     : (cfg?.hideTime ? 'grid-cols-[3rem_1fr_5rem]' : 'grid-cols-[3rem_1fr_5rem_4.5rem]')
 
 const agentName = (e) =>
@@ -24,7 +27,7 @@ const agentName = (e) =>
 // leaderboard's post-game rank slide). `delta` is the change in position for the
 // user's own row during that slide (positive = climbed) and renders a small
 // ↑/↓ badge next to the rank; both are inert everywhere else.
-export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false, divider = false, mode3d = false, layout = false, delta = null }) {
+export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false, divider = false, mode3d = false, layout = false, delta = null, compact = false }) {
   const achievedAtTitle = entry.achievedAt
     ? new Date(entry.achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
     : null
@@ -33,7 +36,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
     <motion.div
       layout={layout}
       transition={{ layout: { duration: 0.6, ease: [0.4, 0, 0.2, 1] } }}
-      className={`grid ${rowCols(variant, cfg)} gap-2 px-4 py-2.5 text-sm ${divider ? 'border-t border-[#1a3a5c]' : ''} ${
+      className={`grid ${rowCols(variant, cfg, compact)} ${compact ? 'gap-1.5 px-2.5' : 'gap-2 px-4'} py-2.5 text-sm ${divider ? 'border-t border-[#1a3a5c]' : ''} ${
         isMe ? 'bg-brand-600/10 border-l-2 border-l-brand-400' : ''
       }`}
     >

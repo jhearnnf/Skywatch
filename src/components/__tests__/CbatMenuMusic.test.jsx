@@ -6,9 +6,10 @@ vi.mock('../../utils/cbat/menuMusic', () => ({ updateCbatMusic: (...a) => update
 
 let mockPath = '/cbat'
 let mockImmersive = false
+let mockGameOver = false
 let mockSlim = false
 vi.mock('react-router-dom', () => ({ useLocation: () => ({ pathname: mockPath }) }))
-vi.mock('../../context/GameChromeContext', () => ({ useGameChrome: () => ({ immersive: mockImmersive }) }))
+vi.mock('../../context/GameChromeContext', () => ({ useGameChrome: () => ({ immersive: mockImmersive, gameOver: mockGameOver }) }))
 vi.mock('../../hooks/useSlimMode', () => ({ useSlimMode: () => mockSlim }))
 
 import CbatMenuMusic from '../CbatMenuMusic'
@@ -21,6 +22,7 @@ beforeEach(() => {
   updateCbatMusic.mockClear()
   mockPath = '/cbat'
   mockImmersive = false
+  mockGameOver = false
   mockSlim = false
 })
 afterEach(cleanup)
@@ -44,6 +46,14 @@ describe('<CbatMenuMusic> zone mapping', () => {
     mockImmersive = true
     render(<CbatMenuMusic />)
     expect(lastZone()).toBe(null)
+  })
+
+  it('menu zone on a game route at game over (results screen)', () => {
+    mockPath = '/cbat/dad'
+    mockImmersive = false
+    mockGameOver = true
+    render(<CbatMenuMusic />)
+    expect(lastZone()).toBe('menu')
   })
 
   it('menu zone on a game leaderboard route', () => {

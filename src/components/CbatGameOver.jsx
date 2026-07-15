@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useGameChrome } from '../context/GameChromeContext'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 import LeaderboardRow from './LeaderboardRow'
 
@@ -46,14 +47,14 @@ function WeeklyChase({ weekly }) {
   const countdown = fmtCountdown(weekly.resetsAt)
 
   return (
-    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-left">
+    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-2 mb-4 text-left">
       <div className="flex items-center justify-between mb-1.5 px-1">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide">This Week</p>
         {countdown && <p className="text-[10px] text-slate-500">resets in {countdown}</p>}
       </div>
       <div className="divide-y divide-[#1a3a5c]/50">
         {weekly.neighbors.map(n => (
-          <LeaderboardRow key={`${n.rank}-${n.name}`} entry={n} variant="weekly" isMe={n.isMe} />
+          <LeaderboardRow key={`${n.rank}-${n.name}`} entry={n} variant="weekly" isMe={n.isMe} compact />
         ))}
       </div>
       <p className="text-xs text-brand-300 mt-2.5 text-center">
@@ -71,7 +72,15 @@ export default function CbatGameOver({
   gameKey, score, scoreSaved, queued, personalBest, onPlayAgain, extraActions = [], children,
 }) {
   const { apiFetch, API } = useAuth()
+  const { enterGameOver, exitGameOver } = useGameChrome()
   const cfg = CBAT_LEADERBOARD_CONFIG[gameKey] || {}
+
+  // While this results screen is mounted, mark the CBAT chrome as "game over" so
+  // the menu soundtrack returns to full volume (see <CbatMenuMusic>).
+  useEffect(() => {
+    enterGameOver()
+    return exitGameOver
+  }, [enterGameOver, exitGameOver])
 
   const [weekly, setWeekly] = useState(null)
   const [weeklyState, setWeeklyState] = useState('loading') // loading | ready | offline | error

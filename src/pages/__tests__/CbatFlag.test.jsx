@@ -16,7 +16,10 @@ vi.mock('react-router-dom', () => ({
 vi.mock('../../context/AuthContext',       () => ({ useAuth: mockUseAuth }))
 vi.mock('../../context/AppSettingsContext',() => ({ useAppSettings: mockUseAppSettings }))
 vi.mock('../../context/GameChromeContext', () => ({
-  useGameChrome: () => ({ enterImmersive: vi.fn(), exitImmersive: vi.fn() }),
+  useGameChrome: () => ({
+    enterImmersive: vi.fn(), exitImmersive: vi.fn(),
+    enterGameOver: vi.fn(), exitGameOver: vi.fn(),
+  }),
 }))
 vi.mock('../../components/SEO', () => ({ default: () => null }))
 vi.mock('../../data/aircraftModels', () => ({
