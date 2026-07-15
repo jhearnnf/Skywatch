@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { AnimatePresence, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
+import { AnimatePresence, motion, useScroll, useTransform } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
@@ -65,7 +65,6 @@ export default function Home() {
   const [pendingRetract,    setPendingRetract]    = useState(null)
   const streakAnimRan = useRef(false)
   const retractStartedRef = useRef(false)
-  const prefersReducedMotion = useReducedMotion()
   const levelInfo = user ? getLevelInfo(user.cycleAirstars ?? 0, liveLevels) : null
 
   // Mission done if the user completed a brief today (server-authoritative via
@@ -97,7 +96,7 @@ export default function Home() {
       // XP card on first render with no reserved slot above it. Once Quick
       // Actions has finished its slide-in, the drawer mounts and Quick
       // Actions layout-animates downward to make room.
-      const availableDelay = prefersReducedMotion ? 0 : 600
+      const availableDelay = 600
       const availableTimer = setTimeout(() => {
         setMissionPhase('available')
       }, availableDelay)
@@ -138,7 +137,7 @@ export default function Home() {
     // React StrictMode's double-mount in dev — which cancels this timer via
     // the cleanup below and immediately re-runs the effect — can re-schedule
     // a fresh timer instead of bailing on the early-return guard.
-    const revealDelay = prefersReducedMotion ? 0 : 650
+    const revealDelay = 650
     const revealTimer = setTimeout(() => {
       streakAnimRan.current = true
       setMissionPhase('complete')
@@ -160,7 +159,7 @@ export default function Home() {
 
     const { currentStreak, storageKey } = pendingRetract
     const presentDelay  = 2000
-    const exitDuration  = prefersReducedMotion ? 250 : 520
+    const exitDuration  = 520
     // Matches the flame-pulse keyframe in main.css — first ~800ms is the big
     // bump, last ~1000ms is the subtler aftershock so the user has time to
     // register the streak number ticking up.
@@ -458,28 +457,20 @@ export default function Home() {
               <motion.div
                 layout
                 key="mission-drawer"
-                initial={(missionPhase === 'available' || missionPhase === 'complete') && !prefersReducedMotion
-                  ? { y: -60, clipPath: 'inset(100% 0% 0% 0%)', scale: 0.95, opacity: 1 }
-                  : { opacity: 0, y: -8 }}
-                animate={(missionPhase === 'available' || missionPhase === 'complete') && !prefersReducedMotion
-                  ? {
-                      opacity:  1,
-                      y:        0,
-                      clipPath: 'inset(0% 0% 0% 0%)',
-                      // Single subtle overshoot → settle, no extra recoil.
-                      scale:    [0.95, 1.04, 1],
-                    }
-                  : { opacity: 1, y: 0, scale: 1, clipPath: 'inset(0% 0% 0% 0%)' }}
-                exit={prefersReducedMotion
-                  ? { opacity: 0, transition: { duration: 0.25 } }
-                  : { opacity: 0, y: -48, scale: 0.94, clipPath: 'inset(100% 0% 0% 0%)', transition: { duration: 0.52, ease: [0.4, 0, 0.2, 1] } }}
-                transition={(missionPhase === 'available' || missionPhase === 'complete') && !prefersReducedMotion
-                  ? {
-                      clipPath: { duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] },
-                      y:        { type: 'spring', stiffness: 260, damping: 18, delay: 0.15 },
-                      scale:    { duration: 0.6, delay: 0.15, times: [0, 0.55, 1], ease: 'easeOut' },
-                    }
-                  : { duration: 0.35, delay: 0 }}
+                initial={{ y: -60, clipPath: 'inset(100% 0% 0% 0%)', scale: 0.95, opacity: 1 }}
+                animate={{
+                  opacity:  1,
+                  y:        0,
+                  clipPath: 'inset(0% 0% 0% 0%)',
+                  // Single subtle overshoot → settle, no extra recoil.
+                  scale:    [0.95, 1.04, 1],
+                }}
+                exit={{ opacity: 0, y: -48, scale: 0.94, clipPath: 'inset(100% 0% 0% 0%)', transition: { duration: 0.52, ease: [0.4, 0, 0.2, 1] } }}
+                transition={{
+                  clipPath: { duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] },
+                  y:        { type: 'spring', stiffness: 260, damping: 18, delay: 0.15 },
+                  scale:    { duration: 0.6, delay: 0.15, times: [0, 0.55, 1], ease: 'easeOut' },
+                }}
                 onClick={missionPhase === 'available' && !missionLoading
                   ? (isZeroRead
                       ? () => setShowCROFlow(true)

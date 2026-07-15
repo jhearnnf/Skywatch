@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import PlaneTurnModeToggle from '../components/PlaneTurnModeToggle'
@@ -28,7 +28,6 @@ export default function CbatLeaderboard() {
   const { gameKey } = useParams()
   const navigate = useNavigate()
   const { user, apiFetch, API } = useAuth()
-  const reduce = useReducedMotion()
 
   const [tab, setTab] = useState('weekly')           // 'weekly' (default) | 'all-time'
   const [boards, setBoards] = useState({})           // { weekly: {...}, 'all-time': {...} }
@@ -42,7 +41,7 @@ export default function CbatLeaderboard() {
   // to its new position.
   const location = useLocation()
   const fromGame = !!location.state?.fromGame
-  const [introDone, setIntroDone] = useState(reduce)   // reduced motion → skip the flourish
+  const [introDone, setIntroDone] = useState(false)
   const [slideRows, setSlideRows] = useState(null)      // reordered weekly entries during the FLIP, or null
   const [slideDelta, setSlideDelta] = useState(null)    // +climbed / −dropped, shown on the user's row
   const slideFiredRef = useRef(false)
@@ -85,7 +84,7 @@ export default function CbatLeaderboard() {
 
     const trueOrder = b.leaderboard
     const meIdx = trueOrder.findIndex(e => e.userId === b.myBest.userId)
-    const eligible = fromGame && !reduce && meIdx >= 0 &&
+    const eligible = fromGame && meIdx >= 0 &&
       prevRank != null && Number.isFinite(prevRank) && prevRank !== newRank
     if (!eligible) return
 
@@ -106,7 +105,7 @@ export default function CbatLeaderboard() {
       setSlideRows(null)
       setSlideDelta(null)
     }, 2400)
-  }, [boards.weekly, tab, introDone, fromGame, gameKey, reduce])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [boards.weekly, tab, introDone, fromGame, gameKey])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cancel any in-flight slide timers on unmount.
   useEffect(() => () => {
@@ -211,9 +210,9 @@ export default function CbatLeaderboard() {
       ) : (
         <motion.div
           key={tab}
-          initial={reduce ? false : { opacity: 0, x: 12 }}
+          initial={{ opacity: 0, x: 12 }}
           animate={{ opacity: 1, x: 0 }}
-          drag={reduce ? false : 'x'}
+          drag="x"
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.15}
           onDragEnd={onDragEnd}

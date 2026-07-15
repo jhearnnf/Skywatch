@@ -48,7 +48,6 @@ vi.mock('framer-motion', () => ({
       <button className={className} onClick={onClick} disabled={disabled}>{children}</button>,
   },
   AnimatePresence: ({ children }) => <>{children}</>,
-  useReducedMotion: () => true,
 }))
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────

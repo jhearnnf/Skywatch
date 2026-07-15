@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 import LeaderboardRow from './LeaderboardRow'
@@ -16,7 +16,6 @@ import LeaderboardRow from './LeaderboardRow'
 //
 // Offline (queued): the score is saved locally but not yet ranked, so we skip
 // the weekly fetch and tell the user their rank updates on reconnect.
-// Reduced motion: no count-up / slide — the final state is shown immediately.
 //
 // Props:
 //   gameKey      — leaderboard key (e.g. 'target', 'plane-turn-2d')
@@ -72,17 +71,15 @@ export default function CbatGameOver({
   gameKey, score, scoreSaved, queued, personalBest, onPlayAgain, extraActions = [], children,
 }) {
   const { apiFetch, API } = useAuth()
-  const reduce = useReducedMotion()
   const cfg = CBAT_LEADERBOARD_CONFIG[gameKey] || {}
 
   const [weekly, setWeekly] = useState(null)
   const [weeklyState, setWeeklyState] = useState('loading') // loading | ready | offline | error
-  const [shown, setShown] = useState(reduce ? score : 0)
+  const [shown, setShown] = useState(0)
   const rafRef = useRef(null)
 
-  // Count-up animation for the personal beat (skipped under reduced motion).
+  // Count-up animation for the personal beat.
   useEffect(() => {
-    if (reduce) { setShown(score); return }
     const dur = 700
     let start = null
     const step = (t) => {
@@ -93,7 +90,7 @@ export default function CbatGameOver({
     }
     rafRef.current = requestAnimationFrame(step)
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [score, reduce])
+  }, [score])
 
   // Fetch the user's weekly standing (skip when the score is only queued offline).
   useEffect(() => {
@@ -119,7 +116,7 @@ export default function CbatGameOver({
 
   return (
     <motion.div
-      initial={reduce ? false : { opacity: 0, scale: 0.96 }}
+      initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
       className="w-full max-w-md flex flex-col gap-4"
     >
@@ -136,9 +133,9 @@ export default function CbatGameOver({
 
         {weeklyState === 'ready' && weekly && (
           <motion.div
-            initial={reduce ? false : { opacity: 0, y: 8 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: reduce ? 0 : 0.4 }}
+            transition={{ delay: 0.4 }}
           >
             <WeeklyChase weekly={weekly} />
           </motion.div>

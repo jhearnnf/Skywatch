@@ -1,5 +1,5 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatGameOver from '../CbatGameOver'
 
 const mockUseAuth = vi.hoisted(() => vi.fn())
@@ -12,8 +12,16 @@ vi.mock('react-router-dom', () => ({
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('framer-motion', () => ({
   motion: { div: ({ children, className }) => <div className={className}>{children}</div> },
-  useReducedMotion: () => true, // static final state — no count-up to wait on
 }))
+
+// Drive the score count-up (a requestAnimationFrame loop) to its final frame
+// synchronously so the displayed score settles within a single render pass.
+beforeEach(() => {
+  let t = 0
+  vi.stubGlobal('requestAnimationFrame', (cb) => { t += 800; cb(t); return t })
+  vi.stubGlobal('cancelAnimationFrame', () => {})
+})
+afterEach(() => vi.unstubAllGlobals())
 
 const weeklyData = (over = {}) => ({
   played: true, rank: 3, weekTotal: 300, plays: 2,

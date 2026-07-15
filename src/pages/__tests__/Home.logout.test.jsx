@@ -34,7 +34,6 @@ vi.mock('framer-motion', () => ({
     button: ({ children, className, onClick }) => <button className={className} onClick={onClick}>{children}</button>,
   },
   AnimatePresence: ({ children }) => <>{children}</>,
-  useReducedMotion: () => false,
   useScroll:        () => ({ scrollY: 0 }),
   useTransform:     () => 0,
 }))

@@ -22,7 +22,7 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
         aria-hidden="true"
         draggable={false}
         data-testid={`card-bg-image-${game.key}`}
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none motion-reduce:![animation:none]"
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
         style={{
           filter:     'grayscale(1) brightness(0.85) blur(4px)',
           opacity:    dimmed ? 0.4 : 1,
@@ -45,7 +45,7 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
       {/* Blue radial bloom — slow pulse */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 pointer-events-none motion-reduce:![animation:none]"
+        className="absolute inset-0 pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse 80% 70% at 50% 50%, rgba(91,170,255,0.16) 0%, transparent 75%)',
           animation:  `cbat-bloom-pulse 4.5s ease-in-out ${delay * 0.4}s infinite`,

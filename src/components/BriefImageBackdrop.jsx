@@ -175,7 +175,7 @@ export default function BriefImageBackdrop({ images = [], opacity = 0.28 }) {
       >
         {/* Crossfading image stack */}
         <div
-          className="absolute inset-0 motion-reduce:!animate-none"
+          className="absolute inset-0"
           style={{ animation: 'lp-preview-flicker 2.3s ease-in-out infinite' }}
         >
           {list.map((url, i) => (

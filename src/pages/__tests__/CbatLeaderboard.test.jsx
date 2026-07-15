@@ -17,11 +17,17 @@ vi.mock('react-router-dom', () => ({
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('../../components/SEO', () => ({ default: () => null }))
 
+// The arrival flourish is exercised on its own; here it would just overlay the
+// board, so stub it out (still supplying the pill layout id the page imports).
+vi.mock('../../components/LeaderboardIntro', () => ({
+  default: () => null,
+  INTRO_PILL_LAYOUT_ID: 'cbat-weekly-pill',
+}))
+
 vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, className }) => <div className={className}>{children}</div>,
   },
-  useReducedMotion: () => true,
 }))
 
 // ── Helpers ───────────────────────────────────────────────────────────────

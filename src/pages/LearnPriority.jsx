@@ -506,7 +506,7 @@ function BriefImagePreview({ images, side, accent, onTap, height }) {
             (viewport edge) the image stays at full scale and only its outer
             edge is clipped by the button's overflow:hidden. */}
         <div
-          className="absolute top-0 motion-reduce:!animate-none"
+          className="absolute top-0"
           style={{
             ...imageLayerStyle,
             width:     PREVIEW_W,
