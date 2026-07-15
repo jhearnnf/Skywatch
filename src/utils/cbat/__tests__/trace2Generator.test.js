@@ -1,5 +1,30 @@
 import { describe, it, expect } from 'vitest'
-import { generateTrace2Game, TRACE2_ROUNDS, TRACE2_COLORS } from '../trace2Generator'
+import * as THREE from 'three'
+import { generateTrace2Game, TRACE2_ROUNDS, TRACE2_COLORS, TRACE2_TURN_DEFS } from '../trace2Generator'
+
+// Re-derive an aircraft's upside-down time straight from its rendered spec
+// (initialQuat + scheduled turns), over the SAME window the round plays
+// (durationMs / tickMs ticks — including the onward flight past the last turn).
+// This mirrors how the scene records inverted time, independently of the
+// generator's internal count, so it catches a mismatch between the "upside-down
+// longest" answer and what the on-screen counter shows.
+const MODEL_UP  = new THREE.Vector3(0, 1, 0)
+const AXIS_VEC  = { up: new THREE.Vector3(0, 1, 0), right: new THREE.Vector3(0, 0, -1) }
+function invertedMsFromSpec(spec, durationMs, tickMs) {
+  const totalTicks = Math.round(durationMs / tickMs)
+  let inverted = 0
+  for (let seg = 0; seg < totalTicks; seg++) {
+    const tNow = seg * tickMs
+    const q = new THREE.Quaternion(spec.initialQuat[0], spec.initialQuat[1], spec.initialQuat[2], spec.initialQuat[3])
+    for (const tr of spec.turns) {
+      if (tr.tMs > tNow) break
+      const def = TRACE2_TURN_DEFS[tr.turnKey]
+      q.multiply(new THREE.Quaternion().setFromAxisAngle(AXIS_VEC[def.axis], def.angle)).normalize()
+    }
+    if (MODEL_UP.clone().applyQuaternion(q).y < -0.2) inverted++
+  }
+  return inverted * tickMs
+}
 
 // Small deterministic PRNG so failures are reproducible.
 function mulberry32(seed) {
@@ -95,6 +120,47 @@ describe('trace2Generator', () => {
         expect(ans[0]).not.toBe(ans[1])
       }
     }
+  })
+
+  it('upside-down time is counted over the full watched window (matches the rendered spec)', () => {
+    // The generator's per-plane invertedMs must equal the inverted time derived
+    // from the plane's own spec over the whole durationMs the scene plays — i.e.
+    // the onward flight past the last turn is included, exactly as the live
+    // counter accrues it. (Regression: previously counted only up to the last
+    // turn, so a plane that ended the round inverted was under-counted and could
+    // lose to one that was inverted earlier but recovered.)
+    for (let seed = 1; seed <= 60; seed++) {
+      const { rounds } = generateTrace2Game(mulberry32(seed))
+      for (const r of rounds) {
+        if (!r.stats.length) continue
+        for (const a of r.aircraft) {
+          const stat = r.stats.find(s => s.colorKey === a.colorKey)
+          expect(stat.invertedMs).toBe(invertedMsFromSpec(a, r.durationMs, r.tickMs))
+        }
+      }
+    }
+  })
+
+  it('the upside-down-longest winner is the true max over the watched window, by a clear margin', () => {
+    let seen = 0
+    for (let seed = 1; seed <= 120; seed++) {
+      const { rounds } = generateTrace2Game(mulberry32(seed))
+      for (const r of rounds) {
+        if (r.question.id !== 'upside-down-longest') continue
+        seen++
+        const measured = r.aircraft.map(a => ({
+          colorKey: a.colorKey, ms: invertedMsFromSpec(a, r.durationMs, r.tickMs),
+        }))
+        const sorted = [...measured].sort((x, y) => y.ms - x.ms)
+        const winner = r.question.options[r.question.correctIndex].colors[0]
+        // The flagged winner really is the most-inverted over the played window,
+        // clearly inverted, and ahead of the runner-up by at least a full tick.
+        expect(winner).toBe(sorted[0].colorKey)
+        expect(sorted[0].ms).toBeGreaterThanOrEqual(2 * r.tickMs)
+        expect(sorted[0].ms - sorted[1].ms).toBeGreaterThanOrEqual(r.tickMs)
+      }
+    }
+    expect(seen).toBeGreaterThan(0)   // the question type actually occurred
   })
 
   it('aircraft specs are well-formed Trace 1-style flight (quat + start + ordered turns)', () => {

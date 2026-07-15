@@ -17,6 +17,11 @@
 import * as THREE from 'three'
 
 export const TRACE2_ROUNDS = 8
+// Ticks of onward flight the round renders past the last turn (planes never stop
+// — the picture clears with everything still in motion). Used both to size the
+// watched window (buildRound.finish) and to count upside-down time over that same
+// window so the answer agrees with the live counter (see simulatePlane).
+const ONWARD_TICKS = 2
 
 export const TRACE2_COLORS = [
   { key: 'red',    label: 'Red',    hex: '#ff4d4d' },
@@ -143,7 +148,7 @@ const OPP_AXIS = { PX: 'NX', NX: 'PX', PY: 'NY', NY: 'PY', PZ: 'NZ', NZ: 'PZ' }
 //   opts: forceAllRight | forbidClimb | forceClimb | straightThrough | forceExit
 //         | startDelayTicks (hold off-screen this many ticks before flying in,
 //           so staggered planes enter the frame at visibly different times)
-function simulatePlane(edge, z, nSeg, entryHold, tickMs, rng, opts = {}) {
+function simulatePlane(edge, z, nSeg, entryHold, tickMs, rng, opts = {}, onwardTicks = 0) {
   const { forceAllRight = false, forbidClimb = false, forceClimb = false,
           straightThrough = false, forceExit = false, startDelayTicks = 0, levelOnly = false } = opts
   const { quat: q0, pos: p0 } = entrySetup(edge, z, rng)
@@ -226,9 +231,19 @@ function simulatePlane(edge, z, nSeg, entryHold, tickMs, rng, opts = {}) {
   let majorityHeading = null, best = -1, tied = false
   for (const [k, c] of Object.entries(counts)) { if (c > best) { best = c; majorityHeading = k; tied = false } else if (c === best) tied = true }
   if (tied) majorityHeading = null
-  // Upside-down time: local up points below world up.
+  // Upside-down time, measured over the SAME window the player watches. The round
+  // renders (nSeg + onwardTicks) ticks — a couple past the last turn — and the
+  // live counter (Trace2Scene.invertedSecUpTo) keeps accruing inverted time across
+  // that onward flight. Once the turns run out the orientation is frozen, so a
+  // plane still inverted at the end simply stays inverted for the onward ticks:
+  // count those here too. Omitting them let the answer disagree with the counter —
+  // a plane inverted mid-flight could out-count (in the sim) one that ends the
+  // round inverted, while the on-screen counter showed the opposite.
   let invertedSegs = 0
   for (let i = 1; i < traj.length; i++) if (upOf(traj[i].quat).y < -0.2) invertedSegs++
+  const flownTicks = traj.length - 1
+  const totalTicks = nSeg + onwardTicks
+  if (upOf(quat).y < -0.2 && totalTicks > flownTicks) invertedSegs += totalTicks - flownTicks
   const invertedMs = invertedSegs * tickMs
   const finalFwd = forwardOf(quat)
   const finalAxis = axisKeyOf(finalFwd)
@@ -324,6 +339,10 @@ function buildFacingPair(z, nSeg, tickMs) {
 
 // ── One aircraft-set sample (4 planes), biased toward a target question ──────
 function sampleSet(rng, nSeg, seed, tickMs) {
+  // Facing rounds end exactly on schedule (no onward flight); every other round
+  // flies ONWARD_TICKS past the last turn — must match buildRound.finish so the
+  // upside-down count covers the exact window the player watches.
+  const onwardTicks = seed === 'facing-each-other' ? 0 : ONWARD_TICKS
   let edges = shuffle(EDGES, rng)
   const zs = shuffle([0.4, 1.0, 1.6, 2.2], rng)               // depth layers (near camera)
   // Per-plane entry hold (1 or 2 ticks) staggers when each enters view and makes
@@ -388,7 +407,7 @@ function sampleSet(rng, nSeg, seed, tickMs) {
     let r
     if (builders[i] === 'facingA') r = facingPair[0]
     else if (builders[i] === 'facingB') r = facingPair[1]
-    else r = simulatePlane(edges[i], zs[i], nSeg, holds[i], tickMs, rng, opts[i])
+    else r = simulatePlane(edges[i], zs[i], nSeg, holds[i], tickMs, rng, opts[i], onwardTicks)
     if (!r) return null
     planes.push({
       colorKey: COLOR_KEYS[i], hex: HEX[COLOR_KEYS[i]], z: zs[i], entryHold: holds[i], ...r,
@@ -473,7 +492,13 @@ function evaluate(type, planes, rng, tickMs = 1350) {
     }
     case 'upside-down-longest': {
       const w = uniqueExtreme(planes, 'invertedMs', 'max')
-      if (!w || w.invertedMs <= 0) return null
+      // Winner must be clearly inverted (not a one-tick blip) and lead the rest by
+      // a clear margin. The discrete sim snaps orientation at each tick while the
+      // render banks smoothly, so the counter can cross the inverted threshold a
+      // fraction of a tick off the sim; a ≥1-tick lead can't be eroded by that.
+      if (!w || w.invertedMs < 2 * tickMs) return null
+      const secondMax = Math.max(0, ...planes.filter(p => p !== w).map(p => p.invertedMs))
+      if (w.invertedMs - secondMax < tickMs) return null
       return { id: type, prompt: 'Which aircraft was upside down for the longest?', ...withIndex(singleOptions(w.colorKey, rng)) }
     }
     case 'facing-each-other': {
@@ -574,7 +599,7 @@ function buildRound(roundIndex, tier, pool, rng) {
     // clears with everything still in motion). The facing pair is only
     // nose-to-nose AT its schedule end, though; two more ticks and the two fly
     // straight through each other, so those rounds end exactly on schedule.
-    const onwardTicks = q.id === 'facing-each-other' ? 0 : 2
+    const onwardTicks = q.id === 'facing-each-other' ? 0 : ONWARD_TICKS
     const durationMs = (nSeg + onwardTicks) * tickMs
     return {
       roundIndex, tier, durationMs, tickMs,
