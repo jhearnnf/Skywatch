@@ -1,6 +1,7 @@
 // CBAT menu music controller.
 //
-// Plays the menu soundtrack across the CBAT selection + instructions screens:
+// Plays the menu soundtrack across the CBAT selection + instructions screens
+// (and the slim landing):
 //   1. "cbat menu (start).mp3" plays once, then
 //   2. "cbat menu (repeat).mp3" loops continuously.
 //
@@ -9,19 +10,21 @@
 // declare which zone the user is in and the controller cross-fades / starts /
 // stops to match:
 //
-//   'menu'         → CBAT game-selection page          → 100% volume
-//   'instructions' → a game's pre-play / results screen →  25% volume
-//    null          → in a game, or off the CBAT area    → faded out & stopped
+//   'menu'         → CBAT game-selection page / slim landing → 100% volume
+//   'instructions' → a game's pre-play / results screen      →  25% volume
+//    null          → in a game, or off the CBAT area         → faded out & stopped
 //
-// Volume is always scaled by the user's master-volume preference
-// (Profile → Sound), read live so a mid-play change is honoured.
+// Volume is scaled by BOTH the admin per-sound level (AppSettings
+// volumeCbatMenuMusic / soundEnabledCbatMenuMusic, via the sound-settings cache)
+// AND the user's master-volume preference (Profile → Sound), both read live.
 //
-// Leaving the "on" zones (into a game or off CBAT entirely) fully stops the
-// sequence; returning restarts it from the start clip — matching the spec that
-// the start+repeat only plays once the user is back on the selection or
-// instructions screen.
+// Presence gating: the track is only audible while the user is actually present
+// on the app — minimising, switching tab/app, or backgrounding pauses it, and
+// returning resumes the SAME clip (no restart). Leaving the "on" zones (into a
+// game or off CBAT) fully stops the sequence; returning restarts from the start
+// clip.
 
-import { getMasterVolume } from '../sound'
+import { getMasterVolume, getCbatMenuMusicSetting } from '../sound'
 
 const START_SRC  = '/sounds/cbat menu (start).mp3'
 const REPEAT_SRC = '/sounds/cbat menu (repeat).mp3'
@@ -38,6 +41,10 @@ let zoneVol     = 0      // current target zone volume (pre-master)
 let appliedGain = 0      // effective gain currently set on the audio elements
 let fadeRAF     = null
 let gestureArmed = false // one-shot "retry on user gesture" listener attached?
+let presenceBound = false
+let present      = true  // is the user currently present (visible + focused)?
+let pageVisible  = true  // document not hidden (minimise / tab-switch / background)
+let windowFocused = true // window has focus (another app/window on top)
 
 function hasRAF() {
   return typeof requestAnimationFrame === 'function'
@@ -48,9 +55,12 @@ function masterFactor() {
   catch { return 1 }
 }
 
-// Effective gain for the current (or a given) zone volume, after master scaling.
+// Effective gain for the current (or a given) zone volume, after admin-level +
+// master scaling.
 function targetGain(vol = zoneVol) {
-  return Math.min(1, Math.max(0, vol * masterFactor()))
+  let adminVol = 1
+  try { adminVol = getCbatMenuMusicSetting().volume } catch {}
+  return Math.min(1, Math.max(0, vol * adminVol * masterFactor()))
 }
 
 // Whichever audio elements currently exist. Only one is audible at a time, but
@@ -102,6 +112,61 @@ function fadeTo(target, onDone) {
   fadeRAF = requestAnimationFrame(step)
 }
 
+// ── Presence gating (auto-mute when the user isn't looking) ──────────────────
+// Event-driven (not hasFocus() polling) so it's deterministic and testable. The
+// user is "present" only while the page is visible AND the window is focused;
+// minimising, switching tab/app, or backgrounding drops presence.
+
+function onVisibility() {
+  try { pageVisible = document.visibilityState !== 'hidden' } catch { pageVisible = true }
+  reconcilePresence()
+}
+function onFocus()   { windowFocused = true;  reconcilePresence() }
+function onBlur()    { windowFocused = false; reconcilePresence() }
+function onPageHide() { pageVisible = false;  reconcilePresence() }
+
+// Pause/resume the current clip to match presence. Never restarts the sequence —
+// a quick tab-away keeps its place and resumes the same clip.
+function reconcilePresence() {
+  const now = pageVisible && windowFocused
+  if (now === present) return
+  present = now
+  if (!playing) return
+  if (present) {
+    const a = repeatAudio || startAudio
+    if (a) safePlay(a)
+  } else {
+    for (const a of liveAudios()) { try { a.pause() } catch {} }
+  }
+}
+
+function bindPresence() {
+  if (presenceBound || typeof window === 'undefined') return
+  presenceBound = true
+  try { pageVisible = document.visibilityState !== 'hidden' } catch { pageVisible = true }
+  windowFocused = true
+  present = pageVisible && windowFocused
+  try {
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('pagehide', onPageHide)
+  } catch { presenceBound = false }
+}
+
+function unbindPresence() {
+  if (!presenceBound) return
+  presenceBound = false
+  try {
+    document.removeEventListener('visibilitychange', onVisibility)
+    window.removeEventListener('focus', onFocus)
+    window.removeEventListener('blur', onBlur)
+    window.removeEventListener('pagehide', onPageHide)
+  } catch {}
+}
+
+// ── Autoplay-blocked retry ───────────────────────────────────────────────────
+
 function detachGestureRetry() {
   if (!gestureArmed) return
   gestureArmed = false
@@ -113,9 +178,8 @@ function detachGestureRetry() {
 
 function onGesture() {
   detachGestureRetry()
-  // Only resume if we still want to be playing (user hasn't left in the
-  // meantime). Re-issue play() on whatever clip should currently be sounding.
-  if (!playing) return
+  // Only resume if we still want to be playing and the user is present.
+  if (!playing || !present) return
   const audio = repeatAudio || startAudio
   if (audio) safePlay(audio)
 }
@@ -154,19 +218,20 @@ function onStartEnded() {
     repeatAudio = makeAudio(REPEAT_SRC)
     repeatAudio.loop = true
     repeatAudio.volume = appliedGain
-    safePlay(repeatAudio, armGestureRetry)
+    if (present) safePlay(repeatAudio, armGestureRetry)
   } catch {}
 }
 
 function startSequence() {
   playing = true
+  bindPresence()
   // Begin (or restart) from the intro clip. Fade up from silence.
   appliedGain = 0
   try {
     startAudio = makeAudio(START_SRC)
     startAudio.volume = 0
     startAudio.addEventListener('ended', onStartEnded, { once: true })
-    safePlay(startAudio, armGestureRetry)
+    if (present) safePlay(startAudio, armGestureRetry)
   } catch {}
   fadeTo(targetGain())
 }
@@ -194,8 +259,11 @@ function stopSequence() {
 
 // Declare the current CBAT zone. `zone` is 'menu' | 'instructions' | null.
 // Idempotent: repeated calls with the same on-zone just retarget the volume.
+// When the admin has disabled the soundtrack, every zone is treated as silent.
 export function updateCbatMusic(zone) {
-  if (zone == null) { stopSequence(); return }
+  let enabled = true
+  try { enabled = getCbatMenuMusicSetting().enabled } catch {}
+  if (zone == null || !enabled) { stopSequence(); return }
   zoneVol = ZONE_VOL[zone] ?? ZONE_VOL.menu
   if (!playing) startSequence()
   else fadeTo(targetGain())
@@ -205,10 +273,14 @@ export function updateCbatMusic(zone) {
 export function _resetCbatMusic() {
   cancelFade()
   detachGestureRetry()
+  unbindPresence()
   for (const a of liveAudios()) { try { a.pause() } catch {} }
   startAudio = null
   repeatAudio = null
   playing = false
+  present = true
+  pageVisible = true
+  windowFocused = true
   zoneVol = 0
   appliedGain = 0
 }

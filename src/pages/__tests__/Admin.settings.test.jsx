@@ -43,6 +43,7 @@ vi.mock('../../utils/sound', () => ({
   invalidateSoundSettings: vi.fn(), previewTypingSound: vi.fn(), previewGridRevealTone: vi.fn(),
   previewActVoiceCommand: vi.fn(), previewActChatter: vi.fn(),
   previewActStatic: vi.fn(), previewActBleep: vi.fn(), stopActPreview: vi.fn(),
+  previewCbatMenuMusic: vi.fn(),
 }))
 
 vi.mock('framer-motion', () => ({
@@ -313,6 +314,16 @@ describe('Admin — Settings tab: Sound Effects', () => {
     const last = audioInstances.at(-1)
     expect(last.src).toBe('/sounds/target_locked_keyword.mp3')
     expect(last.play).toHaveBeenCalled()
+  })
+
+  it('▶ for the CBAT "Menu Soundtrack" row uses previewCbatMenuMusic', async () => {
+    const { previewCbatMenuMusic } = await import('../../utils/sound')
+    await renderAndOpenSettings()
+
+    const row = screen.getByText('Menu Soundtrack').closest('div')
+    fireEvent.click(within(row).getByTitle('Preview'))
+
+    expect(previewCbatMenuMusic).toHaveBeenCalled()
   })
 
   it('preview uses the volume from settings (80% → 0.8)', async () => {

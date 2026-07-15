@@ -6,8 +6,10 @@ vi.mock('../../utils/cbat/menuMusic', () => ({ updateCbatMusic: (...a) => update
 
 let mockPath = '/cbat'
 let mockImmersive = false
+let mockSlim = false
 vi.mock('react-router-dom', () => ({ useLocation: () => ({ pathname: mockPath }) }))
 vi.mock('../../context/GameChromeContext', () => ({ useGameChrome: () => ({ immersive: mockImmersive }) }))
+vi.mock('../../hooks/useSlimMode', () => ({ useSlimMode: () => mockSlim }))
 
 import CbatMenuMusic from '../CbatMenuMusic'
 
@@ -19,6 +21,7 @@ beforeEach(() => {
   updateCbatMusic.mockClear()
   mockPath = '/cbat'
   mockImmersive = false
+  mockSlim = false
 })
 afterEach(cleanup)
 
@@ -52,6 +55,20 @@ describe('<CbatMenuMusic> zone mapping', () => {
 
   it('silent (null) off the CBAT area', () => {
     mockPath = '/home'
+    render(<CbatMenuMusic />)
+    expect(lastZone()).toBe(null)
+  })
+
+  it('menu zone on the slim landing (/) when slim mode is on', () => {
+    mockPath = '/'
+    mockSlim = true
+    render(<CbatMenuMusic />)
+    expect(lastZone()).toBe('menu')
+  })
+
+  it('silent (null) on the landing (/) when slim mode is off', () => {
+    mockPath = '/'
+    mockSlim = false
     render(<CbatMenuMusic />)
     expect(lastZone()).toBe(null)
   })

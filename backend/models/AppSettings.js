@@ -126,6 +126,11 @@ const appSettingsSchema = new mongoose.Schema({
   soundEnabledActStatic:       { type: Boolean, default: true },
   soundEnabledActBleep:        { type: Boolean, default: true },
 
+  // CBAT menu soundtrack (start-once then loop, on the CBAT selection +
+  // instructions screens, and the slim landing). One control governs both clips.
+  volumeCbatMenuMusic:       { type: Number, default: 100, min: 0, max: 100 },
+  soundEnabledCbatMenuMusic: { type: Boolean, default: true },
+
   // Blueprint grid-reveal tones (Intel Brief image cell dissolve)
   volumeGridReveal:       { type: Number, default: 30, min: 0, max: 100 },
   soundEnabledGridReveal: { type: Boolean, default: true },

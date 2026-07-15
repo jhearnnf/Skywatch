@@ -251,6 +251,13 @@ export function previewActBleep(sliderValue) {
   })
 }
 
+// Admin preview for the CBAT menu soundtrack — plays the intro clip at the
+// given slider volume. Reuses the ACT preview slot so it's cancelled the same
+// way (stopActPreview) when another preview starts.
+export function previewCbatMenuMusic(sliderValue) {
+  _playActMp3('/sounds/cbat menu (start).mp3', sliderValue ?? 100, 10000)
+}
+
 const OUT_OF_AMMO_VARIANTS = ['out_of_ammo_1.mp3', 'out_of_ammo_2.mp3', 'out_of_ammo_3.mp3']
 
 // Module-level settings cache
@@ -295,6 +302,7 @@ function fetchSettings() {
         volumeFlashcardCollect: 100,   soundEnabledFlashcardCollect: true,
         volumeTypingSound: 30,         soundEnabledTypingSound: true,
         volumeGridReveal: 30,          soundEnabledGridReveal: true,
+        volumeCbatMenuMusic: 100,      soundEnabledCbatMenuMusic: true,
         durationTypingSound: 3,        durationGridReveal: 12,
         freeCategories: ['News'], silverCategories: [],
       }
@@ -319,6 +327,18 @@ export function setMasterVolume(v) {
 
 function masterVol(vol) {
   return vol * (getMasterVolume() / 100)
+}
+
+// Synchronous read of the CBAT menu-music admin setting from the settings cache.
+// Returns { volume: 0..1, enabled }. Falls back to full-volume/enabled until the
+// settings fetch has warmed the cache (matches how other sounds behave on a
+// cold start).
+export function getCbatMenuMusicSetting() {
+  const s = cache || {}
+  return {
+    volume:  Math.min(1, Math.max(0, (s.volumeCbatMenuMusic ?? 100) / 100)),
+    enabled: s.soundEnabledCbatMenuMusic !== false,
+  }
 }
 
 export function invalidateSoundSettings() {

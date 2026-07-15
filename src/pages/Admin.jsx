@@ -14,6 +14,7 @@ import {
   previewActChatter,
   previewActStatic,
   previewActBleep,
+  previewCbatMenuMusic,
   stopActPreview,
 } from '../utils/sound'
 import { applyTierCascade } from '../utils/tierCascade'
@@ -1158,6 +1159,12 @@ const SOUND_GROUPS = [
       { key: 'volumeActBleep',        enabledKey: 'soundEnabledActBleep',        label: 'Reaction Bleep',                     sound: '__act_bleep__'   },
     ],
   },
+  {
+    title: 'CBAT — Menu Music',
+    sounds: [
+      { key: 'volumeCbatMenuMusic', enabledKey: 'soundEnabledCbatMenuMusic', label: 'Menu Soundtrack', sound: '__cbat_menu__' },
+    ],
+  },
 ]
 
 const ALL_SOUND_KEYS = SOUND_GROUPS.flatMap(g => g.sounds.flatMap(s => [s.key, s.enabledKey, s.durationKey].filter(Boolean)))
@@ -1268,6 +1275,7 @@ function SoundRowV2({ label, sound, value, onChange, enabled, onToggle, duration
     if (sound === '__act_chatter__') { previewActChatter(value ?? 40);      return }
     if (sound === '__act_static__')  { previewActStatic(value ?? 40);       return }
     if (sound === '__act_bleep__')   { previewActBleep(value ?? 22);        return }
+    if (sound === '__cbat_menu__')   { previewCbatMenuMusic(value ?? 100);  return }
     try {
       const file = sound === 'out_of_ammo'
         ? OUT_OF_AMMO_VARIANTS[Math.floor(Math.random() * OUT_OF_AMMO_VARIANTS.length)]
