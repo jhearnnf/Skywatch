@@ -2415,6 +2415,23 @@ router.post('/cbat/sat/result', protect, async (req, res) => {
   }
 });
 
+// POST /api/games/cbat/trace-2/result
+router.post('/cbat/trace-2/result', protect, async (req, res) => {
+  try {
+    const { correctCount, totalQuestions, totalTime, avgTimePerQuestionMs } = req.body;
+    const Trace2 = CBAT_GAMES['trace-2'].Model;
+    const result = await saveCbatResult(Trace2, req, {
+      correctCount: correctCount ?? 0,
+      totalQuestions: totalQuestions ?? 8,
+      totalTime: totalTime ?? 0,
+      avgTimePerQuestionMs,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/games/cbat/code-duplicates/result
 router.post('/cbat/code-duplicates/result', protect, async (req, res) => {
   try {
@@ -2932,6 +2949,7 @@ router.get('/cbat/visualisation-3d/leaderboard', protect, (req, res) => cbatLead
 router.get('/cbat/dpt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt'));
 router.get('/cbat/act/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'act'));
 router.get('/cbat/trace-1/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'trace-1'));
+router.get('/cbat/trace-2/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'trace-2'));
 router.get('/cbat/numerical-ops/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'numerical-ops'));
 router.get('/cbat/dad/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dad'));
 router.get('/cbat/sat/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sat'));
@@ -3075,6 +3093,7 @@ router.get('/cbat/visualisation-3d/personal-best', protect, (req, res) => cbatPe
 router.get('/cbat/dpt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt'));
 router.get('/cbat/act/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'act'));
 router.get('/cbat/trace-1/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'trace-1'));
+router.get('/cbat/trace-2/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'trace-2'));
 router.get('/cbat/numerical-ops/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'numerical-ops'));
 router.get('/cbat/dad/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dad'));
 router.get('/cbat/sat/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sat'));

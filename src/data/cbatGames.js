@@ -37,6 +37,7 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'plane-turn-2d':   { title: 'Trace Practise 2D', emoji: '🗺️', scoreLabel: 'Rotations', lowerIsBetter: true,  formatScore: (s) => `${s}`,     backPath: '/cbat/trace',          planeTurnMode: '2d' },
   'plane-turn-3d':   { title: 'Trace Practise 3D', emoji: '🗺️', scoreLabel: 'Rotations', lowerIsBetter: true,  formatScore: (s) => `${s}`,     backPath: '/cbat/trace',          planeTurnMode: '3d' },
   'trace-1':         { title: 'Trace 1',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/40`,  backPath: '/cbat/trace',          hideTime: true },
+  'trace-2':         { title: 'Trace 2',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/8`,   backPath: '/cbat/trace',          hideTime: true },
   'angles':          { title: 'Angles',            emoji: '📐',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/20`,  backPath: '/cbat/angles' },
   'code-duplicates': { title: 'Code Duplicates',   emoji: '🧩',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/15`,  backPath: '/cbat/code-duplicates' },
   'symbols':         { title: 'Symbols',           emoji: '🔣',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/15`,  backPath: '/cbat/symbols' },
@@ -64,6 +65,7 @@ export const CBAT_ADMIN_GAMES = CBAT_GAMES.flatMap(g => {
       { ...g, key: 'plane-turn-2d', title: 'Trace Practise 2D' },
       { ...g, key: 'plane-turn-3d', title: 'Trace Practise 3D' },
       { ...g, key: 'trace-1',       title: 'Trace 1' },
+      { ...g, key: 'trace-2',       title: 'Trace 2' },
     ]
   }
   if (g.key === 'visualisation') {

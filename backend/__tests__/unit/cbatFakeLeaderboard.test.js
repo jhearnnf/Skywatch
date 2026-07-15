@@ -16,6 +16,7 @@ const GAME_MAX = {
   'visualisation-3d': 8,     // 8 rounds, one point each
   'dpt':             null,   // accumulating score, no fixed ceiling
   'trace-1':         40,     // 5 rounds × 8 turns
+  'trace-2':         8,      // 8 rounds, one question each
   'numerical-ops':   100,    // percentage 0–100
   'dad':             15,     // 15 questions, one point each
   'sat':             18,     // 18 questions (3 situations × 6), one point each

@@ -770,7 +770,7 @@ router.patch('/settings', requireReason, async (req, res) => {
     // unimplemented set is empty.
     const CBAT_KNOWN_KEYS = new Set([
       'target', 'ant', 'symbols', 'code-duplicates', 'angles', 'instruments',
-      'plane-turn-2d', 'plane-turn-3d', 'trace-1', 'flag',
+      'plane-turn-2d', 'plane-turn-3d', 'trace-1', 'trace-2', 'flag',
       'visualisation-2d', 'visualisation-3d',
       'dpt', 'act', 'numerical-ops', 'dad', 'sat',
     ]);

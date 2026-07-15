@@ -75,6 +75,7 @@ function initialPlaneQuat(dir) {
 
 const PlaneModel3D    = lazy(() => import('../components/PlaneModel3D'))
 const PlaneTurn3DScene = lazy(() => import('../components/PlaneTurn3DScene'))
+const CbatTrace2       = lazy(() => import('./CbatTrace2'))
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const GRID           = 10
@@ -550,12 +551,12 @@ export default function CbatPlaneTurn() {
   // disabled, fall back to the first one still on (Trace 1 is the headline).
   const isAdmin = !!user?.isAdmin
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
-  const MODE_KEY = { '2d': 'plane-turn-2d', '3d': 'plane-turn-3d', trace1: 'trace-1' }
-  const isModeEnabled = (m) => isAdmin || m === 'trace2' || cbatGameEnabled[MODE_KEY[m]] !== false
+  const MODE_KEY = { '2d': 'plane-turn-2d', '3d': 'plane-turn-3d', trace1: 'trace-1', trace2: 'trace-2' }
+  const isModeEnabled = (m) => isAdmin || cbatGameEnabled[MODE_KEY[m]] !== false
   useEffect(() => {
-    if (isAdmin || !settings || mode === 'trace2') return
+    if (isAdmin || !settings) return
     if (cbatGameEnabled[MODE_KEY[mode]] === false) {
-      const fallback = ['trace1', '2d', '3d'].find(m => cbatGameEnabled[MODE_KEY[m]] !== false)
+      const fallback = ['trace1', 'trace2', '2d', '3d'].find(m => cbatGameEnabled[MODE_KEY[m]] !== false)
       if (fallback) setMode(fallback)
     }
   }, [mode, settings, isAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -1219,18 +1220,21 @@ export default function CbatPlaneTurn() {
     <div className="cbat-plane-turn-page">
       <SEO title="Trace — CBAT" description="Practise your turn and heading, or take the Trace recall test." />
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          {phase === 'select'
-            ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-            : <button onClick={handleMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
-          }
-          <h1 className="text-sm font-extrabold text-slate-900">
-            {TITLE_BY_MODE[mode] ?? 'Trace 1/2'}
-          </h1>
+      {/* Header — Trace 2 renders its own (it manages its own instructions
+          screen and back-button target). */}
+      {!gameModeTrace2 && (
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            {phase === 'select'
+              ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
+              : <button onClick={handleMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+            }
+            <h1 className="text-sm font-extrabold text-slate-900">
+              {TITLE_BY_MODE[mode] ?? 'Trace 1/2'}
+            </h1>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Not logged in */}
       {!user && (
@@ -1244,8 +1248,17 @@ export default function CbatPlaneTurn() {
         </div>
       )}
 
-      {/* Logged in — game area */}
-      {user && (
+      {/* Logged in — Trace 2 runs its own self-contained game flow (watch
+          multiple aircraft, then answer). It renders the shared mode selector
+          on its own menu so users can switch back to Practise / Trace 1. */}
+      {user && gameModeTrace2 && (
+        <Suspense fallback={null}>
+          <CbatTrace2 traceModeSelector={<TraceModeSelector value={mode} onChange={setMode} isModeEnabled={isModeEnabled} />} />
+        </Suspense>
+      )}
+
+      {/* Logged in — game area (Practise 2D/3D + Trace 1) */}
+      {user && !gameModeTrace2 && (
         <div className="flex flex-col items-center">
 
           {/* Aircraft selection */}

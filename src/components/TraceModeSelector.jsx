@@ -1,11 +1,10 @@
 // Selector for the /cbat/trace page. Two heading-pill groups read/write a single
 // `mode` value, so picking any option deselects the others.
 //   Practise group → '2d' · '3d'
-//   Trace group    → 'trace1' · 'trace2' (Coming Soon — disabled)
+//   Trace group    → 'trace1' · 'trace2'
 //
 // `isModeEnabled` (optional) hides a playable mode disabled by an admin in Game
-// Options. Trace 2 is a coming-soon stub and always shows. A group with no
-// remaining options is dropped.
+// Options. A group with no remaining options is dropped.
 export default function TraceModeSelector({ value, onChange, isModeEnabled }) {
   const shown = (v) => !isModeEnabled || isModeEnabled(v)
   const practiseOptions = [
@@ -13,9 +12,9 @@ export default function TraceModeSelector({ value, onChange, isModeEnabled }) {
     { value: '3d', label: '3D Practise' },
   ].filter(o => shown(o.value))
   const traceOptions = [
-    { value: 'trace1', label: 'Trace 1', badge: 'NEW', badgeVariant: 'new' },
-    { value: 'trace2', label: 'Trace 2', disabled: true, badge: 'SOON', badgeVariant: 'soon' },
-  ].filter(o => o.value === 'trace2' || shown(o.value))
+    { value: 'trace1', label: 'Trace 1' },
+    { value: 'trace2', label: 'Trace 2', badge: 'NEW', badgeVariant: 'new' },
+  ].filter(o => shown(o.value))
 
   return (
     <div className="flex flex-col items-center gap-2.5">

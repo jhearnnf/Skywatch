@@ -29,6 +29,7 @@ const GAME_OFFSET = {
   'visualisation-3d': 11,
   'dpt':             14,
   'trace-1':         13,
+  'trace-2':         19,
   'numerical-ops':   15,
   'act':             18,
   'dad':             22,
@@ -160,6 +161,14 @@ const FAKE_TUNING = {
     floor: 5, ceiling: 18, seedTime: 204.6, timeStep: 5.4,
     scoreSequence: [17, 16, 16, 15, 15, 14, 14, 13, 12, 12, 11, 11, 10, 9, 9, 8, 8, 7, 6, 5],
   },
+  'trace-2': {
+    // correctCount out of 8 (watch-and-recall, one question per round), higher
+    // is better. Top demo of 7 stays under a perfect 8; the roster trails to 2.
+    // Narrow 2–7 band, so an explicit sequence keeps >5 distinct values. Eight
+    // rounds of ~11s watch + answer → ~110–160s.
+    floor: 2, ceiling: 8, seedTime: 118.4, timeStep: 3.6,
+    scoreSequence: [7, 7, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 2],
+  },
 };
 
 // Fixed delta tables — natural-looking variance without randomness.
@@ -273,6 +282,7 @@ const WEEKLY_PER_PLAY = {
   'dpt':            3400,  // real med 3850
   'act':            1300,  // real med 1482
   'trace-1':          26,  // real med 29 (correctTurns /40)
+  'trace-2':           5,  // correctCount /8 — a little below a decent single run
   'numerical-ops':    80,  // real med 90 (correctPercentage)
   'dad':               9,  // correctCount /15 — a little below a decent single run
   'sat':              11,  // correctCount /18 — a little below a decent single run
