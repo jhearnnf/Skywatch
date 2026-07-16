@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 
 function timeAgo(iso) {
   if (!iso) return ''
@@ -15,14 +16,13 @@ function timeAgo(iso) {
   return `${d}d ago`
 }
 
-// Inline emoji lookup — avoids importing CBAT_GAMES from src/pages/Cbat.jsx
-// (which itself imports this component) and keeps the side column self-contained.
-const EMOJI_BY_KEY = {
-  'target': '🎯', 'ant': '📡', 'symbols': '🔣', 'code-duplicates': '🧩',
-  'angles': '📐', 'instruments': '🛫', 'plane-turn-2d': '🗺️', 'plane-turn-3d': '🗺️', 'flag': '🚩',
-  'visualisation-2d': '🧮', 'dpt': '🛩️', 'act': '🎧', 'trace-1': '🛩️',
-  'visualisation-3d': '🧊', 'dad': '🧭',
-}
+// Keyed by leaderboard gameKey, same as the rows the API returns. Derived from
+// the shared config rather than hand-listed so a new game can't fall back to the
+// generic emoji. Importing src/pages/Cbat.jsx here would cycle (it imports this
+// component); src/data/cbatGames.js is pure data, so it doesn't.
+const EMOJI_BY_KEY = Object.fromEntries(
+  Object.entries(CBAT_LEADERBOARD_CONFIG).map(([key, cfg]) => [key, cfg.emoji])
+)
 
 export default function RecentCbatScores() {
   const { apiFetch, API, user } = useAuth()

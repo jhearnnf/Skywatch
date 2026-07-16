@@ -4,7 +4,9 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 
-const GAME_LABELS = {
+// Keyed by backend gameKey, mirroring the labels the backend CBAT_GAMES
+// registry uses. Drives the filter pills; must be extended when a game is added.
+export const GAME_LABELS = {
   'plane-turn-2d':    'Trace Practise 2D',
   'plane-turn-3d':    'Trace Practise 3D',
   'angles':           'Angles',
@@ -19,7 +21,10 @@ const GAME_LABELS = {
   'dpt':              'DPT',
   'act':              'ACT',
   'trace-1':          'Trace 1',
+  'trace-2':          'Trace 2',
   'numerical-ops':    'Numerical Operations',
+  'dad':              'Directions and Distances',
+  'sat':              'Situational Awareness Test',
 }
 
 const PRIMARY_LABELS = {

@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, afterEach } from 'vitest'
-import CbatGameHistory from '../CbatGameHistory'
+import CbatGameHistory, { GAME_LABELS } from '../CbatGameHistory'
+import { CBAT_LEADERBOARD_CONFIG } from '../../data/cbatGames'
 
 // ── Hoisted mocks ──────────────────────────────────────────────────────────
 
@@ -148,5 +149,36 @@ describe('CbatGameHistory', () => {
     setup(makeFetch([], 0, { total: 0, finished: 0, abandoned: 0 }))
     render(<CbatGameHistory />)
     await waitFor(() => screen.getByText(/No CBAT sessions yet/))
+  })
+
+  // The filter pills come from a label map that has to be extended by hand when
+  // a game is added to the backend CBAT_GAMES registry — it has silently missed
+  // new games before (Trace 2, DAD, SAT). CBAT_LEADERBOARD_CONFIG is the
+  // frontend source of truth keyed by the same gameKey, so every key there must
+  // be filterable.
+  it('offers a filter pill for every CBAT game', async () => {
+    const mockFetch = makeFetch([makeSession()])
+    setup(mockFetch)
+    render(<CbatGameHistory />)
+    await waitFor(() => screen.getByText('All Games'))
+
+    const pills = screen.getAllByRole('button').map(b => b.textContent)
+    for (const key of Object.keys(CBAT_LEADERBOARD_CONFIG)) {
+      expect(pills, `no filter pill for "${key}"`).toContain(GAME_LABELS[key])
+    }
+  })
+
+  it('filters by Trace 2', async () => {
+    const mockFetch = makeFetch([makeSession()])
+    setup(mockFetch)
+    render(<CbatGameHistory />)
+    await waitFor(() => screen.getByText('Trace 2'))
+
+    fireEvent.click(screen.getByText('Trace 2'))
+
+    await waitFor(() => {
+      const calls = mockFetch.mock.calls.map(([url]) => url)
+      expect(calls.some(url => url.includes('gameKey=trace-2'))).toBe(true)
+    })
   })
 })
