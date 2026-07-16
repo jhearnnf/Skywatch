@@ -3098,4 +3098,163 @@ router.get('/cbat/numerical-ops/personal-best', protect, (req, res) => cbatPerso
 router.get('/cbat/dad/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dad'));
 router.get('/cbat/sat/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sat'));
 
+// GET /api/games/cbat/:gameKey/progress — the signed-in user's own score series for one game,
+// oldest → newest, backing the post-game trend sparkline and the leaderboard's "You" tab.
+//
+// Only finished runs exist in the result collections (starts live in GameSessionCbatStart), so
+// the series is finished attempts only — which is what "am I improving?" wants.
+//
+// `attempts` is the user's true lifetime count, NOT series.length: the series is capped at
+// `limit` (most recent), so a user with 200 runs still sees "200 attempts" under a 50-point chart.
+// firstAvg/lastAvg are computed over the returned window for the same reason — they describe the
+// chart the user is looking at.
+//
+// One param route covers every game (cfg resolved from CBAT_GAMES at call time), so a new game
+// gets this endpoint for free. Every result model already indexes { userId: 1, createdAt: -1 }.
+const PROGRESS_TREND_WINDOW = 5;   // attempts averaged at each end for the first-vs-last delta
+const PROGRESS_MIN_FOR_TREND = 6;  // fewer than this and the delta is noise, so we omit it
+
+// ── Recent-form percentile (?percentile=1) ───────────────────────────────────────────────────
+// "Where does my current form sit against the field?" — a question neither leaderboard answers.
+// The all-time board ranks best-ever scores, so its rank can only ever improve and stops being
+// informative; this moves in both directions as the user's form does.
+//
+// Form = the mean of a user's most recent FORM_WINDOW runs. Deliberately NOT the latest score
+// (one bad run would tank the number) and NOT the lifetime average (that permanently drags in a
+// user's worst early runs, punishing the very improvement this feature exists to show).
+//
+// The comparison is strictly like-for-like: the user's recent-form mean against every OTHER
+// user's recent-form mean. Comparing a mean against other people's best scores would be apples
+// to oranges — everyone's best beats their own average, so the user would always look worse
+// than they are.
+//
+// Opt-in via ?percentile=1 because it aggregates the whole collection: the post-game sparkline
+// fires /progress on every single game completion and doesn't need this, so it stays off that
+// hot path. The { userId: 1, createdAt: -1 } index on every result model serves the $sort.
+const FORM_WINDOW = 5;         // runs averaged into "current form"
+const FORM_MIN_RUNS = 3;       // fewer runs than this and a user isn't ranked (their own or others')
+const FORM_MIN_COHORT = 5;     // below this the percentile is meaningless (and near-deanonymising)
+
+async function cbatRecentForm(cfg, userId) {
+  const rows = await cfg.Model.aggregate([
+    { $match: { ...(cfg.modeFilter ?? {}) } },
+    // Newest-first within each user so $push preserves that order and $slice takes the latest runs.
+    { $sort: { userId: 1, createdAt: -1 } },
+    { $group: {
+      _id: '$userId',
+      scores: { $push: `$${cfg.primaryField}` },
+      times:  { $push: '$totalTime' },
+    } },
+    { $project: {
+      recent:      { $slice: ['$scores', FORM_WINDOW] },
+      recentTimes: { $slice: ['$times', FORM_WINDOW] },
+    } },
+    { $match: { $expr: { $gte: [{ $size: '$recent' }, FORM_MIN_RUNS] } } },
+    // $avg skips nulls and yields null when a game never records a time.
+    { $project: { form: { $avg: '$recent' }, formTime: { $avg: '$recentTimes' } } },
+  ]);
+
+  const me = rows.find(r => String(r._id) === String(userId));
+  if (!me || rows.length < FORM_MIN_COHORT) return null;
+
+  // Rank on form score first, then mean time — the same comparator every CBAT leaderboard already
+  // uses ({ [primaryField]: sortDir, totalTime: 1 }), and the reason the result models index
+  // totalTime and annotate it "tie-breaker".
+  //
+  // The time leg is what makes this meaningful at a scoring ceiling. Most CBAT games cap out
+  // (Symbols at 15/15), so a large share of the field can sit on a perfect recent-form average;
+  // ranked on score alone they're all one undifferentiated lump at the top, and a flawless player
+  // reports something like "ahead of 65%". Splitting that lump on speed restores a real ordering:
+  // among the perfect agents, the quick ones rank above the slow ones.
+  //
+  // Falls back to a genuine tie when either side has no time — Trace 1/2 default totalTime to 0,
+  // and $avg yields null for a game that never records one.
+  //
+  // Compare on 2dp-rounded values: these are $avg floats, and 12.4 vs 12.400000000000002 must not
+  // read as a genuine difference.
+  const q = (v) => Math.round(v * 100);
+
+  // >0 = they're better than me, <0 = I'm better, 0 = level on both legs.
+  const compare = (them) => {
+    const ds = q(them.form) - q(me.form);
+    if (ds !== 0) return (cfg.sortDir === 1 ? ds < 0 : ds > 0) ? 1 : -1;
+    if (them.formTime == null || me.formTime == null) return 0;
+    const dt = q(them.formTime) - q(me.formTime);
+    if (dt === 0) return 0;
+    return dt < 0 ? 1 : -1;   // quicker over the same score wins
+  };
+
+  const betterThanMe = rows.filter(r => compare(r) > 0).length;
+  const aheadOf      = rows.filter(r => compare(r) < 0).length;
+  // Derived rather than counted so the three always sum to the cohort (compare(me) === 0).
+  const tiedWith     = rows.length - 1 - betterThanMe - aheadOf;
+
+  return {
+    form: Number(me.form.toFixed(1)),
+    formTime: me.formTime == null ? null : Number(me.formTime.toFixed(1)),
+    // Share of the cohort this user is strictly ahead of. The UI renders its inverse ("top X%"),
+    // so this must stay a plain strictly-ahead share and not a tie-adjusted mid-rank.
+    percentile: Math.round((aheadOf / rows.length) * 100),
+    aheadOf,        // 0 means nobody is behind — the UI encourages rather than saying "top 100%"
+    tiedWith,
+    betterThanMe,   // 0 means nobody has better form — the UI celebrates rather than showing a %
+    cohort: rows.length,
+    window: FORM_WINDOW,
+  };
+}
+
+async function cbatProgress(req, res, gameKey) {
+  const cfg = CBAT_GAMES[gameKey];
+  if (!cfg) return res.status(400).json({ message: 'Unknown game' });
+
+  const modeFilter = cfg.modeFilter ?? {};
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+
+  try {
+    const query = { ...modeFilter, userId: req.user._id };
+
+    // Take the most recent `limit` (descending + limit uses the index), then flip to
+    // chronological for plotting.
+    const recent = await cfg.Model.find(query)
+      .select(`${cfg.primaryField} totalTime createdAt`)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    const series = recent.reverse().map(s => ({
+      score: s[cfg.primaryField],
+      time: s.totalTime ?? null,
+      at: s.createdAt,
+    }));
+
+    if (!series.length) {
+      return res.json({
+        status: 'success',
+        data: { gameKey, attempts: 0, series: [], best: null, firstAvg: null, lastAvg: null, form: null },
+      });
+    }
+
+    const attempts = await cfg.Model.countDocuments(query);
+    const scores = series.map(p => p.score);
+    const best = cfg.sortDir === 1 ? Math.min(...scores) : Math.max(...scores);
+
+    // Averaged ends of the window — a rolling comparison that survives one fluke run at either end.
+    const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+    const hasTrend = series.length >= PROGRESS_MIN_FOR_TREND;
+    const firstAvg = hasTrend ? avg(scores.slice(0, PROGRESS_TREND_WINDOW)) : null;
+    const lastAvg  = hasTrend ? avg(scores.slice(-PROGRESS_TREND_WINDOW)) : null;
+
+    // null whenever the user or the cohort is too small to rank honestly.
+    const form = req.query.percentile === '1' ? await cbatRecentForm(cfg, req.user._id) : null;
+
+    res.json({
+      status: 'success',
+      data: { gameKey, attempts, series, best, firstAvg, lastAvg, form },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+
+router.get('/cbat/:gameKey/progress', protect, (req, res) => cbatProgress(req, res, req.params.gameKey));
+
 module.exports = router;

@@ -7,11 +7,18 @@ import PlaneTurnModeToggle from '../components/PlaneTurnModeToggle'
 import LeaderboardRow, { rowCols } from '../components/LeaderboardRow'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 import LeaderboardIntro, { INTRO_PILL_LAYOUT_ID } from '../components/LeaderboardIntro'
+import CbatProgressChart from '../components/CbatProgressChart'
+import { cbatTrend } from '../utils/cbatProgress'
 import { cbatLastRankKey } from '../utils/storageKeys'
 
+// 'you' is the odd one out: it's the user's own score history rather than a board of other
+// people, and it reads from /progress instead of /leaderboard. It lives here anyway because
+// "how am I doing" is the same question the boards answer, and the tabstrip is already the
+// place users look for it.
 const TABS = [
   { key: 'weekly',   label: 'This Week' },
   { key: 'all-time', label: 'All Time' },
+  { key: 'you',      label: 'You' },
 ]
 
 function fmtCountdown(resetsAt) {
@@ -22,6 +29,162 @@ function fmtCountdown(resetsAt) {
   const d = Math.floor(mins / (60 * 24))
   const h = Math.floor((mins % (60 * 24)) / 60)
   return d > 0 ? `${d}d ${h}h` : `${h}h ${mins % 60}m`
+}
+
+// The trend stat tile. The HEADING carries the verdict and the value carries the magnitude, so it
+// reads "Improved +15%" — a user shouldn't have to decode a minus sign to learn whether their own
+// number is good news. The heading has to move with the sign: a tile labelled "Improved" showing
+// −12% is simply a lie, and one that's caught once poisons the whole panel.
+//
+// Sign handling (including the lower-is-better inversion, where a FALLING score is an improving
+// player) comes from the shared cbatTrend, so this can't drift from the post-game screen's wording.
+function trendTile(board, lowerIsBetter) {
+  const trend = cbatTrend(board, lowerIsBetter)
+  if (!trend) return null
+  if (trend.steady) return { heading: 'Trend', value: 'Steady', tone: 'text-slate-400' }
+  if (trend.improving) return { heading: 'Improved', value: `+${trend.pct}%`, tone: 'text-emerald-300' }
+  // Muted rather than red — a dip is information, not a telling-off.
+  return { heading: 'Declined', value: `${trend.pct}%`, tone: 'text-slate-400' }
+}
+
+function StatTile({ label, value, tone = 'text-[#ddeaf8]' }) {
+  return (
+    <div className="flex-1 bg-[#060e1a] border border-[#1a3a5c] rounded-lg px-3 py-2 text-center">
+      <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</p>
+      <p className={`text-base font-mono font-bold ${tone}`}>{value}</p>
+    </div>
+  )
+}
+
+// Where the user's recent form sits against everyone else's — one sentence, no gauge.
+//
+// A progress bar used to sit here and was removed: it encoded the share you're AHEAD of (92%)
+// right beside a headline reading "top 8%" — the same fact as two different numbers on opposing
+// scales, which is unreadable rather than merely redundant. The sentence says it better alone.
+//
+// Phrased as "top X%", not "ahead of Y%" — and never "top Xth percentile", which strictly means the
+// opposite (the 60th percentile has 60% BELOW it). Beyond reading better, "top X%" absorbs ties
+// without having to explain them: most CBAT games have a scoring ceiling, so a chunk of the field
+// shares a perfect recent-form average, and "ahead of 65%" on a flawless 15/15 reads as broken
+// until you're told the other 35% are level rather than above.
+//
+// Two ends a raw percentage can't carry:
+//
+// Nobody above you → celebrate (a ceiling'd tie, or an outright lead).
+//
+// Bottom quartile → "outside the top 75%". topPct is 100 − (share you're ahead of), so the foot of
+// the field computes to "top 100%", which is a punchline; and clamping that to a flattering-looking
+// 99% would just be a lie. Note this is NOT the same as "the bottom 75%" — someone at topPct 80 is
+// in the bottom 20%, so naming a bottom-% from this number would misstate it. "Outside the top 75%"
+// is exactly true for everyone in this branch, keeps the same vocabulary as the good case, and
+// invents no number.
+const OUTSIDE_TOP_PCT = 75
+
+function FormPercentile({ form, cfg }) {
+  // `window` deliberately renamed — destructuring it here would shadow the global.
+  const { percentile, window: runsWindow, form: value, formTime, tiedWith, betterThanMe } = form
+  const atTop = betterThanMe === 0
+  const topPct = Math.max(1, 100 - percentile)
+  const outsideTop = topPct > OUTSIDE_TOP_PCT
+  const scoreLabel = cfg.formatScore ? cfg.formatScore(Math.round(value)) : value
+  // Ranking always breaks score ties on time, but only games with a meaningful clock show it —
+  // Target and FLAG run a fixed duration, so their time is a constant, not an achievement.
+  const showTime = !cfg.hideTime && formTime != null
+
+  return (
+    <div className="mt-4 pt-3 border-t border-[#1a3a5c]">
+      <div className="flex items-baseline justify-between mb-1.5">
+        <p className="text-[11px] text-slate-500 uppercase tracking-wide">Current Form</p>
+        {/* Shows the exact basis of the ranking, so "top 8%" on a perfect score is self-explaining:
+            the score is maxed and speed is what's separating you from the other perfect agents. */}
+        <p className="text-[10px] text-slate-500">
+          last {runsWindow} runs avg {scoreLabel}{showTime && ` · ${formTime}s`}
+        </p>
+      </div>
+      {/* The verdict is the whole point of this block, so it carries the weight; the avg/time
+          basis stays in the small print above. */}
+      {atTop ? (
+        <p className="text-sm font-bold text-amber-300 mt-2">
+          {tiedWith === 0 ? '🥇 Best form of any agent' : '🥇 Joint best form'}
+          {tiedWith > 0 && (
+            <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
+              level with {tiedWith} other agent{tiedWith === 1 ? '' : 's'}
+            </span>
+          )}
+        </p>
+      ) : outsideTop ? (
+        <p className="text-sm font-bold text-[#ddeaf8] mt-2">
+          You're outside the top{' '}
+          <span className="text-xl font-mono font-extrabold text-slate-700">{OUTSIDE_TOP_PCT}%</span>
+          <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
+            Keep practising to improve your score!
+          </span>
+        </p>
+      ) : (
+        <p className="text-sm font-bold text-[#ddeaf8] mt-2">
+          You're in the top{' '}
+          <span className="text-xl font-mono font-extrabold text-brand-300">{topPct}%</span>
+          {' '}of agents!
+        </p>
+      )}
+    </div>
+  )
+}
+
+// The "You" tab body — the user's own score history rather than a board of other agents.
+function ProgressPanel({ board, cfg }) {
+  const { series = [], attempts = 0, best = null, form = null } = board || {}
+  const formatScore = cfg.formatScore || ((s) => `${s}`)
+
+  // Neither empty state carries its own play button: the page already renders a persistent
+  // "Play {game}" action directly below this panel, so one here would just repeat it.
+  if (attempts === 0) {
+    return (
+      <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+        <p className="text-4xl mb-3">📈</p>
+        <p className="font-bold text-white mb-1">No runs yet</p>
+        <p className="text-sm text-slate-400">Finish a game and your progress starts charting here.</p>
+      </div>
+    )
+  }
+
+  // Two points is a line between two dots — it implies a trend that isn't there yet.
+  if (series.length < 3) {
+    return (
+      <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+        <p className="text-4xl mb-3">📈</p>
+        <p className="font-bold text-white mb-1">{attempts} run{attempts === 1 ? '' : 's'} logged</p>
+        <p className="text-sm text-slate-400">
+          Play {3 - series.length} more and your trend line appears here.
+        </p>
+      </div>
+    )
+  }
+
+  const verdict = trendTile(board, !!cfg.lowerIsBetter)
+
+  return (
+    <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4">
+      <div className="flex gap-2 mb-4">
+        <StatTile label="Attempts" value={attempts} />
+        <StatTile label="Best" value={best != null ? formatScore(best) : '—'} tone="text-amber-300" />
+        {verdict && <StatTile label={verdict.heading} value={verdict.value} tone={verdict.tone} />}
+      </div>
+
+      <CbatProgressChart
+        series={series}
+        lowerIsBetter={!!cfg.lowerIsBetter}
+        formatScore={formatScore}
+        variant="full"
+      />
+
+      <p className="text-[11px] text-slate-500 text-center mt-2">
+        {cfg.lowerIsBetter ? 'Higher on the chart is better (fewer rotations).' : 'Each point is one finished run.'}
+      </p>
+
+      {form && <FormPercentile form={form} cfg={cfg} />}
+    </div>
+  )
 }
 
 export default function CbatLeaderboard() {
@@ -50,15 +213,23 @@ export default function CbatLeaderboard() {
   // Reset cached boards whenever the game changes.
   useEffect(() => { setBoards({}); setLoading({}); setTab('weekly') }, [gameKey])
 
-  // Lazily fetch the active tab's board (weekly on mount, all-time on first switch).
+  // Lazily fetch the active tab's data (weekly on mount, the others on first switch).
   useEffect(() => {
     if (!user || !cfg) return
     if (boards[tab] || loading[tab]) return
+    const isProgress = tab === 'you'
+    // percentile=1 is opt-in — it aggregates the whole collection, and only this tab shows it.
+    const url = isProgress
+      ? `${API}/api/games/cbat/${gameKey}/progress?percentile=1`
+      : `${API}/api/games/cbat/${gameKey}/leaderboard?period=${tab}`
+    const empty = isProgress
+      ? { series: [], attempts: 0, best: null }
+      : { leaderboard: [], myBest: null }
     setLoading(l => ({ ...l, [tab]: true }))
-    apiFetch(`${API}/api/games/cbat/${gameKey}/leaderboard?period=${tab}`)
+    apiFetch(url)
       .then(r => r.json())
-      .then(d => setBoards(b => ({ ...b, [tab]: d.data || { leaderboard: [], myBest: null } })))
-      .catch(() => setBoards(b => ({ ...b, [tab]: { leaderboard: [], myBest: null } })))
+      .then(d => setBoards(b => ({ ...b, [tab]: d.data || empty })))
+      .catch(() => setBoards(b => ({ ...b, [tab]: empty })))
       .finally(() => setLoading(l => ({ ...l, [tab]: false })))
   }, [user, gameKey, tab])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -115,10 +286,12 @@ export default function CbatLeaderboard() {
 
   const handlePlaneTurnModeChange = (nextMode) => navigate(`/cbat/plane-turn-${nextMode}/leaderboard`)
 
-  // Swipe between tabs on touch (segmented control remains the source of truth).
+  // Swipe between tabs on touch (segmented control remains the source of truth). Steps one tab
+  // along TABS rather than naming them, so the strip can grow without this drifting out of sync.
   const onDragEnd = (_e, info) => {
-    if (info.offset.x < -60 && tab === 'weekly') setTab('all-time')
-    else if (info.offset.x > 60 && tab === 'all-time') setTab('weekly')
+    const i = TABS.findIndex(t => t.key === tab)
+    if (info.offset.x < -60 && i < TABS.length - 1) setTab(TABS[i + 1].key)
+    else if (info.offset.x > 60 && i > 0) setTab(TABS[i - 1].key)
   }
 
   if (!cfg) {
@@ -134,6 +307,7 @@ export default function CbatLeaderboard() {
   const board = boards[tab]
   const isLoading = loading[tab] || !board
   const isWeekly = tab === 'weekly'
+  const isProgress = tab === 'you'
   const countdown = isWeekly ? fmtCountdown(board?.resetsAt) : null
 
   const cols = rowCols(tab, cfg)
@@ -196,9 +370,11 @@ export default function CbatLeaderboard() {
         <p className="text-[11px] text-slate-500 mt-1.5 text-center">
           {isWeekly
             ? <>Points add up across every run this week{countdown ? ` · resets in ${countdown}` : ''}</>
-            : planeTurnMode
-              ? `All-time best ${planeTurnMode === '3d' ? '3D' : '2D'} scores · fewest rotations through 5 levels`
-              : 'All-time best scores'}
+            : isProgress
+              ? 'Every run you\'ve finished, oldest to newest'
+              : planeTurnMode
+                ? `All-time best ${planeTurnMode === '3d' ? '3D' : '2D'} scores · fewest rotations through 5 levels`
+                : 'All-time best scores'}
         </p>
       </div>
 
@@ -218,7 +394,9 @@ export default function CbatLeaderboard() {
           onDragEnd={onDragEnd}
           className="w-full max-w-lg mx-auto"
         >
-          {(board.leaderboard || []).length === 0 ? (
+          {isProgress ? (
+            <ProgressPanel board={board} cfg={cfg} />
+          ) : (board.leaderboard || []).length === 0 ? (
             <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
               <p className="text-4xl mb-3">🏆</p>
               <p className="font-bold text-white mb-1">{isWeekly ? 'No scores yet this week' : 'No scores yet'}</p>

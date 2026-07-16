@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 import LeaderboardRow from './LeaderboardRow'
+import CbatProgressChart from './CbatProgressChart'
+import { cbatTrend } from '../utils/cbatProgress'
 
 // Shared CBAT game-completion screen. Every CBAT game renders this at
 // phase === 'results', passing its results breakdown as `children` (with its
@@ -68,6 +70,58 @@ function WeeklyChase({ weekly }) {
   )
 }
 
+// Fewer than this and a trend line is just noise, so we show the "keep playing" hook instead.
+const MIN_ATTEMPTS_FOR_CHART = 3
+
+// The personal trend: a sparkline of recent attempts plus one plain-English verdict. Sits with
+// the score/PB lines because it's part of the same personal beat — the competitive beat
+// (<WeeklyChase>) comes after it.
+function ProgressTrend({ progress, cfg }) {
+  const { series, firstAvg, lastAvg, attempts } = progress
+  const formatScore = cfg.formatScore || ((s) => `${s}`)
+
+  // Too early to chart — say how much further it is rather than going silent, which doubles as a
+  // nudge toward the Play Again button below.
+  if (series.length < MIN_ATTEMPTS_FOR_CHART) {
+    const remaining = MIN_ATTEMPTS_FOR_CHART - series.length
+    return (
+      <p className="text-[11px] text-slate-500 mb-4">
+        {remaining} more run{remaining === 1 ? '' : 's'} and your progress chart appears here.
+      </p>
+    )
+  }
+
+  // Sign handling lives in cbatTrend — positive always means "getting better", whichever
+  // direction the game scores in.
+  const trend = cbatTrend({ firstAvg, lastAvg }, !!cfg.lowerIsBetter)
+  let verdict = null
+  if (trend) {
+    if (trend.steady) {
+      verdict = <span className="text-slate-400">Holding steady over your last 5 runs</span>
+    } else if (trend.improving) {
+      verdict = <span className="text-emerald-300">Last 5 runs {trend.pct}% better than your first 5</span>
+    } else {
+      verdict = <span className="text-slate-400">Last 5 runs {Math.abs(trend.pct)}% below your first 5</span>
+    }
+  }
+
+  return (
+    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-2 mb-4">
+      <div className="flex items-center justify-between mb-0.5 px-1">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide">Your Progress</p>
+        <p className="text-[10px] text-slate-500">{attempts} attempts</p>
+      </div>
+      <CbatProgressChart
+        series={series}
+        lowerIsBetter={!!cfg.lowerIsBetter}
+        formatScore={formatScore}
+        variant="spark"
+      />
+      {verdict && <p className="text-[11px] text-center mt-1">{verdict}</p>}
+    </div>
+  )
+}
+
 export default function CbatGameOver({
   gameKey, score, scoreSaved, queued, personalBest, onPlayAgain, extraActions = [], children,
 }) {
@@ -84,6 +138,7 @@ export default function CbatGameOver({
 
   const [weekly, setWeekly] = useState(null)
   const [weeklyState, setWeeklyState] = useState('loading') // loading | ready | offline | error
+  const [progress, setProgress] = useState(null)            // null until loaded; never blocks the panel
   const [shown, setShown] = useState(0)
   const rafRef = useRef(null)
 
@@ -116,6 +171,21 @@ export default function CbatGameOver({
     return () => { cancelled = true }
   }, [gameKey, queued])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch the user's own score history for the trend sparkline, in parallel with the weekly
+  // standing above. Skipped when queued: an offline run isn't on the server yet, so the series
+  // would be missing the very attempt the user just played — a trend that silently omits the
+  // newest point is worse than no trend. It fetches itself rather than taking a prop so none of
+  // the ~18 games rendering this screen need to change.
+  useEffect(() => {
+    if (queued) return
+    let cancelled = false
+    apiFetch(`${API}/api/games/cbat/${gameKey}/progress`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled && d?.data?.series) setProgress(d.data) })
+      .catch(() => { /* trend is additive — a failure just leaves the panel as it was */ })
+    return () => { cancelled = true }
+  }, [gameKey, queued])  // eslint-disable-line react-hooks/exhaustive-deps
+
   const formatScore = cfg.formatScore || ((s) => `${s}`)
   const isPB = personalBest != null && (cfg.lowerIsBetter
     ? score <= personalBest.bestScore
@@ -139,6 +209,16 @@ export default function CbatGameOver({
           : personalBest
             ? <p className="text-xs text-slate-400 mb-4">Best {formatScore(personalBest.bestScore)}</p>
             : <p className="text-xs text-slate-400 mb-4">First run logged</p>}
+
+        {progress && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <ProgressTrend progress={progress} cfg={cfg} />
+          </motion.div>
+        )}
 
         {weeklyState === 'ready' && weekly && (
           <motion.div
