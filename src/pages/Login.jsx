@@ -143,6 +143,10 @@ export default function LoginPage() {
     setBusy(true); setError('')
     try {
       const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth')
+      // The Android plugin builds its sign-in client only inside initialize() — its load()
+      // is empty. Calling signIn() first dereferences a null client, and the Capacitor
+      // bridge rethrows that NPE as an uncaught RuntimeException, killing the process.
+      await GoogleAuth.initialize()
       const result = await GoogleAuth.signIn()
       await handleGoogleCredential({ credential: result.authentication.idToken })
     } catch {
@@ -415,6 +419,10 @@ export default function LoginPage() {
                     <p className="text-xs text-slate-400 text-center">Google sign-in requires VITE_GOOGLE_CLIENT_ID</p>
                   )}
                 </>
+              )}
+
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-xl">{error}</p>
               )}
             </motion.div>
           )}
