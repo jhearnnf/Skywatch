@@ -9,6 +9,7 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef } f
 import { useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { useAppSettings } from './AppSettingsContext'
+import { useSlimMode } from '../hooks/useSlimMode'
 
 const Ctx = createContext(null)
 
@@ -211,6 +212,11 @@ export function AppTutorialProvider({ children }) {
   const isGuest = !user?._id
   const isGuestRef = useRef(isGuest)
   useEffect(() => { isGuestRef.current = isGuest }, [isGuest])
+  // Slim ("CBAT-only") mode strips the pages these tutorials describe, so none
+  // of them apply — suppress every tutorial rather than gating page by page.
+  const slim = useSlimMode()
+  const slimRef = useRef(slim)
+  useEffect(() => { slimRef.current = slim }, [slim])
   const pendingRef    = useRef(null) // tutorial name waiting for auth to resolve
   const pendingNavRef = useRef(null) // { name, stepIndex } — fires after next route change
   const tutorialsRef  = useRef(tutorialsMap) // mirror for use in route-change effect
@@ -280,13 +286,15 @@ export function AppTutorialProvider({ children }) {
 
   // Resolve the active step list for a tutorial: prefer DB-sourced data, fall
   // back to hardcoded TUTORIAL_STEPS, then apply runtime filters in this order:
+  //   0. Slim mode — no tutorial applies, return null.
   //   1. Tutorial-level showToGuests — if false and user is a guest, return null
   //      so the tutorial never starts.
   //   2. Step-level showToGuests — drop steps the admin marked as logged-in-only
   //      when the current viewer is a guest.
   //   3. Feature-flag filters for the briefReader tutorial (RSVP / mnemonics).
   // `isGuest` is whether the current viewer is logged-out.
-  const resolveSteps = useCallback((name, { mnemonicsOn, rsvpOn, isGuest, map }) => {
+  const resolveSteps = useCallback((name, { mnemonicsOn, rsvpOn, isGuest, slim, map }) => {
+    if (slim) return null
     const fromMap = map && map[name]
     const fromCode = TUTORIAL_STEPS[name]
     // map values are { steps, showToGuests, ... }; code values are stepsArray
@@ -313,6 +321,7 @@ export function AppTutorialProvider({ children }) {
         mnemonicsOn: mnemonicsEnabledRef.current,
         rsvpOn:      rsvpEnabledRef.current,
         isGuest:     isGuestRef.current,
+        slim:        slimRef.current,
         map:         tutorialsRef.current,
       })
       if (steps?.length) {
@@ -326,8 +335,8 @@ export function AppTutorialProvider({ children }) {
 
   // Public API — returns live-resolved steps for a named tutorial
   const getSteps = useCallback((name) => {
-    return resolveSteps(name, { mnemonicsOn: mnemonicsEnabled, rsvpOn: rsvpEnabled, isGuest, map: tutorialsMap })
-  }, [resolveSteps, tutorialsMap, mnemonicsEnabled, rsvpEnabled, isGuest])
+    return resolveSteps(name, { mnemonicsOn: mnemonicsEnabled, rsvpOn: rsvpEnabled, isGuest, slim, map: tutorialsMap })
+  }, [resolveSteps, tutorialsMap, mnemonicsEnabled, rsvpEnabled, isGuest, slim])
 
   // When auth finishes loading, fire any tutorial that was queued during the loading window
   useEffect(() => {
