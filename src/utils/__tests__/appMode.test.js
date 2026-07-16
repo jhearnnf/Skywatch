@@ -25,6 +25,7 @@ describe('appMode', () => {
         '/report',
         '/share',
         '/privacy',
+        '/delete-account',
         '/admin',
         '/admin/openrouter-usage',
       ]) {

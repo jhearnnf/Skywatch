@@ -79,6 +79,7 @@ import ReportProblem  from './pages/ReportProblem'
 import Chat           from './pages/Chat'
 import Contact        from './pages/Contact'
 import Privacy        from './pages/Privacy'
+import DeleteAccount  from './pages/DeleteAccount'
 import Subscription   from './pages/Subscription'
 import Share          from './pages/Share'
 import NotFound       from './pages/NotFound'
@@ -288,6 +289,7 @@ function AppRoutes() {
           <Route path="/chat"             element={<RequireAuth><PageWrapper><Chat /></PageWrapper></RequireAuth>} />
           <Route path="/contact"          element={<PageWrapper><Contact /></PageWrapper>} />
           <Route path="/privacy"          element={<PageWrapper><Privacy /></PageWrapper>} />
+          <Route path="/delete-account"   element={<PageWrapper><DeleteAccount /></PageWrapper>} />
           <Route path="/share"            element={<PageWrapper><Share /></PageWrapper>} />
           <Route path="/airstar-history"       element={<RequireAuth><PageWrapper><AirstarHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"          element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />

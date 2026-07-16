@@ -21,6 +21,7 @@ const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const { CBAT_GAMES } = require('../constants/cbatGames');
 const { withSelectedBadge } = require('../utils/selectedBadge');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
+const { deleteUserAndData } = require('../services/deleteUserData');
 
 // GET /api/users/stats — current user's stats for profile page
 router.get('/stats', protect, async (req, res) => {
@@ -187,6 +188,45 @@ router.patch('/me/display-name', protect, async (req, res) => {
       return res.status(409).json({ status: 'error', message: 'That display name is already taken.' });
     }
     res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/users/me — permanently delete the caller's own account.
+//
+// Required by Google Play's account-deletion policy (an in-app path plus the
+// public /delete-account page), and by GDPR erasure requests. Irreversible: the
+// cascade is the same one the admin delete uses, so anything it misses here it
+// misses there too — see services/deleteUserData.js.
+router.delete('/me', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // An admin deleting themselves could leave the app with no way back in.
+    // Blocked deliberately: demote to a normal account first, or have another
+    // admin do it. Play's policy covers ordinary user accounts, so this
+    // exception doesn't put the requirement at risk.
+    if (req.user.isAdmin) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Admin accounts cannot be self-deleted. Contact support to have your account removed.',
+      });
+    }
+
+    await deleteUserAndData(userId);
+
+    // Same cookie shape as POST /api/auth/logout — a stale jwt would otherwise
+    // sit in the browser pointing at a user that no longer exists.
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie('jwt', '', {
+      httpOnly: true,
+      secure:   isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      expires:  new Date(0),
+    });
+
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
   }
 });
 

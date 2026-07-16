@@ -13,6 +13,7 @@ import ProfileBadge from '../components/ProfileBadge'
 import SocialLinks from '../components/SocialLinks'
 import SEO from '../components/SEO'
 import { useSlimMode } from '../hooks/useSlimMode'
+import DeleteAccountModal from '../components/DeleteAccountModal'
 
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
   const Tag = onClick && !loading ? 'button' : 'div'
@@ -70,6 +71,7 @@ export default function Profile() {
   const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0, flashcardsCollected: 0 })
   const [statsLoading, setStatsLoading] = useState(!!user)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
+  const [showDelete,  setShowDelete]  = useState(false)
   const [diffBusy,    setDiffBusy]    = useState(false)
   const [nameEditing, setNameEditing] = useState(false)
   const [nameDraft,   setNameDraft]   = useState('')
@@ -599,15 +601,25 @@ export default function Profile() {
       )}
 
       {user && (
-        <div className="mt-6 flex justify-center">
+        <div className="mt-6 flex flex-col items-center gap-1">
           <button
             onClick={logout}
             className="text-sm text-slate-400 hover:text-slate-600 transition-colors py-2 px-4"
           >
             Sign out
           </button>
+          {/* Kept in slim mode too: Google Play requires the in-app deletion
+              path to exist in the shipped native app, which is slim-only. */}
+          <button
+            onClick={() => setShowDelete(true)}
+            className="text-xs text-slate-400 hover:text-red-700 transition-colors py-2 px-4"
+          >
+            Delete account
+          </button>
         </div>
       )}
+
+      {showDelete && <DeleteAccountModal onClose={() => setShowDelete(false)} />}
 
     </div>
     </>

@@ -23,6 +23,7 @@ const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const { effectiveTier } = require('../utils/subscription');
 const { grantSubscriptionUnlocks } = require('../utils/subscriptionUnlocks');
+const { deleteUserAndData } = require('../services/deleteUserData');
 const Rank  = require('../models/Rank');
 const Level = require('../models/Level');
 const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
@@ -1559,15 +1560,10 @@ router.delete('/users/:id', requireReason, async (req, res) => {
       return res.status(400).json({ message: 'You cannot delete your own account' });
     }
     const userId = req.params.id;
-    await Promise.all([
-      AirstarLog.deleteMany({ userId }),
-      GameSessionQuizResult.deleteMany({ userId }),
-      GameSessionQuizAttempt.deleteMany({ userId }),
-      GameSessionOrderOfBattleResult.deleteMany({ userId }),
-      IntelligenceBriefRead.deleteMany({ userId }),
-      ProblemReport.deleteMany({ userId }),
-    ]);
-    await User.findByIdAndDelete(userId);
+    await deleteUserAndData(userId);
+    // Audit row is written after the cascade — the cascade nulls AdminAction refs
+    // pointing at the deleted user, so creating this first would blank its own
+    // targetUserId.
     await AdminAction.create({ userId: req.user._id, actionType: 'delete_user', reason: req.body.reason, targetUserId: userId });
     res.json({ status: 'success' });
   } catch (err) {

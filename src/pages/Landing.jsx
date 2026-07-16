@@ -437,9 +437,14 @@ export default function Landing() {
       <footer className="py-8 px-5 border-t border-slate-200 text-center">
         <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR THOSE WHO TAKE THE RAF SERIOUSLY</p>
         <SocialLinks source="landing" className="mt-4" />
-        <div className="mt-4">
+        <div className="mt-4 flex items-center justify-center gap-3">
           <Link to="/privacy" className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
             Privacy Policy
+          </Link>
+          <span className="text-xs text-slate-300">·</span>
+          {/* Play wants the deletion URL discoverable without installing the app. */}
+          <Link to="/delete-account" className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
+            Delete Account
           </Link>
         </div>
       </footer>

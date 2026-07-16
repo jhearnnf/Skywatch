@@ -32,6 +32,7 @@ const SLIM_ALLOWED_PREFIXES = [
   '/report',             // "report a problem" (linked from CBAT + profile)
   '/share',              // "share SkyWatch" QR-code page (linked from profile Help)
   '/privacy',            // store-compliance page
+  '/delete-account',     // store-compliance page — the URL declared to Google Play
   '/admin',              // admins can still reach Settings to toggle slim off
 ]
 
