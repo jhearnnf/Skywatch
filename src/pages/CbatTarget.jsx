@@ -29,6 +29,14 @@ const SCAN_PANEL_MATCH_CHANCE = 0.35
 const SECOND_SYS_TARGET_MS = 60_000
 const SYS_SCROLL_MS = 1_000        // ms per row of system-panel scroll
 const SYS_GREEN_FADE_MS = 1_500
+// Alert circles — red pulsing markers that appear on the scene and stay until
+// clicked. First appears 8–15s in; each subsequent one 8–15s after the last.
+// Uncleared alerts stack, so several can be on screen at once.
+const ALERT_GAP_MIN_MS = 8_000
+const ALERT_GAP_MAX_MS = 15_000
+// Click bonus decays to zero over this window from spawn, so a fast reaction is
+// worth the most.
+const ALERT_SCORE_WINDOW_MS = 6_000
 
 const SHAPE_KINDS = ['truck', 'tank', 'building']
 const SHAPE_COLOURS = ['hostile', 'friendly', 'neutral']
@@ -42,6 +50,7 @@ const SCORE = {
   lightMatch: 20, lightBonus: 8, lightMiss: -10,
   scanMatch: 25, scanBonus: 10, scanMiss: -10,
   systemMatch: 15, systemMiss: -5,
+  alertHit: 10, alertBonus: 20,
 }
 
 // Grade bands (out of roughly -50..+500)
@@ -237,6 +246,18 @@ function placeRandom() {
 }
 function resetPlacements() { _placed = [] }
 
+// Random position for an alert circle within the virtual canvas. Kept clear of
+// the edges so the pulsing ring never clips the scene border. Independent of
+// the shape spacing pool — alerts are allowed to overlap shapes.
+function randomAlertPos() {
+  const padX = 100
+  const padY = 100
+  return {
+    x: padX + Math.random() * (1000 - 2 * padX),
+    y: padY + Math.random() * (800 - 2 * padY),
+  }
+}
+
 // ── Shape rendering — each shape is an absolutely-positioned fixed-size box
 // so aspect ratio stays intact regardless of scene container shape.
 const SHAPE_BOX = 72      // wrapper box size in px (desktop baseline)
@@ -369,6 +390,25 @@ function Shape({ shape, scale = 1 }) {
         {damagedX}
       </svg>
     </div>
+  )
+}
+
+// ── Alert circle — red pulsing marker layered over the scene ─────────────────
+// Positioned with the same percentage scheme as Shape so it tracks its point
+// across viewport sizes. It's a real button so it owns its own click and stops
+// the event bubbling to the scene's shape hit-test.
+function AlertCircle({ alert, scale = 1, onClick }) {
+  const leftPct = (alert.x / 1000) * 100
+  const topPct  = (alert.y / 800) * 100
+  const size = 22 * scale
+  return (
+    <button
+      type="button"
+      aria-label="Alert"
+      onClick={(e) => { e.stopPropagation(); onClick(alert) }}
+      className="cbat-alert-circle"
+      style={{ left: `${leftPct}%`, top: `${topPct}%`, width: size, height: size }}
+    />
   )
 }
 
@@ -562,7 +602,7 @@ function SystemPanel({ columns, highlights, onClickCode, flashCode = null }) {
                   <button
                     key={ri}
                     onClick={() => onClickCode(ci, actualRow, code)}
-                    className={`sys-row w-full text-center font-mono text-[12px] cursor-pointer transition-colors ${
+                    className={`sys-row w-full text-center font-mono text-[15px] cursor-pointer transition-colors ${
                       isGreen ? 'bg-green-500/40 text-green-200' : 'text-[#ddeaf8] hover:bg-[#0f2240]'
                     }${isFlash ? ' cbat-row-flash' : ''}`}
                   >
@@ -622,8 +662,8 @@ function ResultsScreen({ stats }) {
     'Failed':      { emoji: '\u{1F4A5}',       color: 'text-red-400' },
   }[grade]
 
-  const row = (label, val, sub) => (
-    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+  const row = (label, val, sub, wide = false) => (
+    <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 ${wide ? 'col-span-2' : ''}`}>
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
       <p className="text-xl font-mono font-bold text-brand-300">{val}</p>
       {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
@@ -641,6 +681,7 @@ function ResultsScreen({ stats }) {
         {row('Light', stats.lightScore, `${stats.lightMatches} match / ${stats.lightMisclicks} miss`)}
         {row('Scan',  stats.scanScore,  `${stats.scanMatches} match / ${stats.scanMisclicks} miss`)}
         {row('System',stats.systemScore,`${stats.systemMatches} match / ${stats.systemMisclicks} miss`)}
+        {row('Alerts', stats.alertScore, `${stats.alertHits} cleared`, true)}
       </div>
     </div>
   )
@@ -681,6 +722,10 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
           <span className="text-brand-300 font-bold shrink-0">System</span>
           <span>click any scrolling code matching a system target</span>
+        </div>
+        <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+          <span className="text-red-400 font-bold shrink-0">Alert</span>
+          <span>click the red pulsing circles fast — the sooner, the more points</span>
         </div>
         <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
           <span className="shrink-0">{'⚠️'}</span>
@@ -741,7 +786,10 @@ const TUTORIAL_STEPS = [
         then click the matching targets you see in the <b className="text-brand-300">scene</b>.
         The first target is always <b className="text-brand-300">unknown</b> — check the{' '}
         <b className="text-brand-300">key</b> to work out which shape that is (a diamond),
-        then click every one you can find.
+        then click every one you can find. Watch out for the{' '}
+        <b className="text-red-400">red pulsing circle</b> too — click it as fast as you can;
+        in the real game these keep appearing, and the quicker you clear them the more points
+        you score.
       </>
     ),
   },
@@ -908,6 +956,9 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
   const [shapes] = useState(() => planTutorialScene())
   const [clicked, setClicked] = useState(() => new Set())
   const [missFlash, setMissFlash] = useState(false)
+  // Section 1 also teaches the alert mechanic: a single red pulsing circle the
+  // user must click before the section will advance. Cleared once, then gone.
+  const [tutAlert, setTutAlert] = useState(() => ({ id: uid(), ...randomAlertPos() }))
 
   // Section 2 (Light) state.
   const [lightPattern, setLightPattern] = useState(() => randomLightPattern())
@@ -1003,7 +1054,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
     const raf = requestAnimationFrame(() => {
       const colEl = systemRef.current?.querySelector('.sys-column')
       if (!colEl) return
-      const visibleRows = Math.max(1, Math.floor(colEl.clientHeight / 26))
+      const visibleRows = Math.max(1, Math.floor(colEl.clientHeight / 32))
       const targetRow = Math.min(sysColumns[0].codes.length - 1, visibleRows + 1)
       const code = randomCode()
       setSysColumns(prev => {
@@ -1081,13 +1132,21 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
     if (hit.kind === 'unknown') {
       setClicked(prev => new Set(prev).add(hit.id))
       setEngaged(true)
-      // When the last unknown target is cleared, move on to the next section.
+      // Advance only once every unknown AND the alert circle are cleared.
       const remaining = visibleShapes.filter(s => s.kind === 'unknown' && s.id !== hit.id).length
-      if (remaining === 0) advance()
+      if (remaining === 0 && !tutAlert) advance()
     } else {
       setMissFlash(true)
       setTimeout(() => setMissFlash(false), 300)
     }
+  }
+
+  const onTutAlertClick = () => {
+    setTutAlert(null)
+    setEngaged(true)
+    // If the diamonds are already gone, clearing the alert finishes section 1.
+    const remainingUnknown = visibleShapes.filter(s => s.kind === 'unknown').length
+    if (remainingUnknown === 0) advance()
   }
 
   const onLightPress = () => {
@@ -1218,6 +1277,9 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
                 {(engaged || focus === 'scene') && visibleShapes
                   .filter(s => s.kind === 'unknown')
                   .map(s => <TutorialArrow key={`arrow-${s.id}`} x={s.x} y={s.y} />)}
+                {stepIdx === 0 && tutAlert && (
+                  <AlertCircle alert={tutAlert} scale={shapeScale} onClick={onTutAlertClick} />
+                )}
               </div>
             ) : <TutorialDisabledPanel label="Scene" />}
           </div>
@@ -1303,6 +1365,10 @@ export default function CbatTarget() {
   // After a correct scan-panel match, keep the panel empty until this elapsedMs.
   const scanCooldownUntilRef = useRef(0)
 
+  // Alert state — red pulsing circles that persist until clicked and stack.
+  const [alerts, setAlerts] = useState([])          // [{ id, x, y, spawnAt }]
+  const nextAlertAtRef = useRef(0)
+
   // System state — 3 columns of codes
   const [sysColumns, setSysColumns] = useState(() => initSysColumns())
   const [sysHighlights, setSysHighlights] = useState(new Set()) // key 'col:row'
@@ -1352,6 +1418,8 @@ export default function CbatTarget() {
     setSysColumns(initSysColumns())
     setSysHighlights(new Set())
     setSysTargets([{ id: uid(), code: randomCode() }])
+    setAlerts([])
+    nextAlertAtRef.current = randRange(ALERT_GAP_MIN_MS, ALERT_GAP_MAX_MS)
     setStats(blankStats())
     setElapsedMs(0)
     setScoreSaved(false)
@@ -1492,6 +1560,16 @@ export default function CbatTarget() {
       setSysTargets(prev => prev.length < 2 ? [...prev, { id: uid(), code: randomCode() }] : prev)
     }
   }, [elapsedMs, phase, sysTargets.length])
+
+  // ── Alert spawn schedule ───────────────────────────────────────────────────
+  // Drop a new alert once the next-spawn time has passed, then schedule the one
+  // after it 8–15s out. Existing alerts stay put until clicked, so they stack.
+  useEffect(() => {
+    if (phase !== 'playing') return
+    if (elapsedMs < nextAlertAtRef.current) return
+    setAlerts(prev => [...prev, { id: uid(), spawnAt: elapsedMs, ...randomAlertPos() }])
+    nextAlertAtRef.current = elapsedMs + randRange(ALERT_GAP_MIN_MS, ALERT_GAP_MAX_MS)
+  }, [elapsedMs, phase])
 
   // ── End game ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1665,6 +1743,15 @@ export default function CbatTarget() {
     }
   }
 
+  const onAlertClick = (alert) => {
+    const age = elapsedMs - alert.spawnAt
+    const frac = Math.max(0, 1 - age / ALERT_SCORE_WINDOW_MS)
+    const bonus = Math.round(SCORE.alertBonus * frac)
+    setAlerts(prev => prev.filter(a => a.id !== alert.id))
+    bumpCounter('alertHits')
+    addScore(SCORE.alertHit + bonus, 'alert')
+  }
+
   const onSysCodeClick = (col, row, code) => {
     const hitTarget = sysTargets.find(t => t.code === code)
     if (!hitTarget) {
@@ -1771,6 +1858,9 @@ export default function CbatTarget() {
                 {visibleShapes.map(s => (
                   <Shape key={s.id} shape={s} scale={shapeScale} />
                 ))}
+                {alerts.map(a => (
+                  <AlertCircle key={a.id} alert={a} scale={shapeScale} onClick={onAlertClick} />
+                ))}
               </div>
             </div>
             <div className="grid-scene-target"><SceneTargetPanel labels={activeTargets} diamondsActive={diamondsActive} /></div>
@@ -1788,19 +1878,29 @@ export default function CbatTarget() {
 function blankStats() {
   return {
     totalScore: 0,
-    sceneScore: 0, lightScore: 0, scanScore: 0, systemScore: 0,
+    sceneScore: 0, lightScore: 0, scanScore: 0, systemScore: 0, alertScore: 0,
     sceneHits: 0, sceneMisses: 0,
     lightMatches: 0, lightMisclicks: 0,
     scanMatches: 0, scanMisclicks: 0,
     systemMatches: 0, systemMisclicks: 0,
+    alertHits: 0,
   }
 }
 
+const SYS_ROW_PX = 32
 function initSysColumns() {
-  // Each column has its own speed so the three tracks don't march in lockstep.
-  const durations = [58000, 66000, 74000]
+  // Row count scales with the column height so the duplicated list always
+  // overflows and wraps with no visible edge — on tall desktops and short
+  // phones alike. The arena is capped at 60vh; a column spans ~90% of it, so
+  // 0.6·innerHeight is a safe upper bound. +4 rows of buffer, min 20.
+  const colPx = typeof window !== 'undefined' ? window.innerHeight * 0.6 : 600
+  const rows = Math.max(20, Math.ceil(colPx / SYS_ROW_PX) + 4)
+  // Constant scroll speed (px/ms) per column so a code that leaves the top
+  // returns after one list length — reasonably quick and readable. Staggered
+  // so the three tracks don't march in lockstep.
+  const speeds = [0.0265, 0.0234, 0.0209]
   return [0, 1, 2].map((i) => ({
-    codes: Array.from({ length: 50 }, () => randomCode()),
-    durationMs: durations[i],
+    codes: Array.from({ length: rows }, () => randomCode()),
+    durationMs: Math.round((rows * SYS_ROW_PX) / speeds[i]),
   }))
 }

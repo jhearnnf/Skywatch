@@ -86,6 +86,21 @@ describe('CbatTarget — tutorial / practice mode', () => {
     expect(screen.getAllByText(/^unknown$/i).length).toBeGreaterThanOrEqual(1)
   })
 
+  it('shows a red alert circle in section 1 that must be cleared to advance', () => {
+    setupUser()
+    render(<CbatTarget />)
+    fireEvent.click(screen.getByRole('button', { name: /^tutorial$/i }))
+
+    // Section 1 teaches the alert mechanic: a single clickable alert is present.
+    const alert = screen.getByRole('button', { name: /^alert$/i })
+    expect(alert).toBeTruthy()
+
+    // Clearing only the alert (diamonds remain) does not advance the section.
+    fireEvent.click(alert)
+    expect(screen.getByText(/spot the targets/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^alert$/i })).toBeNull()
+  })
+
   it('lets the user jump between sections with the arrows', () => {
     setupUser()
     render(<CbatTarget />)
@@ -138,7 +153,9 @@ describe('CbatTarget — tutorial / practice mode', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /^tutorial$/i }))
 
-      // Section 1 — clear all five unknown diamonds (stacked at 80,80).
+      // Section 1 — clear the red alert circle, then all five unknown diamonds
+      // (stacked at 80,80). Both must be cleared before the section advances.
+      fireEvent.click(screen.getByRole('button', { name: /^alert$/i }))
       const scene = document.querySelector('.cbat-target-scene')
       for (let i = 0; i < 5; i++) fireEvent.click(scene, { clientX: 80, clientY: 80 })
 

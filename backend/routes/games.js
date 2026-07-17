@@ -2532,16 +2532,16 @@ router.post('/cbat/flag/result', protect, async (req, res) => {
 router.post('/cbat/target/result', protect, async (req, res) => {
   try {
     const {
-      totalScore, sceneScore, lightScore, scanScore, systemScore,
+      totalScore, sceneScore, lightScore, scanScore, systemScore, alertScore,
       sceneHits, sceneMisses, lightMatches, lightMisclicks,
-      scanMatches, scanMisclicks, systemMatches, systemMisclicks,
+      scanMatches, scanMisclicks, systemMatches, systemMisclicks, alertHits,
       totalTime, grade,
     } = req.body;
     const result = await saveCbatResult(GameSessionCbatTargetResult, req, {
       totalScore,
-      sceneScore, lightScore, scanScore, systemScore,
+      sceneScore, lightScore, scanScore, systemScore, alertScore,
       sceneHits, sceneMisses, lightMatches, lightMisclicks,
-      scanMatches, scanMisclicks, systemMatches, systemMisclicks,
+      scanMatches, scanMisclicks, systemMatches, systemMisclicks, alertHits,
       totalTime,
       grade,
     });
