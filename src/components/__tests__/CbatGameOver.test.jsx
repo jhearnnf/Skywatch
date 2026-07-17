@@ -131,6 +131,24 @@ describe('CbatGameOver', () => {
     expect(screen.getByText('Agent A001 (you)')).toBeDefined()
   })
 
+  it('waits for the score to save before asking for the weekly standing (closes the post-game race)', async () => {
+    const apiFetch = vi.fn().mockImplementation((url) => {
+      const data = String(url).includes('/progress') ? null : weeklyData()
+      return Promise.resolve({ ok: true, json: async () => ({ data }) })
+    })
+    setup({ apiFetch })
+    const { rerender } = render(<CbatGameOver {...baseProps} scoreSaved={false}><div /></CbatGameOver>)
+
+    // Save still in flight → the board must not be queried yet, or it could read
+    // our rank before the just-played score has landed and hide the panel.
+    expect(apiFetch.mock.calls.filter(([url]) => String(url).includes('/weekly/me'))).toHaveLength(0)
+
+    // Save confirms → now it asks, once, and the chase window appears.
+    rerender(<CbatGameOver {...baseProps} scoreSaved={true}><div /></CbatGameOver>)
+    await waitFor(() => expect(screen.getByText(/120 pts to pass/i)).toBeDefined())
+    expect(apiFetch.mock.calls.filter(([url]) => String(url).includes('/weekly/me'))).toHaveLength(1)
+  })
+
   it('skips the weekly fetch and shows an offline notice when queued', async () => {
     const apiFetch = vi.fn()
     setup({ apiFetch })

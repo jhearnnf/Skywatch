@@ -73,6 +73,12 @@ function WeeklyChase({ weekly }) {
 // Fewer than this and a trend line is just noise, so we show the "keep playing" hook instead.
 const MIN_ATTEMPTS_FOR_CHART = 3
 
+// The weekly-standing and progress fetches wait for the score save to confirm
+// (see the effects below). If it never confirms — the rare bad-payload drop path
+// where neither `scoreSaved` nor `queued` ever flips — we query anyway after this
+// long rather than leaving the panels spinning forever.
+const SAVE_WAIT_FALLBACK_MS = 5000
+
 // The personal trend: a sparkline of recent attempts plus one plain-English verdict. Sits with
 // the score/PB lines because it's part of the same personal beat — the competitive beat
 // (<WeeklyChase>) comes after it.
@@ -157,34 +163,51 @@ export default function CbatGameOver({
   }, [score])
 
   // Fetch the user's weekly standing (skip when the score is only queued offline).
+  //
+  // This waits for the score save to confirm (`scoreSaved`) before asking. Saving
+  // the score and reading the weekly board are two separate requests: firing this
+  // on mount raced the save and often read the board *before* the just-played
+  // score had landed, so the server returned "not played this week" and the panel
+  // silently vanished — even though the score saved a beat later. Gating on
+  // `scoreSaved` closes that race; the fallback timer covers the drop path where
+  // the save never confirms (see SAVE_WAIT_FALLBACK_MS).
   useEffect(() => {
     if (queued) { setWeeklyState('offline'); return }
     let cancelled = false
-    apiFetch(`${API}/api/games/cbat/${gameKey}/weekly/me`)
-      .then(r => r.json())
-      .then(d => {
-        if (cancelled) return
-        if (d?.data?.played && d.data.neighbors?.length) { setWeekly(d.data); setWeeklyState('ready') }
-        else setWeeklyState('error')
-      })
-      .catch(() => { if (!cancelled) setWeeklyState('error') })
-    return () => { cancelled = true }
-  }, [gameKey, queued])  // eslint-disable-line react-hooks/exhaustive-deps
+    const fetchStanding = () => {
+      apiFetch(`${API}/api/games/cbat/${gameKey}/weekly/me`)
+        .then(r => r.json())
+        .then(d => {
+          if (cancelled) return
+          if (d?.data?.played && d.data.neighbors?.length) { setWeekly(d.data); setWeeklyState('ready') }
+          else setWeeklyState('error')
+        })
+        .catch(() => { if (!cancelled) setWeeklyState('error') })
+    }
+    if (scoreSaved) { fetchStanding(); return () => { cancelled = true } }
+    const t = setTimeout(fetchStanding, SAVE_WAIT_FALLBACK_MS)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [gameKey, queued, scoreSaved])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch the user's own score history for the trend sparkline, in parallel with the weekly
   // standing above. Skipped when queued: an offline run isn't on the server yet, so the series
   // would be missing the very attempt the user just played — a trend that silently omits the
-  // newest point is worse than no trend. It fetches itself rather than taking a prop so none of
-  // the ~18 games rendering this screen need to change.
+  // newest point is worse than no trend. For the same reason it waits for `scoreSaved`: fetching
+  // before the save lands would omit the just-played point from the trend. It fetches itself
+  // rather than taking a prop so none of the ~18 games rendering this screen need to change.
   useEffect(() => {
     if (queued) return
     let cancelled = false
-    apiFetch(`${API}/api/games/cbat/${gameKey}/progress`)
-      .then(r => r.json())
-      .then(d => { if (!cancelled && d?.data?.series) setProgress(d.data) })
-      .catch(() => { /* trend is additive — a failure just leaves the panel as it was */ })
-    return () => { cancelled = true }
-  }, [gameKey, queued])  // eslint-disable-line react-hooks/exhaustive-deps
+    const fetchProgress = () => {
+      apiFetch(`${API}/api/games/cbat/${gameKey}/progress`)
+        .then(r => r.json())
+        .then(d => { if (!cancelled && d?.data?.series) setProgress(d.data) })
+        .catch(() => { /* trend is additive — a failure just leaves the panel as it was */ })
+    }
+    if (scoreSaved) { fetchProgress(); return () => { cancelled = true } }
+    const t = setTimeout(fetchProgress, SAVE_WAIT_FALLBACK_MS)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [gameKey, queued, scoreSaved])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatScore = cfg.formatScore || ((s) => `${s}`)
   const isPB = personalBest != null && (cfg.lowerIsBetter
