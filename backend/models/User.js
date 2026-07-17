@@ -42,6 +42,12 @@ const userSchema = new mongoose.Schema(
     isAdmin:  { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },
 
+    // Admin-set flag marking an account as a tester. Purely admin-facing (never
+    // exposed on public profile/leaderboard): in the Admin › Users panel it
+    // floats an offline tester to the top of the offline group and gives the row
+    // a red/amber "TESTER" watermark.
+    isTester: { type: Boolean, default: false },
+
     // Subscription
     subscriptionTier: {
       type: String,

@@ -280,6 +280,15 @@ body.cbat-sat-beta {
   background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='180'%20height='72'%3E%3Ctext%20x='6'%20y='28'%20font-family='monospace'%20font-size='26'%20font-weight='700'%20fill='%23f59e0b'%20fill-opacity='0.06'%20letter-spacing='2'%3EBETA%3C/text%3E%3Ctext%20x='96'%20y='62'%20font-family='monospace'%20font-size='26'%20font-weight='700'%20fill='%23f59e0b'%20fill-opacity='0.06'%20letter-spacing='2'%3EBETA%3C/text%3E%3C/svg%3E");
 }
 
+/* Admin › Users panel — a flagged tester's row gets a warm red wash watermarked
+   with endlessly repeating "TESTER" in red/amber (mirrors the SAT
+   body.cbat-sat-beta pattern above). Makes tester accounts unmistakable at a
+   glance; the row's dark content still sits cleanly on top and stays legible. */
+.admin-tester-row {
+  background-color: #2a0e0e;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='240'%20height='72'%3E%3Ctext%20x='6'%20y='30'%20font-family='monospace'%20font-size='24'%20font-weight='700'%20fill='%23ef4444'%20fill-opacity='0.12'%20letter-spacing='2'%3ETESTER%3C/text%3E%3Ctext%20x='132'%20y='64'%20font-family='monospace'%20font-size='24'%20font-weight='700'%20fill='%23f59e0b'%20fill-opacity='0.12'%20letter-spacing='2'%3ETESTER%3C/text%3E%3C/svg%3E");
+}
+
 /* DPT — yellow pulse used for edge-warning highlights and aircraft halos
    whenever a player aircraft enters the edge buffer (auto-turn zone). */
 @keyframes dpt-edge-pulse {
@@ -1081,9 +1090,9 @@ body.play-mode .card-shadow {
 }
 
 .cbat-target-grid .sys-row {
-  height: 26px;
-  line-height: 26px;
-  flex: 0 0 26px;
+  height: 32px;
+  line-height: 32px;
+  flex: 0 0 32px;
 }
 
 @keyframes sys-scroll {
@@ -1143,6 +1152,31 @@ body.play-mode .card-shadow {
     radial-gradient(ellipse 20% 12% at 10% 82%, rgba(205, 220, 240, 0.08), transparent 75%),
     radial-gradient(ellipse 26% 14% at 55% 92%, rgba(205, 220, 240, 0.07), transparent 75%);
   mix-blend-mode: screen;
+}
+
+/* Red pulsing alert marker — sits above the shapes and cloud cover, stays put
+   until clicked. z-index 20 keeps it under the compass (25) but over the haze. */
+@keyframes cbatAlertPulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 3px 1px rgba(239, 68, 68, 0.18);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.06);
+    box-shadow: 0 0 7px 2px rgba(239, 68, 68, 0.3);
+    opacity: 0.78;
+  }
+}
+.cbat-alert-circle {
+  position: absolute;
+  z-index: 20;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(239, 68, 68, 0.7);
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.55) 0%, rgba(214, 40, 40, 0.42) 100%);
+  cursor: pointer;
+  animation: cbatAlertPulse 1.5s ease-in-out infinite;
 }
 
 .cbat-target-hud {

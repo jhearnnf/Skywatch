@@ -3113,10 +3113,27 @@ function UsersTab({ API }) {
       const s = onlineStatus(u.lastSeen)
       if (s === 'live') return 2
       if (s === 'away') return 1
-      return 0
+      return u.isTester ? 0.5 : 0   // offline testers sit atop the offline group
     }
     return [...users].sort((a, b) => priority(b) - priority(a))
   }, [users])
+
+  // Flag/unflag a user as a tester. Saves instantly (no confirm) and optimistically
+  // updates local state so the row re-sorts + re-styles immediately; reverts on failure.
+  const toggleTester = async (id, next) => {
+    setUsers(prev => prev.map(u => u._id === id ? { ...u, isTester: next } : u))
+    try {
+      const res = await apiFetch(`${API}/api/admin/users/${id}/tester`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isTester: next }),
+      })
+      if (!res.ok) throw new Error('request failed')
+    } catch {
+      setUsers(prev => prev.map(u => u._id === id ? { ...u, isTester: !next } : u))
+      setToast('Could not update tester flag')
+    }
+  }
 
   const action = (label, endpoint, method = 'POST', extra = {}) => setModal({ label, endpoint, method, extra })
 
@@ -3184,7 +3201,10 @@ function UsersTab({ API }) {
         {sortedUsers.map(u => {
           const isExpanded = expanded.has(u._id)
           return (
-          <div key={u._id} className={`rounded-2xl border overflow-hidden ${u._id === currentUser?._id ? 'bg-red-950/40 border-red-900/50' : 'bg-surface border-slate-200'}`}>
+          <div key={u._id} className={`rounded-2xl border overflow-hidden ${
+            u.isTester ? 'admin-tester-row border-amber-700/60'
+            : u._id === currentUser?._id ? 'bg-red-950/40 border-red-900/50'
+            : 'bg-surface border-slate-200'}`}>
             {/* Header (clickable — toggles expansion) */}
             <div
               role="button"
@@ -3210,6 +3230,19 @@ function UsersTab({ API }) {
                   {u.displayName || `Agent ${u.agentNumber}`}
                   {u.isAdmin && <span className="ml-2 text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-bold">ADMIN</span>}
                   {u.isBanned && <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">BANNED</span>}
+                  <label
+                    className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 cursor-pointer select-none"
+                    title="Flag this account as a tester"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!u.isTester}
+                      onChange={e => toggleTester(u._id, e.target.checked)}
+                      className="accent-amber-500"
+                    />
+                    tester
+                  </label>
                 </p>
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>

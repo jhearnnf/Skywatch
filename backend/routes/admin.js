@@ -1191,6 +1191,21 @@ router.post('/users/:id/unban', requireReason, async (req, res) => {
   }
 });
 
+// PATCH /api/admin/users/:id/tester — flag/unflag a user as a tester.
+// Lightweight toggle: no reason required, no AdminAction audit entry.
+router.patch('/users/:id/tester', async (req, res) => {
+  try {
+    const isTester = !!req.body.isTester;
+    const updated = await User.findByIdAndUpdate(
+      req.params.id, { isTester }, { returnDocument: 'after' }
+    );
+    if (!updated) return res.status(404).json({ message: 'User not found.' });
+    res.json({ status: 'success', data: { isTester } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/admin/users/:id/airstars/history — paginated airstar history for any user
 router.get('/users/:id/airstars/history', async (req, res) => {
   try {
