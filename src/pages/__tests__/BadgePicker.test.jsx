@@ -4,6 +4,7 @@ import BadgePicker from '../BadgePicker'
 
 const mockUseAuth = vi.hoisted(() => vi.fn())
 const mockNavigate = vi.hoisted(() => vi.fn())
+const mockUseSlimMode = vi.hoisted(() => vi.fn(() => false))
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
@@ -11,6 +12,10 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('../../context/AuthContext', () => ({
   useAuth: mockUseAuth,
+}))
+
+vi.mock('../../hooks/useSlimMode', () => ({
+  useSlimMode: mockUseSlimMode,
 }))
 
 vi.mock('framer-motion', () => ({
@@ -53,7 +58,7 @@ function baseUser(overrides = {}) {
 }
 
 describe('BadgePicker', () => {
-  beforeEach(() => { mockNavigate.mockReset() })
+  beforeEach(() => { mockNavigate.mockReset(); mockUseSlimMode.mockReturnValue(false) })
   afterEach(() => { vi.restoreAllMocks() })
 
   it('renders the rank-badge reset tile as selected when user has no selectedBadge', async () => {
@@ -153,5 +158,39 @@ describe('BadgePicker', () => {
     const patchCall = apiFetch.mock.calls.find(c => c[0].endsWith('/badge'))
     expect(patchCall).toBeDefined()
     expect(JSON.parse(patchCall[1].body)).toEqual({ briefId: 'b1' })
+  })
+
+  describe('slim mode', () => {
+    beforeEach(() => { mockUseSlimMode.mockReturnValue(true) })
+
+    it('sends the X-Slim-App header on the badge-options request', async () => {
+      const { apiFetch } = setupAuth({ fetchData: [] })
+      render(<BadgePicker />)
+      await waitFor(() => expect(screen.getByText('Rank badge')).toBeDefined())
+      const optionsCall = apiFetch.mock.calls.find(c => c[0].endsWith('/badge-options'))
+      expect(optionsCall[1]?.headers).toMatchObject({ 'X-Slim-App': '1' })
+    })
+
+    it('sends the X-Slim-App header when selecting a badge', async () => {
+      const { apiFetch } = setupAuth({
+        fetchData: [
+          { briefId: 'b1', title: 'Typhoon', cutoutUrl: 'https://cdn/typhoon.png', status: 'available' },
+        ],
+      })
+      render(<BadgePicker />)
+      await waitFor(() => expect(screen.getByText('Typhoon')).toBeDefined())
+      fireEvent.click(screen.getByText('Typhoon').closest('button'))
+      const patchCall = apiFetch.mock.calls.find(c => c[0].endsWith('/badge') && c[1]?.method === 'PATCH')
+      expect(patchCall[1].headers).toMatchObject({ 'X-Slim-App': '1' })
+    })
+
+    it('does not send the header when not slim', async () => {
+      mockUseSlimMode.mockReturnValue(false)
+      const { apiFetch } = setupAuth({ fetchData: [] })
+      render(<BadgePicker />)
+      await waitFor(() => expect(screen.getByText('Rank badge')).toBeDefined())
+      const optionsCall = apiFetch.mock.calls.find(c => c[0].endsWith('/badge-options'))
+      expect(optionsCall[1]?.headers?.['X-Slim-App']).toBeUndefined()
+    })
   })
 })

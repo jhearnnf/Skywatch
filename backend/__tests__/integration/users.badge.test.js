@@ -133,6 +133,49 @@ describe('GET /api/users/me/badge-options', () => {
     const res = await request(app).get('/api/users/me/badge-options');
     expect(res.status).toBe(401);
   });
+
+  it('marks unread cutout aircraft as available in slim mode (X-Slim-App header)', async () => {
+    const user = await createUser();
+    await briefWithCutout({ title: 'Typhoon' });     // unread
+    await briefWithCutout({ title: 'Lightning' });   // unread
+
+    const res = await request(app)
+      .get('/api/users/me/badge-options')
+      .set('Cookie', authCookie(user._id))
+      .set('X-Slim-App', '1');
+
+    expect(res.status).toBe(200);
+    const byTitle = Object.fromEntries(res.body.data.map(o => [o.title, o]));
+    expect(byTitle.Typhoon.status).toBe('available');
+    expect(byTitle.Lightning.status).toBe('available');
+  });
+
+  it('marks unread cutout aircraft as available in slim mode (site-wide flag)', async () => {
+    await createSettings({ slimModeEnabled: true });
+    const user = await createUser();
+    await briefWithCutout({ title: 'Typhoon' });     // unread
+
+    const res = await request(app)
+      .get('/api/users/me/badge-options')
+      .set('Cookie', authCookie(user._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data[0].status).toBe('available');
+  });
+
+  it('still marks cutoutless read aircraft as pending in slim mode', async () => {
+    const user = await createUser();
+    const { brief } = await briefWithCutout({ title: 'Chinook', hasCutout: false });
+    await createReadRecord(user._id, brief._id);
+
+    const res = await request(app)
+      .get('/api/users/me/badge-options')
+      .set('Cookie', authCookie(user._id))
+      .set('X-Slim-App', '1');
+
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].status).toBe('pending');
+  });
 });
 
 // ── PATCH /api/users/me/badge ───────────────────────────────────────────────
@@ -223,6 +266,72 @@ describe('PATCH /api/users/me/badge', () => {
   it('rejects unauthenticated requests', async () => {
     const res = await request(app).patch('/api/users/me/badge').send({ briefId: null });
     expect(res.status).toBe(401);
+  });
+
+  it('allows selecting an unread aircraft in slim mode (X-Slim-App header)', async () => {
+    const user = await createUser();
+    const { brief, media } = await briefWithCutout({ title: 'Typhoon' });
+
+    const res = await request(app)
+      .patch('/api/users/me/badge')
+      .set('Cookie', authCookie(user._id))
+      .set('X-Slim-App', '1')
+      .send({ briefId: String(brief._id) });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.user.selectedBadge.cutoutUrl).toBe(media.cutoutUrl);
+  });
+
+  it('allows selecting an unread aircraft in slim mode (site-wide flag)', async () => {
+    await createSettings({ slimModeEnabled: true });
+    const user = await createUser();
+    const { brief } = await briefWithCutout({ title: 'Typhoon' });
+
+    const res = await request(app)
+      .patch('/api/users/me/badge')
+      .set('Cookie', authCookie(user._id))
+      .send({ briefId: String(brief._id) });
+
+    expect(res.status).toBe(200);
+    expect(String(res.body.data.user.selectedBadge.briefId)).toBe(String(brief._id));
+  });
+
+  it('still rejects a cutoutless aircraft in slim mode with 403', async () => {
+    const user = await createUser();
+    const { brief } = await briefWithCutout({ title: 'Chinook', hasCutout: false });
+
+    const res = await request(app)
+      .patch('/api/users/me/badge')
+      .set('Cookie', authCookie(user._id))
+      .set('X-Slim-App', '1')
+      .send({ briefId: String(brief._id) });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('grandfathers a slim-picked unread badge — it still resolves after slim is off', async () => {
+    const user = await createUser();
+    const { brief, media } = await briefWithCutout({ title: 'Typhoon' });
+
+    // Pick it while slim (unread).
+    await request(app)
+      .patch('/api/users/me/badge')
+      .set('Cookie', authCookie(user._id))
+      .set('X-Slim-App', '1')
+      .send({ briefId: String(brief._id) });
+
+    // With slim off, the selection still displays (no re-check of reads).
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', authCookie(user._id));
+
+    expect(res.body.data.user.selectedBadge.cutoutUrl).toBe(media.cutoutUrl);
+
+    // …but the grid re-locks it, so it can't be re-selected once reset.
+    const opts = await request(app)
+      .get('/api/users/me/badge-options')
+      .set('Cookie', authCookie(user._id));
+    expect(opts.body.data[0].status).toBe('locked');
   });
 });
 

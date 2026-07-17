@@ -23,6 +23,24 @@ const { withSelectedBadge } = require('../utils/selectedBadge');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
 
+// True when the request should be treated as "slim" (CBAT-only) mode, in which
+// every Aircraft with a cutout is an unlockable badge regardless of whether the
+// user has read its brief. Two independent triggers, mirroring the client's
+// useSlimMode():
+//   • the site-wide AppSettings.slimModeEnabled flag (authoritative), or
+//   • an X-Slim-App: 1 header sent by the native app (which the backend can't
+//     otherwise detect). Trusting this header is safe — a profile badge is
+//     purely cosmetic and grants no privilege.
+async function isSlimRequest(req) {
+  if (req.get('X-Slim-App') === '1') return true;
+  try {
+    const settings = await AppSettings.getSettings();
+    return Boolean(settings?.slimModeEnabled);
+  } catch {
+    return false;
+  }
+}
+
 // GET /api/users/stats — current user's stats for profile page
 router.get('/stats', protect, async (req, res) => {
   try {
@@ -556,15 +574,18 @@ router.get('/me/badge-options', protect, async (req, res) => {
       .lean();
     const readSet = new Set(reads.map(r => String(r.intelBriefId)));
 
+    // In slim mode every Aircraft with a cutout is unlocked, read or not.
+    const slim = await isSlimRequest(req);
+
     const options = briefs
       .map(b => {
         const withCutout = (b.media || []).find(m => m.cutoutUrl);
         const hasRead    = readSet.has(String(b._id));
         let status;
-        if (withCutout && hasRead)      status = 'available';
-        else if (withCutout)            status = 'locked';
-        else if (hasRead)               status = 'pending';
-        else                            return null;
+        if (withCutout && (hasRead || slim)) status = 'available';
+        else if (withCutout)                 status = 'locked';
+        else if (hasRead)                    status = 'pending';
+        else                                 return null;
         return {
           briefId:   b._id,
           title:     b.title,
@@ -616,12 +637,15 @@ router.patch('/me/badge', protect, async (req, res) => {
       return res.status(403).json({ message: 'No cutout image is available for this aircraft yet' });
     }
 
-    const hasRead = await IntelligenceBriefRead.exists({
-      userId: req.user._id,
-      intelBriefId: briefId,
-      completed: true,
-    });
-    if (!hasRead) return res.status(403).json({ message: 'Read this brief before using it as a badge' });
+    // Slim mode unlocks every cutout aircraft, so skip the read requirement.
+    if (!(await isSlimRequest(req))) {
+      const hasRead = await IntelligenceBriefRead.exists({
+        userId: req.user._id,
+        intelBriefId: briefId,
+        completed: true,
+      });
+      if (!hasRead) return res.status(403).json({ message: 'Read this brief before using it as a badge' });
+    }
 
     const updated = await User.findByIdAndUpdate(
       req.user._id,

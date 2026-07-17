@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useSlimMode } from '../hooks/useSlimMode'
 import ProfileBadge from '../components/ProfileBadge'
 import SEO from '../components/SEO'
 
@@ -27,21 +28,26 @@ function RadarPlaceholder({ size = 72 }) {
 
 export default function BadgePicker() {
   const { user, setUser, API, apiFetch } = useAuth()
+  const slim = useSlimMode()
   const navigate = useNavigate()
   const [options, setOptions] = useState([])
   const [loading, setLoading] = useState(true)
   const [busyBriefId, setBusyBriefId] = useState(null)
   const [error, setError] = useState('')
 
+  // In slim mode the backend unlocks every cutout aircraft; signal it so the
+  // read-gate is relaxed on both the listing and the selection calls.
+  const slimHeaders = slim ? { 'X-Slim-App': '1' } : {}
+
   useEffect(() => {
     if (!user) return
     setLoading(true)
-    apiFetch(`${API}/api/users/me/badge-options`)
+    apiFetch(`${API}/api/users/me/badge-options`, { headers: slimHeaders })
       .then(r => r.json())
       .then(d => setOptions(d?.data ?? []))
       .catch(() => setOptions([]))
       .finally(() => setLoading(false))
-  }, [API, user, apiFetch])
+  }, [API, user, apiFetch, slim])
 
   const selectedId = user?.selectedBadge?.briefId
     ? String(user.selectedBadge.briefId)
@@ -54,7 +60,7 @@ export default function BadgePicker() {
     try {
       const res = await apiFetch(`${API}/api/users/me/badge`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...slimHeaders },
         body: JSON.stringify({ briefId: briefId ?? null }),
       })
       const data = await res.json()
@@ -97,7 +103,9 @@ export default function BadgePicker() {
           Select the aircraft that represents you
         </p>
         <p className="text-sm px-1 mb-5" style={{ color: C.subtle }}>
-          Read an Aircraft intel brief to unlock it here. Locked entries show aircraft you haven&apos;t read yet; pending entries show aircraft you&apos;ve read but whose recon image is still being processed.
+          {slim
+            ? 'Every aircraft is unlocked — tap any one to set it as your badge.'
+            : 'Read an Aircraft intel brief to unlock it here. Locked entries show aircraft you haven’t read yet; pending entries show aircraft you’ve read but whose recon image is still being processed.'}
         </p>
 
         {/* Rank badge (default) reset tile */}
