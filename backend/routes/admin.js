@@ -1091,11 +1091,11 @@ async function enrichUsersWithStats(users) {
     ]),
     GameSessionCbatStart.aggregate([
       { $match: { userId: { $in: userIds } } },
-      { $group: { _id: '$userId', count: { $sum: 1 } } },
+      { $group: { _id: '$userId', count: { $sum: 1 }, lastAt: { $max: '$startedAt' } } },
     ]),
     ...cbatConfigs.map(cfg => cfg.Model.aggregate([
       { $match: { ...(cfg.modeFilter ?? {}), userId: { $in: userIds } } },
-      { $group: { _id: '$userId', count: { $sum: 1 } } },
+      { $group: { _id: '$userId', count: { $sum: 1 }, lastAt: { $max: '$createdAt' } } },
     ])),
   ]);
 
@@ -1107,11 +1107,24 @@ async function enrichUsersWithStats(users) {
   const flashMap       = Object.fromEntries(flashCounts.map(f  => [f._id.toString(), f.total]));
   const cbatStartedMap = Object.fromEntries(cbatStartCounts.map(s => [s._id.toString(), s.count]));
 
+  // Most recent CBAT activity per user — a start (covers finished *and* abandoned
+  // sessions, both of which create a start) or a finish record (covers orphan/
+  // offline-synced finishes with no start). Used to flag idle testers.
+  const lastGameMap = {};
+  const trackLast = row => {
+    if (!row.lastAt) return;
+    const key = row._id.toString();
+    const ts  = new Date(row.lastAt).getTime();
+    if (!(key in lastGameMap) || ts > lastGameMap[key]) lastGameMap[key] = ts;
+  };
+  cbatStartCounts.forEach(trackLast);
+
   const cbatMap = {};
   cbatCountsPerGame.forEach(gameCounts => {
     gameCounts.forEach(row => {
       const key = row._id.toString();
       cbatMap[key] = (cbatMap[key] ?? 0) + row.count;
+      trackLast(row);
     });
   });
 
@@ -1120,6 +1133,7 @@ async function enrichUsersWithStats(users) {
     const uid   = plain._id.toString();
     return {
       ...plain,
+      lastTestGameAt: uid in lastGameMap ? new Date(lastGameMap[uid]).toISOString() : null,
       profileStats: {
         brifsRead:        briefMap[uid]          ?? 0,
         quizzesPlayed:    quizMap[uid]?.total     ?? 0,

@@ -101,6 +101,32 @@ describe('Admin — Users tab: tester flag', () => {
     expect(checkbox.checked).toBe(true)
   })
 
+  it('gives a tester who has NOT played today the idle pulsing border', async () => {
+    // No lastTestGameAt → never played → idle
+    global.fetch = setupFetch([OFFLINE_TESTER])
+
+    render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('tester@test.com'))
+
+    const row = screen.getByText('tester@test.com').closest('.admin-tester-row')
+    expect(row.className).toMatch(/admin-tester-idle/)
+    expect(row.className).not.toMatch(/border-amber-700/)
+  })
+
+  it('does NOT flag a tester as idle when they played a test game today', async () => {
+    const playedToday = { ...OFFLINE_TESTER, lastTestGameAt: new Date().toISOString() }
+    global.fetch = setupFetch([playedToday])
+
+    render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('tester@test.com'))
+
+    const row = screen.getByText('tester@test.com').closest('.admin-tester-row')
+    expect(row.className).not.toMatch(/admin-tester-idle/)
+    expect(row.className).toMatch(/border-amber-700/)
+  })
+
   it('sorts an offline tester above an offline non-tester', async () => {
     // Array order puts the plain user first; the tester must still render first.
     global.fetch = setupFetch([OFFLINE_PLAIN, OFFLINE_TESTER])

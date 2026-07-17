@@ -3041,6 +3041,15 @@ function onlineStatus(lastSeen) {
   return null
 }
 
+// True when the given timestamp falls on the admin's current calendar day.
+function playedToday(ts) {
+  if (!ts) return false
+  const d = new Date(ts), now = new Date()
+  return d.getFullYear() === now.getFullYear()
+      && d.getMonth()    === now.getMonth()
+      && d.getDate()     === now.getDate()
+}
+
 function UsersTab({ API }) {
   const { user: currentUser, refreshUser, apiFetch } = useAuth()
   const navigate = useNavigate()
@@ -3202,7 +3211,8 @@ function UsersTab({ API }) {
           const isExpanded = expanded.has(u._id)
           return (
           <div key={u._id} className={`rounded-2xl border overflow-hidden ${
-            u.isTester ? 'admin-tester-row border-amber-700/60'
+            u.isTester
+              ? `admin-tester-row ${playedToday(u.lastTestGameAt) ? 'border-amber-700/60' : 'admin-tester-idle'}`
             : u._id === currentUser?._id ? 'bg-red-950/40 border-red-900/50'
             : 'bg-surface border-slate-200'}`}>
             {/* Header (clickable — toggles expansion) */}

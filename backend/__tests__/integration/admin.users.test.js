@@ -311,6 +311,57 @@ describe('GET /api/admin/users — profileStats.cbatStarted', () => {
   });
 });
 
+// ── lastTestGameAt (idle-tester flag) ────────────────────────────────────────
+
+describe('GET /api/admin/users — lastTestGameAt', () => {
+  it('is null when the user has no CBAT activity', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    expect(u.lastTestGameAt).toBeNull();
+  });
+
+  it('reflects the most recent CBAT start time', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    const older  = new Date('2026-07-16T09:00:00Z');
+    const newer  = new Date('2026-07-17T14:30:00Z');
+    await GameSessionCbatStart.create({ userId: user._id, gameKey: 'target',  startedAt: older });
+    await GameSessionCbatStart.create({ userId: user._id, gameKey: 'symbols', startedAt: newer });
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    expect(new Date(u.lastTestGameAt).getTime()).toBe(newer.getTime());
+  });
+
+  it('isolates lastTestGameAt per user', async () => {
+    const admin = await createAdminUser();
+    const userA = await createUser();
+    const userB = await createUser();
+
+    const tA = new Date('2026-07-17T08:00:00Z');
+    await GameSessionCbatStart.create({ userId: userA._id, gameKey: 'target', startedAt: tA });
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const aRow = res.body.data.users.find(x => x._id.toString() === userA._id.toString());
+    const bRow = res.body.data.users.find(x => x._id.toString() === userB._id.toString());
+    expect(new Date(aRow.lastTestGameAt).getTime()).toBe(tA.getTime());
+    expect(bRow.lastTestGameAt).toBeNull();
+  });
+});
+
 // ── search endpoint ───────────────────────────────────────────────────────────
 
 describe('GET /api/admin/users/search — profileStats.brifsRead', () => {
