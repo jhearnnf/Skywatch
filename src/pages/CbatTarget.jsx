@@ -602,7 +602,7 @@ function SystemPanel({ columns, highlights, onClickCode, flashCode = null }) {
                   <button
                     key={ri}
                     onClick={() => onClickCode(ci, actualRow, code)}
-                    className={`sys-row w-full text-center font-mono text-[15px] cursor-pointer transition-colors ${
+                    className={`sys-row w-full text-center font-mono text-[19px] cursor-pointer transition-colors ${
                       isGreen ? 'bg-green-500/40 text-green-200' : 'text-[#ddeaf8] hover:bg-[#0f2240]'
                     }${isFlash ? ' cbat-row-flash' : ''}`}
                   >
