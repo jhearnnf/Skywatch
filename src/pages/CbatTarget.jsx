@@ -1888,13 +1888,31 @@ function blankStats() {
 }
 
 const SYS_ROW_PX = 32
+
+// Estimated height of one system column, used only to size the code list.
+// Estimates are deliberately biased high: over-estimating just lengthens the
+// loop, whereas under-estimating leaves the column shorter than its own
+// viewport and a visible gap appears at the wrap.
+function sysColumnHeightPx() {
+  if (typeof window === 'undefined') return 240
+  const h = window.innerHeight
+  // Mobile: .grid-system takes a 1fr share of the arena, which is the viewport
+  // minus ~260px of fixed rows — so it tracks device height rather than sitting
+  // at a fixed floor.
+  if (window.innerWidth <= 900) return Math.max(96, Math.min(300, h * 0.26))
+  // Desktop: arena is 60vh (min 520px) and a column spans ~90% of it.
+  return Math.max(520, h * 0.6) * 0.9
+}
+
 function initSysColumns() {
   // Row count scales with the column height so the duplicated list always
   // overflows and wraps with no visible edge — on tall desktops and short
-  // phones alike. The arena is capped at 60vh; a column spans ~90% of it, so
-  // 0.6·innerHeight is a safe upper bound. +4 rows of buffer, min 20.
-  const colPx = typeof window !== 'undefined' ? window.innerHeight * 0.6 : 600
-  const rows = Math.max(20, Math.ceil(colPx / SYS_ROW_PX) + 4)
+  // phones alike. Keeping the list proportional to the column also keeps the
+  // reappear time sane: speed is constant, so a code that leaves the top
+  // returns after list-length/speed. A fixed 20-row floor made short phones
+  // wait out a list twice as long as their own column. +4 rows of buffer.
+  const colPx = sysColumnHeightPx()
+  const rows = Math.max(10, Math.ceil(colPx / SYS_ROW_PX) + 4)
   // Constant scroll speed (px/ms) per column so a code that leaves the top
   // returns after one list length — reasonably quick and readable. Staggered
   // so the three tracks don't march in lockstep.

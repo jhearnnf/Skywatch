@@ -641,7 +641,7 @@ export default function CbatFlag() {
             )}
 
             {phase === 'playing' && (
-              <div className="w-full max-[600px]:h-[calc(100dvh-3rem)] max-[600px]:flex max-[600px]:flex-col max-[600px]:overflow-hidden">
+              <div className="w-full max-[600px]:h-[calc(100dvh-3rem-env(safe-area-inset-bottom))] max-[600px]:flex max-[600px]:flex-col max-[600px]:overflow-hidden">
                 {/* HUD */}
                 <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-[600px]:mb-1 max-[600px]:shrink-0">
                   <span className="text-slate-400">
