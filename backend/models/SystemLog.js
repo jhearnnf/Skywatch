@@ -48,6 +48,23 @@ const systemLogSchema = new mongoose.Schema({
   // Free-form structured detail (expected/actual answer counts, backfilled ids, etc.)
   details:       { type: mongoose.Schema.Types.Mixed, default: null },
 
+  // ── cors_origin_rejected + api_unreachable ────────────────────────────────
+  // origin:      the offending browser origin, e.g. 'https://www.skywatch.academy'
+  // requestPath: one example path that was refused (not exhaustive — aggregated)
+  // dayKey:      'YYYY-MM-DD', so repeat offences collapse into one row per day
+  //              rather than flooding the log with thousands of identical rows
+  origin:      { type: String, default: '' },
+  requestPath: { type: String, default: '' },
+  dayKey:      { type: String, default: '' },
+  userAgent:   { type: String, default: '' },
+  hitCount:    { type: Number, default: 0 },
+  firstSeenAt: { type: Date, default: null },
+  lastSeenAt:  { type: Date, default: null },
+  // api_unreachable only: how long the device had been failing, and how many
+  // scores were stuck in its outbox when it finally got through.
+  failingForMs: { type: Number, default: 0 },
+  queuedCount:  { type: Number, default: 0 },
+
   // ── common error detail ────────────────────────────────────────────────────
   failureReason: { type: String, default: '' },
 
@@ -57,5 +74,8 @@ const systemLogSchema = new mongoose.Schema({
 });
 
 systemLogSchema.index({ resolved: 1, time: -1 });
+// Backs the per-origin-per-day upsert in utils/rejectedOriginLog.js. Sparse so
+// the many rows without an origin (brief generation failures etc.) stay out.
+systemLogSchema.index({ type: 1, origin: 1, dayKey: 1 }, { sparse: true });
 
 module.exports = mongoose.model('SystemLog', systemLogSchema);

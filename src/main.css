@@ -340,6 +340,25 @@ body.cbat-sat-beta {
   animation: dpt-command-pulse 1.6s ease-out forwards;
 }
 
+/* Score-sync pill (OfflineStatus). Deliberately slow — this sits on the CBAT
+   menu and score screens to say something is unsynced, not to demand attention.
+   A quick blink would read as an error and pull focus off the page. The dot
+   carries most of the movement; the pill itself only breathes. */
+@keyframes sync-status-breathe {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.82; }
+}
+@keyframes sync-status-dot-pulse {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.82); }
+}
+.sync-status-pill {
+  animation: sync-status-breathe 3.2s ease-in-out infinite;
+}
+.sync-status-dot {
+  animation: sync-status-dot-pulse 3.2s ease-in-out infinite;
+}
+
 @media (max-width: 600px) {
   .chrome-immersive .app-topbar    { transform: translateY(-100%); pointer-events: none; }
   .chrome-immersive .app-bottomnav { transform: translateY(100%);  pointer-events: none; }

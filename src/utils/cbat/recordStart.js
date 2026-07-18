@@ -13,6 +13,7 @@
 import { isOnline } from '../../lib/net'
 import { makeClientId } from '../../lib/clientId'
 import { startboxPut, startboxDelete, startboxAll } from '../../lib/offlineStore'
+import { getOutboxOwner, ownsQueuedItem } from '../../lib/outboxOwner'
 
 const startUrl = (API, gameKey) => `${API}/api/games/cbat/${gameKey}/start`
 
@@ -31,7 +32,8 @@ export async function recordCbatStart(gameKey, apiFetch, API) {
     const clientStartId = makeClientId('csi')
     const startedAt = new Date().toISOString()
     const body = { clientStartId, startedAt }
-    const item = { clientStartId, gameKey, body, queuedAt: Date.now() }
+    // Stamped with the owner for the same reason scores are — see outboxOwner.js.
+    const item = { clientStartId, gameKey, body, queuedAt: Date.now(), userId: getOutboxOwner() }
 
     if (isOnline()) {
       try {
@@ -55,13 +57,16 @@ let flushing = false
 
 // Replay every queued start. Safe to call repeatedly (mount, reconnect). A
 // single in-flight guard prevents overlapping drains.
-export async function flushStartOutbox({ apiFetch, API }) {
+// `userId` may be passed explicitly — see the note on flushOutbox in cbatOutbox.js.
+export async function flushStartOutbox({ apiFetch, API, userId }) {
   if (flushing || !isOnline()) return
   flushing = true
   try {
     const items = await startboxAll()
+    const owner = userId ?? getOutboxOwner()
     for (const item of items) {
       if (!isOnline()) break
+      if (!ownsQueuedItem(item, owner)) continue // another user's beacon — leave queued
       let res
       try {
         res = await apiFetch(startUrl(API, item.gameKey), postOpts(item.body))

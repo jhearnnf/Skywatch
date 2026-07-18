@@ -8,6 +8,9 @@ import { flushStartOutbox } from '../utils/cbat/recordStart'
 import { onNetworkChange } from '../lib/net'
 import { getAircraftRoster } from '../lib/offlineRoster'
 import { warmOfflineAssets } from '../lib/warmOfflineAssets'
+import { setOutboxOwner } from '../lib/outboxOwner'
+import { noteApiReachable, noteApiUnauthorized, noteApiUnreachable, onApiHealthChange, getApiHealth } from '../lib/apiHealth'
+import { reportApiUnreachable, stashUnreachable } from '../lib/apiDiagnostics'
 
 const AuthContext = createContext(null)
 
@@ -79,7 +82,23 @@ export function AuthProvider({ children }) {
       const opts = isNative
         ? { ...options, headers: { ...nativeHeaders(), ...options?.headers } }
         : { credentials: 'include', ...options }
-      return await fetch(url, opts)
+      let res
+      try {
+        res = await fetch(url, opts)
+      } catch (err) {
+        // No status code to read: the request never completed. Offline, DNS,
+        // a dead backend, or a CORS rejection — the browser reports them all
+        // identically. Previously this just propagated and every caller
+        // swallowed it, which is how weeks of play vanished unnoticed.
+        noteApiUnreachable(err)
+        throw err
+      }
+      // 401 means the API is alive and has rejected this session. Anything else
+      // (including 403 for tier gating or a suspended account) just proves it's
+      // reachable — don't sign people out over a paywall.
+      if (res.status === 401) noteApiUnauthorized()
+      else noteApiReachable()
+      return res
     } finally {
       clearTimeout(showTimer)
       if (overlayShown) {
@@ -101,11 +120,22 @@ export function AuthProvider({ children }) {
     const controller = new AbortController()
     const timeoutId  = setTimeout(() => controller.abort(), 8000)
     fetch(`${API}/api/auth/me`, { headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }), signal: controller.signal })
-      .then(r => r.ok ? r.json() : null)
+      .then(r => {
+        // A 401 here is definitive: the API is up and this session is dead.
+        // Clearing the cached user is what turns "app silently records nothing"
+        // into "please sign in". Any other failure mode leaves the cache alone
+        // so genuine offline play still works.
+        if (r.status === 401) { noteApiUnauthorized(); return null }
+        noteApiReachable()
+        return r.ok ? r.json() : null
+      })
       .then(data => {
         const u = data?.data?.user ?? null
         setUser(u)
         if (u) identifyUser(u)
+        // Native has no cookie to renew, so it takes a freshly-signed token from
+        // /me on every launch. That's what keeps an app user signed in for good.
+        if (u && data?.data?.token) storeNativeToken(data.data.token)
         // If an admin reset this user's tutorials server-side, clear localStorage tutorial keys
         if (u?.tutorialsResetAt) {
           const resetTs   = new Date(u.tutorialsResetAt).getTime()
@@ -120,8 +150,37 @@ export function AuthProvider({ children }) {
           }
         }
       })
-      .catch(() => {})
+      .catch((err) => {
+        // Couldn't reach the API at all. The cached user deliberately survives
+        // so offline play keeps working — but this is now recorded, so the app
+        // can say "can't reach Skywatch" instead of pretending all is well.
+        if (err?.name !== 'AbortError') noteApiUnreachable(err)
+        else noteApiUnreachable(new Error('auth check timed out'))
+      })
       .finally(() => { clearTimeout(timeoutId); setLoading(false) })
+  }, [])
+
+  // Keep the offline queues pointed at the signed-in user so a flush can never
+  // post one person's scores to another's account.
+  useEffect(() => { setOutboxOwner(user?._id ?? null) }, [user])
+
+  // While the API is unreachable, keep a local record of how long it's been
+  // going. Re-stashed on a timer because the outage only becomes worth
+  // reporting once it has lasted a while, and we can't know the duration up
+  // front. It's posted on the next successful sign-in (reportApiUnreachable).
+  useEffect(() => {
+    let timer = null
+    const sync = ({ status }) => {
+      if (status === 'unreachable' && !timer) {
+        stashUnreachable()
+        timer = setInterval(stashUnreachable, 60_000)
+      } else if (status !== 'unreachable' && timer) {
+        clearInterval(timer); timer = null
+      }
+    }
+    sync(getApiHealth())
+    const off = onApiHealthChange(sync)
+    return () => { off(); if (timer) clearInterval(timer) }
   }, [])
 
   // Flush any CBAT scores + start beacons queued while offline — on first load
@@ -130,16 +189,21 @@ export function AuthProvider({ children }) {
   // logged-in session can sync them.
   useEffect(() => {
     if (!user) return
-    flushOutbox({ apiFetch, API })
-    flushStartOutbox({ apiFetch, API })
+    // userId passed explicitly: the queues filter on ownership, and relying on
+    // the setOutboxOwner effect having already run would make a drain silently
+    // no-op depending on effect order.
+    flushOutbox({ apiFetch, API, userId: user._id })
+    flushStartOutbox({ apiFetch, API, userId: user._id })
+    // If this device sat unable to reach us, tell the server now that it can.
+    reportApiUnreachable({ apiFetch, API })
     // Prime offline caches in the background: roster JSON → cutout images + GLBs.
     getAircraftRoster('aircraft-cutouts', { apiFetch, API })
       .then(() => warmOfflineAssets())
       .catch(() => {})
     const off = onNetworkChange((online) => {
       if (online) {
-        flushOutbox({ apiFetch, API })
-        flushStartOutbox({ apiFetch, API })
+        flushOutbox({ apiFetch, API, userId: user._id })
+        flushStartOutbox({ apiFetch, API, userId: user._id })
       }
     })
     return off

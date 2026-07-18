@@ -13,12 +13,15 @@ vi.mock('../../../lib/offlineStore', () => ({
 }))
 
 import { recordCbatStart, flushStartOutbox } from '../recordStart'
+import { setOutboxOwner } from '../../../lib/outboxOwner'
 import { isOnline } from '../../../lib/net'
 
 const API = 'http://x'
 const ctx = (apiFetch) => ({ apiFetch, API })
 
-beforeEach(() => { mem.clear(); vi.clearAllMocks(); isOnline.mockReturnValue(true) })
+// Start beacons are ownership-filtered now — nothing flushes without a signed-in
+// user. Ownership is covered in lib/__tests__/outboxOwner.test.js; setup here.
+beforeEach(() => { mem.clear(); vi.clearAllMocks(); isOnline.mockReturnValue(true); setOutboxOwner('test-user') })
 
 describe('recordCbatStart', () => {
   it('POSTs immediately when online and does not queue', async () => {

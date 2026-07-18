@@ -3,27 +3,44 @@ const express      = require('express');
 const cors         = require('cors');
 const cookieParser = require('cookie-parser');
 const path         = require('path');
+const { recordRejectedOrigin } = require('./utils/rejectedOriginLog');
 
 const app = express();
 
 // Stripe webhook needs raw body — must be registered BEFORE express.json()
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), require('./routes/stripeWebhook'));
 
-const allowedOrigins = [
+// Both the apex and www are listed explicitly. Vercel serves the site on both
+// and does not redirect between them, so a user who arrives on www is on a
+// different origin to one who arrives on the apex — different storage, and
+// previously a completely broken (but normal-looking) site. CLIENT_URL stays
+// first so a deploy can still point somewhere else without a code change.
+const allowedOrigins = new Set([
   process.env.CLIENT_URL,
+  'https://skywatch.academy',
+  'https://www.skywatch.academy',
   'http://localhost:5173',
   'http://localhost:4173',
   'https://localhost',       // Capacitor Android WebView
   'capacitor://localhost',   // Capacitor Android scheme
-].filter(Boolean)
+].filter(Boolean))
 
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true)
-    cb(new Error(`CORS: origin ${origin} not allowed`))
-  },
-  credentials: true,
-}));
+// Gate disallowed origins *before* cors() rather than inside its callback.
+// Throwing from that callback produced a 500 with no CORS headers, which is
+// both wrong (it isn't a server fault) and unloggable. Here we answer with a
+// clean 403 and, more importantly, leave a record — see rejectedOriginLog.js
+// for why the server is the only place this failure can be observed.
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+  if (!origin || allowedOrigins.has(origin)) return next()
+  recordRejectedOrigin(origin, req)
+  return res.status(403).json({ message: 'Origin not allowed' })
+});
+
+// Everything reaching here has an allowed origin (or none at all, e.g. curl and
+// server-to-server callers), so reflecting it is safe. The gate above is the
+// authority on what's permitted — don't duplicate the list here.
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 

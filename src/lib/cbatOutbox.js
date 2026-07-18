@@ -12,6 +12,7 @@
 import { isOnline } from './net'
 import { outboxPut, outboxDelete, outboxAll, outboxCount } from './offlineStore'
 import { makeClientId } from './clientId'
+import { getOutboxOwner, ownsQueuedItem } from './outboxOwner'
 
 const resultUrl = (API, gameKey) => `${API}/api/games/cbat/${gameKey}/result`
 
@@ -48,7 +49,9 @@ export async function submitCbatResult(gameKey, payload, { apiFetch, API }) {
   const clientResultId = makeClientId()
   const playedAt = new Date().toISOString()
   const body = { ...payload, clientResultId, playedAt }
-  const item = { clientResultId, gameKey, body, queuedAt: Date.now() }
+  // userId stamps who this score belongs to, so a later flush can't post it as
+  // somebody else on a shared device. See lib/outboxOwner.js.
+  const item = { clientResultId, gameKey, body, queuedAt: Date.now(), userId: getOutboxOwner() }
 
   if (isOnline()) {
     try {
@@ -77,14 +80,23 @@ let flushing = false
 
 // Replay every queued score. Safe to call repeatedly (mount, reconnect, after a
 // successful submit). A single in-flight guard prevents overlapping drains.
-export async function flushOutbox({ apiFetch, API }) {
+// `userId` may be passed explicitly by the caller that already knows who is
+// signed in (AuthContext does). Falling back to the module value would otherwise
+// make flushing depend on effect ordering — if the owner hadn't been set yet the
+// drain would silently no-op, which is the exact class of silent failure this
+// whole change exists to remove.
+export async function flushOutbox({ apiFetch, API, userId }) {
   if (flushing || !isOnline()) return
   flushing = true
   let changed = false
   try {
     const items = await outboxAll()
+    const owner = userId ?? getOutboxOwner()
     for (const item of items) {
       if (!isOnline()) break
+      // Someone else's score, queued on a shared device. Skip it — it stays put
+      // and syncs when they next sign in here. Never posted as the wrong user.
+      if (!ownsQueuedItem(item, owner)) continue
       let res
       try {
         res = await apiFetch(resultUrl(API, item.gameKey), postOpts(item.body))

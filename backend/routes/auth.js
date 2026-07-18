@@ -1,7 +1,6 @@
 const router      = require('express').Router();
 const bcrypt      = require('bcryptjs');
 const crypto      = require('crypto');
-const jwt         = require('jsonwebtoken');
 const User        = require('../models/User');
 const Rank        = require('../models/Rank');
 const PendingRegistration    = require('../models/PendingRegistration');
@@ -46,18 +45,11 @@ const getAcRankId = async () => {
   return rank?._id ?? null;
 };
 
-const signToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+const { signToken, setAuthCookie } = require('../utils/authToken');
 
 const sendToken = async (user, statusCode, res, extras = {}) => {
   const token = signToken(user._id);
-  const isProd = process.env.NODE_ENV === 'production'
-  res.cookie('jwt', token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? 'none' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  });
+  setAuthCookie(res, token);
   user.password = undefined;
   // Populate rank so the frontend sees { rankNumber, rankName, ... } on the very
   // first response — otherwise pathway/rank-gated UI reads user.rank as a bare
@@ -396,7 +388,11 @@ router.post('/activate-trial', protect, async (req, res) => {
 router.get('/me', require('../middleware/auth').protect, async (req, res) => {
   const userObj = req.user.toObject ? req.user.toObject({ virtuals: true }) : { ...req.user };
   await withSelectedBadge(userObj);
-  res.json({ status: 'success', data: { user: userObj } });
+  // A freshly-signed token rides along on every /me. Web clients don't need it
+  // (protect renews the cookie for them), but native stores a Bearer token in
+  // localStorage and has no cookie to renew — calling /me on launch is how the
+  // app slides its session forward and stops users being logged out.
+  res.json({ status: 'success', data: { user: userObj, token: signToken(req.user._id) } });
 });
 
 module.exports = router;

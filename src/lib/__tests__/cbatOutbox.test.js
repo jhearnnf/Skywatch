@@ -14,13 +14,17 @@ vi.mock('../offlineStore', () => ({
 }))
 
 import { submitCbatResult, flushOutbox } from '../cbatOutbox'
+import { setOutboxOwner } from '../outboxOwner'
 import { isOnline } from '../net'
 
 const API = 'http://x'
 const okRes = { ok: true, status: 201 }
 const ctx = (apiFetch) => ({ apiFetch, API })
 
-beforeEach(() => { mem.clear(); vi.clearAllMocks(); isOnline.mockReturnValue(true) })
+// Queues are now ownership-filtered — nothing flushes unless someone is signed
+// in, so these cases need an owner. Ownership itself is covered in
+// outboxOwner.test.js; here it's just setup.
+beforeEach(() => { mem.clear(); vi.clearAllMocks(); isOnline.mockReturnValue(true); setOutboxOwner('test-user') })
 
 describe('submitCbatResult', () => {
   it('posts immediately when online and does not queue', async () => {

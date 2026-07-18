@@ -11,6 +11,7 @@ const IntelligenceBriefRead  = require('../models/IntelligenceBriefRead');
 const IntelligenceBrief = require('../models/IntelligenceBrief');
 const Media = require('../models/Media');
 const ProblemReport = require('../models/ProblemReport');
+const SystemLog = require('../models/SystemLog');
 const UserNotification = require('../models/UserNotification');
 const AppSettings = require('../models/AppSettings');
 const Level = require('../models/Level');
@@ -680,6 +681,40 @@ router.post('/heartbeat', protect, async (req, res) => {
   try {
     await User.findByIdAndUpdate(req.user._id, { lastSeen: new Date() });
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/users/diagnostics/unreachable
+// The client couldn't reach the API at all while the browser reported being
+// online, and has been sitting on unsent scores. It queues that observation on
+// the device and posts it here once it gets through — so this report ALWAYS
+// arrives late, describing a window that has already closed.
+//
+// That delay is inherent: a client with no route to the API cannot tell the API
+// about it. The server-side cors_origin_rejected log is the real-time tripwire;
+// this fills the gap for failures that never reach us at all (backend down, DNS,
+// captive portals). It only surfaces users who eventually come back — anyone who
+// gives up and never returns stays invisible, which is precisely how the
+// original www-origin breakage went unnoticed for five weeks.
+router.post('/diagnostics/unreachable', protect, async (req, res) => {
+  try {
+    const { origin, failingForMs, queuedCount, lastError } = req.body || {};
+    const now = new Date();
+    await SystemLog.create({
+      type:        'api_unreachable',
+      userId:      req.user._id,
+      origin:      String(origin ?? '').slice(0, 300),
+      userAgent:   String(req.headers['user-agent'] ?? '').slice(0, 300),
+      failingForMs: Number.isFinite(Number(failingForMs)) ? Math.max(0, Number(failingForMs)) : 0,
+      queuedCount:  Number.isFinite(Number(queuedCount))  ? Math.max(0, Number(queuedCount))  : 0,
+      failureReason: String(lastError ?? '').slice(0, 500),
+      firstSeenAt: now,
+      lastSeenAt:  now,
+      time:        now,
+    });
+    res.status(201).json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

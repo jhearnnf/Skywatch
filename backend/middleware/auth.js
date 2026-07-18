@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { maybeRenewSession } = require('../utils/authToken');
 
 // Extract JWT from Authorization header (Bearer) or fall back to cookie
 const extractToken = (req) => {
@@ -53,6 +54,12 @@ const protect = async (req, res, next) => {
   req.user = await User.findById(decoded.id).select('-password').populate('rank');
   if (!req.user) return res.status(401).json({ message: 'User not found' });
   if (req.user.isBanned) return res.status(403).json({ message: 'Account suspended. Please contact support.' });
+
+  // Slide the session forward so an active user is never logged out. No-op
+  // until the token is past RENEW_AFTER_MS, so this costs nothing on ordinary
+  // traffic. Cookie-based (web) only — native picks up a renewed Bearer token
+  // from GET /api/auth/me instead.
+  maybeRenewSession(res, decoded);
 
   await normalizeStaleStreak(req.user);
 
