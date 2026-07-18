@@ -109,7 +109,7 @@ function ResultsScreen({ answers, totalTime }) {
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(1)}s</p>
+            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(2)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
         </div>
@@ -221,20 +221,26 @@ export default function CbatSymbols() {
 
   const currentRound = rounds[currentIdx] || null
 
+  // True elapsed since the run began. The clock is anchored to a single
+  // start timestamp (set in startGame) rather than re-based on each phase
+  // change — re-basing off the last sampled `elapsed` discarded up to one
+  // tick of real time per round, so totals drifted progressively short.
+  const readElapsed = useCallback(
+    () => (startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0),
+    []
+  )
+
   // Timer — runs during 'playing' and 'feedback' phases (feedback is part of total time)
   useEffect(() => {
     if (phase === 'playing' || phase === 'feedback') {
-      const offset = elapsed * 1000
-      const t0 = Date.now() - offset
-      startTimeRef.current = t0
       timerRef.current = setInterval(() => {
-        setElapsed((Date.now() - t0) / 1000)
+        setElapsed(readElapsed())
       }, 100)
       return () => clearInterval(timerRef.current)
     } else {
       clearInterval(timerRef.current)
     }
-  }, [phase])
+  }, [phase, readElapsed])
 
   // Cleanup pending advance timeout on unmount
   useEffect(() => {
@@ -252,6 +258,7 @@ export default function CbatSymbols() {
     setWasCorrect(null)
     setLastRoundTime(0)
     setElapsed(0)
+    startTimeRef.current = Date.now()
     roundStartRef.current = 0
     setPhase('playing')
   }, [apiFetch, API])
@@ -260,6 +267,7 @@ export default function CbatSymbols() {
     clearInterval(timerRef.current)
     if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current)
     setPhase('intro')
+    startTimeRef.current = null
     setRounds([])
     setCurrentIdx(0)
     setAnswers([])
@@ -272,7 +280,7 @@ export default function CbatSymbols() {
   // Reset round-start timestamp when a new round begins
   useEffect(() => {
     if (phase === 'playing') {
-      roundStartRef.current = elapsed
+      roundStartRef.current = readElapsed()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx, phase])
@@ -280,7 +288,7 @@ export default function CbatSymbols() {
   const handlePick = (symbol) => {
     if (phase !== 'playing' || !currentRound) return
     const correct = symbol === currentRound.target
-    const roundTime = elapsed - roundStartRef.current
+    const roundTime = readElapsed() - roundStartRef.current
     const newAnswers = [
       ...answers,
       { target: currentRound.target, picked: symbol, correct, roundTime, tier: currentRound.tier },
@@ -294,7 +302,13 @@ export default function CbatSymbols() {
     advanceTimeoutRef.current = setTimeout(() => {
       const nextIdx = currentIdx + 1
       if (nextIdx >= TOTAL_ROUNDS) {
-        submitScore(newAnswers, elapsed + FEEDBACK_MS / 1000)
+        // One authoritative reading, used for BOTH the results screen and the
+        // submitted score. Previously the screen rendered the last 100ms tick
+        // of `elapsed` while the leaderboard got `elapsed + FEEDBACK_MS`, so
+        // the two could round to different tenths (e.g. 12.4s vs 12.5s).
+        const finalTime = readElapsed()
+        setElapsed(finalTime)
+        submitScore(newAnswers, finalTime)
         setPhase('results')
         return
       }
@@ -380,7 +394,7 @@ export default function CbatSymbols() {
                   <p className="text-lg font-mono font-bold text-brand-300">
                     {personalBest.bestScore}/{TOTAL_ROUNDS} ({Math.round((personalBest.bestScore / TOTAL_ROUNDS) * 100)}%)
                     <span className="text-slate-500 mx-1">{'\u00b7'}</span>
-                    {personalBest.bestTime.toFixed(1)}s
+                    {personalBest.bestTime.toFixed(2)}s
                   </p>
                   <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                 </div>

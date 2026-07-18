@@ -137,7 +137,8 @@ describe('CbatLeaderboard — all-time tab', () => {
     await selectAllTime()
 
     await waitFor(() => expect(screen.getByText('15/15')).toBeDefined())
-    expect(screen.getByText('42.5s')).toBeDefined()
+    // Symbols sets timeDecimals: 2 — runs cluster tightly and time is the tiebreaker
+    expect(screen.getByText('42.50s')).toBeDefined()
   })
 
   it('renders email instead of agent number for admin rows', async () => {

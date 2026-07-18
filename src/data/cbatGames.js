@@ -33,6 +33,8 @@ export const CBAT_GAMES = [
 //   lowerIsBetter — all-time board direction (weekly is always higher-better,
 //                   because lower-better games sum a derived points value).
 //   hideTime      — game has no meaningful per-run time column.
+//   timeDecimals  — decimal places on the time column (default 1). Symbols uses
+//                   2 because runs cluster tightly and time is the tiebreaker.
 export const CBAT_LEADERBOARD_CONFIG = {
   'plane-turn-2d':   { title: 'Trace Practise 2D', emoji: '🗺️', scoreLabel: 'Rotations', lowerIsBetter: true,  formatScore: (s) => `${s}`,     backPath: '/cbat/trace',          planeTurnMode: '2d' },
   'plane-turn-3d':   { title: 'Trace Practise 3D', emoji: '🗺️', scoreLabel: 'Rotations', lowerIsBetter: true,  formatScore: (s) => `${s}`,     backPath: '/cbat/trace',          planeTurnMode: '3d' },
@@ -40,7 +42,7 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'trace-2':         { title: 'Trace 2',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/8`,   backPath: '/cbat/trace',          hideTime: true },
   'angles':          { title: 'Angles',            emoji: '📐',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/20`,  backPath: '/cbat/angles' },
   'code-duplicates': { title: 'Code Duplicates',   emoji: '🧩',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/15`,  backPath: '/cbat/code-duplicates' },
-  'symbols':         { title: 'Symbols',           emoji: '🔣',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/15`,  backPath: '/cbat/symbols' },
+  'symbols':         { title: 'Symbols',           emoji: '🔣',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/15`,  backPath: '/cbat/symbols', timeDecimals: 2 },
   'target':          { title: 'Target',            emoji: '🎯',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/target',         hideTime: true },
   'instruments':     { title: 'Instruments',       emoji: '🛫',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/instruments',    hideTime: true },
   'ant':             { title: 'ANT',               emoji: '📡',  scoreLabel: 'Points',    lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/ant' },

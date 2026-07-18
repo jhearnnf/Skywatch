@@ -85,7 +85,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
               <span className="ml-1 text-[8px] font-bold px-1 py-0.5 rounded bg-brand-600/80 text-white leading-none align-middle">3D</span>
             )}
           </span>
-          {!cfg.hideTime && <span className="text-right font-mono text-slate-400">{entry.bestTime.toFixed(1)}s</span>}
+          {!cfg.hideTime && <span className="text-right font-mono text-slate-400">{entry.bestTime.toFixed(cfg.timeDecimals ?? 1)}s</span>}
         </>
       )}
     </motion.div>

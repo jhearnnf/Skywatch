@@ -267,14 +267,25 @@ export default function CbatInstruments() {
       .catch(() => {})
   }, [apiFetch, API])
 
+  // True elapsed since the run began, read from the single start timestamp set
+  // in startGame. Deliberately not derived from the `elapsed` state: endGame
+  // used to depend on it, so its identity changed every tick, which re-ran the
+  // timer effect below and re-based the clock 10x a second — each re-base
+  // dropped the sub-tick remainder, so the timer ran measurably slow.
+  const readElapsed = useCallback(
+    () => (startTimeRef.current ? (Date.now() - startTimeRef.current) / 1000 : 0),
+    []
+  )
+
   const endGame = useCallback(() => {
     if (calibrationTimeoutRef.current) clearTimeout(calibrationTimeoutRef.current)
     if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current)
     const current = answersRef.current
-    const finalTime = Math.min(elapsed, TIME_LIMIT)
+    const finalTime = Math.min(readElapsed(), TIME_LIMIT)
+    setElapsed(finalTime)
     submitScore(current, finalTime)
     setPhase('results')
-  }, [elapsed, submitScore])
+  }, [readElapsed, submitScore])
 
   // Master timer — runs during calibrating/playing/feedback. Fires endGame at cap.
   useEffect(() => {
@@ -282,11 +293,8 @@ export default function CbatInstruments() {
       clearInterval(timerRef.current)
       return
     }
-    const offset = elapsed * 1000
-    const t0 = Date.now() - offset
-    startTimeRef.current = t0
     timerRef.current = setInterval(() => {
-      const now = (Date.now() - t0) / 1000
+      const now = readElapsed()
       setElapsed(now)
       if (now >= TIME_LIMIT) {
         clearInterval(timerRef.current)
@@ -294,7 +302,7 @@ export default function CbatInstruments() {
       }
     }, 100)
     return () => clearInterval(timerRef.current)
-  }, [phase, endGame])
+  }, [phase, endGame, readElapsed])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -325,6 +333,7 @@ export default function CbatInstruments() {
     setAnswers([])
     answersRef.current = []
     setElapsed(0)
+    startTimeRef.current = Date.now()
     setScoreSaved(false)
     setRoundIndex(0)
     startCalibration()
@@ -338,13 +347,14 @@ export default function CbatInstruments() {
     setAnswers([])
     answersRef.current = []
     setElapsed(0)
+    startTimeRef.current = null
     setScoreSaved(false)
   }, [])
 
   const handlePick = useCallback((idx) => {
     if (phase !== 'playing' || !round) return
     const correct = idx === round.correctIdx
-    const roundTime = elapsed - roundStartRef.current
+    const roundTime = readElapsed() - roundStartRef.current
     const newAnswers = [
       ...answersRef.current,
       { pickedIdx: idx, correctIdx: round.correctIdx, correct, roundTime, params: round.params },
@@ -357,13 +367,13 @@ export default function CbatInstruments() {
     setPhase('feedback')
 
     advanceTimeoutRef.current = setTimeout(() => {
-      if (elapsed >= TIME_LIMIT) {
+      if (readElapsed() >= TIME_LIMIT) {
         endGame()
         return
       }
       startCalibration()
     }, FEEDBACK_MS)
-  }, [phase, round, elapsed, startCalibration, endGame])
+  }, [phase, round, readElapsed, startCalibration, endGame])
 
   const timeRemaining = Math.max(0, TIME_LIMIT - elapsed)
   const correctSoFar = answers.filter(a => a.correct).length
