@@ -16,7 +16,8 @@ const TOTAL_QUESTIONS = SITUATIONS * QUESTIONS_PER_SITUATION
 const OBSERVE_MS = 28000      // study window per situation
 const PER_QUESTION_MS = 22000 // recall timer per question
 const AIRCRAFT_SLOT_MS = 5000 // panel 4 shows one callsign at a time, switching on this cadence
-const UNIT_SLOT_MS = 4000     // grid shows one unit at a time, switching on this cadence
+// The grid shows each contact exactly once — the observe window is split evenly
+// between them (3–5 units → ~6–9s each) and the last one stays up until the end.
 
 function buildSituations() {
   const out = []
@@ -64,11 +65,11 @@ function SatGrid({ units }) {
 
       {/* column labels 0–9, along the top */}
       {COLS.map((c, i) => (
-        <text key={`c${c}`} x={gx + i * cell + cell / 2} y={gy - 7} fill="#9fb4d0" fontSize="13" fontWeight="bold" textAnchor="middle">{c}</text>
+        <text key={`c${c}`} x={gx + i * cell + cell / 2} y={gy - 7} fill="#9fb4d0" fontSize="16" fontWeight="bold" textAnchor="middle">{c}</text>
       ))}
       {/* row labels A–J, down the left */}
       {ROWS.map((rw, i) => (
-        <text key={`r${rw}`} x={gx - 11} y={gy + i * cell + cell / 2 + 4} fill="#9fb4d0" fontSize="13" fontWeight="bold" textAnchor="middle">{rw}</text>
+        <text key={`r${rw}`} x={gx - 11} y={gy + i * cell + cell / 2 + 5} fill="#9fb4d0" fontSize="16" fontWeight="bold" textAnchor="middle">{rw}</text>
       ))}
 
       {/* units — caller passes only the currently-revealed one */}
@@ -81,9 +82,9 @@ function SatGrid({ units }) {
         return (
           <g key={u.id}>
             <circle cx={cx} cy={cy} r={r} fill={color} fillOpacity="0.18" stroke={color} strokeWidth="2.2" />
-            <text x={cx} y={cy + 4.5} fill={color} fontSize="14" fontWeight="bold" textAnchor="middle">{TYPE_LETTER[u.type]}</text>
+            <text x={cx} y={cy + 6} fill={color} fontSize="18" fontWeight="bold" textAnchor="middle">{TYPE_LETTER[u.type]}</text>
             {/* count badge, top-right of the marker */}
-            <text x={cx + r + 1} y={cy - r + 4} fill="#ddeaf8" fontSize="12" fontWeight="bold" textAnchor="middle">{u.count}</text>
+            <text x={cx + r + 2} y={cy - r + 4} fill="#ddeaf8" fontSize="15" fontWeight="bold" textAnchor="middle">{u.count}</text>
             {/* travel-direction arrow, offset from the marker on the heading side */}
             <polygon
               points={arrowPoints(cx + HEADING_VEC[u.heading][0] * (r + 6), cy + HEADING_VEC[u.heading][1] * (r + 6), u.heading, 5)}
@@ -98,25 +99,37 @@ function SatGrid({ units }) {
 
 function GridLegend() {
   return (
-    <div className="mt-2 text-[10px] text-slate-400 leading-relaxed">
+    <div className="mt-2 text-xs text-slate-400 leading-relaxed">
       <p className="mb-0.5">Each cell = <span className="text-slate-300">2 km</span> · letters next to a marker show how many · arrow shows heading.</p>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5">
         <span><span style={{ color: ALLEGIANCE_COLOR.friendly }}>■</span> Yellow = Friendly</span>
         <span><span style={{ color: ALLEGIANCE_COLOR.hostile }}>■</span> Red = Hostile</span>
         <span><span style={{ color: ALLEGIANCE_COLOR.unknown }}>■</span> White = Unknown</span>
       </div>
-      <p className="mt-0.5 text-slate-500">Marker letter: T = Tank · H = Helicopter · J = Jet</p>
+      <p className="mt-1 text-slate-500">Marker letter: T = Tank · H = Helicopter · J = Jet</p>
     </div>
   )
 }
 
 const WAYPOINT_ARROW = { N: '↑', S: '↓', E: '→', W: '←' }
 
-function AircraftField({ label, children }) {
+// Each callsign owns a colour so the panel reads at a glance when it switches:
+// York blue, Leeds red, Hull yellow.
+const CALLSIGN_THEME = {
+  York: { panel: '#0a1628', field: '#060e1a', border: '#1a3a5c', dot: '#5baaff', text: 'text-brand-300' },
+  Leeds: { panel: '#1c0d12', field: '#120709', border: '#5c1f2a', dot: '#ff7b8a', text: 'text-red-300' },
+  Hull: { panel: '#1a1405', field: '#120d03', border: '#5c4a12', dot: '#fbbf24', text: 'text-amber-300' },
+}
+const DEFAULT_THEME = CALLSIGN_THEME.York
+
+function AircraftField({ label, children, theme = DEFAULT_THEME }) {
   return (
-    <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg px-3 py-2.5">
-      <dt className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</dt>
-      <dd className="text-base text-[#ddeaf8] font-mono">{children}</dd>
+    <div
+      className="border rounded-lg px-3 py-2.5"
+      style={{ backgroundColor: theme.field, borderColor: theme.border }}
+    >
+      <dt className="text-xs text-slate-500 uppercase tracking-wide mb-0.5">{label}</dt>
+      <dd className="text-lg text-[#ddeaf8] font-mono">{children}</dd>
     </div>
   )
 }
@@ -127,26 +140,32 @@ function AircraftField({ label, children }) {
 function AircraftPanel({ aircraft, activeIdx }) {
   const ac = aircraft[activeIdx % aircraft.length]
   if (!ac) return null
+  const theme = CALLSIGN_THEME[ac.callsign] || DEFAULT_THEME
   return (
-    <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-3 h-full flex flex-col">
+    <div
+      className="border rounded-lg p-3 h-full flex flex-col"
+      style={{ backgroundColor: theme.panel, borderColor: theme.border }}
+    >
       <div className="flex items-center justify-between mb-3">
-        <p className="text-2xl font-extrabold text-brand-300 tracking-wide">{ac.callsign}</p>
+        <p className={`text-2xl font-extrabold tracking-wide ${theme.text}`}>{ac.callsign}</p>
         <div className="flex gap-1.5">
           {aircraft.map((a, i) => (
             <span
               key={a.callsign}
-              className={`w-2 h-2 rounded-full ${i === activeIdx % aircraft.length ? 'bg-brand-400' : 'bg-[#1a3a5c]'}`}
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: i === activeIdx % aircraft.length ? theme.dot : theme.border }}
             />
           ))}
         </div>
       </div>
       <dl className="grid grid-cols-1 gap-2 flex-1">
-        <AircraftField label="Next Waypoint">
-          <span className="text-green-400">{WAYPOINT_ARROW[ac.waypointDir]}</span> {ac.waypointRef}
+        <AircraftField label="Next Waypoint" theme={theme}>
+          <span className="text-green-400 text-6xl font-bold leading-none align-middle mr-2">{WAYPOINT_ARROW[ac.waypointDir]}</span>
+          <span className="align-middle">{ac.waypointRef}</span>
         </AircraftField>
-        <AircraftField label="Next Waypoint At">{ac.waypointAt}s</AircraftField>
-        <AircraftField label="Altitude">FL{ac.altitude}</AircraftField>
-        <AircraftField label="Comms Channel">{ac.channel}</AircraftField>
+        <AircraftField label="Next Waypoint At" theme={theme}>{ac.waypointAt}s</AircraftField>
+        <AircraftField label="Altitude" theme={theme}>FL{ac.altitude}</AircraftField>
+        <AircraftField label="Comms Channel" theme={theme}>{ac.channel}</AircraftField>
       </dl>
     </div>
   )
@@ -262,6 +281,8 @@ const SAT_TUTORIAL_STEPS = [
       <>
         Some details only come over the <b className="text-brand-300">radio</b> — and you're asked which callsign was given which instruction.
         Keep your sound on; the caption here is a fallback. Remember who was told what.
+        Occasionally a unit on the grid <b className="text-brand-300">calls for support</b> and one aircraft is sent to respond —
+        note the grid cell and what was sitting in it.
       </>
     ),
   },
@@ -539,6 +560,7 @@ export default function CbatSat() {
     const unitCount = currentSituation.units.length
     if (comms.length) speak(comms[0].speech, audioOnRef.current)
     const slot = OBSERVE_MS / Math.max(1, comms.length)
+    const unitSlot = OBSERVE_MS / Math.max(1, unitCount)
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - start
@@ -549,9 +571,10 @@ export default function CbatSat() {
         return idx
       })
       // Panel 4 cycles through the callsigns, and the grid reveals one unit at a
-      // time — both shown one at a time, matching the real SAT.
+      // time — both shown one at a time, matching the real SAT. Units never
+      // repeat: the index walks forward and stops on the last contact.
       if (aircraftCount) setActiveAircraft(Math.floor(elapsed / AIRCRAFT_SLOT_MS) % aircraftCount)
-      if (unitCount) setActiveUnit(Math.floor(elapsed / UNIT_SLOT_MS) % unitCount)
+      if (unitCount) setActiveUnit(Math.min(unitCount - 1, Math.floor(elapsed / unitSlot)))
       if (elapsed >= OBSERVE_MS) {
         clearInterval(interval)
         beginQuestions()
@@ -699,11 +722,11 @@ export default function CbatSat() {
             >
               <p className="text-4xl mb-3">🗺️</p>
               <p className="text-xl font-extrabold text-white mb-2">Situational Awareness Test</p>
-              <p className="text-sm text-slate-400 mb-5">
+              <p className="text-base text-slate-400 mb-5">
                 Build and hold a mental picture of a changing battlefield. Each situation shows units on a grid and controller aircraft, with some details called in over the <span className="text-brand-300">radio</span>. It all disappears — then you answer from memory.
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]">
+              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-base text-[#ddeaf8]">
                 <div className="flex items-start gap-2">
                   <span className="text-brand-300 font-bold shrink-0">1.</span>
                   <span>Observe — units (type, count, allegiance, heading), aircraft data, and radio calls.</span>
@@ -716,7 +739,7 @@ export default function CbatSat() {
                   <span className="text-brand-300 font-bold shrink-0">3.</span>
                   <span>{SITUATIONS} situations · {TOTAL_QUESTIONS} questions total.</span>
                 </div>
-                <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1">
+                <div className="flex items-start gap-2 text-sm text-[#8a9bb5] pt-1">
                   <span className="shrink-0">⏱</span>
                   <span>{PER_QUESTION_MS / 1000}s per question — running out counts as wrong. 🔊 Turn your sound on for the radio calls.</span>
                 </div>
@@ -724,18 +747,18 @@ export default function CbatSat() {
 
               {personalBest && (
                 <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
                   <p className="text-lg font-mono font-bold text-brand-300">
                     {personalBest.bestScore}/{TOTAL_QUESTIONS}
                     <span className="text-slate-500 mx-1">·</span>
                     {personalBest.bestTime.toFixed(1)}s
                   </p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                 </div>
               )}
 
               <div className="text-center mb-4">
-                <Link to="/cbat/sat/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to="/cbat/sat/leaderboard" className="text-sm text-brand-300 hover:text-brand-200 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -773,12 +796,12 @@ export default function CbatSat() {
               {/* Panel 1 (instruction) + Panel 2 (timer) */}
               <div className="flex items-stretch gap-2 mb-2">
                 <div className="flex-1 bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{SITUATIONS} — Memorise the picture</p>
-                  <p className="text-xs text-[#ddeaf8]">Units, aircraft data and radio calls. It disappears when the timer ends.</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{SITUATIONS} — Memorise the picture</p>
+                  <p className="text-sm text-[#ddeaf8]">Units, aircraft data and radio calls. It disappears when the timer ends.</p>
                 </div>
                 <div className="w-20 bg-[#0a1628] border border-[#1a3a5c] rounded-lg flex flex-col items-center justify-center">
-                  <p className="text-[9px] text-slate-500 uppercase">Time</p>
-                  <p className={`text-xl font-mono font-bold ${observeRemainingMs < 5000 ? 'text-red-400' : 'text-brand-300'}`}>{observeSec}s</p>
+                  <p className="text-[11px] text-slate-500 uppercase">Time</p>
+                  <p className={`text-2xl font-mono font-bold ${observeRemainingMs < 5000 ? 'text-red-400' : 'text-brand-300'}`}>{observeSec}s</p>
                 </div>
               </div>
 
@@ -786,7 +809,7 @@ export default function CbatSat() {
               <div className="flex flex-col sm:flex-row gap-2 mb-2">
                 <div className="sm:flex-[3] bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-3">
                   <div className="flex items-center justify-between mb-1 px-0.5">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide">
+                    <p className="text-xs text-slate-500 uppercase tracking-wide">
                       Contact {(activeUnit % currentSituation.units.length) + 1} / {currentSituation.units.length}
                     </p>
                     <div className="flex gap-1.5">
@@ -799,7 +822,7 @@ export default function CbatSat() {
                   <GridLegend />
                 </div>
                 <div className="sm:flex-[2] flex flex-col">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1 px-1">Controller Aircraft</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1 px-1">Controller Aircraft</p>
                   <div className="flex-1">
                     <AircraftPanel aircraft={currentSituation.aircraft} activeIdx={activeAircraft} />
                   </div>
@@ -816,8 +839,8 @@ export default function CbatSat() {
                 >
                   {audioOn ? '🔊' : '🔇'}
                 </button>
-                <span className="text-[10px] text-slate-500 uppercase tracking-wide shrink-0">Radio</span>
-                <p className="text-xs text-green-300 font-mono truncate flex-1">
+                <span className="text-xs text-slate-500 uppercase tracking-wide shrink-0">Radio</span>
+                <p className="text-sm text-green-300 font-mono truncate flex-1">
                   {currentSituation.comms[activeComm]?.text || '—'}
                 </p>
               </div>
@@ -837,7 +860,7 @@ export default function CbatSat() {
           {(phase === 'playing' || phase === 'feedback') && currentQuestion && (
             <div className="w-full max-w-md">
               {/* HUD */}
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+              <div className="flex items-center justify-between text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">Q <span className="text-brand-300">{globalQ}</span>/{TOTAL_QUESTIONS}</span>
                 <span className="text-slate-400">✓ <span className="text-green-400">{correctSoFar}</span></span>
                 <span className="text-slate-400">⏱ <span className={qRemainingMs < 6000 ? 'text-red-400' : 'text-brand-300'}>{remainingSec}s</span></span>
@@ -860,8 +883,8 @@ export default function CbatSat() {
                 animate={{ opacity: 1, scale: 1 }}
                 className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5 mb-3"
               >
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Recall — Situation {situationIdx + 1}</p>
-                <p className="text-base sm:text-lg text-[#ddeaf8] leading-relaxed">{currentQuestion.prompt}</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Recall — Situation {situationIdx + 1}</p>
+                <p className="text-lg sm:text-xl text-[#ddeaf8] leading-relaxed">{currentQuestion.prompt}</p>
               </motion.div>
 
               {/* Options */}
@@ -879,7 +902,7 @@ export default function CbatSat() {
                       type="button"
                       onClick={() => handlePick(opt)}
                       disabled={phase === 'feedback'}
-                      className={`py-4 px-2 rounded-lg border-2 font-mono font-bold text-base transition-all ${cls}`}
+                      className={`py-4 px-2 rounded-lg border-2 font-mono font-bold text-lg transition-all ${cls}`}
                     >
                       {opt}
                     </button>
@@ -891,7 +914,7 @@ export default function CbatSat() {
               <AnimatePresence>
                 {phase === 'feedback' && feedback && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-3">
-                    <div className={`text-center text-sm font-bold mb-2 ${feedback.correct ? 'text-green-400' : 'text-red-400'}`}>
+                    <div className={`text-center text-base font-bold mb-2 ${feedback.correct ? 'text-green-400' : 'text-red-400'}`}>
                       {feedback.correct
                         ? '✓ Correct'
                         : feedback.picked === null

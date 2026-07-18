@@ -8,11 +8,12 @@
 // Pure and deterministic: pass a seeded `rng` (() => [0,1)) to reproduce a
 // situation in tests. Defaults to Math.random for live play.
 //
-// generateSatSituation({ unitCount, aircraftCount, questionCount }, rng)
+// generateSatSituation({ unitCount, aircraftCount, questionCount, supportCall }, rng)
 //   → { units, aircraft, comms, questions }
 //   units    = [{ id, type, count, heading, allegiance, row, col, ref }]
 //   aircraft = [{ callsign, waypointDir, waypointRef, waypointAt, altitude, channel }]
 //   comms    = [{ callsign, kind, text, speech }]   (radio messages, audio-delivered)
+//              kind 'support' also carries { supportRef, supportUnitType }
 //   questions= [{ id, category, prompt, answer, options }]   (4-option MC)
 
 const COLS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] // x-axis, along the top
@@ -108,9 +109,14 @@ function makeAircraft(aircraftCount, rng, randInt) {
 
 // Radio messages — facts delivered over the headphones during the observe
 // phase. Each carries a `speech` variant phrased for text-to-speech.
-function makeComms(aircraft, rng) {
+//
+// Beyond one instruction per aircraft, a situation *occasionally* carries a
+// support request: a ground unit on the grid calls for support and one of the
+// controller aircraft is tasked to respond. It's the only fact that ties the
+// audio to the map, so it can't be answered from either alone.
+function makeComms(aircraft, units, supportCall, rng) {
   const kinds = ['altitude', 'channel', 'waypoint']
-  return aircraft.map(ac => {
+  const comms = aircraft.map(ac => {
     const kind = pick(kinds, rng)
     if (kind === 'altitude') {
       return {
@@ -132,6 +138,25 @@ function makeComms(aircraft, rng) {
       speech: `${ac.callsign}, your next waypoint is grid ${gridSpeech(ac.waypointRef)}.`,
     }
   })
+
+  if (!supportCall || !units.length || !aircraft.length) return comms
+
+  // Friendly units call for support where possible — a hostile one asking for
+  // help doesn't read right. Falls back to any unit if none are friendly.
+  const friendly = units.filter(u => u.allegiance === 'friendly')
+  const caller = pick(friendly.length ? friendly : units, rng)
+  const responder = pick(aircraft, rng)
+  const support = {
+    callsign: responder.callsign,
+    kind: 'support',
+    supportRef: caller.ref,
+    supportUnitType: caller.type,
+    text: `${responder.callsign}, unit calling for support at grid ${caller.ref}. Respond.`,
+    speech: `${responder.callsign}, unit calling for support at grid ${gridSpeech(caller.ref)}. Respond.`,
+  }
+  // Slot it anywhere in the sequence so it isn't always the last thing heard.
+  comms.splice(Math.floor(rng() * (comms.length + 1)), 0, support)
+  return comms
 }
 
 // Build the candidate question pool from the situation's facts, then sample
@@ -207,12 +232,30 @@ function makeQuestions(units, aircraft, comms, questionCount, rng) {
     let what
     if (c.kind === 'altitude') what = `climb and maintain flight level ${commsAircraft(aircraft, c).altitude}`
     else if (c.kind === 'channel') what = `switch to comms channel ${commsAircraft(aircraft, c).channel}`
+    else if (c.kind === 'support') what = `respond to the support request at grid ${c.supportRef}`
     else what = `proceed to waypoint grid ${commsAircraft(aircraft, c).waypointRef}`
     candidates.push({
       category: 'audio-callsign',
       prompt: `Over the radio, which aircraft was instructed to ${what}?`,
       answer: c.callsign,
       options: buildOptions(c.callsign, CALLSIGNS, rng),
+    })
+  })
+
+  // Support requests — audio-only location, plus a cross-modal question that
+  // needs the call (which cell) *and* the map (what was in it).
+  comms.filter(c => c.kind === 'support').forEach(c => {
+    candidates.push({
+      category: 'audio-support-ref',
+      prompt: `Over the radio, which grid cell called for support?`,
+      answer: c.supportRef,
+      options: buildOptions(c.supportRef, allRefs, rng),
+    })
+    candidates.push({
+      category: 'audio-support-unit',
+      prompt: `What type of unit called for support?`,
+      answer: TYPE_PLURAL[c.supportUnitType],
+      options: buildOptions(TYPE_PLURAL[c.supportUnitType], Object.values(TYPE_PLURAL), rng),
     })
   })
 
@@ -238,10 +281,12 @@ export function generateSatSituation(opts = {}, rng = Math.random) {
   const unitCount = opts.unitCount ?? randInt(3, 5)
   const aircraftCount = opts.aircraftCount ?? randInt(2, 3)
   const questionCount = opts.questionCount ?? 6
+  // Occasional by design — roughly every other situation carries one.
+  const supportCall = opts.supportCall ?? rng() < 0.5
 
   const units = makeUnits(unitCount, rng, randInt)
   const aircraft = makeAircraft(aircraftCount, rng, randInt)
-  const comms = makeComms(aircraft, rng)
+  const comms = makeComms(aircraft, units, supportCall, rng)
   const questions = makeQuestions(units, aircraft, comms, questionCount, rng)
 
   return { units, aircraft, comms, questions }

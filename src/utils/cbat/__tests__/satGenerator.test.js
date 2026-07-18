@@ -22,11 +22,48 @@ describe('generateSatSituation', () => {
   })
 
   it('honours requested unit / aircraft / question counts', () => {
-    const s = generateSatSituation({ unitCount: 4, aircraftCount: 3, questionCount: 6 }, mulberry32(7))
+    const s = generateSatSituation({ unitCount: 4, aircraftCount: 3, questionCount: 6, supportCall: false }, mulberry32(7))
     expect(s.units).toHaveLength(4)
     expect(s.aircraft).toHaveLength(3)
     expect(s.comms).toHaveLength(3)
     expect(s.questions).toHaveLength(6)
+  })
+
+  it('adds exactly one support call when asked, and none when not', () => {
+    for (let seed = 1; seed <= 100; seed++) {
+      const withCall = generateSatSituation({ aircraftCount: 3, supportCall: true }, mulberry32(seed))
+      const without = generateSatSituation({ aircraftCount: 3, supportCall: false }, mulberry32(seed))
+      expect(withCall.comms.filter(c => c.kind === 'support')).toHaveLength(1)
+      expect(without.comms.filter(c => c.kind === 'support')).toHaveLength(0)
+      expect(withCall.comms).toHaveLength(4) // one per aircraft + the support call
+    }
+  })
+
+  it('support calls name a real unit on the grid and a real aircraft', () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const s = generateSatSituation({ supportCall: true }, mulberry32(seed))
+      const call = s.comms.find(c => c.kind === 'support')
+      const caller = s.units.find(u => u.ref === call.supportRef)
+      expect(caller).toBeDefined()
+      expect(call.supportUnitType).toBe(caller.type)
+      expect(s.aircraft.map(a => a.callsign)).toContain(call.callsign)
+      // Friendly units do the asking whenever the situation has one.
+      if (s.units.some(u => u.allegiance === 'friendly')) {
+        expect(caller.allegiance).toBe('friendly')
+      }
+      expect(call.text).toContain(call.supportRef)
+      expect(call.speech).not.toContain(call.supportRef) // phonetic for TTS
+    }
+  })
+
+  it('is occasional — fires on some seeds but not all', () => {
+    const fired = []
+    for (let seed = 1; seed <= 200; seed++) {
+      const s = generateSatSituation({}, mulberry32(seed))
+      fired.push(s.comms.some(c => c.kind === 'support'))
+    }
+    expect(fired.some(Boolean)).toBe(true)
+    expect(fired.some(f => !f)).toBe(true)
   })
 
   it('places every unit in a distinct, valid grid cell with a count ≥ 1', () => {
