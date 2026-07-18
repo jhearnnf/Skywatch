@@ -15,10 +15,24 @@ import { motion } from 'framer-motion'
 // `compact` narrows the fixed columns for constrained containers (the post-game
 // weekly-chase window, which is nested inside several layers of padding on a
 // phone) so the flexible Agent column keeps enough room for names.
+//
+// The non-compact widths are mobile-first: the rank/score/plays columns are
+// sized to their actual content below `sm` and only widen on larger screens.
+// Agent is the `1fr` column, so every rem shaved off the fixed ones goes
+// straight into the name — on a 360px phone that took it from ~10 characters
+// to ~19, which is what a display name or "Agent 1234" needs to read.
 export const rowCols = (variant, cfg, compact = false) =>
   variant === 'weekly'
-    ? (compact ? 'grid-cols-[2.25rem_1fr_3.25rem_2.25rem]' : 'grid-cols-[3rem_1fr_5rem_4rem]')
-    : (cfg?.hideTime ? 'grid-cols-[3rem_1fr_5rem]' : 'grid-cols-[3rem_1fr_5rem_4.5rem]')
+    ? (compact
+        ? 'grid-cols-[2.25rem_1fr_3.25rem_2.25rem]'
+        : 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem] sm:grid-cols-[3rem_1fr_5rem_4rem]')
+    : (cfg?.hideTime
+        ? 'grid-cols-[2.5rem_1fr_3.5rem] sm:grid-cols-[3rem_1fr_5rem]'
+        : 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem]')
+
+// Row padding/gutter shrink alongside the columns on mobile for the same reason.
+export const rowPad = (compact = false) =>
+  compact ? 'gap-1.5 px-2.5' : 'gap-1.5 px-3 sm:gap-2 sm:px-4'
 
 const agentName = (e) =>
   e.name || e.displayName || (e.email ? e.email : `Agent ${e.agentNumber || '???'}`)
@@ -36,7 +50,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
     <motion.div
       layout={layout}
       transition={{ layout: { duration: 0.6, ease: [0.4, 0, 0.2, 1] } }}
-      className={`grid ${rowCols(variant, cfg, compact)} ${compact ? 'gap-1.5 px-2.5' : 'gap-2 px-4'} py-2.5 text-sm ${divider ? 'border-t border-[#1a3a5c]' : ''} ${
+      className={`grid ${rowCols(variant, cfg, compact)} ${rowPad(compact)} py-2.5 text-sm ${divider ? 'border-t border-[#1a3a5c]' : ''} ${
         isMe ? 'bg-brand-600/10 border-l-2 border-l-brand-400' : ''
       }`}
     >

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import PlaneTurnModeToggle from '../components/PlaneTurnModeToggle'
-import LeaderboardRow, { rowCols } from '../components/LeaderboardRow'
+import LeaderboardRow, { rowCols, rowPad } from '../components/LeaderboardRow'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 import LeaderboardIntro, { INTRO_PILL_LAYOUT_ID } from '../components/LeaderboardIntro'
 import CbatProgressChart from '../components/CbatProgressChart'
@@ -408,7 +408,7 @@ export default function CbatLeaderboard() {
           ) : (
             <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">
               {/* Table header */}
-              <div className={`grid ${cols} gap-2 px-4 py-2.5 bg-[#060e1a] border-b border-[#1a3a5c] text-[10px] text-slate-500 uppercase tracking-wide font-bold`}>
+              <div className={`grid ${cols} ${rowPad()} py-2.5 bg-[#060e1a] border-b border-[#1a3a5c] text-[10px] text-slate-500 uppercase tracking-wide font-bold`}>
                 <span>Rank</span>
                 <span>Agent</span>
                 {isWeekly ? (
