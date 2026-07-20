@@ -5,8 +5,33 @@ import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { execSync } from 'node:child_process'
 import { optimizeGlbFile } from './scripts/optimize-models.mjs'
 import { OFFLINE_AIRCRAFT_GLBS } from './src/lib/offlineAircraft.js'
+
+// Identifies the exact frontend bundle a browser is running, which is reported
+// on every heartbeat and surfaced in Admin › Users. On web the semver alone is
+// not enough: the PWA service worker can leave a device pinned to an older
+// bundle indefinitely, and two deploys of the same version are indistinguishable
+// without the commit. Vercel injects the sha at build time; locally we ask git.
+function buildId() {
+  const fromCI = process.env.VERCEL_GIT_COMMIT_SHA || process.env.VITE_VERCEL_GIT_COMMIT_SHA
+  if (fromCI) return fromCI.slice(0, 7)
+  try {
+    return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString().trim()
+  } catch {
+    return 'dev'
+  }
+}
+
+function appVersion() {
+  try {
+    return JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')).version || '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+}
 
 // Precache exactly the offline aircraft GLBs (Typhoon + Hawk T2) — the heavy
 // World3D character/scene models are deliberately left out. Each entry needs a
@@ -169,6 +194,10 @@ export default defineConfig({
       devOptions: { enabled: false },
     }),
   ],
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion()),
+    __APP_BUILD__:   JSON.stringify(buildId()),
+  },
   server: {
     proxy: {
       '/api': 'http://localhost:5000',

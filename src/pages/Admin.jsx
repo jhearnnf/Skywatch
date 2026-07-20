@@ -18,6 +18,7 @@ import {
   stopActPreview,
 } from '../utils/sound'
 import { applyTierCascade } from '../utils/tierCascade'
+import { peekClientInfo } from '../utils/appVersion'
 import RankBadge from '../components/RankBadge'
 import SocialsSection from '../components/admin/SocialsSection'
 import BriefReelReviewPanel from '../components/briefReel/admin/BriefReelReviewPanel'
@@ -3054,6 +3055,47 @@ function onlineStatus(lastSeen) {
   return null
 }
 
+const PLATFORM_LABELS = { web: 'Web', android: 'Android', ios: 'iOS' }
+const PLATFORM_ORDER  = ['android', 'ios', 'web']
+
+const fmtDateTime = (ts) => ts
+  ? new Date(ts).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  : '—'
+
+// "1.2.3 (7)" for Android (versionName + versionCode), "1.2.3 (a3f9c21)" for
+// web (semver + commit). Both halves matter: the version is what a human reads,
+// the build is what actually identifies the bundle.
+const fmtBuild = (info) => info?.version
+  ? (info.build ? `${info.version} (${info.build})` : info.version)
+  : null
+
+// The client an account most recently used, across platforms. Someone who plays
+// on both keeps a record for each; this picks whichever they touched last, which
+// is what the collapsed row summarises.
+function latestUsedClient(lastClients) {
+  const used = PLATFORM_ORDER
+    .map(platform => [platform, lastClients?.[platform]])
+    .filter(([, info]) => info?.version)
+  if (!used.length) return null
+  used.sort(([, a], [, b]) => new Date(b.lastSeenAt ?? 0) - new Date(a.lastSeenAt ?? 0))
+  const [platform, info] = used[0]
+  return { platform, ...info }
+}
+
+// 'latest' | 'outdated' | null when there is nothing to compare against.
+//
+// The yardstick differs by platform. Native comes from the server (highest
+// versionCode anyone is running — store rules make that monotonic). Web cannot:
+// a commit sha has no ordering. Instead we compare against the bundle THIS page
+// is running, which is by definition the currently deployed one — so a user
+// whose service worker has pinned them to an older bundle shows as outdated.
+function versionStatus(client, latestClients, webReference) {
+  if (!client?.build) return null
+  const yardstick = client.platform === 'web' ? webReference : latestClients?.[client.platform]
+  if (!yardstick?.build) return null
+  return String(client.build) === String(yardstick.build) ? 'latest' : 'outdated'
+}
+
 // True when the given timestamp falls on the admin's current calendar day.
 function playedToday(ts) {
   if (!ts) return false
@@ -3078,12 +3120,24 @@ function UsersTab({ API }) {
   const [awardAmount, setAwardAmount] = useState('')
   const [tierPanel,   setTierPanel]   = useState(null) // user._id of open panel
   const [expanded,    setExpanded]    = useState(() => new Set()) // user._ids expanded
+  const [latestClients, setLatestClients] = useState({}) // newest native release per platform
+
+  // This admin page is itself running the currently deployed web bundle, which
+  // makes it the only reliable answer to "what is the latest web build?" — the
+  // server cannot know, since the frontend deploys separately. Captured once on
+  // mount; null when an admin is browsing from the native app, in which case web
+  // rows simply show no latest/outdated verdict rather than a wrong one.
+  const webReference = useMemo(() => {
+    const me = peekClientInfo()
+    return me?.platform === 'web' ? me : null
+  }, [])
 
   const loadAll = useCallback(async () => {
     setLoading(true); setSearch(false)
     const res  = await apiFetch(`${API}/api/admin/users`, { credentials: 'include' })
     const data = await res.json()
     setUsers(data.data?.users ?? [])
+    setLatestClients(data.data?.latestClients ?? {})
     setLoading(false)
   }, [API])
 
@@ -3126,6 +3180,7 @@ function UsersTab({ API }) {
     const res  = await apiFetch(`${API}/api/admin/users/search?q=${encodeURIComponent(q.trim())}`, { credentials: 'include' })
     const data = await res.json()
     setUsers(data.data?.users ?? [])
+    setLatestClients(data.data?.latestClients ?? {})
     setLoading(false)
   }
 
@@ -3239,6 +3294,26 @@ function UsersTab({ API }) {
               className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-raised/40 transition-colors"
             >
               <div>
+                {(() => {
+                  // At-a-glance version verdict, above the name. Deliberately
+                  // just a verdict — the specifics (platform, version, build,
+                  // when) live in the expanded panel so the collapsed list stays
+                  // scannable. Nothing renders when there is no verdict to give,
+                  // rather than a row of "unknown" noise on legacy accounts.
+                  const client = latestUsedClient(u.lastClients)
+                  const status = versionStatus(client, latestClients, webReference)
+                  if (!status) return null
+                  return (
+                    <p
+                      title={`${PLATFORM_LABELS[client.platform] ?? client.platform} ${fmtBuild(client)} · last used ${fmtDateTime(client.lastSeenAt)}`}
+                      className={`text-[9px] font-bold uppercase tracking-[0.14em] mb-0.5 ${
+                        status === 'latest' ? 'text-emerald-700' : 'text-amber-700'
+                      }`}
+                    >
+                      {status === 'latest' ? 'Latest version' : 'Outdated version'}
+                    </p>
+                  )
+                })()}
                 <p className="font-bold text-slate-800 text-sm flex items-center">
                   {(() => {
                     const s = onlineStatus(u.lastSeen)
@@ -3331,6 +3406,55 @@ function UsersTab({ API }) {
                   <p className="text-[10px] text-slate-400">{l}</p>
                 </div>
               ))}
+            </div>
+
+            {/* Client / build detail — what they were on, per platform, and when */}
+            <div className="px-4 py-3 border-b border-slate-100 border-t">
+              <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Last online</p>
+                  <p className="text-xs font-bold text-slate-700">{fmtDateTime(u.lastSeen)}</p>
+                </div>
+
+                {PLATFORM_ORDER.map(platform => {
+                  const info = u.lastClients?.[platform]
+                  if (!info?.version) return null
+                  // Each platform is judged against its own yardstick, so a user
+                  // current on the phone but stale in the browser reads as
+                  // exactly that rather than as one blended verdict.
+                  const status = versionStatus({ platform, ...info }, latestClients, webReference)
+                  return (
+                    <div key={platform}>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">
+                        {PLATFORM_LABELS[platform] ?? platform}
+                      </p>
+                      <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <span className="font-mono">{fmtBuild(info)}</span>
+                        {status && (
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full ${
+                            status === 'latest'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-amber-50 text-amber-700'
+                          }`}>
+                            {status}
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-slate-400">last used {fmtDateTime(info.lastSeenAt)}</p>
+                    </div>
+                  )
+                })}
+
+                {!latestUsedClient(u.lastClients) && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">App version</p>
+                    <p className="text-xs text-slate-400">
+                      Not reported yet
+                      <span className="block text-[10px]">recorded from their next session</span>
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Actions */}

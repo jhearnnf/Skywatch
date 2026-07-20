@@ -1152,12 +1152,46 @@ async function enrichUsersWithStats(users) {
   });
 }
 
+// The newest native release seen in the wild, per platform — the yardstick the
+// admin UI compares each account's last-known build against.
+//
+// Derived from what users actually report rather than from configuration, so
+// there is nothing to remember to bump at release time. This is only sound
+// because Play/App Store rules require versionCode (Android) and build number
+// (iOS) to increase with every upload: the highest one anybody is running is
+// therefore the newest one that exists. Version *names* would not work here —
+// "1.10.0" sorts below "1.9.0" as a string, and nothing stops a name being
+// reused across builds.
+//
+// Web is deliberately absent: a commit sha has no ordering, so "latest web
+// build" cannot be derived this way. The admin's own browser answers that
+// question instead (see Admin › Users), since it is by definition running the
+// currently deployed bundle.
+const NATIVE_PLATFORMS = ['android', 'ios'];
+
+async function latestNativeReleases() {
+  const entries = await Promise.all(NATIVE_PLATFORMS.map(async platform => {
+    const field = `lastClients.${platform}`;
+    const newest = await User.findOne({ [`${field}.buildNumber`]: { $ne: null } })
+      .sort({ [`${field}.buildNumber`]: -1 })
+      .select(field)
+      .lean();
+    const info = newest?.lastClients?.[platform];
+    return [platform, info ? { version: info.version, build: info.build } : null];
+  }));
+  return Object.fromEntries(entries);
+}
+
 // GET /api/admin/users — admins first, then oldest registration first
 router.get('/users', async (req, res) => {
   try {
     await sweepStaleStreaks();
     const users = await User.find().populate('rank').sort({ isAdmin: -1, createdAt: 1 });
-    res.json({ status: 'success', data: { users: await enrichUsersWithStats(users) } });
+    const [enriched, latestClients] = await Promise.all([
+      enrichUsersWithStats(users),
+      latestNativeReleases(),
+    ]);
+    res.json({ status: 'success', data: { users: enriched, latestClients } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1173,7 +1207,14 @@ router.get('/users/search', async (req, res) => {
       $or: [{ email: new RegExp(q, 'i') }, { agentNumber: q }],
     }).populate('rank').sort({ isAdmin: -1, createdAt: 1 }).limit(20);
 
-    res.json({ status: 'success', data: { users: await enrichUsersWithStats(users) } });
+    // Latest-release yardstick comes from the whole population, not just the
+    // search hits — otherwise searching for one outdated user would make their
+    // build look like the newest one that exists.
+    const [enriched, latestClients] = await Promise.all([
+      enrichUsersWithStats(users),
+      latestNativeReleases(),
+    ]);
+    res.json({ status: 'success', data: { users: enriched, latestClients } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

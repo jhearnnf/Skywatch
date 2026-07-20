@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useAuth, authFetchOptions } from '../context/AuthContext'
+import { getClientInfo, peekClientInfo } from '../utils/appVersion'
 
 const INTERVAL_MS = 30_000
 
@@ -21,11 +22,29 @@ export default function useHeartbeat() {
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
     events.forEach(e => window.addEventListener(e, onActivity, { passive: true }))
 
+    // Native needs a bridge round-trip for the app version; kick it off once so
+    // peekClientInfo() has an answer by the second beat at the latest.
+    getClientInfo()
+
     const send = async () => {
       if (document.visibilityState !== 'visible') return
       if (Date.now() - lastActivityRef.current > IDLE_THRESHOLD_MS) return
+
+      // The version rides along with presence rather than travelling on its own
+      // request: it is recorded at exactly the moments lastSeen is, so "version
+      // when last online" is true by construction. It is also strictly optional
+      // — a heartbeat must still register presence if the version is unknown,
+      // since presence is what the Users Online count depends on.
+      const opts   = authFetchOptions()
+      const client = peekClientInfo()
+
       try {
-        await fetch(`${API}/api/users/heartbeat`, { method: 'POST', ...authFetchOptions() })
+        await fetch(`${API}/api/users/heartbeat`, {
+          method: 'POST',
+          ...opts,
+          headers: { ...(opts.headers ?? {}), 'Content-Type': 'application/json' },
+          body: JSON.stringify(client ? { client } : {}),
+        })
       } catch {
         // ignore network errors silently
       }

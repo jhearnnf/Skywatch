@@ -23,6 +23,7 @@ const { CBAT_GAMES } = require('../constants/cbatGames');
 const { withSelectedBadge } = require('../utils/selectedBadge');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
+const { sanitiseClientInfo } = require('../constants/clientPlatforms');
 
 // True when the request should be treated as "slim" (CBAT-only) mode, in which
 // every Aircraft with a cutout is an unlockable badge regardless of whether the
@@ -676,10 +677,36 @@ router.get('/me/read-briefs', protect, async (req, res) => {
   }
 });
 
-// POST /api/users/heartbeat — records lastSeen for active-user presence tracking
+// POST /api/users/heartbeat — records lastSeen for active-user presence tracking,
+// plus (optionally) which build of the app the client is running.
+//
+// The build rides along here rather than on its own endpoint so it is recorded
+// at exactly the moments lastSeen is: "the version they were on when they were
+// last online" is then true by construction rather than an approximation.
+//
+// The client half is strictly optional and strictly best-effort. A missing or
+// malformed `client` must still update lastSeen — presence drives the Users
+// Online count, and a version-reporting bug must never be able to take that
+// down with it.
 router.post('/heartbeat', protect, async (req, res) => {
   try {
-    await User.findByIdAndUpdate(req.user._id, { lastSeen: new Date() });
+    const now    = new Date();
+    const update = { lastSeen: now };
+
+    const client = sanitiseClientInfo(req.body?.client);
+    if (client) {
+      const asNumber = Number(client.build);
+      // Only the reporting platform's entry is touched — the other platform's
+      // last-known build is deliberately left standing.
+      update[`lastClients.${client.platform}`] = {
+        version:     client.version,
+        build:       client.build,
+        buildNumber: client.build !== null && client.build !== '' && Number.isFinite(asNumber) ? asNumber : null,
+        lastSeenAt:  now,
+      };
+    }
+
+    await User.findByIdAndUpdate(req.user._id, update);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });

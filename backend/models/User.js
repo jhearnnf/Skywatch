@@ -8,6 +8,13 @@ const loginSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
 }, { _id: false });
 
+const clientBuildSchema = new mongoose.Schema({
+  version:     { type: String, default: null },
+  build:       { type: String, default: null },
+  buildNumber: { type: Number, default: null },
+  lastSeenAt:  { type: Date,   default: null },
+}, { _id: false });
+
 const gameTutorialSchema = new mongoose.Schema({
   gameTypeId:        { type: mongoose.Schema.Types.ObjectId, ref: 'GameType', required: true },
   completed:         { type: Boolean, default: false },
@@ -107,6 +114,25 @@ const userSchema = new mongoose.Schema(
     logins: [loginSchema],
 
     lastSeen: { type: Date, default: null },
+
+    // Which build of the app this account was last running, kept per platform
+    // so a user who plays on both keeps an answer for each — switching to the
+    // phone must not erase what they were last on in the browser, and vice
+    // versa. Each entry carries its own lastSeenAt because the two platforms go
+    // stale independently; `lastSeen` above only records the most recent of the
+    // two. Written from POST /api/users/heartbeat, surfaced in Admin › Users.
+    //
+    // buildNumber mirrors `build` as a number when it parses (Android's
+    // versionCode always does, a web commit sha never will). Play Store rules
+    // guarantee versionCode only ever increases, so the highest one any user
+    // reports is by definition the newest release in the wild — which is how
+    // "is this account on the latest version?" gets answered without anyone
+    // having to configure what the current version is.
+    lastClients: {
+      web:     { type: clientBuildSchema, default: null },
+      android: { type: clientBuildSchema, default: null },
+      ios:     { type: clientBuildSchema, default: null },
+    },
 
     // Game tutorial tracking
     gameTypesSeen: [gameTutorialSchema],

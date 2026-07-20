@@ -11,6 +11,14 @@ vi.mock('../../context/AuthContext', () => ({
   authFetchOptions: () => optionsRef.value,
 }))
 
+// Build identity is resolved per-platform elsewhere; the hook only has to put
+// whatever is known on the wire (and cope with nothing being known yet).
+const clientRef = vi.hoisted(() => ({ value: { platform: 'web', version: '1.2.3', build: 'a3f9c21' } }))
+vi.mock('../../utils/appVersion', () => ({
+  getClientInfo:  () => Promise.resolve(clientRef.value),
+  peekClientInfo: () => clientRef.value,
+}))
+
 import useHeartbeat from '../useHeartbeat'
 
 const setVisibility = (state) => {
@@ -22,6 +30,7 @@ describe('useHeartbeat', () => {
     vi.useFakeTimers()
     authRef.user = { _id: 'u1' }
     optionsRef.value = { credentials: 'include' }
+    clientRef.value = { platform: 'web', version: '1.2.3', build: 'a3f9c21' }
     setVisibility('visible')
     global.fetch = vi.fn(() => Promise.resolve({ ok: true }))
   })
@@ -89,6 +98,35 @@ describe('useHeartbeat', () => {
     setVisibility('visible')
     act(() => { document.dispatchEvent(new Event('visibilitychange')) })
     expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the running build alongside presence', () => {
+    renderHook(() => useHeartbeat())
+    const opts = optsOf(global.fetch.mock.calls[0])
+    expect(JSON.parse(opts.body)).toEqual({
+      client: { platform: 'web', version: '1.2.3', build: 'a3f9c21' },
+    })
+    expect(opts.headers).toMatchObject({ 'Content-Type': 'application/json' })
+  })
+
+  it('keeps the native Bearer header when adding the JSON content type', () => {
+    // Merging headers must not drop what authFetchOptions supplied, or every
+    // native heartbeat 401s again.
+    optionsRef.value = { headers: { Authorization: 'Bearer tok' } }
+    renderHook(() => useHeartbeat())
+    expect(optsOf(global.fetch.mock.calls[0]).headers).toEqual({
+      Authorization: 'Bearer tok',
+      'Content-Type': 'application/json',
+    })
+  })
+
+  it('still sends a heartbeat when the build is not resolved yet', () => {
+    // Native needs a bridge round-trip for its version. Presence drives Users
+    // Online and must never wait on — or be lost to — version reporting.
+    clientRef.value = null
+    renderHook(() => useHeartbeat())
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(optsOf(global.fetch.mock.calls[0]).body)).toEqual({})
   })
 
   it('stops sending after unmount', () => {
