@@ -6,6 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import { generateSatSituation, SAT_GRID } from '../utils/cbat/satGenerator'
+import { speak, stopSpeech, primeSpeech } from '../utils/cbat/satSpeech'
 import SEO from '../components/SEO'
 import CbatGameOver from '../components/CbatGameOver'
 
@@ -220,21 +221,6 @@ function ResultsScreen({ answers, totalTime }) {
   )
 }
 
-// ── Comms playback (Web Speech API, with caption fallback) ───────────────────
-function speak(text, enabled) {
-  if (!enabled) return
-  try {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-    const u = new SpeechSynthesisUtterance(text)
-    u.rate = 1.0
-    u.pitch = 1.0
-    window.speechSynthesis.speak(u)
-  } catch { /* TTS unavailable — caption fallback still shows */ }
-}
-function stopSpeech() {
-  try { if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel() } catch { /* noop */ }
-}
-
 // ── Guided practice tutorial ─────────────────────────────────────────────────
 // A step-by-step walkthrough modelled on the CBAT Target practice mode: a coach
 // card with prev/next navigation sits above a fixed (seeded) practice picture.
@@ -388,12 +374,17 @@ function SatTutorial({ onExit, onProgress }) {
           <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-1 mb-2${pulse('aircraft')}`}>
             <AircraftPanel aircraft={sit.aircraft} activeIdx={0} />
           </div>
-          <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2 mb-3 flex items-center gap-2${pulse('radio')}`}>
-            <span className="shrink-0 text-base">🔊</span>
-            <span className="text-[10px] text-slate-500 uppercase tracking-wide shrink-0">Radio</span>
-            <p className="text-xs text-green-300 font-mono truncate flex-1">{sit.comms[0]?.text || '—'}</p>
+          <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2 mb-3 flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1${pulse('radio')}`}>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-base">🔊</span>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wide">Radio</span>
+              {step.focus === 'radio' && (
+                <button onClick={() => speak(sit.comms[0]?.speech, true)} className="sm:hidden ml-auto shrink-0 text-[10px] text-brand-300 hover:text-brand-200 bg-transparent border-0 cursor-pointer">Play again</button>
+              )}
+            </div>
+            <p className="text-[11px] sm:text-xs leading-snug text-green-300 font-mono break-words flex-1 min-w-0">{sit.comms[0]?.text || '—'}</p>
             {step.focus === 'radio' && (
-              <button onClick={() => speak(sit.comms[0]?.speech, true)} className="shrink-0 text-[10px] text-brand-300 hover:text-brand-200 bg-transparent border-0 cursor-pointer">Play again</button>
+              <button onClick={() => speak(sit.comms[0]?.speech, true)} className="hidden sm:inline shrink-0 text-[10px] text-brand-300 hover:text-brand-200 bg-transparent border-0 cursor-pointer">Play again</button>
             )}
           </div>
           <div className="text-center">
@@ -653,6 +644,10 @@ export default function CbatSat() {
   }
 
   const startGame = useCallback(() => {
+    // Must happen synchronously in the click handler: iOS Safari only allows
+    // speech that was unlocked by a user gesture, and the first radio call is
+    // fired later by the observe timer.
+    primeSpeech()
     startTracking('sat')
     setSituations(buildSituations())
     setSituationIdx(0)
@@ -771,7 +766,7 @@ export default function CbatSat() {
                   Start
                 </button>
                 <button
-                  onClick={() => setPhase('tutorial')}
+                  onClick={() => { primeSpeech(); setPhase('tutorial') }}
                   className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm"
                 >
                   Tutorial
@@ -830,17 +825,19 @@ export default function CbatSat() {
               </div>
 
               {/* Panel 5 (comms ticker) */}
-              <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
-                <button
-                  onClick={() => { setAudioOn(v => { if (v) stopSpeech(); return !v }) }}
-                  className="shrink-0 text-base bg-transparent border-0 cursor-pointer p-0"
-                  title={audioOn ? 'Mute radio' : 'Unmute radio'}
-                  aria-label={audioOn ? 'Mute radio' : 'Unmute radio'}
-                >
-                  {audioOn ? '🔊' : '🔇'}
-                </button>
-                <span className="text-xs text-slate-500 uppercase tracking-wide shrink-0">Radio</span>
-                <p className="text-sm text-green-300 font-mono truncate flex-1">
+              <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2 mb-3 flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1">
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => { setAudioOn(v => { if (v) stopSpeech(); return !v }) }}
+                    className="shrink-0 text-base bg-transparent border-0 cursor-pointer p-0"
+                    title={audioOn ? 'Mute radio' : 'Unmute radio'}
+                    aria-label={audioOn ? 'Mute radio' : 'Unmute radio'}
+                  >
+                    {audioOn ? '🔊' : '🔇'}
+                  </button>
+                  <span className="text-xs text-slate-500 uppercase tracking-wide">Radio</span>
+                </div>
+                <p className="text-[11px] sm:text-sm leading-snug text-green-300 font-mono break-words flex-1 min-w-0">
                   {currentSituation.comms[activeComm]?.text || '—'}
                 </p>
               </div>
