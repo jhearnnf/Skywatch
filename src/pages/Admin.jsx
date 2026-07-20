@@ -19,7 +19,7 @@ import {
   stopActPreview,
 } from '../utils/sound'
 import { applyTierCascade } from '../utils/tierCascade'
-import { peekClientInfo } from '../utils/appVersion'
+import { peekClientInfo, getClientInfo } from '../utils/appVersion'
 import RankBadge from '../components/RankBadge'
 import SocialsSection from '../components/admin/SocialsSection'
 import BriefReelReviewPanel from '../components/briefReel/admin/BriefReelReviewPanel'
@@ -249,6 +249,10 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
   const [openRouter, setOpenRouter] = useState(null)
+  // Which build the admin is *currently* viewing from — the web bundle on the
+  // site, the store release on native. Resolves synchronously on web; native
+  // needs the bridge round-trip.
+  const [clientInfo, setClientInfo] = useState(() => peekClientInfo())
 
   // Refetched on an interval, not just on mount: Users Online is a live 5-minute
   // window, and the first read races the heartbeat that marks *this* admin as
@@ -276,6 +280,13 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
       .then(d => { if (d.status === 'success') setOpenRouter(d.data) })
       .catch(() => {})
   }, [API])
+
+  useEffect(() => {
+    if (clientInfo) return
+    let cancelled = false
+    getClientInfo().then(info => { if (!cancelled && info) setClientInfo(info) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [clientInfo])
 
   const openRouterNav = (key, scope) => {
     const params = new URLSearchParams({ key })
@@ -338,6 +349,14 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="Uptime Since Deploy"  value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="brand" />
           <StatCard label="Total Loading Time"  value={fmtSeconds(Math.round((server?.totalLoadingMs ?? 0) / 1000))} color="brand" sub="cumulative user fetch wait" />
+          <StatCard
+            label={clientInfo?.platform && clientInfo.platform !== 'web' ? 'App Version' : 'Site Version'}
+            value={clientInfo?.version ?? '—'}
+            color="brand"
+            sub={clientInfo
+              ? `${PLATFORM_LABELS[clientInfo.platform] ?? clientInfo.platform}${clientInfo.build ? ` · build ${clientInfo.build}` : ''}`
+              : 'resolving build…'}
+          />
         </div>
       </StatsSection>
 
