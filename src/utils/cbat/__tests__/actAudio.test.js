@@ -298,3 +298,53 @@ describe('ActAudioEngine playDistraction', () => {
     expect(engine.playDistraction({ voice: 'male' }).played).toBe(true)
   })
 })
+
+describe('ActAudioEngine suspend/resume', () => {
+  function makeSuspendableCtx(state = 'running') {
+    return {
+      state,
+      currentTime: 0,
+      suspend: vi.fn(function () { this.state = 'suspended'; return Promise.resolve() }),
+      resume:  vi.fn(function () { this.state = 'running';   return Promise.resolve() }),
+      destination: {},
+    }
+  }
+
+  it('suspends and resumes the underlying context', () => {
+    const engine = new ActAudioEngine()
+    engine.ctx = makeSuspendableCtx()
+
+    engine.suspend()
+    expect(engine.ctx.suspend).toHaveBeenCalledTimes(1)
+    expect(engine.ctx.state).toBe('suspended')
+
+    engine.resume()
+    expect(engine.ctx.resume).toHaveBeenCalledTimes(1)
+    expect(engine.ctx.state).toBe('running')
+  })
+
+  it('is a no-op with no context (audio never initialised)', () => {
+    const engine = new ActAudioEngine()
+    expect(() => { engine.suspend(); engine.resume() }).not.toThrow()
+  })
+
+  it('is a no-op on a closed context (dispose raced the pause)', () => {
+    const engine = new ActAudioEngine()
+    engine.ctx = makeSuspendableCtx('closed')
+    engine.suspend()
+    engine.resume()
+    expect(engine.ctx.suspend).not.toHaveBeenCalled()
+    expect(engine.ctx.resume).not.toHaveBeenCalled()
+  })
+
+  it('swallows a rejected suspend/resume promise', async () => {
+    const engine = new ActAudioEngine()
+    engine.ctx = makeSuspendableCtx()
+    engine.ctx.suspend = vi.fn(() => Promise.reject(new Error('nope')))
+    engine.ctx.resume  = vi.fn(() => Promise.reject(new Error('nope')))
+    engine.suspend()
+    engine.resume()
+    await Promise.resolve()
+    expect(engine.ctx.suspend).toHaveBeenCalled()
+  })
+})

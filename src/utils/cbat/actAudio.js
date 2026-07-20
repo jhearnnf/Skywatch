@@ -325,6 +325,35 @@ export class ActAudioEngine {
     };
   }
 
+  // ── Freeze / thaw (screen lock, tab switch, app backgrounded) ───────────
+  // Suspending the context silences everything at once — the looping static,
+  // any in-flight instruction chunks, and queued chatter — without tearing the
+  // graph down, so a resume picks up exactly where the player left off.
+  //
+  // It also freezes ctx.currentTime, which is what keeps the scheduling
+  // bookkeeping (_instructionPlayingUntil, _distractionBusyUntil, every
+  // src.start(t)) honest across the pause instead of expiring while nothing
+  // is audible.
+  //
+  // Both are safe to call at any time; a missing or closed context is a no-op.
+  suspend() {
+    if (!this.ctx || this.ctx.state === 'closed') return;
+    try {
+      const p = this.ctx.suspend();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch {}
+  }
+
+  // Must be called from a user gesture on iOS, where resuming a suspended
+  // context outside one is silently refused.
+  resume() {
+    if (!this.ctx || this.ctx.state === 'closed') return;
+    try {
+      const p = this.ctx.resume();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch {}
+  }
+
   stopAll() {
     for (const src of this.activeSources) {
       try { src.stop(); } catch {}
@@ -391,6 +420,10 @@ export class ActAudioEngine {
     // in [400, 2400] Hz, ramping smoothly so the texture audibly shifts.
     const lfoTimer = setInterval(() => {
       if (!this.ctx) return;
+      // While the context is suspended currentTime is frozen, so every tick
+      // would pile another ramp onto the same instant and they'd all unwind
+      // at once on resume. Nothing is audible anyway — skip.
+      if (this.ctx.state !== 'running') return;
       const next = 400 + Math.random() * 2000;
       const rampTo = this.ctx.currentTime + 0.25 + Math.random() * 0.4;
       try {

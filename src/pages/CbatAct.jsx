@@ -8,6 +8,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
+import usePagePresence from '../hooks/usePagePresence'
 import SEO from '../components/SEO'
 import CbatGameOver from '../components/CbatGameOver'
 import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
@@ -570,6 +571,53 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
 
   const completedRef = useRef(false)
 
+  // ── Pause when the player isn't there ──────────────────────────────────────
+  // Locking the phone, switching app/tab, or clicking into another window all
+  // drop presence. Without this the rAF loop stops (the browser stops calling
+  // it) but the audio graph doesn't: the looping static and the chatter
+  // setTimeout chain kept playing into a locked phone while the game itself sat
+  // frozen.
+  //
+  // Coming back does NOT auto-resume — the player taps Resume. That's partly UX
+  // (nobody wants to be dropped back into a moving tunnel mid-cue) and partly
+  // necessity: iOS only lets a suspended AudioContext resume inside a user
+  // gesture.
+  const { present } = usePagePresence()
+  const [paused, setPaused] = useState(false)
+  const pausedRef   = useRef(false)
+  const pausedAtRef = useRef(0)
+
+  useEffect(() => {
+    if (present || pausedRef.current || completedRef.current) return
+    pausedRef.current = true
+    pausedAtRef.current = performance.now()
+    setPaused(true)
+    audio.suspend()
+  }, [present, audio])
+
+  const resumeFromPause = useCallback(() => {
+    if (!pausedRef.current) return
+    const pausedMs = performance.now() - pausedAtRef.current
+    // Every wall-clock deadline in the round has to move with the pause.
+    // Otherwise a three-minute screen lock instantly trips the
+    // MAX_ROUND_DURATION_S safety timer and scores a bleep the player never
+    // had a chance to answer as a miss.
+    roundStartedAtRef.current += pausedMs
+    lastTickRef.current = performance.now()
+    pendingBleepRef.current = null
+    // Drag/keyboard deltas banked while the overlay was up would otherwise
+    // all apply on the first frame back.
+    inputRef.current.dx = 0
+    inputRef.current.dy = 0
+    pausedRef.current = false
+    setPaused(false)
+    audio.resume()
+  }, [audio])
+
+  // If the round unmounts while paused (Instructions, navigation), thaw the
+  // context on the way out — otherwise the next round starts silent.
+  useEffect(() => () => { if (pausedRef.current) audio.resume() }, [audio])
+
   // Touch / pointer drag input. We pointer-capture on down so move/up keep
   // firing even when the cursor leaves the canvas — without capture, a
   // mid-drag exit would silently stop the input. Every move/up handler
@@ -642,6 +690,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
     const interval = setInterval(() => {
+      if (pausedRef.current) return
       const k = KEYBOARD_RATE_PER_TICK
       if (keys.has('ArrowLeft')  || keys.has('a') || keys.has('A')) inputRef.current.dx -= k
       if (keys.has('ArrowRight') || keys.has('d') || keys.has('D')) inputRef.current.dx += k
@@ -703,7 +752,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
   useEffect(() => {
     if (!tutorialActive) return
     const id = setInterval(() => {
-      if (!tutorialActiveRef.current) return
+      if (!tutorialActiveRef.current || pausedRef.current) return
       audio.playBleep()
     }, 1400)
     return () => clearInterval(id)
@@ -730,8 +779,13 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     let timer = null
     const fire = () => {
       if (cancelled) return
-      const voice = Math.random() < 0.5 ? 'male' : 'female'
-      audio.playDistraction({ voice })
+      // Keep the chain alive but silent while paused — the context is
+      // suspended, so a play scheduled here would just queue up and land the
+      // moment the player resumes.
+      if (!pausedRef.current) {
+        const voice = Math.random() < 0.5 ? 'male' : 'female'
+        audio.playDistraction({ voice })
+      }
       const [lo, hi] = plan.gapMs
       timer = setTimeout(fire, lo + Math.random() * (hi - lo))
     }
@@ -750,6 +804,17 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
 
     const tick = () => {
       const now = performance.now()
+
+      // ── 0a. Presence pause. Only reachable when the window lost focus but
+      // stayed visible — a hidden page stops getting rAF callbacks at all.
+      // Re-base lastTick each frame so the paused interval never lands as one
+      // giant dt when the player resumes.
+      if (pausedRef.current) {
+        lastTickRef.current = now
+        raf = requestAnimationFrame(tick)
+        return
+      }
+
       const dt  = Math.min(0.05, (now - lastTickRef.current) / 1000)
       lastTickRef.current = now
 
@@ -1013,6 +1078,8 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     onBleepTap,
     tutorialActive,
     startBleepTutorial,
+    paused,
+    resumeFromPause,
   }
 }
 
@@ -1585,18 +1652,43 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
             </div>
           </motion.div>
         )}
+
+        {/* Pause — sits above the callsign/tutorial overlays (z-30) because it
+            can come up during either. Resume runs off this tap so iOS lets the
+            audio context restart. */}
+        {state.paused && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 flex items-center justify-center bg-black/85 backdrop-blur-sm z-30"
+          >
+            <div className="text-center px-6">
+              <p className="text-xs text-slate-400 uppercase tracking-widest mb-3">Paused</p>
+              <p className="text-lg sm:text-xl font-bold text-slate-800 mb-1">You left the game</p>
+              <p className="text-xs text-slate-500 mb-6">The round is on hold — nothing was scored while you were away.</p>
+              <button
+                onClick={state.resumeFromPause}
+                className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-extrabold uppercase tracking-widest rounded-xl transition-colors"
+              >
+                Resume
+              </button>
+            </div>
+          </motion.div>
+        )}
       </div>
 
-      {/* Bleep button — large, mobile-friendly. Disabled while the callsign
-          overlay is showing at round start (no bleeps fire during warmup
+      {/* Bleep button — large, mobile-friendly. Disabled while paused, and
+          while the callsign overlay is showing at round start (no bleeps fire
+          during warmup
           anyway, so a tap there has no game effect; the disabled state is
           a UX cue that the round hasn't begun). Pulses + brightens during
           the round-1 tutorial so the player knows where to tap. */}
       <button
         onClick={state.onBleepTap}
-        disabled={showCallsignOverlay}
+        disabled={showCallsignOverlay || state.paused}
         className={`w-full mt-3 py-5 border-2 font-extrabold text-lg uppercase tracking-widest rounded-xl transition-colors ${
-          showCallsignOverlay
+          showCallsignOverlay || state.paused
             ? 'bg-slate-700/20 border-slate-600/30 text-slate-500 cursor-not-allowed'
             : tutorialActive
               ? 'bg-amber-500/40 border-amber-300 text-amber-100 ring-4 ring-amber-400/60 animate-pulse'
