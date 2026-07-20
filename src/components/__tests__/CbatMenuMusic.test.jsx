@@ -63,6 +63,18 @@ describe('<CbatMenuMusic> zone mapping', () => {
     expect(lastZone()).toBe('menu')
   })
 
+  it('menu zone on the profile page', () => {
+    mockPath = '/profile'
+    render(<CbatMenuMusic />)
+    expect(lastZone()).toBe('menu')
+  })
+
+  it('menu zone on a profile sub-route', () => {
+    mockPath = '/profile/badge'
+    render(<CbatMenuMusic />)
+    expect(lastZone()).toBe('menu')
+  })
+
   it('silent (null) off the CBAT area', () => {
     mockPath = '/home'
     render(<CbatMenuMusic />)

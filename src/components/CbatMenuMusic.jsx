@@ -13,6 +13,7 @@ import { updateCbatMusic } from '../utils/cbat/menuMusic'
 //   /cbat/<game> (in game)      →  null           (faded out, in-game sounds only)
 //   /cbat/<game> (game over)    → 'menu'          (results screen — a browse/celebrate screen)
 //   /cbat/<x>/leaderboard       → 'menu'          (a browsing screen, not a game)
+//   /profile[/...]              → 'menu'          (stats/leaderboard browsing)
 //   / (slim landing only)       → 'menu'          (CBAT-only mode home page)
 //   anything else               →  null           (stopped)
 //
@@ -35,6 +36,10 @@ export default function CbatMenuMusic() {
       // The game-over "Your Score" screen is a browse/celebrate screen, so it
       // gets full menu volume — not the quiet pre-play "instructions" level.
       else zone = gameOver ? 'menu' : 'instructions'
+    } else if (pathname === '/profile' || pathname.startsWith('/profile/')) {
+      // Profile (stats + leaderboard) is a browsing screen off the CBAT menu —
+      // keep the soundtrack running so the trip there doesn't cut the music.
+      zone = 'menu'
     } else if (slim && pathname === '/') {
       // Slim (CBAT-only) landing doubles as the home page — play the soundtrack.
       zone = 'menu'
