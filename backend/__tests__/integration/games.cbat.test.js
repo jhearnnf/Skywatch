@@ -841,6 +841,42 @@ describe('CBAT ACT', () => {
       expect(res.body.data.bleepHits).toBe(0);
     });
 
+    it('saves the round-5 memory-code recall', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({
+          totalScore: 520, totalTime: 230, finalRound: 5,
+          codeAttempted: true, codeDigitsCorrect: 7, codeRecalled: true,
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.data.codeAttempted).toBe(true);
+      expect(res.body.data.codeDigitsCorrect).toBe(7);
+      expect(res.body.data.codeRecalled).toBe(true);
+    });
+
+    it('records a partial recall', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({
+          totalScore: 400, totalTime: 230, finalRound: 5,
+          codeAttempted: true, codeDigitsCorrect: 4, codeRecalled: false,
+        });
+      expect(res.body.data.codeDigitsCorrect).toBe(4);
+      expect(res.body.data.codeRecalled).toBe(false);
+    });
+
+    it('defaults the code fields for a run that never reached round 5', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({ totalScore: 120, totalTime: 60, finalRound: 2 });
+      expect(res.body.data.codeAttempted).toBe(false);
+      expect(res.body.data.codeDigitsCorrect).toBe(0);
+      expect(res.body.data.codeRecalled).toBe(false);
+    });
+
     it('returns 401 without auth', async () => {
       const res = await request(app).post(RESULT_URL).send({ totalScore: 100, totalTime: 30 });
       expect(res.status).toBe(401);

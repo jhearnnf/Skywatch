@@ -121,10 +121,15 @@ const appSettingsSchema = new mongoose.Schema({
   volumeActChatter:         { type: Number, default: 40, min: 0, max: 100 },
   volumeActStatic:          { type: Number, default: 40, min: 0, max: 100 },
   volumeActBleep:           { type: Number, default: 22, min: 0, max: 100 },
+  // The round-5 memory code sits louder than the rest on purpose: the
+  // challenge is holding seven digits for a whole round, not straining to hear
+  // them over the static.
+  volumeActCode:            { type: Number, default: 85, min: 0, max: 100 },
   soundEnabledActVoiceCommand: { type: Boolean, default: true },
   soundEnabledActChatter:      { type: Boolean, default: true },
   soundEnabledActStatic:       { type: Boolean, default: true },
   soundEnabledActBleep:        { type: Boolean, default: true },
+  soundEnabledActCode:         { type: Boolean, default: true },
 
   // CBAT menu soundtrack (start-once then loop, on the CBAT selection +
   // instructions screens, and the slim landing). One control governs both clips.

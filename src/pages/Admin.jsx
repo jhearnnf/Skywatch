@@ -14,6 +14,7 @@ import {
   previewActChatter,
   previewActStatic,
   previewActBleep,
+  previewActCode,
   previewCbatMenuMusic,
   stopActPreview,
 } from '../utils/sound'
@@ -1171,6 +1172,7 @@ const SOUND_GROUPS = [
       { key: 'volumeActChatter',      enabledKey: 'soundEnabledActChatter',      label: 'Background Chatter',                 sound: '__act_chatter__' },
       { key: 'volumeActStatic',       enabledKey: 'soundEnabledActStatic',       label: 'White Noise / Static',               sound: '__act_static__'  },
       { key: 'volumeActBleep',        enabledKey: 'soundEnabledActBleep',        label: 'Reaction Bleep',                     sound: '__act_bleep__'   },
+      { key: 'volumeActCode',         enabledKey: 'soundEnabledActCode',         label: 'Memory Code (round 5)',              sound: '__act_code__'    },
     ],
   },
   {
@@ -1289,6 +1291,7 @@ function SoundRowV2({ label, sound, value, onChange, enabled, onToggle, duration
     if (sound === '__act_chatter__') { previewActChatter(value ?? 40);      return }
     if (sound === '__act_static__')  { previewActStatic(value ?? 40);       return }
     if (sound === '__act_bleep__')   { previewActBleep(value ?? 22);        return }
+    if (sound === '__act_code__')    { previewActCode(value ?? 85);         return }
     if (sound === '__cbat_menu__')   { previewCbatMenuMusic(value ?? 100);  return }
     try {
       const file = sound === 'out_of_ammo'

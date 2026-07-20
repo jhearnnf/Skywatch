@@ -22,9 +22,15 @@ import {
 import {
   RENDERED_AHEAD,
   AUDIO_WARMUP_T,
+  CODE_LENGTH,
+  CODE_ROUND_IDX,
   generateShapeEvents,
   generateAudioPlan,
+  generateMemoryCode,
+  scoreCodeRecall,
 } from '../utils/cbat/cbatActPlan'
+import CodeRecall from './CbatAct/CodeRecall'
+import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/actRoundCheat'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 5
@@ -509,12 +515,12 @@ function ChaseCamera({ ballPosRef, ballForwardRef, ballTRef, curve }) {
 
 // Tracks the live game state for one round. Exposes everything the React tree
 // needs to render the canvas + HUD without re-rendering every frame.
-function useActRoundState(roundIdx, audio, onRoundComplete) {
+function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
   const cfg     = ROUND_CONFIG[roundIdx]
   const userCallsign = useMemo(() => pickCallsigns(cfg.callsigns), [roundIdx])
   const curve   = useMemo(() => buildTunnelCurve(roundIdx), [roundIdx])
   const events  = useMemo(() => generateShapeEvents(curve.getLength(), cfg.shapes, roundIdx), [curve, cfg.shapes, roundIdx])
-  const audioCues = useMemo(() => generateAudioPlan(events, cfg, userCallsign, roundIdx, curve.getLength()), [events, cfg, userCallsign, roundIdx, curve])
+  const audioCues = useMemo(() => generateAudioPlan(events, cfg, userCallsign, roundIdx, curve.getLength(), memoryCode), [events, cfg, userCallsign, roundIdx, curve, memoryCode])
 
   const ballTRef       = useRef(0)
   const ballPosRef     = useRef(new THREE.Vector3())
@@ -568,6 +574,9 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
   const cueIdxRef       = useRef(0)
   // Event cursor — index of the next shape event to evaluate (in order of t).
   const eventIdxRef     = useRef(0)
+  // Wall-clock instant the memory-code readout finishes. Chatter stays silent
+  // until then so nothing talks over the digits.
+  const codeQuietUntilRef = useRef(0)
 
   const completedRef = useRef(false)
 
@@ -604,6 +613,9 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
     // had a chance to answer as a miss.
     roundStartedAtRef.current += pausedMs
     lastTickRef.current = performance.now()
+    // The readout was frozen mid-sentence with the context; its quiet window
+    // has to move with it or chatter resumes over the remaining digits.
+    if (codeQuietUntilRef.current) codeQuietUntilRef.current += pausedMs
     pendingBleepRef.current = null
     // Drag/keyboard deltas banked while the overlay was up would otherwise
     // all apply on the first frame back.
@@ -781,8 +793,9 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
       if (cancelled) return
       // Keep the chain alive but silent while paused — the context is
       // suspended, so a play scheduled here would just queue up and land the
-      // moment the player resumes.
-      if (!pausedRef.current) {
+      // moment the player resumes. Same during the memory-code readout, which
+      // the player has to hear cleanly.
+      if (!pausedRef.current && performance.now() >= codeQuietUntilRef.current) {
         const voice = Math.random() < 0.5 ? 'male' : 'female'
         audio.playDistraction({ voice })
       }
@@ -963,6 +976,13 @@ function useActRoundState(roundIdx, audio, onRoundComplete) {
         } else if (cue.kind === 'bleep') {
           audio.playBleep()
           pendingBleepRef.current = { startedAt: performance.now() }
+        } else if (cue.kind === 'code') {
+          // Round-5 memory code. The planner reserves a cue-free block around
+          // this, so nothing should be in flight to drop it; the chatter
+          // scheduler is held off for the readout's real duration on top.
+          const digits = cue.code.split('')
+          audio.playCode(digits)
+          codeQuietUntilRef.current = performance.now() + audio.codeDurationS(digits) * 1000
         }
       }
 
@@ -1189,7 +1209,7 @@ function TouchSteerPad({ onPointerDown, onPointerMove, onPointerUp, isDragging }
 }
 
 // ── Round-end recap card ─────────────────────────────────────────────────────
-function RoundRecap({ roundIdx, stats, onContinue, isFinal }) {
+function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
@@ -1210,6 +1230,22 @@ function RoundRecap({ roundIdx, stats, onContinue, isFinal }) {
         <Stat label="Bleep hits"      value={`${stats.bleepHits}/${stats.bleepHits + stats.bleepMisses}`} good={stats.bleepHits > 0} />
         <Stat label="False taps"      value={stats.bleepFalseAlarms} bad={stats.bleepFalseAlarms > 0} />
       </div>
+
+      {codeResult && (
+        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1.5">Memory code</p>
+          <p className="font-mono text-xl font-extrabold tracking-[0.2em] mb-1">
+            {codeResult.expected.split('').map((d, i) => (
+              <span key={i} className={codeResult.entered[i] === d ? 'text-emerald-700' : 'text-rose-400'}>{d}</span>
+            ))}
+          </p>
+          <p className="text-[11px] text-slate-500">
+            {codeResult.allCorrect
+              ? 'Perfect recall'
+              : `You entered ${codeResult.entered} — ${codeResult.digitsCorrect}/${codeResult.expected.length} in position`}
+          </p>
+        </div>
+      )}
 
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Round score</p>
@@ -1252,6 +1288,18 @@ export default function CbatAct() {
   const [audioReady, setAudioReady]     = useState(false)
   const audioRef = useRef(null)
 
+  // Round-5 memory code. Generated once per run and held here, above the round
+  // component — ActRound unmounts when the round ends, but the answer is typed
+  // in and scored after that.
+  const [memoryCode, setMemoryCode]     = useState(null)
+  const [pendingStats, setPendingStats] = useState(null)   // round-5 stats awaiting the recall
+  const [codeResult, setCodeResult]     = useState(null)
+
+  // Set when an admin uses the round-skip cheat. Permanent for the rest of the
+  // run — the result is never submitted.
+  const [debugUsed, setDebugUsed]       = useState(false)
+  const [jumpNonce, setJumpNonce]       = useState(0)
+
   // Push admin-configured ACT volumes into the engine whenever settings or the
   // engine become available. Re-applies on settings refresh, so an admin
   // changing a slider in another tab + reloading takes effect on the next
@@ -1264,12 +1312,14 @@ export default function CbatAct() {
         chatter:      (settings.volumeActChatter      ?? 40) / 100,
         staticNoise:  (settings.volumeActStatic       ?? 40) / 100,
         bleep:        (settings.volumeActBleep        ?? 22) / 100,
+        code:         (settings.volumeActCode         ?? 85) / 100,
       },
       enabled: {
         voiceCommand: settings.soundEnabledActVoiceCommand !== false,
         chatter:      settings.soundEnabledActChatter      !== false,
         staticNoise:  settings.soundEnabledActStatic       !== false,
         bleep:        settings.soundEnabledActBleep        !== false,
+        code:         settings.soundEnabledActCode         !== false,
       },
     })
   }, [audioReady, settings])
@@ -1287,7 +1337,7 @@ export default function CbatAct() {
 
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
-    if (phase === 'playing' || phase === 'callsign' || phase === 'recap') enterImmersive()
+    if (phase === 'playing' || phase === 'callsign' || phase === 'recap' || phase === 'codeRecall') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
@@ -1316,6 +1366,10 @@ export default function CbatAct() {
     setAllRoundStats([])
     setLatestStats(null)
     setScoreSaved(false)
+    setMemoryCode(generateMemoryCode())
+    setPendingStats(null)
+    setCodeResult(null)
+    setDebugUsed(false)
     setPhase(logoPlayedRef.current ? 'callsign' : 'logoIntro')
   }, [apiFetch, API, initAudio])
 
@@ -1323,6 +1377,44 @@ export default function CbatAct() {
     logoPlayedRef.current = true
     setPhase('callsign')
   }, [])
+
+  // ── Admin round-skip ───────────────────────────────────────────────────────
+  // Jump straight into a round without playing the ones before it. Wipes the
+  // run's stats (the earlier rounds never happened) and flags it as debug, so
+  // the score is never submitted.
+  const jumpToRound = useCallback(async (roundNum) => {
+    await initAudio()
+    if (phase === 'intro') startTracking('act')
+    setDebugUsed(true)
+    setRoundIdx(roundNum - 1)
+    setAllRoundStats([])
+    setLatestStats(null)
+    setScoreSaved(false)
+    setPendingStats(null)
+    setCodeResult(null)
+    setMemoryCode(prev => prev ?? generateMemoryCode())
+    // Bumping the nonce remounts ActRound even when the jump targets the round
+    // already on screen — without it, re-typing the current round's code does
+    // nothing and reads as a broken cheat.
+    setJumpNonce(n => n + 1)
+    setPhase('callsign')
+  }, [initAudio, phase, startTracking])
+
+  // Typed cheat codes, DPT-style: 111 → round 1 … 555 → round 5. Admin +
+  // desktop only, and never while the memory-code pad is up — those digit
+  // presses belong to the player's answer.
+  const isTouchDevice = useIsTouch()
+  const cheatBufRef = useRef(emptyCheatBuffer())
+  useEffect(() => {
+    if (!user?.isAdmin || isTouchDevice || phase === 'codeRecall') return
+    const onKeyDown = (e) => {
+      const { buffer, round } = pushCheatDigit(cheatBufRef.current, e.key, Date.now())
+      cheatBufRef.current = buffer
+      if (round != null) jumpToRound(round)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [user, isTouchDevice, phase, jumpToRound])
 
   // Auto-advance from callsign reveal to playing after 3s.
   useEffect(() => {
@@ -1335,11 +1427,34 @@ export default function CbatAct() {
     if (phase === 'playing') trackRound(roundIdx + 1)
   }, [phase, roundIdx, trackRound])
 
-  const onRoundComplete = useCallback((stats) => {
+  const commitRoundStats = useCallback((stats) => {
     setLatestStats(stats)
     setAllRoundStats(prev => [...prev, stats])
     setPhase('recap')
   }, [])
+
+  const onRoundComplete = useCallback((stats) => {
+    // Final round: the memory-code recall comes BEFORE the debrief, so a stats
+    // screen can't sit between hearing the code and typing it back.
+    if (roundIdx === CODE_ROUND_IDX && memoryCode) {
+      setPendingStats(stats)
+      setPhase('codeRecall')
+      return
+    }
+    commitRoundStats(stats)
+  }, [roundIdx, memoryCode, commitRoundStats])
+
+  const onCodeSubmit = useCallback((entered) => {
+    const result = scoreCodeRecall(memoryCode, entered)
+    setCodeResult({ ...result, entered, expected: memoryCode })
+    commitRoundStats({
+      ...pendingStats,
+      score: pendingStats.score + result.score,
+      codeDigitsCorrect: result.digitsCorrect,
+      codeRecalled: result.allCorrect,
+    })
+    setPendingStats(null)
+  }, [memoryCode, pendingStats, commitRoundStats])
 
   const continueAfterRecap = useCallback(() => {
     if (roundIdx + 1 >= TOTAL_ROUNDS) {
@@ -1353,6 +1468,8 @@ export default function CbatAct() {
   // Submit final score after results phase enters.
   useEffect(() => {
     if (phase !== 'results' || allRoundStats.length === 0 || scoreSaved) return
+    // Debug run (admin skipped rounds) — never reaches the leaderboard.
+    if (debugUsed) return
     const totals = allRoundStats.reduce((acc, s) => ({
       score: acc.score + s.score,
       ringsThreaded: acc.ringsThreaded + s.ringsThreaded,
@@ -1386,6 +1503,9 @@ export default function CbatAct() {
         bleepHits:          totals.bleepHits,
         bleepMisses:        totals.bleepMisses,
         avgBleepReactionMs: Math.round(avgReaction),
+        codeDigitsCorrect:  codeResult?.digitsCorrect ?? 0,
+        codeRecalled:       !!codeResult?.allCorrect,
+        codeAttempted:      !!codeResult,
       }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)
@@ -1396,7 +1516,7 @@ export default function CbatAct() {
           .catch(() => {})
       })
       .catch(() => {})
-  }, [phase, allRoundStats, scoreSaved, apiFetch, API])
+  }, [phase, allRoundStats, scoreSaved, codeResult, debugUsed, apiFetch, API])
 
   // Cleanup audio on unmount
   useEffect(() => () => { audioRef.current?.dispose() }, [])
@@ -1413,6 +1533,9 @@ export default function CbatAct() {
     setAllRoundStats([])
     setLatestStats(null)
     setScoreSaved(false)
+    setMemoryCode(null)
+    setPendingStats(null)
+    setCodeResult(null)
     setPhase('intro')
   }, [])
 
@@ -1453,20 +1576,27 @@ export default function CbatAct() {
 
           {(phase === 'callsign' || phase === 'playing') && audioRef.current && (
             <ActRound
-              key={roundIdx}
+              key={`${roundIdx}-${jumpNonce}`}
               roundIdx={roundIdx}
               audio={audioRef.current}
               showCallsignOverlay={phase === 'callsign'}
               onRoundComplete={onRoundComplete}
               tutorialDone={tutorialDone}
               onTutorialFired={onTutorialFired}
+              memoryCode={roundIdx === CODE_ROUND_IDX ? memoryCode : null}
+              debug={debugUsed}
             />
+          )}
+
+          {phase === 'codeRecall' && (
+            <CodeRecall codeLength={CODE_LENGTH} onSubmit={onCodeSubmit} />
           )}
 
           {phase === 'recap' && latestStats && (
             <RoundRecap
               roundIdx={roundIdx}
               stats={latestStats}
+              codeResult={codeResult}
               onContinue={continueAfterRecap}
               isFinal={roundIdx + 1 >= TOTAL_ROUNDS}
             />
@@ -1483,6 +1613,8 @@ export default function CbatAct() {
             >
               <FinalResults
                 allRoundStats={allRoundStats}
+                codeResult={codeResult}
+                debug={debugUsed}
               />
             </CbatGameOver>
           )}
@@ -1506,6 +1638,11 @@ function IntroScreen({ personalBest, onStart }) {
         Steer the ball through every shape. Listen for your callsign — when you hear
         <span className="text-brand-300 font-bold"> "avoid the next circle/square" </span>
         with your full callsign, skip that one. Triangles are always default-thread.
+      </p>
+
+      <p className="text-sm text-slate-400 mb-5">
+        On the final round you'll be read a <span className="text-brand-300 font-bold">{CODE_LENGTH}-digit code</span> —
+        hold on to it. You'll be asked for it when the round ends.
       </p>
 
       <div className="bg-amber-500/10 border border-amber-500/40 rounded-lg p-3 mb-5 flex items-start gap-2 text-left">
@@ -1561,8 +1698,8 @@ function IntroScreen({ personalBest, onStart }) {
 }
 
 // ── Round wrapper (mounts game-state hook + canvas + HUD) ────────────────────
-function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutorialDone, onTutorialFired }) {
-  const state = useActRoundState(roundIdx, audio, onRoundComplete)
+function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutorialDone, onTutorialFired, memoryCode, debug }) {
+  const state = useActRoundState(roundIdx, audio, onRoundComplete, memoryCode)
   const stats = state.statsRef.current
 
   // Round-1 bleep tutorial: ~1.5 s after the callsign overlay disappears,
@@ -1614,7 +1751,10 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
     <div className="w-full max-w-2xl">
       <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
         <span className="text-slate-400">Round <span className="text-brand-300">{roundIdx + 1}</span>/{TOTAL_ROUNDS}</span>
-        <span className="text-slate-400">Score <span className="text-brand-300">{Math.round(stats.score)}</span></span>
+        <span className="text-slate-400">
+          Score <span className="text-brand-300">{Math.round(stats.score)}</span>
+          {debug && <span className="ml-2 text-amber-400">DEBUG · NO SUBMIT</span>}
+        </span>
       </div>
 
       <div className="relative aspect-square sm:aspect-[4/3] bg-[#020812] border border-[#1a3a5c] rounded-xl overflow-hidden">
@@ -1717,7 +1857,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
 }
 
 // ── Final results ────────────────────────────────────────────────────────────
-function FinalResults({ allRoundStats }) {
+function FinalResults({ allRoundStats, codeResult, debug }) {
   const totals = allRoundStats.reduce((acc, s) => ({
     score: acc.score + s.score,
     ringsThreaded: acc.ringsThreaded + s.ringsThreaded,
@@ -1733,7 +1873,8 @@ function FinalResults({ allRoundStats }) {
   return (
     <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
       <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Mission Debrief</p>
-      <p className="text-xl font-extrabold text-white mb-4">Final score</p>
+      <p className={`text-xl font-extrabold text-white ${debug ? 'mb-1' : 'mb-4'}`}>Final score</p>
+      {debug && <p className="text-xs text-amber-400 mb-4">DEBUG MODE · run not submitted to leaderboard</p>}
 
       <div className="grid grid-cols-2 gap-2 text-left">
         <Stat label="Threaded"        value={totals.ringsThreaded} good />
@@ -1743,6 +1884,14 @@ function FinalResults({ allRoundStats }) {
         <Stat label="Wall scrape"     value={`${totals.wallScrapeSeconds.toFixed(1)}s`} bad={totals.wallScrapeSeconds > 0} />
         <Stat label="Bleep accuracy"  value={`${totals.bleepHits}/${totals.bleepHits + totals.bleepMisses}`} good={totals.bleepHits > 0} />
         <Stat label="False taps"      value={totals.bleepFalseAlarms} bad={totals.bleepFalseAlarms > 0} />
+        {codeResult && (
+          <Stat
+            label="Memory code"
+            value={`${codeResult.digitsCorrect}/${codeResult.expected.length}`}
+            good={codeResult.allCorrect}
+            bad={codeResult.digitsCorrect === 0}
+          />
+        )}
       </div>
     </div>
   )

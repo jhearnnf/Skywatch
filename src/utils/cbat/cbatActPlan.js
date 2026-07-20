@@ -4,7 +4,7 @@
 // in three.js / R3F. The planner is pure JS — pass `curveLen` (world units)
 // instead of a curve object.
 
-import { generateDistractorCallsign } from './actAudio'
+import { generateDistractorCallsign, CODE_DIGITS } from './actAudio'
 //
 // Core invariants enforced here (the source of truth for ACT scheduling):
 //   1. Triangles are NEVER the target of an "avoid" command. They're pure
@@ -20,6 +20,11 @@ import { generateDistractorCallsign } from './actAudio'
 //      has time to commit the instruction to working memory.
 //   5. Two avoid cues never overlap: the next cue's audio cannot start until
 //      the previous target has been crossed + POST_TARGET_GAP_S.
+//   6. On the final round, NO cue of any kind — avoid, distractor or bleep —
+//      overlaps the memory-code block. The readout is ~7s of speech the player
+//      has to hold for the rest of the round; the audio engine would silently
+//      drop whichever exclusive sequence started second, and a bleep landing
+//      mid-readout masks a digit.
 
 // ── Tunable constants ───────────────────────────────────────────────────────
 
@@ -70,6 +75,57 @@ export const TRIANGLE_FRACTION = 0.30
 // Tunnel radius is 2.0 and shape radius is 0.7, so 0.7 keeps the shape edge
 // at ≤ 1.4 from the wall — still comfortably threadable.
 export const MAX_SHAPE_OFFSET = 0.7
+
+// ── Round-5 memory code ─────────────────────────────────────────────────────
+
+// Only the final round carries the memory code.
+export const CODE_ROUND_IDX = 4
+
+export const CODE_LENGTH = 7
+
+// Where the readout starts — roughly a quarter of the way in, so the player
+// carries the code for most of the round. Jittered a little so it isn't
+// metronomic across replays.
+export const CODE_CUE_T = 0.25
+export const CODE_CUE_JITTER_T = 0.02
+
+// Conservative estimate of the readout's length ("remember code" + 7 digits,
+// spaced by CODE_DIGIT_GAP_S). The engine measures the real duration from its
+// decoded buffers at runtime; this only has to be long enough that the
+// reserved block never under-covers.
+export const CODE_AUDIO_DURATION_S_EST = 10
+
+// Points for the recall at the end of round 5. Partial credit per digit in the
+// right position, plus a bonus for a clean sweep — a 6/7 recall shouldn't be
+// worth the same as never listening. No penalty for a wrong answer: losing a
+// round's worth of attention to the code is cost enough.
+export const CODE_SCORE = {
+  PER_DIGIT:   25,
+  ALL_CORRECT: 75,
+}
+
+// A fresh code. Digits repeat freely (CODE_DIGITS has no zero — see actAudio).
+export function generateMemoryCode(length = CODE_LENGTH) {
+  let out = ''
+  for (let i = 0; i < length; i++) {
+    out += CODE_DIGITS[Math.floor(Math.random() * CODE_DIGITS.length)]
+  }
+  return out
+}
+
+// Score a recall attempt. Correct-in-position only: transposed digits earn
+// nothing, which is the point of a serial-recall task.
+export function scoreCodeRecall(expected, entered) {
+  const exp = String(expected ?? '')
+  const got = String(entered ?? '')
+  let digitsCorrect = 0
+  for (let i = 0; i < exp.length; i++) {
+    if (got[i] === exp[i]) digitsCorrect++
+  }
+  const allCorrect = exp.length > 0 && digitsCorrect === exp.length && got.length === exp.length
+  const score = digitsCorrect * CODE_SCORE.PER_DIGIT + (allCorrect ? CODE_SCORE.ALL_CORRECT : 0)
+  return { digitsCorrect, allCorrect, score }
+}
 
 // Floor on per-round avoid cue count — the player must hear their callsign
 // at least this many times so they can train recognition under stress.
@@ -210,7 +266,8 @@ function findAudioTAroundExisting(window, candidateTargetT, existingCues, postTa
 }
 
 // Build the per-round audio plan. Returns cues sorted by t.
-export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curveLen) {
+// `memoryCode` is the 7-digit string for the final round; pass null elsewhere.
+export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curveLen, memoryCode = null) {
   const cues = []
 
   // Derived spacing in t-units.
@@ -220,8 +277,32 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
   const params = { minCueToTargetGapT, postTargetGapT }
 
   // Tracks placed avoid cues so subsequent placements can slot between them.
+  // The memory-code block rides in here too (isCode), so every later placement
+  // pass routes around it for free — it is not an avoid and is filtered out
+  // when avoids are committed to the cue list.
   const placed = []
   const placedIdxs = new Set()
+
+  // Step 0: reserve the memory-code block (final round only) BEFORE anything
+  // else is placed. Everything downstream treats it as occupied space.
+  let codeBlock = null
+  if (roundIdx === CODE_ROUND_IDX && memoryCode) {
+    const codeSpanT = (CODE_AUDIO_DURATION_S_EST * roundCfg.speed) / safeCurveLen
+    const jitter = (Math.random() * 2 - 1) * CODE_CUE_JITTER_T
+    // Clamped so a short round can't schedule a readout that runs past the end
+    // of the tunnel.
+    const latest = Math.max(AUDIO_WARMUP_T, 1 - codeSpanT - postTargetGapT - 0.02)
+    const startT = Math.min(Math.max(AUDIO_WARMUP_T, CODE_CUE_T + jitter), latest)
+    codeBlock = { audioT: startT, targetT: startT + codeSpanT, shape: null, isCode: true }
+    placed.push(codeBlock)
+    cues.push({ t: startT, kind: 'code', code: String(memoryCode) })
+  }
+
+  // Span the code readout occupies, including its trailing gap. Null when the
+  // round has no code.
+  const codeSpan = codeBlock
+    ? { start: codeBlock.audioT, end: codeBlock.targetT + postTargetGapT }
+    : null
 
   function placeAvoid(i) {
     if (placedIdxs.has(i)) return false
@@ -251,6 +332,11 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
     rolled.sort((a, b) => a - b)
   }
 
+  // How many AVOID cues are placed. `placed` also carries the memory-code
+  // block, which must not count toward the per-round avoid floor or ceiling —
+  // otherwise round 5 reads as "already has one" and skips its top-up passes.
+  const avoidCount = () => placed.length - (codeBlock ? 1 : 0)
+
   // Step 2: place each rolled candidate. Slot-finder picks an audioT that
   // doesn't overlap any previously-placed cue's active span — so the order
   // of placement doesn't matter for correctness.
@@ -260,7 +346,7 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
   // triangle event in a randomised order so we don't always pull from the
   // start — late events have wider natural windows and are more likely to
   // succeed once the round is partly filled.
-  if (placed.length < MIN_AVOID_CUES) {
+  if (avoidCount() < MIN_AVOID_CUES) {
     const remaining = []
     for (let i = 0; i < events.length; i++) {
       if (events[i].shape === 'triangle') continue
@@ -272,8 +358,8 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
       ;[remaining[i], remaining[j]] = [remaining[j], remaining[i]]
     }
     for (const i of remaining) {
-      if (placed.length >= MIN_AVOID_CUES) break
-      if (placed.length >= MAX_AVOID_CUES) break
+      if (avoidCount() >= MIN_AVOID_CUES) break
+      if (avoidCount() >= MAX_AVOID_CUES) break
       placeAvoid(i)
     }
   }
@@ -285,7 +371,7 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
   // and adopt the first pair that fits — even if it means discarding what
   // we've placed so far. The floor is more important than preserving any
   // particular cue.
-  if (placed.length < MIN_AVOID_CUES) {
+  if (avoidCount() < MIN_AVOID_CUES) {
     const eligible = []
     for (let i = 0; i < events.length; i++) {
       if (events[i].shape === 'triangle') continue
@@ -297,19 +383,21 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
       for (let b = a + 1; b < eligible.length; b++) {
         const A = eligible[a]
         const B = eligible[b]
-        // A's target.t < B's target.t (eligible is sorted by index/t).
-        // Place A as early as possible, then check B's effective window.
-        const effBLower = Math.max(B.win.lower, A.win.targetT + postTargetGapT)
-        if (effBLower >= B.win.upper) continue
-        // Also check A's upper doesn't conflict with B going first:
-        // A's audio must end before B's audio starts. Since A.target.t <
-        // B.audio (by effBLower), A's block ends at A.target.t + postGap ≤
-        // effBLower ≤ B.audio. OK.
+        // Fit the pair with the same slot-finder every other pass uses, seeded
+        // with the memory-code block so the fallback can't buy its two cues by
+        // talking over the readout. Nothing is committed until BOTH fit —
+        // clearing `placed` first would throw away a working single cue (and
+        // the code block) on a pair that turns out not to work.
+        const trial = codeBlock ? [codeBlock] : []
+        const audioA = findAudioTAroundExisting(A.win, A.win.targetT, trial, postTargetGapT)
+        if (audioA == null) continue
+        const blockA = { audioT: audioA, targetT: A.win.targetT, shape: A.shape }
+        const audioB = findAudioTAroundExisting(B.win, B.win.targetT, [...trial, blockA], postTargetGapT)
+        if (audioB == null) continue
         placed.length = 0
         placedIdxs.clear()
-        const audioA = A.win.lower + Math.random() * (A.win.upper - A.win.lower) * 0.4
-        const audioB = effBLower + Math.random() * (B.win.upper - effBLower)
-        placed.push({ audioT: audioA, targetT: A.win.targetT, shape: A.shape })
+        if (codeBlock) placed.push(codeBlock)
+        placed.push(blockA)
         placedIdxs.add(A.i)
         placed.push({ audioT: audioB, targetT: B.win.targetT, shape: B.shape })
         placedIdxs.add(B.i)
@@ -319,8 +407,10 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
     }
   }
 
-  // Commit placed avoids into the cue list.
+  // Commit placed avoids into the cue list. The code block shares `placed` for
+  // collision purposes only — it was already emitted in step 0.
   for (const p of placed) {
+    if (p.isCode) continue
     cues.push({ t: p.audioT, kind: 'avoid', callsigns: userCallsign, shape: p.shape })
   }
 
@@ -364,7 +454,16 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
     const slotEnd   = slotStart + slotWidth
     const subStart  = i === 0              ? slotStart : slotStart + minGapT / 2
     const subEnd    = i === bleepCount - 1 ? slotEnd   : slotEnd   - minGapT / 2
-    const t = subStart + Math.random() * Math.max(0, subEnd - subStart)
+    let t = subStart + Math.random() * Math.max(0, subEnd - subStart)
+    // A bleep landing mid-readout masks a digit. Slide it out of the block if
+    // this slot has room either side; drop it if the block swallows the slot.
+    if (codeSpan && t >= codeSpan.start && t < codeSpan.end) {
+      const after  = codeSpan.end > subStart && codeSpan.end < subEnd  ? codeSpan.end   : null
+      const before = codeSpan.start > subStart && codeSpan.start < subEnd ? subStart    : null
+      if (after != null)       t = after + Math.random() * (subEnd - after)
+      else if (before != null) t = before + Math.random() * (codeSpan.start - before)
+      else continue
+    }
     cues.push({ t, kind: 'bleep' })
   }
 

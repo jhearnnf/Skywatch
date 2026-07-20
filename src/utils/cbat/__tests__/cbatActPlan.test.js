@@ -7,9 +7,18 @@ import {
   AUDIO_WARMUP_T,
   TRIANGLE_FRACTION,
   MAX_AVOID_CUES,
+  CODE_LENGTH,
+  CODE_ROUND_IDX,
+  CODE_CUE_T,
+  CODE_CUE_JITTER_T,
+  CODE_AUDIO_DURATION_S_EST,
+  CODE_SCORE,
   generateShapeEvents,
   generateAudioPlan,
+  generateMemoryCode,
+  scoreCodeRecall,
 } from '../cbatActPlan'
+import { CODE_DIGITS } from '../actAudio'
 
 // Mirror the production ROUND_CONFIG so tests cover real round tuning.
 const ROUND_CONFIG = [
@@ -279,6 +288,127 @@ describe('generateAudioPlan — invariants', () => {
           expect(cues[i].t).toBeGreaterThanOrEqual(cues[i - 1].t)
         }
       }
+    }
+  })
+})
+
+// ── Round-5 memory code ─────────────────────────────────────────────────────
+
+describe('generateMemoryCode', () => {
+  it('produces a 7-digit code drawn only from the recorded digits', () => {
+    for (let i = 0; i < 200; i++) {
+      const code = generateMemoryCode()
+      expect(code).toHaveLength(CODE_LENGTH)
+      for (const d of code) expect(CODE_DIGITS).toContain(d)
+    }
+  })
+
+  it('never contains a zero (no 0.mp3 exists, and a dead pad key is a tell)', () => {
+    for (let i = 0; i < 200; i++) expect(generateMemoryCode()).not.toContain('0')
+  })
+})
+
+describe('scoreCodeRecall', () => {
+  it('awards per-digit credit for correct positions only', () => {
+    const r = scoreCodeRecall('1234567', '1234000')
+    expect(r.digitsCorrect).toBe(4)
+    expect(r.allCorrect).toBe(false)
+    expect(r.score).toBe(4 * CODE_SCORE.PER_DIGIT)
+  })
+
+  it('gives no credit for a transposition — serial recall, not a digit bag', () => {
+    expect(scoreCodeRecall('1234567', '2134567').digitsCorrect).toBe(5)
+    expect(scoreCodeRecall('1234567', '7654321').digitsCorrect).toBe(1)   // only the middle aligns
+  })
+
+  it('adds the clean-sweep bonus for a perfect recall', () => {
+    const r = scoreCodeRecall('1234567', '1234567')
+    expect(r.allCorrect).toBe(true)
+    expect(r.score).toBe(7 * CODE_SCORE.PER_DIGIT + CODE_SCORE.ALL_CORRECT)
+  })
+
+  it('scores an empty or missing answer at zero without throwing', () => {
+    expect(scoreCodeRecall('1234567', '').score).toBe(0)
+    expect(scoreCodeRecall('1234567', null).score).toBe(0)
+    expect(scoreCodeRecall('1234567', undefined).digitsCorrect).toBe(0)
+  })
+
+  it('does not award the bonus for a correct prefix that is too short', () => {
+    const r = scoreCodeRecall('1234567', '123')
+    expect(r.digitsCorrect).toBe(3)
+    expect(r.allCorrect).toBe(false)
+  })
+})
+
+describe('generateAudioPlan — memory code cue', () => {
+  const CODE = '1234567'
+
+  // The span the readout occupies, mirroring the planner's own reservation.
+  function codeSpanOf(roundIdx, curveLen, codeT) {
+    const cfg = ROUND_CONFIG[roundIdx]
+    const spanT = (CODE_AUDIO_DURATION_S_EST * cfg.speed) / Math.max(1, curveLen)
+    const postGapT = (POST_TARGET_GAP_S * cfg.speed) / Math.max(1, curveLen)
+    return { start: codeT, end: codeT + spanT + postGapT }
+  }
+
+  it('emits exactly one code cue on round 5 and none on earlier rounds', () => {
+    for (let r = 0; r < 5; r++) {
+      const len = approxCurveLen(r)
+      const events = generateShapeEvents(len, ROUND_CONFIG[r].shapes, r)
+      const cues = generateAudioPlan(events, ROUND_CONFIG[r], USER_CALLSIGN, r, len, CODE)
+      const codeCues = cues.filter(c => c.kind === 'code')
+      expect(codeCues).toHaveLength(r === CODE_ROUND_IDX ? 1 : 0)
+      if (codeCues.length) expect(codeCues[0].code).toBe(CODE)
+    }
+  })
+
+  it('emits no code cue when no code is supplied', () => {
+    const r = CODE_ROUND_IDX
+    const len = approxCurveLen(r)
+    const events = generateShapeEvents(len, ROUND_CONFIG[r].shapes, r)
+    expect(generateAudioPlan(events, ROUND_CONFIG[r], USER_CALLSIGN, r, len).filter(c => c.kind === 'code')).toHaveLength(0)
+    expect(generateAudioPlan(events, ROUND_CONFIG[r], USER_CALLSIGN, r, len, null).filter(c => c.kind === 'code')).toHaveLength(0)
+  })
+
+  it('fires roughly a quarter of the way through the round, after warmup', () => {
+    const r = CODE_ROUND_IDX
+    const len = approxCurveLen(r)
+    for (let i = 0; i < 60; i++) {
+      const events = generateShapeEvents(len, ROUND_CONFIG[r].shapes, r)
+      const cue = generateAudioPlan(events, ROUND_CONFIG[r], USER_CALLSIGN, r, len, CODE).find(c => c.kind === 'code')
+      expect(cue.t).toBeGreaterThanOrEqual(AUDIO_WARMUP_T)
+      expect(cue.t).toBeGreaterThanOrEqual(CODE_CUE_T - CODE_CUE_JITTER_T - 1e-9)
+      expect(cue.t).toBeLessThanOrEqual(CODE_CUE_T + CODE_CUE_JITTER_T + 1e-9)
+    }
+  })
+
+  it('never schedules another cue inside the readout block', () => {
+    const r = CODE_ROUND_IDX
+    const len = approxCurveLen(r)
+    for (let i = 0; i < 120; i++) {
+      const events = generateShapeEvents(len, ROUND_CONFIG[r].shapes, r)
+      const cues = generateAudioPlan(events, ROUND_CONFIG[r], USER_CALLSIGN, r, len, CODE)
+      const code = cues.find(c => c.kind === 'code')
+      const span = codeSpanOf(r, len, code.t)
+      for (const cue of cues) {
+        if (cue.kind === 'code') continue
+        // Bleeps are instants; avoid/distractor cues occupy ~AUDIO_DURATION_S_EST.
+        const cueEnd = cue.kind === 'bleep'
+          ? cue.t
+          : cue.t + (AUDIO_DURATION_S_EST * ROUND_CONFIG[r].speed) / len
+        const overlaps = cue.t < span.end && cueEnd > span.start
+        expect(overlaps, `${cue.kind} cue at t=${cue.t} overlaps code block ${span.start}–${span.end}`).toBe(false)
+      }
+    }
+  })
+
+  it('still meets the avoid-cue floor on round 5 with the block reserved', () => {
+    const r = CODE_ROUND_IDX
+    const len = approxCurveLen(r)
+    for (let i = 0; i < 60; i++) {
+      const events = generateShapeEvents(len, ROUND_CONFIG[r].shapes, r)
+      const cues = generateAudioPlan(events, ROUND_CONFIG[r], USER_CALLSIGN, r, len, CODE)
+      expect(cues.filter(c => c.kind === 'avoid').length).toBeGreaterThanOrEqual(2)
     }
   })
 })

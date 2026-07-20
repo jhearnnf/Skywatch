@@ -57,8 +57,8 @@ export default function usePagePresence() {
           reconcile()
         })))
         .then((handle) => {
-          if (cancelled) { try { handle?.remove?.() } catch {} return }
-          removeNative = () => { try { handle?.remove?.() } catch {} }
+          if (cancelled) { try { handle?.remove?.() } catch { /* already torn down */ } return }
+          removeNative = () => { try { handle?.remove?.() } catch { /* already torn down */ } }
         })
         .catch(() => {})
     }

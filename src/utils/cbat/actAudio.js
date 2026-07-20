@@ -25,6 +25,32 @@ const CHUNK_FILES = [
   ...AVOID_KEYS,
 ];
 
+// ── Round-5 memory code ─────────────────────────────────────────────────────
+// The player is read a 7-digit code a quarter of the way through the final
+// round and asked to type it back at the end. Its clips ("remember_code.mp3",
+// "1.mp3" … "9.mp3") are single recordings with no male/female variant, so they
+// live under their own pseudo-voice in the buffer map rather than being keyed
+// by speaker.
+//
+// There is deliberately no zero: no 0.mp3 was recorded, and a dead key on the
+// recall pad would tell the player which digit can never appear.
+export const CODE_VOICE = 'code';
+export const CODE_DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
+export const CODE_PREAMBLE = 'remember_code';
+const CODE_FILES = [CODE_PREAMBLE, ...CODE_DIGITS];
+
+// Digits are spaced far wider than the 0.04s used between instruction words.
+// Run together they blur into one number the player can't chunk or rehearse;
+// the pause is what makes seven digits holdable.
+export const CODE_DIGIT_GAP_S = 0.4;
+
+// While the code is being read, the static distractor ducks to this fraction of
+// its configured level. Raising the code's own gain alone doesn't help much —
+// the static is bandpassed right through the speech range, so it masks rather
+// than sits under it.
+const CODE_DUCK_FACTOR = 0.25;
+const CODE_DUCK_FADE_S = 0.3;
+
 // Map internal key → actual filename body (no voice prefix, no extension).
 // Most are 1:1; the avoid keys translate underscores to spaces.
 function chunkKeyToFilename(key) {
@@ -71,11 +97,15 @@ export function computeDistractionSegments(totalDuration, count = DISTRACTION_SE
 // Default per-sound gain values when admin settings haven't been applied. Match
 // the legacy hardcoded values so an admin who never touches the sliders gets
 // exactly the previous behaviour.
+// The memory code sits deliberately louder than the rest: the round-5
+// challenge is holding seven digits for a whole round, not straining to hear
+// them over the static.
 const DEFAULT_VOLUMES = {
   voiceCommand: 0.40,
   chatter:      0.40,
   staticNoise:  0.40,
   bleep:        0.22,
+  code:         0.85,
 };
 
 export class ActAudioEngine {
@@ -94,7 +124,7 @@ export class ActAudioEngine {
     // AppSettings — see setVolumes(). Each play method honours these unless an
     // explicit volume override is passed (kept for the preview path).
     this._volumes = { ...DEFAULT_VOLUMES };
-    this._enabled = { voiceCommand: true, chatter: true, staticNoise: true, bleep: true };
+    this._enabled = { voiceCommand: true, chatter: true, staticNoise: true, bleep: true, code: true };
   }
 
   // Apply admin-configured per-sound levels. Pass any subset; missing keys are
@@ -128,7 +158,25 @@ export class ActAudioEngine {
       for (const name of CHUNK_FILES) jobs.push(this._loadBuffer(voice, name));
       jobs.push(this._loadDistractionBuffer(voice));
     }
+    for (const name of CODE_FILES) jobs.push(this._loadCodeBuffer(name));
     await Promise.all(jobs);
+  }
+
+  // Code clips are bare filenames (no voice prefix), keyed under CODE_VOICE so
+  // playSequence can walk them like any other chunk list.
+  async _loadCodeBuffer(name) {
+    const key = bufferKey(CODE_VOICE, name);
+    if (this.buffers.has(key)) return;
+    const url = `/sounds/act/${encodeURIComponent(name)}.mp3`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const arrayBuffer = await res.arrayBuffer();
+      const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+      this.buffers.set(key, audioBuffer);
+    } catch (err) {
+      console.warn(`[ACT] Failed to load ${url}:`, err.message);
+    }
   }
 
   async _loadDistractionBuffer(voice) {
@@ -174,7 +222,10 @@ export class ActAudioEngine {
   // `exclusive: true` makes this call skip if another exclusive sequence is
   // currently playing — used for callsign instructions so two voices never
   // overlap.
-  playSequence(names, { gap = 0.04, volume, exclusive = false, voice } = {}) {
+  // `soundKey` selects which admin-configured level and on/off flag apply —
+  // 'voiceCommand' for callsign instructions, 'code' for the round-5 memory
+  // code, which is deliberately louder and switchable on its own.
+  playSequence(names, { gap = 0.04, volume, exclusive = false, voice, soundKey = 'voiceCommand' } = {}) {
     if (!this.ctx) return { promise: Promise.resolve(), cancel: () => {}, played: false };
 
     if (exclusive && this._instructionPlayingUntil > this.ctx.currentTime + 0.01) {
@@ -182,16 +233,17 @@ export class ActAudioEngine {
     }
 
     // Apply admin-configured volume + enabled flag. Explicit `volume` override
-    // wins (preview path); otherwise the engine's stored voice-command gain
+    // wins (preview path); otherwise the engine's stored gain for this sound
     // applies. When the sound is disabled we bail with `played: false` so the
     // exclusive-instruction window isn't reserved for a silent call.
     if (volume === undefined) {
-      if (!this._enabled.voiceCommand) return { promise: Promise.resolve(), cancel: () => {}, played: false };
-      volume = this._volumes.voiceCommand;
+      if (!this._enabled[soundKey]) return { promise: Promise.resolve(), cancel: () => {}, played: false };
+      volume = this._volumes[soundKey];
     }
 
     // One voice per sequence so a sentence doesn't flip speakers mid-utterance.
-    const chosenVoice = voice && VOICES.includes(voice) ? voice : this._pickVoice();
+    const knownVoice = voice && (VOICES.includes(voice) || voice === CODE_VOICE);
+    const chosenVoice = knownVoice ? voice : this._pickVoice();
 
     let cancelled = false;
     const sources = [];
@@ -233,6 +285,52 @@ export class ActAudioEngine {
         }
       },
     };
+  }
+
+  // Read the round-5 memory code: "remember code" followed by each digit.
+  // Exclusive like any instruction, but the planner reserves a cue-free block
+  // around it — nothing else should be in flight to drop it.
+  playCode(digits, { volume } = {}) {
+    const result = this.playSequence([CODE_PREAMBLE, ...digits], {
+      voice: CODE_VOICE,
+      soundKey: 'code',
+      exclusive: true,
+      gap: CODE_DIGIT_GAP_S,
+      volume,
+    });
+    if (result.played) this._duckStatic(this.codeDurationS(digits));
+    return result;
+  }
+
+  // Pull the static down for `durationS`, then bring it back to its configured
+  // level. No-op when static isn't running.
+  _duckStatic(durationS, factor = CODE_DUCK_FACTOR) {
+    if (!this._staticNodes || !this.ctx) return;
+    const full = this._enabled.staticNoise ? this._volumes.staticNoise : 0;
+    const g = this._staticNodes.gain.gain;
+    const t = this.ctx.currentTime;
+    const hold = Math.max(CODE_DUCK_FADE_S, durationS);
+    try {
+      g.cancelScheduledValues(t);
+      g.setValueAtTime(g.value, t);
+      g.linearRampToValueAtTime(full * factor, t + CODE_DUCK_FADE_S);
+      g.setValueAtTime(full * factor, t + hold);
+      g.linearRampToValueAtTime(full, t + hold + CODE_DUCK_FADE_S * 2);
+    } catch { /* param scheduling unavailable — leave the static as-is */ }
+  }
+
+  // Real playback length of a code readout, in seconds, from the decoded
+  // buffers. The planner works off a fixed estimate (it's pure and has no
+  // engine); this is the runtime's actual figure, used to hold chatter off
+  // until the readout finishes. Returns 0 if the clips never loaded.
+  codeDurationS(digits, { gap = CODE_DIGIT_GAP_S } = {}) {
+    let total = 0;
+    for (const name of [CODE_PREAMBLE, ...digits]) {
+      const buf = this.buffers.get(bufferKey(CODE_VOICE, name));
+      if (!buf) continue;
+      total += buf.duration + gap;
+    }
+    return total;
   }
 
   // Synthesised sine-wave bleep — softened attack, ~440ms total, E5 (660Hz).

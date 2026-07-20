@@ -181,6 +181,12 @@ export function previewActVoiceCommand(sliderValue) {
   _playActMp3(url, sliderValue, 3000)
 }
 
+// Round-5 memory code — the "remember code" preamble is enough to judge the
+// level against the other ACT sounds without playing seven digits at the admin.
+export function previewActCode(sliderValue) {
+  _playActMp3('/sounds/act/remember_code.mp3', sliderValue ?? 85, 3000)
+}
+
 // Background chatter — plays from the same long recording the engine slices
 // for distractor playback. Auto-stopped after 3 s.
 export function previewActChatter(sliderValue) {

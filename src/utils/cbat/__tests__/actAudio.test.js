@@ -8,6 +8,10 @@ import {
   generateDistractorCallsign,
   buildAvoidSequence,
   computeDistractionSegments,
+  CODE_VOICE,
+  CODE_DIGITS,
+  CODE_PREAMBLE,
+  CODE_DIGIT_GAP_S,
 } from '../actAudio'
 
 describe('CALLSIGNS pool', () => {
@@ -296,6 +300,132 @@ describe('ActAudioEngine playDistraction', () => {
     engine.playDistraction({ voice: 'male' })
     engine.stopAll()
     expect(engine.playDistraction({ voice: 'male' }).played).toBe(true)
+  })
+})
+
+describe('ActAudioEngine memory code', () => {
+  function makeFakeCtx() {
+    let now = 0
+    return {
+      get currentTime() { return now },
+      _advance(t) { now += t },
+      createBufferSource: () => ({
+        buffer: null, connect() {}, start() {}, stop() {}, onended: null,
+      }),
+      createGain: () => ({ gain: { value: 0 }, connect() {} }),
+      destination: {},
+    }
+  }
+
+  function makeEngineWithCode() {
+    const engine = new ActAudioEngine()
+    engine.ctx = makeFakeCtx()
+    engine.buffers.set(`${CODE_VOICE}:${CODE_PREAMBLE}`, { duration: 1.2 })
+    for (const d of CODE_DIGITS) engine.buffers.set(`${CODE_VOICE}:${d}`, { duration: 0.5 })
+    return engine
+  }
+
+  it('has no zero — there is no 0.mp3 to read out', () => {
+    expect(CODE_DIGITS).toHaveLength(9)
+    expect(CODE_DIGITS).not.toContain('0')
+  })
+
+  it('plays the preamble then each digit, all from the code namespace', () => {
+    const engine = makeEngineWithCode()
+    const spy = vi.spyOn(engine.buffers, 'get')
+
+    const result = engine.playCode(['1', '2', '3'])
+    expect(result.played).toBe(true)
+    // Only the playback pass — the duck's duration lookup reads the same map
+    // again afterwards.
+    const keys = spy.mock.calls.map(c => c[0]).slice(0, 4)
+    expect(keys).toEqual([
+      `${CODE_VOICE}:${CODE_PREAMBLE}`,
+      `${CODE_VOICE}:1`,
+      `${CODE_VOICE}:2`,
+      `${CODE_VOICE}:3`,
+    ])
+  })
+
+  it('is louder than the voice commands by default', () => {
+    const engine = makeEngineWithCode()
+    expect(engine._volumes.code).toBeGreaterThan(engine._volumes.voiceCommand)
+  })
+
+  it('uses the code gain, not the voice-command gain', () => {
+    const engine = makeEngineWithCode()
+    engine.setVolumes({ volumes: { code: 0.8, voiceCommand: 0.1 } })
+    const gains = []
+    engine.ctx.createGain = () => {
+      const node = { gain: { value: 0 }, connect() {} }
+      gains.push(node)
+      return node
+    }
+    engine.playCode(['4'])
+    expect(gains[0].gain.value).toBeCloseTo(0.8)
+  })
+
+  it('is silenced by its own enabled flag, independently of voice commands', () => {
+    const engine = makeEngineWithCode()
+    engine.setVolumes({ enabled: { code: false, voiceCommand: true } })
+    expect(engine.playCode(['5']).played).toBe(false)
+
+    engine.setVolumes({ enabled: { code: true, voiceCommand: false } })
+    expect(engine.playCode(['5']).played).toBe(true)
+  })
+
+  it('reports the readout duration from the decoded buffers', () => {
+    const engine = makeEngineWithCode()
+    // preamble 1.2 + three digits at 0.5, each followed by a 0.04 gap.
+    expect(engine.codeDurationS(['1', '2', '3'], { gap: 0.04 })).toBeCloseTo(1.2 + 1.5 + 4 * 0.04)
+  })
+
+  it('spaces digits by the wide code gap by default, not the instruction gap', () => {
+    const engine = makeEngineWithCode()
+    expect(CODE_DIGIT_GAP_S).toBeGreaterThan(0.2)
+    expect(engine.codeDurationS(['1', '2', '3'])).toBeCloseTo(1.2 + 1.5 + 4 * CODE_DIGIT_GAP_S)
+  })
+
+  it('ducks the static for the length of the readout, then restores it', () => {
+    const engine = makeEngineWithCode()
+    engine.setVolumes({ volumes: { staticNoise: 0.4 } })
+    const ramps = []
+    engine._staticNodes = {
+      gain: {
+        gain: {
+          value: 0.4,
+          cancelScheduledValues() {},
+          setValueAtTime(v, t) { ramps.push(['set', v, t]) },
+          linearRampToValueAtTime(v, t) { ramps.push(['ramp', v, t]) },
+        },
+      },
+    }
+
+    engine.playCode(['1', '2', '3'])
+
+    const ducked = ramps.find(r => r[0] === 'ramp' && r[1] < 0.4)
+    expect(ducked).toBeDefined()
+    expect(ducked[1]).toBeLessThan(0.4 * 0.5)          // meaningfully quieter
+    const restore = ramps[ramps.length - 1]
+    expect(restore[1]).toBeCloseTo(0.4)                 // back to the configured level
+    expect(restore[2]).toBeGreaterThan(engine.codeDurationS(['1', '2', '3']))
+  })
+
+  it('leaves the static alone when the code did not play', () => {
+    const engine = makeEngineWithCode()
+    engine.setVolumes({ enabled: { code: false } })
+    const spy = vi.fn()
+    engine._staticNodes = {
+      gain: { gain: { value: 0.4, cancelScheduledValues: spy, setValueAtTime: spy, linearRampToValueAtTime: spy } },
+    }
+    engine.playCode(['1'])
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('reports zero duration when the clips never loaded', () => {
+    const engine = new ActAudioEngine()
+    engine.ctx = makeFakeCtx()
+    expect(engine.codeDurationS(['1', '2', '3'])).toBe(0)
   })
 })
 

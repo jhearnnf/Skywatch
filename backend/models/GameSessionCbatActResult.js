@@ -13,6 +13,12 @@ const schema = new mongoose.Schema({
   bleepHits:            { type: Number, default: 0 },     // bleeps tapped within the 2s reaction window
   bleepMisses:          { type: Number, default: 0 },     // bleeps that elapsed without a tap (or were tapped late)
   avgBleepReactionMs:   { type: Number, default: 0 },     // mean reaction time across hit bleeps; 0 if no hits
+  // Round-5 memory code: 7 digits read out a quarter of the way in, typed back
+  // at the end. codeAttempted is false for runs abandoned before round 5 and
+  // for every session recorded before the feature existed.
+  codeAttempted:        { type: Boolean, default: false },
+  codeDigitsCorrect:    { type: Number, default: 0 },     // digits correct in position (0–7)
+  codeRecalled:         { type: Boolean, default: false },// whole code correct
   createdAt:            { type: Date, default: Date.now },
 });
 
