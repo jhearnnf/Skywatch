@@ -248,11 +248,24 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
   const [error, setError] = useState('')
   const [openRouter, setOpenRouter] = useState(null)
 
+  // Refetched on an interval, not just on mount: Users Online is a live 5-minute
+  // window, and the first read races the heartbeat that marks *this* admin as
+  // online — so a mount-only fetch reliably showed the viewer as missing and
+  // then never corrected itself.
   useEffect(() => {
-    apiFetch(`${API}/api/admin/stats`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => { if (d.status === 'success') setStats(d.data); else setError('Failed to load stats') })
-      .catch(() => setError('Failed to load stats'))
+    let cancelled = false
+    const load = () => {
+      apiFetch(`${API}/api/admin/stats`, { credentials: 'include' })
+        .then(r => r.json())
+        .then(d => {
+          if (cancelled) return
+          if (d.status === 'success') setStats(d.data); else setError('Failed to load stats')
+        })
+        .catch(() => { if (!cancelled) setError('Failed to load stats') })
+    }
+    load()
+    const id = setInterval(load, 30_000)
+    return () => { cancelled = true; clearInterval(id) }
   }, [API])
 
   useEffect(() => {

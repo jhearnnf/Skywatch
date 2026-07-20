@@ -289,3 +289,12 @@ export const useAuth = () => useContext(AuthContext)
 
 // Exposed so Login.jsx can save the token from auth responses on native
 export const storeNativeToken = (token) => { if (isNative && token) storeToken(token) }
+
+// Request options that authenticate a raw `fetch` the same way apiFetch does:
+// a Bearer header on native (no cookie jar in the WebView), the cookie on web.
+// Any hand-rolled fetch to a `protect`-ed route must use this or it 401s on the
+// Android app — which is exactly how the online-users count lost every app user.
+export const authFetchOptions = () =>
+  (isNative
+    ? { headers: nativeHeaders() }
+    : { credentials: 'include' })
