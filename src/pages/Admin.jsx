@@ -332,8 +332,16 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
         </div>
       </StatsSection>
 
+      {/* Server / Performance */}
+      <StatsSection title="Server & Performance" defaultOpen>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Uptime Since Deploy"  value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="brand" />
+          <StatCard label="Total Loading Time"  value={fmtSeconds(Math.round((server?.totalLoadingMs ?? 0) / 1000))} color="brand" sub="cumulative user fetch wait" />
+        </div>
+      </StatsSection>
+
       {/* OpenRouter API spend */}
-      <StatsSection title="OpenRouter Spend" defaultOpen>
+      <StatsSection title="OpenRouter Spend">
         {!openRouter ? (
           <div className="py-4 text-center text-slate-400 text-xs animate-pulse">Loading OpenRouter usage…</div>
         ) : (
@@ -420,14 +428,6 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
             </button>
           </div>
         )}
-      </StatsSection>
-
-      {/* Server / Performance */}
-      <StatsSection title="Server & Performance" defaultOpen>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Uptime Since Deploy"  value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="brand" />
-          <StatCard label="Total Loading Time"  value={fmtSeconds(Math.round((server?.totalLoadingMs ?? 0) / 1000))} color="brand" sub="cumulative user fetch wait" />
-        </div>
       </StatsSection>
 
       {/* Airstars + Briefs + Tutorials */}

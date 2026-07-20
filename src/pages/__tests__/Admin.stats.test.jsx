@@ -111,15 +111,28 @@ describe('Admin — Stats tab: collapsible sections', () => {
   beforeEach(() => { global.fetch = setupFetch() })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('renders Users and OpenRouter sections open by default', async () => {
+  it('renders the Users section open and OpenRouter Spend closed by default', async () => {
     render(<Admin />)
 
     await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    expect(screen.getByText('OpenRouter Spend')).toBeInTheDocument()
+    expect(screen.queryByText('$12.34')).not.toBeInTheDocument()     // OpenRouter lifetime main
+  })
+
+  it('expands OpenRouter Spend when its header is clicked', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('OpenRouter Spend'))
+
     await waitFor(() => expect(screen.getByText('$12.34')).toBeInTheDocument())     // OpenRouter lifetime main
   })
 
   it('renders TODAY and LIFETIME tiles for the casefiles key', async () => {
     render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('OpenRouter Spend'))
 
     await waitFor(() => expect(screen.getByText('$5.67')).toBeInTheDocument())     // casefiles lifetime
     // Two casefiles tiles (TODAY + LIFETIME) — find them via the shared label
