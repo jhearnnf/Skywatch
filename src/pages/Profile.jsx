@@ -15,6 +15,7 @@ import SocialLinks from '../components/SocialLinks'
 import SEO from '../components/SEO'
 import { useSlimMode } from '../hooks/useSlimMode'
 import DeleteAccountModal from '../components/DeleteAccountModal'
+import { getClientInfo } from '../utils/appVersion'
 
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
   const Tag = onClick && !loading ? 'button' : 'div'
@@ -73,6 +74,16 @@ export default function Profile() {
   const [statsLoading, setStatsLoading] = useState(!!user)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
   const [showDelete,  setShowDelete]  = useState(false)
+  // Build stamp shown in the page footer. getClientInfo() resolves synchronously
+  // on web (build-time stamp) and via a bridge round-trip on Android (the real
+  // store versionName/versionCode), so both platforms show their true release.
+  const [clientInfo,  setClientInfo]  = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    getClientInfo().then((info) => { if (alive && info) setClientInfo(info) })
+    return () => { alive = false }
+  }, [])
   const [diffBusy,    setDiffBusy]    = useState(false)
   const [nameEditing, setNameEditing] = useState(false)
   const [nameDraft,   setNameDraft]   = useState('')
@@ -621,6 +632,17 @@ export default function Profile() {
             Delete account
           </button>
         </div>
+      )}
+
+      {/* Build stamp — last thing on the page, shown to everyone (incl. Android).
+          Full version + build in the tooltip helps diagnose stale-bundle reports. */}
+      {clientInfo && (
+        <p
+          className="mt-6 text-center text-[10px] text-slate-400"
+          title={`${clientInfo.platform} · v${clientInfo.version}${clientInfo.build ? ` · ${clientInfo.build}` : ''}`}
+        >
+          v{clientInfo.version}
+        </p>
       )}
 
       {showDelete && <DeleteAccountModal onClose={() => setShowDelete(false)} />}
