@@ -24,6 +24,7 @@ import RankBadge from '../components/RankBadge'
 import SocialsSection from '../components/admin/SocialsSection'
 import BriefReelReviewPanel from '../components/briefReel/admin/BriefReelReviewPanel'
 import ReportChart, { ChartSkeleton } from '../components/admin/ReportChart'
+import ReportHeatmap from '../components/admin/ReportHeatmap'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 import TutorialsEditor from './admin/TutorialsEditor'
 import UpdateNotificationsEditor from './admin/UpdateNotificationsEditor'
@@ -924,6 +925,9 @@ function ReportsTab({ API }) {
             <ChartCard title="Daily CBAT Sessions" sub={`stacked by game · window: ${window}`}>
               <ChartSkeleton height={260} />
             </ChartCard>
+            <ChartCard title="CBAT Activity by Day & Hour" sub="game starts · UK time">
+              <ChartSkeleton height={200} />
+            </ChartCard>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <ChartCard title="Sessions per User" sub="distribution across users">
                 <ChartSkeleton height={220} />
@@ -972,6 +976,14 @@ function ReportsTab({ API }) {
                 compareKey={compareActive ? '_prevTotal' : undefined}
                 compareLabel="Prev period total"
               />
+            </ChartCard>
+
+            {/* When users play: day-of-week × hour-of-day heatmap of game starts */}
+            <ChartCard
+              title="CBAT Activity by Day & Hour"
+              sub={`game starts · UK time · window: ${window}`}
+            >
+              <ReportHeatmap data={cbat.activityHeatmap} />
             </ChartCard>
 
             {/* Distribution + per-game side by side on lg */}

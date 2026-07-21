@@ -23,6 +23,12 @@ const TUTORIAL_GAMES = [
   { key: 'target-tutorial', gameKey: 'target', label: 'Target (tutorial)' },
 ];
 
+// Timezone for the day/hour activity heatmap. The audience is UK-based, and
+// "what time of day" only reads correctly in local time (a UTC grid smears
+// peaks by an hour under BST), so starts are bucketed in Europe/London rather
+// than UTC like the daily charts.
+const ACTIVITY_TZ = 'Europe/London';
+
 router.use(protect, adminOnly);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -214,6 +220,40 @@ async function tutorialUsage(since) {
       sessionsByDay: dayMap,
     };
   }));
+}
+
+// Day-of-week × hour-of-day session-start counts for the activity heatmap.
+// Grid is 7 rows (index 0 = Monday, via $isoDayOfWeek) × 24 hour columns,
+// bucketed in ACTIVITY_TZ. Sourced from GameSessionCbatStart (every start,
+// including abandoned sessions) — the broadest "when do people use Skywatch"
+// signal. Respects the window (since = window start).
+async function activityHeatmap(since, until = null) {
+  const dateCond = {};
+  if (since) dateCond.$gte = since;
+  if (until) dateCond.$lt  = until;
+  const match = Object.keys(dateCond).length ? { startedAt: dateCond } : {};
+  const rows = await GameSessionCbatStart.aggregate([
+    { $match: match },
+    { $group: {
+      _id: {
+        dow:  { $isoDayOfWeek: { date: '$startedAt', timezone: ACTIVITY_TZ } }, // 1=Mon..7=Sun
+        hour: { $hour:         { date: '$startedAt', timezone: ACTIVITY_TZ } }, // 0..23
+      },
+      count: { $sum: 1 },
+    }},
+  ]);
+  const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  let max = 0;
+  let total = 0;
+  for (const r of rows) {
+    const row = r._id.dow - 1;      // 0 = Monday
+    const hour = r._id.hour;
+    if (row < 0 || row > 6 || hour < 0 || hour > 23) continue;
+    grid[row][hour] = r.count;
+    total += r.count;
+    if (r.count > max) max = r.count;
+  }
+  return { timezone: ACTIVITY_TZ, grid, max, total };
 }
 
 // Activation for a signup cohort: of users who registered in [start, end),
@@ -413,10 +453,12 @@ router.get('/cbat', async (req, res) => {
     const prior = priorWindow(window);              // null for all-time
     const wantCompare = compare && !!prior;
 
-    // Per-game streams + sessions-by-day, plus tutorial/practice usage.
-    const [games, tutorials] = await Promise.all([
+    // Per-game streams + sessions-by-day, plus tutorial/practice usage and the
+    // day/hour activity heatmap.
+    const [games, tutorials, heatmap] = await Promise.all([
       cbatStreams(wStart),
       tutorialUsage(wStart),
+      activityHeatmap(wStart),
     ]);
 
     // Total sessions and unique players in window — scored games only; tutorials
@@ -614,6 +656,7 @@ router.get('/cbat', async (req, res) => {
           ...Object.fromEntries(tutorials.map(t => [t.key, t.label])),
         },
         practiceKeys,
+        activityHeatmap: heatmap,
         sessionsPerPlayerBuckets,
         perGame,
         tutorials: tutorials.map(t => ({
