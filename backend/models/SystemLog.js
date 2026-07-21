@@ -57,6 +57,11 @@ const systemLogSchema = new mongoose.Schema({
   requestPath: { type: String, default: '' },
   dayKey:      { type: String, default: '' },
   userAgent:   { type: String, default: '' },
+  // referer: the page URL the blocked request was made from, when the browser
+  // sends one. This is the single most useful clue for "where did this come
+  // from" — a stray link, an embed on another site, or empty for a direct
+  // address-bar visit / scanner.
+  referer:     { type: String, default: '' },
   hitCount:    { type: Number, default: 0 },
   firstSeenAt: { type: Date, default: null },
   lastSeenAt:  { type: Date, default: null },

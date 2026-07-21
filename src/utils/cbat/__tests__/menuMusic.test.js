@@ -41,7 +41,7 @@ function setVisibility(state) {
   document.dispatchEvent(new Event('visibilitychange'))
 }
 
-let updateCbatMusic, _resetCbatMusic
+let updateCbatMusic, _resetCbatMusic, refreshCbatMusicVolume
 
 beforeEach(async () => {
   masterVolume = 100
@@ -52,7 +52,7 @@ beforeEach(async () => {
   // Force the controller's synchronous (no-rAF) fade path for determinism.
   vi.stubGlobal('requestAnimationFrame', undefined)
   vi.stubGlobal('cancelAnimationFrame', undefined)
-  ;({ updateCbatMusic, _resetCbatMusic } = await import('../menuMusic'))
+  ;({ updateCbatMusic, _resetCbatMusic, refreshCbatMusicVolume } = await import('../menuMusic'))
   _resetCbatMusic()
 })
 
@@ -136,6 +136,23 @@ describe('cbat menu music controller', () => {
     masterVolume = 50
     updateCbatMusic('menu')
     expect(MockAudio.ofSrc(START)[0].volume).toBeCloseTo(0.25) // 1.0 × 0.5 × 0.5
+  })
+
+  it('refreshCbatMusicVolume re-applies a changed master volume to the playing track', () => {
+    updateCbatMusic('menu')
+    const start = MockAudio.ofSrc(START)[0]
+    expect(start.volume).toBeCloseTo(1.0)
+
+    // User drags the Profile volume slider down mid-playback.
+    masterVolume = 40
+    refreshCbatMusicVolume()
+    expect(start.volume).toBeCloseTo(0.4)
+  })
+
+  it('refreshCbatMusicVolume is a no-op when nothing is playing', () => {
+    masterVolume = 40
+    expect(() => refreshCbatMusicVolume()).not.toThrow()
+    expect(MockAudio.instances).toHaveLength(0)
   })
 
   it('plays nothing when the admin has disabled the soundtrack', () => {

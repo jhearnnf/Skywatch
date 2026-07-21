@@ -6,6 +6,7 @@ import { useAppTutorial } from '../context/AppTutorialContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import { MOCK_LEADERBOARD } from '../data/mockData'
 import { getMasterVolume, setMasterVolume } from '../utils/sound'
+import { refreshCbatMusicVolume } from '../utils/cbat/menuMusic'
 import { displayTier, isFreeUser } from '../utils/subscription'
 import { getLevelInfo } from '../utils/levelUtils'
 import { useAppSettings } from '../context/AppSettingsContext'
@@ -452,6 +453,9 @@ export default function Profile() {
                 const v = Number(e.target.value)
                 setMasterVol(v)
                 setMasterVolume(v)
+                // Menu music is playing on this page — apply the new level live
+                // instead of only on the next navigation.
+                refreshCbatMusicVolume()
               }}
               aria-label="App volume"
             />

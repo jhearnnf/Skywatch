@@ -269,6 +269,16 @@ export function updateCbatMusic(zone) {
   else fadeTo(targetGain())
 }
 
+// Re-apply the current zone's gain immediately using the latest admin-level +
+// master-volume values. Call this when the user changes their master volume
+// (Profile → Sound) so a soundtrack already playing responds at once rather than
+// only on the next zone change (i.e. after navigating away). No-op when nothing
+// is playing.
+export function refreshCbatMusicVolume() {
+  if (!playing) return
+  applyGain(targetGain())
+}
+
 // Test/HMR helper — hard reset without fades.
 export function _resetCbatMusic() {
   cancelFade()

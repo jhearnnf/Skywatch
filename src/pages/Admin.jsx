@@ -8583,6 +8583,51 @@ const INTEL_SUBTABS = [
 // SYSTEM LOGS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Turn a raw User-Agent string into something glanceable, e.g. "iPhone · Safari".
+function describeDevice(ua = '') {
+  if (!ua) return ''
+  const os =
+    /iPhone/i.test(ua)            ? 'iPhone'  :
+    /iPad/i.test(ua)             ? 'iPad'    :
+    /Android/i.test(ua)          ? 'Android' :
+    /Windows/i.test(ua)          ? 'Windows' :
+    /Mac OS X|Macintosh/i.test(ua) ? 'Mac'   :
+    /Linux/i.test(ua)            ? 'Linux'   : ''
+  const browser =
+    /Edg\//i.test(ua)            ? 'Edge'    :
+    /OPR\/|Opera/i.test(ua)      ? 'Opera'   :
+    /Chrome\//i.test(ua)         ? 'Chrome'  :
+    /Firefox\//i.test(ua)        ? 'Firefox' :
+    /Safari\//i.test(ua)         ? 'Safari'  : ''
+  return [os, browser].filter(Boolean).join(' · ')
+}
+
+// Plain-English read on a blocked origin so the "what is this?" answer sits on
+// the row itself. Distinguishes the harmless self-poke (the API's own address
+// opened in a browser / probed by a scanner — no real visitor affected) from a
+// genuine Skywatch address being turned away (which silently breaks the site
+// for those users and needs the CORS allowlist checked).
+function explainRejectedOrigin(origin = '') {
+  let host = ''
+  try { host = new URL(origin).host } catch { host = String(origin) }
+  if (/^api\./i.test(host)) {
+    return {
+      severity: 'harmless',
+      text: "This is the API's own address being opened directly in a browser — someone typed/followed the api. link, or a scanner probed it. No real visitor was affected; safe to resolve.",
+    }
+  }
+  if (/(^|\.)skywatch\.academy$/i.test(host)) {
+    return {
+      severity: 'investigate',
+      text: 'A real Skywatch address was blocked. This can silently break the site for anyone arriving on it — add this origin to the CORS allowlist in backend/app.js.',
+    }
+  }
+  return {
+    severity: 'investigate',
+    text: 'A page on another site called your API. Usually a bot, an embed, or someone scraping — worth a look only if it keeps happening.',
+  }
+}
+
 function SystemLogsTab({ API, onResolved }) {
   const { apiFetch } = useAuth()
   const [logs,       setLogs]       = useState([])
@@ -8652,6 +8697,8 @@ function SystemLogsTab({ API, onResolved }) {
     quiz_finish_failure:         { label: 'Intel Recall Finish Recovered', color: 'bg-pink-900/40 text-pink-300' },
     quiz_result_persist_failure: { label: 'Intel Recall Result Save Failed', color: 'bg-pink-900/40 text-pink-300' },
     account_creation_failure:    { label: 'Account Creation Failed',       color: 'bg-red-900/40 text-red-300' },
+    cors_origin_rejected:        { label: 'Blocked Unknown Origin',        color: 'bg-sky-900/40 text-sky-300' },
+    api_unreachable:             { label: 'Device Could Not Reach API',    color: 'bg-sky-900/40 text-sky-300' },
   }
 
   return (
@@ -8743,8 +8790,47 @@ function SystemLogsTab({ API, onResolved }) {
                     </p>
                   )}
 
+                  {/* cors_origin_rejected — where it came from + plain-English read */}
+                  {log.type === 'cors_origin_rejected' && (
+                    <div className="text-xs text-slate-400 space-y-0.5 mb-1">
+                      <p>Blocked origin: <span className="font-mono text-slate-300 break-all">{log.origin || '(none)'}</span></p>
+                      {log.requestPath && <p>Tried to reach: <span className="font-mono break-all">{log.requestPath}</span></p>}
+                      {log.referer && <p>Linked from: <span className="font-mono break-all">{log.referer}</span></p>}
+                      {describeDevice(log.userAgent) && <p>Device: <span className="font-semibold text-slate-300">{describeDevice(log.userAgent)}</span></p>}
+                      {log.hitCount > 0 && (
+                        <p>
+                          {log.hitCount} request{log.hitCount === 1 ? '' : 's'}
+                          {log.firstSeenAt && log.lastSeenAt && log.firstSeenAt !== log.lastSeenAt && (
+                            <> · {new Date(log.firstSeenAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}–{new Date(log.lastSeenAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</>
+                          )}
+                        </p>
+                      )}
+                      {(() => {
+                        const e = explainRejectedOrigin(log.origin)
+                        return (
+                          <p className={`mt-1.5 ${e.severity === 'harmless' ? 'text-slate-400' : 'text-amber-400'}`}>
+                            {e.severity === 'harmless' ? '✓ ' : '⚠ '}{e.text}
+                          </p>
+                        )
+                      })()}
+                    </div>
+                  )}
+
+                  {/* api_unreachable — a device that couldn't reach the API while it thought it was online */}
+                  {log.type === 'api_unreachable' && (
+                    <div className="text-xs text-slate-400 space-y-0.5 mb-1">
+                      {log.origin && <p>Reported by: <span className="font-mono text-slate-300 break-all">{log.origin}</span></p>}
+                      {describeDevice(log.userAgent) && <p>Device: <span className="font-semibold text-slate-300">{describeDevice(log.userAgent)}</span></p>}
+                      {log.failingForMs > 0 && <p>Was failing for: <span className="font-semibold text-slate-300">{Math.round(log.failingForMs / 1000)}s</span></p>}
+                      {log.queuedCount > 0 && <p>Scores queued on device: <span className="font-semibold text-slate-300">{log.queuedCount}</span></p>}
+                      <p className="mt-1.5 text-amber-400">
+                        ⚠ A device couldn&apos;t reach the API while it believed it was online, so scores queued locally until it recovered. A one-off is usually a flaky connection; repeats point at a real outage or a wrong API address.
+                      </p>
+                    </div>
+                  )}
+
                   {/* common error detail */}
-                  {log.failureReason && log.type !== 'bulk_generation_warnings' && (
+                  {log.failureReason && log.type !== 'bulk_generation_warnings' && log.type !== 'cors_origin_rejected' && (
                     <p className="text-[10px] text-red-400 font-mono mt-1 break-words">{log.failureReason}</p>
                   )}
                 </div>

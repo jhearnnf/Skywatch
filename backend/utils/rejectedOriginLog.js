@@ -35,6 +35,9 @@ function recordRejectedOrigin(origin, req) {
         lastSeenAt:  now,
         requestPath: req?.originalUrl ?? '',
         userAgent:   (req?.headers?.['user-agent'] ?? '').slice(0, 300),
+        // Keep the most recent referer we saw for this origin/day. Empty for a
+        // direct visit (nothing linked to it); populated when a page did.
+        referer:     (req?.headers?.referer ?? req?.headers?.referrer ?? '').slice(0, 300),
       },
       $setOnInsert: {
         type: 'cors_origin_rejected',

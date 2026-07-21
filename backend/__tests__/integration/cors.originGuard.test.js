@@ -56,6 +56,16 @@ describe('CORS origin guard', () => {
     expect(logs[0].hitCount).toBe(1);
   });
 
+  it('records the referer so the admin can see where the blocked request came from', async () => {
+    await request(app)
+      .get('/api/health')
+      .set('Origin', 'https://not-allowed.example.com')
+      .set('Referer', 'https://some-other-site.example.com/embed');
+
+    const log = await SystemLog.findOne({ type: 'cors_origin_rejected', origin: 'https://not-allowed.example.com' });
+    expect(log.referer).toBe('https://some-other-site.example.com/embed');
+  });
+
   it('aggregates repeat offences into one row per origin per day', async () => {
     for (let i = 0; i < 5; i++) {
       await request(app).get('/api/health').set('Origin', 'https://noisy.example.com');
