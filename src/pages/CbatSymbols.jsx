@@ -51,14 +51,34 @@ function buildSymbolPool() {
 
 const SYMBOL_POOL = buildSymbolPool()
 
-function pickUniqueSymbols(count) {
-  // Fisher-Yates partial shuffle to pick `count` unique code points
+// Case-fold key so a round never draws both the uppercase and lowercase of the
+// same base letter. Many Cyrillic lowercase forms are just scaled-down copies of
+// the capital (e.g. И vs и, Н vs н), so showing both makes them near-identical.
+// Cyrillic uppercase А–Я sit at 0x0410–0x042F and lowercase а–я at 0x0430–0x044F,
+// a fixed +0x20 offset; folding lowercase down to its capital gives a shared key.
+// Every other script returns its own code point, so unrelated symbols never fold.
+export function collisionKey(codePoint) {
+  if (codePoint >= 0x0430 && codePoint <= 0x044F) return codePoint - 0x20
+  return codePoint
+}
+
+export function pickUniqueSymbols(count) {
+  // Full Fisher-Yates shuffle, then greedily take symbols while skipping any
+  // whose case-folded key is already in the selection. The pool (hundreds of
+  // entries) dwarfs the largest tier size, so `count` is always satisfiable.
   const arr = [...SYMBOL_POOL]
-  const out = []
-  for (let i = 0; i < count; i++) {
-    const j = i + Math.floor(Math.random() * (arr.length - i))
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
-    out.push(String.fromCodePoint(arr[i]))
+  }
+  const out = []
+  const usedKeys = new Set()
+  for (const cp of arr) {
+    if (out.length >= count) break
+    const key = collisionKey(cp)
+    if (usedKeys.has(key)) continue
+    usedKeys.add(key)
+    out.push(String.fromCodePoint(cp))
   }
   return out
 }

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import CbatSymbols from '../CbatSymbols'
+import CbatSymbols, { pickUniqueSymbols, collisionKey } from '../CbatSymbols'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -55,6 +55,34 @@ function setupGuest() {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
+
+describe('pickUniqueSymbols — case-collision guard', () => {
+  // Cyrillic capital И (0x0418) and lowercase и (0x0438) fold to the same key.
+  it('folds a Cyrillic lowercase letter down to its capital', () => {
+    expect(collisionKey(0x0438)).toBe(0x0418) // и → И
+    expect(collisionKey(0x0418)).toBe(0x0418) // И → И
+  })
+
+  it('leaves non-Cyrillic code points as their own key', () => {
+    expect(collisionKey(0x3042)).toBe(0x3042) // Hiragana あ
+    expect(collisionKey(0x4E00)).toBe(0x4E00) // CJK 一
+  })
+
+  it('never returns both the uppercase and lowercase of the same Cyrillic letter', () => {
+    // Run many draws at the largest tier size to exercise the guard.
+    for (let trial = 0; trial < 300; trial++) {
+      const symbols = pickUniqueSymbols(25)
+      const keys = symbols.map(s => collisionKey(s.codePointAt(0)))
+      expect(new Set(keys).size).toBe(keys.length)
+    }
+  })
+
+  it('still returns the requested count of unique symbols', () => {
+    const symbols = pickUniqueSymbols(25)
+    expect(symbols.length).toBe(25)
+    expect(new Set(symbols).size).toBe(25)
+  })
+})
 
 describe('CbatSymbols — guest gate', () => {
   beforeEach(() => vi.clearAllMocks())
