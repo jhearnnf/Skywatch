@@ -745,6 +745,19 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     pendingBleepRef.current = null
   }, [])
 
+  // Fire BLEEP on pointer-down rather than click. This registers the tap
+  // instantly — no synthetic-click latency on a reaction-timed action — and,
+  // crucially, works while another finger is already dragging the steer pad:
+  // pointer capture is per-pointerId, so this second finger is a wholly
+  // independent pointer the browser never suppresses (a multi-touch `click`
+  // often is). We only respond to the primary button (button 0 / touch), and
+  // preventDefault to swallow the ghost click and avoid double-firing.
+  const onBleepPointerDown = useCallback((e) => {
+    if (e.button != null && e.button !== 0) return  // ignore right/middle mouse
+    e.preventDefault()
+    onBleepTap()
+  }, [onBleepTap])
+
   // Trigger the round-1 bleep tutorial. Plays a single bleep, pauses the
   // game loop, and shows the overlay + button pulse until the player taps.
   // A separate effect (below) loops the bleep at ~1.4 s intervals while the
@@ -1096,6 +1109,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     onPointerUp,
     isDragging,
     onBleepTap,
+    onBleepPointerDown,
     tutorialActive,
     startBleepTutorial,
     paused,
@@ -1825,8 +1839,9 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
           a UX cue that the round hasn't begun). Pulses + brightens during
           the round-1 tutorial so the player knows where to tap. */}
       <button
-        onClick={state.onBleepTap}
+        onPointerDown={state.onBleepPointerDown}
         disabled={showCallsignOverlay || state.paused}
+        style={{ touchAction: 'none' }}
         className={`w-full mt-3 py-5 border-2 font-extrabold text-lg uppercase tracking-widest rounded-xl transition-colors ${
           showCallsignOverlay || state.paused
             ? 'bg-slate-700/20 border-slate-600/30 text-slate-500 cursor-not-allowed'
