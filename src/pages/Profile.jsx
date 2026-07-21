@@ -92,7 +92,16 @@ export default function Profile() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
   const [masterVol,   setMasterVol]   = useState(() => isIOS ? 100 : getMasterVolume())
   const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'settings' | 'tutorials'
+  const [namePulse,   setNamePulse]   = useState(false)
   const [resetDone,   setResetDone]   = useState(false)
+
+  // Tapping the agent name in the header jumps to Settings and briefly pulses
+  // the Display Name card so the "Change" control is easy to find.
+  const goToNameSettings = () => {
+    setTab('settings')
+    setNamePulse(true)
+    setTimeout(() => setNamePulse(false), 1300)
+  }
 
   // Tutorial on first visit
   useEffect(() => {
@@ -227,9 +236,14 @@ export default function Profile() {
               <ProfileBadge user={user} size={user?.selectedBadge?.cutoutUrl ? 48 : 38} />
             </button>
             <div className="flex-1 min-w-0">
-              <p className="font-extrabold text-lg text-slate-800 leading-tight truncate">
+              <button
+                type="button"
+                onClick={goToNameSettings}
+                title="Change your display name"
+                className="block max-w-full font-extrabold text-lg text-slate-800 leading-tight truncate text-left hover:text-brand-700 transition-colors"
+              >
                 {user.displayName || `Agent #${user.agentNumber ?? '———'}`}
-              </p>
+              </button>
               {!slim && <p className="text-slate-600 text-sm">{rankDisplay}</p>}
               {user.displayName && (
                 <p className="text-slate-500 text-xs mt-0.5 intel-mono">#{user.agentNumber ?? '———'}</p>
@@ -311,7 +325,7 @@ export default function Profile() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
 
           {/* Display Name */}
-          <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+          <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${namePulse ? ' flashcard-ring-active' : ''}`}>
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Display Name</p>
 
             {!nameEditing ? (

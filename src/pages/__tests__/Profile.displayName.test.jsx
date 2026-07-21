@@ -150,6 +150,22 @@ describe('Profile — Display Name', () => {
     expect(screen.getByText(/Next change available in/i)).toBeInTheDocument()
   })
 
+  it('jumps to Settings and pulses the Display Name card when the agent name is clicked', async () => {
+    mountWith({ user: { ...BASE_USER, displayName: 'Maverick' }, apiFetch: statsAndDefaultFetch() })
+    render(<Profile />)
+
+    // The header name is a button that jumps straight to the Display Name control
+    fireEvent.click(await screen.findByRole('button', { name: 'Maverick' }))
+
+    // Settings tab is now active → the Change button is visible
+    const change = await screen.findByRole('button', { name: /^Change$/ })
+    expect(change).toBeInTheDocument()
+
+    // The Display Name card is briefly pulsing
+    const label = screen.getByText('Display Name')
+    expect(label.closest('.flashcard-ring-active')).not.toBeNull()
+  })
+
   it('clears the display name when Clear is clicked', async () => {
     const clearedUser = { ...BASE_USER, displayName: null, displayNameChangedAt: new Date().toISOString() }
     const apiFetch = statsAndDefaultFetch((url, opts) => {
