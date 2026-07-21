@@ -124,6 +124,49 @@ describe('CbatTarget — tutorial / practice mode', () => {
     expect(screen.getByText(/identify the aircraft/i)).toBeTruthy()
   })
 
+  it('points an arrow at the red alert once every unknown is cleared', async () => {
+    setupUser()
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800, x: 0, y: 0, toJSON() {},
+    })
+    try {
+      render(<CbatTarget />)
+      fireEvent.click(screen.getByRole('button', { name: /^tutorial$/i }))
+
+      // No alert arrow while diamonds remain to be clicked.
+      expect(document.querySelectorAll('.cbat-tutorial-arrow').length).toBe(0)
+
+      // Clear all five stacked diamonds but leave the alert uncleared.
+      const scene = document.querySelector('.cbat-target-scene')
+      for (let i = 0; i < 5; i++) fireEvent.click(scene, { clientX: 80, clientY: 80 })
+
+      // The alert is still there, so exactly one arrow now points at it.
+      expect(screen.getByRole('button', { name: /^alert$/i })).toBeTruthy()
+      expect(document.querySelectorAll('.cbat-tutorial-arrow').length).toBe(1)
+    } finally {
+      randomSpy.mockRestore()
+      rectSpy.mockRestore()
+    }
+  })
+
+  it('dims earlier-section panels once a later section is reached', () => {
+    setupUser()
+    render(<CbatTarget />)
+    fireEvent.click(screen.getByRole('button', { name: /^tutorial$/i }))
+
+    // Section 1 — its own panels are not dimmed.
+    expect(document.querySelector('.grid-scene').className).not.toContain('cbat-tutorial-dim')
+
+    // Section 2 (Light) — the Light panels stay lit; the Scene/Key panels from
+    // section 1 are dimmed as they aren't part of this step's task.
+    fireEvent.click(screen.getByRole('button', { name: /next section/i }))
+    expect(document.querySelector('.grid-light').className).not.toContain('cbat-tutorial-dim')
+    expect(document.querySelector('.grid-scene').className).toContain('cbat-tutorial-dim')
+    expect(document.querySelector('.grid-info').className).toContain('cbat-tutorial-dim')
+    expect(document.querySelector('.grid-scene-target').className).toContain('cbat-tutorial-dim')
+  })
+
   it('Exit practice returns to the intro', async () => {
     setupUser()
     render(<CbatTarget />)

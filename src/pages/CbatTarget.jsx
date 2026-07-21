@@ -422,18 +422,21 @@ function InfoPanel({ highlightUnknown = false } = {}) {
   const outlineSvg = (child) => (
     <svg width="11" height="11" viewBox="-6 -6 12 12" style={{ flexShrink: 0 }}>{child}</svg>
   )
+  // While the Key panel is spotlighted (section 1), fade every entry except
+  // "unknown" so the eye lands straight on the one the player has to decode.
+  const other = highlightUnknown ? 'opacity-20 transition-opacity duration-300' : 'transition-opacity duration-300'
   return (
     <div className="w-full h-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-1.5 py-1 text-[10px] text-[#ddeaf8] leading-[1.2]">
       <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-        <Item icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#ef4444]" />} label="hostile" />
-        <Item icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#5baaff]" />} label="friendly" />
-        <Item icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#facc15]" />} label="neutral" />
-        <Item icon={outlineSvg(<circle cx="0" cy="0" r="4.5" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="truck" />
-        <Item icon={outlineSvg(<rect x="-4.5" y="-4.5" width="9" height="9" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="tank" />
-        <Item icon={outlineSvg(<polygon points="0,-5.2 -4.5,2.6 4.5,2.6" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="building" />
+        <Item className={other} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#ef4444]" />} label="hostile" />
+        <Item className={other} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#5baaff]" />} label="friendly" />
+        <Item className={other} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#facc15]" />} label="neutral" />
+        <Item className={other} icon={outlineSvg(<circle cx="0" cy="0" r="4.5" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="truck" />
+        <Item className={other} icon={outlineSvg(<rect x="-4.5" y="-4.5" width="9" height="9" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="tank" />
+        <Item className={other} icon={outlineSvg(<polygon points="0,-5.2 -4.5,2.6 4.5,2.6" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="building" />
         <Item className={highlightUnknown ? 'cbat-triple-pulse' : ''} icon={outlineSvg(<rect x="-3.5" y="-3.5" width="7" height="7" fill="none" stroke="#facc15" strokeWidth="1.3" transform="rotate(45)" />)} label="unknown" />
-        <Item icon={<span className="text-red-300 font-bold">✕</span>} label="damaged" />
-        <Item icon={outlineSvg(
+        <Item className={other} icon={<span className="text-red-300 font-bold">✕</span>} label="damaged" />
+        <Item className={other} icon={outlineSvg(
           <g stroke="#5baaff" strokeWidth="1.5" strokeLinecap="round">
             <line x1="0" y1="-5" x2="0" y2="-2" />
             <line x1="0" y1="2" x2="0" y2="5" />
@@ -1012,6 +1015,12 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
   const isPulsing = (panel) => (!engaged && (sequence ? focus === panel : step?.highlight?.includes(panel)))
   const pulse = (panel) => (isPulsing(panel) ? ' cbat-tutorial-pulse' : '')
 
+  // Panels this step actually uses (its spotlight sequence, or its highlight
+  // set). An unlocked panel that isn't part of the current task is dimmed so the
+  // eye stays on the section being taught — earlier sections read as "done".
+  const activePanels = new Set(step?.sequence || step?.highlight || [])
+  const dim = (panel) => (enabled[panel] && !activePanels.has(panel) ? ' cbat-tutorial-dim' : '')
+
   // Which section's task is currently active — gates each panel's button flash
   // and completion so e.g. the Light LOCK stops flashing/advancing once the user
   // has moved on to the Scan section.
@@ -1241,20 +1250,20 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
       {/* Practice arena — same grid as the live game; locked panels greyed out */}
       <div className="cbat-target-arena">
         <div className="cbat-target-grid">
-          <div className={`grid-info${pulse('info')}`}>
+          <div className={`grid-info${pulse('info')}${dim('info')}`}>
             {enabled.info ? <InfoPanel highlightUnknown={focus === 'info'} /> : <TutorialDisabledPanel label="Key" />}
           </div>
-          <div className={`grid-light${pulse('light')}`}>
+          <div className={`grid-light${pulse('light')}${dim('light')}`}>
             {enabled.light
               ? <LightPanel pattern={lightPattern} flash={lightFlash} onPress={onLightPress} lockPulse={lightsMatch} />
               : <TutorialDisabledPanel label="Light" />}
           </div>
-          <div className={`grid-scan${pulse('scan')}`}>
+          <div className={`grid-scan${pulse('scan')}${dim('scan')}`}>
             {enabled.scan
               ? <ScanPanel aircraft={scanPanelAc} onPress={onScanPress} flash={scanFlash} idPulse={scanMatch} />
               : <TutorialDisabledPanel label="Scan" />}
           </div>
-          <div ref={systemRef} className={`grid-system${pulse('system')}`}>
+          <div ref={systemRef} className={`grid-system${pulse('system')}${dim('system')}`}>
             {enabled.system
               ? <SystemPanel
                   columns={sysColumns}
@@ -1264,7 +1273,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
                 />
               : <TutorialDisabledPanel label="System" />}
           </div>
-          <div className={`grid-scene${pulse('scene')}`}>
+          <div className={`grid-scene${pulse('scene')}${dim('scene')}`}>
             {enabled.scene ? (
               <div
                 className={`cbat-target-scene relative w-full h-full border rounded-lg overflow-hidden cursor-pointer transition-colors ${missFlash ? 'border-red-500' : 'border-[#1a3a5c]'}`}
@@ -1280,25 +1289,31 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
                 {stepIdx === 0 && tutAlert && (
                   <AlertCircle alert={tutAlert} scale={shapeScale} onClick={onTutAlertClick} />
                 )}
+                {/* Once every unknown is cleared, point the eye at the last thing
+                    left to click — the red alert — the same way the diamonds are
+                    signposted. */}
+                {stepIdx === 0 && tutAlert && !diamondsActive && (
+                  <TutorialArrow x={tutAlert.x} y={tutAlert.y} />
+                )}
               </div>
             ) : <TutorialDisabledPanel label="Scene" />}
           </div>
-          <div className={`grid-scene-target${pulse('sceneTarget')}`}>
+          <div className={`grid-scene-target${pulse('sceneTarget')}${dim('sceneTarget')}`}>
             {enabled.sceneTarget
               ? <SceneTargetPanel labels={[]} diamondsActive={diamondsActive} highlightUnknown={focus === 'sceneTarget'} />
               : <TutorialDisabledPanel label="Scene Targets" />}
           </div>
-          <div className={`grid-light-target${pulse('lightTarget')}`}>
+          <div className={`grid-light-target${pulse('lightTarget')}${dim('lightTarget')}`}>
             {enabled.lightTarget
               ? <LightTargetPanel pattern={lightTarget} />
               : <TutorialDisabledPanel label="Light Target" />}
           </div>
-          <div className={`grid-scan-target${pulse('scanTarget')}`}>
+          <div className={`grid-scan-target${pulse('scanTarget')}${dim('scanTarget')}`}>
             {enabled.scanTarget
               ? <ScanTargetPanel aircraft={scanTargetAc} />
               : <TutorialDisabledPanel label="Scan Target" />}
           </div>
-          <div className={`grid-system-target${pulse('systemTarget')}`}>
+          <div className={`grid-system-target${pulse('systemTarget')}${dim('systemTarget')}`}>
             {enabled.systemTarget
               ? <SystemTargetPanel targets={sysTarget ? [sysTarget] : []} />
               : <TutorialDisabledPanel label="System Target" />}

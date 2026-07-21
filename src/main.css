@@ -1251,6 +1251,14 @@ body.play-mode .card-shadow {
   filter: grayscale(1);
   pointer-events: none;
 }
+/* Panels unlocked in an earlier step but not part of the current step's task —
+   dimmed (but not locked) so the section being taught stands out. */
+.cbat-tutorial-dim {
+  opacity: 0.4;
+  filter: grayscale(0.9);
+  pointer-events: none;
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
 /* Rapid triple-pulse used to call out a specific value (a chip / legend item)
    within a highlighted panel — three quick pulses, then a rest, looping. */
 @keyframes cbatTriplePulse {
