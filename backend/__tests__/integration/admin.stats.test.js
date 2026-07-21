@@ -115,11 +115,13 @@ describe('GET /api/admin/stats — users section', () => {
     expect(res.body.data.users.totalUsers).toBe(3);
   });
 
-  it('counts online users as those with lastSeen within 5 minutes', async () => {
+  it('counts online users as those with lastSeen within 10 minutes (matches the Users-page dots)', async () => {
     const admin  = await createAdminUser();
-    const recent = new Date(Date.now() - 2 * 60 * 1000); // 2 min ago — online
-    const stale  = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago — offline
+    const recent = new Date(Date.now() - 2 * 60 * 1000);  // 2 min ago — green/live
+    const away   = new Date(Date.now() - 8 * 60 * 1000);  // 8 min ago — orange/away, still online
+    const stale  = new Date(Date.now() - 15 * 60 * 1000); // 15 min ago — no dot, offline
     await createUser({ lastSeen: recent });
+    await createUser({ lastSeen: away });
     await createUser({ lastSeen: stale });
     await createUser(); // lastSeen: null — offline
 
@@ -127,7 +129,7 @@ describe('GET /api/admin/stats — users section', () => {
       .get('/api/admin/stats')
       .set('Cookie', authCookie(admin._id));
 
-    expect(res.body.data.users.onlineUsers).toBe(1);
+    expect(res.body.data.users.onlineUsers).toBe(2);
   });
 
   it('counts users by subscription tier — only paying Stripe subscribers', async () => {

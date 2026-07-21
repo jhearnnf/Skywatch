@@ -389,7 +389,7 @@ router.get('/stats', async (_req, res) => {
       emailsSent, emailsFailed,
     ] = await Promise.all([
       User.countDocuments(),
-      User.countDocuments({ lastSeen: { $gte: new Date(Date.now() - 5 * 60 * 1000) } }),
+      User.countDocuments({ lastSeen: { $gte: new Date(Date.now() - 10 * 60 * 1000) } }),
       User.countDocuments({ subscriptionTier: 'free' }),
       User.countDocuments({ subscriptionTier: 'trial' }),
       // Silver/gold counts are restricted to real Stripe payers — excludes
