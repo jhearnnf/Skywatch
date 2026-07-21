@@ -28,4 +28,23 @@ function sanitiseClientInfo(raw) {
   };
 }
 
-module.exports = { CLIENT_PLATFORMS, VERSION_PATTERN, sanitiseClientInfo };
+// The operating systems we recognise on the heartbeat, for Admin › Users. Order
+// is display order (desktop families first, then mobile).
+const OS_KEYS = ['windows', 'mac', 'linux', 'ios', 'android'];
+
+// Best-effort OS family from a browser User-Agent string. Order matters: an
+// Android UA also contains "Linux", and an iOS UA contains neither, so the
+// mobile families are tested before the generic desktop ones. Returns null when
+// nothing recognisable matches — a missing OS must never break the heartbeat.
+function osFromUserAgent(ua) {
+  const s = String(ua ?? '');
+  if (!s) return null;
+  if (/iPhone|iPad|iPod/i.test(s))   return 'ios';
+  if (/Android/i.test(s))            return 'android';
+  if (/Windows/i.test(s))            return 'windows';
+  if (/Mac OS X|Macintosh/i.test(s)) return 'mac';
+  if (/Linux/i.test(s))              return 'linux';
+  return null;
+}
+
+module.exports = { CLIENT_PLATFORMS, VERSION_PATTERN, sanitiseClientInfo, OS_KEYS, osFromUserAgent };

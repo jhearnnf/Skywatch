@@ -163,8 +163,11 @@ describe('Admin — Users tab: client version', () => {
     // Retained per platform: playing in the browser must not erase the phone.
     expect(screen.getByText('1.2.3 (7)')).toBeInTheDocument()
     expect(screen.getByText('1.3.0 (bb11cc2)')).toBeInTheDocument()
-    expect(screen.getByText('Android')).toBeInTheDocument()
-    expect(screen.getByText('Web')).toBeInTheDocument()
+    // Scoped to the client/build detail section specifically — the OS spread
+    // tray also renders an "Android" badge label elsewhere on the card.
+    const clientDetail = within(screen.getByText(/last online/i).closest('.flex.flex-wrap.items-start.gap-x-8.gap-y-3'))
+    expect(clientDetail.getByText('Android')).toBeInTheDocument()
+    expect(clientDetail.getByText('Web')).toBeInTheDocument()
   })
 
   it('says so explicitly in the drilldown when nothing has been reported', async () => {

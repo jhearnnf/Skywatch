@@ -3144,6 +3144,20 @@ function onlineStatus(lastSeen) {
 const PLATFORM_LABELS = { web: 'Web', android: 'Android', ios: 'iOS' }
 const PLATFORM_ORDER  = ['android', 'ios', 'web']
 
+// Operating systems shown per user on the Admin list as mini tabs peeking out
+// from under the card's right edge. `used` styling stays deliberately quiet (a
+// tinted tab) so it doesn't fight the version verdict or name; unused OSes are
+// greyed to a faint tab. `abbr` is the short label shown on the protruding tab
+// (the full name lives in the title tooltip). Only theme-defined scales are
+// used here (slate/sky/amber/brand/emerald) — see src/main.css @theme.
+const OS_META = [
+  { key: 'windows', label: 'Windows', abbr: 'Win', usedCls: 'bg-sky-50 text-sky-700 border-sky-200/40' },
+  { key: 'mac',     label: 'macOS',   abbr: 'Mac', usedCls: 'bg-slate-100 text-slate-700 border-slate-200/60' },
+  { key: 'linux',   label: 'Linux',   abbr: 'Lin', usedCls: 'bg-amber-50 text-amber-700 border-amber-200/40' },
+  { key: 'ios',     label: 'iOS',     abbr: 'iOS', usedCls: 'bg-brand-100 text-brand-700 border-brand-200/40' },
+  { key: 'android', label: 'Android', abbr: 'And', usedCls: 'bg-emerald-50 text-emerald-700 border-emerald-200/40' },
+]
+
 const fmtDateTime = (ts) => ts
   ? new Date(ts).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   : '—'
@@ -3229,12 +3243,12 @@ function UsersTab({ API }) {
 
   useEffect(() => { loadAll() }, [loadAll])
 
-  // Default expansion: only the current user's row when browsing; all rows when in search mode
+  // Default expansion: all rows collapsed when browsing; all rows when in search mode
   useEffect(() => {
     if (search) {
       setExpanded(new Set(users.map(u => u._id)))
     } else {
-      setExpanded(currentUser?._id ? new Set([currentUser._id]) : new Set())
+      setExpanded(new Set())
     }
   }, [users, search, currentUser?._id])
 
@@ -3360,11 +3374,38 @@ function UsersTab({ API }) {
         </div>
       )}
 
-      <div className="space-y-3">
+      {/* pr gutter reserves room on the right for the OS tabs that peek out from
+          under each card, so they never push the page into horizontal scroll. */}
+      <div className="space-y-3 pr-16">
         {sortedUsers.map(u => {
           const isExpanded = expanded.has(u._id)
           return (
-          <div key={u._id} className={`rounded-2xl border overflow-hidden ${
+          <div key={u._id} className="relative">
+          {/* OS tabs — every operating system this account has ever been seen on,
+              just off the card's right edge. Lit = used; greyed = never seen.
+              Always visible; collapsed rows use a compact 2-column grid, expanded
+              rows get a roomier single column with larger, more legible text. */}
+          <div className={`absolute top-1/2 -translate-y-1/2 right-0 translate-x-[calc(100%+0.375rem)] z-0 grid ${
+            isExpanded ? 'grid-cols-1 gap-1' : 'grid-cols-2 gap-px'
+          }`}>
+            {OS_META.map(os => {
+              const usedAt = u.osSeen?.[os.key]
+              return (
+                <span
+                  key={os.key}
+                  title={usedAt ? `Seen on ${os.label} · last ${fmtDateTime(usedAt)}` : `Never seen on ${os.label}`}
+                  className={`font-bold leading-tight tracking-tight text-center rounded-[3px] border transition-colors ${
+                    isExpanded ? 'w-12 px-2 py-1 text-sm' : 'w-7 px-1 py-0.5 text-[9px]'
+                  } ${
+                    usedAt ? os.usedCls : 'bg-surface-raised/50 border-slate-100 text-slate-500/40'
+                  }`}
+                >
+                  {os.abbr}
+                </span>
+              )
+            })}
+          </div>
+          <div className={`relative z-10 rounded-2xl border overflow-hidden ${
             u.isTester
               ? `admin-tester-row ${playedToday(u.lastTestGameAt) ? 'border-amber-700/60' : 'admin-tester-idle'}`
             : u._id === currentUser?._id ? 'bg-red-950/40 border-red-900/50'
@@ -3751,6 +3792,7 @@ function UsersTab({ API }) {
             })()}
             </>
             )}
+          </div>
           </div>
           )
         })}

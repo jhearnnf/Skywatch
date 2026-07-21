@@ -23,7 +23,7 @@ const { CBAT_GAMES } = require('../constants/cbatGames');
 const { withSelectedBadge } = require('../utils/selectedBadge');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
-const { sanitiseClientInfo } = require('../constants/clientPlatforms');
+const { sanitiseClientInfo, osFromUserAgent } = require('../constants/clientPlatforms');
 
 // True when the request should be treated as "slim" (CBAT-only) mode, in which
 // every Aircraft with a cutout is an unlockable badge regardless of whether the
@@ -705,6 +705,15 @@ router.post('/heartbeat', protect, async (req, res) => {
         lastSeenAt:  now,
       };
     }
+
+    // Record which OS this account has now been seen on. A native client names
+    // its platform directly (ios/android); web is inferred from the User-Agent.
+    // Best-effort only — a missing/odd UA just means no OS is stamped this beat,
+    // and must never stop presence from recording.
+    const os = client?.platform === 'ios' || client?.platform === 'android'
+      ? client.platform
+      : osFromUserAgent(req.headers['user-agent']);
+    if (os) update[`osSeen.${os}`] = now;
 
     await User.findByIdAndUpdate(req.user._id, update);
     res.json({ ok: true });

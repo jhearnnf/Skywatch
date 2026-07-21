@@ -134,6 +134,20 @@ const userSchema = new mongoose.Schema(
       ios:     { type: clientBuildSchema, default: null },
     },
 
+    // Every operating system this account has ever been seen on, for Admin ›
+    // Users. Unlike lastClients (the last *build* per app platform), this
+    // accumulates: each value is the last time that OS was seen, and an OS is
+    // never cleared once lit. Web is inferred from the heartbeat's User-Agent;
+    // native reports its platform (ios/android) directly. See POST
+    // /api/users/heartbeat.
+    osSeen: {
+      windows: { type: Date, default: null },
+      mac:     { type: Date, default: null },
+      linux:   { type: Date, default: null },
+      ios:     { type: Date, default: null },
+      android: { type: Date, default: null },
+    },
+
     // Game tutorial tracking
     gameTypesSeen: [gameTutorialSchema],
 

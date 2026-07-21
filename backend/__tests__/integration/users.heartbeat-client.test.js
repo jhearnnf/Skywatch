@@ -31,6 +31,14 @@ afterAll(async () => { await db.closeDatabase(); });
 const beat = (cookie, body) =>
   request(app).post('/api/users/heartbeat').set('Cookie', cookie).send(body ?? {});
 
+// Same as `beat`, but with a caller-supplied User-Agent header — needed to
+// exercise the web-side OS inference, which `beat` above never sets.
+const beatUA = (cookie, body, ua) =>
+  request(app).post('/api/users/heartbeat').set('Cookie', cookie).set('User-Agent', ua ?? '').send(body ?? {});
+
+const UA_WINDOWS_CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const UA_IPHONE_SAFARI  = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+
 describe('POST /api/users/heartbeat — client build reporting', () => {
   it('records an Android build under lastClients.android', async () => {
     const user   = await createUser();
@@ -118,5 +126,58 @@ describe('POST /api/users/heartbeat — client build reporting', () => {
   it('requires auth', async () => {
     const res = await request(app).post('/api/users/heartbeat').send({});
     expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /api/users/heartbeat — osSeen accumulation', () => {
+  it('sets osSeen.windows from a web heartbeat carrying a Windows User-Agent', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    const res = await beatUA(cookie, {}, UA_WINDOWS_CHROME);
+    expect(res.status).toBe(200);
+
+    const saved = await User.findById(user._id).lean();
+    expect(saved.osSeen.windows).toBeTruthy();
+    expect(saved.osSeen.windows instanceof Date || typeof saved.osSeen.windows === 'string').toBe(true);
+  });
+
+  it('sets osSeen.ios from a native client payload regardless of User-Agent', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    const res = await beatUA(cookie, { client: { platform: 'ios', version: '1.2.3', build: '7' } }, UA_WINDOWS_CHROME);
+    expect(res.status).toBe(200);
+
+    const saved = await User.findById(user._id).lean();
+    expect(saved.osSeen.ios).toBeTruthy();
+  });
+
+  it('accumulates: a Windows web beat then an iPhone web beat leave both osSeen entries set', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    await beatUA(cookie, {}, UA_WINDOWS_CHROME);
+    await beatUA(cookie, {}, UA_IPHONE_SAFARI);
+
+    const saved = await User.findById(user._id).lean();
+    expect(saved.osSeen.windows).toBeTruthy();
+    expect(saved.osSeen.ios).toBeTruthy();
+  });
+
+  it('records presence with an unrecognisable/empty User-Agent, leaving all osSeen null', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    const res = await beatUA(cookie, {}, '');
+    expect(res.status).toBe(200);
+
+    const saved = await User.findById(user._id).lean();
+    expect(saved.lastSeen).toBeTruthy();
+    expect(saved.osSeen.windows).toBeNull();
+    expect(saved.osSeen.mac).toBeNull();
+    expect(saved.osSeen.linux).toBeNull();
+    expect(saved.osSeen.ios).toBeNull();
+    expect(saved.osSeen.android).toBeNull();
   });
 });
