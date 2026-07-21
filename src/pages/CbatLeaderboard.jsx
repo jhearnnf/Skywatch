@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useParams, useLocation, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
-import PlaneTurnModeToggle from '../components/PlaneTurnModeToggle'
 import LeaderboardRow, { rowCols, rowPad } from '../components/LeaderboardRow'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 import LeaderboardIntro, { INTRO_PILL_LAYOUT_ID } from '../components/LeaderboardIntro'
@@ -189,10 +188,13 @@ function ProgressPanel({ board, cfg }) {
 
 export default function CbatLeaderboard() {
   const { gameKey } = useParams()
-  const navigate = useNavigate()
   const { user, apiFetch, API } = useAuth()
 
-  const [tab, setTab] = useState('weekly')           // 'weekly' (default) | 'all-time'
+  // Right-clicking a game tile on the hub deep-links here with ?period=all-time,
+  // so honour that as the initial tab; otherwise the board opens on This Week.
+  const [searchParams] = useSearchParams()
+  const deepLinkAllTime = searchParams.get('period') === 'all-time'
+  const [tab, setTab] = useState(deepLinkAllTime ? 'all-time' : 'weekly')  // 'weekly' | 'all-time' | 'you'
   const [boards, setBoards] = useState({})           // { weekly: {...}, 'all-time': {...} }
   const [loading, setLoading] = useState({})         // per-period in-flight flag
 
@@ -204,14 +206,24 @@ export default function CbatLeaderboard() {
   // to its new position.
   const location = useLocation()
   const fromGame = !!location.state?.fromGame
-  const [introDone, setIntroDone] = useState(false)
+  // A deep-link straight to All Time (right-click / long-press from the hub)
+  // skips the weekly arrival flourish — it only makes sense on the weekly tab.
+  const [introDone, setIntroDone] = useState(deepLinkAllTime)
   const [slideRows, setSlideRows] = useState(null)      // reordered weekly entries during the FLIP, or null
   const [slideDelta, setSlideDelta] = useState(null)    // +climbed / −dropped, shown on the user's row
   const slideFiredRef = useRef(false)
   const slideTimersRef = useRef({ raf: null, clear: null })
 
-  // Reset cached boards whenever the game changes.
-  useEffect(() => { setBoards({}); setLoading({}); setTab('weekly') }, [gameKey])
+  // Reset cached boards when the game actually changes. Compare against the last
+  // gameKey rather than skipping "the first run": under StrictMode the mount
+  // effect fires twice, so a plain mount-skip flag would let the second pass
+  // clobber a deep-linked initial tab back to weekly.
+  const lastGameKeyRef = useRef(gameKey)
+  useEffect(() => {
+    if (lastGameKeyRef.current === gameKey) return
+    lastGameKeyRef.current = gameKey
+    setBoards({}); setLoading({}); setTab('weekly')
+  }, [gameKey])
 
   // Lazily fetch the active tab's data (weekly on mount, the others on first switch).
   useEffect(() => {
@@ -284,8 +296,6 @@ export default function CbatLeaderboard() {
     if (slideTimersRef.current.clear) clearTimeout(slideTimersRef.current.clear)
   }, [])
 
-  const handlePlaneTurnModeChange = (nextMode) => navigate(`/cbat/plane-turn-${nextMode}/leaderboard`)
-
   // Swipe between tabs on touch (segmented control remains the source of truth). Steps one tab
   // along TABS rather than naming them, so the strip can grow without this drifting out of sync.
   const onDragEnd = (_e, info) => {
@@ -311,7 +321,6 @@ export default function CbatLeaderboard() {
   const countdown = isWeekly ? fmtCountdown(board?.resetsAt) : null
 
   const cols = rowCols(tab, cfg)
-  const mode3d = planeTurnMode === '3d'
 
   const myBest = board?.myBest
   const myBestOutsideTop = myBest && !(board?.leaderboard || []).find(e => e.userId === myBest.userId)
@@ -332,7 +341,6 @@ export default function CbatLeaderboard() {
           <Link to={cfg.backPath} className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; Instructions</Link>
           <h1 className="text-sm font-extrabold text-slate-900">{cfg.emoji} {cfg.title} Leaderboard</h1>
         </div>
-        {planeTurnMode && <PlaneTurnModeToggle value={planeTurnMode} onChange={handlePlaneTurnModeChange} />}
       </div>
 
       {/* Weekly / All-Time segmented control (source of truth; swipe is an accelerator) */}
@@ -435,7 +443,6 @@ export default function CbatLeaderboard() {
                       variant={tab}
                       cfg={cfg}
                       isMe={isMe}
-                      mode3d={mode3d}
                       layout={sliding}
                       delta={isMe && sliding ? slideDelta : null}
                     />
@@ -447,7 +454,7 @@ export default function CbatLeaderboard() {
               {myBestOutsideTop && (
                 <>
                   <div className="px-4 py-1 text-center text-[10px] text-slate-500">···</div>
-                  <LeaderboardRow entry={myBest} variant={tab} cfg={cfg} isMe divider mode3d={mode3d} />
+                  <LeaderboardRow entry={myBest} variant={tab} cfg={cfg} isMe divider />
                 </>
               )}
             </div>

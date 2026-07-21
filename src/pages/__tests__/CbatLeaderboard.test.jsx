@@ -6,11 +6,15 @@ import CbatLeaderboard from '../CbatLeaderboard'
 
 const mockUseAuth   = vi.hoisted(() => vi.fn())
 const mockUseParams = vi.hoisted(() => vi.fn())
+// Search string the mocked useSearchParams reports — set per-test to exercise
+// deep-links like ?period=all-time. Reset to '' in beforeEach.
+const mockSearch    = vi.hoisted(() => ({ value: '' }))
 
 vi.mock('react-router-dom', () => ({
   useParams: () => mockUseParams(),
   useNavigate: () => vi.fn(),
-  useLocation: () => ({ state: null, pathname: '/cbat/x/leaderboard', search: '', hash: '' }),
+  useLocation: () => ({ state: null, pathname: '/cbat/x/leaderboard', search: mockSearch.value, hash: '' }),
+  useSearchParams: () => [new URLSearchParams(mockSearch.value), vi.fn()],
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 
@@ -54,6 +58,26 @@ const selectAllTime = async () => {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
+
+// Runs before every test regardless of block, so a deep-link set in one test
+// never leaks into the next.
+beforeEach(() => { mockSearch.value = '' })
+
+describe('CbatLeaderboard — deep-linked tab', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('opens on the All Time tab when ?period=all-time is present', async () => {
+    mockSearch.value = '?period=all-time'
+    setupAuth(mockApi({ allTime: { leaderboard: [
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A001' },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    expect(screen.getByRole('tab', { name: /all time/i }).getAttribute('aria-selected')).toBe('true')
+    await waitFor(() => expect(screen.getByText('Agent A001 (you)')).toBeDefined())
+  })
+})
 
 describe('CbatLeaderboard — unknown game', () => {
   beforeEach(() => vi.clearAllMocks())

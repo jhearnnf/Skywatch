@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
@@ -67,6 +67,47 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
 
 const IMAGE_GAMES = CBAT_GAMES.filter(g => g.image)
 
+// Right-clicking (or long-pressing) a game tile jumps straight to that game's
+// all-time leaderboard. Most tiles' leaderboard key is the last segment of their
+// path. The two combined tiles (Trace 1/2, Visualisation 2D/3D) have no single
+// board, so they resolve to whichever mode the user last selected — the same
+// choice persisted by useTraceMode / useVisualisationMode — defaulting to those
+// hooks' own defaults (Trace 1, Visualisation 2D) when nothing is stored yet.
+const TRACE_MODE_TO_KEY = { '2d': 'plane-turn-2d', '3d': 'plane-turn-3d', trace1: 'trace-1', trace2: 'trace-2' }
+function leaderboardKeyFor(game) {
+  if (game.key === 'plane-turn') {
+    const mode = (() => { try { return localStorage.getItem('cbat:trace:mode') } catch { return null } })()
+    return TRACE_MODE_TO_KEY[mode] || 'trace-1'
+  }
+  if (game.key === 'visualisation') {
+    const mode = (() => { try { return localStorage.getItem('cbat:visualisation:mode') } catch { return null } })()
+    return mode === '3d' ? 'visualisation-3d' : 'visualisation-2d'
+  }
+  return game.path.split('/').pop()
+}
+
+// The two combined tiles fan out into their two modes on hover (desktop only).
+// Each half left-clicks into the game with that mode pre-selected — persisted to
+// the same localStorage key useTraceMode / useVisualisationMode read on mount —
+// and right-clicks straight to that mode's all-time leaderboard.
+const SPLIT_TILES = {
+  'plane-turn': {
+    storageKey: 'cbat:trace:mode',
+    halves: [
+      { label: 'Trace 1', mode: 'trace1', lbKey: 'trace-1' },
+      { label: 'Trace 2', mode: 'trace2', lbKey: 'trace-2' },
+    ],
+  },
+  'visualisation': {
+    storageKey: 'cbat:visualisation:mode',
+    halves: [
+      { label: '2D', mode: '2d', lbKey: 'visualisation-2d' },
+      { label: '3D', mode: '3d', lbKey: 'visualisation-3d' },
+    ],
+  },
+}
+const persistMode = (key, mode) => { try { localStorage.setItem(key, mode) } catch { /* storage unavailable */ } }
+
 // Display the "NEW GAME" badge on the TRACE 1/2 card until midnight at the
 // start of 22 May 2026 (i.e. visible up to and including 21st May).
 // Month is 0-indexed (4 = May), so `Date.now() < deadline` is still true at
@@ -74,9 +115,101 @@ const IMAGE_GAMES = CBAT_GAMES.filter(g => g.image)
 const NEW_GAME_KEY = 'plane-turn'
 const NEW_GAME_DEADLINE = new Date(2026, 4, 22)
 
+// A combined tile (Trace 1/2, Visualisation 2D/3D). Identical to the normal tile
+// off-hover; on hover (desktop only — `group-hover` in Tailwind v4 fires solely
+// on hover-capable devices) it greys the card and floats two half-width mode
+// buttons over it. The overlay is a SIBLING of the base <Link>, not a child, so
+// its clicks never trip the anchor's navigation and touch devices — where the
+// overlay stays inert — fall through to the Link's tap / long-press exactly as
+// before. Whichever half is hovered is the active (brand) one; the other dims.
+function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, showNewBadge, navigate, baseHandlers }) {
+  return (
+    <div className="relative h-full group">
+      <Link
+        to={game.path}
+        {...baseHandlers}
+        className="relative flex items-center gap-4 bg-surface rounded-2xl p-6 border border-slate-200 transition-all card-shadow cursor-pointer h-full min-h-[130px] w-full
+          hover:border-brand-300 hover:bg-brand-50 hover:-translate-y-0.5 no-underline overflow-hidden"
+      >
+        <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
+        {showNewBadge && game.key === NEW_GAME_KEY && enabled && (
+          <span
+            className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
+            style={{ zIndex: 4 }}
+          >
+            New Game
+          </span>
+        )}
+        {!enabled && isAdmin && (
+          <span
+            className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-slate-300 text-slate-700 text-[10px] font-extrabold tracking-wider uppercase"
+            style={{ zIndex: 4 }}
+          >
+            Disabled
+          </span>
+        )}
+        <span className="text-4xl shrink-0 group-hover:scale-110 transition-transform" style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
+        <div className="min-w-0" style={{ position: 'relative', zIndex: 3 }}>
+          <p className="font-bold text-slate-800 mb-0.5">{game.title}</p>
+          <p className="text-xs text-slate-700">{game.desc}</p>
+        </div>
+      </Link>
+
+      {/* Hover split — greys the base card and overlays the two mode buttons. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 z-20 flex items-center justify-center gap-2 p-3 rounded-2xl bg-[#050d1a]/85
+          opacity-0 pointer-events-none transition-opacity duration-150
+          group-hover:opacity-100 group-hover:pointer-events-auto"
+      >
+        {split.halves.map((h) => (
+          <div
+            key={h.mode}
+            onClick={() => {
+              // Left-click → open the game with this mode pre-selected.
+              persistMode(split.storageKey, h.mode)
+              navigate(game.path)
+            }}
+            onContextMenu={(e) => {
+              // Right-click → this mode's all-time leaderboard.
+              e.preventDefault()
+              navigate(`/cbat/${h.lbKey}/leaderboard?period=all-time`)
+            }}
+            className="flex-1 max-w-[40%] flex items-center justify-center px-5 py-6 rounded-xl cursor-pointer select-none
+              border border-[#1a3a5c] bg-[#0a1628] text-slate-400 opacity-60 transition-all
+              hover:opacity-100 hover:bg-brand-600 hover:text-white hover:border-brand-400
+              hover:shadow-[0_0_16px_rgba(91,170,255,0.45)]"
+          >
+            <span className="text-base font-extrabold tracking-wide uppercase">{h.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Cbat() {
   const { user } = useAuth()
   const { settings } = useAppSettings()
+  const navigate = useNavigate()
+
+  // Shortcut to a game's all-time leaderboard: desktop right-click, or a ~500ms
+  // long-press on touch. One shared timer is enough — only one tile can be under
+  // a finger at a time. `fired` lets the tile's onClick swallow the tap-through
+  // navigation that a touch-end would otherwise trigger after a long-press.
+  const longPressRef = useRef({ timer: null, fired: false })
+  const openAllTimeBoard = (game) =>
+    navigate(`/cbat/${leaderboardKeyFor(game)}/leaderboard?period=all-time`)
+  const startLongPress = (game) => {
+    longPressRef.current.fired = false
+    clearTimeout(longPressRef.current.timer)
+    longPressRef.current.timer = setTimeout(() => {
+      longPressRef.current.fired = true
+      openAllTimeBoard(game)
+    }, 500)
+  }
+  const cancelLongPress = () => clearTimeout(longPressRef.current.timer)
+  useEffect(() => () => clearTimeout(longPressRef.current.timer), [])
   const [flickeringKey, setFlickeringKey] = useState(null)
   const showNewBadge = Date.now() < NEW_GAME_DEADLINE.getTime()
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
@@ -141,6 +274,22 @@ export default function Cbat() {
           // "this game has no page yet" (genuinely future) so the picker can
           // show the right message to non-admins.
           const adminDisabled = isImplemented && !enabled
+          const split         = SPLIT_TILES[game.key]
+          // Shared base-<Link> handlers: right-click → the persisted mode's board;
+          // touch tap / long-press unchanged. Combined tiles reuse these for their
+          // base layer (mobile), and add a desktop hover split on top.
+          const baseHandlers = {
+            onContextMenu: (e) => { e.preventDefault(); openAllTimeBoard(game) },
+            onTouchStart:  () => startLongPress(game),
+            onTouchEnd:    cancelLongPress,
+            onTouchMove:   cancelLongPress,
+            onTouchCancel: cancelLongPress,
+            onClick: (e) => {
+              // Swallow the tap-through that follows a long-press so it
+              // doesn't also open the game after we've navigated away.
+              if (longPressRef.current.fired) { e.preventDefault(); longPressRef.current.fired = false }
+            },
+          }
           return (
             <motion.div
               key={game.key}
@@ -149,9 +298,22 @@ export default function Cbat() {
               transition={{ delay: i * 0.06, duration: 0.35 }}
               className="h-full"
             >
-              {clickable ? (
+              {clickable && split ? (
+                <CombinedGameTile
+                  game={game}
+                  i={i}
+                  split={split}
+                  flickeringKey={flickeringKey}
+                  enabled={enabled}
+                  isAdmin={!!user?.isAdmin}
+                  showNewBadge={showNewBadge}
+                  navigate={navigate}
+                  baseHandlers={baseHandlers}
+                />
+              ) : clickable ? (
                 <Link
                   to={game.path}
+                  {...baseHandlers}
                   className="relative flex items-center gap-4 bg-surface rounded-2xl p-6 border border-slate-200 transition-all card-shadow cursor-pointer h-full min-h-[130px] w-full
                     hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5 no-underline overflow-hidden"
                 >

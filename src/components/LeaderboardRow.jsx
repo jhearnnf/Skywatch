@@ -41,7 +41,7 @@ const agentName = (e) =>
 // leaderboard's post-game rank slide). `delta` is the change in position for the
 // user's own row during that slide (positive = climbed) and renders a small
 // ↑/↓ badge next to the rank; both are inert everywhere else.
-export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false, divider = false, mode3d = false, layout = false, delta = null, compact = false }) {
+export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false, divider = false, layout = false, delta = null, compact = false }) {
   const achievedAtTitle = entry.achievedAt
     ? new Date(entry.achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
     : null
@@ -81,9 +81,6 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
         <>
           <span className="text-right font-mono font-bold text-brand-600">
             {cfg.formatScore ? cfg.formatScore(entry.bestScore) : entry.bestScore}
-            {mode3d && (
-              <span className="ml-1 text-[8px] font-bold px-1 py-0.5 rounded bg-brand-600/80 text-white leading-none align-middle">3D</span>
-            )}
           </span>
           {!cfg.hideTime && <span className="text-right font-mono text-slate-400">{entry.bestTime.toFixed(cfg.timeDecimals ?? 1)}s</span>}
         </>

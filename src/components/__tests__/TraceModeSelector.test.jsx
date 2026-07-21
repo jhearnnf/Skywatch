@@ -44,9 +44,9 @@ describe('TraceModeSelector', () => {
     expect(onChange).toHaveBeenCalledWith('trace2')
   })
 
-  it('shows a "NEW" badge on the Trace 2 button', () => {
+  it('no longer shows a "NEW" badge on the Trace 2 button', () => {
     render(<TraceModeSelector value="3d" onChange={onChange} />)
-    expect(screen.getByText('NEW')).toBeInTheDocument()
+    expect(screen.queryByText('NEW')).not.toBeInTheDocument()
   })
 
   it('hides a playable mode when isModeEnabled returns false', () => {

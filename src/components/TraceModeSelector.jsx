@@ -13,7 +13,7 @@ export default function TraceModeSelector({ value, onChange, isModeEnabled }) {
   ].filter(o => shown(o.value))
   const traceOptions = [
     { value: 'trace1', label: 'Trace 1' },
-    { value: 'trace2', label: 'Trace 2', badge: 'NEW', badgeVariant: 'new' },
+    { value: 'trace2', label: 'Trace 2' },
   ].filter(o => shown(o.value))
 
   return (
