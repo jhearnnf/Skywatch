@@ -343,6 +343,57 @@ describe('Admin — Reports tab', () => {
     expect(screen.getByRole('switch', { name: /Compare to previous/i })).toBeDisabled()
   })
 
+  it('marks each window-driven chart/table with a compact Time-window badge', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Total Sessions')).toBeInTheDocument())
+
+    // Two section-header chips (Activity & Growth, CBAT Engagement) plus a compact
+    // chip on every window-driven chart/table (Daily Signups, Daily CBAT Sessions,
+    // Activity heatmap, Sessions per User, Sessions by Game, Per-game Breakdown,
+    // Tutorial Drop-off) all read the active window "7D".
+    expect(screen.getAllByText('7D').length).toBeGreaterThanOrEqual(8)
+
+    // The window-independent Snapshot section is not marked with a window chip.
+    expect(screen.getByText('FIXED')).toBeInTheDocument()
+  })
+
+  it('flags window-driven cards as busy while new-window data is in flight', async () => {
+    let releaseWindow, releaseCbat
+    const pendingWindow = new Promise((res) => { releaseWindow = res })
+    const pendingCbat   = new Promise((res) => { releaseCbat = res })
+
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/reports/snapshot')) {
+        return Promise.resolve({ ok: true, json: async () => MOCK_SNAPSHOT })
+      }
+      if (url.includes('/api/admin/reports/window')) {
+        // First (7d) load resolves immediately; the 30d refetch stays pending.
+        if (url.includes('window=30d')) return pendingWindow.then(() => ({ ok: true, json: async () => MOCK_WINDOW }))
+        return Promise.resolve({ ok: true, json: async () => MOCK_WINDOW })
+      }
+      if (url.includes('/api/admin/reports/cbat')) {
+        if (url.includes('window=30d')) return pendingCbat.then(() => ({ ok: true, json: async () => MOCK_CBAT }))
+        return Promise.resolve({ ok: true, json: async () => MOCK_CBAT })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Total Sessions')).toBeInTheDocument())
+
+    // At rest (data loaded), nothing is busy.
+    expect(document.querySelectorAll('[aria-busy="true"]').length).toBe(0)
+
+    // Switch window — stale content stays put and window-driven cards mark busy.
+    fireEvent.click(screen.getByRole('button', { name: '30d' }))
+    await waitFor(() => expect(document.querySelectorAll('[aria-busy="true"]').length).toBeGreaterThan(0))
+
+    // Once the new-window data lands, the busy flag clears.
+    releaseWindow()
+    releaseCbat()
+    await waitFor(() => expect(document.querySelectorAll('[aria-busy="true"]').length).toBe(0))
+  })
+
   it('shows error state if fetch fails', async () => {
     global.fetch = vi.fn().mockImplementation((url) => {
       if (url.includes('/api/admin/reports/')) {

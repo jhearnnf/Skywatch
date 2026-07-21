@@ -611,12 +611,41 @@ function compareRanges(window) {
   return `${fmt(curStart)}–${fmt(now)} vs ${fmt(prevStart)}–${fmt(curStart)}`
 }
 
-function WindowChip({ window }) {
+// `sm` renders the compact per-chart variant (no left margin, smaller) used to
+// mark an individual chart/table as driven by the Time window picker; the default
+// size is the section-header chip.
+function WindowChip({ window, sm = false }) {
   const labels = { today: 'TODAY', '7d': '7D', '30d': '30D', all: 'ALL-TIME' }
+  const text = labels[window] ?? window.toUpperCase()
+  if (sm) {
+    return (
+      <span
+        title="Driven by the Time window picker"
+        className="inline-block px-1.5 py-0.5 rounded-full text-[9px] font-extrabold bg-brand-600 text-white tracking-widest align-middle whitespace-nowrap"
+      >
+        {text}
+      </span>
+    )
+  }
   return (
     <span className="ml-2 inline-block px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-brand-600 text-white tracking-widest align-middle">
-      {labels[window] ?? window.toUpperCase()}
+      {text}
     </span>
+  )
+}
+
+// Thin indeterminate bar shown across the top edge of a window-driven chart/table
+// while its data refetches after a window change (stale content stays in place
+// underneath). Purely a loading affordance — no layout shift when it toggles.
+function ChartLoadingBar({ active }) {
+  if (!active) return null
+  return (
+    <div
+      className="absolute inset-x-0 top-0 h-0.5 overflow-hidden rounded-t-2xl bg-brand-50"
+      aria-hidden="true"
+    >
+      <div className="absolute top-0 bottom-0 w-1/3 bg-brand-600 report-loading-bar" />
+    </div>
   )
 }
 
@@ -640,13 +669,22 @@ function CurrentOnlyChip() {
 
 // `dim` de-emphasises (not disables) a card whose data isn't part of the active
 // comparison; `tag` renders a chip beside the title (e.g. the "current only" mark).
-function ChartCard({ title, sub, tag, dim = false, children }) {
+// `window` marks the card as driven by the Time window picker (compact chip);
+// `loading` shows a reload bar while that window's data refetches.
+function ChartCard({ title, sub, tag, window, loading = false, dim = false, children }) {
   return (
-    <div className={`rounded-2xl border border-slate-200 bg-surface p-4 transition-opacity ${dim ? 'opacity-60' : ''}`}>
+    <div
+      className={`relative rounded-2xl border border-slate-200 bg-surface p-4 transition-opacity ${dim ? 'opacity-60' : ''}`}
+      aria-busy={loading || undefined}
+    >
+      <ChartLoadingBar active={loading} />
       <div className="mb-3">
         <div className="flex items-center justify-between gap-2">
           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">{title}</h4>
-          {tag}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {tag}
+            {window && <WindowChip window={window} sm />}
+          </div>
         </div>
         {sub && <p className="text-[10px] text-slate-400 mt-0.5">{sub}</p>}
       </div>
@@ -876,7 +914,7 @@ function ReportsTab({ API }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <StatCardSkeleton /><StatCardSkeleton />
             </div>
-            <ChartCard title="Daily Signups" sub={`window: ${window}`}>
+            <ChartCard title="Daily Signups" sub={`window: ${window}`} window={window}>
               <ChartSkeleton height={200} />
             </ChartCard>
           </div>
@@ -899,7 +937,7 @@ function ReportsTab({ API }) {
               />
             </div>
 
-            <ChartCard title="Daily Signups" sub={compareActive ? `window: ${window} · dashed = previous period` : `window: ${window}`}>
+            <ChartCard title="Daily Signups" sub={compareActive ? `window: ${window} · dashed = previous period` : `window: ${window}`} window={window} loading={windowedLoading}>
               <ReportChart
                 type="bar"
                 data={windowed.dailySignups}
@@ -922,17 +960,17 @@ function ReportsTab({ API }) {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
             </div>
-            <ChartCard title="Daily CBAT Sessions" sub={`stacked by game · window: ${window}`}>
+            <ChartCard title="Daily CBAT Sessions" sub={`stacked by game · window: ${window}`} window={window}>
               <ChartSkeleton height={260} />
             </ChartCard>
-            <ChartCard title="CBAT Activity by Day & Hour" sub="game starts · UK time">
+            <ChartCard title="CBAT Activity by Day & Hour" sub="game starts · UK time" window={window}>
               <ChartSkeleton height={200} />
             </ChartCard>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ChartCard title="Sessions per User" sub="distribution across users">
+              <ChartCard title="Sessions per User" sub="distribution across users" window={window}>
                 <ChartSkeleton height={220} />
               </ChartCard>
-              <ChartCard title="Sessions by Game" sub={`window: ${window}`}>
+              <ChartCard title="Sessions by Game" sub={`window: ${window}`} window={window}>
                 <ChartSkeleton height={280} />
               </ChartCard>
             </div>
@@ -963,7 +1001,7 @@ function ReportsTab({ API }) {
             </div>
 
             {/* Daily sessions stacked by game */}
-            <ChartCard title="Daily CBAT Sessions" sub={compareActive ? `stacked by game · window: ${window} · dashed = previous period total` : `stacked by game · window: ${window}`}>
+            <ChartCard title="Daily CBAT Sessions" sub={compareActive ? `stacked by game · window: ${window} · dashed = previous period total` : `stacked by game · window: ${window}`} window={window} loading={cbatLoading}>
               <ReportChart
                 type="stackedBar"
                 data={cbat.dailySessions}
@@ -982,6 +1020,8 @@ function ReportsTab({ API }) {
             <ChartCard
               title="CBAT Activity by Day & Hour"
               sub={`game starts · UK time · window: ${window}`}
+              window={window}
+              loading={cbatLoading}
             >
               <ReportHeatmap data={cbat.activityHeatmap} />
             </ChartCard>
@@ -992,6 +1032,8 @@ function ReportsTab({ API }) {
                 title="Sessions per User"
                 sub={`distribution across all ${fmtNum(cbat.headlines.totalUsers)} users`}
                 dim={compareActive}
+                window={window}
+                loading={cbatLoading}
                 tag={compareActive ? <CurrentOnlyChip /> : null}
               >
                 <ReportChart
@@ -1010,6 +1052,8 @@ function ReportsTab({ API }) {
                 title="Sessions by Game"
                 sub={`window: ${window}`}
                 dim={compareActive}
+                window={window}
+                loading={cbatLoading}
                 tag={compareActive ? <CurrentOnlyChip /> : null}
               >
                 <ReportChart
@@ -1025,9 +1069,13 @@ function ReportsTab({ API }) {
             </div>
 
             {/* Per-game table */}
-            <div className="rounded-2xl border border-slate-200 bg-surface overflow-hidden">
+            <div className="relative rounded-2xl border border-slate-200 bg-surface overflow-hidden" aria-busy={cbatLoading || undefined}>
+              <ChartLoadingBar active={cbatLoading} />
               <div className="px-4 py-3 border-b border-slate-200">
-                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Per-game Breakdown</h4>
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Per-game Breakdown</h4>
+                  <WindowChip window={window} sm />
+                </div>
                 <p className="text-[10px] text-slate-400 mt-0.5">window: {window}{compareActive ? ' · Δ = sessions vs previous period' : ''}</p>
               </div>
               <div className="overflow-x-auto">
@@ -1066,11 +1114,15 @@ function ReportsTab({ API }) {
 
             {/* Tutorial / practice-mode per-step drop-off */}
             {cbat.tutorials?.length > 0 && (
-              <div className={`rounded-2xl border border-slate-200 bg-surface overflow-hidden transition-opacity ${compareActive ? 'opacity-60' : ''}`}>
+              <div className={`relative rounded-2xl border border-slate-200 bg-surface overflow-hidden transition-opacity ${compareActive ? 'opacity-60' : ''}`} aria-busy={cbatLoading || undefined}>
+                <ChartLoadingBar active={cbatLoading} />
                 <div className="px-4 py-3 border-b border-slate-200">
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Tutorial Drop-off</h4>
-                    {compareActive && <CurrentOnlyChip />}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {compareActive && <CurrentOnlyChip />}
+                      <WindowChip window={window} sm />
+                    </div>
                   </div>
                   <p className="text-[10px] text-slate-400 mt-0.5">practice-mode usage · window: {window}</p>
                 </div>

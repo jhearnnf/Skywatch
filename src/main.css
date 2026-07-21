@@ -133,6 +133,16 @@ header.fixed {
   animation: stat-skeleton-sweep 1.8s ease-in-out infinite;
 }
 
+/* Indeterminate reload bar — sweeps across the top edge of a window-driven
+   Reports chart/table while its data refetches. */
+@keyframes report-loading-bar {
+  0%   { left: -35%; }
+  100% { left: 100%; }
+}
+.report-loading-bar {
+  animation: report-loading-bar 1.1s ease-in-out infinite;
+}
+
 /* ── Base ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
