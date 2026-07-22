@@ -110,6 +110,7 @@ export default function ReportChart({
   showLegend = false,
   dimX,
   dimLabels,
+  slantX = false,
   compareKey,
   compareLabel = 'Prev period',
 }) {
@@ -139,8 +140,15 @@ export default function ReportChart({
       <tspan x={x} dy={13} fillOpacity={0.65}>{formatXSub(payload?.value)}</tspan>
     </text>
   )
-  const xTick = dimSet ? dimTick : (formatXSub ? twoLineTick : undefined)
-  const xAxisHeight = formatXSub ? 40 : undefined
+  // Angled x tick — for categorical bars whose labels are too wide to sit flat
+  // side by side (e.g. OS names). Rotated ~35° and right-anchored at the tick.
+  const slantTick = ({ x, y, payload }) => (
+    <text x={x} y={y + 10} fill={COLORS.axis} fontSize={11} textAnchor="end" transform={`rotate(-35 ${x} ${y + 10})`}>
+      {xFmt(payload?.value)}
+    </text>
+  )
+  const xTick = dimSet ? dimTick : (formatXSub ? twoLineTick : (slantX ? slantTick : undefined))
+  const xAxisHeight = formatXSub ? 40 : (slantX ? 56 : undefined)
 
   // Greying of practice/tutorial game names (by their human label).
   const dimLabelSet = dimLabels && dimLabels.length ? new Set(dimLabels.map(String)) : null
@@ -221,6 +229,7 @@ export default function ReportChart({
             tickFormatter={xFmt}
             tick={xTick}
             height={xAxisHeight}
+            interval={slantX ? 0 : undefined}
           />
           <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
           <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />

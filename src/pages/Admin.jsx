@@ -832,6 +832,7 @@ function ReportsTab({ API }) {
               <ChartCard title="Signup Source" sub="all-time"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Subscription Tiers" sub="current snapshot"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Test Usage" sub="last 7 days"><ChartSkeleton height={200} /></ChartCard>
+              <ChartCard title="Operating Systems" sub="all-time"><ChartSkeleton height={200} /></ChartCard>
             </div>
           </div>
         ) : (
@@ -894,6 +895,25 @@ function ReportsTab({ API }) {
                   keys={['count']}
                   colors={['#34d399']}
                   formatXSub={(d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}
+                  height={200}
+                />
+              </ChartCard>
+
+              <ChartCard title="Operating Systems" sub="accounts ever seen per OS · all-time">
+                <ReportChart
+                  type="bar"
+                  data={[
+                    { os: 'Windows',    count: snapshot.osDistribution?.windows    ?? 0 },
+                    { os: 'macOS',      count: snapshot.osDistribution?.mac        ?? 0 },
+                    { os: 'Linux',      count: snapshot.osDistribution?.linux      ?? 0 },
+                    { os: 'iOS',        count: snapshot.osDistribution?.ios        ?? 0 },
+                    { os: 'Android',    count: snapshot.osDistribution?.android    ?? 0 },
+                    { os: 'Unreported', count: snapshot.osDistribution?.unreported ?? 0 },
+                  ]}
+                  xKey="os"
+                  keys={['count']}
+                  colors={['#5baaff']}
+                  slantX
                   height={200}
                 />
               </ChartCard>

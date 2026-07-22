@@ -10,6 +10,7 @@ const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const { CBAT_GAMES } = require('../constants/cbatGames');
+const { OS_KEYS } = require('../constants/clientPlatforms');
 
 // Games whose names render greyed on the Reports page — tutorial/practice modes
 // that aren't the scored test. The frontend dims any perGame/legend/axis label
@@ -296,7 +297,19 @@ router.get('/snapshot', async (_req, res) => {
     const sparkStart = new Date(now.getTime() - 29 * DAY_MS); // 30 days inclusive of today
     const testStart  = new Date(now.getTime() - 6  * DAY_MS); // 7 days inclusive of today
 
-    const [totalUsers, signupSourceAgg, subTierAgg, testerDocs] = await Promise.all([
+    // OS distribution — how many accounts have ever been seen on each OS. A user
+    // can be seen on several (osSeen accumulates), so per-OS counts overlap and
+    // don't sum to totalUsers; `reported` is the count seen on at least one, and
+    // `unreported = totalUsers - reported` (accounts we've never fingerprinted).
+    const osGroupStage = { _id: null };
+    for (const k of OS_KEYS) {
+      osGroupStage[k] = { $sum: { $cond: [{ $ifNull: [`$osSeen.${k}`, false] }, 1, 0] } };
+    }
+    osGroupStage.reported = {
+      $sum: { $cond: [{ $or: OS_KEYS.map(k => ({ $ifNull: [`$osSeen.${k}`, false] })) }, 1, 0] },
+    };
+
+    const [totalUsers, signupSourceAgg, subTierAgg, testerDocs, osAgg] = await Promise.all([
       User.countDocuments(),
       User.aggregate([
         { $group: { _id: { $cond: [{ $ifNull: ['$googleId', false] }, 'google', 'email'] }, count: { $sum: 1 } } },
@@ -305,6 +318,7 @@ router.get('/snapshot', async (_req, res) => {
         { $group: { _id: '$subscriptionTier', count: { $sum: 1 } } },
       ]),
       User.find({ isTester: true }).select('_id').lean(),
+      User.aggregate([{ $group: osGroupStage }]),
     ]);
 
     const streams = await activityStreams(sparkStart);
@@ -357,6 +371,11 @@ router.get('/snapshot', async (_req, res) => {
     const subscription = { free: 0, trial: 0, silver: 0, gold: 0 };
     for (const r of subTierAgg) if (r._id in subscription) subscription[r._id] = r.count;
 
+    const osRow = osAgg[0] ?? {};
+    const osDistribution = {};
+    for (const k of OS_KEYS) osDistribution[k] = osRow[k] ?? 0;
+    osDistribution.unreported = totalUsers - (osRow.reported ?? 0);
+
     res.json({
       status: 'success',
       data: {
@@ -365,6 +384,7 @@ router.get('/snapshot', async (_req, res) => {
         signupSource,
         subscription,
         testUsage,
+        osDistribution,
       },
     });
   } catch (err) {

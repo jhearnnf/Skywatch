@@ -76,6 +76,7 @@ const MOCK_SNAPSHOT = {
     signupSource: { google: 18, email: 12 },
     subscription: { free: 25, trial: 3, silver: 1, gold: 1 },
     testUsage: Array.from({ length: 7 }, (_, i) => ({ date: `2026-04-${String(24 + i).padStart(2, '0')}`, count: i % 3 })),
+    osDistribution: { windows: 12, mac: 5, linux: 1, ios: 4, android: 6, unreported: 8 },
   },
 }
 
@@ -221,6 +222,12 @@ describe('Admin — Reports tab', () => {
     await openReportsTab()
     await waitFor(() => expect(screen.getByText('Test Usage')).toBeInTheDocument())
     expect(screen.getByText('tester CBAT plays · last 7 days')).toBeInTheDocument()
+  })
+
+  it('renders the Operating Systems snapshot card with an unreported bucket', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Operating Systems')).toBeInTheDocument())
+    expect(screen.getByText('accounts ever seen per OS · all-time')).toBeInTheDocument()
   })
 
   it('renders Within Window section with platform-wide acquisition stats', async () => {
