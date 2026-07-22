@@ -830,6 +830,7 @@ function ReportsTab({ API }) {
               <ChartCard title="Daily Active Users" sub="last 30 days (rolling)"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Signup Source" sub="all-time"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Subscription Tiers" sub="current snapshot"><ChartSkeleton height={200} /></ChartCard>
+              <ChartCard title="Test Usage" sub="last 7 days"><ChartSkeleton height={200} /></ChartCard>
             </div>
           </div>
         ) : (
@@ -881,6 +882,18 @@ function ReportsTab({ API }) {
                   colors={['#8ba0c0', '#f59e0b', '#aec0d8', '#fbbf24']}
                   height={200}
                   showLegend
+                />
+              </ChartCard>
+
+              <ChartCard title="Test Usage" sub="tester CBAT plays · last 7 days">
+                <ReportChart
+                  type="bar"
+                  data={snapshot.testUsage ?? []}
+                  xKey="date"
+                  keys={['count']}
+                  colors={['#34d399']}
+                  formatXSub={(d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}
+                  height={200}
                 />
               </ChartCard>
             </div>

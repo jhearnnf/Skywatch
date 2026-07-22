@@ -75,6 +75,7 @@ const MOCK_SNAPSHOT = {
     dailyDau: Array.from({ length: 30 }, (_, i) => ({ date: `2026-04-${String(i + 1).padStart(2, '0')}`, count: i % 5 })),
     signupSource: { google: 18, email: 12 },
     subscription: { free: 25, trial: 3, silver: 1, gold: 1 },
+    testUsage: Array.from({ length: 7 }, (_, i) => ({ date: `2026-04-${String(24 + i).padStart(2, '0')}`, count: i % 3 })),
   },
 }
 
@@ -214,6 +215,12 @@ describe('Admin — Reports tab', () => {
     expect(screen.getByText('WAU')).toBeInTheDocument()
     expect(screen.getByText('MAU')).toBeInTheDocument()
     expect(screen.getByText('Total Users')).toBeInTheDocument()
+  })
+
+  it('renders the Test Usage snapshot card', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Test Usage')).toBeInTheDocument())
+    expect(screen.getByText('tester CBAT plays · last 7 days')).toBeInTheDocument()
   })
 
   it('renders Within Window section with platform-wide acquisition stats', async () => {

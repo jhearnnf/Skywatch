@@ -105,6 +105,7 @@ export default function ReportChart({
   labels,
   height = 220,
   formatX,
+  formatXSub,
   formatY,
   showLegend = false,
   dimX,
@@ -130,6 +131,16 @@ export default function ReportChart({
       </text>
     )
   }
+  // Two-line x tick: primary label (formatX) with a secondary line (formatXSub)
+  // stacked beneath — e.g. a date with its day-of-week below it.
+  const twoLineTick = ({ x, y, payload }) => (
+    <text x={x} y={y + 12} fill={COLORS.axis} fontSize={11} textAnchor="middle">
+      <tspan x={x}>{xFmt(payload?.value)}</tspan>
+      <tspan x={x} dy={13} fillOpacity={0.65}>{formatXSub(payload?.value)}</tspan>
+    </text>
+  )
+  const xTick = dimSet ? dimTick : (formatXSub ? twoLineTick : undefined)
+  const xAxisHeight = formatXSub ? 40 : undefined
 
   // Greying of practice/tutorial game names (by their human label).
   const dimLabelSet = dimLabels && dimLabels.length ? new Set(dimLabels.map(String)) : null
@@ -208,7 +219,8 @@ export default function ReportChart({
             stroke={COLORS.axis}
             fontSize={11}
             tickFormatter={xFmt}
-            tick={dimSet ? dimTick : undefined}
+            tick={xTick}
+            height={xAxisHeight}
           />
           <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
           <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />

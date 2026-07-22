@@ -294,8 +294,9 @@ router.get('/snapshot', async (_req, res) => {
   try {
     const now = new Date();
     const sparkStart = new Date(now.getTime() - 29 * DAY_MS); // 30 days inclusive of today
+    const testStart  = new Date(now.getTime() - 6  * DAY_MS); // 7 days inclusive of today
 
-    const [totalUsers, signupSourceAgg, subTierAgg] = await Promise.all([
+    const [totalUsers, signupSourceAgg, subTierAgg, testerDocs] = await Promise.all([
       User.countDocuments(),
       User.aggregate([
         { $group: { _id: { $cond: [{ $ifNull: ['$googleId', false] }, 'google', 'email'] }, count: { $sum: 1 } } },
@@ -303,10 +304,30 @@ router.get('/snapshot', async (_req, res) => {
       User.aggregate([
         { $group: { _id: '$subscriptionTier', count: { $sum: 1 } } },
       ]),
+      User.find({ isTester: true }).select('_id').lean(),
     ]);
 
     const streams = await activityStreams(sparkStart);
     const dailyMap = mergeDailyDistinctUsers(streams);
+
+    // Test usage — distinct tester accounts who played any CBAT game per day over
+    // the last 7 days. Fixed 7-day window (independent of the report window picker).
+    const testerIds = new Set(testerDocs.map(u => String(u._id)));
+    let testUsage = emptyDailyBuckets(testStart, now).map(b => ({ date: b.date, count: 0 }));
+    if (testerIds.size) {
+      const testerCbatStreams = await Promise.all(
+        Object.values(CBAT_GAMES).map(g =>
+          dailyDistinctUsers(g.Model, 'createdAt', 'userId', testStart, g.modeFilter ?? {})
+        )
+      );
+      const testerByDay = mergeDailyDistinctUsers(testerCbatStreams); // date → Set<userId>
+      testUsage = emptyDailyBuckets(testStart, now).map(b => {
+        const users = testerByDay.get(b.date);
+        let count = 0;
+        if (users) for (const u of users) if (testerIds.has(u)) count++;
+        return { date: b.date, count };
+      });
+    }
 
     const dailyDau = emptyDailyBuckets(sparkStart, now).map(b => ({
       date: b.date,
@@ -343,6 +364,7 @@ router.get('/snapshot', async (_req, res) => {
         dailyDau,
         signupSource,
         subscription,
+        testUsage,
       },
     });
   } catch (err) {
