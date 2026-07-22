@@ -121,7 +121,7 @@ function ResultsScreen({ stats }) {
 }
 
 // ── Intro screen ──────────────────────────────────────────────────────────────
-function IntroScreen({ onStart, personalBest, aircraftList, aircraftLoading }) {
+function IntroScreen({ onStart, onTutorial, personalBest, aircraftList, aircraftLoading }) {
   const disabled = aircraftLoading || aircraftList.length === 0
 
   return (
@@ -173,14 +173,456 @@ function IntroScreen({ onStart, personalBest, aircraftList, aircraftLoading }) {
         </Link>
       </div>
 
+      <div className="flex flex-wrap gap-3 justify-center">
+        <button
+          onClick={onTutorial}
+          className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm cursor-pointer"
+        >
+          Tutorial
+        </button>
+        <button
+          onClick={onStart}
+          disabled={disabled}
+          className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
+        >
+          {aircraftLoading ? 'Loading aircraft…' : aircraftList.length === 0 ? 'No aircraft enabled — ask an admin to enable at least one in CBAT settings.' : 'Start'}
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── Tutorial / practice mode ────────────────────────────────────────────────
+// Progressive walkthrough modelled on the CBAT Target and ANT practice modes: a
+// coach card with prev/next navigation sits above a practice arena that mirrors
+// the live layout. FLAG runs three tasks at once, so the tutorial teaches them
+// one at a time — each step unlocks its own zone, dims the ones already covered,
+// and locks the ones still ahead. The targets step embeds the real play field
+// (aircraft genuinely drift their rings across the shapes); the aircraft and
+// maths steps use small scripted scenarios so the correct action is always
+// reachable and the copy always matches what's on screen.
+const FLAG_TUTORIAL_STEPS = [
+  {
+    key: 'targets',
+    title: 'Strike the targets',
+    body: (
+      <>
+        The play field is live. Aircraft drift across it trailing a{' '}
+        <b className="text-brand-300">white ring</b>. The moment a ring overlaps one of the
+        coloured <b className="text-brand-300">shapes</b>, that shape is armed — click it, or tap
+        its matching <b className="text-brand-300">colour button</b> below, to strike it. Land two
+        strikes to move on. In the real game a wrong click loses points.
+      </>
+    ),
+  },
+  {
+    key: 'aircraft',
+    title: 'Monitor the aircraft',
+    body: (
+      <>
+        An aircraft's two-letter <b className="text-brand-300">callsign</b> only flashes on for a
+        moment, then hides — so you have to <b className="text-brand-300">remember it</b>. Watch this
+        one blink on and off. When a callsign shows in the prompt below, press{' '}
+        <b className="text-brand-300">YES</b> if it's the one on screen, or{' '}
+        <b className="text-brand-300">NO</b> if it isn't. Answer two correctly to continue.
+      </>
+    ),
+  },
+  {
+    key: 'maths',
+    title: 'Solve the maths',
+    body: (
+      <>
+        A <b className="text-brand-300">maths</b> question drops onto the numpad. Tap the digits to
+        enter the answer before it times out — the entry submits itself once you've keyed enough
+        digits. Solve this one to finish.
+      </>
+    ),
+  },
+]
+
+// Fixed scenario data — no randomness, so the coaching copy always matches.
+const TUT_MATH_QUESTION = { question: '12 + 7', answer: 19, expectedDigits: 2 }
+const TUT_TARGET_HITS_REQUIRED = 4
+const TUT_AC_CORRECT_REQUIRED = 2
+
+// Per-playthrough id for tutorial usage tracking; the backend dedupes on it.
+function makeTutorialRunId() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  } catch { /* fall through */ }
+  return `tut_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function TutorialComplete({ onExit }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+    >
+      <p className="text-5xl mb-3">✅</p>
+      <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
+      <p className="text-sm text-slate-400 mb-6">
+        In the real thing all three run at once for 60 seconds — strike shapes, watch the callsigns,
+        and clear the maths without letting any of them slide. Now try it for real.
+      </p>
       <button
-        onClick={onStart}
-        disabled={disabled}
-        className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
+        onClick={onExit}
+        className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
       >
-        {aircraftLoading ? 'Loading aircraft…' : aircraftList.length === 0 ? 'No aircraft enabled — ask an admin to enable at least one in CBAT settings.' : 'Start'}
+        Back to Instructions
       </button>
     </motion.div>
+  )
+}
+
+function FlagTutorial({ onExit, onProgress, modelUrl }) {
+  const [stepIdx, setStepIdx] = useState(0)
+  const [done, setDone] = useState(false)
+  const [runId] = useState(makeTutorialRunId)
+
+  // One shared play field for the whole tutorial — same as the live game. gameTime
+  // is pinned to the easy stage so aircraft spawn at a gentle, learnable cadence.
+  const playFieldRef = useRef(null)
+  const tutGameTimeRef = useRef(8)
+  const [symbols] = useState(() => generateUniqueSymbols(40))
+  const [palette] = useState(() => generatePalette())
+  // Re-entering the targets step remounts the field so its focus mechanic resets.
+  const [fieldKey, setFieldKey] = useState(0)
+
+  const stepIdxRef = useRef(0)
+  useEffect(() => { stepIdxRef.current = stepIdx }, [stepIdx])
+
+  // Targets step.
+  const [targetHits, setTargetHits] = useState(0)
+  const targetAdvancedRef = useRef(false)   // one-shot guard for the auto-advance
+  const [hotColors, setHotColors] = useState([])
+  const onHotColorsChange = useCallback((cols) => setHotColors(cols), [])
+
+  // Aircraft step — live callsign tracking read off the shared field.
+  const onScreenSymsRef = useRef(new Set())
+  const seenSymsRef = useRef(new Set())
+  const [acQuestion, setAcQuestion] = useState(null)   // { sym } | null
+  const [acDisabled, setAcDisabled] = useState(false)
+  const [acFlash, setAcFlash] = useState(null)         // 'ok' | 'miss' | null
+  const [acCorrect, setAcCorrect] = useState(0)
+  const acCorrectRef = useRef(0)
+  const acTimerRef = useRef(null)
+  const [acHighlightSym, setAcHighlightSym] = useState(null) // callsign to pulse (nudge)
+  const [acHighlightOnScreen, setAcHighlightOnScreen] = useState(false) // is that callsign on the field?
+  const acHintTimerRef = useRef(null)
+
+  // Maths step.
+  const [mathEntered, setMathEntered] = useState('')
+  const [mathFlash, setMathFlash] = useState(null)     // 'ok' | 'miss' | null
+
+  // Report tutorial usage for the admin Reports per-step drop-off funnel. Fires
+  // on entry and on every section change (forward, backward, or completion).
+  useEffect(() => {
+    onProgress?.({ clientRunId: runId, furthestStep: stepIdx, totalSteps: FLAG_TUTORIAL_STEPS.length, completed: false })
+  }, [stepIdx, runId, onProgress])
+  useEffect(() => {
+    if (done) onProgress?.({ clientRunId: runId, furthestStep: FLAG_TUTORIAL_STEPS.length - 1, totalSteps: FLAG_TUTORIAL_STEPS.length, completed: true })
+  }, [done, runId, onProgress])
+
+  const advance = useCallback(() => {
+    setStepIdx(i => {
+      if (i < FLAG_TUTORIAL_STEPS.length - 1) return i + 1
+      setDone(true)
+      return i
+    })
+  }, [])
+  const goToStep = (i) => {
+    if (i < 0 || i >= FLAG_TUTORIAL_STEPS.length) return
+    // Re-entering the targets step restarts that practice: remount the field
+    // (fresh focus aircraft), reset the strike counter/guard and armed-colour
+    // flash, and clear the callsign tracking the aircraft step reads.
+    if (i === 0) {
+      setFieldKey(k => k + 1)
+      setTargetHits(0)
+      targetAdvancedRef.current = false
+      setHotColors([])
+      onScreenSymsRef.current = new Set()
+      seenSymsRef.current = new Set()
+    }
+    if (i === 2) { setMathEntered(''); setMathFlash(null) }
+    setStepIdx(i)
+  }
+
+  // Targets — count strikes with a pure updater (only on the targets step); the
+  // auto-advance is handled by the effect below (scheduling it inside the updater
+  // fires twice under StrictMode's double-invoke and skips the next step).
+  const onTargetScore = useCallback((evt) => {
+    if (stepIdxRef.current !== 0 || evt?.type !== 'targetHit') return
+    setTargetHits(h => Math.min(h + 1, TUT_TARGET_HITS_REQUIRED))
+  }, [])
+  useEffect(() => {
+    if (stepIdx !== 0 || targetHits < TUT_TARGET_HITS_REQUIRED || targetAdvancedRef.current) return
+    targetAdvancedRef.current = true
+    const t = setTimeout(advance, 450)
+    return () => clearTimeout(t)
+  }, [targetHits, stepIdx, advance])
+
+  // Live callsign tracking off the shared field (used by the aircraft step).
+  const handleAcSpawn = useCallback((sym) => { onScreenSymsRef.current.add(sym) }, [])
+  const handleAcDespawn = useCallback((sym) => { onScreenSymsRef.current.delete(sym) }, [])
+  const handleAcSeen = useCallback((sym) => { seenSymsRef.current.add(sym) }, [])
+
+  // Aircraft — present a prompt about a callsign, biased so a "yes" is reachable
+  // when aircraft are up. Correctness is judged live against what's on the field
+  // at answer time, exactly as the real game does.
+  const presentAcQuestion = useCallback(() => {
+    const onScreen = [...onScreenSymsRef.current]
+    let sym
+    if (onScreen.length > 0 && Math.random() < 0.6) {
+      sym = onScreen[Math.floor(Math.random() * onScreen.length)]
+    } else {
+      const gone = [...seenSymsRef.current].filter(s => !onScreenSymsRef.current.has(s))
+      sym = gone.length
+        ? gone[Math.floor(Math.random() * gone.length)]
+        : generateUniqueSymbols(1, onScreenSymsRef.current)[0]
+    }
+    setAcQuestion({ sym })
+    setAcDisabled(false)
+    setAcFlash(null)
+    // Nudge: if they haven't answered after a few seconds, pulse the referenced
+    // callsign on the field. (If the code isn't on screen — a NO prompt — nothing
+    // matches, so no ring appears, which is itself the answer.)
+    setAcHighlightSym(null)
+    setAcHighlightOnScreen(false)
+    if (acHintTimerRef.current) clearTimeout(acHintTimerRef.current)
+    acHintTimerRef.current = setTimeout(() => {
+      setAcHighlightSym(sym)
+      setAcHighlightOnScreen(onScreenSymsRef.current.has(sym))
+    }, 4000)
+  }, [])
+
+  const onAcAnswer = useCallback((choice) => {
+    if (acDisabled || !acQuestion) return
+    if (acHintTimerRef.current) clearTimeout(acHintTimerRef.current)
+    setAcHighlightSym(null)
+    setAcHighlightOnScreen(false)
+    const isOnScreen = onScreenSymsRef.current.has(acQuestion.sym)
+    const correct = (choice === 'yes') === isOnScreen
+    setAcDisabled(true)
+    setAcFlash(correct ? 'ok' : 'miss')
+    if (correct) {
+      const n = acCorrectRef.current + 1
+      acCorrectRef.current = n
+      setAcCorrect(n)
+      acTimerRef.current = setTimeout(() => {
+        if (n >= TUT_AC_CORRECT_REQUIRED) advance()
+        else presentAcQuestion()
+      }, 700)
+    } else {
+      acTimerRef.current = setTimeout(presentAcQuestion, 900)
+    }
+  }, [acDisabled, acQuestion, advance, presentAcQuestion])
+
+  // On entering the aircraft step, reset its progress and present the first
+  // prompt after a short beat; clear timers when leaving.
+  useEffect(() => {
+    if (stepIdx !== 1) return
+    const t = setTimeout(() => {
+      acCorrectRef.current = 0
+      setAcCorrect(0)
+      presentAcQuestion()
+    }, 600)
+    return () => {
+      clearTimeout(t)
+      if (acTimerRef.current) clearTimeout(acTimerRef.current)
+      if (acHintTimerRef.current) clearTimeout(acHintTimerRef.current)
+    }
+  }, [stepIdx, presentAcQuestion])
+
+  // Maths — mirror the live auto-submit: grade once enough digits are keyed.
+  const onMathDigit = (d) => {
+    if (mathFlash === 'ok') return
+    const next = mathEntered + d
+    setMathEntered(next)
+    if (next.length >= TUT_MATH_QUESTION.expectedDigits) {
+      if (parseInt(next, 10) === TUT_MATH_QUESTION.answer) {
+        setMathFlash('ok')
+        setTimeout(advance, 550)
+      } else {
+        setMathFlash('miss')
+        setTimeout(() => { setMathEntered(''); setMathFlash(null) }, 800)
+      }
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="flex flex-col items-center">
+        <TutorialComplete onExit={onExit} />
+      </div>
+    )
+  }
+
+  const step = FLAG_TUTORIAL_STEPS[stepIdx]
+  const targetsActive = stepIdx === 0
+  const aircraftActive = stepIdx === 1
+  const mathsActive = stepIdx === 2
+  // The control in use renders exactly like the live game; the ones not in use
+  // for this step are greyed out + inert. (No glow on the active one — it stands
+  // out simply by being the one that isn't greyed.)
+  const zoneCls = (on) => (on ? '' : ' cbat-tutorial-dim')
+
+  return (
+    <div className="w-full max-w-md">
+      {/* Coach card */}
+      <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] uppercase tracking-wide text-brand-300 font-bold">Practice Mode</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => goToStep(stepIdx - 1)}
+              disabled={stepIdx === 0}
+              aria-label="Previous section"
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+            >
+              {'‹'}
+            </button>
+            <span className="text-[10px] text-slate-500 tabular-nums">{stepIdx + 1} / {FLAG_TUTORIAL_STEPS.length}</span>
+            <button
+              onClick={() => goToStep(stepIdx + 1)}
+              disabled={stepIdx === FLAG_TUTORIAL_STEPS.length - 1}
+              aria-label="Next section"
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+            >
+              {'›'}
+            </button>
+          </div>
+        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={stepIdx}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+          >
+            <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
+            <p className="text-sm text-[#ddeaf8] leading-relaxed">{step.body}</p>
+          </motion.div>
+        </AnimatePresence>
+        <div className="mt-4">
+          <button onClick={onExit} className="text-xs text-slate-500 hover:text-slate-300 transition-colors bg-transparent border-0 cursor-pointer">
+            Exit practice
+          </button>
+        </div>
+      </div>
+
+      {/* Per-step status line */}
+      <div className="flex items-center justify-end h-4 mb-1 px-1 text-[10px] font-mono">
+        {targetsActive && <span className="text-brand-300">Strikes {targetHits}/{TUT_TARGET_HITS_REQUIRED}</span>}
+        {aircraftActive && <span className="text-brand-300">Correct {acCorrect}/{TUT_AC_CORRECT_REQUIRED}</span>}
+      </div>
+
+      {/* Practice arena — mirrors the live game: the field on top, then the
+          numpad + colour strikes + aircraft Y/N below. Each step lights the
+          control it teaches and greys the rest. */}
+      <div
+        className={`w-full rounded-lg overflow-hidden${mathsActive ? ' cbat-tutorial-dim' : ''}`}
+        style={{ height: 'clamp(200px, 45vw, 340px)' }}
+      >
+        <PlayField
+          key={fieldKey}
+          ref={playFieldRef}
+          modelUrl={modelUrl}
+          symbols={symbols}
+          palette={palette}
+          gameTimeRef={tutGameTimeRef}
+          onScoreEvent={onTargetScore}
+          onHotColorsChange={onHotColorsChange}
+          onAircraftSpawn={handleAcSpawn}
+          onAircraftDespawn={handleAcDespawn}
+          onAircraftSeen={handleAcSeen}
+          tutorialHints={targetsActive}
+          tutorialFocusOnly={targetsActive && targetHits === 0}
+          dimAllShapes={aircraftActive}
+          blinkSymbols={aircraftActive}
+          keepAircraftLonger={aircraftActive}
+          maxAircraft={aircraftActive ? 1 : null}
+          highlightSymbol={aircraftActive ? acHighlightSym : null}
+          active
+        />
+      </div>
+
+      <div className="w-full max-w-[280px] mx-auto mt-3">
+        <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 flex flex-col gap-3">
+          {/* Numpad (maths) */}
+          <div className={`rounded-lg${zoneCls(mathsActive)}`}>
+            <Numpad
+              question={mathsActive ? TUT_MATH_QUESTION : null}
+              entered={mathEntered}
+              onDigit={onMathDigit}
+              disabled={!mathsActive}
+            />
+            {mathsActive && (
+              <div className="mt-1.5 min-h-[1rem] text-[11px] leading-tight text-center">
+                {mathFlash === 'miss' && <span className="text-red-400">Not quite — try again.</span>}
+                {mathFlash === 'ok' && <span className="text-green-400">✓ Correct</span>}
+              </div>
+            )}
+          </div>
+
+          {/* Colour strike buttons (targets) */}
+          {palette.length === 3 && (
+            <div className={`rounded-lg${zoneCls(targetsActive)}`}>
+              <div className="grid grid-cols-3 gap-1.5">
+                {palette.map((p) => {
+                  const hot = targetsActive && hotColors.includes(p.color)
+                  // Phase A: while a shape is armed, grey every button but the one
+                  // to press — mirrors the shape greying on the field above.
+                  const dimBtn = targetsActive && targetHits === 0 && hotColors.length > 0 && !hot
+                  return (
+                    <div key={p.color} className="relative">
+                      {hot && (
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 pointer-events-none z-20">
+                          <div className="cbat-flag-click-here flex flex-col items-center">
+                            <span className="text-[9px] font-extrabold text-red-400 whitespace-nowrap tracking-wide" style={{ textShadow: '0 0 4px #000' }}>CLICK HERE</span>
+                            <svg width="14" height="9" viewBox="0 0 14 9" aria-hidden><path d="M7 9 L1 1 H13 Z" fill="#ef4444" /></svg>
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => playFieldRef.current?.clickColor(p.color)}
+                        disabled={!targetsActive}
+                        className={`w-full py-2 rounded-lg flex items-center justify-center transition-all duration-200 active:scale-95 hover:opacity-90 cursor-pointer${hot ? ' cbat-flag-btn-hot' : ''}${dimBtn ? ' opacity-20 grayscale pointer-events-none' : ''}`}
+                        style={{ backgroundColor: p.color }}
+                        aria-label={`Strike ${p.kind}`}
+                      >
+                        <ShapeIcon kind={p.kind} color={p.color} size={22} />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Aircraft Y/N */}
+          <div className={`rounded-lg${zoneCls(aircraftActive)}`}>
+            <AircraftQuestion
+              symbol={aircraftActive ? (acQuestion?.sym ?? null) : null}
+              onAnswer={onAcAnswer}
+              disabled={!aircraftActive || acDisabled || !acQuestion}
+              pulseSymbol={aircraftActive && acHighlightOnScreen}
+            />
+            {aircraftActive && (
+              <div className="mt-1.5 min-h-[1rem] text-[11px] leading-tight text-center">
+                {acFlash === 'miss' && <span className="text-red-400">Not quite — check the field.</span>}
+                {acFlash === 'ok' && <span className="text-green-400">✓ Correct</span>}
+                {!acFlash && acQuestion && <span className="text-slate-500">Is <b className="text-[#ddeaf8]">{acQuestion.sym}</b> on the field right now?</span>}
+                {!acFlash && !acQuestion && <span className="text-slate-600">Watch the field…</span>}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -242,10 +684,22 @@ export default function CbatFlag() {
   const allSymbolsRef = useRef(new Set())
 
   useEffect(() => {
-    if (phase === 'playing') enterImmersive()
+    // Hide the nav chrome during the live game and the practice tutorial.
+    if (phase === 'playing' || phase === 'tutorial') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
+
+  // Fire-and-forget tutorial usage tracking (admin Reports per-step drop-off).
+  // Online-only by design — a learning aid, not a score, so no offline outbox.
+  const reportTutorialProgress = useCallback((body) => {
+    if (!user) return
+    apiFetch(`${API}/api/games/cbat/flag/tutorial`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})
+  }, [user, apiFetch, API])
 
   // Fetch personal best and aircraft list
   useEffect(() => {
@@ -634,9 +1088,18 @@ export default function CbatFlag() {
             {phase === 'intro' && (
               <IntroScreen
                 onStart={startGame}
+                onTutorial={() => setPhase('tutorial')}
                 personalBest={personalBest}
                 aircraftList={aircraftList}
                 aircraftLoading={aircraftLoading}
+              />
+            )}
+
+            {phase === 'tutorial' && (
+              <FlagTutorial
+                onExit={() => setPhase('intro')}
+                onProgress={reportTutorialProgress}
+                modelUrl={modelUrl}
               />
             )}
 

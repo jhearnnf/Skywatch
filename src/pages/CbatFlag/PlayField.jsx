@@ -303,6 +303,19 @@ function AircraftInstances({ modelUrl, aircraftRef, fieldW, fieldH }) {
     metalness: 0.6,
   }), [])
 
+  // Greyed-out material for tutorial background aircraft (the ones that aren't
+  // the current focus subject). Desaturated and semi-transparent so the single
+  // circled aircraft stays the clear subject.
+  const greyMaterial = useMemo(() => new THREE.MeshStandardMaterial({
+    color: '#5c6b7a',
+    emissive: '#0a1420',
+    emissiveIntensity: 0.25,
+    roughness: 0.8,
+    metalness: 0.2,
+    transparent: true,
+    opacity: 0.45,
+  }), [])
+
   useFrame(() => {
     const aircraft = aircraftRef.current
     if (!groupRef.current) return
@@ -323,11 +336,13 @@ function AircraftInstances({ modelUrl, aircraftRef, fieldW, fieldH }) {
     for (const ac of aircraft) {
       if (!instancesRef.current[ac.id]) {
         const cloned = gltfScene.clone(true)
+        const mat = ac.greyed ? greyMaterial : tintMaterial
         cloned.traverse(child => {
-          if (child.isMesh) child.material = tintMaterial
+          if (child.isMesh) child.material = mat
         })
         const g = new THREE.Group()
         g.add(cloned)
+        g._greyed = !!ac.greyed
         // Centre the model
         cloned.position.set(-centre.x, -centre.y, -centre.z)
         g.scale.setScalar(scale)
@@ -336,6 +351,13 @@ function AircraftInstances({ modelUrl, aircraftRef, fieldW, fieldH }) {
       }
 
       const g = instancesRef.current[ac.id]
+      // Swap material when an aircraft's greyed state changes (tutorial phase
+      // change, or the focus aircraft being released).
+      if (g._greyed !== !!ac.greyed) {
+        const mat = ac.greyed ? greyMaterial : tintMaterial
+        g.traverse(child => { if (child.isMesh) child.material = mat })
+        g._greyed = !!ac.greyed
+      }
       // Convert px coords to world coords — origin at field centre
       const wx = (ac.x - fieldW / 2) / 20
       const wz = (ac.y - fieldH / 2) / 20
@@ -382,7 +404,7 @@ function FlagScene({ modelUrl, aircraftRef, fieldW, fieldH }) {
 }
 
 // ── Shape SVG overlay ────────────────────────────────────────────────────────
-function ShapeOverlay({ shapes, fieldW, fieldH, onShapeClick }) {
+function ShapeOverlay({ shapes, fieldW, fieldH, onShapeClick, tutorialHints = false, dimAllShapes = false }) {
   return (
     <svg
       className="absolute inset-0 pointer-events-none"
@@ -420,14 +442,46 @@ function ShapeOverlay({ shapes, fieldW, fieldH, onShapeClick }) {
           path = <rect x={-r} y={-r} width={r * 2} height={r * 2} fill={fill} fillOpacity={0.55} stroke={s.color} strokeWidth="2.5" transform="rotate(45)" />
           if (flashing) haloPath = <rect x={-r} y={-r} width={r * 2} height={r * 2} fill="none" stroke={flashColor} strokeWidth="2" transform="rotate(45)" vectorEffect="non-scaling-stroke" />
         }
+        // dimAllShapes greys every shape (aircraft step — the field's shapes are
+        // out of play there); s.dimmed is the per-shape spotlight from the targets
+        // step. Either one dims + disables the shape.
+        const dimmed = dimAllShapes || s.dimmed
+        // Tutorial-only: pulse a red hint ring while the shape holds an unstruck
+        // aircraft ring. Clears on a correct strike; returns when a new ring enters.
+        const hotHint = tutorialHints && s.hintActive && !dimmed
+        let hotRing = null
+        if (hotHint) {
+          if (s.kind === 'square') {
+            hotRing = <rect x={-r} y={-r} width={r * 2} height={r * 2} fill="none" stroke="#ef4444" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+          } else if (s.kind === 'circle') {
+            hotRing = <circle cx={0} cy={0} r={r} fill="none" stroke="#ef4444" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+          } else if (s.kind === 'triangle') {
+            const apex = (r * 2) / Math.sqrt(3)
+            const base = r / Math.sqrt(3)
+            hotRing = <polygon points={`0,${-apex} ${-r},${base} ${r},${base}`} fill="none" stroke="#ef4444" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+          } else if (s.kind === 'diamond') {
+            hotRing = <rect x={-r} y={-r} width={r * 2} height={r * 2} fill="none" stroke="#ef4444" strokeWidth="2.5" transform="rotate(45)" vectorEffect="non-scaling-stroke" />
+          }
+        }
         return (
           <g
             key={s.id}
             transform={`translate(${s.cx},${s.cy}) rotate(${s.rotation}) scale(${s.widthScale},${s.heightScale})`}
-            style={{ pointerEvents: 'all', cursor: 'pointer' }}
+            style={{
+              pointerEvents: dimmed ? 'none' : 'all',
+              cursor: 'pointer',
+              opacity: dimmed ? 0.12 : 1,
+              filter: dimmed ? 'grayscale(1)' : undefined,
+              transition: 'opacity 0.2s ease',
+            }}
             onClick={() => onShapeClick(s.id)}
           >
             <circle cx={0} cy={0} r={r + 10} fill="transparent" />
+            {hotRing && (
+              <g className="cbat-flag-hot-ring" transform="scale(1.28)" style={{ filter: 'drop-shadow(0 0 3px #ef4444)' }}>
+                {hotRing}
+              </g>
+            )}
             {haloPath && (
               <g transform="scale(1.14)" style={{ filter: `drop-shadow(0 0 3px ${flashColor})` }}>
                 {haloPath}
@@ -442,16 +496,27 @@ function ShapeOverlay({ shapes, fieldW, fieldH, onShapeClick }) {
 }
 
 // ── Symbol overlay (above aircraft) ─────────────────────────────────────────
-function SymbolOverlay({ aircraft, fieldW, fieldH }) {
+function SymbolOverlay({ aircraft, fieldW, fieldH, blinkSymbols = false, highlightSymbol = null }) {
   return (
     <svg className="absolute inset-0 pointer-events-none" width={fieldW} height={fieldH} viewBox={`0 0 ${fieldW} ${fieldH}`}>
       {aircraft.map(ac => {
-        const showCircle = ac.hasCircle
+        const now = performance.now()
+        // "Remember the callsign" step: the label shows and pulses for ~3s, then
+        // hides for ~3s, cyclically — teaching that it's fleeting and must be
+        // memorised. The pulse lives on the callsign text itself, not the aircraft.
+        const blinkShow = now % 6000 < 3000
+        const showCircle = ac.activeCircle ?? ac.hasCircle
+        const highlighted = !!highlightSymbol && ac.symbol === highlightSymbol
         // symbolFlashEnd is set from performance.now()/1000 in the rAF loop —
-        // compare against the same time base, NOT Date.now().
-        const showSymbol = ac.symbol && performance.now() / 1000 < ac.symbolFlashEnd
+        // compare against the same time base, NOT Date.now(). A highlighted
+        // callsign (post-timeout hint) is always shown + pulsing; blink mode
+        // shows + pulses during its on-window; otherwise it's the normal flash.
+        let showSymbol, pulseSymbol
+        if (highlighted) { showSymbol = !!ac.symbol; pulseSymbol = true }
+        else if (blinkSymbols) { showSymbol = !!ac.symbol && blinkShow; pulseSymbol = blinkShow }
+        else { showSymbol = ac.symbol && now / 1000 < ac.symbolFlashEnd; pulseSymbol = false }
         return (
-          <g key={ac.id}>
+          <g key={ac.id} opacity={ac.greyed ? 0.35 : 1}>
             {showCircle && (
               <circle
                 cx={ac.x} cy={ac.y} r={AIRCRAFT_RADIUS}
@@ -462,10 +527,11 @@ function SymbolOverlay({ aircraft, fieldW, fieldH }) {
               <text
                 x={ac.x} y={ac.y - AIRCRAFT_RADIUS - 6}
                 textAnchor="middle"
-                fontSize="11"
+                fontSize={highlighted ? 13 : 11}
                 fontWeight="bold"
                 fontFamily="monospace"
-                fill="#ddeaf8"
+                fill={highlighted ? '#5baaff' : '#ddeaf8'}
+                className={pulseSymbol ? 'cbat-flag-callsign-pulse' : undefined}
                 style={{ textShadow: '0 0 4px #000' }}
               >
                 {ac.symbol}
@@ -475,6 +541,23 @@ function SymbolOverlay({ aircraft, fieldW, fieldH }) {
         )
       })}
     </svg>
+  )
+}
+
+// ── Eyes overlay (tutorial only) ─────────────────────────────────────────────
+// Floating 👀 pinned next to the first aircraft to enter, nudging the learner to
+// watch it. Positioned with the same pixel coords as the aircraft so it tracks
+// the plane across the field.
+function EyesOverlay({ aircraft }) {
+  if (!aircraft) return null
+  return (
+    <div
+      className="absolute pointer-events-none select-none"
+      style={{ left: aircraft.x, top: aircraft.y, transform: 'translate(14px, -34px)', zIndex: 20 }}
+      aria-hidden
+    >
+      <span className="cbat-flag-eyes" style={{ fontSize: 24, lineHeight: 1, display: 'inline-block' }}>👀</span>
+    </div>
   )
 }
 
@@ -489,6 +572,14 @@ function PlayFieldImpl({
   onAircraftSpawn,
   onAircraftDespawn,
   active,
+  tutorialHints = false,
+  tutorialFocusOnly = false,
+  dimAllShapes = false,
+  blinkSymbols = false,
+  keepAircraftLonger = false,
+  maxAircraft = null,
+  highlightSymbol = null,
+  onHotColorsChange,
 }, ref) {
   const fieldRef = useRef(null)
   // Start at 0×0 so shape placement waits for the real ResizeObserver
@@ -504,6 +595,14 @@ function PlayFieldImpl({
   const symbolsRef = useRef(symbols)
   const symbolIdxRef = useRef(0)
   const spawnTimerRef = useRef(randRange(1.5, 3.5))
+  const firstAcIdRef = useRef(null)     // tutorial: id of the first aircraft to spawn
+  const [firstAcId, setFirstAcId] = useState(null) // render-safe mirror of the above
+  // Phase A of the targets tutorial: only the focus (first) aircraft is live and
+  // circled; every other aircraft is greyed. Flips false after the first strike.
+  // Read via a ref inside the rAF loop so the phase change doesn't restart it.
+  const focusOnlyRef = useRef(tutorialFocusOnly)
+  useEffect(() => { focusOnlyRef.current = tutorialFocusOnly }, [tutorialFocusOnly])
+  const lastHotColorsKeyRef = useRef('') // tutorial: last reported hot-colours key
   const shapeLockRef = useRef({})   // id -> unlockTime (250ms anti-double-click)
   const shapeClaimRef = useRef({})  // shapeId -> { [acId]: claimedAtMs } per-aircraft claims while in slot
   const acShapeEntryRef = useRef({}) // acId -> { [shapeId]: enteredAtMs } slot-priority by entry time
@@ -549,13 +648,21 @@ function PlayFieldImpl({
       // so the field can clear before the timer ends.
       if (gameTime < 55) {
         const { max, spawn } = stageConfig(gameTime)
+        const effMax = maxAircraft != null ? maxAircraft : max
         spawnTimerRef.current -= dt
-        if (spawnTimerRef.current <= 0 && aircraftRef.current.length < max) {
+        if (spawnTimerRef.current <= 0 && aircraftRef.current.length < effMax) {
           const sym = symbolsRef.current[symbolIdxRef.current % symbolsRef.current.length]
           symbolIdxRef.current++
           const ac = spawnAircraft(w, h)
           ac.symbol = sym
           ac.symbolFlashAt = randRange(0, 14)
+          // Tutorial: force the first aircraft to carry a ring so the "watch it,
+          // then click the shape it touches" lesson is guaranteed to play out.
+          if (tutorialHints && firstAcIdRef.current == null) {
+            ac.hasCircle = true
+            firstAcIdRef.current = ac.id
+            setFirstAcId(ac.id)
+          }
           aircraftRef.current = [...aircraftRef.current, ac]
           onAircraftSpawn?.(sym)
           spawnTimerRef.current = randRange(spawn * 0.7, spawn * 1.3)
@@ -575,6 +682,17 @@ function PlayFieldImpl({
         next.age += dt
         next.stateTimer -= dt
 
+        // Tutorial focus bookkeeping. In phase A (focus-only) exactly one aircraft
+        // — the first to spawn — is the live, circled subject; the rest are greyed
+        // and inert. The focus is pinned on-screen and made to seek shapes until
+        // the player lands the first strike, after which the phase flips and every
+        // aircraft behaves normally.
+        const focusOnly = tutorialHints && focusOnlyRef.current
+        const isFocus = tutorialHints && next.id === firstAcIdRef.current
+        const pinFocus = isFocus && focusOnly
+        next.greyed = focusOnly && !isFocus
+        next.activeCircle = focusOnly ? isFocus : next.hasCircle
+
         // State transition
         if (next.stateTimer <= 0 && !next.exiting) {
           next.state = pickState(next.hasCircle)
@@ -586,18 +704,26 @@ function PlayFieldImpl({
           } else {
             next.uTurnRemaining = 0
           }
+          // Focus aircraft continually hunts the nearest shape so an overlap (and
+          // the lesson) is guaranteed to happen promptly.
+          if (pinFocus) { next.state = 'LOCK_ON'; next.uTurnRemaining = 0 }
         }
 
         // Safety net — if cumulative rotation in any non-U_TURN state exceeds
         // π radians, force STRAIGHT so we never visually loop a full circle.
         if (!next.exiting && next.state !== 'U_TURN' && Math.abs(next.cumTurn) > Math.PI) {
-          next.state = 'STRAIGHT'
+          next.state = pinFocus ? 'LOCK_ON' : 'STRAIGHT'
           next.stateTimer = randRange(STATE_INTERVAL_MIN, STATE_INTERVAL_MAX)
           next.cumTurn = 0
         }
 
-        // Exit mode
-        if (next.age >= AIRCRAFT_EXIT_START && !next.exiting) {
+        // Tutorial aircraft step: keep aircraft loitering on-screen far longer so
+        // their callsigns stay readable (they only leave if pushed off an edge).
+        const acExitStart = keepAircraftLonger ? Infinity : AIRCRAFT_EXIT_START
+        const acLifetime = keepAircraftLonger ? Infinity : AIRCRAFT_LIFETIME
+
+        // Exit mode — the pinned focus aircraft never exits in phase A.
+        if (next.age >= acExitStart && !next.exiting && !pinFocus) {
           next.exiting = true
           next.state = 'STRAIGHT'
           // Head toward nearest edge
@@ -644,10 +770,11 @@ function PlayFieldImpl({
         next.x += Math.cos(next.heading) * AIRCRAFT_SPEED * dt
         next.y += Math.sin(next.heading) * AIRCRAFT_SPEED * dt
 
-        // Despawn if off screen or too old
+        // Despawn if off screen or too old — but never the pinned focus aircraft,
+        // which stays until the player's first strike releases it.
         const margin = 60
         const offScreen = next.x < -margin || next.x > w + margin || next.y < -margin || next.y > h + margin
-        if (offScreen || next.age >= AIRCRAFT_LIFETIME) {
+        if ((offScreen || next.age >= acLifetime) && !pinFocus) {
           onAircraftDespawn?.(next.symbol)
           continue
         }
@@ -663,7 +790,7 @@ function PlayFieldImpl({
       // hot/scoring; any 3rd+ aircraft is deflected radially.
       const overlappersByShape = {}
       for (const ac of surviving) {
-        if (!ac.hasCircle) continue
+        if (!ac.activeCircle) continue
         const acEntries = acShapeEntryRef.current[ac.id]
         for (const s of shapesRef.current) {
           const wasInside = acEntries?.[s.id] != null
@@ -742,15 +869,56 @@ function PlayFieldImpl({
         }
       }
 
+      // Tutorial: a shape only cues while it holds an *unclaimed* aircraft ring.
+      // A correct strike claims that ring, so the cue stops until a fresh
+      // (unclaimed) aircraft enters. Computed after the claim cleanup above so it
+      // reflects the just-clicked state. Shapes carry a `hintActive` flag and the
+      // parent flashes the matching strike buttons via onHotColorsChange.
+      if (tutorialHints) {
+        const focusOnly = focusOnlyRef.current
+        // Which shapes currently hold an unstruck ring?
+        const hintById = {}
+        let anyHint = false
+        for (const s of updatedShapes) {
+          const slots = slotsByShape[String(s.id)] || []
+          const claims = shapeClaimRef.current[s.id] || {}
+          const h = s.hot && slots.some(acId => claims[acId] == null)
+          hintById[s.id] = h
+          if (h) anyHint = true
+        }
+        let mutated = false
+        const withHint = updatedShapes.map(s => {
+          const hintActive = hintById[s.id]
+          // Phase A only: while the focus aircraft is hovering a shape, grey every
+          // other shape so the eye lands on the one to strike. Clears when the
+          // aircraft leaves (no hint) or the strike lands (hint claimed).
+          const dimmed = focusOnly && anyHint && !hintActive
+          if (hintActive !== !!s.hintActive || dimmed !== !!s.dimmed) mutated = true
+          return (hintActive === !!s.hintActive && dimmed === !!s.dimmed)
+            ? s : { ...s, hintActive, dimmed }
+        })
+        if (mutated) {
+          shapesRef.current = withHint
+          if (onHotColorsChange) {
+            const hotColors = [...new Set(withHint.filter(s => s.hintActive).map(s => s.color))].sort()
+            const key = hotColors.join(',')
+            if (key !== lastHotColorsKeyRef.current) {
+              lastHotColorsKeyRef.current = key
+              onHotColorsChange(hotColors)
+            }
+          }
+        }
+      }
+
       setDisplayAircraft([...surviving])
-      setDisplayShapes([...updatedShapes])
+      setDisplayShapes([...shapesRef.current])
 
       rafRef.current = requestAnimationFrame(tick)
     }
 
     rafRef.current = requestAnimationFrame(tick)
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [active, fieldSize, gameTimeRef, onAircraftSpawn, onAircraftDespawn, onAircraftSeen, onScoreEvent])
+  }, [active, fieldSize, gameTimeRef, onAircraftSpawn, onAircraftDespawn, onAircraftSeen, onScoreEvent, tutorialHints, onHotColorsChange, keepAircraftLonger, maxAircraft])
 
   const flashShape = (shapeId, kind) => {
     const field = kind === 'green' ? 'flashGreen' : 'flashRed'
@@ -876,6 +1044,8 @@ function PlayFieldImpl({
         fieldW={fieldSize.w}
         fieldH={fieldSize.h}
         onShapeClick={handleShapeClick}
+        tutorialHints={tutorialHints}
+        dimAllShapes={dimAllShapes}
       />
 
       {modelUrl && fieldSize.w > 10 && (
@@ -898,7 +1068,13 @@ function PlayFieldImpl({
         aircraft={displayAircraft}
         fieldW={fieldSize.w}
         fieldH={fieldSize.h}
+        blinkSymbols={blinkSymbols}
+        highlightSymbol={highlightSymbol}
       />
+
+      {tutorialHints && tutorialFocusOnly && firstAcId != null && (
+        <EyesOverlay aircraft={displayAircraft.find(a => a.id === firstAcId)} />
+      )}
     </div>
   )
 }
