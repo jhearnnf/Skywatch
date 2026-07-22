@@ -1413,6 +1413,15 @@ body.play-mode .card-shadow {
 .cbat-flag-callsign-pulse {
   animation: cbatFlagCallsignPulse 0.32s steps(2, jump-none) infinite;
 }
+/* Red "callsign leaving" box shown while a circled aircraft heads off the field
+   — a soft attention pulse so the last-look cue catches the eye. */
+@keyframes cbatFlagCallsignLeaving {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+.cbat-flag-callsign-leaving {
+  animation: cbatFlagCallsignLeaving 0.7s ease-in-out infinite;
+}
 /* "CLICK HERE" call-out above the armed strike button. Horizontal centring is
    handled by the wrapper's -translate-x-1/2; this only bounces vertically so the
    two transforms don't fight. */

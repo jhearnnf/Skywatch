@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useMemo, useImperativeHandle, forwardRef, 
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
+import { playFlagBleep } from '../../utils/sound'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const AIRCRAFT_SPEED = 20          // px/s
@@ -496,7 +497,7 @@ function ShapeOverlay({ shapes, fieldW, fieldH, onShapeClick, tutorialHints = fa
 }
 
 // ── Symbol overlay (above aircraft) ─────────────────────────────────────────
-function SymbolOverlay({ aircraft, fieldW, fieldH, blinkSymbols = false, highlightSymbol = null }) {
+function SymbolOverlay({ aircraft, fieldW, fieldH, blinkSymbols = false, highlightSymbol = null, exitCallsign = false }) {
   return (
     <svg className="absolute inset-0 pointer-events-none" width={fieldW} height={fieldH} viewBox={`0 0 ${fieldW} ${fieldH}`}>
       {aircraft.map(ac => {
@@ -507,14 +508,24 @@ function SymbolOverlay({ aircraft, fieldW, fieldH, blinkSymbols = false, highlig
         const blinkShow = now % 6000 < 3000
         const showCircle = ac.activeCircle ?? ac.hasCircle
         const highlighted = !!highlightSymbol && ac.symbol === highlightSymbol
+        // A circled aircraft on its way off the field re-surfaces its callsign in
+        // a red box — the "last look before it's gone" cue. Takes priority over
+        // the normal fleeting flash so it's always readable while leaving.
+        const leaving = exitCallsign && showCircle && !!ac.symbol && ac.exiting
         // symbolFlashEnd is set from performance.now()/1000 in the rAF loop —
         // compare against the same time base, NOT Date.now(). A highlighted
         // callsign (post-timeout hint) is always shown + pulsing; blink mode
         // shows + pulses during its on-window; otherwise it's the normal flash.
         let showSymbol, pulseSymbol
-        if (highlighted) { showSymbol = !!ac.symbol; pulseSymbol = true }
+        if (leaving) { showSymbol = false; pulseSymbol = false }
+        else if (highlighted) { showSymbol = !!ac.symbol; pulseSymbol = true }
         else if (blinkSymbols) { showSymbol = !!ac.symbol && blinkShow; pulseSymbol = blinkShow }
         else { showSymbol = ac.symbol && now / 1000 < ac.symbolFlashEnd; pulseSymbol = false }
+        // Red callsign box geometry — sized to the (2-letter) label, centred over
+        // the aircraft just above its ring.
+        const boxW = leaving ? ac.symbol.length * 9 + 12 : 0
+        const boxH = 17
+        const boxTop = ac.y - AIRCRAFT_RADIUS - 22
         return (
           <g key={ac.id} opacity={ac.greyed ? 0.35 : 1}>
             {showCircle && (
@@ -522,6 +533,24 @@ function SymbolOverlay({ aircraft, fieldW, fieldH, blinkSymbols = false, highlig
                 cx={ac.x} cy={ac.y} r={AIRCRAFT_RADIUS}
                 fill="none" stroke="#ddeaf8" strokeWidth="1.5" opacity="0.8"
               />
+            )}
+            {leaving && (
+              <g className="cbat-flag-callsign-leaving">
+                <rect
+                  x={ac.x - boxW / 2} y={boxTop}
+                  width={boxW} height={boxH} rx={3}
+                  fill="#7f1d1d" fillOpacity={0.92}
+                  stroke="#f87171" strokeWidth="1.5"
+                />
+                <text
+                  x={ac.x} y={boxTop + boxH / 2 + 0.5}
+                  textAnchor="middle" dominantBaseline="central"
+                  fontSize={11} fontWeight="bold" fontFamily="monospace"
+                  fill="#fecaca"
+                >
+                  {ac.symbol}
+                </text>
+              </g>
             )}
             {showSymbol && (
               <text
@@ -580,6 +609,9 @@ function PlayFieldImpl({
   maxAircraft = null,
   highlightSymbol = null,
   onHotColorsChange,
+  // Live-play cues: enter/leave contact bleeps and the red "leaving" callsign
+  // box. Off in the tutorial so its scripted scenarios stay quiet and focused.
+  gameCues = false,
 }, ref) {
   const fieldRef = useRef(null)
   // Start at 0×0 so shape placement waits for the real ResizeObserver
@@ -651,11 +683,7 @@ function PlayFieldImpl({
         const effMax = maxAircraft != null ? maxAircraft : max
         spawnTimerRef.current -= dt
         if (spawnTimerRef.current <= 0 && aircraftRef.current.length < effMax) {
-          const sym = symbolsRef.current[symbolIdxRef.current % symbolsRef.current.length]
-          symbolIdxRef.current++
           const ac = spawnAircraft(w, h)
-          ac.symbol = sym
-          ac.symbolFlashAt = randRange(0, 14)
           // Tutorial: force the first aircraft to carry a ring so the "watch it,
           // then click the shape it touches" lesson is guaranteed to play out.
           if (tutorialHints && firstAcIdRef.current == null) {
@@ -663,8 +691,23 @@ function PlayFieldImpl({
             firstAcIdRef.current = ac.id
             setFirstAcId(ac.id)
           }
+          // The "monitor the callsign" tutorial step runs one aircraft at a time
+          // and must show a callsign — force a ring there too.
+          if (blinkSymbols) ac.hasCircle = true
+
+          // Callsigns belong to circled aircraft only: the ring marks the ones a
+          // callsign question can ask about. Uncircled aircraft carry no symbol,
+          // are never tracked, and never appear in a question. A fresh circled
+          // contact also fires the enter bleep during live play.
+          if (ac.hasCircle) {
+            const sym = symbolsRef.current[symbolIdxRef.current % symbolsRef.current.length]
+            symbolIdxRef.current++
+            ac.symbol = sym
+            ac.symbolFlashAt = randRange(0, 14)
+            onAircraftSpawn?.(sym)
+            if (gameCues) playFlagBleep('enter')
+          }
           aircraftRef.current = [...aircraftRef.current, ac]
-          onAircraftSpawn?.(sym)
           spawnTimerRef.current = randRange(spawn * 0.7, spawn * 1.3)
         } else if (spawnTimerRef.current <= 0) {
           // Cap reached — re-arm the timer with a short retry so we spawn
@@ -738,8 +781,8 @@ function PlayFieldImpl({
           else next.heading = 0
         }
 
-        // Symbol flash trigger
-        if (!next.flashTriggered && next.age >= next.symbolFlashAt) {
+        // Symbol flash trigger — only circled aircraft carry a symbol.
+        if (next.symbol && !next.flashTriggered && next.age >= next.symbolFlashAt) {
           next.flashTriggered = true
           next.symbolFlashEnd = nowSec + 5
           onAircraftSeen?.(next.symbol)
@@ -775,7 +818,11 @@ function PlayFieldImpl({
         const margin = 60
         const offScreen = next.x < -margin || next.x > w + margin || next.y < -margin || next.y > h + margin
         if ((offScreen || next.age >= acLifetime) && !pinFocus) {
-          onAircraftDespawn?.(next.symbol)
+          // Only circled aircraft are tracked / bleep — uncircled ones leave silently.
+          if (next.symbol) {
+            onAircraftDespawn?.(next.symbol)
+            if (gameCues) playFlagBleep('exit')
+          }
           continue
         }
         surviving.push(next)
@@ -918,7 +965,7 @@ function PlayFieldImpl({
 
     rafRef.current = requestAnimationFrame(tick)
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [active, fieldSize, gameTimeRef, onAircraftSpawn, onAircraftDespawn, onAircraftSeen, onScoreEvent, tutorialHints, onHotColorsChange, keepAircraftLonger, maxAircraft])
+  }, [active, fieldSize, gameTimeRef, onAircraftSpawn, onAircraftDespawn, onAircraftSeen, onScoreEvent, tutorialHints, onHotColorsChange, keepAircraftLonger, maxAircraft, blinkSymbols, gameCues])
 
   const flashShape = (shapeId, kind) => {
     const field = kind === 'green' ? 'flashGreen' : 'flashRed'
@@ -1070,6 +1117,7 @@ function PlayFieldImpl({
         fieldH={fieldSize.h}
         blinkSymbols={blinkSymbols}
         highlightSymbol={highlightSymbol}
+        exitCallsign={gameCues}
       />
 
       {tutorialHints && tutorialFocusOnly && firstAcId != null && (

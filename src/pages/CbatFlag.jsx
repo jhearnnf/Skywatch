@@ -147,7 +147,7 @@ function IntroScreen({ onStart, onTutorial, personalBest, aircraftList, aircraft
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
           <span className="text-brand-300 font-bold shrink-0">✈️</span>
-          <span>Monitor aircraft symbols — press YES/NO if the associated aircraft is currently on screen</span>
+          <span>Only ringed aircraft carry a callsign — press YES/NO on whether that callsign is currently on screen</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
           <span className="text-brand-300 font-bold shrink-0">🔢</span>
@@ -220,9 +220,10 @@ const FLAG_TUTORIAL_STEPS = [
     title: 'Monitor the aircraft',
     body: (
       <>
-        An aircraft's two-letter <b className="text-brand-300">callsign</b> only flashes on for a
-        moment, then hides — so you have to <b className="text-brand-300">remember it</b>. Watch this
-        one blink on and off. When a callsign shows in the prompt below, press{' '}
+        Only aircraft inside a <b className="text-brand-300">white ring</b> carry a{' '}
+        <b className="text-brand-300">callsign</b>, and it only flashes on for a moment before it
+        hides — so you have to <b className="text-brand-300">remember it</b>. Watch this one blink on
+        and off. When a callsign shows in the prompt below, press{' '}
         <b className="text-brand-300">YES</b> if it's the one on screen, or{' '}
         <b className="text-brand-300">NO</b> if it isn't. Answer two correctly to continue.
       </>
@@ -1131,6 +1132,7 @@ export default function CbatFlag() {
                       onAircraftSeen={handleAircraftSeen}
                       onAircraftSpawn={handleAircraftSpawn}
                       onAircraftDespawn={handleAircraftDespawn}
+                      gameCues
                       active={phase === 'playing'}
                     />
                   </div>

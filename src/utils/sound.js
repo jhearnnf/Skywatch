@@ -335,6 +335,33 @@ function masterVol(vol) {
   return vol * (getMasterVolume() / 100)
 }
 
+// ── FLAG (CBAT) contact bleep ────────────────────────────────────────────────
+// Short synthesised blip fired when a circled ("callsign") aircraft enters or
+// leaves the FLAG play field. No asset file — mirrors the grid-reveal/ACT-bleep
+// synthesis approach. Entry is a higher tone, exit a lower one, so the ear can
+// tell a fresh contact from a departing one. Respects master volume; these
+// events are naturally sparse so no concurrency cap is needed.
+export function playFlagBleep(kind = 'enter') {
+  const vol = masterVol(0.28)
+  if (vol <= 0) return
+  const freq = kind === 'exit' ? 440 : 760
+  getRunningAudioCtx().then(ctx => {
+    try {
+      const now = ctx.currentTime
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, now)
+      gain.gain.setValueAtTime(0.0001, now)
+      gain.gain.exponentialRampToValueAtTime(vol, now + 0.012)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15)
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(now)
+      osc.stop(now + 0.17)
+    } catch {}
+  })
+}
+
 // Synchronous read of the CBAT menu-music admin setting from the settings cache.
 // Returns { volume: 0..1, enabled }. Falls back to full-volume/enabled until the
 // settings fetch has warmed the cache (matches how other sounds behave on a
