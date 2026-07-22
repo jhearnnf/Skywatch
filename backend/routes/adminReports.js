@@ -497,7 +497,18 @@ router.get('/cbat', async (req, res) => {
     // so the tutorial series shows on the chart (greyed in the legend client-side).
     const gameKeys = games.map(g => g.key);
     const stackedKeys = [...gameKeys, ...tutorials.map(t => t.key)];
-    const stackedDaily = emptyDailyBuckets(wStart, now, stackedKeys);
+    // All-time: clamp the bucket start to the first day with real activity, so the
+    // chart isn't a ~55-year empty span (windowStart('all') is the epoch) that
+    // squashes the real bars into an invisible sliver at the right edge.
+    let bucketStart = wStart;
+    if (window === 'all') {
+      const allDates = [
+        ...games.flatMap(g => [...g.sessionsByDay.keys()]),
+        ...tutorials.flatMap(t => [...t.sessionsByDay.keys()]),
+      ].sort();
+      bucketStart = allDates.length ? new Date(`${allDates[0]}T00:00:00Z`) : now;
+    }
+    const stackedDaily = emptyDailyBuckets(bucketStart, now, stackedKeys);
     for (const g of games) {
       for (const row of stackedDaily) {
         row[g.key] = g.sessionsByDay.get(row.date) ?? 0;
