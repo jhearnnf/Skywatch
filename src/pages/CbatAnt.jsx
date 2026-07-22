@@ -11,6 +11,7 @@ import {
   buildRound,
   scoreAnswer,
   gradeForScore,
+  roundHalfUp,
   formatHHMM,
   ANT_NODES,
   ANT_EDGES,
@@ -29,7 +30,7 @@ const IS_TOUCH = typeof window !== 'undefined'
   && window.matchMedia('(hover: none) and (pointer: coarse)').matches
 
 // ── Map ───────────────────────────────────────────────────────────────────────
-function JourneyMap({ round }) {
+function JourneyMap({ round, pillAnchor }) {
   const activeEdges = new Set([
     [round.start, round.via].sort().join('-'),
     [round.via, round.destination].sort().join('-'),
@@ -57,8 +58,8 @@ function JourneyMap({ round }) {
       {/* Distance labels — only on active segments */}
       {round.show.segments && (
         <>
-          <DistanceLabel a={round.start} b={round.via} miles={round.seg1} />
-          <DistanceLabel a={round.via} b={round.destination} miles={round.seg2} />
+          <DistanceLabel a={round.start} b={round.via} miles={round.seg1} anchor={pillAnchor} />
+          <DistanceLabel a={round.via} b={round.destination} miles={round.seg2} anchor={pillAnchor} />
         </>
       )}
 
@@ -110,14 +111,14 @@ function JourneyMap({ round }) {
   )
 }
 
-function DistanceLabel({ a, b, miles }) {
+function DistanceLabel({ a, b, miles, anchor }) {
   const pa = ANT_NODE_POS[a]
   const pb = ANT_NODE_POS[b]
   const mx = (pa.x + pb.x) / 2
   const my = (pa.y + pb.y) / 2
   return (
     <g>
-      <rect x={mx - 31} y={my - 16} width={62} height={32} rx={5} fill="#0a1628" stroke="#5baaff" strokeWidth={1.5} />
+      <rect x={mx - 31} y={my - 16} width={62} height={32} rx={5} fill="#0a1628" stroke="#5baaff" strokeWidth={1.5} data-anchor={anchor || undefined} />
       <text x={mx} y={my + 9} textAnchor="middle" fontSize="26" fontFamily="monospace" fill="#5baaff" fontWeight="bold">
         {miles}
       </text>
@@ -126,7 +127,7 @@ function DistanceLabel({ a, b, miles }) {
 }
 
 // ── Weight reference table ────────────────────────────────────────────────────
-function WeightTable({ currentWeight }) {
+function WeightTable({ currentWeight, flashActive = false, cueAnchors = false }) {
   return (
     <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg overflow-hidden">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide px-2 py-1 border-b border-[#1a3a5c] bg-[#0a1628]">
@@ -144,10 +145,10 @@ function WeightTable({ currentWeight }) {
           {WEIGHT_TABLE.map(row => {
             const active = row.weight === currentWeight
             return (
-              <tr key={row.weight} className={active ? 'bg-[#102040] text-brand-300 font-bold' : 'text-[#ddeaf8]'}>
+              <tr key={row.weight} className={active ? `bg-[#102040] text-brand-300 font-bold${flashActive ? ' cbat-cell-flash' : ''}` : 'text-[#ddeaf8]'}>
                 <td className="px-2 py-0.5">{row.weight}</td>
-                <td className="px-2 py-0.5 text-right">{row.mpm}</td>
-                <td className="px-2 py-0.5 text-right">{row.gph}</td>
+                <td className="px-2 py-0.5 text-right" data-anchor={cueAnchors && active ? 'mpm' : undefined}>{row.mpm}</td>
+                <td className="px-2 py-0.5 text-right" data-anchor={cueAnchors && active ? 'gph' : undefined}>{row.gph}</td>
               </tr>
             )
           })}
@@ -158,7 +159,7 @@ function WeightTable({ currentWeight }) {
 }
 
 // ── Data table ────────────────────────────────────────────────────────────────
-function DataTable({ round }) {
+function DataTable({ round, flashWeight = false, cueAnchors = false }) {
   const hasParcel = round.show.parcel
   return (
     <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg overflow-hidden">
@@ -184,17 +185,21 @@ function DataTable({ round }) {
             <td className="px-2 py-2">{round.start}</td>
             <td className="px-2 py-2">{round.via}</td>
             <td className="px-2 py-2">{round.destination}</td>
-            <td className="px-2 py-2 border-l border-[#1a3a5c]">
+            <td className="px-2 py-2 border-l border-[#1a3a5c]" data-anchor={cueAnchors && round.show.timeNow ? 'now' : undefined}>
               {round.show.timeNow ? formatHHMM(round.timeNowMin) : <span className="text-amber-400">?</span>}
             </td>
-            <td className="px-2 py-2">
+            <td className="px-2 py-2" data-anchor={cueAnchors && round.show.arrivalTime ? 'arrive' : undefined}>
               {round.show.arrivalTime ? formatHHMM(round.arrivalMin) : <span className="text-amber-400">?</span>}
             </td>
             <td className="px-2 py-2 border-l border-[#1a3a5c]">
               {hasParcel ? 'Y' : 'N'}
             </td>
-            <td className="px-2 py-2">
-              {hasParcel && round.show.weight ? round.weight : <span className="text-slate-600">—</span>}
+            <td className="px-2 py-2" data-anchor={cueAnchors && hasParcel && round.show.weight ? 'weightkg' : undefined}>
+              {hasParcel && round.show.weight
+                ? (flashWeight
+                    ? <span className="cbat-cell-flash inline-block px-1.5 font-bold text-brand-300">{round.weight}</span>
+                    : round.weight)
+                : <span className="text-slate-600">—</span>}
             </td>
           </tr>
         </tbody>
@@ -265,18 +270,514 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
   )
 }
 
+// ── Tutorial / practice mode ──────────────────────────────────────────────────
+// Progressive walkthrough modelled on the CBAT Target practice mode: a coach card
+// with prev/next navigation sits above a fixed practice arena that mirrors the
+// live layout. Each step lights only the panels it's teaching and dims/locks the
+// rest. The two orientation steps advance via a Next button; the four solve steps
+// grade the typed answer (via the live scoreAnswer) and auto-advance on a match.
+//
+// One fixed journey underlies every step so the coaching copy always matches the
+// on-screen numbers: Tango → Victor → Romeo, 60 + 60 miles, 200 kg parcel
+// (6 mi/min, 5 gal/hr), depart 1000 arrive 1020 (20-minute flight).
+const TUT_BASE = {
+  start: 'Tango', via: 'Victor', destination: 'Romeo',
+  seg1: 60, seg2: 60, totalDistance: 120,
+  weight: 200, mpm: 6, gph: 5,
+  timeNowMin: 600, arrivalMin: 620,
+}
+const TUT_FULL_SHOW = { segments: true, timeNow: true, arrivalTime: true, weight: true, parcel: true }
+const TUT_TRAVEL = TUT_BASE.arrivalMin - TUT_BASE.timeNowMin // 20 minutes
+
+// Derive a solve round for one question type, hiding the same fields the live
+// buildRound() hides so the practice picture matches the real game exactly.
+function tutorialRound(type) {
+  const show = { ...TUT_FULL_SHOW }
+  let correctAnswer = 0
+  if (type === 'arrival') {
+    correctAnswer = TUT_BASE.arrivalMin
+    show.arrivalTime = false
+  } else if (type === 'distance') {
+    correctAnswer = TUT_TRAVEL * TUT_BASE.mpm
+    show.segments = false
+  } else if (type === 'fuel') {
+    correctAnswer = roundHalfUp((TUT_TRAVEL / 60) * TUT_BASE.gph)
+  } else if (type === 'speed') {
+    correctAnswer = roundHalfUp((TUT_BASE.totalDistance * 60) / TUT_TRAVEL)
+    show.weight = false
+    show.parcel = false
+  }
+  return { ...TUT_BASE, type, correctAnswer, show }
+}
+// A fully-revealed round for the reading steps (nothing hidden).
+const TUT_READING_ROUND = { ...TUT_BASE, type: 'speed', correctAnswer: 0, show: { ...TUT_FULL_SHOW } }
+
+const ALL_PANELS = { map: true, data: true, solve: true, weight: true, answer: true }
+
+// A number in the coaching copy that a connector line links to its on-screen
+// source. `id` must match a `data-anchor` stamped on the panel value it comes
+// from; the overlay draws a line only when a matching visible anchor exists.
+function Cue({ id, children }) {
+  return <b data-cue={id} className="cbat-cue text-brand-300 font-bold">{children}</b>
+}
+
+const ANT_TUTORIAL_STEPS = [
+  {
+    enabled: { map: true },
+    focus: ['map'],
+    title: 'Read the route',
+    body: (
+      <>
+        Every round you fly a parcel across the network. The <b className="text-green-400">green</b> node
+        is your <b className="text-brand-300">start</b>, the <b className="text-amber-400">amber</b> node is
+        the <b className="text-brand-300">via</b> point you route through, and the <b className="text-red-400">red</b> node
+        is the <b className="text-brand-300">destination</b>. The two active legs are drawn in blue, each with
+        a <b className="text-brand-300">distance pill</b> — here 60 and 60, so the whole trip is 120 miles.
+      </>
+    ),
+  },
+  {
+    enabled: { map: true, data: true, weight: true },
+    focus: ['data', 'weight'],
+    dim: ['map'],
+    flashParcel: true,
+    title: 'Read the flight data',
+    body: (
+      <>
+        The <b className="text-brand-300">Journey</b> columns repeat the route. <b className="text-brand-300">Timings</b> give
+        the current time (<b className="text-brand-300">Now</b>) and <b className="text-brand-300">Arrive</b> time in 24-hour
+        HHMM. <b className="text-brand-300">Parcel</b> shows its weight in kg — and that weight sets your pace.
+        Read it off the <b className="text-brand-300">Weight Reference</b>: 200 kg means <b className="text-brand-300">6 miles/min</b> and{' '}
+        <b className="text-brand-300">5 gal/hr</b> (the matching row is highlighted).
+      </>
+    ),
+  },
+  {
+    solve: 'arrival',
+    enabled: ALL_PANELS,
+    focus: ['solve', 'answer'],
+    title: 'Solve: Arrival Time',
+    body: (
+      <>
+        Find the <b className="text-brand-300">Arrival Time</b>. First the flight time: distance ÷ speed ={' '}
+        <Cue id="distance">120</Cue> ÷ <Cue id="mpm">6</Cue> = 20 min. Add that to <b className="text-brand-300">Now</b>{' '}
+        (<Cue id="now">1000</Cue>) and enter the result as <b className="text-brand-300">HHMM</b>.
+      </>
+    ),
+  },
+  {
+    solve: 'distance',
+    enabled: ALL_PANELS,
+    focus: ['solve', 'answer'],
+    title: 'Solve: Total Distance',
+    body: (
+      <>
+        The leg distances are <b className="text-amber-400">hidden</b> this time — work back from the clock.
+        Flight time = Arrive − Now = <Cue id="arrive">1020</Cue> − <Cue id="now">1000</Cue> = 20 min. Distance ={' '}
+        flight time × speed = 20 × <Cue id="mpm">6</Cue>. Enter it in <b className="text-brand-300">miles</b>.
+      </>
+    ),
+  },
+  {
+    solve: 'fuel',
+    enabled: ALL_PANELS,
+    focus: ['solve', 'answer'],
+    title: 'Solve: Fuel',
+    body: (
+      <>
+        Fuel burn uses <b className="text-brand-300">gal/hr</b>, not miles. <Cue id="weightkg">200</Cue> kg burns{' '}
+        <Cue id="gph">5</Cue> gal/hr, and you fly for 20 min = <b className="text-brand-300">20 ÷ 60 hr</b>. Fuel =
+        5 × (20 ÷ 60) = 1.67 → <b className="text-brand-300">round half-up</b> to the nearest whole{' '}
+        <b className="text-brand-300">gallon</b>.
+      </>
+    ),
+  },
+  {
+    solve: 'speed',
+    enabled: ALL_PANELS,
+    focus: ['solve', 'answer'],
+    title: 'Solve: Speed',
+    body: (
+      <>
+        No parcel this round, so no weight table — you're given the distances instead. Speed ={' '}
+        total distance × 60 ÷ flight-time minutes. Total = 60 + 60 = <Cue id="distance">120</Cue>,
+        flight time = <b className="text-brand-300">20 min</b>. Enter the speed in <b className="text-brand-300">mph</b>.
+      </>
+    ),
+  },
+]
+
+// Per-playthrough id for tutorial usage tracking; the backend dedupes on it.
+function makeTutorialRunId() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  } catch { /* fall through */ }
+  return `tut_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+function LockedPanel({ label, className = '' }) {
+  return (
+    <div className={`cbat-tutorial-disabled w-full h-full bg-[#0a1628] border border-[#15293f] rounded-lg flex items-center justify-center select-none ${className}`}>
+      <span className="text-[10px] uppercase tracking-wide text-slate-600 flex items-center gap-1">
+        {'\u{1F512}'} {label}
+      </span>
+    </div>
+  )
+}
+
+function TutorialComplete({ onExit }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+    >
+      <p className="text-5xl mb-3">✅</p>
+      <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
+      <p className="text-sm text-slate-400 mb-6">You've got the four calculations down — now try it for real.</p>
+      <button
+        onClick={onExit}
+        className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+      >
+        Back to Instructions
+      </button>
+    </motion.div>
+  )
+}
+
+function AntTutorial({ onExit, onProgress }) {
+  const [stepIdx, setStepIdx] = useState(0)
+  const [done, setDone] = useState(false)
+  const [runId] = useState(makeTutorialRunId)
+  const [answerInput, setAnswerInput] = useState('')
+  const [flash, setFlash] = useState(null) // 'ok' | 'miss' | null
+  const inputRef = useRef(null)
+
+  // Connector overlay — draws a line from each instruction number (a [data-cue])
+  // to its on-screen source (a matching [data-anchor]). Recomputed on step change
+  // and on resize once the layout settles.
+  const containerRef = useRef(null)
+  const [links, setLinks] = useState([])
+  const [overlaySize, setOverlaySize] = useState({ w: 0, h: 0 })
+  const measureLinks = useCallback(() => {
+    const root = containerRef.current
+    if (!root) return
+    const base = root.getBoundingClientRect()
+    const out = []
+    root.querySelectorAll('[data-cue]').forEach(cueEl => {
+      const id = cueEl.getAttribute('data-cue')
+      const anchors = root.querySelectorAll(`[data-anchor="${id}"]`)
+      if (!anchors.length) return
+      const cr = cueEl.getBoundingClientRect()
+      const cx = cr.left + cr.width / 2 - base.left
+      const cy = cr.bottom - base.top
+      anchors.forEach((aEl, i) => {
+        const ar = aEl.getBoundingClientRect()
+        if (ar.width === 0 && ar.height === 0) return
+        // Target box (relative to container), padded so the arrow stops just
+        // outside the digits rather than landing on top of them.
+        const pad = 4
+        const rx = ar.left - base.left
+        const ry = ar.top - base.top
+        const ax = rx + ar.width / 2
+        const ay = ry + ar.height / 2
+        const hw = ar.width / 2 + pad
+        const hh = ar.height / 2 + pad
+        // Walk back from the box centre toward the cue until we hit the padded
+        // boundary — that intersection is where the arrowhead lands.
+        const dx = cx - ax
+        const dy = cy - ay
+        const t = Math.min(hw / (Math.abs(dx) || 1e-3), hh / (Math.abs(dy) || 1e-3))
+        out.push({
+          key: `${id}-${i}`,
+          x1: cx, y1: cy,
+          x2: ax + dx * t, y2: ay + dy * t,
+          box: { x: rx - pad, y: ry - pad, w: ar.width + 2 * pad, h: ar.height + 2 * pad },
+        })
+      })
+    })
+    setOverlaySize({ w: base.width, h: base.height })
+    setLinks(out)
+  }, [])
+
+  // Report tutorial usage for the admin Reports per-step drop-off funnel. Fires on
+  // entry and on every section change (forward, backward, or completion).
+  useEffect(() => {
+    onProgress?.({ clientRunId: runId, furthestStep: stepIdx, totalSteps: ANT_TUTORIAL_STEPS.length, completed: false })
+  }, [stepIdx, runId, onProgress])
+  useEffect(() => {
+    if (done) onProgress?.({ clientRunId: runId, furthestStep: ANT_TUTORIAL_STEPS.length - 1, totalSteps: ANT_TUTORIAL_STEPS.length, completed: true })
+  }, [done, runId, onProgress])
+
+  const step = ANT_TUTORIAL_STEPS[stepIdx]
+  const enabled = step.enabled
+  const isSolve = !!step.solve
+  const round = isSolve ? tutorialRound(step.solve) : TUT_READING_ROUND
+
+  // Fresh input each time the section changes; focus it on solve steps (desktop).
+  useEffect(() => {
+    setAnswerInput('')
+    setFlash(null)
+    if (isSolve && !IS_TOUCH) setTimeout(() => inputRef.current?.focus(), 50)
+  }, [stepIdx, isSolve])
+
+  // Remeasure connectors after the section copy has settled (it animates in over
+  // ~0.2s), and whenever the viewport resizes.
+  useEffect(() => {
+    setLinks([])
+    const raf = requestAnimationFrame(measureLinks)
+    const t = setTimeout(measureLinks, 340)
+    return () => { cancelAnimationFrame(raf); clearTimeout(t) }
+  }, [stepIdx, measureLinks])
+  useEffect(() => {
+    const onResize = () => measureLinks()
+    window.addEventListener('resize', onResize)
+    let ro
+    if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(onResize)
+      ro.observe(containerRef.current)
+    }
+    return () => { window.removeEventListener('resize', onResize); ro?.disconnect() }
+  }, [measureLinks])
+
+  const focusSet = new Set(step.focus || [])
+  const dimSet = new Set(step.dim || [])
+  const pulse = (p) => (focusSet.has(p) ? ' cbat-tutorial-pulse' : '')
+  const dim = (p) => (dimSet.has(p) ? ' cbat-tutorial-dim' : '')
+
+  const advance = () => {
+    if (stepIdx < ANT_TUTORIAL_STEPS.length - 1) setStepIdx(stepIdx + 1)
+    else setDone(true)
+  }
+  const goToStep = (i) => { if (i >= 0 && i < ANT_TUTORIAL_STEPS.length) setStepIdx(i) }
+
+  const submitAnswer = () => {
+    if (!isSolve) return
+    const res = scoreAnswer(round, answerInput)
+    if (res.exact || res.partial) {
+      setFlash('ok')
+      setTimeout(advance, 550)
+    } else {
+      // Leave the miss message up until the user edits the answer (cleared in the
+      // input's onChange) rather than on a timer, so it doesn't vanish instantly.
+      setFlash('miss')
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="flex flex-col items-center">
+        <TutorialComplete onExit={onExit} />
+      </div>
+    )
+  }
+
+  return (
+    <div ref={containerRef} className="relative w-full max-w-5xl">
+      {/* Connector overlay — instruction numbers → their on-screen sources */}
+      {links.length > 0 && (
+        <svg
+          width={overlaySize.w}
+          height={overlaySize.h}
+          className="absolute inset-0 pointer-events-none"
+          style={{ zIndex: 40, overflow: 'visible' }}
+          aria-hidden
+        >
+          <defs>
+            <marker id="cbatCueHead" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+              <path d="M0,0 L7,4.5 L0,9 Z" fill="#5baaff" />
+            </marker>
+          </defs>
+          {links.map(l => {
+            const dy = l.y2 - l.y1
+            const d = `M${l.x1},${l.y1} C ${l.x1},${l.y1 + dy * 0.45} ${l.x2},${l.y2 - dy * 0.45} ${l.x2},${l.y2}`
+            return (
+              <g key={l.key}>
+                <rect
+                  x={l.box.x} y={l.box.y} width={l.box.w} height={l.box.h} rx={4}
+                  className="cbat-cue-target"
+                />
+                <path d={d} className="cbat-cue-line" markerEnd="url(#cbatCueHead)" />
+              </g>
+            )
+          })}
+        </svg>
+      )}
+
+      {/* Coach card */}
+      <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] uppercase tracking-wide text-brand-300 font-bold">Practice Mode</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => goToStep(stepIdx - 1)}
+              disabled={stepIdx === 0}
+              aria-label="Previous section"
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+            >
+              {'‹'}
+            </button>
+            <span className="text-[10px] text-slate-500 tabular-nums">{stepIdx + 1} / {ANT_TUTORIAL_STEPS.length}</span>
+            <button
+              onClick={() => goToStep(stepIdx + 1)}
+              disabled={stepIdx === ANT_TUTORIAL_STEPS.length - 1}
+              aria-label="Next section"
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+            >
+              {'›'}
+            </button>
+          </div>
+        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={stepIdx}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+          >
+            <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
+            <p className="text-sm text-[#ddeaf8] leading-relaxed">{step.body}</p>
+          </motion.div>
+        </AnimatePresence>
+        <div className="mt-4">
+          <button onClick={onExit} className="text-xs text-slate-500 hover:text-slate-300 transition-colors bg-transparent border-0 cursor-pointer">
+            Exit practice
+          </button>
+        </div>
+      </div>
+
+      {/* Practice arena — mirrors the live playing layout; locked panels greyed out */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        {/* Left column — map */}
+        <div className={`md:col-span-2 bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 flex flex-col md:min-h-0${pulse('map')}${dim('map')}`}>
+          {enabled.map ? (
+            <>
+              <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Map</p>
+              <JourneyMap round={round} pillAnchor="distance" />
+              {!round.show.segments && (
+                <p className="text-[10px] text-amber-400 text-center mt-2">Distances hidden — compute total distance</p>
+              )}
+            </>
+          ) : (
+            <LockedPanel label="Map" className="min-h-[220px] md:min-h-[300px]" />
+          )}
+        </div>
+
+        {/* Right column — data + tables + answer */}
+        <div className="md:col-span-3 flex flex-col gap-3">
+          <div className={`${pulse('data').trim()}${dim('data')}`.trim()}>
+            {enabled.data ? <DataTable round={round} flashWeight={!!step.flashParcel} cueAnchors={isSolve} /> : <LockedPanel label="Journey Data" className="min-h-[72px]" />}
+          </div>
+
+          {/* Ask */}
+          <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3${pulse('solve')}${dim('solve')}`}>
+            {enabled.solve ? (
+              <>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Solve For</p>
+                <p className="text-lg font-bold text-brand-300">
+                  {QUESTION_META[round.type].label}
+                  <span className="text-xs text-slate-500 font-mono font-normal ml-2">
+                    ({QUESTION_META[round.type].unit})
+                  </span>
+                </p>
+              </>
+            ) : (
+              <LockedPanel label="Solve For" className="min-h-[40px]" />
+            )}
+          </div>
+
+          <div className={`${pulse('weight').trim()}${dim('weight')}`.trim()}>
+            {enabled.weight
+              ? <WeightTable currentWeight={round.show.weight ? round.weight : null} flashActive={!!step.flashParcel} cueAnchors={isSolve} />
+              : <LockedPanel label="Weight Reference" className="min-h-[120px]" />}
+          </div>
+
+          {/* Answer */}
+          <div className={`${pulse('answer').trim()}${dim('answer')}`.trim()}>
+            {enabled.answer ? (
+              <div className={`bg-[#0a1628] border rounded-xl p-3 transition-colors ${
+                flash === 'ok' ? 'border-green-500 bg-green-500/10'
+                : flash === 'miss' ? 'border-red-500'
+                : 'border-[#1a3a5c]'
+              }`}>
+                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Answer</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    inputMode="numeric"
+                    value={answerInput}
+                    onChange={(e) => { setAnswerInput(e.target.value); if (flash === 'miss') setFlash(null) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') submitAnswer() }}
+                    placeholder={QUESTION_META[round.type].unit}
+                    className="flex-1 min-w-0 bg-[#060e1a] border border-[#1a3a5c] rounded-lg px-3 py-2 text-white font-mono text-lg focus:outline-none focus:border-brand-400"
+                  />
+                  <button
+                    onClick={submitAnswer}
+                    className="shrink-0 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors cbat-btn-flash"
+                  >
+                    Submit
+                  </button>
+                </div>
+                {/* Fixed-height slot so feedback never reflows the grid (which
+                    would resize the map). */}
+                <div className="mt-2 min-h-[1.25rem] text-[11px] leading-tight">
+                  {flash === 'miss' && (
+                    <p className="text-red-400">Not quite — check the working above and try again.</p>
+                  )}
+                  {flash === 'ok' && (
+                    <p className="text-green-400">✓ Correct</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <LockedPanel label="Answer" className="min-h-[64px]" />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Reading steps advance with an explicit Next button; solve steps advance
+          automatically once the typed answer is correct. */}
+      {!isSolve && (
+        <div className="text-center mt-4">
+          <button
+            onClick={advance}
+            className="px-8 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function CbatAnt() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
-  const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
+  const [phase, setPhase] = useState('intro') // intro | tutorial | playing | feedback | results
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
-    if (phase === 'playing' || phase === 'feedback') enterImmersive()
+    // Hide the nav chrome during the live game and the practice tutorial.
+    if (phase === 'playing' || phase === 'feedback' || phase === 'tutorial') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
+
+  // Fire-and-forget tutorial usage tracking (admin Reports per-step drop-off).
+  // Online-only by design — a learning aid, not a score, so no offline outbox.
+  const reportTutorialProgress = useCallback((body) => {
+    if (!user) return
+    apiFetch(`${API}/api/games/cbat/ant/tutorial`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})
+  }, [user, apiFetch, API])
   const [round, setRound] = useState(null)
   const [answers, setAnswers] = useState([])
   const [roundIndex, setRoundIndex] = useState(0)
@@ -536,13 +1037,26 @@ export default function CbatAnt() {
                 </Link>
               </div>
 
-              <button
-                onClick={startGame}
-                className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
-              >
-                Start
-              </button>
+              <div className="flex flex-wrap gap-3 justify-center">
+                <button
+                  onClick={() => setPhase('tutorial')}
+                  className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm cursor-pointer"
+                >
+                  Tutorial
+                </button>
+                <button
+                  onClick={startGame}
+                  className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+                >
+                  Start
+                </button>
+              </div>
             </motion.div>
+          )}
+
+          {/* Tutorial / practice mode */}
+          {phase === 'tutorial' && (
+            <AntTutorial onExit={() => setPhase('intro')} onProgress={reportTutorialProgress} />
           )}
 
           {/* Playing / Feedback */}

@@ -1312,6 +1312,57 @@ body.play-mode .card-shadow {
   border-radius: 4px;
 }
 
+/* Rapid triple background-pulse used to call out a specific table row / value
+   (e.g. the active parcel-weight row in the ANT tutorial) — three quick tint
+   pulses, then a rest, looping. Background-only so it works on table rows and
+   keeps the text legible, unlike the scaling cbat-triple-pulse. */
+@keyframes cbatCellFlash {
+  0%, 12%, 24%, 36%, 100% { background-color: rgba(91, 170, 255, 0.10); }
+  6%, 18%, 30%            { background-color: rgba(91, 170, 255, 0.48); }
+}
+.cbat-cell-flash {
+  animation: cbatCellFlash 2.2s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+/* Connector lines in the ANT tutorial linking an instruction number (a "cue")
+   to where that value comes from on screen. Marching-ants flow points from the
+   number toward its source; a pulsing dot marks the source. */
+@keyframes cbatCueFlow  { to { stroke-dashoffset: -24; } }
+@keyframes cbatCueFade  { from { opacity: 0; } to { opacity: 0.95; } }
+.cbat-cue-line {
+  fill: none;
+  stroke: #5baaff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 5 7;
+  filter: drop-shadow(0 0 3px rgba(91, 170, 255, 0.7));
+  animation: cbatCueFlow 0.7s linear infinite, cbatCueFade 0.35s ease-out both;
+}
+/* Pulsing halo framing the source value a connector points at (never overlaps
+   the digits — the arrow stops at this box's edge). */
+@keyframes cbatCueTargetPulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.95; }
+}
+.cbat-cue-target {
+  fill: none;
+  stroke: #5baaff;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 4px rgba(91, 170, 255, 0.6));
+  animation: cbatCueTargetPulse 1.2s ease-in-out infinite;
+}
+/* The instruction number a connector originates from — a softly pulsing chip. */
+@keyframes cbatCuePulse {
+  0%, 100% { background-color: rgba(91, 170, 255, 0.12); box-shadow: 0 0 0 0 rgba(91, 170, 255, 0); }
+  50%      { background-color: rgba(91, 170, 255, 0.30); box-shadow: 0 0 8px 1px rgba(91, 170, 255, 0.45); }
+}
+.cbat-cue {
+  border-radius: 4px;
+  padding: 0 3px;
+  animation: cbatCuePulse 1.6s ease-in-out infinite;
+}
+
 /* Bouncing arrow pointing down at a scene target. left/top set inline; the
    class owns the transform so the centering offset survives the animation. */
 @keyframes cbatArrowBounce {
