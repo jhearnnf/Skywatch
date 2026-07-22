@@ -5,7 +5,7 @@ const ProblemReport = require('../models/ProblemReport');
 const AdminAction = require('../models/AdminAction');
 const EmailLog    = require('../models/EmailLog');
 const AppSettings = require('../models/AppSettings');
-const { sendWelcomeEmail, sendReportReplyEmail } = require('../utils/email');
+const { sendWelcomeEmail, sendReportReplyEmail, sendAdminComposedEmail } = require('../utils/email');
 const UserNotification = require('../models/UserNotification');
 const GameSessionQuizResult               = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt              = require('../models/GameSessionQuizAttempt');
@@ -1258,6 +1258,38 @@ router.patch('/users/:id/tester', async (req, res) => {
     res.json({ status: 'success', data: { isTester } });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/users/:id/email — send an admin-composed email to a user.
+// The admin has already reviewed/edited the draft and confirmed in the modal, so
+// the request itself is the confirmation. Fields are re-validated server-side and
+// the send is awaited so a Resend failure returns a real error to the admin.
+router.post('/users/:id/email', async (req, res) => {
+  try {
+    const { subject, heading, subtitle, body, ctaText, ctaUrl, footer, type } = req.body;
+
+    if (!subject?.trim() || !heading?.trim() || !body?.trim()) {
+      return res.status(400).json({ message: 'Subject, heading, and body are required.' });
+    }
+
+    const user = await User.findById(req.params.id).select('email');
+    if (!user)       return res.status(404).json({ message: 'User not found.' });
+    if (!user.email) return res.status(400).json({ message: 'This account has no email address on file.' });
+
+    await sendAdminComposedEmail({
+      email:   user.email,
+      subject: subject.trim(),
+      heading: heading.trim(),
+      subtitle: subtitle?.trim() || '',
+      body,
+      ctaText, ctaUrl, footer, type,
+      userId:  user._id,
+    });
+
+    res.json({ status: 'success', data: { sentTo: user.email } });
+  } catch (err) {
+    res.status(502).json({ message: `Email could not be sent: ${err.message}` });
   }
 });
 

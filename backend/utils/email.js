@@ -1,6 +1,7 @@
 const { Resend }      = require('resend');
 const AppSettings     = require('../models/AppSettings');
 const EmailLog        = require('../models/EmailLog');
+const { EMAIL_TYPES } = require('../constants/emailLog');
 const { buildEmailHTML } = require('./emailTemplate');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -146,4 +147,60 @@ async function sendReportReplyEmail({ email, agentNumber, pageReported, replyMes
   }
 }
 
-module.exports = { sendWelcomeEmail, sendConfirmationEmail, sendPasswordResetEmail, sendReportReplyEmail };
+// Admin-composed email — sent from the Admin ▸ Users panel. The admin picks a
+// draft (e.g. the Android testing invite), tweaks the fields, and confirms.
+// Content is arbitrary admin-authored text, so the body is HTML-escaped and its
+// line breaks preserved before it goes into the shared "Classified Transmission"
+// shell. Errors are re-thrown so the route can surface a real failure to the admin.
+async function sendAdminComposedEmail({ email, subject, heading, subtitle = '', body, ctaText, ctaUrl, footer, type = 'app_invite', userId = null }) {
+  const appUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const safeType = EMAIL_TYPES.includes(type) ? type : 'app_invite';
+
+  // The CTA button renders inline at a {{button}} marker in the body, so the
+  // admin can place it right where it belongs (e.g. just below step 1) rather
+  // than always at the foot of the email. Built single-line so the newline pass
+  // below can't split it. Kept in sync with buildEmailPreviewHTML on the client.
+  const ctaLabel   = ctaText?.trim();
+  const ctaHref    = ctaUrl?.trim() || appUrl;
+  const buttonHtml = ctaLabel
+    ? `<a href="${ctaHref}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;padding:13px 30px;border-radius:6px;">${ctaLabel}</a>`
+    : '';
+
+  // Escape, auto-link any http(s) URLs the admin pasted (trailing sentence
+  // punctuation is left outside the link), drop in the CTA button, then turn
+  // blank lines into paragraphs and single newlines into <br> so the plain-text
+  // composition renders the way it was typed. Button placement and linking both
+  // happen before the newline pass so neither runs past a line break.
+  let bodyHtml = String(body ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/(https?:\/\/[^\s]+?)([.,!?;:]*)(?=\s|$)/g,
+      '<a href="$1" style="color:#1d4ed8;text-decoration:underline;">$1</a>$2');
+  if (buttonHtml && !bodyHtml.includes('{{button}}')) bodyHtml += '\n\n{{button}}';
+  bodyHtml = bodyHtml
+    .replace(/\{\{button\}\}/g, buttonHtml)
+    .replace(/\n{2,}/g, '</p><p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 20px;">')
+    .replace(/\n/g, '<br>');
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: email,
+      subject,
+      html: buildEmailHTML({
+        heading,
+        subtitle,
+        body: bodyHtml,
+        // CTA lives inline via the {{button}} marker above; no bottom button.
+        ctaText: '',
+        footer:  footer?.trim()  || DEFAULT_FOOTER,
+      }),
+    });
+    if (error) throw new Error(error.message);
+    logEmail({ type: safeType, recipientEmail: email, recipientUserId: userId, subject, status: 'sent', metadata: { adminComposed: true } });
+  } catch (err) {
+    logEmail({ type: safeType, recipientEmail: email, recipientUserId: userId, subject, status: 'failed', error: err.message, metadata: { adminComposed: true } });
+    throw err;
+  }
+}
+
+module.exports = { sendWelcomeEmail, sendConfirmationEmail, sendPasswordResetEmail, sendReportReplyEmail, sendAdminComposedEmail };

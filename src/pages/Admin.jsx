@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
+import { useSlimMode } from '../hooks/useSlimMode'
 import {
   invalidateSoundSettings,
   previewTypingSound,
@@ -3218,14 +3219,335 @@ function playedToday(ts) {
       && d.getDate()     === now.getDate()
 }
 
+// ── Admin email drafts ────────────────────────────────────────────────────────
+// Pre-written emails an admin can send to a user from the Users panel. Each draft
+// is a factory taking the target user so it can personalise the greeting, and
+// returns the editable field set. All fields remain editable in the modal before
+// the admin confirms the send. `enabled: false` drafts are listed but locked,
+// leaving room to switch more on later without touching the modal.
+const EMAIL_DRAFTS = [
+  {
+    id:      'android_test_invite',
+    label:   'Android Testing Invite',
+    enabled: true,
+    build:   (u) => {
+      const name = u.displayName?.trim() || `Agent ${u.agentNumber}`
+      return {
+        type:     'app_invite',
+        subject:  'You’re invited to test the SkyWatch Android app',
+        heading:  'Android Test Flight',
+        subtitle: `${name}, you’ve been selected.`,
+        body:
+`Hello ${name},
+
+You’ve been personally selected to join the closed testing programme for the new SkyWatch Android app. It puts your CBAT training in a dedicated app: a more focused and cohesive experience than the browser, one tap away on your home screen. Best of all, you can train offline with no signal needed, and your scores sync automatically the moment you’re back online.
+
+Getting set up takes three quick steps.
+
+1. Join our testers group. Tap the button below to join the SkyWatch App Testers Google Group. Your membership here is what unlocks the test build for your account.
+
+{{button}}
+
+2. Opt in to testing. Once you’ve joined the group, open this link on your Android device and accept the invitation:
+https://play.google.com/apps/testing/academy.skywatch.app
+
+3. Install the app. From that same link you’ll then be able to download SkyWatch from the Play Store. Sign in with this email and your progress carries straight over.
+
+One thing to note: there can be a short delay between opting in and the download becoming available, while Google propagates your access. If the install option isn’t there right away, please give it a little time and check back. It will appear.
+
+Testing is free and you can leave the programme at any time. Thank you for helping us get this right.
+
+Thanks,
+The SkyWatch Team`,
+        ctaText:  'Join the Testers Group',
+        ctaUrl:   'https://groups.google.com/g/skywatch-app-testers',
+        footer:   'SkyWatch, the Intelligence Study Platform for RAF Knowledge &amp; Aptitude.<br>You received this because you hold a SkyWatch account. Testing is optional.',
+      }
+    },
+  },
+  {
+    id:      'gold_granted',
+    label:   'Gold Granted',
+    enabled: true,
+    build:   (u) => {
+      const name = u.displayName?.trim() || `Agent ${u.agentNumber}`
+      return {
+        type:     'gold_granted',
+        subject:  'Your SkyWatch account has been upgraded to Gold',
+        heading:  'SkyWatch Gold, On Us',
+        subtitle: `${name}, your account has been upgraded.`,
+        body:
+`Hello ${name},
+
+We’ve upgraded your SkyWatch account to Gold, with our compliments. It’s active right now, with nothing to pay and nothing to set up.
+
+Gold opens up everything SkyWatch has to offer: the full intelligence briefing library, every CBAT training game, and the highest ammunition allowance so you can keep drilling your recall without running dry.
+
+Just sign in with this email and your new access will be waiting. Thank you for being part of SkyWatch.
+
+Thanks,
+The SkyWatch Team`,
+        ctaText:  '',
+        ctaUrl:   '',
+        footer:   'SkyWatch, the Intelligence Study Platform for RAF Knowledge &amp; Aptitude.<br>You received this because you hold a SkyWatch account.',
+      }
+    },
+  },
+]
+
+// The Users panel email composer always opens on this draft, whatever order the
+// list is in. Falls back to the first enabled draft if this id is ever removed.
+const DEFAULT_DRAFT_ID = 'android_test_invite'
+
+// Live client-side render of an admin-composed email, mirroring the backend
+// exactly: the body escaping / URL auto-linking / paragraph logic from
+// utils/email.js:sendAdminComposedEmail, wrapped in the same shell as
+// utils/emailTemplate.js:buildEmailHTML. Kept in lockstep with those two files so
+// the preview is what the recipient actually receives, not an approximation.
+const EMAIL_DEFAULT_FOOTER = 'SkyWatch — Intelligence Study Platform for RAF Knowledge &amp; Aptitude.<br>If you didn&apos;t create this account, you can safely ignore this email.'
+
+function formatEmailBody(body, buttonHtml) {
+  let out = String(body ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/(https?:\/\/[^\s]+?)([.,!?;:]*)(?=\s|$)/g,
+      '<a href="$1" style="color:#1d4ed8;text-decoration:underline;">$1</a>$2')
+  if (buttonHtml && !out.includes('{{button}}')) out += '\n\n{{button}}'
+  return out
+    .replace(/\{\{button\}\}/g, buttonHtml || '')
+    .replace(/\n{2,}/g, '</p><p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 20px;">')
+    .replace(/\n/g, '<br>')
+}
+
+function buildEmailPreviewHTML(fields) {
+  if (!fields) return ''
+  const heading  = fields.heading || ''
+  const subtitle = fields.subtitle || ''
+  const ctaLabel = fields.ctaText?.trim()
+  const ctaHref  = fields.ctaUrl?.trim() || '#'
+  const buttonHtml = ctaLabel
+    ? `<a href="${ctaHref}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;padding:13px 30px;border-radius:6px;">${ctaLabel}</a>`
+    : ''
+  const bodyHtml = formatEmailBody(fields.body, buttonHtml)
+  const footer   = fields.footer?.trim()  || EMAIL_DEFAULT_FOOTER
+
+  const subtitleHtml = subtitle
+    ? `\n          <p style="font-size:13px;color:#94a3b8;letter-spacing:0.04em;margin:0 0 28px;">\n            ${subtitle}\n          </p>`
+    : ''
+  const bodyBlock = bodyHtml
+    ? `\n          <p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 32px;">\n            ${bodyHtml}\n          </p>`
+    : ''
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f8ff;font-family:Arial,Helvetica,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8ff;padding:48px 20px;">
+    <tr><td align="center">
+      <table width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
+
+        <tr><td style="background:linear-gradient(90deg,#1d4ed8 0%,#3b82f6 100%);height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+        <tr><td style="padding:40px 36px;">
+
+          <p style="font-size:11px;font-weight:700;letter-spacing:0.22em;text-transform:uppercase;color:#1d4ed8;margin:0 0 24px;">
+            Classified Transmission
+          </p>
+
+          <h1 style="font-size:26px;font-weight:800;color:#0f172a;letter-spacing:-0.02em;margin:0 0 8px;line-height:1.2;">
+            ${heading}
+          </h1>${subtitleHtml}${bodyBlock}
+
+          <p style="font-size:11px;color:#94a3b8;margin:36px 0 0;padding-top:24px;border-top:1px solid #e2e8f0;line-height:1.6;">
+            ${footer}
+          </p>
+
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
+
+function EmailUserModal({ user, API, apiFetch, onClose, onSent, onError }) {
+  const enabledDrafts = EMAIL_DRAFTS.filter(d => d.enabled)
+  const defaultDraft  = enabledDrafts.find(d => d.id === DEFAULT_DRAFT_ID) ?? enabledDrafts[0]
+  const [draftId, setDraftId] = useState(defaultDraft?.id ?? null)
+  const [fields,  setFields]  = useState(() => defaultDraft?.build(user) ?? null)
+  const [busy,    setBusy]    = useState(false)
+
+  useEffect(() => {
+    const fn = (e) => { if (e.key === 'Escape' && !busy) onClose() }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  }, [onClose, busy])
+
+  const selectDraft = (d) => {
+    if (!d.enabled) return
+    setDraftId(d.id)
+    setFields(d.build(user)) // re-populates every field; admin edits happen after
+  }
+
+  const setField = (k, v) => setFields(prev => ({ ...prev, [k]: v }))
+
+  const canSend = fields && fields.subject?.trim() && fields.heading?.trim() && fields.body?.trim() && !busy
+
+  const send = async () => {
+    if (!canSend) return
+    setBusy(true)
+    try {
+      const res = await apiFetch(`${API}/api/admin/users/${user._id}/email`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.message || 'Send failed')
+      onSent(data.data?.sentTo || user.email)
+    } catch (err) {
+      onError(err.message || 'Email could not be sent')
+      setBusy(false)
+    }
+  }
+
+  const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400'
+
+  const previewHtml = useMemo(() => buildEmailPreviewHTML(fields), [fields])
+
+  return (
+    <Overlay zIndex={50} backdrop="rgba(15,23,42,0.60)" onDismiss={busy ? undefined : onClose} className="flex items-end sm:items-center justify-center p-4">
+      <div className="w-full max-w-5xl max-h-[90vh] flex flex-col lg:flex-row gap-4 overflow-y-auto lg:overflow-visible">
+      {/* Composer */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-surface rounded-2xl w-full lg:w-[26rem] lg:shrink-0 shadow-2xl lg:max-h-[90vh] min-h-0 flex flex-col overflow-hidden"
+      >
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 border-b border-slate-100">
+          <h3 className="text-base font-bold text-slate-900">Email User</h3>
+          <p className="text-sm text-slate-500 mt-0.5">
+            To <span className="font-semibold text-slate-700">{user.displayName || `Agent ${user.agentNumber}`}</span> · {user.email}
+          </p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            Sends from <span className="font-mono">noreply@skywatch.academy</span> in the standard SkyWatch email style.
+          </p>
+        </div>
+
+        {/* Draft picker */}
+        <div className="px-6 pt-4">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Draft</p>
+          <div className="flex flex-wrap gap-2">
+            {EMAIL_DRAFTS.map(d => (
+              <button
+                key={d.id}
+                onClick={() => selectDraft(d)}
+                disabled={!d.enabled || busy}
+                title={d.enabled ? `Load the ${d.label} draft` : 'Coming soon'}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+                  draftId === d.id
+                    ? 'bg-brand-600 border-brand-600 text-white'
+                    : d.enabled
+                      ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      : 'border-slate-100 text-slate-500/50 cursor-not-allowed'
+                }`}
+              >
+                {d.label}{!d.enabled && ' · soon'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Editable fields */}
+        {fields && (
+          <div className="px-6 py-4 space-y-3 flex-1 min-h-0 overflow-y-auto">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Subject</label>
+              <input value={fields.subject} onChange={e => setField('subject', e.target.value)} className={inputCls} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Heading</label>
+                <input value={fields.heading} onChange={e => setField('heading', e.target.value)} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Subtitle</label>
+                <input value={fields.subtitle} onChange={e => setField('subtitle', e.target.value)} className={inputCls} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Body</label>
+              <textarea
+                rows={9}
+                value={fields.body}
+                onChange={e => setField('body', e.target.value)}
+                className={`${inputCls} resize-y leading-relaxed`}
+              />
+              <p className="text-[10px] text-slate-400 mt-1">Blank lines become paragraphs. <code className="font-mono">{'{{button}}'}</code> marks where the button appears (omit it and the button drops to the bottom).</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Button text</label>
+                <input value={fields.ctaText} onChange={e => setField('ctaText', e.target.value)} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">Button link</label>
+                <input value={fields.ctaUrl} onChange={e => setField('ctaUrl', e.target.value)} className={inputCls} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div className="px-6 py-4 border-t border-slate-100 flex gap-2">
+          <button onClick={onClose} disabled={busy} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors disabled:opacity-40">
+            Cancel
+          </button>
+          <button
+            onClick={send}
+            disabled={!canSend}
+            className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold transition-colors disabled:opacity-40"
+          >
+            {busy ? 'Sending…' : 'Send Email'}
+          </button>
+        </div>
+      </motion.div>
+
+      {/* Live preview — the exact email the recipient will open */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-surface rounded-2xl w-full lg:flex-1 shadow-2xl lg:max-h-[90vh] min-h-0 flex flex-col overflow-hidden"
+      >
+        <div className="px-6 pt-6 pb-4 border-b border-slate-100 flex items-baseline justify-between">
+          <h3 className="text-base font-bold text-slate-900">Preview</h3>
+          <p className="text-[11px] text-slate-400">How it looks when opened</p>
+        </div>
+        <div className="flex-1 min-h-[55vh] lg:min-h-0 bg-[#f4f8ff]">
+          <iframe
+            title="Email preview"
+            aria-label="Email preview"
+            sandbox=""
+            srcDoc={previewHtml}
+            className="w-full h-full border-0"
+          />
+        </div>
+      </motion.div>
+      </div>
+    </Overlay>
+  )
+}
+
 function UsersTab({ API }) {
   const { user: currentUser, refreshUser, apiFetch } = useAuth()
   const navigate = useNavigate()
+  const slim = useSlimMode() // CBAT-only mode disables in-app messaging
   const [users,   setUsers]   = useState([])
   const [q,       setQ]       = useState('')
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState(false) // is in search mode
   const [modal,   setModal]   = useState(null)
+  const [emailModal, setEmailModal] = useState(null) // user object whose email composer is open
   const [toast,   setToast]   = useState('')
   const [resetPanel,  setResetPanel]  = useState(null) // user._id of open panel
   const [resetChecks, setResetChecks] = useState({})
@@ -3350,6 +3672,16 @@ function UsersTab({ API }) {
       {modal && (
         <ConfirmModal title={modal.label} danger={modal.label.toLowerCase().includes('ban') || modal.label.toLowerCase().includes('delete')}
           onConfirm={confirmAction} onCancel={() => setModal(null)} />
+      )}
+      {emailModal && (
+        <EmailUserModal
+          user={emailModal}
+          API={API}
+          apiFetch={apiFetch}
+          onClose={() => setEmailModal(null)}
+          onSent={(email) => { setEmailModal(null); setToast(`Email sent to ${email}`) }}
+          onError={(msg) => setToast(msg)}
+        />
       )}
 
       {/* Search */}
@@ -3645,22 +3977,41 @@ function UsersTab({ API }) {
                 </button>
               )}
               {u._id !== currentUser?._id && (
-                <button onClick={() => navigate(`/chat?userId=${u._id}`)}
-                  title="Open chat with this user"
-                  aria-label="Open chat with this user"
-                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-brand-200 text-brand-600 hover:bg-brand-50 transition-colors">
+                <button onClick={() => { if (!slim) navigate(`/chat?userId=${u._id}`) }}
+                  disabled={slim}
+                  title={slim ? 'Messaging is unavailable while CBAT slim mode is enabled' : 'Open chat with this user'}
+                  aria-label={slim ? 'Messaging unavailable in CBAT slim mode' : 'Open chat with this user'}
+                  className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${
+                    slim
+                      ? 'border-slate-100 text-slate-500/50 cursor-not-allowed'
+                      : 'border-brand-200 text-brand-600 hover:bg-brand-50'
+                  }`}>
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                   </svg>
                 </button>
               )}
-              <button onClick={() => { setAwardPanel(awardPanel === u._id ? null : u._id); setAwardAmount('') }}
-                title="Award Airstars"
-                aria-label="Award Airstars"
+              {u._id !== currentUser?._id && u.email && (
+                <button onClick={() => setEmailModal(u)}
+                  title="Email this user"
+                  aria-label="Email this user"
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-brand-200 text-brand-600 hover:bg-brand-50 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect width="20" height="16" x="2" y="4" rx="2" />
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                  </svg>
+                </button>
+              )}
+              <button onClick={() => { if (!slim) { setAwardPanel(awardPanel === u._id ? null : u._id); setAwardAmount('') } }}
+                disabled={slim}
+                title={slim ? 'Airstars are unused while CBAT slim mode is enabled' : 'Award Airstars'}
+                aria-label={slim ? 'Award Airstars unavailable in CBAT slim mode' : 'Award Airstars'}
                 className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${
-                  awardPanel === u._id
-                    ? 'border-amber-300 bg-amber-50'
-                    : 'border-amber-200 hover:bg-amber-50'
+                  slim
+                    ? 'border-slate-100 text-slate-500/50 cursor-not-allowed grayscale'
+                    : awardPanel === u._id
+                      ? 'border-amber-300 bg-amber-50'
+                      : 'border-amber-200 hover:bg-amber-50'
                 }`}>
                 <span className="star-silver text-base leading-none" aria-hidden="true">⭐</span>
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="absolute -top-1 -right-1 w-3.5 h-3.5 text-emerald-500 drop-shadow">

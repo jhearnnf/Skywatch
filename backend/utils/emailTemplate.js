@@ -16,6 +16,17 @@ function buildEmailHTML({ heading, subtitle = '', body = '', middle = '', ctaTex
           </p>`
     : '';
   const middleHtml = middle ? `\n          ${middle}` : '';
+  // The CTA is optional: admin-composed emails place their button inline within
+  // the body (via a {{button}} marker) and pass no ctaText, so nothing should
+  // render here. Transactional emails still pass ctaText and are unaffected.
+  const ctaHtml = ctaText
+    ? `\n          <a href="${ctaUrl}"
+             style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;
+                    font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;
+                    padding:13px 30px;border-radius:6px;">
+            ${ctaText}
+          </a>\n`
+    : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -34,14 +45,7 @@ function buildEmailHTML({ heading, subtitle = '', body = '', middle = '', ctaTex
 
           <h1 style="font-size:26px;font-weight:800;color:#0f172a;letter-spacing:-0.02em;margin:0 0 8px;line-height:1.2;">
             ${heading}
-          </h1>${subtitleHtml}${bodyHtml}${middleHtml}
-
-          <a href="${ctaUrl}"
-             style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;
-                    font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;
-                    padding:13px 30px;border-radius:6px;">
-            ${ctaText}
-          </a>
+          </h1>${subtitleHtml}${bodyHtml}${middleHtml}${ctaHtml}
 
           <p style="font-size:11px;color:#94a3b8;margin:36px 0 0;padding-top:24px;border-top:1px solid #e2e8f0;line-height:1.6;">
             ${footer}
