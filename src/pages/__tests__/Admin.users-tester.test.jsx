@@ -88,7 +88,11 @@ describe('Admin — Users tab: tester flag', () => {
     await navigateToUsers()
     await waitFor(() => screen.getByText('plain@test.com'))
 
-    // One row → one header tester checkbox
+    // Checkbox only appears once the row is expanded
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /expand agent 001/i }))
+
+    // One expanded row → one tester checkbox
     const checkbox = screen.getByRole('checkbox')
     expect(checkbox.checked).toBe(false)
     fireEvent.click(checkbox)

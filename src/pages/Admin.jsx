@@ -3742,7 +3742,7 @@ function UsersTab({ API }) {
                   className={`font-bold leading-tight tracking-tight text-center rounded-[3px] border transition-colors ${
                     isExpanded ? 'w-12 px-2 py-1 text-sm' : 'w-7 px-1 py-0.5 text-[9px]'
                   } ${
-                    usedAt ? os.usedCls : 'bg-surface-raised/50 border-slate-100 text-slate-500/40'
+                    usedAt ? os.usedCls : 'bg-surface-raised/50 border-slate-100 text-slate-500/15'
                   }`}
                 >
                   {os.abbr}
@@ -3778,8 +3778,8 @@ function UsersTab({ API }) {
                   return (
                     <p
                       title={`${PLATFORM_LABELS[client.platform] ?? client.platform} ${fmtBuild(client)} · last used ${fmtDateTime(client.lastSeenAt)}`}
-                      className={`text-[9px] font-bold uppercase tracking-[0.14em] mb-0.5 ${
-                        status === 'latest' ? 'text-emerald-700' : 'text-amber-700'
+                      className={`text-[8px] font-bold uppercase tracking-[0.14em] mb-0.5 ${
+                        status === 'latest' ? 'text-emerald-700/70' : 'text-amber-700/70'
                       }`}
                     >
                       {status === 'latest' ? 'Latest version' : 'Outdated version'}
@@ -3800,19 +3800,21 @@ function UsersTab({ API }) {
                   {u.displayName || `Agent ${u.agentNumber}`}
                   {u.isAdmin && <span className="ml-2 text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-bold">ADMIN</span>}
                   {u.isBanned && <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">BANNED</span>}
-                  <label
-                    className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 cursor-pointer select-none"
-                    title="Flag this account as a tester"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!u.isTester}
-                      onChange={e => toggleTester(u._id, e.target.checked)}
-                      className="accent-amber-500"
-                    />
-                    tester
-                  </label>
+                  {isExpanded && (
+                    <label
+                      className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 cursor-pointer select-none"
+                      title="Flag this account as a tester"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!u.isTester}
+                        onChange={e => toggleTester(u._id, e.target.checked)}
+                        className="accent-amber-500"
+                      />
+                      tester
+                    </label>
+                  )}
                 </p>
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>
