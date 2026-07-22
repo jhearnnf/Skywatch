@@ -5924,6 +5924,7 @@ router.get('/email-logs', async (req, res) => {
         .sort({ sentAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
+        .populate('recipientUserId', 'displayName agentNumber email')
         .lean(),
       EmailLog.countDocuments(filter),
     ]);

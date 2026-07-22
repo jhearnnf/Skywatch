@@ -3900,17 +3900,17 @@ function ProblemsTab({ API, onOpenBrief }) {
       {confirm && (
         <Overlay zIndex={50} backdrop="rgba(0,0,0,0.40)" className="flex items-center justify-center p-4">
           <div className="bg-surface rounded-2xl shadow-xl border border-slate-700 max-w-md w-full p-6 space-y-4">
-            <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider">Confirm — send to user</h3>
-            <p className="text-xs text-slate-400">
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Confirm — send to user</h3>
+            <p className="text-xs text-slate-600">
               The user will receive the following {confirm.sendEmail ? 'via email' : 'as an in-app notification'}:
             </p>
-            <div className="bg-surface-raised border-l-4 border-brand-600 rounded-r-xl p-3 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+            <div className="bg-surface-raised border-l-4 border-brand-600 rounded-r-xl p-3 text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
               {confirm.description}
             </div>
             <div className="flex gap-2 justify-end pt-1">
               <button
                 onClick={() => setConfirm(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-300 border border-slate-600 rounded-lg hover:bg-surface-raised"
+                className="px-4 py-2 text-xs font-semibold text-slate-700 border border-slate-600 rounded-lg hover:bg-surface-raised"
               >
                 Cancel
               </button>
@@ -3930,20 +3930,20 @@ function ProblemsTab({ API, onOpenBrief }) {
         {['unsolved', 'solved', 'all'].map(f => (
           <button key={f} onClick={() => setFilter(f)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors capitalize
-              ${filter === f ? 'bg-brand-600 text-white' : 'bg-surface border border-slate-700 text-slate-300 hover:border-brand-400'}`}>
+              ${filter === f ? 'bg-brand-600 text-white' : 'bg-surface border border-slate-700 text-slate-700 hover:border-brand-400'}`}>
             {f}
           </button>
         ))}
         <input
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Filter reports…"
-          className="flex-1 min-w-40 border border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-slate-200 placeholder:text-slate-500"
+          className="flex-1 min-w-40 border border-slate-700 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface text-slate-800 placeholder:text-slate-500"
         />
       </div>
 
-      {loading && <div className="text-center py-8 text-slate-400 text-sm animate-pulse">Loading…</div>}
+      {loading && <div className="text-center py-8 text-slate-600 text-sm animate-pulse">Loading…</div>}
       {!loading && visible.length === 0 && (
-        <div className="text-center py-12 text-slate-400">
+        <div className="text-center py-12 text-slate-600">
           <div className="text-3xl mb-2">✅</div>
           <p>No {filter !== 'all' ? filter : ''} reports</p>
         </div>
@@ -3957,8 +3957,8 @@ function ProblemsTab({ API, onOpenBrief }) {
               onClick={() => setExpanded(e => e === p._id ? null : p._id)}
             >
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-slate-400 mb-0.5">{p.pageReported || 'Unknown page'} · {new Date(p.time).toLocaleDateString('en-GB')}</p>
-                <p className="text-sm font-semibold text-slate-100 line-clamp-2">{p.description}</p>
+                <p className="text-xs text-slate-600 mb-0.5">{p.pageReported || 'Unknown page'} · {new Date(p.time).toLocaleDateString('en-GB')}</p>
+                <p className="text-sm font-semibold text-slate-900 line-clamp-2">{p.description}</p>
                 {p.intelligenceBrief && (
                   <span
                     role="link"
@@ -3971,7 +3971,7 @@ function ProblemsTab({ API, onOpenBrief }) {
                   </span>
                 )}
               </div>
-              <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${p.solved ? 'bg-emerald-900/40 text-emerald-300' : 'bg-red-900/40 text-red-300'}`}>
+              <span className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${p.solved ? 'bg-emerald-900/40 text-emerald-600' : 'bg-red-900/40 text-red-300'}`}>
                 {p.solved ? 'Solved' : 'Open'}
               </span>
             </button>
@@ -3980,10 +3980,10 @@ function ProblemsTab({ API, onOpenBrief }) {
               <div className="px-4 pb-4 border-t border-slate-700 pt-3 space-y-3">
 
                 {/* Full original description */}
-                <div className="bg-surface-raised rounded-xl p-3 text-xs text-slate-300">
-                  <p className="font-semibold text-slate-400 mb-1 uppercase tracking-wider text-[10px]">Original report</p>
+                <div className="bg-surface-raised rounded-xl p-3 text-xs text-slate-700">
+                  <p className="font-semibold text-slate-600 mb-1 uppercase tracking-wider text-[10px]">Original report</p>
                   <p className="whitespace-pre-wrap leading-relaxed">{p.description}</p>
-                  <p className="mt-1 text-slate-400">
+                  <p className="mt-1 text-slate-600">
                     {p.userId?.agentNumber ? `Agent ${p.userId.agentNumber}` : 'Unknown agent'}
                     {' · '}{new Date(p.time || p.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
                   </p>
@@ -3992,11 +3992,11 @@ function ProblemsTab({ API, onOpenBrief }) {
                 {/* Update history */}
                 {p.updates?.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Update history</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-600">Update history</p>
                     {p.updates.map((u, i) => (
-                      <div key={i} className={`border rounded-xl p-3 text-xs text-slate-300 ${u.isUserVisible ? 'bg-brand-600/10 border-brand-600/20' : 'bg-surface-raised border-slate-700'}`}>
+                      <div key={i} className={`border rounded-xl p-3 text-xs text-slate-700 ${u.isUserVisible ? 'bg-brand-600/10 border-brand-600/20' : 'bg-surface-raised border-slate-700'}`}>
                         <p className="whitespace-pre-wrap leading-relaxed mb-1">{u.description}</p>
-                        <p className="text-slate-400 flex items-center gap-2">
+                        <p className="text-slate-600 flex items-center gap-2">
                           <span>
                             {u.adminUserId?.agentNumber ? `Agent ${u.adminUserId.agentNumber}` : 'Admin'}
                             {' · '}{new Date(u.time).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
@@ -4023,7 +4023,7 @@ function ProblemsTab({ API, onOpenBrief }) {
 
                 {/* Notify user controls */}
                 <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
+                  <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={notify[p._id] ?? false}
@@ -4034,7 +4034,7 @@ function ProblemsTab({ API, onOpenBrief }) {
                   </label>
 
                   {(notify[p._id]) && (
-                    <div className="flex gap-4 pl-5 text-xs text-slate-300">
+                    <div className="flex gap-4 pl-5 text-xs text-slate-700">
                       <label className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="radio"
@@ -8452,7 +8452,7 @@ function LogsTab({ API }) {
         <select
           value={typeFilter}
           onChange={handleTypeChange}
-          className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 bg-surface focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-700 bg-surface focus:outline-none focus:ring-1 focus:ring-brand-400"
         >
           <option value="">All actions</option>
           {ALL_ACTION_TYPES.map(t => (
@@ -8462,9 +8462,9 @@ function LogsTab({ API }) {
       </div>
 
       <div className="bg-surface rounded-2xl border border-slate-700 overflow-hidden mb-4">
-        {loading && <p className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading…</p>}
+        {loading && <p className="py-8 text-center text-slate-600 text-sm animate-pulse">Loading…</p>}
         {!loading && actions.length === 0 && (
-          <p className="py-8 text-center text-slate-400 text-sm">No logs found</p>
+          <p className="py-8 text-center text-slate-600 text-sm">No logs found</p>
         )}
         {!loading && actions.map((a, i) => {
           const admin  = a.userId
@@ -8479,17 +8479,17 @@ function LogsTab({ API }) {
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <ActionBadge type={a.actionType} />
                     {target && (
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[10px] text-slate-600">
                         → Agent {target.agentNumber ?? target.email ?? '?'}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-300 truncate">{a.reason}</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-700 truncate">{a.reason}</p>
+                  <p className="text-[10px] text-slate-600 mt-0.5">
                     Agent {admin?.agentNumber ?? admin?.email ?? '?'}
                   </p>
                 </div>
-                <span className="text-[10px] text-slate-400 whitespace-nowrap shrink-0">
+                <span className="text-[10px] text-slate-600 whitespace-nowrap shrink-0">
                   {new Date(a.time).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
@@ -8503,15 +8503,15 @@ function LogsTab({ API }) {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-700 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
           >
             ← Prev
           </button>
-          <span className="text-xs text-slate-400">Page {page} of {totalPages} ({total} total)</span>
+          <span className="text-xs text-slate-600">Page {page} of {totalPages} ({total} total)</span>
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-700 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
           >
             Next →
           </button>
@@ -8549,6 +8549,7 @@ function EmailLogsTab({ API, initialStatusFilter }) {
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter ?? '')
   const [search,     setSearch]     = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [expanded,   setExpanded]   = useState(null) // log._id of the open detail panel
 
   useEffect(() => {
     setLoading(true)
@@ -8562,6 +8563,7 @@ function EmailLogsTab({ API, initialStatusFilter }) {
         setLogs(d.data?.logs ?? [])
         setTotal(d.data?.total ?? 0)
         setTotalPages(d.data?.totalPages ?? 1)
+        setExpanded(null)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -8581,7 +8583,7 @@ function EmailLogsTab({ API, initialStatusFilter }) {
           <select
             value={typeFilter}
             onChange={e => { setTypeFilter(e.target.value); setPage(1) }}
-            className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 bg-surface focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-700 bg-surface focus:outline-none focus:ring-1 focus:ring-brand-400"
           >
             <option value="">All types</option>
             {Object.entries(EMAIL_TYPE_LABELS).map(([k, v]) => (
@@ -8591,7 +8593,7 @@ function EmailLogsTab({ API, initialStatusFilter }) {
           <select
             value={statusFilter}
             onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
-            className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-300 bg-surface focus:outline-none focus:ring-1 focus:ring-brand-400"
+            className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-700 bg-surface focus:outline-none focus:ring-1 focus:ring-brand-400"
           >
             <option value="">All statuses</option>
             <option value="sent">Sent</option>
@@ -8606,7 +8608,7 @@ function EmailLogsTab({ API, initialStatusFilter }) {
           placeholder="Search by email…"
           value={searchInput}
           onChange={e => setSearchInput(e.target.value)}
-          className="flex-1 text-xs border border-slate-700 rounded-lg px-3 py-1.5 text-slate-200 bg-surface placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          className="flex-1 text-xs border border-slate-700 rounded-lg px-3 py-1.5 text-slate-800 bg-surface placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-400"
         />
         <button
           type="submit"
@@ -8618,7 +8620,7 @@ function EmailLogsTab({ API, initialStatusFilter }) {
           <button
             type="button"
             onClick={() => { setSearch(''); setSearchInput(''); setPage(1) }}
-            className="text-xs px-2 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:bg-surface-raised transition-colors"
+            className="text-xs px-2 py-1.5 rounded-lg border border-slate-700 text-slate-600 hover:bg-surface-raised transition-colors"
           >
             Clear
           </button>
@@ -8626,42 +8628,110 @@ function EmailLogsTab({ API, initialStatusFilter }) {
       </form>
 
       <div className="bg-surface rounded-2xl border border-slate-700 overflow-hidden mb-4">
-        {loading && <p className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading…</p>}
+        {loading && <p className="py-8 text-center text-slate-600 text-sm animate-pulse">Loading…</p>}
         {!loading && logs.length === 0 && (
-          <p className="py-8 text-center text-slate-400 text-sm">No email logs found</p>
+          <p className="py-8 text-center text-slate-600 text-sm">No email logs found</p>
         )}
-        {!loading && logs.map((log, i) => (
+        {!loading && logs.map((log, i) => {
+          const isOpen = expanded === log._id
+          const user   = log.recipientUserId && typeof log.recipientUserId === 'object' ? log.recipientUserId : null
+          const metaEntries = log.metadata && typeof log.metadata === 'object' ? Object.entries(log.metadata) : []
+          return (
           <div
             key={log._id}
-            className={`px-4 py-3 ${i !== 0 ? 'border-t border-slate-700/50' : ''} ${log.status === 'failed' ? 'bg-red-900/10' : ''}`}
+            className={`${i !== 0 ? 'border-t border-slate-700/50' : ''} ${log.status === 'failed' ? 'bg-red-900/10' : ''}`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <EmailTypeBadge type={log.type} />
-                  <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${log.status === 'sent' ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'}`}>
-                    {log.status}
-                  </span>
+            <button
+              type="button"
+              aria-expanded={isOpen}
+              onClick={() => setExpanded(isOpen ? null : log._id)}
+              className="w-full text-left px-4 py-3 hover:bg-surface-raised/40 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <EmailTypeBadge type={log.type} />
+                    <span className={`inline-block text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${log.status === 'sent' ? 'bg-green-900/40 text-green-300' : 'bg-red-900/40 text-red-300'}`}>
+                      {log.status}
+                    </span>
+                  </div>
+                  <p className={`text-xs text-slate-800 font-medium ${isOpen ? 'break-all' : 'truncate'}`}>{log.recipientEmail}</p>
+                  {log.subject && (
+                    <p className={`text-[11px] text-slate-600 ${isOpen ? '' : 'truncate'}`}>{log.subject}</p>
+                  )}
+                  {log.status === 'failed' && log.error && (
+                    <p className={`text-[11px] text-red-400 mt-0.5 ${isOpen ? 'break-words' : 'truncate'}`}>{log.error}</p>
+                  )}
+                  {!isOpen && metaEntries.length > 0 && (
+                    <p className="text-[10px] text-slate-600 mt-0.5 truncate">
+                      {metaEntries.map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                    </p>
+                  )}
                 </div>
-                <p className="text-xs text-slate-200 font-medium truncate">{log.recipientEmail}</p>
-                {log.subject && (
-                  <p className="text-[11px] text-slate-400 truncate">{log.subject}</p>
-                )}
-                {log.status === 'failed' && log.error && (
-                  <p className="text-[11px] text-red-400 mt-0.5 truncate">{log.error}</p>
-                )}
-                {log.metadata && Object.keys(log.metadata).length > 0 && (
-                  <p className="text-[10px] text-slate-400 mt-0.5">
-                    {Object.entries(log.metadata).map(([k, v]) => `${k}: ${v}`).join(' · ')}
-                  </p>
-                )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] text-slate-600 whitespace-nowrap">
+                    {new Date(log.sentAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <svg className={`w-4 h-4 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
               </div>
-              <span className="text-[10px] text-slate-400 whitespace-nowrap shrink-0">
-                {new Date(log.sentAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
+            </button>
+
+            {isOpen && (
+              <dl className="px-4 pb-3 pt-1 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1.5 text-[11px] border-t border-slate-700/40">
+                <dt className="text-slate-500 font-medium">Recipient</dt>
+                <dd className="text-slate-800 break-all">{log.recipientEmail}</dd>
+
+                {user && (
+                  <>
+                    <dt className="text-slate-500 font-medium">Agent</dt>
+                    <dd className="text-slate-800">
+                      {user.displayName || 'Unnamed'}
+                      {user.agentNumber && <span className="text-slate-600"> · #{user.agentNumber}</span>}
+                    </dd>
+                  </>
+                )}
+
+                <dt className="text-slate-500 font-medium">Type</dt>
+                <dd className="text-slate-800">{EMAIL_TYPE_LABELS[log.type]?.label ?? log.type}</dd>
+
+                <dt className="text-slate-500 font-medium">Status</dt>
+                <dd className={log.status === 'sent' ? 'text-green-300' : 'text-red-300'}>{log.status}</dd>
+
+                {log.subject && (
+                  <>
+                    <dt className="text-slate-500 font-medium">Subject</dt>
+                    <dd className="text-slate-800 break-words">{log.subject}</dd>
+                  </>
+                )}
+
+                {log.status === 'failed' && log.error && (
+                  <>
+                    <dt className="text-slate-500 font-medium">Error</dt>
+                    <dd className="text-red-400 break-words">{log.error}</dd>
+                  </>
+                )}
+
+                <dt className="text-slate-500 font-medium">Sent</dt>
+                <dd className="text-slate-800">
+                  {new Date(log.sentAt).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </dd>
+
+                {metaEntries.length > 0 && metaEntries.map(([k, v]) => (
+                  <div key={k} className="contents">
+                    <dt className="text-slate-500 font-medium break-all">{k}</dt>
+                    <dd className="text-slate-700 break-words">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</dd>
+                  </div>
+                ))}
+
+                <dt className="text-slate-500 font-medium">Log ID</dt>
+                <dd className="text-slate-600 break-all font-mono text-[10px]">{log._id}</dd>
+              </dl>
+            )}
           </div>
-        ))}
+        )})}
       </div>
 
       {totalPages > 1 && (
@@ -8669,15 +8739,15 @@ function EmailLogsTab({ API, initialStatusFilter }) {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-700 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
           >
             ← Prev
           </button>
-          <span className="text-xs text-slate-400">Page {page} of {totalPages} ({total} total)</span>
+          <span className="text-xs text-slate-600">Page {page} of {totalPages} ({total} total)</span>
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-700 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
           >
             Next →
           </button>
@@ -8824,7 +8894,7 @@ function SystemLogsTab({ API, onResolved }) {
     <div>
       <div className="flex items-center justify-between mb-4 gap-3">
         <h2 className="text-base font-bold text-slate-900">System Logs</h2>
-        <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+        <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={showAll}
@@ -8836,9 +8906,9 @@ function SystemLogsTab({ API, onResolved }) {
       </div>
 
       <div className="bg-surface rounded-2xl border border-slate-700 overflow-hidden mb-4">
-        {loading && <p className="py-8 text-center text-slate-400 text-sm animate-pulse">Loading…</p>}
+        {loading && <p className="py-8 text-center text-slate-600 text-sm animate-pulse">Loading…</p>}
         {!loading && logs.length === 0 && (
-          <p className="py-8 text-center text-slate-400 text-sm">
+          <p className="py-8 text-center text-slate-600 text-sm">
             {showAll ? 'No system logs' : 'No unresolved system logs'}
           </p>
         )}
@@ -8856,7 +8926,7 @@ function SystemLogsTab({ API, onResolved }) {
 
                   {/* Brief context */}
                   {log.briefTitle && (
-                    <p className="text-xs text-slate-300 mb-1">
+                    <p className="text-xs text-slate-700 mb-1">
                       Brief: <span className="font-semibold">{log.briefTitle}</span>
                       {log.briefCategory && <span className="text-slate-500"> [{log.briefCategory}]</span>}
                     </p>
@@ -8864,12 +8934,12 @@ function SystemLogsTab({ API, onResolved }) {
 
                   {/* priority_ranking_failure */}
                   {log.sourceBriefTitle && (
-                    <p className="text-xs text-slate-400 mb-1">
+                    <p className="text-xs text-slate-600 mb-1">
                       Source brief: <span className="font-semibold">{log.sourceBriefTitle}</span>
                     </p>
                   )}
                   {log.newStubs?.length > 0 && (
-                    <p className="text-xs text-slate-400 mb-1">
+                    <p className="text-xs text-slate-600 mb-1">
                       New stubs: {log.newStubs.map(s => `"${s.title}"`).join(', ')}
                     </p>
                   )}
@@ -8879,14 +8949,14 @@ function SystemLogsTab({ API, onResolved }) {
 
                   {/* brief_generation_failure */}
                   {log.stage && (
-                    <p className="text-xs text-slate-400 mb-1">
+                    <p className="text-xs text-slate-600 mb-1">
                       Stage: <span className="font-semibold">{log.stage.replace(/_/g, ' ')}</span>
                     </p>
                   )}
 
                   {/* image_fetch_failure */}
                   {log.searchTerms?.length > 0 && (
-                    <p className="text-xs text-slate-400 mb-1">
+                    <p className="text-xs text-slate-600 mb-1">
                       Search terms tried: {log.searchTerms.map(t => `"${t}"`).join(', ')}
                     </p>
                   )}
@@ -8902,7 +8972,7 @@ function SystemLogsTab({ API, onResolved }) {
 
                   {/* account_creation_failure */}
                   {log.type === 'account_creation_failure' && log.details && (
-                    <p className="text-xs text-slate-400 mb-1">
+                    <p className="text-xs text-slate-600 mb-1">
                       {log.details.endpoint && <>Endpoint: <span className="font-mono">{log.details.endpoint}</span></>}
                       {log.details.email && <> · Email: <span className="font-mono">{log.details.email}</span></>}
                       {log.details.errorCode != null && <> · Code: <span className="font-mono">{log.details.errorCode}</span></>}
@@ -8911,11 +8981,11 @@ function SystemLogsTab({ API, onResolved }) {
 
                   {/* cors_origin_rejected — where it came from + plain-English read */}
                   {log.type === 'cors_origin_rejected' && (
-                    <div className="text-xs text-slate-400 space-y-0.5 mb-1">
-                      <p>Blocked origin: <span className="font-mono text-slate-300 break-all">{log.origin || '(none)'}</span></p>
+                    <div className="text-xs text-slate-600 space-y-0.5 mb-1">
+                      <p>Blocked origin: <span className="font-mono text-slate-700 break-all">{log.origin || '(none)'}</span></p>
                       {log.requestPath && <p>Tried to reach: <span className="font-mono break-all">{log.requestPath}</span></p>}
                       {log.referer && <p>Linked from: <span className="font-mono break-all">{log.referer}</span></p>}
-                      {describeDevice(log.userAgent) && <p>Device: <span className="font-semibold text-slate-300">{describeDevice(log.userAgent)}</span></p>}
+                      {describeDevice(log.userAgent) && <p>Device: <span className="font-semibold text-slate-700">{describeDevice(log.userAgent)}</span></p>}
                       {log.hitCount > 0 && (
                         <p>
                           {log.hitCount} request{log.hitCount === 1 ? '' : 's'}
@@ -8927,7 +8997,7 @@ function SystemLogsTab({ API, onResolved }) {
                       {(() => {
                         const e = explainRejectedOrigin(log.origin)
                         return (
-                          <p className={`mt-1.5 ${e.severity === 'harmless' ? 'text-slate-400' : 'text-amber-400'}`}>
+                          <p className={`mt-1.5 ${e.severity === 'harmless' ? 'text-slate-600' : 'text-amber-400'}`}>
                             {e.severity === 'harmless' ? '✓ ' : '⚠ '}{e.text}
                           </p>
                         )
@@ -8937,11 +9007,11 @@ function SystemLogsTab({ API, onResolved }) {
 
                   {/* api_unreachable — a device that couldn't reach the API while it thought it was online */}
                   {log.type === 'api_unreachable' && (
-                    <div className="text-xs text-slate-400 space-y-0.5 mb-1">
-                      {log.origin && <p>Reported by: <span className="font-mono text-slate-300 break-all">{log.origin}</span></p>}
-                      {describeDevice(log.userAgent) && <p>Device: <span className="font-semibold text-slate-300">{describeDevice(log.userAgent)}</span></p>}
-                      {log.failingForMs > 0 && <p>Was failing for: <span className="font-semibold text-slate-300">{Math.round(log.failingForMs / 1000)}s</span></p>}
-                      {log.queuedCount > 0 && <p>Scores queued on device: <span className="font-semibold text-slate-300">{log.queuedCount}</span></p>}
+                    <div className="text-xs text-slate-600 space-y-0.5 mb-1">
+                      {log.origin && <p>Reported by: <span className="font-mono text-slate-700 break-all">{log.origin}</span></p>}
+                      {describeDevice(log.userAgent) && <p>Device: <span className="font-semibold text-slate-700">{describeDevice(log.userAgent)}</span></p>}
+                      {log.failingForMs > 0 && <p>Was failing for: <span className="font-semibold text-slate-700">{Math.round(log.failingForMs / 1000)}s</span></p>}
+                      {log.queuedCount > 0 && <p>Scores queued on device: <span className="font-semibold text-slate-700">{log.queuedCount}</span></p>}
                       <p className="mt-1.5 text-amber-400">
                         ⚠ A device couldn&apos;t reach the API while it believed it was online, so scores queued locally until it recovered. A one-off is usually a flaky connection; repeats point at a real outage or a wrong API address.
                       </p>
@@ -8955,7 +9025,7 @@ function SystemLogsTab({ API, onResolved }) {
                 </div>
 
                 <div className="flex flex-col items-end gap-2 shrink-0">
-                  <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                  <span className="text-[10px] text-slate-600 whitespace-nowrap">
                     {new Date(log.time).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </span>
                   {!log.resolved && log.type === 'priority_ranking_failure' && (
@@ -8971,7 +9041,7 @@ function SystemLogsTab({ API, onResolved }) {
                     <button
                       onClick={() => resolve(log._id)}
                       disabled={resolving === log._id}
-                      className="text-[10px] px-2 py-1 rounded-lg border border-slate-600 text-slate-300 font-semibold hover:bg-surface-raised transition-colors disabled:opacity-40"
+                      className="text-[10px] px-2 py-1 rounded-lg border border-slate-600 text-slate-700 font-semibold hover:bg-surface-raised transition-colors disabled:opacity-40"
                     >
                       {resolving === log._id ? '…' : 'Resolve'}
                     </button>
@@ -8993,15 +9063,15 @@ function SystemLogsTab({ API, onResolved }) {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-700 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
           >
             ← Prev
           </button>
-          <span className="text-xs text-slate-400">Page {page} of {totalPages} ({total} total)</span>
+          <span className="text-xs text-slate-600">Page {page} of {totalPages} ({total} total)</span>
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-700 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
           >
             Next →
           </button>
