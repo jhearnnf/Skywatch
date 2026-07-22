@@ -79,6 +79,24 @@ function ymd(date) {
   return x.toISOString().slice(0, 10);
 }
 
+// Format a Date as YYYY-MM-DD in a given IANA timezone (en-CA yields ISO order).
+// Used to bucket days the way UK users experience them rather than by UTC.
+function ymdInTz(date, tz) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(date));
+}
+
+// Ordered list of the last `days` calendar-day keys (inclusive of today) in `tz`.
+function recentDayKeysInTz(days, tz, now = new Date()) {
+  const keys = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const key = ymdInTz(new Date(now.getTime() - i * DAY_MS), tz);
+    if (keys[keys.length - 1] !== key) keys.push(key); // dedupe DST-edge repeats
+  }
+  return keys;
+}
+
 // Build a zero-filled daily bucket array between `start` and `end` (inclusive).
 function emptyDailyBuckets(start, end, extraKeys = []) {
   const out = [];
@@ -113,8 +131,10 @@ async function dailyCount(Model, dateField, since, extraMatch = {}, until = null
   return map;
 }
 
-// Mongo aggregation: per UTC day, count distinct userIds.
-async function dailyDistinctUsers(Model, dateField, userField, since, extraMatch = {}, until = null) {
+// Mongo aggregation: per day (in `tz`), count distinct userIds. `tz` defaults to
+// UTC to match the DAU sparkline; callers that need to align with what UK-based
+// users experience as "a day" (e.g. Test Usage) pass 'Europe/London'.
+async function dailyDistinctUsers(Model, dateField, userField, since, extraMatch = {}, until = null, tz = 'UTC') {
   const dateCond = {};
   if (since)  dateCond.$gte = since;
   if (until)  dateCond.$lt  = until;
@@ -123,7 +143,7 @@ async function dailyDistinctUsers(Model, dateField, userField, since, extraMatch
     { $match: match },
     { $group: {
       _id: {
-        date: { $dateToString: { format: '%Y-%m-%d', date: `$${dateField}`, timezone: 'UTC' } },
+        date: { $dateToString: { format: '%Y-%m-%d', date: `$${dateField}`, timezone: tz } },
         user: `$${userField}`,
       },
     }},
@@ -324,22 +344,29 @@ router.get('/snapshot', async (_req, res) => {
     const streams = await activityStreams(sparkStart);
     const dailyMap = mergeDailyDistinctUsers(streams);
 
-    // Test usage — distinct tester accounts who played any CBAT game per day over
-    // the last 7 days. Fixed 7-day window (independent of the report window picker).
+    // Test usage — distinct tester accounts who engaged with any CBAT game per day
+    // over the last 7 days. Fixed 7-day window (independent of the report window
+    // picker). Days are bucketed in Europe/London (not UTC) so the columns match
+    // what UK-based testers experience as "today", and both game *starts* (incl.
+    // abandoned sessions) and finished results count — mirroring the "played
+    // today" highlight on the admin Users list, which is the number admins eyeball
+    // against this chart.
     const testerIds = new Set(testerDocs.map(u => String(u._id)));
-    let testUsage = emptyDailyBuckets(testStart, now).map(b => ({ date: b.date, count: 0 }));
+    const testDayKeys = recentDayKeysInTz(7, ACTIVITY_TZ, now);
+    let testUsage = testDayKeys.map(date => ({ date, count: 0 }));
     if (testerIds.size) {
-      const testerCbatStreams = await Promise.all(
-        Object.values(CBAT_GAMES).map(g =>
-          dailyDistinctUsers(g.Model, 'createdAt', 'userId', testStart, g.modeFilter ?? {})
-        )
-      );
+      const testerCbatStreams = await Promise.all([
+        ...Object.values(CBAT_GAMES).map(g =>
+          dailyDistinctUsers(g.Model, 'createdAt', 'userId', testStart, g.modeFilter ?? {}, null, ACTIVITY_TZ)
+        ),
+        dailyDistinctUsers(GameSessionCbatStart, 'startedAt', 'userId', testStart, {}, null, ACTIVITY_TZ),
+      ]);
       const testerByDay = mergeDailyDistinctUsers(testerCbatStreams); // date → Set<userId>
-      testUsage = emptyDailyBuckets(testStart, now).map(b => {
-        const users = testerByDay.get(b.date);
+      testUsage = testDayKeys.map(date => {
+        const users = testerByDay.get(date);
         let count = 0;
         if (users) for (const u of users) if (testerIds.has(u)) count++;
-        return { date: b.date, count };
+        return { date, count };
       });
     }
 

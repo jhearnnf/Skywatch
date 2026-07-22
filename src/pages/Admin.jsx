@@ -855,7 +855,7 @@ function ReportsTab({ API }) {
                 />
               </ChartCard>
 
-              <ChartCard title="Test Usage" sub="tester CBAT plays · last 7 days">
+              <ChartCard title="Test Usage" sub="tester CBAT activity · last 7 days">
                 <ReportChart
                   type="bar"
                   data={snapshot.testUsage ?? []}

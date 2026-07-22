@@ -6,9 +6,15 @@ const db      = require('../helpers/setupDb');
 const { createUser, createAdminUser, createSettings, authCookie } = require('../helpers/factories');
 const GameSessionCbatTargetResult = require('../../models/GameSessionCbatTargetResult');
 const GameSessionCbatAnglesResult = require('../../models/GameSessionCbatAnglesResult');
+const GameSessionCbatStart        = require('../../models/GameSessionCbatStart');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-function ymd(d) { return new Date(d).toISOString().slice(0, 10); }
+// Buckets are keyed by Europe/London calendar day, so tests must key the same way.
+function ymd(d) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(d));
+}
 
 let admin, cookie;
 
@@ -59,6 +65,36 @@ describe('GET /api/admin/reports/snapshot — test usage', () => {
     const byDate = Object.fromEntries(testUsage.map(r => [r.date, r.count]));
     expect(byDate[ymd(today)]).toBe(2);      // two distinct testers today (not 3 plays)
     expect(byDate[ymd(yesterday)]).toBe(1);  // one tester yesterday
+  });
+
+  it('counts a tester who only started a game (no finish) as active', async () => {
+    const started = new Date(Date.now() - 2 * 60 * 60 * 1000); // a couple hours ago
+    const tester = await createUser({ agentNumber: '1000010', isTester: true });
+    // A start with no matching result — an abandoned/in-progress session.
+    await GameSessionCbatStart.create({ userId: tester._id, gameKey: 'target', startedAt: started });
+
+    const res = await request(app)
+      .get('/api/admin/reports/snapshot')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const byDate = Object.fromEntries(res.body.data.testUsage.map(r => [r.date, r.count]));
+    expect(byDate[ymd(started)]).toBe(1);
+  });
+
+  it('does not double-count a tester who both started and finished today', async () => {
+    const when = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const tester = await createUser({ agentNumber: '1000011', isTester: true });
+    await GameSessionCbatStart.create({ userId: tester._id, gameKey: 'target', startedAt: when });
+    await playTarget(tester._id, when);
+
+    const res = await request(app)
+      .get('/api/admin/reports/snapshot')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const byDate = Object.fromEntries(res.body.data.testUsage.map(r => [r.date, r.count]));
+    expect(byDate[ymd(when)]).toBe(1); // one distinct tester, not two
   });
 
   it('returns a zero-filled 7-day series when no testers have played', async () => {
