@@ -3839,17 +3839,19 @@ function UsersTab({ API }) {
                 <p className="text-xs text-slate-400">{u.email}</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={e => { e.stopPropagation(); setTierPanel(tierPanel === u._id ? null : u._id); if (!isExpanded) setExpanded(prev => new Set(prev).add(u._id)) }}
-                  title="Change subscription tier"
-                  aria-label="Change subscription tier"
-                  className={`text-[10px] font-bold px-2 py-1 rounded-full border transition-colors ${
-                    tierPanel === u._id
-                      ? `${TIER_BTN[u.subscriptionTier ?? 'free']} ring-2 ring-offset-1 ring-slate-400`
-                      : `${TIER_BTN[u.subscriptionTier ?? 'free']} opacity-70 hover:opacity-100`
-                  }`}>
-                  {TIER_LABELS[u.subscriptionTier ?? 'free'] ?? 'Free'} {tierPanel === u._id ? '▲' : '▼'}
-                </button>
-                {(() => {
+                {isExpanded && (
+                  <button onClick={e => { e.stopPropagation(); setTierPanel(tierPanel === u._id ? null : u._id) }}
+                    title="Change subscription tier"
+                    aria-label="Change subscription tier"
+                    className={`text-[10px] font-bold px-2 py-1 rounded-full border transition-colors ${
+                      tierPanel === u._id
+                        ? `${TIER_BTN[u.subscriptionTier ?? 'free']} ring-2 ring-offset-1 ring-slate-400`
+                        : `${TIER_BTN[u.subscriptionTier ?? 'free']} opacity-70 hover:opacity-100`
+                    }`}>
+                    {TIER_LABELS[u.subscriptionTier ?? 'free'] ?? 'Free'} {tierPanel === u._id ? '▲' : '▼'}
+                  </button>
+                )}
+                {isExpanded && (() => {
                   const diff = (u.difficultySetting ?? 'easy')
                   const DIFF_COLORS = { easy: 'bg-green-100 text-green-700', medium: 'bg-amber-100 text-amber-700', hard: 'bg-red-100 text-red-600' }
                   return (

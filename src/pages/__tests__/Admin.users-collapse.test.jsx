@@ -155,6 +155,18 @@ describe('Admin — Users tab: collapsible rows', () => {
     await waitFor(() => expect(screen.queryAllByText('Joined').length).toBe(0))
   })
 
+  it('hides the difficulty and subscription controls until a row is expanded', async () => {
+    await openUsersTab()
+
+    // Collapsed rows show no tier button or difficulty pill.
+    expect(screen.queryAllByLabelText('Change subscription tier').length).toBe(0)
+
+    fireEvent.click(screen.getByLabelText('Expand Agent 002'))
+
+    // Once expanded, exactly one row exposes the tier control.
+    await waitFor(() => expect(screen.getAllByLabelText('Change subscription tier').length).toBe(1))
+  })
+
   it('Expand all and Collapse all buttons toggle every row', async () => {
     await openUsersTab()
 
