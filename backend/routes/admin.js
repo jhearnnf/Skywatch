@@ -5985,6 +5985,9 @@ function parseUpdateNotificationPayload(body) {
   if (!title) return { ok: false, error: 'Title is required' };
   const text = (body.body ?? '').toString();
   if (!text.trim()) return { ok: false, error: 'Body is required' };
+  // Optional sanitized-HTML version. Empty string => no rich version, clients
+  // render the plain `body`. Sanitized client-side on save and again at render.
+  const richBody = (body.richBody ?? '').toString();
 
   const imageMode = UPDATE_NOTIF_IMAGE_MODES.includes(body.imageMode) ? body.imageMode : 'none';
   const usesUrl = imageMode === 'custom' || imageMode === 'upload';
@@ -6014,6 +6017,7 @@ function parseUpdateNotificationPayload(body) {
     payload: {
       title,
       body:       text,
+      richBody,
       imageMode,
       imageUrl,
       enabled:    body.enabled !== undefined ? !!body.enabled : true,
@@ -6042,11 +6046,15 @@ router.get('/update-notifications', async (req, res) => {
       UpdateNotification.countDocuments({}),
     ]);
 
-    // Shape rows for the admin table — include the views count without leaking
-    // the full viewedBy array (viewers are loaded on demand via /viewers).
+    // Shape rows for the admin table — include the views count and the number
+    // of users who left a "have your say" response, without leaking the full
+    // viewedBy array (viewers are loaded on demand via /viewers).
     const rows = docs.map(d => ({
       ...d,
       viewersCount: Array.isArray(d.viewedBy) ? d.viewedBy.length : 0,
+      responsesCount: Array.isArray(d.viewedBy)
+        ? d.viewedBy.filter(v => v.response && v.response.trim()).length
+        : 0,
       viewedBy: undefined,
     }));
 

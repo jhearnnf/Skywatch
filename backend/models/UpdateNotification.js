@@ -18,7 +18,14 @@ const viewedBySchema = new mongoose.Schema({
 // reachable only via the Previous/Next browser inside the modal.
 const updateNotificationSchema = new mongoose.Schema({
   title:      { type: String, required: true, trim: true },
+  // `body` is the plain-text version, shown to every client and used as the
+  // fallback. `richBody` is the optional sanitized-HTML version (bold / italic
+  // / colour / links). Clients that understand rich text render `richBody` when
+  // it's non-empty and fall back to `body` otherwise; older clients only know
+  // about `body`, so they always get a clean plain-text rendering. See
+  // renderNotificationBody on the frontend.
   body:       { type: String, required: true },
+  richBody:   { type: String, default: '' },
 
   // 'none' (default) renders no image; 'placeholder' renders /images/placeholder-brief.svg
   // on the frontend; 'custom' uses an admin-supplied imageUrl; 'upload' uses a

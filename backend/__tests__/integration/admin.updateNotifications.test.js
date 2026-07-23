@@ -130,6 +130,32 @@ describe('POST /api/admin/update-notifications', () => {
     expect(action.reason).toBe('announce v2');
   });
 
+  it('stores richBody alongside a plain body', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/update-notifications')
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        title: 'Formatted',
+        body: 'Bold news today',
+        richBody: '<b>Bold</b> news today',
+        reason: 'r',
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.data.notification.body).toBe('Bold news today');
+    expect(res.body.data.notification.richBody).toBe('<b>Bold</b> news today');
+  });
+
+  it('defaults richBody to an empty string when omitted', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/update-notifications')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 't', body: 'plain only', reason: 'r' });
+    expect(res.status).toBe(201);
+    expect(res.body.data.notification.richBody).toBe('');
+  });
+
   it('persists responsesEnabled when toggled on', async () => {
     const admin = await createAdminUser();
     const res = await request(app)
@@ -406,6 +432,29 @@ describe('GET /api/admin/update-notifications (list)', () => {
     const b = res.body.data.notifications.find(n => n.title === 'b');
     expect(b.viewersCount).toBe(1);
     expect(b.viewedBy).toBeUndefined();
+  });
+
+  it('counts only viewers who left a non-empty response in responsesCount', async () => {
+    const admin = await createAdminUser();
+    const u1 = await createUser();
+    const u2 = await createUser();
+    const u3 = await createUser();
+    await UpdateNotification.create({
+      title: 'poll', body: 'b', responsesEnabled: true,
+      viewedBy: [
+        { userId: u1._id, viewedAt: new Date(), response: 'great idea' },
+        { userId: u2._id, viewedAt: new Date(), response: '   ' }, // whitespace only → not counted
+        { userId: u3._id, viewedAt: new Date() },                  // viewed, no response
+      ],
+    });
+
+    const res = await request(app)
+      .get('/api/admin/update-notifications')
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(200);
+    const poll = res.body.data.notifications.find(n => n.title === 'poll');
+    expect(poll.viewersCount).toBe(3);
+    expect(poll.responsesCount).toBe(1);
   });
 });
 

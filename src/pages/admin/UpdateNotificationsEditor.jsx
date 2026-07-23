@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { PAGE_OPTIONS, pageLabelForValue } from '../../constants/pages'
 import Overlay from '../../components/ui/Overlay'
-import renderBodyWithLinks from '../../utils/renderBodyWithLinks'
+import RichTextEditor from '../../components/ui/RichTextEditor'
+import renderNotificationBody from '../../utils/renderNotificationBody'
+import { isRichHtml, sanitizeRichHtml, htmlToPlainText, escapeHtml } from '../../utils/richText'
 
 function resolvePreviewImageSrc(notif) {
   if (!notif) return null
@@ -83,7 +85,9 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
     setEditingId(n._id)
     const next = {
       title:      n.title ?? '',
-      body:       n.body ?? '',
+      // Edit the rich version when there is one; fall back to the plain body
+      // (older notifications, or ones with no formatting).
+      body:       n.richBody || n.body || '',
       imageMode:  n.imageMode ?? 'none',
       imageUrl:   n.imageUrl ?? '',
       enabled:    n.enabled !== false,
@@ -97,6 +101,20 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
     setSavedDraft(next)
     setAiOutput('')
     setEditorOpen(true)
+  }
+
+  // Tracks whether a mousedown actually started on the backdrop. Without this,
+  // drag-resizing the body textarea and releasing the mouse over the backdrop
+  // fires a click on the backdrop (its common ancestor with the textarea) and
+  // wrongly closes the editor. We only treat it as a backdrop click when the
+  // press both began and ended on the backdrop itself.
+  const backdropDownRef = useRef(false)
+  function onBackdropMouseDown(e) {
+    backdropDownRef.current = e.target === e.currentTarget
+  }
+  function onBackdropClick(e) {
+    if (e.target === e.currentTarget && backdropDownRef.current) attemptClose()
+    backdropDownRef.current = false
   }
 
   // True when the form has edits that would be lost on close.
@@ -174,13 +192,24 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
 
   async function copyAiToBody() {
     if (!aiOutput) return
-    setDraft(d => ({ ...d, body: d.body ? `${d.body}\n\n${aiOutput}` : aiOutput }))
+    // Body is now rich HTML, so append the plain AI text as escaped HTML with
+    // newlines turned into <br> (and a blank line between existing content).
+    const asHtml = escapeHtml(aiOutput).replace(/\n/g, '<br>')
+    setDraft(d => ({ ...d, body: d.body ? `${d.body}<br><br>${asHtml}` : asHtml }))
     try { await navigator.clipboard?.writeText(aiOutput) } catch { /* ignore */ }
     setToast('✓ Summary copied into body and clipboard')
   }
 
   function saveDraft() {
-    if (!draft.title.trim() || !draft.body.trim()) {
+    // The editor holds rich HTML. Store the sanitized HTML as `richBody` and a
+    // derived plain-text `body` so older clients (which only read `body`) still
+    // get a clean, link-preserving fallback. Plain content ships as `body` with
+    // an empty `richBody`.
+    const isRich = isRichHtml(draft.body)
+    const richBody  = isRich ? sanitizeRichHtml(draft.body) : ''
+    const plainBody = isRich ? htmlToPlainText(richBody)    : draft.body
+
+    if (!draft.title.trim() || !plainBody.trim()) {
       setToast('✗ Title and body are required')
       return
     }
@@ -201,6 +230,8 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
         const method = editingId ? 'PUT' : 'POST'
         const body = {
           ...draft,
+          body: plainBody,
+          richBody,
           // datetime-local emits 'yyyy-MM-ddTHH:mm' with no zone — let Date() interpret as local.
           validFrom: draft.validFrom ? new Date(draft.validFrom).toISOString() : '',
           expiresAt: draft.expiresAt ? new Date(draft.expiresAt).toISOString() : '',
@@ -337,6 +368,17 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                   <button onClick={() => askDelete(n)}    className="text-[11px] font-bold px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100">Delete</button>
                 </div>
               </div>
+              {/* Reply count — only meaningful when "have your say" is enabled. */}
+              {n.responsesEnabled && (
+                <div className="flex justify-end mt-1">
+                  <span
+                    title={`${n.responsesCount ?? 0} ${(n.responsesCount ?? 0) === 1 ? 'user has' : 'users have'} had their say`}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700"
+                  >
+                    💬 {n.responsesCount ?? 0}
+                  </span>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -348,7 +390,8 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={attemptClose}
+            onMouseDown={onBackdropMouseDown}
+            onClick={onBackdropClick}
           >
             <motion.div
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
@@ -368,13 +411,15 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
               </Field>
 
               <Field label="Body (emojis ok)">
-                <textarea
-                  rows={5} value={draft.body}
-                  onChange={e => setDraft(d => ({ ...d, body: e.target.value }))}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-surface text-text outline-none focus:ring-2 focus:ring-brand-600/40 resize-none"
+                <RichTextEditor
+                  ariaLabel="Notification body"
+                  value={draft.body}
+                  onChange={val => setDraft(d => ({ ...d, body: val }))}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-surface text-text outline-none focus:ring-2 focus:ring-brand-600/40 resize-y overflow-auto min-h-32 max-h-96 whitespace-pre-wrap"
                 />
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Links work: paste a URL (https://…) or write <code className="text-slate-600">[label](https://…)</code> for a labelled link.
+                  Select text, then use the toolbar or <kbd className="text-slate-600">Ctrl</kbd>+<kbd className="text-slate-600">B</kbd> / <kbd className="text-slate-600">I</kbd> / <kbd className="text-slate-600">U</kbd> to format, or a swatch to colour it.
+                  Links work too: paste a URL (https://…) or write <code className="text-slate-600">[label](https://…)</code>.
                 </p>
               </Field>
 
@@ -636,7 +681,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                 </button>
                 <h2 className="text-xl font-extrabold text-brand-700 pr-8">{previewNotif.title}</h2>
                 <p className="mt-3 text-sm leading-relaxed text-text whitespace-pre-wrap">
-                  {renderBodyWithLinks(previewNotif.body)}
+                  {renderNotificationBody(previewNotif.richBody || previewNotif.body)}
                 </p>
                 {previewNotif.responsesEnabled && (
                   <div className="mt-4">
