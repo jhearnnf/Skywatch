@@ -221,7 +221,7 @@ describe('Admin — Reports tab', () => {
   it('renders the Test Usage snapshot card', async () => {
     await openReportsTab()
     await waitFor(() => expect(screen.getByText('Test Usage')).toBeInTheDocument())
-    expect(screen.getByText('tester CBAT plays · last 7 days')).toBeInTheDocument()
+    expect(screen.getByText('tester CBAT activity · last 7 days')).toBeInTheDocument()
   })
 
   it('renders the Operating Systems snapshot card with an unreported bucket', async () => {

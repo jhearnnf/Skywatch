@@ -121,7 +121,7 @@ describe('Admin — Users tab: collapsible rows', () => {
     await waitFor(() => expect(screen.getByText('Agent 001')).toBeInTheDocument())
   }
 
-  it('expands the current admin by default and keeps other users collapsed', async () => {
+  it('keeps every row collapsed by default when browsing', async () => {
     await openUsersTab()
 
     // All three rows render their headers
@@ -129,25 +129,29 @@ describe('Admin — Users tab: collapsible rows', () => {
     expect(screen.getByText('Agent 002')).toBeInTheDocument()
     expect(screen.getByText('Agent 003')).toBeInTheDocument()
 
-    // Stats grid (only inside expanded rows) — "Joined" label appears once for admin1 only
-    expect(screen.getAllByText('Joined').length).toBe(1)
+    // Stats grid (only inside expanded rows) — nothing is expanded on load
+    expect(screen.queryAllByText('Joined').length).toBe(0)
   })
 
   it('expands a collapsed user when their header is clicked', async () => {
     await openUsersTab()
 
-    expect(screen.getAllByText('Joined').length).toBe(1)
+    expect(screen.queryAllByText('Joined').length).toBe(0)
 
     fireEvent.click(screen.getByLabelText('Expand Agent 002'))
 
-    await waitFor(() => expect(screen.getAllByText('Joined').length).toBe(2))
+    await waitFor(() => expect(screen.getAllByText('Joined').length).toBe(1))
   })
 
   it('collapses an expanded user when their header is clicked again', async () => {
     await openUsersTab()
 
-    fireEvent.click(screen.getByLabelText('Collapse Agent 001'))
+    // Rows start collapsed, so expand Agent 001 first…
+    fireEvent.click(screen.getByLabelText('Expand Agent 001'))
+    await waitFor(() => expect(screen.getAllByText('Joined').length).toBe(1))
 
+    // …then clicking its header again collapses it back.
+    fireEvent.click(screen.getByLabelText('Collapse Agent 001'))
     await waitFor(() => expect(screen.queryAllByText('Joined').length).toBe(0))
   })
 
