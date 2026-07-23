@@ -1761,6 +1761,33 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
   const tutorialActive = state.tutorialActive
   const isTouch = useIsTouch()
 
+  // BLEEP press feedback is driven from JS, not CSS `:active`. On touch, the
+  // `:active` pseudo-class only tracks the *primary* pointer, so a second
+  // finger tapping BLEEP while the first is dragging the steer pad fires the
+  // handler but never gets the browser's press highlight. We toggle our own
+  // `bleepPressed` from the pointer events (which do fire for every pointer)
+  // and hold it for a minimum window so a fast tap is still visible.
+  const [bleepPressed, setBleepPressed] = useState(false)
+  const bleepPressStartRef = useRef(0)
+  const bleepReleaseTimerRef = useRef(null)
+  const BLEEP_MIN_PRESS_MS = 140
+  const handleBleepPointerDown = useCallback((e) => {
+    state.onBleepPointerDown(e)
+    if (bleepReleaseTimerRef.current) {
+      clearTimeout(bleepReleaseTimerRef.current)
+      bleepReleaseTimerRef.current = null
+    }
+    bleepPressStartRef.current = performance.now()
+    setBleepPressed(true)
+  }, [state])
+  const handleBleepPointerUp = useCallback(() => {
+    const remaining = Math.max(0, BLEEP_MIN_PRESS_MS - (performance.now() - bleepPressStartRef.current))
+    bleepReleaseTimerRef.current = setTimeout(() => setBleepPressed(false), remaining)
+  }, [])
+  useEffect(() => () => {
+    if (bleepReleaseTimerRef.current) clearTimeout(bleepReleaseTimerRef.current)
+  }, [])
+
   return (
     <div className="w-full max-w-2xl">
       <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
@@ -1839,7 +1866,10 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
           a UX cue that the round hasn't begun). Pulses + brightens during
           the round-1 tutorial so the player knows where to tap. */}
       <button
-        onPointerDown={state.onBleepPointerDown}
+        onPointerDown={handleBleepPointerDown}
+        onPointerUp={handleBleepPointerUp}
+        onPointerCancel={handleBleepPointerUp}
+        onPointerLeave={handleBleepPointerUp}
         disabled={showCallsignOverlay || state.paused}
         style={{ touchAction: 'none' }}
         className={`w-full mt-3 py-5 border-2 font-extrabold text-lg uppercase tracking-widest rounded-xl transition-colors ${
@@ -1847,7 +1877,9 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
             ? 'bg-slate-700/20 border-slate-600/30 text-slate-500 cursor-not-allowed'
             : tutorialActive
               ? 'bg-amber-500/40 border-amber-300 text-amber-100 ring-4 ring-amber-400/60 animate-pulse'
-              : 'bg-amber-500/20 hover:bg-amber-500/30 active:bg-amber-500/40 border-amber-500/50 text-amber-300'
+              : bleepPressed
+                ? 'bg-amber-500/40 border-amber-500/50 text-amber-300'
+                : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/50 text-amber-300'
         }`}
       >
         BLEEP
