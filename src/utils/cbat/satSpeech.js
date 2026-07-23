@@ -38,12 +38,36 @@ function loadTts() {
   return ttsLoading
 }
 
-function nativeSpeak(text) {
+// Android's OS TextToSpeech engine initialises asynchronously: the plugin's
+// speak() rejects with "Not yet initialized…" until its onInit callback fires,
+// which is a few hundred ms to ~2s after the engine is first touched. So we
+// (1) warm it up from the Start-button gesture (see primeSpeech) and (2) retry
+// a rejected call a handful of times so the opening radio call — fired the
+// instant the observe phase starts — isn't lost to that init race.
+const NATIVE_RETRY_MAX = 8
+const NATIVE_RETRY_MS = 250
+
+function nativeSpeak(text, attempt = 0) {
   loadTts().then(tts => {
     if (!tts) return
     // Default QueueStrategy.Flush: a new call interrupts the previous one, which
     // matches how the observe loop switches from one radio call to the next.
-    tts.speak({ text, lang: 'en-GB', rate: 1.0, pitch: 1.0 }).catch(() => {})
+    tts.speak({ text, lang: 'en-GB', rate: 1.0, pitch: 1.0 }).catch(() => {
+      if (attempt < NATIVE_RETRY_MAX) {
+        setTimeout(() => nativeSpeak(text, attempt + 1), NATIVE_RETRY_MS)
+      }
+    })
+  })
+}
+
+/** Force the native engine to instantiate so its async init starts early. */
+function nativeWarmUp() {
+  loadTts().then(tts => {
+    if (!tts) return
+    // Any bridge call triggers the plugin's load() → new TextToSpeech(), which
+    // kicks off onInit. getSupportedLanguages is cheap and needs no arguments;
+    // we discard the result — we only want the side effect of starting init.
+    if (typeof tts.getSupportedLanguages === 'function') tts.getSupportedLanguages().catch(() => {})
   })
 }
 
@@ -79,11 +103,12 @@ function clearPendingVoices(s) {
 /**
  * Unlock speech synthesis. Must be called synchronously from a user gesture
  * (e.g. the Start button's onClick) or iOS Safari will refuse every later
- * utterance. On native this instead warm-loads the TTS plugin so the first
- * radio call, fired from the observe timer, doesn't wait on the import.
+ * utterance. On native this instead warms up the OS TTS engine (starting its
+ * async initialisation) so the first radio call, fired the moment the observe
+ * phase begins, doesn't lose the init race and fall silent.
  */
 export function primeSpeech() {
-  if (isNative) { loadTts(); return }
+  if (isNative) { nativeWarmUp(); return }
   const s = synth()
   if (!s || primed) return
   try {
