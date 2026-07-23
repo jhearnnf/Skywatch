@@ -3621,14 +3621,6 @@ function UsersTab({ API }) {
     })
   }
 
-  const expandAll = () => setExpanded(new Set(users.map(u => u._id)))
-  const collapseAll = () => {
-    setExpanded(new Set())
-    setTierPanel(null)
-    setAwardPanel(null)
-    setResetPanel(null)
-  }
-
   const runSearch = async () => {
     if (!q.trim()) { loadAll(); return }
     setLoading(true); setSearch(true)
@@ -3731,13 +3723,6 @@ function UsersTab({ API }) {
         </div>
       )}
 
-      {!loading && users.length > 0 && (
-        <div className="flex items-center justify-end gap-3 mb-3 text-xs">
-          <button onClick={expandAll}   className="text-brand-600 hover:text-brand-500 font-semibold transition-colors">Expand all</button>
-          <span className="text-slate-500/60" aria-hidden="true">·</span>
-          <button onClick={collapseAll} className="text-slate-400 hover:text-slate-200 font-semibold transition-colors">Collapse all</button>
-        </div>
-      )}
 
       {/* pr gutter reserves room on the right for the OS tabs that peek out from
           under each card, so they never push the page into horizontal scroll. */}

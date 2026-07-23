@@ -166,14 +166,4 @@ describe('Admin — Users tab: collapsible rows', () => {
     // Once expanded, exactly one row exposes the tier control.
     await waitFor(() => expect(screen.getAllByLabelText('Change subscription tier').length).toBe(1))
   })
-
-  it('Expand all and Collapse all buttons toggle every row', async () => {
-    await openUsersTab()
-
-    fireEvent.click(screen.getByText('Expand all'))
-    expect(screen.getAllByText('Joined').length).toBe(3)
-
-    fireEvent.click(screen.getByText('Collapse all'))
-    expect(screen.queryAllByText('Joined').length).toBe(0)
-  })
 })
