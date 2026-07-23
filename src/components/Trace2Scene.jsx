@@ -200,7 +200,7 @@ function Trace2Aircraft({ url, hex, spec, active, replaying, replayStat, scrubRe
 
   return (
     <group ref={groupRef}>
-      <primitive ref={meshRef} object={cloned} scale={[0.7, 0.7, 0.7]} />
+      <primitive ref={meshRef} object={cloned} scale={[1.05, 1.05, 1.05]} />
       {replaying && replayStat && (
         <Html position={[0, 0.65, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
           <span

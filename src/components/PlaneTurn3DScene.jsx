@@ -134,7 +134,7 @@ function SmoothFlightAircraft({ url, quat, speed, active, resetKey, onReady }) {
 
   return (
     <group ref={groupRef}>
-      <primitive ref={meshRef} object={clonedScene} scale={[0.7, 0.7, 0.7]} />
+      <primitive ref={meshRef} object={clonedScene} scale={[1.05, 1.05, 1.05]} />
     </group>
   )
 }
