@@ -221,13 +221,14 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
   return fakes;
 }
 
-// ANT, code-duplicates, and flag: always generate the full demo sequence so
-// the visible top 20 keeps a per-game min-score floor (15 for ANT, 7 for
-// code-duplicates, 55 for flag) even when real entries with sub-floor
-// scores exist — including when the real pool is already at/above the
-// 20-row limit. Other games keep gap-fill padding (limit - real.length)
-// and short-circuit when real already fills the board.
-const FULL_SEQUENCE_GAMES = new Set(['ant', 'code-duplicates', 'flag']);
+// ANT, code-duplicates, flag, and cut: always generate the full demo sequence
+// so the visible top 20 keeps a per-game min-score floor (15 for ANT, 7 for
+// code-duplicates, 55 for flag, 150 for cut) even when real entries with
+// sub-floor scores exist — including when the real pool is already at/above the
+// 20-row limit. A real run below the lowest demo is displaced off the board
+// until it beats that floor. Other games keep gap-fill padding
+// (limit - real.length) and short-circuit when real already fills the board.
+const FULL_SEQUENCE_GAMES = new Set(['ant', 'code-duplicates', 'flag', 'cut']);
 
 function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
   const cfg = CBAT_GAMES[gameKey];

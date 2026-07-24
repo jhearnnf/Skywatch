@@ -26,10 +26,10 @@ describe('CUT simulation', () => {
     expect(computeWarnings(sim)).toContain('SENSOR: air sensor overdue')
   })
 
-  it('penalises a missed comms code once its 15s window lapses', () => {
+  it('penalises a missed comms code once its window lapses', () => {
     const sim = makeSim()
-    // First code is issued ~10s in and expires 15s later; run past ~30s.
-    for (let i = 0; i < 300; i++) advanceSim(sim, 100)
+    // First code is issued ~10s in and closes 30s later; run past ~45s.
+    for (let i = 0; i < 450; i++) advanceSim(sim, 100)
     expect(sim.tasksMissed).toBeGreaterThan(0)
     // The miss is recorded as a negative commentary line (score itself may stay
     // positive under the lenient model — the point is the fault is penalised).

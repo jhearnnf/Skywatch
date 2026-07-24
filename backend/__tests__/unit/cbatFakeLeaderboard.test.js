@@ -179,13 +179,14 @@ describe('padLeaderboard', () => {
     out.filter(e => e.isFake).forEach(f => expect(f.bestTime).toBe(60));
   });
 
-  it('full-sequence games (flag, ant, code-duplicates) displace sub-floor real entries even when real fills the board', () => {
+  it('full-sequence games (flag, ant, code-duplicates, cut) displace sub-floor real entries even when real fills the board', () => {
     // 20 real entries, every score below the game's floor. Without the
     // full-sequence path these would short-circuit past padding.
     const cases = [
       { game: 'flag',            subFloor: -10 }, // floor 55
       { game: 'ant',             subFloor:   5 }, // floor 15
       { game: 'code-duplicates', subFloor:   3 }, // floor 7
+      { game: 'cut',             subFloor: 149 }, // floor 150
     ];
     for (const { game, subFloor } of cases) {
       const real = Array.from({ length: 20 }, (_, i) => realEntry({

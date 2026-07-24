@@ -10,10 +10,10 @@ import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import {
   GAME_MS, TICK_MS, SYSTEMS, SYSTEM_LABELS, SCORE, grade, award,
-  makeSim, advanceSim, scheduleNextLoad, randRange, fmtWall, fmtClock,
+  makeSim, advanceSim, scheduleNextLoad, pushMessage, randRange, fmtWall, fmtClock,
   FUEL_MAX_SPREAD, SPEED_TOL, SPEED_STEP, SENSOR_ARM_WINDOW,
   AIR_INTERVAL, GROUND_INTERVAL, LOAD_RELEASE_WINDOW, LOAD_POINTS, stationName,
-  PRESS_LOW, PRESS_HIGH, CODE_WINDOW,
+  PRESS_LOW, PRESS_HIGH, CODE_SUBMIT_WINDOW,
 } from '../utils/cbat/cutSim'
 
 // ── Panels ───────────────────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ function MissionPanel({ loadLights, loadReady, onRelease }) {
     <Panel title="Mission">
       <div className="flex flex-col items-center justify-center gap-3 h-full">
         <p className="text-[10px] text-slate-400 text-center">
-          Release the <b className="text-[#ddeaf8]">ordered station</b> at its scheduled time — read the order in Message and watch the Clock.
+          Release the <b className="text-[#ddeaf8]">package</b> at its scheduled time — read the ordered station in Message and watch the Clock.
         </p>
         {/* Dispenser readiness — fills as the scheduled time approaches. */}
         <div className="flex gap-1.5">
@@ -211,6 +211,9 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
   // Gauge fill 60–140 mapped to 0–100%.
   const fillPct = Math.max(0, Math.min(100, ((pressure - 60) / 80) * 100))
   const codeRem = code ? Math.ceil((code.dueAt - elapsedMs) / 1000) : null
+  // OK only accepts in the final CODE_SUBMIT_WINDOW; before that, count down to it.
+  const submitOpen = !!code && elapsedMs >= code.dueAt - CODE_SUBMIT_WINDOW
+  const armRem = code ? Math.ceil((code.dueAt - CODE_SUBMIT_WINDOW - elapsedMs) / 1000) : null
   return (
     <Panel title="System">
       <div className="flex gap-3 h-full">
@@ -238,7 +241,9 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
           <div className="flex items-center justify-between mb-1">
             <span className="font-mono text-lg text-[#ddeaf8] tracking-widest">{codeEntry.padEnd(3, '·')}</span>
             {code
-              ? <span className={`text-[10px] font-mono ${codeRem <= 5 ? 'text-red-400' : 'text-amber-400'}`}>{codeRem}s</span>
+              ? submitOpen
+                ? <span className={`text-[10px] font-mono ${codeRem <= 5 ? 'text-red-400' : 'text-amber-400'}`}>{codeRem}s</span>
+                : <span className="text-[10px] font-mono text-slate-400">submit in {armRem}s</span>
               : <span className="text-[10px] text-slate-600">no code</span>}
           </div>
           {/* Keypad is inert until a code is actually issued. */}
@@ -248,7 +253,7 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
             ))}
             <button onClick={onClearCode} disabled={!code} className="py-1 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed">CLR</button>
             <button onClick={() => onDigit('0')} disabled={!code} className="py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-sm rounded cursor-pointer disabled:cursor-not-allowed">0</button>
-            <button onClick={onSubmitCode} disabled={!code} className="py-1 bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed">OK</button>
+            <button onClick={onSubmitCode} disabled={!submitOpen} className="py-1 bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-40">OK</button>
           </div>
         </div>
       </div>
@@ -504,8 +509,13 @@ export default function CbatCut() {
         sim.tasksCompleted += 1
         scheduleNextLoad(sim)
       } else {
-        // Wrong station — the ordered drop is still pending.
+        // Wrong station — the drop is consumed, no second chance. Same as a
+        // successful release: schedule the next drop so the stations go inactive
+        // until then (loadReady false), rather than leaving this one pending.
         award(sim, SCORE.loadWrong, `wrong station (${stationName(station)})`)
+        sim.tasksMissed += 1
+        pushMessage(sim, `MISSION: wrong station — ${stationName(sim.loadTarget)} drop lost`)
+        scheduleNextLoad(sim)
       }
     } else {
       // Released before the scheduled drop time — the load is still pending.
@@ -517,8 +527,10 @@ export default function CbatCut() {
   const onClearCode = () => act(sim => { sim.codeEntry = '' })
   const onSubmitCode = () => act(sim => {
     if (!sim.code) return
+    // OK only accepts once the submission window has opened (final 15s).
+    if (sim.elapsedMs < sim.code.dueAt - CODE_SUBMIT_WINDOW) return
     if (sim.codeEntry === sim.code.digits) {
-      const speedBonus = Math.max(0, Math.round(SCORE.codeSpeedBonus * (sim.code.dueAt - sim.elapsedMs) / CODE_WINDOW))
+      const speedBonus = Math.max(0, Math.round(SCORE.codeSpeedBonus * (sim.code.dueAt - sim.elapsedMs) / CODE_SUBMIT_WINDOW))
       award(sim, SCORE.code + speedBonus, 'comms code entered correctly')
       sim.tasksCompleted += 1
       sim.code = null

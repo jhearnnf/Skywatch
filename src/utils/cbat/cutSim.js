@@ -17,13 +17,13 @@ export const SYSTEM_LABELS = {
 }
 
 // Engine — one tank feeds (drains) at a time; keep all within 50 L.
-export const FUEL_DRAIN_PER_SEC = 6
+export const FUEL_DRAIN_PER_SEC = 4.5
 export const FUEL_MAX_SPREAD = 50
 
 // Navigation — current airspeed drifts down; hold within ±10 of required.
-export const SPEED_DRIFT_PER_SEC = 1.0
+export const SPEED_DRIFT_PER_SEC = 0.5
 export const SPEED_TOL = 10
-export const SPEED_STEP = 5
+export const SPEED_STEP = 2
 
 // Sensor — re-activation intervals (scaled) + camera orders.
 export const AIR_INTERVAL = 45_000
@@ -40,11 +40,15 @@ export const LOAD_POINTS = 3
 export const stationName = (i) => `Station ${i + 1}`
 
 // System — hydraulic pressure band + comms-code entry.
-export const PRESS_RISE_PER_SEC = 1      // pump ON — very gentle (band lasts ~20s)
-export const PRESS_DROP_PER_SEC = 0.7    // pump OFF
+export const PRESS_RISE_PER_SEC = 0.7    // pump ON — very gentle (band lasts ~28s)
+export const PRESS_DROP_PER_SEC = 0.5    // pump OFF
 export const PRESS_LOW = 90
 export const PRESS_HIGH = 110
-export const CODE_WINDOW = 15_000
+// The comms code appears in Message this far ahead of its close — the keypad is
+// live the whole time (key the digits in early), but OK only accepts in the
+// final CODE_SUBMIT_WINDOW before it closes.
+export const CODE_WINDOW = 30_000
+export const CODE_SUBMIT_WINDOW = 15_000
 
 // The five monitored tolerance checks (the breach conditions in computeWarnings):
 // engine spread, airspeed, air sensor, ground sensor, hydraulic pressure. Each one
@@ -212,6 +216,9 @@ export function advanceSim(sim, dt) {
   sim.speed = Math.max(0, sim.speed - SPEED_DRIFT_PER_SEC * secs)
   if (sim.elapsedMs >= sim.nextSpeedAt) {
     sim.requiredSpeed = randRange(360, 480)
+    // Current airspeed catches up to the new setting (safe ceiling), then drifts
+    // down again so the player has to keep re-trimming it — same as game start.
+    sim.speed = sim.requiredSpeed + SPEED_TOL
     sim.nextSpeedAt = sim.elapsedMs + randRange(32_000, 42_000)
     pushMessage(sim, `NAV: set airspeed to ${sim.requiredSpeed} kts (±${SPEED_TOL})`)
   }
@@ -245,7 +252,7 @@ export function advanceSim(sim, dt) {
   if (!sim.code && sim.elapsedMs >= sim.nextCodeAt) {
     sim.code = { digits: code3(), dueAt: sim.elapsedMs + CODE_WINDOW }
     sim.codeEntry = ''
-    pushMessage(sim, `COMMS: enter code ${sim.code.digits} in System (${CODE_WINDOW / 1000}s)`)
+    pushMessage(sim, `COMMS: code ${sim.code.digits} — enter in System, submit in the final ${CODE_SUBMIT_WINDOW / 1000}s`)
   }
   if (sim.code && sim.elapsedMs > sim.code.dueAt) {
     award(sim, SCORE.codeMissed, 'comms code window missed')
