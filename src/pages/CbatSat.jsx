@@ -8,6 +8,7 @@ import { useGameChrome } from '../context/GameChromeContext'
 import { generateSatSituation, SAT_GRID } from '../utils/cbat/satGenerator'
 import { speak, stopSpeech, primeSpeech } from '../utils/cbat/satSpeech'
 import SEO from '../components/SEO'
+import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -688,7 +689,7 @@ export default function CbatSat() {
       <div className="flex items-center gap-2 mb-2">
         {phase === 'intro'
           ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <button onClick={goToIntro} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['observe', 'playing', 'feedback'].includes(phase)} />
         }
         <h1 className="text-sm font-extrabold text-slate-900">Situational Awareness Test</h1>
       </div>

@@ -7,6 +7,7 @@ import { getAircraftRoster } from '../lib/offlineRoster'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import SkywatchLogoIntro, { SKYWATCH_LOGO_INTRO_MS } from '../components/SkywatchLogoIntro'
 import { has3DModel, getModelUrl } from '../data/aircraftModels'
@@ -1934,7 +1935,7 @@ export default function CbatDpt() {
         <div className="flex items-center gap-3">
           {phase === 'select'
             ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-            : <button onClick={handleMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Quit</button>
+            : <CbatQuitButton onConfirm={handleMenu} confirmNeeded={['intro', 'playing', 'over'].includes(phase)} label={<>&larr; Quit</>} />
           }
           <h1 className="text-sm font-extrabold text-text">DPT</h1>
         </div>

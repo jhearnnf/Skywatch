@@ -6,6 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import CbatGameOver from '../components/CbatGameOver'
+import CbatQuitButton from '../components/CbatQuitButton'
 import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import { getModelUrl } from '../data/aircraftModels'
 import { generateTrace2Game, TRACE2_ROUNDS, TRACE2_COLORS, replayStatKind } from '../utils/cbat/trace2Generator'
@@ -247,7 +248,7 @@ export default function CbatTrace2({ traceModeSelector }) {
       <div className="w-full flex items-center gap-2 mb-2">
         {phase === 'menu'
           ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <button onClick={handleBackToMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+          : <CbatQuitButton onConfirm={handleBackToMenu} confirmNeeded={['intro', 'watch', 'question'].includes(phase)} />
         }
         <h1 className="text-sm font-extrabold text-slate-900">Trace 2</h1>
       </div>

@@ -27,14 +27,25 @@ export default function TopBar() {
     <header className="app-topbar fixed top-0 left-0 right-0 z-[1001] bg-slate-50/90 backdrop-blur-md border-b border-slate-200/60 h-14">
       <div className="max-w-6xl mx-auto px-4 h-full flex items-center justify-between gap-3">
 
-        {/* Logo */}
+        {/* Logo — in slim (CBAT-only) mode there is no landing page to reach,
+            so the logo is inert rather than a link that bounces to /cbat and
+            flashes a blank screen. */}
         <div className="flex items-center gap-2 shrink-0">
-          <Link to="/" className="flex items-center gap-2">
-            <CrosshairLogo />
-            <span className="font-bold text-lg tracking-widest text-brand-600 hidden sm:block">
-              SKYWATCH
-            </span>
-          </Link>
+          {slim ? (
+            <div className="flex items-center gap-2 select-none">
+              <CrosshairLogo />
+              <span className="font-bold text-lg tracking-widest text-brand-600 hidden sm:block">
+                SKYWATCH
+              </span>
+            </div>
+          ) : (
+            <Link to="/" className="flex items-center gap-2">
+              <CrosshairLogo />
+              <span className="font-bold text-lg tracking-widest text-brand-600 hidden sm:block">
+                SKYWATCH
+              </span>
+            </Link>
+          )}
           <OfflineBadge />
         </div>
 

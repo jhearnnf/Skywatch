@@ -9,6 +9,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
@@ -1227,7 +1228,7 @@ export default function CbatPlaneTurn() {
           <div className="flex items-center gap-2">
             {phase === 'select'
               ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-              : <button onClick={handleMenu} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+              : <CbatQuitButton onConfirm={handleMenu} confirmNeeded={['intro', 'playing', 'over'].includes(phase)} />
             }
             <h1 className="text-sm font-extrabold text-slate-900">
               {TITLE_BY_MODE[mode] ?? 'Trace 1/2'}

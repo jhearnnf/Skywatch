@@ -9,6 +9,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import SEO from '../components/SEO'
+import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 
 const AircraftTopDown = lazy(() => import('../components/AircraftTopDown'))
@@ -1815,7 +1816,7 @@ export default function CbatTarget() {
         <div className="flex items-center gap-2 mb-2">
           {phase === 'intro'
             ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-            : <button onClick={goToIntro} className="text-slate-500 hover:text-brand-400 transition-colors text-sm bg-transparent border-0 p-0 cursor-pointer">&larr; Instructions</button>
+            : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
           }
           <h1 className="text-sm font-extrabold text-slate-900">{phase === 'tutorial' ? 'Target Tutorial' : 'Target'}</h1>
         </div>
