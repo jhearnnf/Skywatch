@@ -15,6 +15,7 @@ const GameSessionCbatTrace2Result        = require('../models/GameSessionCbatTra
 const GameSessionCbatNumericalOpsResult  = require('../models/GameSessionCbatNumericalOpsResult');
 const GameSessionCbatDADResult           = require('../models/GameSessionCbatDADResult');
 const GameSessionCbatSatResult           = require('../models/GameSessionCbatSatResult');
+const GameSessionCbatCutResult           = require('../models/GameSessionCbatCutResult');
 
 // Single source of truth for CBAT games. Adding a new CBAT game = add one entry
 // here and it automatically flows through submission routes, leaderboards,
@@ -189,6 +190,13 @@ const CBAT_GAMES = {
     sortDir: -1,           // higher is better
     bestOp: '$max',
     label: 'Situational Awareness Test',
+  },
+  'cut': {
+    Model: GameSessionCbatCutResult,
+    primaryField: 'totalScore',
+    sortDir: -1,           // higher is better (accumulating score)
+    bestOp: '$max',
+    label: 'Cognitive Updating Test',
   },
 };
 

@@ -33,6 +33,7 @@ const GAME_OFFSET = {
   'numerical-ops':   15,
   'act':             18,
   'dad':             22,
+  'cut':              3,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -169,6 +170,17 @@ const FAKE_TUNING = {
     floor: 2, ceiling: 8, seedTime: 118.4, timeStep: 3.6,
     scoreSequence: [7, 7, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 2],
   },
+  'cut': {
+    // Cognitive Updating Test — accumulating totalScore (higher better), no fixed
+    // ceiling. Points come from tasks handled on time (comms codes, sensor
+    // activations, load releases, camera selects) minus warning-time bleed and
+    // missed tasks over a 180s run; a strong run lands in the 500–680 band, the
+    // roster trails to 120. CUT is a fixed-180s game so real runs all display
+    // ~180s, but the time column is hidden (CBAT_LEADERBOARD_CONFIG hideTime) — a
+    // small non-integer timeStep keeps the demo times non-uniform anyway.
+    floor: 150, ceiling: 550, seedTime: 176.4, timeStep: 0.4,
+    scoreSequence: [550, 530, 505, 480, 455, 430, 410, 390, 370, 350, 330, 310, 290, 270, 250, 230, 210, 190, 170, 150],
+  },
 };
 
 // Fixed delta tables — natural-looking variance without randomness.
@@ -286,6 +298,7 @@ const WEEKLY_PER_PLAY = {
   'numerical-ops':    80,  // real med 90 (correctPercentage)
   'dad':               9,  // correctCount /15 — a little below a decent single run
   'sat':              11,  // correctCount /18 — a little below a decent single run
+  'cut':             350,  // accumulating totalScore — a little below a decent single run
 };
 
 // Six deterministic demo players: a couple of active ones, the rest light.

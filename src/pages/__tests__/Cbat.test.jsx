@@ -43,9 +43,9 @@ function renderWithUser(user = { _id: '1', name: 'Test' }) {
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('CBAT_GAMES data', () => {
-  it('has 14 games, all visible and clickable with images', () => {
-    expect(CBAT_GAMES.length).toBe(14)
-    expect(GAMES_WITH_IMAGES.length).toBe(14)
+  it('has 15 games, all visible and clickable with images', () => {
+    expect(CBAT_GAMES.length).toBe(15)
+    expect(GAMES_WITH_IMAGES.length).toBe(15)
     expect(GAMES_WITHOUT_IMAGES.length).toBe(0)
     expect(CBAT_GAMES.every(g => !g.hidden)).toBe(true)
   })

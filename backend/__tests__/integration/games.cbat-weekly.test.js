@@ -39,6 +39,18 @@ describe('CBAT weekly leaderboard', () => {
     expect(res.body.data.resetsAt).toBeTruthy();
   });
 
+  it('never lets a negative single-game score lower the weekly total', async () => {
+    // A good run then a bad (negative) run. The bad run contributes 0, not -50,
+    // so the weekly total holds at 100 and play count still grows — "more play
+    // never drops you down the board".
+    await post('target', { totalScore: 100, totalTime: 120, grade: 'Good', playedAt: inWeek });
+    await post('target', { totalScore: -50, totalTime: 120, grade: 'Failed', playedAt: inWeek });
+
+    const res = await request(app).get('/api/games/cbat/target/leaderboard?period=weekly').set('Cookie', cookie);
+    expect(res.body.data.myBest.weekTotal).toBe(100); // -50 floored to 0, not subtracted
+    expect(res.body.data.myBest.plays).toBe(2);
+  });
+
   it('excludes runs from before the week start', async () => {
     await post('target', { totalScore: 500, totalTime: 120, grade: 'Outstanding', playedAt: lastWeek });
     await post('target', { totalScore: 50,  totalTime: 120, grade: 'Good', playedAt: inWeek });

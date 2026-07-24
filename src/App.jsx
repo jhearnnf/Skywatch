@@ -69,6 +69,7 @@ import CbatAct from './pages/CbatAct'
 import CbatNumericalOps from './pages/CbatNumericalOps'
 import CbatDAD from './pages/CbatDAD'
 import CbatSat from './pages/CbatSat'
+import CbatCut from './pages/CbatCut'
 import CbatLeaderboard from './pages/CbatLeaderboard'
 import CbatGameGuard from './components/CbatGameGuard'
 import AirstarHistory from './pages/AirstarHistory'
@@ -281,6 +282,7 @@ function AppRoutes() {
           <Route path="/cbat/numerical-ops"    element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="numerical-ops"     gameTitle="Numerical Operations"><CbatNumericalOps /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/dad"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="dad"               gameTitle="Directions and Distances"><CbatDAD /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/sat"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="sat"               gameTitle="Situational Awareness Test"><CbatSat /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/cut"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="cut"               gameTitle="Cognitive Updating Test"><CbatCut /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/:gameKey/leaderboard" element={<RequireAuth><PageWrapper><CbatLeaderboard /></PageWrapper></RequireAuth>} />
 
           {/* v2 protected pages */}

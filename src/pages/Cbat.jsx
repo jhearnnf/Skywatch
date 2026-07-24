@@ -326,7 +326,7 @@ export default function Cbat() {
                       Beta
                     </span>
                   )}
-                  {showNewBadge && game.key === NEW_GAME_KEY && enabled && (
+                  {(game.isNew || (showNewBadge && game.key === NEW_GAME_KEY)) && enabled && (
                     <span
                       className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
                       style={{ zIndex: 4 }}

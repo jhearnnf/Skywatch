@@ -25,6 +25,7 @@ export const GAME_LABELS = {
   'numerical-ops':    'Numerical Operations',
   'dad':              'Directions and Distances',
   'sat':              'Situational Awareness Test',
+  'cut':              'Cognitive Updating Test',
 }
 
 const PRIMARY_LABELS = {

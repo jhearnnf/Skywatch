@@ -278,6 +278,16 @@ body.cbat-dpt-fullwidth .app-shell-content {
   }
 }
 
+/* CUT gameplay: widen the shell on desktop so the running-commentary column has
+   room beside the arena. Toggled from src/pages/CbatCut.jsx while playing. */
+@media (min-width: 1024px) {
+  body.cbat-cut-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
 /* SAT is in beta. While CbatSat is mounted it adds `cbat-sat-beta` to <body>
    (mirrors the cbat-dpt-fullwidth pattern). We swap the cool dark-blue shell
    backdrop for a warm amber wash watermarked with endlessly repeating "beta",

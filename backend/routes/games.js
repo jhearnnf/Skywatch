@@ -41,6 +41,7 @@ const GameSessionCbatActResult             = CBAT_GAMES['act'].Model;
 const GameSessionCbatNumericalOpsResult    = CBAT_GAMES['numerical-ops'].Model;
 const GameSessionCbatDADResult             = CBAT_GAMES['dad'].Model;
 const GameSessionCbatSatResult             = CBAT_GAMES['sat'].Model;
+const GameSessionCbatCutResult             = CBAT_GAMES['cut'].Model;
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -2415,6 +2416,23 @@ router.post('/cbat/sat/result', protect, async (req, res) => {
   }
 });
 
+// POST /api/games/cbat/cut/result
+router.post('/cbat/cut/result', protect, async (req, res) => {
+  try {
+    const { totalScore, totalTime, tasksCompleted, tasksMissed, warningSeconds } = req.body;
+    const result = await saveCbatResult(GameSessionCbatCutResult, req, {
+      totalScore: totalScore ?? 0,
+      totalTime,
+      tasksCompleted,
+      tasksMissed,
+      warningSeconds,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/games/cbat/trace-2/result
 router.post('/cbat/trace-2/result', protect, async (req, res) => {
   try {
@@ -2767,17 +2785,31 @@ async function cbatLeaderboard(req, res, gameKey) {
   }
 }
 
+// Per-session weekly contribution, floored at 0. Higher-is-better games sum
+// their primaryField; lower-is-better games supply a derived cfg.weeklyExpr
+// (already ≥0). Wrapping in $max:[0,…] guarantees no single play ever lowers a
+// weekly total — a null/absent score contributes 0 too.
+function weeklyValueExpr(cfg) {
+  return { $max: [0, cfg.weeklyExpr || `$${cfg.primaryField}`] };
+}
+
 // Weekly CBAT leaderboard — ranks users by points accumulated since the most
 // recent Monday 00:00 UTC. Every replay adds to the user's weekTotal, so the
 // board rewards practice volume (the gamification loop = the practice loop).
 // Higher-is-better games sum their primaryField; lower-is-better games supply a
 // derived higher-is-better cfg.weeklyExpr (see CBAT_GAMES). Weekly is always
 // ranked weekTotal-desc regardless of the all-time sortDir.
+//
+// Each play's contribution is floored at 0 (weeklyValueExpr) so a poor run —
+// including a negative single-game score in games that can go negative (target,
+// cut, dpt, …) — never SUBTRACTS from the weekly total. This keeps the board
+// monotonic in effort: the more you play, the higher (or level) you sit, never
+// lower. Games that can't go negative are unaffected ($max:[0,x] === x).
 async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
   const isAdmin = !!req.user?.isAdmin;
   const modeFilter = cfg.modeFilter ?? null;
   const weekStart = startOfWeekUTC();
-  const valueExpr = cfg.weeklyExpr || `$${cfg.primaryField}`;
+  const valueExpr = weeklyValueExpr(cfg);
 
   const groupStage = {
     $group: {
@@ -2866,7 +2898,7 @@ async function cbatWeeklyMe(req, res, gameKey) {
   const isAdmin = !!req.user?.isAdmin;
   const modeFilter = cfg.modeFilter ?? {};
   const weekStart = startOfWeekUTC();
-  const valueExpr = cfg.weeklyExpr || `$${cfg.primaryField}`;
+  const valueExpr = weeklyValueExpr(cfg);
 
   try {
     const board = await cfg.Model.aggregate([
@@ -2957,6 +2989,7 @@ router.get('/cbat/trace-2/leaderboard', protect, (req, res) => cbatLeaderboard(r
 router.get('/cbat/numerical-ops/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'numerical-ops'));
 router.get('/cbat/dad/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dad'));
 router.get('/cbat/sat/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sat'));
+router.get('/cbat/cut/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'cut'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -3101,6 +3134,7 @@ router.get('/cbat/trace-2/personal-best', protect, (req, res) => cbatPersonalBes
 router.get('/cbat/numerical-ops/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'numerical-ops'));
 router.get('/cbat/dad/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dad'));
 router.get('/cbat/sat/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sat'));
+router.get('/cbat/cut/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'cut'));
 
 // GET /api/games/cbat/:gameKey/progress — the signed-in user's own score series for one game,
 // oldest → newest, backing the post-game trend sparkline and the leaderboard's "You" tab.
