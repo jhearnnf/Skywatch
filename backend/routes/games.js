@@ -3019,11 +3019,37 @@ async function cbatPersonalBest(req, res, gameKey) {
   }
 }
 
+// Rebuild the demo (fake) rows the all-time board would inject for one game, so a
+// recent score can be ranked against the SAME padded board the Recent Scores row
+// links through to — not just the real sessions. Mirrors cbatLeaderboard's real-board
+// pipeline (top-20 best-per-user) so padLeaderboard's short-circuit / gap-fill logic
+// matches: games where real entries already fill the board get no fakes here either.
+async function cbatPaddedFakes(gameKey, cfg, isAdmin) {
+  const modeFilter = cfg.modeFilter ?? null;
+  const real = await cfg.Model.aggregate([
+    ...(modeFilter ? [{ $match: modeFilter }] : []),
+    { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
+    {
+      $group: {
+        _id: '$userId',
+        userId: { $first: '$userId' },
+        [cfg.primaryField]: { $first: `$${cfg.primaryField}` },
+        totalTime: { $first: '$totalTime' },
+      },
+    },
+    { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
+    { $limit: 20 },
+    { $project: { _id: 0, userId: 1, bestScore: `$${cfg.primaryField}`, bestTime: '$totalTime' } },
+  ]);
+  return padLeaderboard(real, gameKey, { limit: 20, isAdmin }).filter(e => e.isFake);
+}
+
 // GET /api/games/cbat/recent — public-to-signed-in feed of latest scores across every CBAT game.
 // Scoped to the last 24h and deduped per (user, game, mode) keeping the user's best attempt,
-// so retries don't spam the feed. Each row's `rank` is computed against the same game's real
-// (non-padded) all-time sessions, so reuses the same comparator semantics as the per-game
-// leaderboards. Emails are only surfaced to admins; everyone else sees displayName / agentNumber.
+// so retries don't spam the feed. Each row's `rank` is computed against the same demo-padded
+// all-time board the row links to (real sessions + the same injected demo rows), so the badge
+// matches what the user sees on the leaderboard. Emails are only surfaced to admins; everyone
+// else sees displayName / agentNumber.
 router.get('/cbat/recent', protect, async (req, res) => {
   const isAdmin = !!req.user?.isAdmin;
   const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
@@ -3072,6 +3098,16 @@ router.get('/cbat/recent', protect, async (req, res) => {
     const users = await User.find({ _id: { $in: userIds } }).select('email agentNumber displayName').lean();
     const userMap = Object.fromEntries(users.map(u => [String(u._id), u]));
 
+    // Rebuild each game's demo rows once (not per recent row) so ranks below can
+    // count the injected demos that sit above each score — the same rows the
+    // linked all-time leaderboard shows.
+    const gamesInFeed = [...new Map(merged.map(r => [r.gameKey, r.cfg])).entries()];
+    const fakesByGame = Object.fromEntries(
+      await Promise.all(
+        gamesInFeed.map(async ([gameKey, cfg]) => [gameKey, await cbatPaddedFakes(gameKey, cfg, isAdmin)])
+      )
+    );
+
     const recent = await Promise.all(merged.map(async ({ session, gameKey, cfg }) => {
       const scoreVal = session[cfg.primaryField];
       const timeVal  = session.totalTime;
@@ -3094,6 +3130,16 @@ router.get('/cbat/recent', protect, async (req, res) => {
             }),
       });
 
+      // Demo rows strictly better than this score, using the same primary-then-time
+      // comparator as the countDocuments above, so real + demo ranks stay consistent
+      // with the padded leaderboard.
+      const fakesBetter = (fakesByGame[gameKey] || []).reduce((acc, f) => {
+        const better = f.bestScore !== scoreVal
+          ? (cfg.sortDir === 1 ? f.bestScore < scoreVal : f.bestScore > scoreVal)
+          : (f.bestTime ?? Infinity) < (timeVal ?? Infinity);
+        return acc + (better ? 1 : 0);
+      }, 0);
+
       const u = userMap[String(session.userId)];
       return {
         _id:         session._id,
@@ -3105,7 +3151,7 @@ router.get('/cbat/recent', protect, async (req, res) => {
         displayName: u?.displayName || null,
         score:       scoreVal,
         time:        timeVal,
-        rank:        countBetter + 1,
+        rank:        countBetter + fakesBetter + 1,
         achievedAt:  session.createdAt,
       };
     }));

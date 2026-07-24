@@ -175,3 +175,34 @@ describe('GET /api/games/cbat/recent — dedupe + 24h window', () => {
       .toEqual([String(userA._id), String(userB._id)].sort());
   });
 });
+
+describe('GET /api/games/cbat/recent — rank counts demo rows', () => {
+  // plane-turn-2d is lower-is-better; its demo scoreSequence starts at 42.
+  it('ranks a score better than every demo as #1', async () => {
+    const user = await createUser({ agentNumber: '3200001' });
+    const cookie = authCookie(user._id);
+
+    // 30 rotations beats even the best demo (42), so no real OR demo row outranks it.
+    await request(app).post(PLANE_TURN_RESULT).set('Cookie', cookie)
+      .send({ totalRotations: 30, totalTime: 25 });
+
+    const res = await request(app).get(ROUTE).set('Cookie', cookie);
+    const row = res.body.data.recent.find(r => r.userId === String(user._id));
+    expect(row.rank).toBe(1);
+  });
+
+  it('counts demo rows sitting above a mediocre score into its rank', async () => {
+    const user = await createUser({ agentNumber: '3200002' });
+    const cookie = authCookie(user._id);
+
+    // 90 rotations. With one real entry, padLeaderboard injects 19 demos from the
+    // sequence [42,45,48,52,55,58,62,65,68,72,75,78,82,85,88,92,95,98,102]; the
+    // 15 values below 90 outrank this score, so rank = 0 real + 15 demo + 1 = 16.
+    await request(app).post(PLANE_TURN_RESULT).set('Cookie', cookie)
+      .send({ totalRotations: 90, totalTime: 40 });
+
+    const res = await request(app).get(ROUTE).set('Cookie', cookie);
+    const row = res.body.data.recent.find(r => r.userId === String(user._id));
+    expect(row.rank).toBe(16);
+  });
+});
