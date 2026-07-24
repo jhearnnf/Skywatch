@@ -59,6 +59,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
   const [uploadBusy,  setUploadBusy]  = useState(false)
   const [confirmOp,   setConfirmOp]   = useState(null) // { label, run }
   const [viewersFor,  setViewersFor]  = useState(null) // { notif, viewers }
+  const [responsesFor, setResponsesFor] = useState(null) // { notif, responses }
   const [previewNotif, setPreviewNotif] = useState(null)
   const [toast,       setToast]       = useState('')
 
@@ -286,6 +287,18 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
     })
   }
 
+  async function openResponses(n) {
+    try {
+      const res = await apiFetch(`${API}/api/admin/update-notifications/${n._id}/viewers`, { credentials: 'include' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data?.message || 'Failed')
+      const responses = (data?.data?.viewers ?? []).filter(v => v.response)
+      setResponsesFor({ notif: n, responses })
+    } catch (err) {
+      setToast(`✗ ${err.message}`)
+    }
+  }
+
   async function openViewers(n) {
     try {
       const res = await apiFetch(`${API}/api/admin/update-notifications/${n._id}/viewers`, { credentials: 'include' })
@@ -339,8 +352,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
             <div key={n._id} className="rounded-xl border border-slate-200 bg-surface-raised p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-text truncate">{n.title}</span>
+                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
                     {n.enabled
                       ? <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">on</span>
                       : <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-50 text-slate-700">off</span>}
@@ -353,6 +365,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                       </span>
                     )}
                   </div>
+                  <span className="block text-sm font-bold text-text truncate">{n.title}</span>
                   <p className="text-xs text-slate-500 mt-0.5">
                     {pageLabelForValue(n.targetPath)} · views {n.viewersCount}
                   </p>
@@ -371,12 +384,13 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
               {/* Reply count — only meaningful when "have your say" is enabled. */}
               {n.responsesEnabled && (
                 <div className="flex justify-end mt-1">
-                  <span
-                    title={`${n.responsesCount ?? 0} ${(n.responsesCount ?? 0) === 1 ? 'user has' : 'users have'} had their say`}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700"
+                  <button
+                    onClick={() => openResponses(n)}
+                    title={`${n.responsesCount ?? 0} ${(n.responsesCount ?? 0) === 1 ? 'user has' : 'users have'} had their say — click to view`}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 hover:bg-brand-100"
                   >
                     💬 {n.responsesCount ?? 0}
-                  </span>
+                  </button>
                 </div>
               )}
             </div>
@@ -640,6 +654,43 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
               )}
               <div className="mt-4 flex justify-end">
                 <button onClick={() => setViewersFor(null)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold">Close</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Responses modal — each user's "have your say" reply */}
+      <AnimatePresence>
+        {responsesFor && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setResponsesFor(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="bg-surface-raised border border-slate-200 rounded-2xl max-w-md w-full max-h-[80vh] overflow-y-auto p-5"
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold text-text mb-2 truncate">Responses: {responsesFor.notif.title}</h3>
+              {responsesFor.responses.length === 0 ? (
+                <p className="text-slate-500 text-sm py-3">No responses yet.</p>
+              ) : (
+                <ul className="divide-y divide-slate-200">
+                  {responsesFor.responses.map((v, i) => (
+                    <li key={(v.user?._id || '') + i} className="py-2">
+                      <p className="text-sm text-text truncate">{v.user?.email || v.user?.agentNumber || '(unknown)'}</p>
+                      <p className="text-[11px] text-slate-400">{fmtDate(v.viewedAt)}</p>
+                      <p className="mt-1 p-2 rounded bg-surface border border-slate-200 text-xs text-text whitespace-pre-wrap break-words">
+                        {v.response}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="mt-4 flex justify-end">
+                <button onClick={() => setResponsesFor(null)} className="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold">Close</button>
               </div>
             </motion.div>
           </motion.div>
