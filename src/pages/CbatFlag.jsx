@@ -211,7 +211,7 @@ const FLAG_TUTORIAL_STEPS = [
         The play field is live. Aircraft drift across it trailing a{' '}
         <b className="text-brand-300">white ring</b>. The moment a ring overlaps one of the
         coloured <b className="text-brand-300">shapes</b>, that shape is armed — click it, or tap
-        its matching <b className="text-brand-300">colour button</b> below, to strike it. Land two
+        its matching <b className="text-brand-300">colour button</b> below, to strike it. Land four
         strikes to move on. In the real game a wrong click loses points.
       </>
     ),
