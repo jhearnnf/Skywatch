@@ -109,17 +109,76 @@ describe('CbatGameOver', () => {
     expect(link.getAttribute('data-state')).toBe(JSON.stringify({ fromGame: true }))
   })
 
-  it('flags a personal best when the run beats the previous best', () => {
-    setup()
-    render(<CbatGameOver {...baseProps} score={300} personalBest={{ bestScore: 250 }}><div /></CbatGameOver>)
-    expect(screen.getByText(/personal best/i)).toBeDefined()
+  it('flags a personal best when the run beats the previous best', async () => {
+    // Series' last run (300) is the new high; personal-best endpoint reflects it as the record.
+    setup({ progress: progressData([200, 250, 300]) })
+    render(<CbatGameOver {...baseProps} score={300} personalBest={{ bestScore: 300 }}><div /></CbatGameOver>)
+    await waitFor(() => expect(screen.getByText(/personal best/i)).toBeDefined())
   })
 
-  it('shows the previous best (not a PB) when the run is lower', () => {
-    setup()
+  it('shows the previous best (not a PB) when the run is lower', async () => {
+    // Last run (100) trails the record (250) — not a PB.
+    setup({ progress: progressData([250, 180, 100]) })
     render(<CbatGameOver {...baseProps} score={100} personalBest={{ bestScore: 250 }}><div /></CbatGameOver>)
-    expect(screen.getByText(/Best\s*250/i)).toBeDefined()
+    await waitFor(() => expect(screen.getByText(/Best\s*250/i)).toBeDefined())
     expect(screen.queryByText(/personal best/i)).toBeNull()
+  })
+
+  // Score-ceiling games (e.g. Angles /20) let a player max out repeatedly. The first max is a PB;
+  // a later max is only a PB if it beat the previous time, otherwise it's just a tie.
+  describe('personal best on a maxed-out score', () => {
+    // A run that hits the ceiling for the first time — record score, and it sets the best time.
+    const firstMax = () => progressData([18, 20], {
+      series: [
+        { score: 18, time: 25, at: new Date(Date.now() - 2 * 86400000).toISOString() },
+        { score: 20, time: 18, at: new Date(Date.now() - 1 * 86400000).toISOString() },
+      ],
+    })
+
+    it('celebrates the first time the player hits the max score', async () => {
+      setup({ progress: firstMax() })
+      render(
+        <CbatGameOver {...baseProps} gameKey="angles" score={20}
+          personalBest={{ bestScore: 20, bestTime: 18 }}><div /></CbatGameOver>
+      )
+      await waitFor(() => expect(screen.getByText(/personal best/i)).toBeDefined())
+    })
+
+    it('does NOT re-celebrate a later max that was slower than the best time', async () => {
+      // Best time on record is 18s; this max run took 22s, so it is not a new best. Three runs so
+      // the chart renders and its "N attempts" marker gives a signal the series has loaded.
+      const prog = progressData([18, 20, 20], {
+        series: [
+          { score: 18, time: 25, at: new Date(Date.now() - 3 * 86400000).toISOString() },
+          { score: 20, time: 18, at: new Date(Date.now() - 2 * 86400000).toISOString() },
+          { score: 20, time: 22, at: new Date(Date.now() - 1 * 86400000).toISOString() },
+        ],
+      })
+      setup({ progress: prog })
+      render(
+        <CbatGameOver {...baseProps} gameKey="angles" score={20}
+          personalBest={{ bestScore: 20, bestTime: 18 }}><div /></CbatGameOver>
+      )
+      await waitFor(() => expect(screen.getByText(/3 attempts/i)).toBeDefined())
+      expect(screen.queryByText(/personal best/i)).toBeNull()
+    })
+
+    it('celebrates again when a later max beats the previous best time', async () => {
+      // New best time (15s) beats the old record (18s), even though the score is the same max.
+      const prog = progressData([18, 20, 20], {
+        series: [
+          { score: 18, time: 25, at: new Date(Date.now() - 3 * 86400000).toISOString() },
+          { score: 20, time: 18, at: new Date(Date.now() - 2 * 86400000).toISOString() },
+          { score: 20, time: 15, at: new Date(Date.now() - 1 * 86400000).toISOString() },
+        ],
+      })
+      setup({ progress: prog })
+      render(
+        <CbatGameOver {...baseProps} gameKey="angles" score={20}
+          personalBest={{ bestScore: 20, bestTime: 15 }}><div /></CbatGameOver>
+      )
+      await waitFor(() => expect(screen.getByText(/personal best/i)).toBeDefined())
+    })
   })
 
   it('renders the weekly chase window with a "pts to pass" target', async () => {

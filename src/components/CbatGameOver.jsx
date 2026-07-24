@@ -6,7 +6,7 @@ import { useGameChrome } from '../context/GameChromeContext'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 import LeaderboardRow from './LeaderboardRow'
 import CbatProgressChart from './CbatProgressChart'
-import { cbatTrend } from '../utils/cbatProgress'
+import { cbatTrend, isCbatNewBest } from '../utils/cbatProgress'
 
 // Shared CBAT game-completion screen. Every CBAT game renders this at
 // phase === 'results', passing its results breakdown as `children` (with its
@@ -145,6 +145,7 @@ export default function CbatGameOver({
   const [weekly, setWeekly] = useState(null)
   const [weeklyState, setWeeklyState] = useState('loading') // loading | ready | offline | error
   const [progress, setProgress] = useState(null)            // null until loaded; never blocks the panel
+  const [progressDone, setProgressDone] = useState(false)   // settled (loaded, failed or skipped) — gates the PB verdict
   const [shown, setShown] = useState(0)
   const rafRef = useRef(null)
 
@@ -196,13 +197,14 @@ export default function CbatGameOver({
   // before the save lands would omit the just-played point from the trend. It fetches itself
   // rather than taking a prop so none of the ~18 games rendering this screen need to change.
   useEffect(() => {
-    if (queued) return
+    if (queued) { setProgressDone(true); return }   // no server series offline — PB verdict falls back
     let cancelled = false
     const fetchProgress = () => {
       apiFetch(`${API}/api/games/cbat/${gameKey}/progress`)
         .then(r => r.json())
         .then(d => { if (!cancelled && d?.data?.series) setProgress(d.data) })
         .catch(() => { /* trend is additive — a failure just leaves the panel as it was */ })
+        .finally(() => { if (!cancelled) setProgressDone(true) })
     }
     if (scoreSaved) { fetchProgress(); return () => { cancelled = true } }
     const t = setTimeout(fetchProgress, SAVE_WAIT_FALLBACK_MS)
@@ -210,9 +212,22 @@ export default function CbatGameOver({
   }, [gameKey, queued, scoreSaved])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatScore = cfg.formatScore || ((s) => `${s}`)
-  const isPB = personalBest != null && (cfg.lowerIsBetter
+
+  // A genuine PB means this run holds the record, not merely that it tied the top score — otherwise
+  // games with a score ceiling flash "personal best" on every max, even a slower one. The progress
+  // series carries per-run times so we can rank score-then-time (see isCbatNewBest). Until it lands
+  // we hold the verdict rather than celebrate prematurely and then retract it; if the series never
+  // comes (offline/failed), we fall back to the score-only check as a best effort.
+  const preciseIsPB = isCbatNewBest(progress?.series, personalBest, {
+    hideTime: cfg.hideTime,
+    lowerIsBetter: cfg.lowerIsBetter,
+  })
+  const fallbackIsPB = personalBest != null && (cfg.lowerIsBetter
     ? score <= personalBest.bestScore
     : score >= personalBest.bestScore)
+  const isPB = preciseIsPB != null ? preciseIsPB
+    : progressDone ? fallbackIsPB
+    : false
 
   const secondaryBtn = 'px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline'
 
