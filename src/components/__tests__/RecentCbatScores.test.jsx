@@ -1,11 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import RecentCbatScores from '../RecentCbatScores'
 
 const mockUseAuth = vi.hoisted(() => vi.fn())
+const mockNavigate = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
-  Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
+  Link: ({ children, to, className, ...rest }) => <a href={to} className={className} {...rest}>{children}</a>,
+  useNavigate: () => mockNavigate,
 }))
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
@@ -17,9 +20,9 @@ function mockFetch(recent) {
   })
 }
 
-function setupAuth({ userId = 'me', apiFetch }) {
+function setupAuth({ userId = 'me', isAdmin = false, apiFetch }) {
   mockUseAuth.mockReturnValue({
-    user: { _id: userId },
+    user: { _id: userId, isAdmin },
     API: '',
     apiFetch,
   })
@@ -63,5 +66,54 @@ describe('RecentCbatScores — current-user highlight', () => {
     })
     render(<RecentCbatScores />)
     await waitFor(() => expect(screen.getByText(/Agent A001 \(you\)/)).toBeDefined())
+  })
+})
+
+describe('RecentCbatScores — row links to the all-time leaderboard', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('points the row link at the game leaderboard, pinned to the all-time tab', async () => {
+    setupAuth({
+      userId: 'me',
+      apiFetch: mockFetch([
+        { _id: 'r1', userId: 'other', gameKey: 'angles', gameLabel: 'Angles', rank: 2, agentNumber: 'A999', displayName: 'Maverick', achievedAt: new Date().toISOString() },
+      ]),
+    })
+    render(<RecentCbatScores />)
+    const link = await screen.findByRole('link', { name: /Angles all-time leaderboard/ })
+    expect(link.getAttribute('href')).toBe('/cbat/angles/leaderboard?period=all-time')
+  })
+})
+
+describe('RecentCbatScores — admin username → CBAT history', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('renders the username as a button that opens the admin history for that user', async () => {
+    setupAuth({
+      userId: 'admin',
+      isAdmin: true,
+      apiFetch: mockFetch([
+        { _id: 'r1', userId: 'other', gameKey: 'angles', gameLabel: 'Angles', rank: 2, agentNumber: 'A999', displayName: 'Maverick', achievedAt: new Date().toISOString() },
+      ]),
+    })
+    render(<RecentCbatScores />)
+    const btn = await screen.findByRole('button', { name: /Maverick/ })
+    await userEvent.click(btn)
+    expect(mockNavigate).toHaveBeenCalledWith('/cbat-game-history', {
+      state: { adminUserId: 'other', adminUserName: 'Maverick' },
+    })
+  })
+
+  it('does not expose a username button to non-admins', async () => {
+    setupAuth({
+      userId: 'me',
+      isAdmin: false,
+      apiFetch: mockFetch([
+        { _id: 'r1', userId: 'other', gameKey: 'angles', gameLabel: 'Angles', rank: 2, agentNumber: 'A999', displayName: 'Maverick', achievedAt: new Date().toISOString() },
+      ]),
+    })
+    render(<RecentCbatScores />)
+    await screen.findByText('Maverick')
+    expect(screen.queryByRole('button', { name: /Maverick/ })).toBeNull()
   })
 })

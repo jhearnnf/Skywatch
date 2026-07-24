@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 
@@ -26,6 +26,8 @@ const EMOJI_BY_KEY = Object.fromEntries(
 
 export default function RecentCbatScores() {
   const { apiFetch, API, user } = useAuth()
+  const navigate = useNavigate()
+  const isAdmin = !!user?.isAdmin
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -80,21 +82,47 @@ export default function RecentCbatScores() {
           {rows.map((r) => {
             const emoji = EMOJI_BY_KEY[r.gameKey] || '🎯'
             const title = r.gameLabel || r.gameKey
-            const leaderboardPath = `/cbat/${r.gameKey}/leaderboard`
+            // Pin the All Time tab: the row is billed as the all-time board, and the
+            // leaderboard page otherwise opens on This Week.
+            const leaderboardPath = `/cbat/${r.gameKey}/leaderboard?period=all-time`
             const rankBadge = r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : `#${r.rank}`
             const isMe = user && r.userId && r.userId === user._id
+            const agentLabel = r.displayName || r.email || `Agent ${r.agentNumber || '???'}`
+            // Admins get a distinct username click target into that user's CBAT history
+            // (the admin-only /cbat-game-history page, which reads the user off nav state).
+            // The button sits above the stretched row link, so a normal click on the
+            // name opens the history while a click anywhere else opens the leaderboard.
+            const canOpenHistory = isAdmin && r.userId
             return (
-              <Link
+              <div
                 key={r._id}
-                to={leaderboardPath}
-                title={`${title} leaderboard`}
-                className={`px-4 py-2.5 text-sm grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center no-underline hover:bg-[#102040] transition-colors ${
+                className={`relative px-4 py-2.5 text-sm grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center hover:bg-[#102040] transition-colors ${
                   isMe ? 'bg-brand-600/10 border-l-2 border-l-brand-400' : ''
                 }`}
               >
-                <span className={`truncate ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`} title={r.email || ''}>
-                  {r.displayName || r.email || `Agent ${r.agentNumber || '???'}`}{isMe ? ' (you)' : ''}
-                </span>
+                {/* Whole-row target: that game's all-time leaderboard. Stretched over the
+                    row so every cell but the admin username button routes here. */}
+                <Link
+                  to={leaderboardPath}
+                  aria-label={`${title} all-time leaderboard`}
+                  className="absolute inset-0 z-0"
+                />
+                {canOpenHistory ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/cbat-game-history', {
+                      state: { adminUserId: r.userId, adminUserName: agentLabel },
+                    })}
+                    title={`View ${agentLabel}'s CBAT history`}
+                    className={`relative z-10 justify-self-start text-left truncate hover:underline ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}
+                  >
+                    {agentLabel}{isMe ? ' (you)' : ''}
+                  </button>
+                ) : (
+                  <span className={`truncate ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`} title={r.email || ''}>
+                    {agentLabel}{isMe ? ' (you)' : ''}
+                  </span>
+                )}
                 <span className="font-mono text-[11px] text-brand-600 shrink-0">
                   {rankBadge}
                 </span>
@@ -104,7 +132,7 @@ export default function RecentCbatScores() {
                 <span className="text-[10px] text-slate-500 shrink-0" title={new Date(r.achievedAt).toLocaleString()}>
                   {timeAgo(r.achievedAt)}
                 </span>
-              </Link>
+              </div>
             )
           })}
         </div>
