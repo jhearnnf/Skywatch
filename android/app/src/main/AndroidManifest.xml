@@ -39,4 +39,13 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Android 11+ package visibility: without this, the OS hides the
+         Text-To-Speech engine (a separate app) from us and the SAT radio
+         calls stay silent. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 </manifest>
