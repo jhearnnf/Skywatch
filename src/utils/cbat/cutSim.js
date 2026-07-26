@@ -223,9 +223,10 @@ export function advanceSim(sim, dt) {
     pushMessage(sim, `NAV: set airspeed to ${sim.requiredSpeed} kts (±${SPEED_TOL})`)
   }
 
-  // Sensor — camera orders.
+  // Sensor — camera orders. Always the camera that isn't already selected; an
+  // order to re-select the live camera would be a no-op.
   if (sim.elapsedMs >= sim.nextCameraAt) {
-    sim.requiredCamera = pick(['Alpha', 'Bravo'])
+    sim.requiredCamera = sim.camera === 'Alpha' ? 'Bravo' : 'Alpha'
     sim.nextCameraAt = sim.elapsedMs + randRange(40_000, 60_000)
     pushMessage(sim, `SENSOR: select camera ${sim.requiredCamera}`)
   }

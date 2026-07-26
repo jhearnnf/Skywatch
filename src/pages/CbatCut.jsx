@@ -62,26 +62,36 @@ function MessagePanel({ messages }) {
 
 function EnginePanel({ fuel, onToggle }) {
   const levels = fuel.map(f => f.level)
-  const spread = Math.max(...levels) - Math.min(...levels)
+  const maxLevel = Math.max(...levels)
+  const spread = maxLevel - Math.min(...levels)
   const bad = spread > FUEL_MAX_SPREAD
+  // Every tank has to stay within FUEL_MAX_SPREAD of the fullest one — that
+  // floor is the line the player is really flying, so draw it on every tank.
+  const floor = maxLevel - FUEL_MAX_SPREAD
+  const floorPct = Math.max(0, Math.min(100, (floor / 500) * 100))
   return (
     <Panel title="Engine">
       <p className="text-[10px] text-slate-400 mb-2">
         One tank feeds at a time (it drains). Keep all tanks within {FUEL_MAX_SPREAD} L — switch the feed to the fullest tank.
       </p>
-      <div className="flex items-end justify-around gap-2 h-[62%]">
+      <div className="flex items-end justify-around gap-2 h-[62%] min-h-[150px]">
         {fuel.map((f, i) => {
           const pct = Math.max(0, Math.min(100, (f.level / 500) * 100))
+          const low = f.level < floor
           return (
             <div key={i} className="flex-1 flex flex-col items-center h-full">
-              <div className="relative flex-1 w-8 bg-[#060e1a] border border-[#1a3a5c] rounded overflow-hidden">
+              <div className="relative flex-1 min-h-0 w-10 bg-[#060e1a] border border-[#1a3a5c] rounded overflow-hidden">
                 <div className="absolute bottom-0 left-0 right-0 transition-[height] duration-100"
-                  style={{ height: `${pct}%`, background: f.on ? '#22c55e' : '#5baaff' }} />
+                  style={{ height: `${pct}%`, background: f.on ? '#22c55e' : low ? '#ef4444' : '#5baaff' }} />
+                {/* minimum acceptable level, drawn over the fill so it reads at any level */}
+                <div className="absolute left-0 right-0 h-px" style={{ bottom: `${floorPct}%`, background: '#fbbf24' }} />
               </div>
-              <p className="text-[11px] font-mono text-[#ddeaf8] mt-1">{Math.round(f.level)}L</p>
+              <p className={`shrink-0 text-base font-mono font-bold mt-1 ${low ? 'text-red-400' : 'text-[#ddeaf8]'}`}>
+                {Math.round(f.level)}<span className="text-[10px] font-normal text-slate-500 ml-0.5">L</span>
+              </p>
               <button
                 onClick={() => onToggle(i)}
-                className={`mt-1 px-2 py-1 text-[10px] font-bold rounded transition-colors cursor-pointer ${
+                className={`mt-1 w-10 shrink-0 px-1 py-3 text-xs font-bold rounded transition-colors cursor-pointer ${
                   f.on ? 'bg-green-600 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
                 }`}
               >
@@ -209,24 +219,31 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
   const zone = pressure < PRESS_LOW ? 'LOW' : pressure > PRESS_HIGH ? 'HIGH' : 'CORRECT'
   const zoneCol = zone === 'CORRECT' ? 'text-green-400' : 'text-red-400'
   // Gauge fill 60–140 mapped to 0–100%.
-  const fillPct = Math.max(0, Math.min(100, ((pressure - 60) / 80) * 100))
+  const gaugePct = (v) => Math.max(0, Math.min(100, ((v - 60) / 80) * 100))
+  const fillPct = gaugePct(pressure)
   const codeRem = code ? Math.ceil((code.dueAt - elapsedMs) / 1000) : null
   // OK only accepts in the final CODE_SUBMIT_WINDOW; before that, count down to it.
   const submitOpen = !!code && elapsedMs >= code.dueAt - CODE_SUBMIT_WINDOW
   const armRem = code ? Math.ceil((code.dueAt - CODE_SUBMIT_WINDOW - elapsedMs) / 1000) : null
   return (
     <Panel title="System">
-      <div className="flex gap-3 h-full">
-        {/* Hydraulic pressure */}
-        <div className="flex flex-col items-center justify-between w-1/2">
+      <div className="flex gap-2 sm:gap-3 h-full min-h-0">
+        {/* Hydraulic pressure — narrower on small screens so the keypad can grow;
+            the gauge itself is a thin bar, so it loses nothing. */}
+        <div className="flex flex-col items-center justify-between shrink-0 w-[38%] sm:w-1/2">
           <p className="text-[9px] uppercase tracking-wide text-slate-500">Hydraulic Pressure</p>
           <div className="relative flex-1 w-8 my-1 bg-[#060e1a] border border-[#1a3a5c] rounded overflow-hidden">
-            {/* correct band 90–110 → 37.5%–62.5% of the 60–140 range */}
-            <div className="absolute left-0 right-0 bg-green-500/20" style={{ bottom: '37.5%', height: '25%' }} />
+            {/* correct band, tinted behind the fill */}
+            <div className="absolute left-0 right-0 bg-green-500/20"
+              style={{ bottom: `${gaugePct(PRESS_LOW)}%`, height: `${gaugePct(PRESS_HIGH) - gaugePct(PRESS_LOW)}%` }} />
             <div className="absolute bottom-0 left-0 right-0 transition-[height] duration-100"
               style={{ height: `${fillPct}%`, background: zone === 'CORRECT' ? '#22c55e' : '#ef4444' }} />
+            {/* band limits drawn over the fill so the target range stays readable at any level */}
+            <div className="absolute left-0 right-0 h-px bg-green-200" style={{ bottom: `${gaugePct(PRESS_LOW)}%` }} />
+            <div className="absolute left-0 right-0 h-px bg-green-200" style={{ bottom: `${gaugePct(PRESS_HIGH)}%` }} />
           </div>
-          <p className={`text-sm font-mono font-bold ${zoneCol}`}>{Math.round(pressure)}</p>
+          <p className={`text-base font-mono font-bold ${zoneCol}`}>{Math.round(pressure)}</p>
+          <p className="text-[10px] font-mono text-slate-500">{PRESS_LOW}–{PRESS_HIGH}</p>
           <p className={`text-[9px] font-bold ${zoneCol}`}>{zone}</p>
           <button onClick={onPump}
             className={`mt-1 px-3 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
@@ -235,8 +252,8 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
             Pump {pump ? 'ON' : 'OFF'}
           </button>
         </div>
-        {/* Comms code keypad */}
-        <div className="flex flex-col w-1/2">
+        {/* Comms code keypad — fills the panel height so the keys are thumb-sized */}
+        <div className="flex flex-col flex-1 min-w-0 min-h-0">
           <p className="text-[9px] uppercase tracking-wide text-slate-500">Comms Code</p>
           <div className="flex items-center justify-between mb-1">
             <span className="font-mono text-lg text-[#ddeaf8] tracking-widest">{codeEntry.padEnd(3, '·')}</span>
@@ -247,13 +264,15 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
               : <span className="text-[10px] text-slate-600">no code</span>}
           </div>
           {/* Keypad is inert until a code is actually issued. */}
+          {/* Below sm the keys grow to a chunky 4:3 tile; sm+ keeps the original
+              flat keypad. The keys are never stretched to fill the panel. */}
           <div className={`grid grid-cols-3 gap-1 ${code ? '' : 'opacity-40 pointer-events-none'}`} aria-disabled={!code}>
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
-              <button key={d} onClick={() => onDigit(d)} disabled={!code} className="py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-sm rounded cursor-pointer disabled:cursor-not-allowed">{d}</button>
+              <button key={d} onClick={() => onDigit(d)} disabled={!code} className="aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed">{d}</button>
             ))}
-            <button onClick={onClearCode} disabled={!code} className="py-1 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed">CLR</button>
-            <button onClick={() => onDigit('0')} disabled={!code} className="py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-sm rounded cursor-pointer disabled:cursor-not-allowed">0</button>
-            <button onClick={onSubmitCode} disabled={!submitOpen} className="py-1 bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-40">OK</button>
+            <button onClick={onClearCode} disabled={!code} className="aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed">CLR</button>
+            <button onClick={() => onDigit('0')} disabled={!code} className="aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed">0</button>
+            <button onClick={onSubmitCode} disabled={!submitOpen} className="aspect-[4/3] sm:aspect-auto sm:py-1 bg-brand-600 hover:bg-brand-700 text-white text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-40">OK</button>
           </div>
         </div>
       </div>
@@ -261,13 +280,15 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
   )
 }
 
-// Six-button multifunction index for one display stack.
+// Six-button multifunction index for one display stack. A label too wide for its
+// key is clipped at the right edge rather than wrapped or shrunk — half of
+// "NAVIGATION" still reads as Navigation, and every key stays the same size.
 function NavButtons({ active, onSelect }) {
   return (
     <div className="w-full h-full flex gap-1">
       {SYSTEMS.map(k => (
         <button key={k} onClick={() => onSelect(k)}
-          className={`flex-1 min-w-0 rounded text-[10px] sm:text-[11px] font-bold uppercase tracking-wide transition-colors cursor-pointer ${
+          className={`flex-1 min-w-0 overflow-hidden rounded px-1 text-left text-[10px] sm:text-[11px] font-bold uppercase tracking-tight sm:tracking-wide whitespace-nowrap transition-colors cursor-pointer ${
             active === k ? 'bg-green-600 text-white' : 'bg-[#0f2240] text-[#ddeaf8] hover:bg-[#163055] hover:text-white'
           }`}>
           {SYSTEM_LABELS[k]}
@@ -642,19 +663,27 @@ export default function CbatCut() {
                 <div style={{ width: '80%' }}>
                   <div className="w-full h-full flex flex-col bg-[#0a1628] border rounded-lg overflow-hidden"
                     style={{ borderColor: sim.warnings.length ? '#ef4444' : '#1a3a5c' }}>
-                    <div className="shrink-0 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-red-400">Warning</div>
-                    <div className="flex-1 min-h-0 overflow-auto px-2 py-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                    {/* Below sm the header and rows tighten up so four wrapped
+                        warning lines still fit the strip; sm+ keeps the original
+                        sizing, which already had the room. */}
+                    <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-red-400">Warning</div>
+                    <div className="flex-1 min-h-0 overflow-auto px-2 py-0.5 sm:py-1 flex flex-wrap items-start sm:items-center content-start sm:content-center gap-x-3 sm:gap-y-0.5">
                       {sim.warnings.length === 0
-                        ? <span className="text-[11px] text-green-400 font-bold">All systems nominal</span>
-                        : sim.warnings.map(w => <span key={w} className="text-[11px] text-red-400 font-bold">⚠ {w}</span>)}
+                        ? <span className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-green-400 font-bold">All systems nominal</span>
+                        : sim.warnings.map(w => <span key={w} className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-red-400 font-bold">⚠ {w}</span>)}
                     </div>
                   </div>
                 </div>
                 <div style={{ width: '20%' }}>
                   <div className="w-full h-full flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-lg overflow-hidden">
-                    <div className="shrink-0 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-brand-500">Clock</div>
-                    <div className="flex-1 min-h-0 flex items-center justify-center">
-                      <span className="font-mono font-bold text-lg sm:text-xl text-[#ddeaf8] tabular-nums">{fmtWall(sim.clockStartSec + sim.elapsedMs / 1000)}</span>
+                    <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-brand-500">Clock</div>
+                    <div className="flex-1 min-h-0 flex items-center justify-center px-1 overflow-hidden">
+                      {/* Fluid so HH:MM:SS always fits this narrow panel; capped at
+                          the old 20px so desktop is unchanged. */}
+                      <span className="font-mono font-bold leading-none text-[#ddeaf8] tabular-nums whitespace-nowrap"
+                        style={{ fontSize: 'clamp(10px, 3.2vw, 20px)' }}>
+                        {fmtWall(sim.clockStartSec + sim.elapsedMs / 1000)}
+                      </span>
                     </div>
                   </div>
                 </div>

@@ -26,6 +26,24 @@ describe('CUT simulation', () => {
     expect(computeWarnings(sim)).toContain('SENSOR: air sensor overdue')
   })
 
+  it('only ever orders the camera that is not already selected', () => {
+    // Run several sims well past the first camera order (40–55s) and keep going
+    // so a second order lands too; every order must be the opposite camera.
+    for (let n = 0; n < 25; n++) {
+      const sim = makeSim()
+      let seen = 0
+      for (let i = 0; i < 1500; i++) {
+        const before = sim.requiredCamera
+        advanceSim(sim, 100)
+        if (sim.requiredCamera && sim.requiredCamera !== before) {
+          expect(sim.requiredCamera).not.toBe(sim.camera)
+          seen += 1
+        }
+      }
+      expect(seen).toBeGreaterThan(0)
+    }
+  })
+
   it('penalises a missed comms code once its window lapses', () => {
     const sim = makeSim()
     // First code is issued ~10s in and closes 30s later; run past ~45s.
