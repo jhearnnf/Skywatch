@@ -539,6 +539,86 @@ describe('Admin — Settings tab: Feature Flags', () => {
   })
 })
 
+// The landing-page preview windows moved here from Game Options, because slim
+// mode is what decides whether they can apply at all and that switch lives here.
+describe('Admin — Settings tab: home page preview windows', () => {
+  beforeEach(() => {
+    global.Audio = MockAudio
+    audioInstances = []
+  })
+
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const toggleOf = (label) => within(screen.getByText(label).closest('div').parentElement).getByRole('button')
+
+  async function openFeatureFlags() {
+    global.fetch = setupFetch()
+    render(<Admin />)
+    const settingsTab = await screen.findByRole('button', { name: /settings/i })
+    fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Feature Flags'))
+    fireEvent.click(screen.getByText('Feature Flags'))
+    await waitFor(() => screen.getByText('Live Leaderboard'))
+  }
+
+  it('renders both preview window toggles under Feature Flags', async () => {
+    await openFeatureFlags()
+    expect(screen.getByText('Intel Brief preview window')).toBeDefined()
+    expect(screen.getByText('CBAT preview window')).toBeDefined()
+  })
+
+  it('no longer renders them under Game Options', async () => {
+    global.fetch = setupFetch()
+    render(<Admin />)
+    const settingsTab = await screen.findByRole('button', { name: /settings/i })
+    fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Game Options'))
+    fireEvent.click(screen.getByText('Game Options'))
+    await waitFor(() => screen.getByText('Intel Recall'))
+
+    expect(screen.queryByText('Home Page Preview Windows')).toBeNull()
+    expect(screen.queryByText('Intel Brief preview window')).toBeNull()
+  })
+
+  it('is toggleable while slim mode is off', async () => {
+    await openFeatureFlags()
+
+    // Absent from MOCK_SETTINGS → defaults on → brand-coloured switch.
+    const toggle = toggleOf('CBAT preview window')
+    expect(toggle.disabled).toBe(false)
+    expect(toggle.className).toContain('bg-brand-500')
+
+    fireEvent.click(toggle)
+    await waitFor(() => expect(toggle.className).toContain('bg-slate-200'))
+  })
+
+  it('greys out and stops responding once slim mode is switched on', async () => {
+    await openFeatureFlags()
+
+    fireEvent.click(toggleOf('Slim (CBAT-only) Site Mode'))
+    await waitFor(() => expect(toggleOf('Intel Brief preview window').disabled).toBe(true))
+
+    const toggle = toggleOf('Intel Brief preview window')
+    expect(toggle.className).toContain('cursor-not-allowed')
+    expect(toggle.className).not.toContain('bg-brand-500')
+
+    // Clicking a disabled toggle must not flip the underlying setting.
+    fireEvent.click(toggle)
+    expect(toggleOf('Intel Brief preview window').disabled).toBe(true)
+    expect(screen.getAllByText(/Unavailable while Slim \(CBAT-only\) Site Mode is on/)).toHaveLength(2)
+  })
+
+  it('becomes interactive again when slim mode is switched back off', async () => {
+    await openFeatureFlags()
+
+    fireEvent.click(toggleOf('Slim (CBAT-only) Site Mode'))
+    await waitFor(() => expect(toggleOf('CBAT preview window').disabled).toBe(true))
+
+    fireEvent.click(toggleOf('Slim (CBAT-only) Site Mode'))
+    await waitFor(() => expect(toggleOf('CBAT preview window').disabled).toBe(false))
+  })
+})
+
 describe('Admin — Settings tab: Airstars Economy & Game options', () => {
   beforeEach(() => {
     global.Audio = MockAudio

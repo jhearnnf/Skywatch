@@ -1320,18 +1320,27 @@ function NumInput({ label, value, onChange, min = 0, max = 9999, hint }) {
   )
 }
 
-function Toggle({ label, hint, checked, onChange }) {
+// `disabled` is for settings another setting has taken out of play — the switch
+// greys out and stops responding, but stays visible with `disabledHint` saying
+// why. Hiding it instead would leave an admin hunting for a setting they know
+// exists, and would silently drop whatever it is currently set to.
+function Toggle({ label, hint, checked, onChange, disabled = false, disabledHint }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-0">
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-slate-700">{label}</p>
-        {hint && <p className="text-xs text-slate-400">{hint}</p>}
+        <p className={`text-sm font-semibold ${disabled ? 'text-slate-500/60' : 'text-slate-700'}`}>{label}</p>
+        {hint && <p className={`text-xs ${disabled ? 'text-slate-400/50' : 'text-slate-400'}`}>{hint}</p>}
+        {disabled && disabledHint && <p className="text-xs text-amber-700 mt-0.5">{disabledHint}</p>}
       </div>
       <button
-        onClick={() => onChange(!checked)}
-        className={`relative w-11 h-6 shrink-0 rounded-full transition-colors ${checked ? 'bg-brand-500' : 'bg-slate-200'}`}
+        onClick={() => { if (!disabled) onChange(!checked) }}
+        disabled={disabled}
+        title={disabled ? disabledHint : undefined}
+        className={`relative w-11 h-6 shrink-0 rounded-full transition-colors ${
+          disabled ? 'bg-slate-100 cursor-not-allowed' : checked ? 'bg-brand-500' : 'bg-slate-200'
+        }`}
       >
-        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-surface rounded-full shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
+        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-surface rounded-full shadow transition-transform ${checked ? 'translate-x-5' : ''} ${disabled ? 'opacity-40' : ''}`} />
       </button>
     </div>
   )
@@ -2576,34 +2585,16 @@ function SettingsTab({ API }) {
           'caseFilesDailyLimitSilver',
           'caseFilesDailyLimitGold',
           'newsFlashcardsEnabled',
-          'previewWindowIntelBriefEnabled',
-          'previewWindowCbatEnabled',
         ]
         if (draft.cbatEnabled) {
           gameOptionsFields.push('cbatTargetAircraftBriefIds', 'cbatFlagAircraftBriefIds')
         }
         save('Update Game Options', gameOptionsFields)
       }}>
-        <div className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-1 pb-2 mb-2 border-b-2 border-brand-600/40">
-          <span>Home Page Preview Windows</span>
-        </div>
-        <Toggle
-          label="Intel Brief preview window"
-          hint="Shows a looping montage of the intel-brief games (Priority pathway, Intel Recall, Flashcards, Where's That Aircraft, Battle of Order, Aptitude Sync, Case Files) on the public landing page. Per-game gates (e.g. aptitudeSyncEnabled) still filter individual scenes."
-          checked={draft.previewWindowIntelBriefEnabled !== false}
-          onChange={v => set('previewWindowIntelBriefEnabled', v)}
-        />
-        <Toggle
-          label="CBAT preview window"
-          hint="Shows a looping montage of the CBAT practice games on the public landing page. Per-game cbatGameEnabled flags still filter individual scenes."
-          checked={draft.previewWindowCbatEnabled !== false}
-          onChange={v => set('previewWindowCbatEnabled', v)}
-        />
-
         <button
           type="button"
           onClick={() => toggleGameGroup('quiz')}
-          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-6 pb-2 mb-2 border-b-2 border-brand-600/40"
+          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-1 pb-2 mb-2 border-b-2 border-brand-600/40"
         >
           <span>Intel Recall</span>
           <span className="text-brand-600 text-xs">{gameGroupsOpen.quiz ? '▲' : '▼'}</span>
@@ -3062,7 +3053,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled', 'slimLandingEnabled'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled', 'slimLandingEnabled', 'previewWindowIntelBriefEnabled', 'previewWindowCbatEnabled'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -3111,6 +3102,27 @@ function SettingsTab({ API }) {
             />
           </div>
         )}
+        {/* Landing-page preview windows. Slim mode has no preview windows at all
+            — Landing.jsx gates both on !slim — so these are dead controls while
+            it is on, and say so rather than pretending to work. Read off the
+            draft, not the saved settings, so turning slim mode on above greys
+            them out straight away instead of waiting for a save. */}
+        <Toggle
+          label="Intel Brief preview window"
+          hint="Shows a looping montage of the intel-brief games (Priority pathway, Intel Recall, Flashcards, Where's That Aircraft, Battle of Order, Aptitude Sync, Case Files) on the public landing page. Per-game gates (e.g. aptitudeSyncEnabled) still filter individual scenes."
+          checked={draft.previewWindowIntelBriefEnabled !== false}
+          onChange={v => set('previewWindowIntelBriefEnabled', v)}
+          disabled={draft.slimModeEnabled ?? false}
+          disabledHint="Unavailable while Slim (CBAT-only) Site Mode is on — the slim site shows no preview windows."
+        />
+        <Toggle
+          label="CBAT preview window"
+          hint="Shows a looping montage of the CBAT practice games on the public landing page. Per-game cbatGameEnabled flags still filter individual scenes."
+          checked={draft.previewWindowCbatEnabled !== false}
+          onChange={v => set('previewWindowCbatEnabled', v)}
+          disabled={draft.slimModeEnabled ?? false}
+          disabledHint="Unavailable while Slim (CBAT-only) Site Mode is on — the slim site shows no preview windows."
+        />
       </Section>
 
       {/* ── Sound Effects ───────────────────────────────────── */}
