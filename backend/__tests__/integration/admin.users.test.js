@@ -382,6 +382,58 @@ describe('GET /api/admin/users/search — profileStats.brifsRead', () => {
   });
 });
 
+describe('GET /api/admin/users/search — partial matching', () => {
+  it('matches a partial agent number', async () => {
+    const admin = await createAdminUser();
+    await createUser({ email: 'agent@test.com', agentNumber: '333111666' });
+
+    const res = await request(app)
+      .get('/api/admin/users/search?q=333')
+      .set('Cookie', authCookie(admin._id));
+
+    const hit = res.body.data.users.find(u => u.agentNumber === '333111666');
+    expect(hit).toBeTruthy();
+  });
+
+  it('matches an agent number from the middle of the string', async () => {
+    const admin = await createAdminUser();
+    await createUser({ email: 'agent2@test.com', agentNumber: '333111666' });
+
+    const res = await request(app)
+      .get('/api/admin/users/search?q=1116')
+      .set('Cookie', authCookie(admin._id));
+
+    const hit = res.body.data.users.find(u => u.agentNumber === '333111666');
+    expect(hit).toBeTruthy();
+  });
+
+  it('matches a partial display name, case-insensitively', async () => {
+    const admin = await createAdminUser();
+    await createUser({
+      email: 'named@test.com', displayName: 'Maverick', displayNameLower: 'maverick',
+    });
+
+    const res = await request(app)
+      .get('/api/admin/users/search?q=aver')
+      .set('Cookie', authCookie(admin._id));
+
+    const hit = res.body.data.users.find(u => u.displayName === 'Maverick');
+    expect(hit).toBeTruthy();
+  });
+
+  it('treats regex punctuation in the query as literal text', async () => {
+    const admin = await createAdminUser();
+    await createUser({ email: 'literal@test.com' });
+
+    const res = await request(app)
+      .get(`/api/admin/users/search?q=${encodeURIComponent('lit(era')}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.users).toHaveLength(0);
+  });
+});
+
 // ── unban endpoint ────────────────────────────────────────────────────────────
 
 describe('POST /api/admin/users/:id/unban', () => {

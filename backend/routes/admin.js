@@ -1203,8 +1203,13 @@ router.get('/users/search', async (req, res) => {
     const { q } = req.query;
     if (!q) return res.status(400).json({ message: 'Search query required' });
 
+    // Substring match on every identifier an admin might half-remember —
+    // typing "333" must find agent 333111666. Escaped so punctuation in the
+    // query is a literal, not a regex operator (or a 500).
+    const rx = new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
     const users = await User.find({
-      $or: [{ email: new RegExp(q, 'i') }, { agentNumber: q }],
+      $or: [{ email: rx }, { agentNumber: rx }, { displayName: rx }],
     }).populate('rank').sort({ isAdmin: -1, createdAt: 1 }).limit(20);
 
     // Latest-release yardstick comes from the whole population, not just the
