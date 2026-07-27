@@ -65,10 +65,8 @@ function EnginePanel({ fuel, onToggle }) {
   const maxLevel = Math.max(...levels)
   const spread = maxLevel - Math.min(...levels)
   const bad = spread > FUEL_MAX_SPREAD
-  // Every tank has to stay within FUEL_MAX_SPREAD of the fullest one — that
-  // floor is the line the player is really flying, so draw it on every tank.
+  // Every tank has to stay within FUEL_MAX_SPREAD of the fullest one.
   const floor = maxLevel - FUEL_MAX_SPREAD
-  const floorPct = Math.max(0, Math.min(100, (floor / 500) * 100))
   return (
     <Panel title="Engine">
       <p className="text-[10px] text-slate-400 mb-2">
@@ -83,8 +81,6 @@ function EnginePanel({ fuel, onToggle }) {
               <div className="relative flex-1 min-h-0 w-10 bg-[#060e1a] border border-[#1a3a5c] rounded overflow-hidden">
                 <div className="absolute bottom-0 left-0 right-0 transition-[height] duration-100"
                   style={{ height: `${pct}%`, background: f.on ? '#22c55e' : low ? '#ef4444' : '#5baaff' }} />
-                {/* minimum acceptable level, drawn over the fill so it reads at any level */}
-                <div className="absolute left-0 right-0 h-px" style={{ bottom: `${floorPct}%`, background: '#fbbf24' }} />
               </div>
               <p className={`shrink-0 text-base font-mono font-bold mt-1 ${low ? 'text-red-400' : 'text-[#ddeaf8]'}`}>
                 {Math.round(f.level)}<span className="text-[10px] font-normal text-slate-500 ml-0.5">L</span>
