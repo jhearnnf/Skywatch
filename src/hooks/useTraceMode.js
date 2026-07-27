@@ -1,7 +1,8 @@
 import { useState } from 'react'
 
 const STORAGE_KEY = 'cbat:trace:mode'
-const VALID = ['2d', '3d', 'trace1', 'trace2']
+export const TRACE_MODES = ['2d', '3d', 'trace1', 'trace2']
+const VALID = TRACE_MODES
 // Trace 1 is the headline mode of /cbat/trace — first-time visitors land on
 // it. Once a user explicitly picks a Practise mode (or returns to Trace 1)
 // their choice is persisted in localStorage and used on subsequent visits.

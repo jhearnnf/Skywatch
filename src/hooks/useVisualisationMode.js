@@ -1,7 +1,8 @@
 import { useState } from 'react'
 
 const STORAGE_KEY = 'cbat:visualisation:mode'
-const VALID = ['2d', '3d']
+export const VISUALISATION_MODES = ['2d', '3d']
+const VALID = VISUALISATION_MODES
 const DEFAULT = '2d'
 
 function readInitial() {

@@ -112,7 +112,13 @@ export default function DemoGameCard({
     }
   }, [mounted, runKey, cycleMs, answerIntervalMs, handleFail])
 
-  const to = loggedIn ? path : '/login?tab=register'
+  // Multi-mode pages (Trace, Visualisation) open on whichever mode the visitor
+  // last played, so a tile has to name the one it is showing or tapping "Trace
+  // Practise 3D" can land you in Trace 1. Derived from the same `forcedMode`
+  // the tile renders with, so the link and the tile can't drift apart.
+  const to = loggedIn
+    ? (gameProps?.forcedMode ? `${path}?mode=${gameProps.forcedMode}` : path)
+    : '/login?tab=register'
   // The poster carries the card until the game is genuinely running, and for
   // good if it can't run here.
   const showPoster = !mounted || !alive

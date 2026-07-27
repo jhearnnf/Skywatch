@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { GAME_DEMO_POOL, pickGameDemos, takeWithHeavyCap } from '../gameDemoPool'
 import { frameFor } from '../demoFraming'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 // Deterministic rng so a failure is reproducible.
 function seededRng(seed = 1) {
@@ -103,6 +105,16 @@ describe('GAME_DEMO_POOL', () => {
   it('covers the twelve games the wall advertises', () => {
     expect(GAME_DEMO_POOL).toHaveLength(12)
     expect(new Set(GAME_DEMO_POOL.map((g) => g.id)).size).toBe(12)
+  })
+
+  it('links every tile at a route the app actually serves', () => {
+    // A tile is a link first and a showcase second; a path that 404s (or that
+    // has been renamed out from under the pool) sends a visitor nowhere.
+    const app = readFileSync(join('src', 'App.jsx'), 'utf8')
+    const routes = new Set([...app.matchAll(/path="(\/cbat\/[a-z0-9-]*)"/g)].map((m) => m[1]))
+    for (const g of GAME_DEMO_POOL) {
+      expect(routes.has(g.path), `${g.id} → ${g.path}`).toBe(true)
+    }
   })
 
   it('gives every entry a poster, a path and a game key', () => {

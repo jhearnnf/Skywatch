@@ -43,6 +43,23 @@ describe('DemoGameCard', () => {
     expect(screen.getByRole('link').getAttribute('href')).toBe('/cbat/sat')
   })
 
+  it('names the mode when the tile is showing one of several', () => {
+    // /cbat/trace opens on whichever mode was last played, so a Trace Practise
+    // 3D tile that linked to the bare path could land you in Trace 1.
+    const traceEntry = { ...entry, id: 'plane-turn-3d', path: '/cbat/trace', props: { forcedMode: '3d' } }
+    render(
+      <MemoryRouter>
+        <DemoGameCard entry={traceEntry} Component={StubGame} loggedIn />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link').getAttribute('href')).toBe('/cbat/trace?mode=3d')
+  })
+
+  it('leaves single-mode games with a plain path', () => {
+    renderCard({ loggedIn: true })
+    expect(screen.getByRole('link').getAttribute('href')).not.toContain('?mode=')
+  })
+
   it('keeps the link out of the game’s ancestry', () => {
     // The driver clicks inside the mounted game and those clicks bubble. If the
     // link wrapped the stage, every bot press would navigate the visitor into a

@@ -12,7 +12,8 @@ import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
-import { useTraceMode } from '../hooks/useTraceMode'
+import { useTraceMode, TRACE_MODES } from '../hooks/useTraceMode'
+import { useModeFromSearch } from '../hooks/useModeFromSearch'
 import TraceModeSelector from '../components/TraceModeSelector'
 // Aircraft control model: full local-frame flight controls.
 //   - Pitch (climb/dive): rotation around the aircraft's local right axis (model -Z).
@@ -433,6 +434,13 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
   const [storedMode, setStoredMode]     = useTraceMode()
   const mode                            = forcedMode ?? storedMode
   const setMode                         = forcedMode ? () => {} : setStoredMode
+
+  // `?mode=` names the mode a link meant — the landing page's game tiles link
+  // per mode, and this page would otherwise open on whatever was played last.
+  // Applied once per mount, and only for a mode we recognise: a bogus value
+  // must not clobber the visitor's stored choice, and re-applying would fight
+  // the admin-gating fallback below.
+  useModeFromSearch(TRACE_MODES, forcedMode ? null : setStoredMode)
   const gameMode3D                      = mode === '3d'
   const gameModeTrace1                  = mode === 'trace1'
   const gameModeTrace2                  = mode === 'trace2'

@@ -18,7 +18,8 @@ import {
   SHAPES,
 } from '../utils/cbat/visualisation2DPuzzle'
 import { buildRounds as buildRounds3D } from '../utils/cbat/visualisation3DPuzzle'
-import { useVisualisationMode } from '../hooks/useVisualisationMode'
+import { useVisualisationMode, VISUALISATION_MODES } from '../hooks/useVisualisationMode'
+import { useModeFromSearch } from '../hooks/useModeFromSearch'
 import VisualisationModeSelector from '../components/VisualisationModeSelector'
 import Visualisation3DShape, { VisualisationShapeCanvas } from '../components/cbat/Visualisation3DShape'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
@@ -431,6 +432,9 @@ export default function CbatVisualisation({ forcedMode = null }) {
   const [storedMode, setStoredMode] = useVisualisationMode()
   const mode = forcedMode ?? storedMode
   const setMode = forcedMode ? () => {} : setStoredMode
+
+  // `?mode=` names the mode a link meant — see useModeFromSearch.
+  useModeFromSearch(VISUALISATION_MODES, forcedMode ? null : setStoredMode)
 
   // Per-mode admin gating. Admins always see both modes; everyone else only
   // sees a mode whose cbatGameEnabled flag isn't explicitly false. If the
