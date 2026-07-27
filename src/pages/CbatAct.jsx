@@ -606,13 +606,18 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
   const pausedRef   = useRef(false)
   const pausedAtRef = useRef(0)
 
+  // A demo tile never pauses. Both reasons for the pause are about a player:
+  // protecting a run they walked away from, and iOS needing a tap to restart
+  // the audio context — a showcase card has no run to protect and no audio to
+  // restart. Left in, alt-tabbing away froze every ACT tile on "You left the
+  // game" until it recycled, because nobody was there to press Resume.
   useEffect(() => {
-    if (present || pausedRef.current || completedRef.current) return
+    if (isDemo || present || pausedRef.current || completedRef.current) return
     pausedRef.current = true
     pausedAtRef.current = performance.now()
     setPaused(true)
     audio.suspend()
-  }, [present, audio])
+  }, [isDemo, present, audio])
 
   const resumeFromPause = useCallback(() => {
     if (!pausedRef.current) return
@@ -1882,6 +1887,10 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
               <p className="text-xs text-slate-500 mb-6">The round is on hold — nothing was scored while you were away.</p>
               <button
                 onClick={state.resumeFromPause}
+                // Belt and braces: the demo driver presses start controls for
+                // the whole life of a card, so a pause that does slip through
+                // (a tile mounted mid-alt-tab, say) clears itself.
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-extrabold uppercase tracking-widest rounded-xl transition-colors"
               >
                 Resume

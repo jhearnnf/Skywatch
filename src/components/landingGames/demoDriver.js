@@ -97,9 +97,17 @@ export function runDemoDriver(root, {
     observer.observe(root, { childList: true, subtree: true, attributes: true, characterData: true })
   }
 
-  const startedAt = Date.now()
+  // A hidden tab stops getting rAF callbacks and throttles timers, so a
+  // perfectly healthy card looks dead: no DOM churn for the stall check, no
+  // progress for the start check. Both deadlines therefore pause with the tab —
+  // otherwise alt-tabbing for fifteen seconds retired every card to its poster
+  // for good, and the wall was still posters when the visitor came back.
+  const isHidden = () => typeof document !== 'undefined' && document.hidden
+
+  let startedAt = Date.now()
   poll = setInterval(() => {
     if (cancelled) return
+    if (isHidden()) { startedAt = Date.now(); return }
     const target = pickTarget(root, START_SELECTOR, 'first')
 
     if (target) {
@@ -131,6 +139,7 @@ export function runDemoDriver(root, {
   if (observer && stallTimeoutMs > 0) {
     stallTimer = setInterval(() => {
       if (cancelled) return
+      if (isHidden()) { mutated = false; return }
       if (!mutated) { stop(); onFail('stalled'); return }
       mutated = false
     }, stallTimeoutMs)

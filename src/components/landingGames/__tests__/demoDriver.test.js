@@ -118,3 +118,45 @@ describe('runDemoDriver', () => {
     expect(clicked).not.toHaveBeenCalled()
   })
 })
+
+describe('runDemoDriver — a hidden tab is not a broken card', () => {
+  // Backgrounding the tab stops rAF and throttles timers, so a healthy card
+  // stops mutating and stops making progress. Retiring it to its poster for
+  // that would leave the whole wall dead when the visitor came back.
+  function setHidden(hidden) {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden })
+  }
+  let stop
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => {
+    stop?.()
+    setHidden(false)
+    vi.useRealTimers()
+    document.body.innerHTML = ''
+  })
+
+  it('does not give up hunting for a start control while hidden', () => {
+    const root = mount('<div>no start control here</div>')
+    const onFail = vi.fn()
+    setHidden(true)
+    stop = runDemoDriver(root, { startTimeoutMs: 1000, stallTimeoutMs: 0, onFail })
+
+    vi.advanceTimersByTime(5000)
+    expect(onFail).not.toHaveBeenCalled()
+
+    // Back on screen, the deadline runs again from now.
+    setHidden(false)
+    vi.advanceTimersByTime(5000)
+    expect(onFail).toHaveBeenCalledWith('no-start')
+  })
+
+  it('does not call a hidden card stalled', () => {
+    const root = mount('<button data-demo-start>Start</button>')
+    const onFail = vi.fn()
+    setHidden(true)
+    stop = runDemoDriver(root, { stallTimeoutMs: 1000, startTimeoutMs: 0, onFail })
+
+    vi.advanceTimersByTime(5000)
+    expect(onFail).not.toHaveBeenCalled()
+  })
+})
