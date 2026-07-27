@@ -31,6 +31,7 @@ export default function Numpad({ question, entered, onDigit, disabled }) {
             key={d}
             onClick={() => onDigit(d)}
             disabled={disabled}
+            data-demo-answer
             className="py-2.5 max-[600px]:py-1 bg-[#0a1628] border border-[#1a3a5c] hover:bg-[#0f2240] hover:border-brand-400 disabled:opacity-40 disabled:cursor-not-allowed text-[#ddeaf8] font-mono text-base max-[600px]:text-xs font-bold rounded-lg transition-all cursor-pointer"
           >
             {d}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Overlay from './ui/Overlay'
+import { useCbatDemo } from '../utils/cbat/demoMode'
 
 // Confirmation shown before the back-to-instructions button abandons a game
 // that is actively in progress.
@@ -69,6 +70,13 @@ function QuitConfirmModal({ open, onCancel, onConfirm }) {
  */
 export default function CbatQuitButton({ onConfirm, confirmNeeded = false, label }) {
   const [confirming, setConfirming] = useState(false)
+  // A demo mount (the landing page's live game wall) gets neither the guard nor
+  // the prompt. The guard is global state — it pushes a history entry while a
+  // game is in progress and pops it on unmount — so a wall of demo games
+  // cycling every few seconds would shred the visitor's back button and pop a
+  // "Quit this game?" modal over the landing page. Nothing is at stake in a
+  // demo: there is no score to abandon.
+  const demo = useCbatDemo()
 
   // Whether our extra history entry is currently on the stack, and any pending
   // removal of it. Kept in refs so they survive a React StrictMode remount
@@ -88,7 +96,7 @@ export default function CbatQuitButton({ onConfirm, confirmNeeded = false, label
   // which unmounts this button and the cleanup drops the guard entry — leaving
   // a clean stack where the next back press falls through to the CBAT menu.
   useEffect(() => {
-    if (!confirmNeeded) return
+    if (!confirmNeeded || demo) return
     const guardPath = window.location.pathname
 
     // A synchronous StrictMode remount (or a quick re-enter) arrives with a
@@ -127,7 +135,7 @@ export default function CbatQuitButton({ onConfirm, confirmNeeded = false, label
         }, 0)
       }
     }
-  }, [confirmNeeded])
+  }, [confirmNeeded, demo])
 
   return (
     <>
@@ -138,7 +146,7 @@ export default function CbatQuitButton({ onConfirm, confirmNeeded = false, label
         {label ?? <>&larr; Instructions</>}
       </button>
       <QuitConfirmModal
-        open={confirming}
+        open={confirming && !demo}
         onCancel={() => setConfirming(false)}
         onConfirm={() => { setConfirming(false); onConfirm() }}
       />

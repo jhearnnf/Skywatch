@@ -237,6 +237,13 @@ const appSettingsSchema = new mongoose.Schema({
   // can't lock them out of /admin. Off by default.
   slimModeEnabled:            { type: Boolean,  default: false },
 
+  // Whether the landing/welcome page is reachable while slim mode is on. Off
+  // means the site URL goes straight to the CBAT game selection page and the
+  // header logo stops being a link, so there is no route to the landing page
+  // at all. Only meaningful alongside slimModeEnabled — the full site always
+  // has its landing page. The native app never shows it either way.
+  slimLandingEnabled:         { type: Boolean,  default: true },
+
   // Home-page preview windows (Landing.jsx). Each window can be hidden
   // independently by an admin. Per-game gates inside each window still apply
   // (e.g. disabling Aptitude Sync via aptitudeSyncEnabled drops its scene).

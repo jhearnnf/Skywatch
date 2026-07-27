@@ -21,6 +21,7 @@
 // still the fallback, so failures here must never throw.
 
 import { isNative } from '../isNative'
+import { isDemoActive } from './demoMode'
 
 // ── Native path (Capacitor plugin) ───────────────────────────────────────────
 // Loaded lazily so the web bundle and tests never pull the plugin in. Mirrors
@@ -108,6 +109,7 @@ function clearPendingVoices(s) {
  * phase begins, doesn't lose the init race and fall silent.
  */
 export function primeSpeech() {
+  if (isDemoActive()) return
   if (isNative) { nativeWarmUp(); return }
   const s = synth()
   if (!s || primed) return
@@ -135,6 +137,9 @@ function speakNow(s, text) {
 /** Speak a radio call. `enabled` is the player's mute toggle. */
 export function speak(text, enabled) {
   if (!enabled || !text) return
+  // Demo mounts (the landing page's live game wall) run SAT silently — the
+  // on-screen caption still shows, which is all a showcase card needs.
+  if (isDemoActive()) return
   if (isNative) { nativeSpeak(text); return }
 
   const s = synth()

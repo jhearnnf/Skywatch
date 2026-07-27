@@ -31,8 +31,8 @@ import PlayNavFlasher                      from './components/PlayNavFlasher'
 import UpdateNotificationModal             from './components/UpdateNotificationModal'
 import OfflineStatus                        from './components/OfflineStatus'
 import { captureLoginReturn, resolveLoginDest } from './utils/loginRedirect'
-import { isSlimAllowed, SLIM_APP } from './utils/appMode'
-import { useSlimMode } from './hooks/useSlimMode'
+import { isSlimAllowed } from './utils/appMode'
+import { useSlimMode, useLandingPageEnabled } from './hooks/useSlimMode'
 
 // v2 pages
 import Landing        from './pages/Landing'
@@ -187,6 +187,7 @@ function AppRoutes() {
   const location    = useLocation()
   const navigate    = useNavigate()
   const slim        = useSlimMode()
+  const landingEnabled = useLandingPageEnabled()
   useHeartbeat()
 
   // When the user transitions TO /login from another route, remember where
@@ -219,9 +220,10 @@ function AppRoutes() {
 
   if (loading) return <LoadingScreen />
 
-  // The native app opens straight to the CBAT games page — skip the slimmed
-  // landing (which only serves the web when an admin enables slim site-wide).
-  if (SLIM_APP && location.pathname === '/') {
+  // No landing page to show — go straight to the CBAT games page. That's the
+  // native app always, and web slim mode when an admin has turned the landing
+  // page off. See useLandingPageEnabled.
+  if (!landingEnabled && location.pathname === '/') {
     return <Navigate to="/cbat" replace />
   }
 

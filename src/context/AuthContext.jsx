@@ -12,7 +12,11 @@ import { setOutboxOwner } from '../lib/outboxOwner'
 import { noteApiReachable, noteApiUnauthorized, noteApiUnreachable, onApiHealthChange, getApiHealth } from '../lib/apiHealth'
 import { reportApiUnreachable, stashUnreachable } from '../lib/apiDiagnostics'
 
-const AuthContext = createContext(null)
+// Exported so a caller can deliberately substitute the auth value for a
+// subtree — the landing page's live game wall wraps each demo-mounted game in
+// a stub value (logged-out user, inert apiFetch) so a showcase run can never
+// submit a score or hit the API. See src/components/landingGames/demoHarness.jsx.
+export const AuthContext = createContext(null)
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 const isNative = Capacitor.isNativePlatform()

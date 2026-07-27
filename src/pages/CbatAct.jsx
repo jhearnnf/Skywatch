@@ -1703,6 +1703,7 @@ function IntroScreen({ personalBest, onStart }) {
 
       <button
         onClick={onStart}
+        data-demo-start
         className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
       >
         Start Mission

@@ -455,6 +455,7 @@ export default function CbatInstruments() {
 
               <button
                 onClick={startGame}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start
@@ -568,6 +569,7 @@ export default function CbatInstruments() {
                           transition={{ delay: i * 0.06, duration: 0.22, ease: 'easeOut' }}
                           onClick={() => handlePick(i)}
                           disabled={phase === 'feedback'}
+                          data-demo-answer
                           className={`w-full text-left px-3 py-2.5 rounded-lg border-2 text-xs sm:text-sm transition-all min-h-[3.75rem] sm:min-h-[4.25rem] ${btnClass} ${
                             phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                           }`}

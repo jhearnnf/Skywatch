@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { getAircraftRoster } from '../lib/offlineRoster'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
+import { useCbatDemo } from '../utils/cbat/demoMode'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
@@ -606,6 +607,7 @@ function SystemPanel({ columns, highlights, onClickCode, flashCode = null }) {
                   <button
                     key={ri}
                     onClick={() => onClickCode(ci, actualRow, code)}
+                    data-demo-answer
                     className={`sys-row w-full text-center font-mono text-[19px] cursor-pointer transition-colors ${
                       isGreen ? 'bg-green-500/40 text-green-200' : 'text-[#ddeaf8] hover:bg-[#0f2240]'
                     }${isFlash ? ' cbat-row-flash' : ''}`}
@@ -761,6 +763,7 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
         <button
           onClick={onStart}
           disabled={!aircraftReady}
+          data-demo-start
           className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
         >
           {aircraftReady ? 'Start' : 'Loading aircraft…'}
@@ -1329,6 +1332,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
 export default function CbatTarget() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
+  const demo = useCbatDemo()
   const { settings } = useAppSettings()
   const shapeScale = useShapeScale()
 
@@ -1409,7 +1413,9 @@ export default function CbatTarget() {
         const allowlist = new Set((settings?.cbatTargetAircraftBriefIds ?? []).map(String))
         const list = (d.data || [])
           .filter(a => has3DModel(a.briefId, a.title))
-          .filter(a => allowlist.has(String(a.briefId)))
+          // See CbatFlag: a demo mount's synthetic roster can't match the
+          // admin's brief-id allowlist, so skip it there.
+          .filter(a => demo || allowlist.has(String(a.briefId)))
           .map(a => ({ ...a, modelUrl: getModelUrl(a.briefId, a.title) }))
         setAircraftList(list)
       })

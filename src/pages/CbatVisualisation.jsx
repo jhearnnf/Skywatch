@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
+import { useCbatDemoPortalTarget } from '../utils/cbat/demoMode'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
@@ -149,6 +150,9 @@ const LETTER_SLOT = 30
 const LETTER_HALF = LETTER_SLOT / 2
 
 function AssemblyAnimation({ data }) {
+  // Inside a landing-page demo card this portals into the card's stage instead
+  // of document.body, so the flying pieces stay inside the tile.
+  const demoTarget = useCbatDemoPortalTarget()
   if (!data || !data.pieces || !data.pieces.length || typeof document === 'undefined') return null
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 60 }}>
@@ -243,7 +247,7 @@ function AssemblyAnimation({ data }) {
         </motion.div>
       ))}
     </div>,
-    document.body,
+    demoTarget ?? document.body,
   )
 }
 
@@ -406,11 +410,16 @@ function ResultsScreen({ answers, totalTime }) {
 }
 
 // ── Main Component ───────────────────────────────────────────────────────────
-export default function CbatVisualisation() {
+export default function CbatVisualisation({ forcedMode = null }) {
   const { user, apiFetch, API } = useAuth()
   const { settings } = useAppSettings()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
-  const [mode, setMode] = useVisualisationMode()
+  // `forcedMode` pins 2D or 3D and bypasses the persisted selection — the
+  // landing page's live game wall shows a Visualisation 2D card regardless of
+  // whatever mode the visitor last played. See CbatPlaneTurn for the same prop.
+  const [storedMode, setStoredMode] = useVisualisationMode()
+  const mode = forcedMode ?? storedMode
+  const setMode = forcedMode ? () => {} : setStoredMode
 
   // Per-mode admin gating. Admins always see both modes; everyone else only
   // sees a mode whose cbatGameEnabled flag isn't explicitly false. If the
@@ -733,6 +742,7 @@ export default function CbatVisualisation() {
 
               <button
                 onClick={startGame}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start
@@ -820,6 +830,7 @@ export default function CbatVisualisation() {
                             key={i}
                             onClick={() => handlePick(i)}
                             disabled={phase === 'feedback'}
+                            data-demo-answer
                             className={`flex items-center justify-center rounded-lg border-2 p-1 sm:p-2 transition-all aspect-square ${btnClass} ${
                               phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                             }`}
@@ -935,6 +946,7 @@ export default function CbatVisualisation() {
                             key={opt.id}
                             onClick={() => handlePick(opt.id)}
                             disabled={phase === 'feedback'}
+                            data-demo-answer
                             className={`flex flex-col items-center justify-center rounded-lg border-2 p-1 sm:p-1.5 transition-all ${btnClass} ${
                               phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                             }`}

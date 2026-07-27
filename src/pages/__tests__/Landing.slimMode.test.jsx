@@ -30,6 +30,11 @@ vi.mock('../../components/homePreview/PreviewWindow', () => ({
   default: ({ eyebrow, dataTestId }) => <div data-testid={dataTestId}>{eyebrow}</div>,
 }))
 
+// The live game wall mounts real games; stub it down to a marker.
+vi.mock('../../components/landingGames/LiveGameGrid', () => ({
+  default: () => <div data-testid="live-game-grid" />,
+}))
+
 // Both registries return a non-empty scene list so each window *would* render
 // if not otherwise gated.
 vi.mock('../../components/homePreview/registries/intelBriefRegistry', () => ({
@@ -54,14 +59,20 @@ describe('Landing — slim (CBAT-only) mode', () => {
 
   it('shows a CBAT-focused hero', () => {
     render(<Landing />)
-    expect(screen.getByText('RAF CBAT')).toBeDefined()
+    expect(screen.getByText('Aircrew CBAT')).toBeDefined()
     expect(screen.getByText(/Computer-Based Aptitude Test/i)).toBeDefined()
-    expect(screen.queryByText('RAF Knowledge')).toBeNull()
+    expect(screen.queryByText('Aviation Knowledge')).toBeNull()
   })
 
-  it('shows the CBAT preview window but not the intel-brief window', async () => {
+  it('never names the RAF — the landing page keeps its wording generic', () => {
+    const { container } = render(<Landing />)
+    expect(container.textContent).not.toMatch(/\bRAF\b/)
+  })
+
+  it('leads with the live game wall instead of the cycling preview window', async () => {
     render(<Landing />)
-    await waitFor(() => expect(screen.getByTestId('preview-window-cbat')).toBeDefined())
+    await waitFor(() => expect(screen.getByTestId('live-game-grid')).toBeDefined())
+    expect(screen.queryByTestId('preview-window-cbat')).toBeNull()
     expect(screen.queryByTestId('preview-window-intel-brief')).toBeNull()
   })
 

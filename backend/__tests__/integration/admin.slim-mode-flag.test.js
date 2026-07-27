@@ -90,3 +90,50 @@ describe('PATCH /api/admin/settings — slimModeEnabled', () => {
     expect(saved.slimModeEnabled).toBe(false);
   });
 });
+
+describe('slimLandingEnabled — landing page inside slim mode', () => {
+  it('defaults to on, so turning slim mode on keeps the landing page', async () => {
+    const s = await AppSettings.getSettings();
+    expect(s.slimLandingEnabled).toBe(true);
+  });
+
+  it('is exposed on the public GET /api/settings response', async () => {
+    await createSettings();
+    const res = await request(app).get('/api/settings');
+    expect(res.status).toBe(200);
+    expect(res.body.slimLandingEnabled).toBe(true);
+  });
+
+  it('persists when an admin turns the landing page off', async () => {
+    await createRank();
+    await createSettings();
+    const admin = await createAdminUser();
+
+    const res = await request(app)
+      .patch('/api/admin/settings')
+      .set('Cookie', authCookie(admin._id))
+      .send({ slimLandingEnabled: false, reason: 'hide slim landing page' });
+
+    expect(res.status).toBe(200);
+    const saved = await AppSettings.findOne();
+    expect(saved.slimLandingEnabled).toBe(false);
+
+    const pub = await request(app).get('/api/settings');
+    expect(pub.body.slimLandingEnabled).toBe(false);
+  });
+
+  it('is independent of slimModeEnabled', async () => {
+    await createRank();
+    await createSettings();
+    const admin = await createAdminUser();
+
+    await request(app)
+      .patch('/api/admin/settings')
+      .set('Cookie', authCookie(admin._id))
+      .send({ slimModeEnabled: true, slimLandingEnabled: false, reason: 'slim, no landing' });
+
+    const saved = await AppSettings.findOne();
+    expect(saved.slimModeEnabled).toBe(true);
+    expect(saved.slimLandingEnabled).toBe(false);
+  });
+});

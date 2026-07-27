@@ -762,6 +762,7 @@ export default function CbatSat() {
               <div className="flex items-center justify-center gap-3">
                 <button
                   onClick={startGame}
+                  data-demo-start
                   className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
                 >
                   Start

@@ -8,6 +8,7 @@ import { getAircraftRoster } from '../lib/offlineRoster'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
+import { useCbatDemo } from '../utils/cbat/demoMode'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import { generateMath } from './CbatFlag/mathBank'
 import { generateUniqueSymbols } from './CbatFlag/symbols'
@@ -184,6 +185,7 @@ function IntroScreen({ onStart, onTutorial, personalBest, aircraftList, aircraft
         <button
           onClick={onStart}
           disabled={disabled}
+          data-demo-start
           className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
         >
           {aircraftLoading ? 'Loading aircraft…' : aircraftList.length === 0 ? 'No aircraft enabled — ask an admin to enable at least one in CBAT settings.' : 'Start'}
@@ -632,6 +634,7 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
 export default function CbatFlag() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
+  const demo = useCbatDemo()
   const { settings } = useAppSettings()
   const { enterImmersive, exitImmersive } = useGameChrome()
 
@@ -716,7 +719,11 @@ export default function CbatFlag() {
         const allowlist = new Set((settings?.cbatFlagAircraftBriefIds ?? []).map(String))
         const list = (d.data || [])
           .filter(a => has3DModel(a.briefId, a.title))
-          .filter(a => allowlist.has(String(a.briefId)))
+          // A demo mount is served a synthetic roster of the aircraft whose
+          // models ship in the build, so the admin's brief-id allowlist can
+          // never match — skip it rather than leave the card with no aircraft
+          // and a disabled Start button.
+          .filter(a => demo || allowlist.has(String(a.briefId)))
           .map(a => ({ ...a, modelUrl: getModelUrl(a.briefId, a.title) }))
         setAircraftList(list)
         setAircraftLoading(false)

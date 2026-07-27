@@ -476,6 +476,7 @@ function ShapeOverlay({ shapes, fieldW, fieldH, onShapeClick, tutorialHints = fa
               transition: 'opacity 0.2s ease',
             }}
             onClick={() => onShapeClick(s.id)}
+            data-demo-answer
           >
             <circle cx={0} cy={0} r={r + 10} fill="transparent" />
             {hotRing && (

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { captureEvent } from '../../lib/posthog'
 import { useAuth } from '../../context/AuthContext'
 import { recordCbatStart } from './recordStart'
+import { useCbatDemo } from './demoMode'
 
 // Shared lifecycle tracker for CBAT games. Each game calls start(gameKey) when
 // the player actually begins (after instructions), markCompleted(...) when
@@ -17,6 +18,10 @@ import { recordCbatStart } from './recordStart'
 // reached round is captured on abandon.
 export function useCbatTracking() {
   const { apiFetch, API } = useAuth()
+  // Demo mounts (the landing page's live game wall) run the real games purely
+  // as a showcase — they must not pollute the funnel with nine game_started
+  // events per page view, nor stamp a start row on the server.
+  const demo = useCbatDemo()
   const stateRef = useRef({
     gameKey: null,
     startedAt: null,
@@ -26,6 +31,7 @@ export function useCbatTracking() {
   })
 
   const start = useCallback((gameKey, meta = {}) => {
+    if (demo) return
     stateRef.current = {
       gameKey,
       startedAt: Date.now(),
@@ -35,7 +41,7 @@ export function useCbatTracking() {
     }
     captureEvent('game_started', { gameKey, ...meta })
     recordCbatStart(gameKey, apiFetch, API)
-  }, [apiFetch, API])
+  }, [apiFetch, API, demo])
 
   const setRound = useCallback((round) => {
     if (round == null) return

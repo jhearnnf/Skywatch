@@ -6,6 +6,8 @@
 //
 // All MP3s live in /public/sounds/act/ and are decoded once on init.
 
+import { isDemoActive } from './demoMode';
+
 export const CALLSIGNS = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'hotel'];
 export const SHAPES    = ['circle', 'square'];
 
@@ -151,6 +153,10 @@ export class ActAudioEngine {
   // Lazy-init AudioContext on first user gesture (browsers block autoplay).
   async init() {
     if (this.ctx) return;
+    // Demo mounts (the landing page's live game wall) run ACT silently: with no
+    // AudioContext every play method below short-circuits on `!this.ctx`, so
+    // nothing is fetched and nothing is heard.
+    if (isDemoActive()) return;
     const Ctor = window.AudioContext || window.webkitAudioContext;
     this.ctx = new Ctor();
     const jobs = [];

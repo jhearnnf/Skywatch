@@ -6,6 +6,7 @@ export default function AircraftQuestion({ symbol, onAnswer, disabled, pulseSymb
       <button
         onClick={() => !disabled && hasSymbol && onAnswer('no')}
         disabled={disabled || !hasSymbol}
+        data-demo-answer
         className="shrink-0 px-2.5 py-1.5 bg-[#1a3a5c] hover:bg-[#254a6e] disabled:opacity-40 disabled:cursor-not-allowed text-[#ddeaf8] text-xs font-bold rounded-lg transition-colors cursor-pointer"
       >
         NO
@@ -22,6 +23,7 @@ export default function AircraftQuestion({ symbol, onAnswer, disabled, pulseSymb
       <button
         onClick={() => !disabled && hasSymbol && onAnswer('yes')}
         disabled={disabled || !hasSymbol}
+        data-demo-answer
         className="shrink-0 px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
       >
         YES

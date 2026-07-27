@@ -9,16 +9,17 @@ import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import SocialLinks from '../components/SocialLinks'
 import SEO from '../components/SEO'
 import PreviewWindow from '../components/homePreview/PreviewWindow'
+import LiveGameGrid from '../components/landingGames/LiveGameGrid'
 import { buildIntelBriefScenes } from '../components/homePreview/registries/intelBriefRegistry'
 import { buildCbatScenes } from '../components/homePreview/registries/cbatRegistry'
 
 const FEATURES = [
-  { icon: '✈️', title: 'Learn About the RAF',        body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — designed for aspiring aviators.' },
+  { icon: '✈️', title: 'Learn About Military Aviation', body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — designed for aspiring aviators.' },
   { icon: '🧠', title: 'Section-by-Section Reading', body: 'Each brief is broken into short, clear sections. Read at your own pace and build genuine knowledge.' },
   { icon: '🎙️', title: 'Live Debrief Sessions',       body: 'Step into a one-on-one debrief — targeted recall questions, follow-ups on what you missed, and an instant feedback report when you wrap.', badge: 'New format' },
   { icon: '🔥', title: 'Daily Streaks',              body: 'Return every day to keep your streak alive. Consistent learning beats last-minute cramming every time.' },
   { icon: '🏆', title: 'Climb the Rankings',         body: 'Compete with other learners on the leaderboard as you progress through subjects.' },
-  { icon: '📰', title: 'Daily RAF News',             body: 'Stay up to date with real RAF news — automatically sourced and formatted as intel briefs.' },
+  { icon: '📰', title: 'Daily Aviation News',        body: 'Stay up to date with real defence aviation news — automatically sourced and formatted as intel briefs.' },
 ]
 
 const PREVIEW_CATEGORIES = [
@@ -102,10 +103,10 @@ export default function Landing() {
     [settings, user, cbatGamesMeta],
   )
 
-  // In slim (CBAT-only) mode the intel-brief preview is irrelevant — only the
-  // CBAT preview window is shown.
+  // In slim (CBAT-only) mode the intel-brief preview is irrelevant, and the
+  // CBAT preview window is replaced outright by the live game wall.
   const showIntelBriefWindow = !slim && (settings?.previewWindowIntelBriefEnabled !== false) && intelBriefScenes.length > 0
-  const showCbatWindow       = (settings?.previewWindowCbatEnabled       !== false) && cbatScenes.length > 0
+  const showCbatWindow       = !slim && (settings?.previewWindowCbatEnabled !== false) && cbatScenes.length > 0
 
   useEffect(() => {
     let aborted = false
@@ -122,7 +123,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen" style={{ background: '#06101e' }}>
       <SEO description={slim
-        ? 'Practise for the RAF CBAT with targeted training games — sharpen the aptitude subtests and track your scores.'
+        ? 'Practise for the aircrew CBAT with targeted training games — sharpen the aptitude subtests and track your scores.'
         : 'Master military aviation knowledge with structured intel briefs, quizzes, and interactive games. Study aircraft, bases, ranks, and operations.'} />
 
       {/* ── Header ─────────────────────────────────────────── */}
@@ -165,16 +166,16 @@ export default function Landing() {
 
           <motion.h1 variants={fadeUp} custom={1} className="text-5xl sm:text-6xl font-extrabold text-slate-900 mb-5 leading-tight tracking-tight">
             {slim ? (
-              <>Train for the{' '}<span className="text-gradient">RAF CBAT</span></>
+              <>Train for the{' '}<span className="text-gradient">Aircrew CBAT</span></>
             ) : (
-              <>Master{' '}<span className="text-gradient">RAF Knowledge</span></>
+              <>Master{' '}<span className="text-gradient">Aviation Knowledge</span></>
             )}
           </motion.h1>
 
           <motion.p variants={fadeUp} custom={2} className="text-lg sm:text-xl text-slate-600 mb-6 max-w-xl mx-auto leading-relaxed">
             {slim
-              ? 'Targeted practice games for the RAF Computer-Based Aptitude Test. Sharpen each subtest, track your scores, and build the speed the real thing demands.'
-              : 'Not a Wikipedia article. A structured, gamified path through RAF aircraft, operations, doctrine, and more.'}
+              ? 'Targeted practice games for the aircrew Computer-Based Aptitude Test. Sharpen each subtest, track your scores, and build the speed the real thing demands.'
+              : 'Not a Wikipedia article. A structured, gamified path through military aircraft, operations, doctrine, and more.'}
           </motion.p>
 
           {!slim && settings?.cbatEnabled && (
@@ -278,8 +279,15 @@ export default function Landing() {
         </Suspense>
       )}
 
-      {/* ── CBAT preview window ────────────────────────────── */}
-      {showCbatWindow && (
+      {/* ── CBAT games ─────────────────────────────────────────
+          Slim (CBAT-only) mode leads with the live game wall: a grid of the
+          real games playing themselves. Everywhere else keeps the cycling
+          preview window. */}
+      {slim ? (
+        <Suspense fallback={null}>
+          <LiveGameGrid />
+        </Suspense>
+      ) : showCbatWindow && (
         <Suspense fallback={null}>
           <PreviewWindow
             eyebrow="CBAT PRACTICE GAMES"
@@ -305,7 +313,7 @@ export default function Landing() {
             <span className="intel-tag">SUBJECT INDEX</span>
           </div>
           <h2 className="text-3xl font-bold text-slate-900 mb-3">Everything You Need to Know</h2>
-          <p className="text-slate-500 max-w-lg mx-auto">Fifteen subject areas covering the full breadth of modern RAF knowledge.</p>
+          <p className="text-slate-500 max-w-lg mx-auto">Fifteen subject areas covering the full breadth of modern military aviation.</p>
         </motion.div>
 
         <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 sm:gap-3">
@@ -343,7 +351,7 @@ export default function Landing() {
             <span className="intel-tag">MISSION BRIEFING</span>
           </div>
           <h2 className="text-3xl font-bold text-slate-900 mb-3">How It Works</h2>
-          <p className="text-slate-500">Every feature built around one goal — deep RAF knowledge.</p>
+          <p className="text-slate-500">Every feature built around one goal — deep aviation knowledge.</p>
         </motion.div>
 
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -403,7 +411,7 @@ export default function Landing() {
           <p className="text-lg mb-8 max-w-md mx-auto" style={{ color: '#a8c4e0' }}>
             {slim
               ? 'Practise the real CBAT subtests and walk in ready.'
-              : 'Stop skimming Wikipedia. Start actually knowing the RAF.'}
+              : 'Stop skimming Wikipedia. Start actually knowing military aviation.'}
           </p>
           {user ? (
             <Link
@@ -435,7 +443,7 @@ export default function Landing() {
 
       {/* ── Footer ────────────────────────────────────────── */}
       <footer className="py-8 px-5 border-t border-slate-200 text-center">
-        <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR THOSE WHO TAKE THE RAF SERIOUSLY</p>
+        <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR THOSE WHO TAKE AVIATION SERIOUSLY</p>
         <SocialLinks source="landing" className="mt-4" />
         <div className="mt-4 flex items-center justify-center gap-3">
           <Link to="/privacy" className="text-xs text-slate-500 hover:text-slate-700 transition-colors">

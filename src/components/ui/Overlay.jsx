@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useCbatDemoPortalTarget } from '../../utils/cbat/demoMode'
 
 export default function Overlay({
   zIndex = 50,
@@ -12,8 +13,14 @@ export default function Overlay({
   children,
   'data-testid': testId,
 }) {
+  // Inside a landing-page demo card this is the card's stage, so an overlay
+  // can't escape and cover the page. Null (the normal case) means document.body.
+  const demoTarget = useCbatDemoPortalTarget()
+
   useEffect(() => {
     if (!lockBodyScroll || typeof document === 'undefined') return
+    // A demo card's overlay must never freeze the page it's sitting on.
+    if (demoTarget) return
     const body = document.body
     const scrollY = window.scrollY
     const prev = {
@@ -38,7 +45,7 @@ export default function Overlay({
       Object.assign(body.style, prev)
       window.scrollTo(0, scrollY)
     }
-  }, [lockBodyScroll])
+  }, [lockBodyScroll, demoTarget])
 
   if (typeof document === 'undefined') return null
 
@@ -65,5 +72,5 @@ export default function Overlay({
     </div>
   )
 
-  return createPortal(el, document.body)
+  return createPortal(el, demoTarget ?? document.body)
 }

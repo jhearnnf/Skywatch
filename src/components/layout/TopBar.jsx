@@ -2,7 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import ProfileBadge from '../ProfileBadge'
 import OfflineBadge from './OfflineBadge'
-import { useSlimMode } from '../../hooks/useSlimMode'
+import { useSlimMode, useLandingPageEnabled } from '../../hooks/useSlimMode'
 
 function CrosshairLogo() {
   return (
@@ -22,16 +22,19 @@ export default function TopBar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const slim = useSlimMode()
+  const landingEnabled = useLandingPageEnabled()
 
   return (
     <header className="app-topbar fixed top-0 left-0 right-0 z-[1001] bg-slate-50/90 backdrop-blur-md border-b border-slate-200/60 h-14">
       <div className="max-w-6xl mx-auto px-4 h-full flex items-center justify-between gap-3">
 
-        {/* Logo — in slim (CBAT-only) mode there is no landing page to reach,
-            so the logo is inert rather than a link that bounces to /cbat and
-            flashes a blank screen. */}
+        {/* Logo — routes to the landing page whenever there is one to reach.
+            When there isn't (the native app, or web slim with the landing page
+            turned off) it's inert rather than a link that bounces to /cbat and
+            flashes a blank screen. Same hook as the route gate in App.jsx, so
+            the link and the page can't disagree. */}
         <div className="flex items-center gap-2 shrink-0">
-          {slim ? (
+          {!landingEnabled ? (
             <div className="flex items-center gap-2 select-none">
               <CrosshairLogo />
               <span className="font-bold text-lg tracking-widest text-brand-600 hidden sm:block">

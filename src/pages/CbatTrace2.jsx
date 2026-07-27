@@ -88,6 +88,7 @@ function StartScreen({ onStart, personalBest, traceModeSelector }) {
       <div className="flex justify-center">
         <button
           onClick={onStart}
+          data-demo-start
           className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
         >
           Start Trace 2
@@ -356,6 +357,7 @@ export default function CbatTrace2({ traceModeSelector }) {
                           key={i}
                           onClick={() => handleAnswer(i)}
                           disabled={answered}
+                          data-demo-answer
                           className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg border-2 text-sm font-bold transition-colors ${cls}`}
                         >
                           <Dots colors={opt.colors} />

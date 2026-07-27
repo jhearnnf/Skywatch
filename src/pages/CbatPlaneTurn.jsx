@@ -271,6 +271,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.04 }}
               onClick={() => onSelect(a)}
+              data-demo-start
               className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-[#1a3a5c] bg-[#0a1628] hover:border-[#5baaff] hover:bg-[#0f2240] transition-all group cursor-pointer"
             >
               {!gameMode2D && has3DModel(a.briefId, a.title) && (
@@ -325,6 +326,7 @@ function GameOverOverlay({ won, score, level, maxLevel, onRestart, onMenu }) {
         <div className="flex gap-3 justify-center">
           <button
             onClick={onRestart}
+            data-demo-start
             className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
           >
             {won ? (level >= maxLevel ? 'View Score' : 'Next Level') : 'Retry'}
@@ -389,6 +391,7 @@ function DpadBtn({ label, onPress, ariaLabel }) {
   return (
     <button
       onPointerDown={onPress}
+      data-demo-answer
       className="rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-3xl text-slate-400 active:text-brand-300 select-none"
       style={{ width: 'calc(min(100vw - 2rem, 28rem) * 0.22)', height: 'calc(min(100vw - 2rem, 28rem) * 0.22)' }}
       aria-label={ariaLabel}
@@ -1738,6 +1741,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                 <div className="flex gap-4 justify-center mt-4">
                   <button
                     onPointerDown={() => handleRotate('left')}
+                    data-demo-answer
                     className="rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-5xl text-slate-400 active:text-brand-300 select-none"
                     style={{ width: 'calc(min(100vw - 2rem, 28rem) * 0.45)', height: 'calc(min(100vw - 2rem, 28rem) * 0.35)' }}
                     aria-label="Rotate left"
@@ -1746,6 +1750,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                   </button>
                   <button
                     onPointerDown={() => handleRotate('right')}
+                    data-demo-answer
                     className="rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-5xl text-slate-400 active:text-brand-300 select-none"
                     style={{ width: 'calc(min(100vw - 2rem, 28rem) * 0.45)', height: 'calc(min(100vw - 2rem, 28rem) * 0.35)' }}
                     aria-label="Rotate right"

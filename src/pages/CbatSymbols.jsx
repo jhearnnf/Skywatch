@@ -605,6 +605,7 @@ export default function CbatSymbols() {
 
               <button
                 onClick={startGame}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start
@@ -671,6 +672,7 @@ export default function CbatSymbols() {
                         key={i}
                         onClick={() => handlePick(sym)}
                         disabled={phase === 'feedback'}
+                        data-demo-answer
                         className={`aspect-square flex items-center justify-center overflow-hidden rounded-lg border-2 text-2xl sm:text-3xl transition-all ${btnClass} ${
                           phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                         }`}

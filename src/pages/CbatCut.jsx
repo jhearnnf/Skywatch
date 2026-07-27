@@ -87,6 +87,7 @@ function EnginePanel({ fuel, onToggle }) {
               </p>
               <button
                 onClick={() => onToggle(i)}
+                data-demo-answer
                 className={`mt-1 w-10 shrink-0 px-1 py-3 text-xs font-bold rounded transition-colors cursor-pointer ${
                   f.on ? 'bg-green-600 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
                 }`}
@@ -141,7 +142,7 @@ function SensorRow({ label, rem, kind, onActivate }) {
       <span className={`text-[11px] font-mono ${overdue ? 'text-red-400 font-bold' : armed ? 'text-amber-400' : 'text-slate-400'}`}>
         {overdue ? 'OVERDUE' : `${Math.ceil(rem)}s`}
       </span>
-      <button onClick={() => onActivate(kind)}
+      <button onClick={() => onActivate(kind)} data-demo-answer
         className={`px-2 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
           armed || overdue ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
         }`}>
@@ -161,7 +162,7 @@ function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt,
           <p className="text-[9px] uppercase tracking-wide text-slate-500 mb-1">Camera {requiredCamera && <span className="text-amber-400">— order: {requiredCamera}</span>}</p>
           <div className="flex gap-2">
             {['Alpha', 'Bravo'].map(c => (
-              <button key={c} onClick={() => onCamera(c)}
+              <button key={c} onClick={() => onCamera(c)} data-demo-answer
                 className={`flex-1 px-2 py-1.5 text-[11px] font-bold rounded cursor-pointer transition-colors ${
                   camera === c ? 'bg-green-600 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
                 }`}>
@@ -198,7 +199,7 @@ function MissionPanel({ loadLights, loadReady, onRelease }) {
         {/* Three drop stations — the panel never says which one; recall it. */}
         <div className="flex gap-2">
           {Array.from({ length: LOAD_POINTS }, (_, i) => (
-            <button key={i} onClick={() => onRelease(i)}
+            <button key={i} onClick={() => onRelease(i)} data-demo-answer
               className={`px-4 py-3 text-xs font-extrabold rounded cursor-pointer transition-colors ${
                 loadReady ? 'bg-red-600 hover:bg-red-500 text-white cbat-btn-flash' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
               }`}>
@@ -241,7 +242,7 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
           <p className={`text-base font-mono font-bold ${zoneCol}`}>{Math.round(pressure)}</p>
           <p className="text-[10px] font-mono text-slate-500">{PRESS_LOW}–{PRESS_HIGH}</p>
           <p className={`text-[9px] font-bold ${zoneCol}`}>{zone}</p>
-          <button onClick={onPump}
+          <button onClick={onPump} data-demo-answer
             className={`mt-1 px-3 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
               pump ? 'bg-green-600 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
             }`}>
@@ -645,7 +646,7 @@ export default function CbatCut() {
                   <Link to="/cbat/cut/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">View Leaderboard →</Link>
                 </div>
 
-                <button onClick={startGame} className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer">Start</button>
+                <button onClick={startGame} data-demo-start className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer">Start</button>
               </motion.div>
             </div>
           )}

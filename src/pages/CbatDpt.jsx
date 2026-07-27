@@ -755,6 +755,7 @@ const DptControls = memo(function DptControls({
         type="button"
         disabled={dirDisabled}
         onClick={() => !dirDisabled && onTurnDir(d)}
+        data-demo-answer
         className={`w-full h-full py-3 rounded-lg font-mono font-extrabold text-lg border transition-colors ${
           dirDisabled ? disabledCls : isActive ? 'text-white' : inactiveCls
         }`}
@@ -997,6 +998,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.04 }}
               onClick={() => onSelect(a)}
+              data-demo-start
               className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-[#1a3a5c] bg-[#0a1628] hover:border-[#5baaff] hover:bg-[#0f2240] transition-all group cursor-pointer"
             >
               <span className="absolute top-1 right-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-brand-600/80 text-white leading-none">

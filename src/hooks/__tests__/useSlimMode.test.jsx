@@ -12,7 +12,7 @@ vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({ settings: settingsRef.value }),
 }))
 
-import { useSlimMode } from '../useSlimMode'
+import { useSlimMode, useLandingPageEnabled } from '../useSlimMode'
 
 describe('useSlimMode', () => {
   beforeEach(() => {
@@ -43,5 +43,36 @@ describe('useSlimMode', () => {
     settingsRef.value = { slimModeEnabled: true }
     const { result } = renderHook(() => useSlimMode())
     expect(result.current).toBe(true)
+  })
+})
+
+describe('useLandingPageEnabled', () => {
+  beforeEach(() => {
+    slimAppRef.value = false
+    settingsRef.value = {}
+  })
+
+  const render = () => renderHook(() => useLandingPageEnabled()).result.current
+
+  it('is always true on the full site — the landing page is not optional there', () => {
+    expect(render()).toBe(true)
+    settingsRef.value = { slimLandingEnabled: false }
+    expect(render()).toBe(true)
+  })
+
+  it('defaults to on in web slim mode', () => {
+    settingsRef.value = { slimModeEnabled: true }
+    expect(render()).toBe(true)
+  })
+
+  it('is off in web slim mode when an admin turns the landing page off', () => {
+    settingsRef.value = { slimModeEnabled: true, slimLandingEnabled: false }
+    expect(render()).toBe(false)
+  })
+
+  it('is off on the native app whatever the flag says', () => {
+    slimAppRef.value = true
+    settingsRef.value = { slimLandingEnabled: true }
+    expect(render()).toBe(false)
   })
 })

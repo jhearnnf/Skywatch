@@ -3062,7 +3062,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled', 'slimLandingEnabled'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -3099,6 +3099,18 @@ function SettingsTab({ API }) {
           checked={draft.slimModeEnabled ?? false}
           onChange={v => set('slimModeEnabled', v)}
         />
+        {/* Only meaningful while slim mode is on — the full site always has a
+            landing page — so it stays hidden until then. */}
+        {draft.slimModeEnabled && (
+          <div className="pl-4 border-l-2 border-slate-200">
+            <Toggle
+              label="Landing Page in Slim Mode"
+              hint="When on, the site URL shows the landing/welcome page (the live game wall) and the header logo links back to it. When off, arriving at the site goes straight to the CBAT game selection page and the logo stops being a link, so there's no way to reach the landing page. The native app never shows it either way."
+              checked={draft.slimLandingEnabled !== false}
+              onChange={v => set('slimLandingEnabled', v)}
+            />
+          </div>
+        )}
       </Section>
 
       {/* ── Sound Effects ───────────────────────────────────── */}
