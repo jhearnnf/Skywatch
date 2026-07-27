@@ -11,8 +11,10 @@ import CbatGameOver from '../components/CbatGameOver'
 import {
   buildRound,
   scoreAnswer,
+  CLOSE_BAND,
+  solutionSteps,
+  solutionAnchors,
   gradeForScore,
-  roundHalfUp,
   formatHHMM,
   ANT_NODES,
   ANT_EDGES,
@@ -24,14 +26,13 @@ import {
 
 const ROUND_COUNT = 8
 const ROUND_TIME = 60            // seconds per round
-const FEEDBACK_MS = 1500
 
 const IS_TOUCH = typeof window !== 'undefined'
   && typeof window.matchMedia === 'function'
   && window.matchMedia('(hover: none) and (pointer: coarse)').matches
 
 // ── Map ───────────────────────────────────────────────────────────────────────
-function JourneyMap({ round, pillAnchor }) {
+function JourneyMap({ round, pillAnchor, reveal = false, highlight = null }) {
   const activeEdges = new Set([
     [round.start, round.via].sort().join('-'),
     [round.via, round.destination].sort().join('-'),
@@ -56,11 +57,18 @@ function JourneyMap({ round, pillAnchor }) {
         )
       })}
 
-      {/* Distance labels — only on active segments */}
-      {round.show.segments && (
+      {/* Distance labels — only on active segments. Hidden legs come back in the
+          post-round debrief so the player can see where the answer came from. */}
+      {(round.show.segments || reveal) && (
         <>
-          <DistanceLabel a={round.start} b={round.via} miles={round.seg1} anchor={pillAnchor} />
-          <DistanceLabel a={round.via} b={round.destination} miles={round.seg2} anchor={pillAnchor} />
+          <DistanceLabel
+            a={round.start} b={round.via} miles={round.seg1}
+            anchor={pillAnchor || 'seg1'} flash={!!highlight?.has('seg1')}
+          />
+          <DistanceLabel
+            a={round.via} b={round.destination} miles={round.seg2}
+            anchor={pillAnchor || 'seg2'} flash={!!highlight?.has('seg2')}
+          />
         </>
       )}
 
@@ -112,14 +120,19 @@ function JourneyMap({ round, pillAnchor }) {
   )
 }
 
-function DistanceLabel({ a, b, miles, anchor }) {
+function DistanceLabel({ a, b, miles, anchor, flash = false }) {
   const pa = ANT_NODE_POS[a]
   const pb = ANT_NODE_POS[b]
   const mx = (pa.x + pb.x) / 2
   const my = (pa.y + pb.y) / 2
   return (
     <g>
-      <rect x={mx - 31} y={my - 16} width={62} height={32} rx={5} fill="#0a1628" stroke="#5baaff" strokeWidth={1.5} data-anchor={anchor || undefined} />
+      <rect
+        x={mx - 31} y={my - 16} width={62} height={32} rx={5}
+        fill="#0a1628" stroke="#5baaff" strokeWidth={1.5}
+        className={flash ? 'cbat-pill-flash' : undefined}
+        data-anchor={anchor || undefined}
+      />
       <text x={mx} y={my + 9} textAnchor="middle" fontSize="26" fontFamily="monospace" fill="#5baaff" fontWeight="bold">
         {miles}
       </text>
@@ -128,7 +141,7 @@ function DistanceLabel({ a, b, miles, anchor }) {
 }
 
 // ── Weight reference table ────────────────────────────────────────────────────
-function WeightTable({ currentWeight, flashActive = false, cueAnchors = false }) {
+function WeightTable({ currentWeight, flashActive = false, cueAnchors = false, highlight = null }) {
   return (
     <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg overflow-hidden">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide px-2 py-1 border-b border-[#1a3a5c] bg-[#0a1628]">
@@ -148,8 +161,18 @@ function WeightTable({ currentWeight, flashActive = false, cueAnchors = false })
             return (
               <tr key={row.weight} className={active ? `bg-[#102040] text-brand-300 font-bold${flashActive ? ' cbat-cell-flash' : ''}` : 'text-[#ddeaf8]'}>
                 <td className="px-2 py-0.5">{row.weight}</td>
-                <td className="px-2 py-0.5 text-right" data-anchor={cueAnchors && active ? 'mpm' : undefined}>{row.mpm}</td>
-                <td className="px-2 py-0.5 text-right" data-anchor={cueAnchors && active ? 'gph' : undefined}>{row.gph}</td>
+                <td
+                  className={`px-2 py-0.5 text-right${active && highlight?.has('mpm') ? ' cbat-cell-flash' : ''}`}
+                  data-anchor={cueAnchors && active ? 'mpm' : undefined}
+                >
+                  {row.mpm}
+                </td>
+                <td
+                  className={`px-2 py-0.5 text-right${active && highlight?.has('gph') ? ' cbat-cell-flash' : ''}`}
+                  data-anchor={cueAnchors && active ? 'gph' : undefined}
+                >
+                  {row.gph}
+                </td>
               </tr>
             )
           })}
@@ -160,8 +183,10 @@ function WeightTable({ currentWeight, flashActive = false, cueAnchors = false })
 }
 
 // ── Data table ────────────────────────────────────────────────────────────────
-function DataTable({ round, flashWeight = false, cueAnchors = false }) {
+function DataTable({ round, flashWeight = false, cueAnchors = false, highlight = null, reveal = false }) {
   const hasParcel = round.show.parcel
+  const hl = name => (highlight?.has(name) ? ' cbat-cell-flash' : '')
+  const showArrival = round.show.arrivalTime || reveal
   return (
     <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg overflow-hidden">
       <table className="w-full text-xs font-mono">
@@ -186,11 +211,13 @@ function DataTable({ round, flashWeight = false, cueAnchors = false }) {
             <td className="px-2 py-2">{round.start}</td>
             <td className="px-2 py-2">{round.via}</td>
             <td className="px-2 py-2">{round.destination}</td>
-            <td className="px-2 py-2 border-l border-[#1a3a5c]" data-anchor={cueAnchors && round.show.timeNow ? 'now' : undefined}>
+            <td className={`px-2 py-2 border-l border-[#1a3a5c]${hl('now')}`} data-anchor={cueAnchors && round.show.timeNow ? 'now' : undefined}>
               {round.show.timeNow ? formatHHMM(round.timeNowMin) : <span className="text-amber-400">?</span>}
             </td>
-            <td className="px-2 py-2" data-anchor={cueAnchors && round.show.arrivalTime ? 'arrive' : undefined}>
-              {round.show.arrivalTime ? formatHHMM(round.arrivalMin) : <span className="text-amber-400">?</span>}
+            <td className={`px-2 py-2${hl('arrive')}`} data-anchor={cueAnchors && round.show.arrivalTime ? 'arrive' : undefined}>
+              {showArrival
+                ? <span className={round.show.arrivalTime ? undefined : 'text-brand-300 font-bold'}>{formatHHMM(round.arrivalMin)}</span>
+                : <span className="text-amber-400">?</span>}
             </td>
             <td className="px-2 py-2 border-l border-[#1a3a5c]">
               {hasParcel ? 'Y' : 'N'}
@@ -205,6 +232,37 @@ function DataTable({ round, flashWeight = false, cueAnchors = false }) {
           </tr>
         </tbody>
       </table>
+    </div>
+  )
+}
+
+// ── Worked solution ───────────────────────────────────────────────────────────
+// The debrief line-by-line. Values that live on the board carry the same pulse
+// as the cell they came from (see solutionAnchors → cbat-cell-flash), so the
+// player can follow a number from the sum back to where it was read.
+function SolutionBreakdown({ round }) {
+  const steps = solutionSteps(round)
+  return (
+    <div className="w-full mt-3 bg-[#060e1a]/70 border border-[#1a3a5c] rounded-lg p-2.5 text-left">
+      <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1.5">How it's worked out</p>
+      <ol className="space-y-2">
+        {steps.map(step => (
+          <li key={step.n}>
+            <div className="flex flex-wrap items-baseline gap-x-1.5 text-xs font-mono">
+              <span className="text-slate-500 shrink-0">{step.n}.</span>
+              <span className="text-slate-500 w-[5.5rem] shrink-0">{step.label}</span>
+              {step.tokens.map((tok, j) => (
+                typeof tok === 'string'
+                  ? <span key={j} className="text-slate-400">{tok}</span>
+                  : <span key={j} className="px-1 text-brand-300 font-bold cbat-cell-flash">{tok.text}</span>
+              ))}
+              <span className="text-slate-500">=</span>
+              <span className="text-[#ddeaf8] font-bold">{step.result}</span>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-snug ml-[1.15rem] mt-0.5">{step.note}</p>
+          </li>
+        ))}
+      </ol>
     </div>
   )
 }
@@ -255,11 +313,18 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
             const color = a.exact ? 'text-green-400' : a.partial ? 'text-amber-400' : 'text-red-400'
             const icon = a.exact ? '✓' : a.partial ? '∼' : '✗'
             return (
-              <div key={i} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${color}`}>
-                <span className="text-slate-500 w-6 text-left">#{i + 1}</span>
-                <span className="w-14 text-left">{label}</span>
-                <span>{icon}</span>
-                <span className="font-mono text-slate-500 w-24 text-right">
+              <div key={i} className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${color}`}>
+                <span className="text-slate-500 w-6 shrink-0 text-left">#{i + 1}</span>
+                <span className="w-14 shrink-0 text-left">{label}</span>
+                <span className="shrink-0">{icon}</span>
+                <span className="flex-1 min-w-0 font-mono text-[11px] text-right truncate">
+                  <span className="text-slate-400">{a.userInput || '—'}</span>
+                  <span className="text-slate-600 mx-1">{'→'}</span>
+                  <span className="text-brand-300">
+                    {a.type === 'arrival' ? formatHHMM(a.correctAnswer) : a.correctAnswer}
+                  </span>
+                </span>
+                <span className="font-mono text-slate-500 w-12 shrink-0 text-right">
                   {a.points} pt{a.points === 1 ? '' : 's'}
                 </span>
               </div>
@@ -279,13 +344,15 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
 // grade the typed answer (via the live scoreAnswer) and auto-advance on a match.
 //
 // One fixed journey underlies every step so the coaching copy always matches the
-// on-screen numbers: Tango → Victor → Romeo, 60 + 60 miles, 200 kg parcel
-// (6 mi/min, 5 gal/hr), depart 1000 arrive 1020 (20-minute flight).
+// on-screen numbers: Tango → Victor → Romeo, 72 + 72 miles, 200 kg parcel
+// (6 mi/min, 5 gal/hr), depart 1000 arrive 1024 (24-minute flight). Like every
+// live round, the journey is chosen so all four answers are whole numbers —
+// 1024, 144 miles, 2 gallons, 360 mph.
 const TUT_BASE = {
   start: 'Tango', via: 'Victor', destination: 'Romeo',
-  seg1: 60, seg2: 60, totalDistance: 120,
+  seg1: 72, seg2: 72, totalDistance: 144,
   weight: 200, mpm: 6, gph: 5,
-  timeNowMin: 600, arrivalMin: 620,
+  timeNowMin: 600, arrivalMin: 624,
 }
 const TUT_FULL_SHOW = { segments: true, timeNow: true, arrivalTime: true, weight: true, parcel: true }
 const TUT_TRAVEL = TUT_BASE.arrivalMin - TUT_BASE.timeNowMin // 20 minutes
@@ -302,9 +369,9 @@ function tutorialRound(type) {
     correctAnswer = TUT_TRAVEL * TUT_BASE.mpm
     show.segments = false
   } else if (type === 'fuel') {
-    correctAnswer = roundHalfUp((TUT_TRAVEL / 60) * TUT_BASE.gph)
+    correctAnswer = (TUT_TRAVEL * TUT_BASE.gph) / 60
   } else if (type === 'speed') {
-    correctAnswer = roundHalfUp((TUT_BASE.totalDistance * 60) / TUT_TRAVEL)
+    correctAnswer = TUT_BASE.mpm * 60
     show.weight = false
     show.parcel = false
   }
@@ -333,7 +400,7 @@ const ANT_TUTORIAL_STEPS = [
         is your <b className="text-brand-300">start</b>, the <b className="text-amber-400">amber</b> node is
         the <b className="text-brand-300">via</b> point you route through, and the <b className="text-red-400">red</b> node
         is the <b className="text-brand-300">destination</b>. The two active legs are drawn in blue, each with
-        a <b className="text-brand-300">distance pill</b> — here 60 and 60, so the whole trip is 120 miles.
+        a <b className="text-brand-300">distance pill</b> — here 72 and 72, so the whole trip is 144 miles.
       </>
     ),
   },
@@ -361,7 +428,7 @@ const ANT_TUTORIAL_STEPS = [
     body: (
       <>
         Find the <b className="text-brand-300">Arrival Time</b>. First the flight time: distance ÷ speed ={' '}
-        <Cue id="distance">120</Cue> ÷ <Cue id="mpm">6</Cue> = 20 min. Add that to <b className="text-brand-300">Now</b>{' '}
+        <Cue id="distance">144</Cue> ÷ <Cue id="mpm">6</Cue> = 24 min. Add that to <b className="text-brand-300">Now</b>{' '}
         (<Cue id="now">1000</Cue>) and enter the result as <b className="text-brand-300">HHMM</b>.
       </>
     ),
@@ -374,8 +441,8 @@ const ANT_TUTORIAL_STEPS = [
     body: (
       <>
         The leg distances are <b className="text-amber-400">hidden</b> this time — work back from the clock.
-        Flight time = Arrive − Now = <Cue id="arrive">1020</Cue> − <Cue id="now">1000</Cue> = 20 min. Distance ={' '}
-        flight time × speed = 20 × <Cue id="mpm">6</Cue>. Enter it in <b className="text-brand-300">miles</b>.
+        Flight time = Arrive − Now = <Cue id="arrive">1024</Cue> − <Cue id="now">1000</Cue> = 24 min. Distance ={' '}
+        flight time × speed = 24 × <Cue id="mpm">6</Cue>. Enter it in <b className="text-brand-300">miles</b>.
       </>
     ),
   },
@@ -387,9 +454,9 @@ const ANT_TUTORIAL_STEPS = [
     body: (
       <>
         Fuel burn uses <b className="text-brand-300">gal/hr</b>, not miles. <Cue id="weightkg">200</Cue> kg burns{' '}
-        <Cue id="gph">5</Cue> gal/hr, and you fly for 20 min = <b className="text-brand-300">20 ÷ 60 hr</b>. Fuel =
-        5 × (20 ÷ 60) = 1.67 → <b className="text-brand-300">round half-up</b> to the nearest whole{' '}
-        <b className="text-brand-300">gallon</b>.
+        <Cue id="gph">5</Cue> gal/hr, and you're in the air 24 of the 60 minutes in an hour. So fuel =
+        5 × 24 ÷ 60. Enter it in <b className="text-brand-300">gallons</b> — journeys are always set so this
+        lands on a whole number.
       </>
     ),
   },
@@ -401,8 +468,8 @@ const ANT_TUTORIAL_STEPS = [
     body: (
       <>
         No parcel this round, so no weight table — you're given the distances instead. Speed ={' '}
-        total distance × 60 ÷ flight-time minutes. Total = 60 + 60 = <Cue id="distance">120</Cue>,
-        flight time = <b className="text-brand-300">20 min</b>. Enter the speed in <b className="text-brand-300">mph</b>.
+        total distance × 60 ÷ flight-time minutes. Total = 72 + 72 = <Cue id="distance">144</Cue>,
+        flight time = <b className="text-brand-300">24 min</b>. Enter the speed in <b className="text-brand-300">mph</b>.
       </>
     ),
   },
@@ -688,11 +755,15 @@ function AntTutorial({ onExit, onProgress }) {
             )}
           </div>
 
-          <div className={`${pulse('weight').trim()}${dim('weight')}`.trim()}>
-            {enabled.weight
-              ? <WeightTable currentWeight={round.show.weight ? round.weight : null} flashActive={!!step.flashParcel} cueAnchors={isSolve} />
-              : <LockedPanel label="Weight Reference" className="min-h-[120px]" />}
-          </div>
+          {/* Matches the live board: no parcel this round means no weight table,
+              which is exactly what the speed step's copy tells the player. */}
+          {round.show.parcel && (
+            <div className={`${pulse('weight').trim()}${dim('weight')}`.trim()}>
+              {enabled.weight
+                ? <WeightTable currentWeight={round.show.weight ? round.weight : null} flashActive={!!step.flashParcel} cueAnchors={isSolve} />
+                : <LockedPanel label="Weight Reference" className="min-h-[120px]" />}
+            </div>
+          )}
 
           {/* Answer */}
           <div className={`${pulse('answer').trim()}${dim('answer')}`.trim()}>
@@ -794,11 +865,18 @@ export default function CbatAnt() {
   const roundIndexRef = useRef(0)
   const roundStartRef = useRef(0)
   const tickRef = useRef(null)
-  const advanceRef = useRef(null)
   const inputRef = useRef(null)
+  const nextRef = useRef(null)
+  // The round clock fires from an interval set up when the round started, so it
+  // can only see the answer box as it was then — empty. Mirror the live value
+  // (and the live submit handler) into refs, or a timeout throws away whatever
+  // the player had typed and scores it as a blank.
+  const answerRef = useRef('')
+  const submitRef = useRef(null)
 
   useEffect(() => { answersRef.current = answers }, [answers])
   useEffect(() => { roundIndexRef.current = roundIndex }, [roundIndex])
+  useEffect(() => { answerRef.current = answerInput }, [answerInput])
 
   // Fetch personal best
   useEffect(() => {
@@ -836,11 +914,10 @@ export default function CbatAnt() {
           .catch(() => {})
       })
       .catch(() => {})
-  }, [apiFetch, API])
+  }, [apiFetch, API, markGameCompleted])
 
   const endGame = useCallback((finalAnswers) => {
     clearInterval(tickRef.current)
-    if (advanceRef.current) clearTimeout(advanceRef.current)
     const total = finalAnswers.reduce((s, a) => s + a.roundTime, 0)
     submitScore(finalAnswers, total)
     setTotalElapsed(total)
@@ -851,6 +928,7 @@ export default function CbatAnt() {
     const r = buildRound()
     setRound(r)
     setAnswerInput('')
+    answerRef.current = ''
     setFeedback(null)
     setRoundIndex(idx)
     roundIndexRef.current = idx
@@ -873,30 +951,30 @@ export default function CbatAnt() {
       setRoundElapsed(el)
       if (el >= ROUND_TIME) {
         clearInterval(tickRef.current)
-        handleSubmit(true)
+        submitRef.current?.(true)
       }
     }, 100)
     return () => clearInterval(tickRef.current)
   }, [phase])
 
   useEffect(() => {
-    return () => {
-      clearInterval(tickRef.current)
-      if (advanceRef.current) clearTimeout(advanceRef.current)
-    }
+    return () => clearInterval(tickRef.current)
   }, [])
 
   const handleSubmit = useCallback((timedOut = false) => {
     if (phase !== 'playing' || !round) return
+    // Read the box, not the closure: on a timeout this handler may be older
+    // than the last keystroke.
+    const typed = timedOut ? answerRef.current : answerInput
+    // A stray tap on Submit shouldn't burn the round.
+    if (!timedOut && typed.trim() === '') return
     clearInterval(tickRef.current)
     const roundTime = Math.min((Date.now() - roundStartRef.current) / 1000, ROUND_TIME)
-    const result = timedOut && answerInput.trim() === ''
-      ? { points: 0, exact: false, partial: false }
-      : scoreAnswer(round, answerInput)
+    const result = scoreAnswer(round, typed)
 
     const newAnswer = {
       type: round.type,
-      userInput: answerInput,
+      userInput: typed,
       correctAnswer: round.correctAnswer,
       roundTime,
       ...result,
@@ -904,18 +982,18 @@ export default function CbatAnt() {
     const updated = [...answersRef.current, newAnswer]
     setAnswers(updated)
     answersRef.current = updated
-    setFeedback({ ...result, correct: round.correctAnswer, user: answerInput, type: round.type, timedOut })
+    setFeedback({ ...result, correct: round.correctAnswer, user: typed, type: round.type, timedOut })
     setPhase('feedback')
+  }, [phase, round, answerInput])
 
-    advanceRef.current = setTimeout(() => {
-      const nextIdx = roundIndexRef.current + 1
-      if (nextIdx >= ROUND_COUNT) {
-        endGame(updated)
-      } else {
-        startRound(nextIdx)
-      }
-    }, FEEDBACK_MS)
-  }, [phase, round, answerInput, startRound, endGame])
+  useEffect(() => { submitRef.current = handleSubmit }, [handleSubmit])
+
+  // The debrief stays up until the player says they're ready — no auto-advance.
+  const advanceRound = useCallback(() => {
+    const nextIdx = roundIndexRef.current + 1
+    if (nextIdx >= ROUND_COUNT) endGame(answersRef.current)
+    else startRound(nextIdx)
+  }, [startRound, endGame])
 
   const startGame = useCallback(() => {
     startTracking('ant')
@@ -924,11 +1002,10 @@ export default function CbatAnt() {
     setTotalElapsed(0)
     setScoreSaved(false)
     startRound(0)
-  }, [startRound, apiFetch, API])
+  }, [startRound, startTracking])
 
   const goToIntro = useCallback(() => {
     clearInterval(tickRef.current)
-    if (advanceRef.current) clearTimeout(advanceRef.current)
     setPhase('intro')
     setRound(null)
     setAnswers([])
@@ -940,6 +1017,19 @@ export default function CbatAnt() {
 
   const timeLeft = Math.max(0, ROUND_TIME - roundElapsed)
   const timePct = (timeLeft / ROUND_TIME) * 100
+
+  // Debrief state: the round is over but the player hasn't asked for the next
+  // one yet, so the board stays up with the solution lit on it.
+  const reviewing = phase === 'feedback' && !!feedback && !!round
+  const solutionHighlight = reviewing ? solutionAnchors(round) : null
+
+  // Focus the continue button so a keyboard player can carry on with Enter —
+  // delayed so the Enter that submitted the answer can't skip the debrief.
+  useEffect(() => {
+    if (!reviewing || IS_TOUCH) return
+    const t = setTimeout(() => nextRef.current?.focus(), 150)
+    return () => clearTimeout(t)
+  }, [reviewing])
 
   const totalScoreSoFar = answers.reduce((s, a) => s + a.points, 0)
   const finalTotalScore = phase === 'results'
@@ -999,7 +1089,7 @@ export default function CbatAnt() {
               <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4 text-left space-y-2">
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
                   <span className="text-brand-300 font-bold shrink-0">{'⏱'}</span>
-                  <span>{ROUND_COUNT} rounds, {ROUND_TIME} seconds each</span>
+                  <span>{ROUND_COUNT} rounds, {ROUND_TIME} seconds each — the clock pauses while you review</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
                   <span className="text-brand-300 font-bold shrink-0">{'\u{1F9EE}'}</span>
@@ -1007,11 +1097,14 @@ export default function CbatAnt() {
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
                   <span className="text-brand-300 font-bold shrink-0">{'\u{1F3AF}'}</span>
-                  <span>Exact = 10 pts, within 5% = 5 pts, miss = 0 pts. Max score {ROUND_COUNT * 10}.</span>
+                  <span>Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {ROUND_COUNT * 10}.</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
                   <span className="text-brand-300 font-bold shrink-0">{'\u{1F4CF}'}</span>
-                  <span>Round up if decimal {'≥'} 0.5, else round down. Times entered as HHMM (e.g. 1430).</span>
+                  <span>
+                    Every answer is a whole number. Close counts as within 5 miles, 10 mph or 2 minutes —
+                    fuel must be exact. Times entered as HHMM (e.g. 1430).
+                  </span>
                 </div>
               </div>
 
@@ -1072,16 +1165,18 @@ export default function CbatAnt() {
                   Score <span className="text-brand-300">{totalScoreSoFar}</span>
                 </span>
                 <span className="text-slate-400">
-                  {'⏱'} <span className={timeLeft < 10 ? 'text-red-400' : 'text-brand-300'}>{timeLeft.toFixed(1)}s</span>
+                  {reviewing
+                    ? <span className="text-brand-300">Reviewing — clock paused</span>
+                    : <>{'⏱'} <span className={timeLeft < 10 ? 'text-red-400' : 'text-brand-300'}>{timeLeft.toFixed(1)}s</span></>}
                 </span>
               </div>
 
               {/* Time bar */}
               <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
                 <motion.div
-                  className={`h-full rounded-full ${timeLeft < 10 ? 'bg-red-500' : 'bg-brand-600'}`}
+                  className={`h-full rounded-full ${reviewing ? 'bg-brand-600/40' : timeLeft < 10 ? 'bg-red-500' : 'bg-brand-600'}`}
                   initial={false}
-                  animate={{ width: `${timePct}%` }}
+                  animate={{ width: `${reviewing ? 100 : timePct}%` }}
                   transition={{ duration: 0.1, ease: 'linear' }}
                 />
               </div>
@@ -1090,15 +1185,17 @@ export default function CbatAnt() {
                 {/* Left column — map (2/5) */}
                 <div className="md:col-span-2 bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 flex flex-col md:min-h-0">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Map</p>
-                  <JourneyMap round={round} />
+                  <JourneyMap round={round} reveal={reviewing} highlight={solutionHighlight} />
                   {!round.show.segments && (
-                    <p className="text-[10px] text-amber-400 text-center mt-2">Distances hidden — compute total distance</p>
+                    reviewing
+                      ? <p className="text-[10px] text-brand-300 text-center mt-2">Distances now shown</p>
+                      : <p className="text-[10px] text-amber-400 text-center mt-2">Distances hidden — compute total distance</p>
                   )}
                 </div>
 
                 {/* Right column — data + tables (3/5) */}
                 <div className="md:col-span-3 flex flex-col gap-3">
-                  <DataTable round={round} />
+                  <DataTable round={round} reveal={reviewing} highlight={solutionHighlight} />
 
                   {/* Ask */}
                   <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3">
@@ -1111,16 +1208,21 @@ export default function CbatAnt() {
                     </p>
                   </div>
 
-                  <WeightTable currentWeight={round.show.weight ? round.weight : null} />
+                  {/* The parcel table is reference for the parcel you're carrying —
+                      speed rounds don't have one, so showing it there just invites
+                      players to solve the wrong question. */}
+                  {round.show.parcel && (
+                    <WeightTable currentWeight={round.show.weight ? round.weight : null} highlight={solutionHighlight} />
+                  )}
 
-                  {/* Answer input OR feedback — same fixed-height slot so the layout doesn't jump on submit */}
+                  {/* Answer input OR debrief — same fixed-height slot so the layout doesn't jump on submit */}
                   <div className="min-h-[9rem] sm:min-h-[5.25rem] flex">
-                    {phase === 'feedback' && feedback ? (
+                    {reviewing ? (
                       <motion.div
                         key="fb"
                         initial={{ opacity: 0, scale: 0.98 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className={`flex-1 rounded-xl border p-3 text-center flex flex-col items-center justify-center ${
+                        className={`flex-1 rounded-xl border p-3 flex flex-col items-center ${
                           feedback.exact ? 'bg-green-500/15 border-green-500/50'
                           : feedback.partial ? 'bg-amber-500/15 border-amber-500/50'
                           : 'bg-red-500/15 border-red-500/50'
@@ -1134,24 +1236,32 @@ export default function CbatAnt() {
                           {feedback.exact
                             ? `✓ Exact  +${feedback.points} pts`
                             : feedback.partial
-                            ? `∼ Close (within 5%)  +${feedback.points} pts`
+                            ? `∼ Close (${CLOSE_BAND[feedback.type]?.label})  +${feedback.points} pts`
                             : feedback.timedOut
                             ? `⏱ Time up`
                             : `✗ Off`}
                         </p>
-                        {!feedback.exact && (
-                          <p className="text-xs font-mono text-slate-300 mt-1">
-                            Correct: <span className="text-brand-300 font-bold">
-                              {formatCorrect({ type: feedback.type, correctAnswer: feedback.correct })}
-                            </span>
-                            {feedback.user && !feedback.timedOut && (
-                              <>
-                                <span className="text-slate-600 mx-2">{'·'}</span>
-                                You: <span className="text-slate-400">{feedback.user}</span>
-                              </>
-                            )}
-                          </p>
-                        )}
+                        <p className="text-xs font-mono text-slate-300 mt-1">
+                          Correct: <span className="text-brand-300 font-bold">
+                            {formatCorrect({ type: feedback.type, correctAnswer: feedback.correct })}
+                          </span>
+                          {feedback.user && (
+                            <>
+                              <span className="text-slate-600 mx-2">{'·'}</span>
+                              You: <span className={feedback.exact ? 'text-green-300' : 'text-slate-400'}>{feedback.user}</span>
+                            </>
+                          )}
+                        </p>
+
+                        <SolutionBreakdown round={round} />
+
+                        <button
+                          ref={nextRef}
+                          onClick={advanceRound}
+                          className="mt-3 w-full sm:w-auto px-8 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+                        >
+                          {roundIndex + 1 >= ROUND_COUNT ? 'See Results →' : 'Next Round →'}
+                        </button>
                       </motion.div>
                     ) : (
                       <div className="flex-1 flex flex-col sm:flex-row items-stretch gap-3">

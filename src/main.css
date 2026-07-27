@@ -1335,6 +1335,17 @@ body.play-mode .card-shadow {
   border-radius: 4px;
 }
 
+/* Same triple-pulse for an SVG value pill (the ANT map's leg distances), which
+   can't take a background-color animation. Fill/stroke instead, same timing so
+   a lit pill and a lit table cell beat together. */
+@keyframes cbatPillFlash {
+  0%, 12%, 24%, 36%, 100% { fill: #0a1628; stroke: #5baaff; }
+  6%, 18%, 30%            { fill: #1d4b8f; stroke: #9ccaff; }
+}
+.cbat-pill-flash {
+  animation: cbatPillFlash 2.2s ease-in-out infinite;
+}
+
 /* Connector lines in the ANT tutorial linking an instruction number (a "cue")
    to where that value comes from on screen. Marching-ants flow points from the
    number toward its source; a pulsing dot marks the source. */

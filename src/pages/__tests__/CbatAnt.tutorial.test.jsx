@@ -125,9 +125,9 @@ describe('CbatAnt — tutorial / practice mode', () => {
     fireEvent.click(screen.getByRole('button', { name: /next section/i }))
     fireEvent.click(screen.getByRole('button', { name: /next section/i }))
 
-    // Arrival = 1000 + 20 min = 1020.
+    // Arrival = 1000 + 24 min = 1024.
     const input = screen.getByPlaceholderText(/HHMM/i)
-    fireEvent.change(input, { target: { value: '1020' } })
+    fireEvent.change(input, { target: { value: '1024' } })
     fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
 
     await waitFor(() => expect(screen.getByText(/solve: total distance/i)).toBeTruthy())
@@ -149,8 +149,8 @@ describe('CbatAnt — tutorial / practice mode', () => {
       fireEvent.click(screen.getByRole('button', { name: /^submit$/i }))
       await waitFor(() => expect(screen.getByText(nextTitle)).toBeTruthy())
     }
-    await solve('1020', /solve: total distance/i)   // arrival
-    await solve('120', /solve: fuel/i)              // distance
+    await solve('1024', /solve: total distance/i)   // arrival
+    await solve('144', /solve: fuel/i)              // distance
     await solve('2', /solve: speed/i)               // fuel
     await solve('360', /tutorial complete/i)        // speed → done
   })
