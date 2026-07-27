@@ -37,11 +37,55 @@ export const rowPad = (compact = false) =>
 const agentName = (e) =>
   e.name || e.displayName || (e.email ? e.email : `Agent ${e.agentNumber || '???'}`)
 
+// A weekly numeric cell that can flash and carry a "+N" gain badge.
+//
+// The badge sits in the row's padding gutter above the number (`-top-3` against `py-2.5`),
+// where it clears both the divider and the digits of the row above. It scales in rather than
+// fading so it registers in peripheral vision — a user reading their score will catch the
+// movement even if they never look straight at this cell.
+//
+// While `pulse` is on, the number turns emerald to match the badge and pops once. The colour
+// swap is a class change, not a tween: a flash should arrive instantly and it keeps the two
+// theme colours out of the animation's keyframes. `tone` is kept separate from `className` for
+// that swap — folding the colour into className would leave two competing text-* classes on the
+// element, resolved by stylesheet order rather than by intent, and would drop the weight the
+// cell is normally rendered at for the duration of the pulse.
+function GainCell({ value, gain, pulse, tone, className = '' }) {
+  return (
+    <span className={`relative text-right font-mono ${className} ${pulse ? 'text-emerald-300' : tone}`}>
+      {gain && (
+        <motion.span
+          initial={{ opacity: 0, y: 5, scale: 0.7 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 22 }}
+          className="absolute -top-3 right-0 text-[9px] font-bold text-emerald-300 whitespace-nowrap pointer-events-none"
+        >
+          {gain}
+        </motion.span>
+      )}
+      <motion.span
+        className="inline-block"
+        animate={pulse ? { scale: [1, 1.3, 1] } : { scale: 1 }}
+        transition={{ duration: 0.55, ease: 'easeOut' }}
+      >
+        {value}
+      </motion.span>
+    </span>
+  )
+}
+
 // `layout` opts a row into framer's FLIP reordering (used only during the
 // leaderboard's post-game rank slide). `delta` is the change in position for the
 // user's own row during that slide (positive = climbed) and renders a small
 // ↑/↓ badge next to the rank; both are inert everywhere else.
-export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false, divider = false, layout = false, delta = null, compact = false }) {
+//
+// `gains` ({ points, plays }) annotates the weekly numeric cells with what the run
+// just added ("+120", "+1"), and `pulse` illuminates them while that lands — both
+// used only by the post-game increment replay, and both inert on the full board.
+// The annotations are absolutely positioned in the row's vertical gutter: the
+// weekly columns are sized to the digits they hold (see rowCols), so anything
+// added in-flow would either reflow the grid or clip.
+export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false, divider = false, layout = false, delta = null, compact = false, gains = null, pulse = false }) {
   const achievedAtTitle = entry.achievedAt
     ? new Date(entry.achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
     : null
@@ -74,8 +118,8 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
       </span>
       {variant === 'weekly' ? (
         <>
-          <span className="text-right font-mono font-bold text-brand-600">{entry.weekTotal}</span>
-          <span className="text-right font-mono text-slate-400">{entry.plays}</span>
+          <GainCell value={entry.weekTotal} gain={gains?.points} pulse={pulse} tone="text-brand-600" className="font-bold" />
+          <GainCell value={entry.plays} gain={gains?.plays} pulse={pulse} tone="text-slate-400" />
         </>
       ) : (
         <>

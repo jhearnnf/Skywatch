@@ -2891,6 +2891,11 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
 // small "chase window" of the players ranked just above and below them. Fired
 // right after a successful score submit. When the week is sparse the board is
 // topped up with demo rows so there's always a target to chase.
+//
+// Also returns `lastRunPoints` (how much the newest run added to the weekly
+// total) and `prevRank` (where the user stood before it), so the reveal can
+// animate the increment rather than just state the result. See the query and the
+// prevRank comment for why neither can be derived on the client.
 async function cbatWeeklyMe(req, res, gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return res.status(400).json({ message: 'Unknown game' });
@@ -2901,32 +2906,56 @@ async function cbatWeeklyMe(req, res, gameKey) {
   const valueExpr = weeklyValueExpr(cfg);
 
   try {
-    const board = await cfg.Model.aggregate([
-      { $match: { ...modeFilter, createdAt: { $gte: weekStart } } },
-      {
-        $group: {
-          _id: '$userId',
-          userId: { $first: '$userId' },
-          weekTotal: { $sum: valueExpr },
-          plays: { $sum: 1 },
-          lastPlayed: { $max: '$createdAt' },
+    const [board, lastRunRow] = await Promise.all([
+      cfg.Model.aggregate([
+        { $match: { ...modeFilter, createdAt: { $gte: weekStart } } },
+        {
+          $group: {
+            _id: '$userId',
+            userId: { $first: '$userId' },
+            weekTotal: { $sum: valueExpr },
+            plays: { $sum: 1 },
+            lastPlayed: { $max: '$createdAt' },
+          },
         },
-      },
-      { $sort: { weekTotal: -1, lastPlayed: -1 } },
-      { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
-      { $unwind: '$user' },
-      {
-        $project: {
-          _id: '$userId',
-          userId: 1,
-          agentNumber: '$user.agentNumber',
-          displayName: '$user.displayName',
-          ...(isAdmin ? { email: '$user.email' } : {}),
-          weekTotal: 1,
-          plays: 1,
+        { $sort: { weekTotal: -1, lastPlayed: -1 } },
+        { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
+        { $unwind: '$user' },
+        {
+          $project: {
+            _id: '$userId',
+            userId: 1,
+            agentNumber: '$user.agentNumber',
+            displayName: '$user.displayName',
+            ...(isAdmin ? { email: '$user.email' } : {}),
+            weekTotal: 1,
+            plays: 1,
+          },
         },
-      },
+      ]),
+      // The newest run's weekly contribution — on this endpoint's only caller (the
+      // post-game screen, queried once the save has confirmed) that IS the run just
+      // played, which lets the screen replay the increment (300 → 420, 2 → 3 plays)
+      // instead of only showing the settled total.
+      //
+      // It has to be computed server-side with the SAME weeklyValueExpr the board sums.
+      // The client cannot infer it from the score it just displayed: a negative run
+      // floors to 0 (target/cut/dpt/act/flag — the total genuinely does not move, and
+      // animating "+" there would be a visible lie), and lower-is-better games derive
+      // their points from rotations+time via cfg.weeklyExpr, which bears no relation to
+      // the displayed score. Runs in parallel with the board — it's a single row off the
+      // { userId, createdAt } index.
+      // `_id` breaks ties on createdAt: createdAt is stamped from the client's playedAt, so a
+      // batch of offline runs flushed with the same timestamp would otherwise pick an arbitrary
+      // one of them. ObjectIds rise monotonically, so the newest insert wins.
+      cfg.Model.aggregate([
+        { $match: { ...modeFilter, userId: req.user._id, createdAt: { $gte: weekStart } } },
+        { $sort: { createdAt: -1, _id: -1 } },
+        { $limit: 1 },
+        { $project: { _id: 0, points: valueExpr } },
+      ]),
     ]);
+    const lastRunPoints = lastRunRow[0]?.points ?? 0;
 
     // Rank the full real board (not just top 20) and top it up when sparse so a
     // quiet week still surfaces a chase target.
@@ -2936,7 +2965,7 @@ async function cbatWeeklyMe(req, res, gameKey) {
     if (idx === -1) {
       return res.json({
         status: 'success',
-        data: { played: false, rank: null, weekTotal: 0, plays: 0, totalPlayers: ranked.length, resetsAt: nextResetAt(), neighbors: [] },
+        data: { played: false, rank: null, weekTotal: 0, plays: 0, lastRunPoints: 0, prevRank: null, totalPlayers: ranked.length, resetsAt: nextResetAt(), neighbors: [] },
       });
     }
 
@@ -2951,6 +2980,21 @@ async function cbatWeeklyMe(req, res, gameKey) {
       isMe: !e.isFake && e.userId?.toString() === req.user._id.toString(),
     }));
 
+    // Where this user stood BEFORE the newest run, so the reveal can show a real rank
+    // change (▲2) rather than one inferred from the five-row chase window — the window is
+    // centred on the post-run rank, so a run that jumped ten places leaves everyone the
+    // user overtook outside it, and reconstructing the old board from what's visible would
+    // invent a smaller climb than actually happened.
+    //
+    // Everyone else's total is unchanged by this user's run, so subtracting the run's own
+    // contribution from their total and re-counting who is ahead is exact. "Strictly ahead,
+    // plus one" is the same convention the weekly board's own myBest rank uses. null on the
+    // first play of the week: there was no previous position to move from.
+    const prevWeekTotal = me.weekTotal - lastRunPoints;
+    const prevRank = me.plays > 1
+      ? ranked.filter(e => e !== me && e.weekTotal > prevWeekTotal).length + 1
+      : null;
+
     res.json({
       status: 'success',
       data: {
@@ -2958,6 +3002,8 @@ async function cbatWeeklyMe(req, res, gameKey) {
         rank: me.rank,
         weekTotal: me.weekTotal,
         plays: me.plays,
+        lastRunPoints,
+        prevRank,
         totalPlayers: ranked.length,
         resetsAt: nextResetAt(),
         neighbors,

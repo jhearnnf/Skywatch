@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
-import LeaderboardRow from './LeaderboardRow'
+import LeaderboardRow, { rowCols, rowPad } from './LeaderboardRow'
 import CbatProgressChart from './CbatProgressChart'
 import { cbatTrend, isCbatNewBest } from '../utils/cbatProgress'
+import useCountUp from '../hooks/useCountUp'
 
 // Shared CBAT game-completion screen. Every CBAT game renders this at
 // phase === 'results', passing its results breakdown as `children` (with its
@@ -42,29 +43,145 @@ function fmtCountdown(resetsAt) {
   return `${h}h ${totalMins % 60}m`
 }
 
+// Increment-replay timings. The pre-run figures are held long enough to actually be READ before
+// anything moves — without that hold this is just a number appearing, which is what the panel
+// did before. Everything after the hold is non-blocking: Play Again stays live throughout.
+//
+// The flash LEADS the change rather than accompanying it: the figures start pulsing while still
+// showing their pre-run values, and only then do they move. That ordering is what makes the
+// increment legible — the pulse says "watch this number", so the eye is already on it when it
+// changes. Flashing and changing on the same frame means whichever the user happened to be
+// looking at is the only one they see move.
+const REPLAY_HOLD_MS = 300    // pre-run figures on screen, still and unremarked
+const REPLAY_FLASH_MS = 700   // pulsing, values STILL pre-run — the cue, not the change
+const REPLAY_COUNT_MS = 600   // the points count-up
+const REPLAY_BADGE_MS = 1400  // how long "+120" lingers after the count settles
+
+// When the numbers actually start moving. The count-up and the play-count flip share it so they
+// land together — two figures changing 400ms apart would read as two separate events.
+const REPLAY_CHANGE_AT = REPLAY_HOLD_MS + REPLAY_FLASH_MS
+
+// Drives the replay: hold → flash → count → settled → badges gone. A pulse alone would be over
+// in half a second and missed by anyone still reading their score, so the "+N" badges outlive it
+// by more than a second; the rank delta, once shown, stays for good.
+function useIncrementReplay(active) {
+  const [phase, setPhase] = useState(active ? 'pre' : 'done')
+
+  useEffect(() => {
+    if (!active) return
+    const at = [
+      [REPLAY_HOLD_MS, 'flash'],
+      [REPLAY_CHANGE_AT, 'count'],
+      [REPLAY_CHANGE_AT + REPLAY_COUNT_MS, 'settled'],
+      [REPLAY_CHANGE_AT + REPLAY_COUNT_MS + REPLAY_BADGE_MS, 'done'],
+    ]
+    const timers = at.map(([ms, next]) => setTimeout(() => setPhase(next), ms))
+    return () => timers.forEach(clearTimeout)
+  }, [active])
+
+  return phase
+}
+
+// The competitive beat: where you sit on THIS WEEK's board, not the all-time one.
+//
+// That distinction has to survive a three-second glance, because the number beside your
+// name is `weekTotal` — the sum of every run you've played this week — and it will not
+// match the score you just posted. Users read the mismatch as "this must be some
+// cumulative all-time total". Three things carry the correction, and none of them is
+// optional: the WEEKLY chip (loud enough to outrank the "Your Progress" label above it),
+// the Points/Plays column header, and the "points add up" subtitle. The subtitle and the
+// column names are copied from the full board (src/pages/CbatLeaderboard.jsx) so this
+// really does read as a preview of where "Weekly Board" takes you.
+//
+// The panel then REPLAYS what the run just did to those figures — holding the pre-run points and
+// play count, illuminating them, then counting up — because watching 300 → 420 and 2 → 3 plays
+// demonstrates the accumulation that the copy can only assert.
+//
+// The run's own contribution and the position it moved the user from both come from the server
+// (`lastRunPoints`, `prevRank`) and cannot be derived here: a negative run's contribution is
+// floored to 0, so the total legitimately doesn't move, and the lower-is-better games derive
+// weekly points from rotations and time rather than from the score on screen. See cbatWeeklyMe.
+//
+// Three cases have nothing honest to replay, and each renders the settled figures immediately:
+// the first play of the week (no previous position to move from — `prevRank` is null and plays
+// would count from 0), a run whose contribution floored to 0 (the points don't move, so only
+// the play count ticks), and a payload from before this field existed.
 function WeeklyChase({ weekly }) {
   const me = weekly.neighbors.find(n => n.isMe)
-  const above = me ? weekly.neighbors.find(n => n.rank === me.rank - 1) : null
-  const toPass = above ? Math.max(1, above.weekTotal - me.weekTotal) : null
   const countdown = fmtCountdown(weekly.resetsAt)
+
+  const gained = weekly.lastRunPoints ?? 0
+  const replaying = !!me && weekly.plays > 1
+  const phase = useIncrementReplay(replaying)
+
+  // Pre-run figures stay on screen through the flash — that's the point of it.
+  const holding = phase === 'pre' || phase === 'flash'
+
+  // Points tween; plays just flip. Counting 2 → 3 over 600ms looks broken — the pulse and the
+  // "+1" carry that one, and it lands on the same frame the count-up starts.
+  const points = useCountUp(me?.weekTotal ?? 0, {
+    from: replaying ? me.weekTotal - gained : (me?.weekTotal ?? 0),
+    duration: REPLAY_COUNT_MS,
+    delay: REPLAY_CHANGE_AT,
+  })
+  const playsShown = replaying && holding ? weekly.plays - 1 : weekly.plays
+  const pointsShown = replaying ? points : me?.weekTotal
+
+  // Badges arrive with the change, not with the flash: the flash is "watch this", the badge is
+  // the explanation of what then happened.
+  const gains = replaying && (phase === 'count' || phase === 'settled')
+    ? { points: gained > 0 ? `+${gained}` : null, plays: '+1' }
+    : null
+  // Rank never counts (#7 → #4 ticking downward reads as losing ground) — the climb is a badge,
+  // held back until the points have finished landing so there's one thing to read at a time.
+  const climb = weekly.prevRank != null ? weekly.prevRank - weekly.rank : 0
+  const delta = climb !== 0 && (phase === 'settled' || phase === 'done') ? climb : null
+
+  // The chase gap is derived from the same tweened figure as the row, so the two can't disagree
+  // mid-flight — and the gap visibly closing is the whole point of the animation.
+  const above = me ? weekly.neighbors.find(n => n.rank === me.rank - 1) : null
+  const toPass = above ? Math.max(1, above.weekTotal - pointsShown) : null
 
   return (
     <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-2 mb-4 text-left">
-      <div className="flex items-center justify-between mb-1.5 px-1">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide">This Week</p>
-        {countdown && <p className="text-[10px] text-slate-500">resets in {countdown}</p>}
+      <div className="flex items-center gap-1.5 px-1">
+        <span className="px-1.5 py-0.5 rounded bg-brand-600 text-white text-[10px] font-extrabold uppercase tracking-wide">
+          Weekly
+        </span>
+        <span className="text-[10px] text-slate-500 uppercase tracking-wide font-bold">Leaderboard</span>
       </div>
+      <p className="text-[10px] text-slate-500 px-1 mt-1 mb-1.5">
+        Points add up across every run this week{countdown ? ` · resets in ${countdown}` : ''}
+      </p>
+      <div className={`grid ${rowCols('weekly', null, true)} ${rowPad(true)} pb-1.5 border-b border-[#1a3a5c] text-[10px] text-slate-500 uppercase tracking-wide font-bold`}>
+        <span>Rank</span>
+        <span>Agent</span>
+        <span className="text-right">Points</span>
+        <span className="text-right">Plays</span>
+      </div>
+      {/* Rows keep their final order and final ranks throughout. Re-sorting them to the pre-run
+          state would mean inventing a board: the window is centred on the post-run rank, so the
+          players just overtaken are usually outside it. The moving number carries the change.
+          The user's cells stay illuminated from the flash right through the count-up, so the
+          figure they were told to watch is still lit while it moves. */}
       <div className="divide-y divide-[#1a3a5c]/50">
         {weekly.neighbors.map(n => (
-          <LeaderboardRow key={`${n.rank}-${n.name}`} entry={n} variant="weekly" isMe={n.isMe} compact />
+          <LeaderboardRow
+            key={`${n.rank}-${n.name}`}
+            entry={n.isMe && replaying ? { ...n, weekTotal: pointsShown, plays: playsShown } : n}
+            variant="weekly"
+            isMe={n.isMe}
+            compact
+            {...(n.isMe ? { gains, pulse: phase === 'flash' || phase === 'count', delta } : {})}
+          />
         ))}
       </div>
       <p className="text-xs text-brand-300 mt-2.5 text-center">
         {toPass != null
           ? <>{toPass} pts to pass <span className="font-bold">{above.name}</span></>
           : me?.rank === 1
-            ? <>🥇 You lead the week — {weekly.weekTotal} pts</>
-            : <>{weekly.weekTotal} pts this week</>}
+            ? <>🥇 You lead the week — {pointsShown} pts</>
+            : <>{pointsShown} pts this week</>}
       </p>
     </div>
   )
@@ -146,22 +263,9 @@ export default function CbatGameOver({
   const [weeklyState, setWeeklyState] = useState('loading') // loading | ready | offline | error
   const [progress, setProgress] = useState(null)            // null until loaded; never blocks the panel
   const [progressDone, setProgressDone] = useState(false)   // settled (loaded, failed or skipped) — gates the PB verdict
-  const [shown, setShown] = useState(0)
-  const rafRef = useRef(null)
-
-  // Count-up animation for the personal beat.
-  useEffect(() => {
-    const dur = 700
-    let start = null
-    const step = (t) => {
-      if (start == null) start = t
-      const p = Math.min(1, (t - start) / dur)
-      setShown(Math.round(score * (1 - Math.pow(1 - p, 3))))
-      if (p < 1) rafRef.current = requestAnimationFrame(step)
-    }
-    rafRef.current = requestAnimationFrame(step)
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [score])
+  // Count-up animation for the personal beat. Shares its curve with the weekly increment
+  // below via useCountUp — two count-ups on one screen must ease identically.
+  const shown = useCountUp(score, { duration: 700 })
 
   // Fetch the user's weekly standing (skip when the score is only queued offline).
   //
@@ -294,7 +398,12 @@ export default function CbatGameOver({
         >
           Play Again
         </button>
-        <Link to={`/cbat/${gameKey}/leaderboard`} state={{ fromGame: true }} className={secondaryBtn}>🏆 View Leaderboard</Link>
+        {/* Both boards are reachable by name rather than behind one ambiguous
+            "View Leaderboard". Only the weekly link carries `fromGame` — the
+            rank-move slide at the destination runs on the weekly tab only — and
+            the all-time link uses the ?period= deep-link the hub already relies on. */}
+        <Link to={`/cbat/${gameKey}/leaderboard`} state={{ fromGame: true }} className={secondaryBtn}>🏆 Weekly Board</Link>
+        <Link to={`/cbat/${gameKey}/leaderboard?period=all-time`} className={secondaryBtn}>All-Time Board</Link>
         {extraActions.map((a, i) => (
           a.to
             ? <Link key={i} to={a.to} className={secondaryBtn}>{a.label}</Link>

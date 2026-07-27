@@ -28,9 +28,12 @@ vi.mock('../../components/LeaderboardIntro', () => ({
   INTRO_PILL_LAYOUT_ID: 'cbat-weekly-pill',
 }))
 
+// span as well as div: LeaderboardRow's numeric cells are motion.spans so the post-game screen
+// can pulse them, even though nothing on this page passes `pulse`.
 vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, className }) => <div className={className}>{children}</div>,
+    span: ({ children, className }) => <span className={className}>{children}</span>,
   },
 }))
 

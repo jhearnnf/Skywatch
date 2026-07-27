@@ -150,4 +150,95 @@ describe('CBAT weekly/me reveal endpoint', () => {
     expect(Array.isArray(res.body.data.neighbors)).toBe(true);
     expect(res.body.data.neighbors.some(n => n.isMe)).toBe(true);
   });
+
+  // The post-game screen replays the increment the run just caused, which means it needs the
+  // run's own contribution — and it cannot work that out from the score it displayed (a negative
+  // run floors to 0; lower-is-better games derive points from rotations and time).
+  describe('lastRunPoints — the newest run\'s contribution', () => {
+    it('reports what the latest run added, not the whole week', async () => {
+      await post('target', { totalScore: 100, totalTime: 120, grade: 'Good', playedAt: inWeek });
+      await post('target', { totalScore: 200, totalTime: 120, grade: 'Good', playedAt: inWeek });
+
+      const res = await request(app).get('/api/games/cbat/target/weekly/me').set('Cookie', cookie);
+      expect(res.body.data.weekTotal).toBe(300);
+      expect(res.body.data.lastRunPoints).toBe(200);
+      // The screen counts from here, so it has to land exactly on the total.
+      expect(res.body.data.weekTotal - res.body.data.lastRunPoints).toBe(100);
+    });
+
+    it('reports 0 for a negative run, matching the total that did not move', async () => {
+      await post('target', { totalScore: 100, totalTime: 120, grade: 'Good', playedAt: inWeek });
+      await post('target', { totalScore: -50, totalTime: 120, grade: 'Failed', playedAt: inWeek });
+
+      const res = await request(app).get('/api/games/cbat/target/weekly/me').set('Cookie', cookie);
+      expect(res.body.data.weekTotal).toBe(100);   // floored, as the board does
+      expect(res.body.data.lastRunPoints).toBe(0); // so the reveal must not animate a gain
+      expect(res.body.data.plays).toBe(2);         // the play count still ticked
+    });
+
+    it('reports derived points for a lower-is-better game, not the rotations score', async () => {
+      await post('plane-turn-2d', { totalRotations: 50, totalTime: 90, mode: '2d', playedAt: inWeek });
+      await post('plane-turn-2d', { totalRotations: 60, totalTime: 100, mode: '2d', playedAt: inWeek });
+
+      const res = await request(app).get('/api/games/cbat/plane-turn-2d/weekly/me').set('Cookie', cookie);
+      const { weekTotal, lastRunPoints } = res.body.data;
+      expect(lastRunPoints).toBeGreaterThan(0);
+      expect(lastRunPoints).not.toBe(60);              // not the raw score on screen
+      expect(weekTotal - lastRunPoints).toBeGreaterThan(0); // and the earlier run is still in there
+    });
+
+    it('is 0 on the first run of the week, when there is nothing to add to', async () => {
+      await post('target', { totalScore: 150, totalTime: 120, grade: 'Good', playedAt: inWeek });
+      const res = await request(app).get('/api/games/cbat/target/weekly/me').set('Cookie', cookie);
+      expect(res.body.data.weekTotal).toBe(150);
+      expect(res.body.data.lastRunPoints).toBe(150);   // the whole total came from this run
+    });
+
+    it('ignores runs from last week when picking the latest', async () => {
+      await post('target', { totalScore: 900, totalTime: 120, grade: 'Outstanding', playedAt: lastWeek });
+      await post('target', { totalScore: 120, totalTime: 120, grade: 'Good', playedAt: inWeek });
+
+      const res = await request(app).get('/api/games/cbat/target/weekly/me').set('Cookie', cookie);
+      expect(res.body.data.weekTotal).toBe(120);
+      expect(res.body.data.lastRunPoints).toBe(120);
+    });
+  });
+
+  // prevRank drives the ▲N badge. It's computed against the whole board rather than the
+  // five-row chase window, because a run that jumps a long way leaves everyone it overtook
+  // outside that window.
+  describe('prevRank — where the run moved the user from', () => {
+    it('is null on the first play of the week (no previous position)', async () => {
+      await post('target', { totalScore: 150, totalTime: 120, grade: 'Good', playedAt: inWeek });
+      const res = await request(app).get('/api/games/cbat/target/weekly/me').set('Cookie', cookie);
+      expect(res.body.data.prevRank).toBeNull();
+    });
+
+    it('reports the climb when a run overtakes another player', async () => {
+      const rival = await createUser({ agentNumber: '1000002' });
+      const rivalCookie = authCookie(rival._id);
+      await request(app).post('/api/games/cbat/target/result').set('Cookie', rivalCookie)
+        .send({ totalScore: 500, totalTime: 120, grade: 'Outstanding', playedAt: inWeek });
+
+      await post('target', { totalScore: 200, totalTime: 120, grade: 'Good', playedAt: inWeek });
+      const before = await request(app).get('/api/games/cbat/target/weekly/me').set('Cookie', cookie);
+
+      // 200 + 400 = 600 clears the rival's 500.
+      await post('target', { totalScore: 400, totalTime: 120, grade: 'Outstanding', playedAt: inWeek });
+      const after = await request(app).get('/api/games/cbat/target/weekly/me').set('Cookie', cookie);
+
+      expect(after.body.data.weekTotal).toBe(600);
+      expect(after.body.data.prevRank).toBe(before.body.data.rank);   // exactly where it started
+      expect(after.body.data.prevRank).toBeGreaterThan(after.body.data.rank); // and it climbed
+    });
+
+    it('equals the current rank when the run changed nothing (a negative run)', async () => {
+      await post('target', { totalScore: 300, totalTime: 120, grade: 'Outstanding', playedAt: inWeek });
+      await post('target', { totalScore: -50, totalTime: 120, grade: 'Failed', playedAt: inWeek });
+
+      const res = await request(app).get('/api/games/cbat/target/weekly/me').set('Cookie', cookie);
+      // The badge is suppressed on a zero delta rather than showing "▲0".
+      expect(res.body.data.prevRank).toBe(res.body.data.rank);
+    });
+  });
 });

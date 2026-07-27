@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatGameOver from '../CbatGameOver'
 
@@ -12,8 +12,13 @@ vi.mock('react-router-dom', () => ({
 }))
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('../../context/GameChromeContext', () => ({ useGameChrome: () => mockChrome }))
+// The gain badges and the pulsing numbers are motion.spans (see LeaderboardRow's GainCell), so
+// the mock has to cover span as well as div or the rows render nothing.
 vi.mock('framer-motion', () => ({
-  motion: { div: ({ children, className }) => <div className={className}>{children}</div> },
+  motion: {
+    div: ({ children, className }) => <div className={className}>{children}</div>,
+    span: ({ children, className }) => <span className={className}>{children}</span>,
+  },
 }))
 // Recharts' ResponsiveContainer measures its parent, which is 0×0 in jsdom, so it renders
 // nothing. Swap it for a plain box so the sparkline's marks are actually in the tree.
@@ -34,12 +39,15 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
+// `plays: 7` (not 2) so the pre-run figure the replay holds — 6 — is a string that appears
+// nowhere else in the panel. Same reason the neighbours' totals stay clear of 180 (= 300 − 120,
+// the pre-run points): these tests read the numbers straight out of the rendered rows.
 const weeklyData = (over = {}) => ({
-  played: true, rank: 3, weekTotal: 300, plays: 2,
+  played: true, rank: 3, weekTotal: 300, plays: 7, lastRunPoints: 120, prevRank: 5,
   resetsAt: new Date(Date.now() + 2 * 86400000).toISOString(),
   neighbors: [
     { rank: 2, weekTotal: 420, plays: 3, name: 'Maverick', isMe: false },
-    { rank: 3, weekTotal: 300, plays: 2, name: 'Agent A001', isMe: true },
+    { rank: 3, weekTotal: 300, plays: 7, name: 'Agent A001', isMe: true },
     { rank: 4, weekTotal: 240, plays: 1, name: 'Goose', isMe: false },
   ],
   ...over,
@@ -89,7 +97,7 @@ describe('CbatGameOver', () => {
     expect(screen.queryByRole('button', { name: /view results/i })).toBeNull()
   })
 
-  it('renders a View Leaderboard link and any extra tertiary actions', () => {
+  it('names both boards in the action row, alongside any extra tertiary actions', () => {
     setup()
     const onExtra = vi.fn()
     render(
@@ -97,16 +105,28 @@ describe('CbatGameOver', () => {
         <div />
       </CbatGameOver>
     )
-    expect(screen.getByRole('link', { name: /view leaderboard/i })).toBeDefined()
+    // One ambiguous "View Leaderboard" left users unsure which board they were being sent to.
+    expect(screen.getByRole('link', { name: /weekly board/i })).toBeDefined()
+    expect(screen.getByRole('link', { name: /all-time board/i })).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: /change aircraft/i }))
     expect(onExtra).toHaveBeenCalled()
   })
 
-  it('the View Leaderboard link carries fromGame state so the destination can play the rank-move slide', () => {
+  it('the Weekly Board link carries fromGame state so the destination can play the rank-move slide', () => {
     setup()
     render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
-    const link = screen.getByRole('link', { name: /view leaderboard/i })
+    const link = screen.getByRole('link', { name: /weekly board/i })
     expect(link.getAttribute('data-state')).toBe(JSON.stringify({ fromGame: true }))
+  })
+
+  // The slide only runs on the weekly tab, so the all-time link must NOT request it — and it
+  // needs the ?period= deep-link or it would land on This Week, the board the user just left.
+  it('the All-Time Board link deep-links to the all-time period without the slide', () => {
+    setup()
+    render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+    const link = screen.getByRole('link', { name: /all-time board/i })
+    expect(link.getAttribute('href')).toBe('/cbat/target/leaderboard?period=all-time')
+    expect(link.getAttribute('data-state')).toBeNull()
   })
 
   it('flags a personal best when the run beats the previous best', async () => {
@@ -188,6 +208,174 @@ describe('CbatGameOver', () => {
     await waitFor(() => expect(screen.getByText(/120 pts to pass/i)).toBeDefined())
     expect(screen.getAllByText(/Maverick/).length).toBeGreaterThan(0) // appears in row + chase line
     expect(screen.getByText('Agent A001 (you)')).toBeDefined()
+  })
+
+  // The window shows weekTotal (every run summed), which will not equal the score just posted —
+  // users read that mismatch as an all-time total unless the panel says otherwise, loudly.
+  describe('weekly window is unmistakably the weekly board', () => {
+    it('labels the period and explains that points accumulate', async () => {
+      setup()
+      render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+
+      await waitFor(() => expect(screen.getByText('Weekly')).toBeDefined())
+      expect(screen.getByText('Leaderboard')).toBeDefined()
+      expect(screen.getByText(/Points add up across every run this week/i)).toBeDefined()
+    })
+
+    it('names the columns, so the number beside your name is not mistaken for your score', async () => {
+      setup()
+      render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+
+      await waitFor(() => expect(screen.getByText('Points')).toBeDefined())
+      expect(screen.getByText('Plays')).toBeDefined()
+      expect(screen.getByText('Rank')).toBeDefined()
+      expect(screen.getByText('Agent')).toBeDefined()
+    })
+
+    // The increment replay: hold the pre-run figures, illuminate, then count up. It exists to
+    // SHOW the accumulation the copy above can only assert, so the pre-run state actually being
+    // on screen first is the whole feature — not a detail of the animation.
+    //
+    // Timers here are real (the stubbed rAF settles the count-up instantly, but the phase
+    // schedule is setTimeout), so these tests assert the pre-run frame synchronously and then
+    // wait for the settled one.
+    describe('increment replay', () => {
+      // The ordering is the feature: pulse first, change second. If both happen on one frame,
+      // the user only sees whichever figure they were already looking at move.
+      //
+      // Fake timers here rather than waitFor — the flash window is a few hundred ms wide, and a
+      // test that has to poll into it to catch the pre-run figures still lit would be a flake.
+      it('flashes the figures BEFORE they change, not as they change', async () => {
+        setup()
+        vi.useFakeTimers()
+        try {
+          render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+          await act(async () => {})   // let the weekly fetch resolve (promises, not timers)
+
+          // Each advance lands mid-phase rather than just past a boundary, so retuning the
+          // REPLAY_* constants by a hundred ms or two doesn't break this. Phase windows as
+          // written: hold 0-300, flash 300-1000, count 1000-1600, settled from 1600.
+          const cell = () => screen.getByText('6').parentElement
+
+          // Hold: pre-run figures, no illumination yet.
+          expect(cell().className).not.toMatch(/emerald/)
+
+          // Flash: lit up, and STILL showing 6 — the cue precedes the change.
+          await act(async () => { vi.advanceTimersByTime(500) })
+          expect(cell().className).toMatch(/text-emerald-300/)
+          expect(screen.queryByText('7')).toBeNull()
+
+          // Change: only now does it tick, and it stays lit while it does.
+          await act(async () => { vi.advanceTimersByTime(800) })
+          expect(screen.getByText('7')).toBeDefined()
+          expect(screen.getByText('7').parentElement.className).toMatch(/text-emerald-300/)
+
+          // Settled: illumination returns to the normal cell colour.
+          await act(async () => { vi.advanceTimersByTime(500) })
+          expect(screen.getByText('7').parentElement.className).not.toMatch(/emerald/)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+
+      it('holds the pre-run play count, then ticks it up by one', async () => {
+        setup()
+        render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+
+        // 7 plays after this run, so the board opens on 6 — the state the user last saw.
+        await waitFor(() => expect(screen.getByText('6')).toBeDefined())
+        expect(screen.queryByText('7')).toBeNull()
+
+        await waitFor(() => expect(screen.getByText('7')).toBeDefined())
+        expect(screen.queryByText('6')).toBeNull()
+      })
+
+      it('badges what the run added to both figures', async () => {
+        setup()
+        render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+
+        await waitFor(() => expect(screen.getByText('+120')).toBeDefined())  // points gained
+        expect(screen.getByText('+1')).toBeDefined()                        // one more play
+      })
+
+      it('shows the rank climb once the numbers have landed', async () => {
+        setup()
+        render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+        // prevRank 5 → rank 3. The climb is a badge, never a counting number.
+        await waitFor(() => expect(screen.getByText('▲2')).toBeDefined())
+        expect(screen.queryByText('#5')).toBeNull()
+      })
+
+      it('drops the badges after they have had time to be read', async () => {
+        setup()
+        render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+
+        await waitFor(() => expect(screen.getByText('+120')).toBeDefined())
+        // A flash alone is missed by anyone still reading their score, so the badges outlive the
+        // pulse by over a second before clearing out.
+        await waitFor(() => expect(screen.queryByText('+120')).toBeNull(), { timeout: 4000 })
+        expect(screen.queryByText('+1')).toBeNull()
+        expect(screen.getByText('▲2')).toBeDefined()   // the climb stays put
+      })
+
+      it('does not replay anything on the first run of the week', async () => {
+        // plays: 1 → there is no previous state to count from, and prevRank is null.
+        setup({ weekly: weeklyData({ plays: 1, prevRank: null, lastRunPoints: 300,
+          neighbors: [
+            { rank: 2, weekTotal: 420, plays: 3, name: 'Maverick', isMe: false },
+            { rank: 3, weekTotal: 300, plays: 1, name: 'Agent A001', isMe: true },
+          ] }) })
+        render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+
+        await waitFor(() => expect(screen.getByText('Agent A001 (you)')).toBeDefined())
+        expect(screen.queryByText('+300')).toBeNull()
+        expect(screen.queryByText('+1')).toBeNull()
+        expect(screen.queryByText('0')).toBeNull()      // never counts up from a phantom zero
+      })
+
+      // A negative run's weekly contribution is floored to 0 by the board, so the total really
+      // does not move. Animating a gain there would be the panel lying to the user.
+      it('badges only the play when the run added no points', async () => {
+        setup({ weekly: weeklyData({ lastRunPoints: 0, prevRank: 3 }) })
+        render(<CbatGameOver {...baseProps} score={-50}><div /></CbatGameOver>)
+
+        await waitFor(() => expect(screen.getByText('+1')).toBeDefined())
+        expect(screen.queryByText('+0')).toBeNull()
+        expect(screen.queryByText('▲0')).toBeNull()     // rank did not move either
+      })
+
+      // Old clients and cached payloads predate lastRunPoints; the play count still ticks.
+      it('survives a payload with no lastRunPoints', async () => {
+        const { lastRunPoints, ...noGain } = weeklyData()   // eslint-disable-line no-unused-vars
+        setup({ weekly: noGain })
+        render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+
+        await waitFor(() => expect(screen.getByText('+1')).toBeDefined())
+        // Points sit at the settled total rather than counting from a guessed starting figure,
+        // and no points badge is invented — only the play tick, which is always knowable.
+        expect(screen.queryByText('180')).toBeNull()
+        expect(screen.queryByText('+120')).toBeNull()
+      })
+
+      it('closes the chase gap in step with the count-up rather than disagreeing with it', async () => {
+        setup()
+        render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+        // Both the row and the gap are derived from the same tweened figure, so once it settles
+        // the gap is 420 − 300, never 420 − 180.
+        await waitFor(() => expect(screen.getByText(/120 pts to pass/i)).toBeDefined())
+        expect(screen.queryByText(/240 pts to pass/i)).toBeNull()
+      })
+    })
+
+    it('keeps the reset countdown on the same line as the explainer', async () => {
+      setup()
+      render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+      // Loose on the digits: resetsAt is 2 days out, which has already ticked down to
+      // "1d 23h" by the time this renders.
+      await waitFor(() => expect(
+        screen.getByText(/Points add up across every run this week · resets in \d+d \d+h/i)
+      ).toBeDefined())
+    })
   })
 
   it('waits for the score to save before asking for the weekly standing (closes the post-game race)', async () => {
