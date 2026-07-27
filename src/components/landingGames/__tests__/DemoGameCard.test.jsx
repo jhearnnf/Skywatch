@@ -2,6 +2,7 @@ import { render, screen, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import DemoGameCard from '../DemoGameCard'
+import { frameFor } from '../demoFraming'
 
 // The card mounts a real game, so everything below it is stubbed out — these
 // tests are about the frame: what it links to, what it exposes to the page, and
@@ -84,5 +85,42 @@ describe('DemoGameCard', () => {
   it('shows the poster until the game is actually running', () => {
     const { container } = renderCard()
     expect(container.querySelector('img').style.opacity).toBe('1')
+  })
+})
+
+describe('frameFor', () => {
+  const DESKTOP = { w: 900, h: 600 }
+  const PHONE   = { w: 430, h: 560 }
+  // The Trace practise arena: a 448px square sitting below the header + HUD.
+  const BOARD   = { w: 448, h: 448, top: 48 }
+
+  it('leaves a game alone when it declares no focus', () => {
+    expect(frameFor(DESKTOP, undefined)).toEqual({ zoom: 1, offsetY: 0 })
+  })
+
+  it('zooms a narrow game up until its focus fills the stage', () => {
+    const { zoom } = frameFor(DESKTOP, BOARD)
+    // Height is the binding constraint: 600 / 448.
+    expect(zoom).toBeCloseTo(600 / 448, 5)
+    // Which is what takes the board from half the card's width to two thirds.
+    expect((BOARD.w * zoom) / DESKTOP.w).toBeCloseTo(0.667, 2)
+  })
+
+  it('lifts the stage so the focus box is centred, not the page header', () => {
+    const { zoom, offsetY } = frameFor(DESKTOP, BOARD)
+    const visibleH = DESKTOP.h / zoom
+    // The visible slice starts at the top of the board and ends at its bottom.
+    expect(offsetY).toBeCloseTo(BOARD.top, 5)
+    expect(offsetY + visibleH).toBeCloseTo(BOARD.top + BOARD.h, 5)
+  })
+
+  it('never crops: the offset stays inside the stage', () => {
+    const { zoom, offsetY } = frameFor(DESKTOP, { w: 448, h: 448, top: 400 })
+    expect(offsetY).toBeGreaterThanOrEqual(0)
+    expect(offsetY + DESKTOP.h / zoom).toBeLessThanOrEqual(DESKTOP.h + 1e-9)
+  })
+
+  it('does nothing on the phone stage, where the same game already fills it', () => {
+    expect(frameFor(PHONE, BOARD)).toEqual({ zoom: 1, offsetY: 0 })
   })
 })

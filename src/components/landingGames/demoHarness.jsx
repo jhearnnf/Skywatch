@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { AuthContext } from '../../context/AuthContext'
 import { GameChromeProvider } from '../../context/GameChromeContext'
-import { CbatDemoContext } from '../../utils/cbat/demoMode'
+import { CbatDemoContext, DEMO_CANVAS_DPR } from '../../utils/cbat/demoMode'
 import { createDemoApiFetch, DEMO_USER } from './demoStubs'
 
 // Provider stack wrapped around every game mounted by the landing page's live
@@ -26,7 +26,9 @@ import { createDemoApiFetch, DEMO_USER } from './demoStubs'
 // AppSettings is deliberately NOT stubbed — a demo should respect the same
 // admin gating as the real game.
 export default function DemoHarness({ children, portalTarget = null }) {
-  const demo = useMemo(() => ({ portalTarget }), [portalTarget])
+  // `dpr` is read by every game canvas (useCbatDemoDpr) so a showcase tile
+  // never renders at full retina resolution.
+  const demo = useMemo(() => ({ portalTarget, dpr: DEMO_CANVAS_DPR }), [portalTarget])
 
   const auth = useMemo(() => ({
     user: DEMO_USER,

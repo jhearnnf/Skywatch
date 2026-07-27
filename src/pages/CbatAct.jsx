@@ -9,6 +9,8 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import usePagePresence from '../hooks/usePagePresence'
+import { useCbatDemo, useCbatDemoDpr } from '../utils/cbat/demoMode'
+import { pickAim, steerInput, wobbleAt } from '../utils/cbat/actDemoPilot'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
@@ -547,6 +549,13 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
   // Active "avoid" instruction targeting the next matching shape, or null.
   const activeAvoidRef = useRef(null)
 
+  // Demo mounts (the landing page's live game wall) fly themselves — see
+  // actDemoPilot. Held in a ref because the game loop is keyed on the round,
+  // not on context, and the flag can't change inside a mount anyway.
+  const isDemo = !!useCbatDemo()
+  const demoRef = useRef(false)
+  useEffect(() => { demoRef.current = isDemo }, [isDemo])
+
   // Per-round stats
   const statsRef = useRef({
     ringsThreaded: 0,
@@ -855,6 +864,23 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
         return
       }
 
+      // ── 0b. Demo autopilot. Writes the drag a player would have made, then
+      // gets out of the way — everything below treats it as ordinary input, so
+      // a demo ball obeys the same rotation cap, deviation cone and wall snap.
+      if (demoRef.current) {
+        const aim = pickAim(curve, events, ballTRef.current, {
+          avoidTargetId: activeAvoidRef.current?.targetId ?? null,
+          wobble: wobbleAt((now - roundStartedAtRef.current) / 1000),
+        })
+        inputRef.current = steerInput({
+          position: ballPosRef.current,
+          forward:  ballForwardRef.current,
+          aim,
+          turnRate: TURN_RATE,
+          dt,
+        })
+      }
+
       // ── 1. Apply pending steering input as a rotation of the ball's forward ──
       // Yaw around world-up; pitch around camera-right. The per-tick magnitude
       // is capped at MAX_ROT_PER_TICK so a single frame can't spin the ball
@@ -1121,6 +1147,8 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
 // Wraps the canvas + ball/camera/shape components so they share the live
 // refs without forcing top-level re-renders every frame.
 function ActScene({ state }) {
+  // Showcase tiles render at a capped pixel ratio; undefined for real players.
+  const demoDpr = useCbatDemoDpr()
   const [, forceFrameTick] = useState(0)
   useEffect(() => {
     let raf
@@ -1133,6 +1161,7 @@ function ActScene({ state }) {
 
   return (
     <Canvas
+      dpr={demoDpr}
       camera={{ fov: 70, near: 0.1, far: 200, position: [0, 0, -3] }}
       onPointerDown={state.onPointerDown}
       onPointerMove={state.onPointerMove}
@@ -1872,6 +1901,11 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
         onPointerUp={handleBleepPointerUp}
         onPointerCancel={handleBleepPointerUp}
         onPointerLeave={handleBleepPointerUp}
+        // The round-1 tutorial holds the tunnel still until this is pressed, so
+        // a demo card that never presses it freezes 1.5s in — the driver taps
+        // it on a cadence, which clears the tutorial and reads as a player
+        // answering bleeps.
+        data-demo-answer
         disabled={showCallsignOverlay || state.paused}
         style={{ touchAction: 'none' }}
         className={`w-full mt-3 py-5 border-2 font-extrabold text-lg uppercase tracking-widest rounded-xl transition-colors ${

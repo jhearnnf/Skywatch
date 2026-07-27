@@ -10,6 +10,7 @@ import { speak, stopSpeech, primeSpeech } from '../utils/cbat/satSpeech'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const SITUATIONS = 3
@@ -454,10 +455,7 @@ export default function CbatSat() {
   // "beta"-watermarked wash while this page is mounted, so the game visibly
   // reads as unfinished. Styled via body.cbat-sat-beta in main.css (mirrors
   // the cbat-dpt-fullwidth body-class pattern).
-  useEffect(() => {
-    document.body.classList.add('cbat-sat-beta')
-    return () => document.body.classList.remove('cbat-sat-beta')
-  }, [])
+  useGameBodyClass('cbat-sat-beta')
 
   // Fire-and-forget tutorial usage tracking (admin Reports per-step drop-off).
   // Online-only by design — a learning aid, not a score, so no offline outbox.

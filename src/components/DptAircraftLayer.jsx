@@ -2,6 +2,7 @@ import { Suspense, Component, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
+import { useCbatDemoDpr } from '../utils/cbat/demoMode'
 
 // ── Coordinate mapping ──────────────────────────────────────────────────────
 // Aircraft live in the WORLD XZ plane (y = 0) and the camera sits at
@@ -75,10 +76,13 @@ function AircraftMesh({ url, x, z, headingDeg, isEnemy, dim, scale }) {
 
 // ── Layer ────────────────────────────────────────────────────────────────────
 export default function DptAircraftLayer({ aircraftList, sizeMultiplier = 1.0, doneIds }) {
+  // Showcase tiles render at a capped pixel ratio; undefined for real players.
+  const demoDpr = useCbatDemoDpr()
   const scale = BASE_SCALE * sizeMultiplier
   return (
     <div className="absolute inset-0 pointer-events-none">
       <Canvas
+        dpr={demoDpr}
         orthographic
         camera={{
           position: [0, 20, 0],

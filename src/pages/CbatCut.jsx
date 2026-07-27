@@ -15,6 +15,7 @@ import {
   AIR_INTERVAL, GROUND_INTERVAL, LOAD_RELEASE_WINDOW, LOAD_POINTS, stationName,
   PRESS_LOW, PRESS_HIGH, CODE_SUBMIT_WINDOW,
 } from '../utils/cbat/cutSim'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // ── Panels ───────────────────────────────────────────────────────────────────
 function Panel({ title, accent = '#5baaff', children, pad = true }) {
@@ -284,7 +285,9 @@ function NavButtons({ active, onSelect }) {
   return (
     <div className="w-full h-full flex gap-1">
       {SYSTEMS.map(k => (
-        <button key={k} onClick={() => onSelect(k)}
+        // Swapping displays is the game — a demo card that never presses these
+        // shows the same two panels for its whole run.
+        <button key={k} onClick={() => onSelect(k)} data-demo-answer
           className={`flex-1 min-w-0 overflow-hidden rounded px-1 text-left text-[10px] sm:text-[11px] font-bold uppercase tracking-tight sm:tracking-wide whitespace-nowrap transition-colors cursor-pointer ${
             active === k ? 'bg-green-600 text-white' : 'bg-[#0f2240] text-[#ddeaf8] hover:bg-[#163055] hover:text-white'
           }`}>
@@ -410,11 +413,7 @@ export default function CbatCut() {
 
   // While playing, widen the app-shell content on lg+ so the commentary column
   // has room beside the arena (mirrors the cbat-recent-wide pattern on the hub).
-  useEffect(() => {
-    if (phase !== 'playing') return
-    document.body.classList.add('cbat-cut-wide')
-    return () => document.body.classList.remove('cbat-cut-wide')
-  }, [phase])
+  useGameBodyClass('cbat-cut-wide', phase === 'playing')
 
   // Personal best
   const fetchPB = useCallback(() => {

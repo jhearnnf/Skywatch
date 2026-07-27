@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
-import { useCbatDemoPortalTarget } from '../utils/cbat/demoMode'
+import { useCbatDemoPortalTarget, getDemoStageFrame } from '../utils/cbat/demoMode'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
@@ -21,6 +21,7 @@ import { buildRounds as buildRounds3D } from '../utils/cbat/visualisation3DPuzzl
 import { useVisualisationMode } from '../hooks/useVisualisationMode'
 import VisualisationModeSelector from '../components/VisualisationModeSelector'
 import Visualisation3DShape, { VisualisationShapeCanvas } from '../components/cbat/Visualisation3DShape'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 const TOTAL_ROUNDS = 8
 const ROUND_TIMER_S = 30
@@ -251,12 +252,22 @@ function AssemblyAnimation({ data }) {
   )
 }
 
-function computeAnimationData(round, correctIdx, promptSvgs, tileSvgs) {
+function computeAnimationData(round, correctIdx, promptSvgs, tileSvgs, demoStage = null) {
   if (!round) return null
   const tileSvg = tileSvgs[correctIdx]
   if (!tileSvg) return null
   const tileCtm = tileSvg.getScreenCTM()
   if (!tileCtm) return null
+
+  // Every coordinate below comes out of getScreenCTM, i.e. screen pixels. In a
+  // landing-page demo card the animation is portalled into the scaled stage, so
+  // those have to be converted into the stage's own space first — otherwise the
+  // pieces fly off to a fraction of their proper position at a fraction of
+  // their proper size. Outside a demo this is the identity.
+  const frame = getDemoStageFrame(demoStage)
+  const toStage = (p) => (frame
+    ? { ...p, x: (p.x - frame.left) / frame.scale, y: (p.y - frame.top) / frame.scale, scale: p.scale / frame.scale }
+    : p)
   const targetScale = Math.hypot(tileCtm.a, tileCtm.b)
   const correctLayout = round.choices[correctIdx].layout
 
@@ -294,8 +305,8 @@ function computeAnimationData(round, correctIdx, promptSvgs, tileSvgs) {
 
     pieces.push({
       shape: round.shapes[i],
-      src: { x: sourceX, y: sourceY, rotateDeg: srcDeg, scale: sourceScale },
-      tgt: { x: tgtX,    y: tgtY,    rotateDeg: tgtDeg, scale: targetScale },
+      src: toStage({ x: sourceX, y: sourceY, rotateDeg: srcDeg, scale: sourceScale }),
+      tgt: toStage({ x: tgtX,    y: tgtY,    rotateDeg: tgtDeg, scale: targetScale }),
     })
   }
 
@@ -342,8 +353,8 @@ function computeAnimationData(round, correctIdx, promptSvgs, tileSvgs) {
     letters.push({
       letter: w.letter,
       carrierIdx,
-      src: { x: srcLetterX, y: srcLetterY, scale: srcScales[carrierIdx] },
-      tgt: { x: tgtLetterX, y: tgtLetterY, scale: targetScale },
+      src: toStage({ x: srcLetterX, y: srcLetterY, scale: srcScales[carrierIdx] }),
+      tgt: toStage({ x: tgtLetterX, y: tgtLetterY, scale: targetScale }),
     })
   }
 
@@ -440,6 +451,9 @@ export default function CbatVisualisation({ forcedMode = null }) {
   const leaderboardHref = `/cbat/${gameKey}/leaderboard`
 
   const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
+  // Non-null only inside a landing-page demo card, where the assembly animation
+  // is measured in screen pixels but painted inside a scaled stage.
+  const demoPortalTarget = useCbatDemoPortalTarget()
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
     if (phase === 'playing' || phase === 'feedback') enterImmersive()
@@ -447,13 +461,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
 
-  useEffect(() => {
-    const active = phase === 'playing' || phase === 'feedback'
-    if (active) {
-      document.body.classList.add('cbat-vis2d-locked')
-      return () => document.body.classList.remove('cbat-vis2d-locked')
-    }
-  }, [phase])
+  useGameBodyClass('cbat-vis2d-locked', phase === 'playing' || phase === 'feedback')
 
   const [rounds, setRounds] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
@@ -552,6 +560,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
         round.correctIdx,
         promptSvgRefs.current,
         tileSvgRefs.current,
+        demoPortalTarget,
       )
       correct = !opts.timedOut && pick === round.correctIdx
     }
@@ -574,7 +583,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
     setLastRoundTime(roundTime)
     setAnimationData(animData)
     setPhase('feedback')
-  }, [phase, rounds, currentIdx, answers, elapsed, is3D])
+  }, [phase, rounds, currentIdx, answers, elapsed, is3D, demoPortalTarget])
 
   const handleNext = useCallback(() => {
     if (phase !== 'feedback') return
@@ -876,6 +885,9 @@ export default function CbatVisualisation({ forcedMode = null }) {
                         >
                           <button
                             onClick={handleNext}
+                            // The only enabled control during feedback: without
+                            // it a demo card locks on round 1 forever.
+                            data-demo-answer
                             className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
                           >
                             {currentIdx + 1 >= TOTAL_ROUNDS ? 'View Results' : 'Next Round'}
@@ -999,6 +1011,9 @@ export default function CbatVisualisation({ forcedMode = null }) {
                         >
                           <button
                             onClick={handleNext}
+                            // The only enabled control during feedback: without
+                            // it a demo card locks on round 1 forever.
+                            data-demo-answer
                             className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
                           >
                             {currentIdx + 1 >= TOTAL_ROUNDS ? 'View Results' : 'Next Round'}

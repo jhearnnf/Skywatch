@@ -32,6 +32,42 @@ export function useCbatDemoPortalTarget() {
   return demo?.portalTarget ?? null
 }
 
+// Device pixel ratio for a canvas mounted inside a demo card.
+//
+// R3F sizes its drawing buffer from the canvas's CSS size times the device
+// pixel ratio, which is right for a game filling the screen and wasteful for
+// one scaled down into a 320px tile — the wall's canvases were measured
+// rendering 3x the pixels they display, and that multiplies by dpr² on a phone
+// (a 3x screen renders 9x the pixels for a tile nobody is inspecting closely).
+// Capping at 1 costs nothing visible at tile size.
+export const DEMO_CANVAS_DPR = 1
+
+// Pass straight to <Canvas dpr={…}>: a number inside a demo, undefined outside,
+// which leaves R3F's own default alone for real players.
+export function useCbatDemoDpr() {
+  const demo = useContext(CbatDemoContext)
+  return demo ? (demo.dpr ?? DEMO_CANVAS_DPR) : undefined
+}
+
+// The stage is scaled (and, when the card zooms in on a game, translated), so
+// the two coordinate spaces a game works in stop agreeing: getScreenCTM /
+// getBoundingClientRect answer in screen pixels, while an overlay portalled
+// into the stage is laid out in the stage's own unscaled pixels. Anything that
+// measures one and paints in the other has to go through here or it lands in
+// the wrong place at the wrong size.
+//
+// Returns null outside a demo (and when the element hasn't been laid out yet),
+// which callers read as "screen space is the only space".
+export function getDemoStageFrame(el) {
+  if (!el?.getBoundingClientRect) return null
+  const rect = el.getBoundingClientRect()
+  const width = el.offsetWidth || 0
+  if (!width || !rect.width) return null
+  // Local (0,0) sits at the transformed box's top-left corner whatever the
+  // translate is, so the rect gives both the origin and the scale.
+  return { left: rect.left, top: rect.top, scale: rect.width / width }
+}
+
 // ── Module-level flag, for non-React callers ────────────────────────────────
 //
 // Ref-counted because several demo cards mount and unmount independently. The

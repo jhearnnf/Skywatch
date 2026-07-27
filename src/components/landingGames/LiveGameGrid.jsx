@@ -4,6 +4,8 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import DemoGameCard from './DemoGameCard'
 import { pickGameDemos, takeWithHeavyCap } from './gameDemoPool'
 import { componentForDemo } from './gameDemoRegistry'
+import PerfHud from './LiveGameGridPerf'
+import { usePerfSweep } from './usePerfSweep'
 
 // The slim-mode landing page's headline: a wall of real CBAT games playing
 // themselves. Replaces the single cycling <PreviewWindow> — nine games at once
@@ -19,8 +21,10 @@ const MOBILE_MAX_WIDTH = 600      // matches the app-wide mobile breakpoint
 const DESKTOP_COUNT = 9
 const MOBILE_COUNT  = 6
 const STAGGER_MS    = 450
-// Half the pool is canvas-backed; these are the ceilings the picker aims for.
-// Phones get a tighter one because they have far less to spend.
+// Most of the pool is canvas-backed — seven of twelve, counting Trace Practise
+// 2D, which renders its aircraft through <PlaneModel3D> and so costs a WebGL
+// context like the rest. These are the ceilings the picker aims for; phones get
+// a tighter one because they have far less to spend.
 const DESKTOP_MAX_HEAVY = 4
 const MOBILE_MAX_HEAVY  = 2
 
@@ -46,8 +50,10 @@ function useIsMobile() {
 
 export default function LiveGameGrid({
   eyebrow = 'CBAT PRACTICE GAMES',
-  heading = 'Every game. Playing right now.',
-  subheading = 'These are the real training games, running live. Tap any one to start.',
+  // Not "every game" — the wall shows a shuffled handful of what's built, and
+  // the CBAT battery has tests we don't cover yet.
+  heading = 'Real games, playing right now.',
+  subheading = 'These are the training games themselves. Tap any one to start.',
 }) {
   const { user } = useAuth()
   const { settings } = useAppSettings() ?? {}
@@ -66,6 +72,11 @@ export default function LiveGameGrid({
     ),
     [enabledKey],
   )
+
+  // Diagnostic only — `?perf=1` steps the number of live cards down and
+  // measures each step. See LiveGameGridPerf.jsx.
+  const perf = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('perf') === '1'
+  const sweep = usePerfSweep(perf)
 
   const [inView, setInView] = useState(() => typeof IntersectionObserver === 'undefined')
   useEffect(() => {
@@ -111,11 +122,15 @@ export default function LiveGameGrid({
             Component={componentForDemo(entry.id)}
             stage={stage}
             loggedIn={!!user}
-            active={inView}
-            startDelayMs={i * STAGGER_MS}
+            // During a perf sweep the cards past the current cap fall back to
+            // their posters, which is exactly how a rationed wall would behave.
+            active={inView && (!perf || i < sweep.live)}
+            startDelayMs={perf ? 0 : i * STAGGER_MS}
           />
         ))}
       </div>
+
+      {perf && <PerfHud {...sweep} />}
     </section>
   )
 }

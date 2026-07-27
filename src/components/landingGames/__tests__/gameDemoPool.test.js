@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { GAME_DEMO_POOL, pickGameDemos, takeWithHeavyCap } from '../gameDemoPool'
+import { frameFor } from '../demoFraming'
 
 // Deterministic rng so a failure is reproducible.
 function seededRng(seed = 1) {
@@ -109,6 +110,30 @@ describe('GAME_DEMO_POOL', () => {
       expect(g.poster, g.id).toBeTruthy()
       expect(g.path, g.id).toMatch(/^\/cbat\//)
       expect(g.gameKey, g.id).toBeTruthy()
+    }
+  })
+
+  it('keeps pressing for ACT, whose round-1 tutorial holds the tunnel until BLEEP is tapped', () => {
+    const act = GAME_DEMO_POOL.find((g) => g.id === 'act')
+    expect(act.answerIntervalMs).toBeGreaterThan(0)
+  })
+
+  it('frames the games that lay themselves out narrower than the stage', () => {
+    for (const id of ['plane-turn-2d', 'plane-turn-3d', 'act']) {
+      const g = GAME_DEMO_POOL.find((e) => e.id === id)
+      expect(g.focus, id).toMatchObject({ w: expect.any(Number), h: expect.any(Number) })
+    }
+  })
+
+  it('crops past the arena for the games whose canvas is mostly empty air', () => {
+    // Trace 3D and ACT both frame a subject inside a much larger scene, so
+    // their focus is a slice of the layout rather than the whole of it.
+    for (const id of ['plane-turn-3d', 'act']) {
+      const { focus } = GAME_DEMO_POOL.find((e) => e.id === id)
+      const { zoom } = frameFor({ w: 900, h: 600 }, focus)
+      expect(zoom, id).toBeGreaterThan(1.3)
+      // Filling the tile means the focus is about as wide as the card is.
+      expect((focus.w * zoom) / 900, id).toBeGreaterThan(0.95)
     }
   })
 })

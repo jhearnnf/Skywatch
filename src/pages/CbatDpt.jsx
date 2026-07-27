@@ -13,6 +13,7 @@ import SkywatchLogoIntro, { SKYWATCH_LOGO_INTRO_MS } from '../components/Skywatc
 import { has3DModel, getModelUrl } from '../data/aircraftModels'
 import DptAircraftLayer from '../components/DptAircraftLayer'
 import { useGLTF } from '@react-three/drei'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 8
@@ -1048,11 +1049,7 @@ export default function CbatDpt() {
   // (which is already offset for the sidebar via md:ml-56 on app-shell-main).
   // 'intro' is included so the arena mounts behind the curtain at the same
   // width it'll have once the curtain lifts — avoids a layout shift on reveal.
-  useEffect(() => {
-    if (phase !== 'playing' && phase !== 'intro') return
-    document.body.classList.add('cbat-dpt-fullwidth')
-    return () => document.body.classList.remove('cbat-dpt-fullwidth')
-  }, [phase])
+  useGameBodyClass('cbat-dpt-fullwidth', phase === 'playing' || phase === 'intro')
 
   // Game state — wired up properly in Chunks 4–9
   const [round, setRound]                                 = useState(1)

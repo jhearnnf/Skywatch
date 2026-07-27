@@ -2,6 +2,8 @@ import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState } 
 import { Link } from 'react-router-dom'
 import DemoHarness from './demoHarness'
 import { runDemoDriver } from './demoDriver'
+import { frameFor } from './demoFraming'
+import { requestRemountSlot } from './remountScheduler'
 import { beginDemo } from '../../utils/cbat/demoMode'
 
 // One tile on the landing page's live game wall: a real CBAT game, mounted at a
@@ -45,7 +47,7 @@ export default function DemoGameCard({
   const [runKey, setRunKey] = useState(0)
   const [failed, setFailed] = useState(false)
   const [alive, setAlive]   = useState(false)   // game has actually started
-  const [scale, setScale]   = useState(0.3)
+  const [cardW, setCardW]   = useState(0)
   const [delayElapsed, setDelayElapsed] = useState(false)
 
   // Mount only while the wall is on screen, and on a stagger so nine games
@@ -63,13 +65,20 @@ export default function DemoGameCard({
   useLayoutEffect(() => {
     const el = cardRef.current
     if (!el) return
-    const measure = () => setScale(el.clientWidth / stage.w)
+    const measure = () => setCardW(el.clientWidth)
     measure()
     if (typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [stage.w])
+  }, [])
+
+  const { zoom, offsetY } = frameFor(stage, entry.focus)
+  const scale = (cardW ? cardW / stage.w : 0.3) * zoom
+  // Re-centre what the zoom pushed off the sides, and lift the stage so the
+  // focus box — not the page header above it — is what the card shows.
+  const shiftX = cardW ? (cardW - stage.w * scale) / 2 : 0
+  const shiftY = -offsetY * scale
 
   const handleFail = useCallback(() => { setFailed(true); setAlive(false) }, [])
 
@@ -86,11 +95,19 @@ export default function DemoGameCard({
       onStart: () => setAlive(true),
       onFail:  handleFail,
     })
-    const cycle = setTimeout(() => setRunKey((k) => k + 1), cycleMs)
+    // Recycling goes through the shared scheduler rather than straight off this
+    // timer: nine cards each holding their own would eventually land two
+    // remounts in the same frame, which is what the perf sweep saw as a 115ms
+    // hitch. See remountScheduler.
+    let releaseSlot = null
+    const cycle = setTimeout(() => {
+      releaseSlot = requestRemountSlot(() => setRunKey((k) => k + 1))
+    }, cycleMs)
 
     return () => {
       cancelDriver()
       clearTimeout(cycle)
+      releaseSlot?.()
       endDemo()
     }
   }, [mounted, runKey, cycleMs, answerIntervalMs, handleFail])
@@ -142,7 +159,7 @@ export default function DemoGameCard({
               position: 'relative',
               width: stage.w,
               height: stage.h,
-              transform: `scale(${scale})`,
+              transform: `translate(${shiftX}px, ${shiftY}px) scale(${scale})`,
               transformOrigin: 'top left',
               overflow: 'hidden',
             }}

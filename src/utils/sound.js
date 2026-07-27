@@ -1,3 +1,5 @@
+import { isDemoActive } from './cbat/demoMode'
+
 const API = import.meta.env.VITE_API_URL || ''
 
 // ── Typing / terminal sound (Web Audio API — no file, synthesised) ────────────
@@ -342,6 +344,7 @@ function masterVol(vol) {
 // tell a fresh contact from a departing one. Respects master volume; these
 // events are naturally sparse so no concurrency cap is needed.
 export function playFlagBleep(kind = 'enter') {
+  if (isDemoActive()) return
   const vol = masterVol(0.28)
   if (vol <= 0) return
   const freq = kind === 'exit' ? 440 : 760
@@ -483,6 +486,10 @@ function playKeywordLocked(volume) {
 // name: 'intel_brief_opened' | 'target_locked' | 'fire' | 'out_of_ammo' | 'airstar'
 // options.onAudio(audio) — called with the Audio element once playback starts
 export function playSound(name, { onAudio } = {}) {
+  // A landing page playing nine games at once must stay silent: the demo wall
+  // mounts the real pages, logo intros and all. Resolving immediately keeps
+  // callers that await the cue (or chain off it) behaving normally.
+  if (isDemoActive()) return Promise.resolve()
   return fetchSettings().then(settings => {
     // out_of_ammo bypasses the queue entirely
     if (name === 'out_of_ammo') {

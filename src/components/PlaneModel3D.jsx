@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, Suspense, Component } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
+import { useCbatDemoDpr } from '../utils/cbat/demoMode'
 
 // Error boundary for catching useGLTF load failures
 class ErrorCatcher extends Component {
@@ -68,6 +69,8 @@ function AircraftModel({ url, angle, onReady }) {
 }
 
 export default function PlaneModel3D({ modelUrl, angle, onError, onReady }) {
+  // Showcase tiles render at a capped pixel ratio; undefined for real players.
+  const demoDpr = useCbatDemoDpr()
   const [failed, setFailed] = useState(false)
 
   if (failed) {
@@ -77,6 +80,7 @@ export default function PlaneModel3D({ modelUrl, angle, onError, onReady }) {
 
   return (
     <Canvas
+      dpr={demoDpr}
       camera={{ position: [0, 20, 0], fov: 30, near: 0.1, far: 50 }}
       gl={{ alpha: true, antialias: true }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
