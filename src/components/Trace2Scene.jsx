@@ -3,7 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { TRACE2_TURN_DEFS } from '../utils/cbat/trace2Generator'
-import { useCbatDemoDpr } from '../utils/cbat/demoMode'
+import { useCbatDemoCanvas } from '../utils/cbat/demoMode'
 
 // Trace 2 scene: four colour-tinted Hawk T2 aircraft, each flown with the EXACT
 // same motion model as Trace 1's SmoothFlightAircraft — continuous flight along
@@ -250,12 +250,13 @@ function ReplayDriver({ replaying, replayKey, durationMs, scrubRef, onStage, onD
 }
 
 export default function Trace2Scene({ aircraft, modelUrl, active, roundKey, replaying, replayKey, replayStat, durationMs, onReplayStage, onReplayDone, onReady, onError }) {
-  // Showcase tiles render at a capped pixel ratio; undefined for real players.
-  const demoDpr = useCbatDemoDpr()
+  // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty
+  // for real players.
+  const demoCanvas = useCbatDemoCanvas()
   const scrubRef = useRef({ t: 0 })
   return (
     <Canvas
-      dpr={demoDpr}
+      {...demoCanvas}
       camera={{ position: [0, ARENA_Y, 10], fov: 55, near: 0.1, far: 100 }}
       gl={{ alpha: true, antialias: true }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}

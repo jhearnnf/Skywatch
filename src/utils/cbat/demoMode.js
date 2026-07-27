@@ -49,6 +49,32 @@ export function useCbatDemoDpr() {
   return demo ? (demo.dpr ?? DEMO_CANVAS_DPR) : undefined
 }
 
+// Everything a <Canvas> needs to behave inside a demo card, as one spread:
+//
+//   <Canvas {...useCbatDemoCanvas()} … />
+//
+// Outside a demo it is empty, so real players get stock R3F.
+//
+// `resize.offsetSize` is the one that matters. R3F measures the canvas with
+// react-use-measure, which reports getBoundingClientRect — and the demo stage
+// is CSS-scaled, so the rect comes back at a fraction of the element's real
+// layout box. R3F then sized the canvas to that fraction inside a
+// full-size container, which drew the game into the top-left corner of the
+// tile while DOM overlays (the ACT callsign screen, say) still filled it.
+// offsetSize measures offsetWidth/offsetHeight instead, which transforms don't
+// touch.
+export function useCbatDemoCanvas() {
+  const demo = useContext(CbatDemoContext)
+  if (!demo) return EMPTY_CANVAS_PROPS
+  return demo.canvasProps ?? DEMO_CANVAS_PROPS
+}
+
+const EMPTY_CANVAS_PROPS = {}
+const DEMO_CANVAS_PROPS = {
+  dpr: DEMO_CANVAS_DPR,
+  resize: { offsetSize: true },
+}
+
 // The stage is scaled (and, when the card zooms in on a game, translated), so
 // the two coordinate spaces a game works in stop agreeing: getScreenCTM /
 // getBoundingClientRect answer in screen pixels, while an overlay portalled

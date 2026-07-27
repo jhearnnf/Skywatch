@@ -2,7 +2,7 @@ import { useRef, useEffect, Suspense, Component, useMemo } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
-import { useCbatDemoDpr } from '../utils/cbat/demoMode'
+import { useCbatDemoCanvas } from '../utils/cbat/demoMode'
 
 const GRID = 10
 const LAYERS = 10
@@ -285,8 +285,9 @@ export default function PlaneTurn3DScene({
   traceFlightActive = false,
   traceFlightResetKey = 0,
 }) {
-  // Showcase tiles render at a capped pixel ratio; undefined for real players.
-  const demoDpr = useCbatDemoDpr()
+  // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty
+  // for real players.
+  const demoCanvas = useCbatDemoCanvas()
   const [px, py, pz] = toWorld(plane.r, plane.c, plane.layer)
 
   // Movement direction (decoupled from visual pitch):
@@ -351,7 +352,7 @@ export default function PlaneTurn3DScene({
 
   return (
     <Canvas
-      dpr={demoDpr}
+      {...demoCanvas}
       camera={{ position: cameraPos, fov: cameraFov, near: 0.1, far: 100 }}
       gl={{ alpha: true, antialias: true }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}

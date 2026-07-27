@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { playFlagBleep } from '../../utils/sound'
-import { useCbatDemoDpr } from '../../utils/cbat/demoMode'
+import { useCbatDemoCanvas } from '../../utils/cbat/demoMode'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const AIRCRAFT_SPEED = 20          // px/s
@@ -615,8 +615,9 @@ function PlayFieldImpl({
   // box. Off in the tutorial so its scripted scenarios stay quiet and focused.
   gameCues = false,
 }, ref) {
-  // Showcase tiles render at a capped pixel ratio; undefined for real players.
-  const demoDpr = useCbatDemoDpr()
+  // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty
+  // for real players.
+  const demoCanvas = useCbatDemoCanvas()
   const fieldRef = useRef(null)
   // Start at 0×0 so shape placement waits for the real ResizeObserver
   // measurement instead of seeding shapes for a phantom default size and
@@ -1101,7 +1102,7 @@ function PlayFieldImpl({
 
       {modelUrl && fieldSize.w > 10 && (
         <Canvas
-          dpr={demoDpr}
+          {...demoCanvas}
           orthographic
           camera={{ position: [0, 50, 0], near: 0.1, far: 200, zoom: 20, up: [0, 0, -1] }}
           gl={{ alpha: true, antialias: true }}

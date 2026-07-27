@@ -2,7 +2,7 @@ import { Suspense, Component, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
-import { useCbatDemoDpr } from '../utils/cbat/demoMode'
+import { useCbatDemoCanvas } from '../utils/cbat/demoMode'
 
 class ErrorCatcher extends Component {
   state = { hasError: false }
@@ -67,8 +67,9 @@ export default function AircraftTopDown({
   modelUrl, onError, partial = false, offsetX = 0, offsetZ = 0,
   clear = false, transparent = false, yawDeg = 0,
 }) {
-  // Showcase tiles render at a capped pixel ratio; undefined for real players.
-  const demoDpr = useCbatDemoDpr()
+  // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty
+  // for real players.
+  const demoCanvas = useCbatDemoCanvas()
   if (!modelUrl) return null
   // Partial view: camera sits much closer and is offset horizontally, so only a
   // fragment of the aircraft lands in frame — forces the user to identify the
@@ -83,7 +84,7 @@ export default function AircraftTopDown({
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 8, background: wrapperBg }}>
       <div style={{ position: 'absolute', inset: 0, filter: innerFilter }}>
         <Canvas
-          dpr={demoDpr}
+          {...demoCanvas}
           camera={{ position: camPos, fov: camFov, near: 0.1, far: 50 }}
           gl={{ alpha: true, antialias: true }}
           style={{ width: '100%', height: '100%', background: 'transparent' }}

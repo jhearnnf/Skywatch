@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber'
 import { View } from '@react-three/drei'
 import { COMPOSITES, compositeCorners } from '../../utils/cbat/visualisation3DPuzzle'
 import { getCompositeGeometry } from '../../utils/cbat/visualisation3DGeometry'
+import { useCbatDemoCanvas } from '../../utils/cbat/demoMode'
 
 // Visualisation 3D CBAT shapes — a round shows ~12 of these at once
 // (2 prompt + 5 options × 2 shapes).
@@ -27,8 +28,10 @@ import { getCompositeGeometry } from '../../utils/cbat/visualisation3DGeometry'
 // underneath. Mount it only while a 3D round is on screen so the overlay isn't
 // live during results/menus.
 export function VisualisationShapeCanvas() {
+  const demoCanvas = useCbatDemoCanvas()
   return (
     <Canvas
+      {...demoCanvas}
       dpr={1}
       // Pulled in from [3,2.6,4.2]/fov32 along the same iso direction so shapes
       // fill more of each box and read clearly. Distance ~4.7 + fov 26 keeps

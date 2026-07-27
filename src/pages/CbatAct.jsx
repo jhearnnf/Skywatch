@@ -9,7 +9,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import usePagePresence from '../hooks/usePagePresence'
-import { useCbatDemo, useCbatDemoDpr } from '../utils/cbat/demoMode'
+import { useCbatDemo, useCbatDemoCanvas } from '../utils/cbat/demoMode'
 import { pickAim, steerInput, wobbleAt } from '../utils/cbat/actDemoPilot'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
@@ -1147,8 +1147,9 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
 // Wraps the canvas + ball/camera/shape components so they share the live
 // refs without forcing top-level re-renders every frame.
 function ActScene({ state }) {
-  // Showcase tiles render at a capped pixel ratio; undefined for real players.
-  const demoDpr = useCbatDemoDpr()
+  // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty
+  // for real players.
+  const demoCanvas = useCbatDemoCanvas()
   const [, forceFrameTick] = useState(0)
   useEffect(() => {
     let raf
@@ -1161,7 +1162,7 @@ function ActScene({ state }) {
 
   return (
     <Canvas
-      dpr={demoDpr}
+      {...demoCanvas}
       camera={{ fov: 70, near: 0.1, far: 200, position: [0, 0, -3] }}
       onPointerDown={state.onPointerDown}
       onPointerMove={state.onPointerMove}

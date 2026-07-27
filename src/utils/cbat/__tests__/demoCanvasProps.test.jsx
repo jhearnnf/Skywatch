@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { renderHook } from '@testing-library/react'
-import { CbatDemoContext, useCbatDemoDpr, DEMO_CANVAS_DPR } from '../demoMode'
+import { CbatDemoContext, useCbatDemoDpr, useCbatDemoCanvas, DEMO_CANVAS_DPR } from '../demoMode'
 
 // A canvas inside a demo tile is drawn at a fraction of its layout size, so
 // rendering it at the device's full pixel ratio burns pixels nobody sees —
@@ -30,11 +30,37 @@ describe('useCbatDemoDpr', () => {
   })
 })
 
+describe('useCbatDemoCanvas', () => {
+  const wrapper = (value) => ({ children }) => (
+    <CbatDemoContext.Provider value={value}>{children}</CbatDemoContext.Provider>
+  )
+
+  it('adds nothing to a canvas outside a demo', () => {
+    const { result } = renderHook(() => useCbatDemoCanvas())
+    expect(result.current).toEqual({})
+  })
+
+  it('caps the pixel ratio and measures past the stage transform', () => {
+    const { result } = renderHook(() => useCbatDemoCanvas(), { wrapper: wrapper({ portalTarget: null }) })
+    expect(result.current.dpr).toBe(DEMO_CANVAS_DPR)
+    // Without this R3F sizes the canvas from the CSS-scaled bounding rect and
+    // the game renders into the tile's top-left corner.
+    expect(result.current.resize).toEqual({ offsetSize: true })
+  })
+
+  it('is stable across renders, so the Canvas is not torn down every frame', () => {
+    const { result, rerender } = renderHook(() => useCbatDemoCanvas(), { wrapper: wrapper({ portalTarget: null }) })
+    const first = result.current
+    rerender()
+    expect(result.current).toBe(first)
+  })
+})
+
 // Trace Practise 2D mounts a WebGL context nobody had counted — its aircraft
 // is a <PlaneModel3D>, not a sprite — and it sat in the pool marked light for
 // months. So rather than trusting a list, walk out from the demo registry and
 // hold every canvas the wall can reach to declaring a pixel ratio.
-describe('every <Canvas> the game wall can mount declares a dpr', () => {
+describe('every <Canvas> the game wall can mount takes the demo canvas props', () => {
   const resolve = (fromFile, spec) => {
     if (!spec.startsWith('.')) return null
     const base = join(dirname(fromFile), spec)
@@ -66,7 +92,7 @@ describe('every <Canvas> the game wall can mount declares a dpr', () => {
       const src = stripComments(readFileSync(file, 'utf8'))
       if (!/<Canvas[\s>]/.test(src)) continue
       withCanvas.push(file)
-      if (!/\bdpr=\{/.test(src)) offenders.push(file)
+      if (!/\{\.\.\.demoCanvas\}/.test(src)) offenders.push(file)
     }
     // Guard the guard: if the walk stops finding canvases, the test has stopped
     // testing anything.
