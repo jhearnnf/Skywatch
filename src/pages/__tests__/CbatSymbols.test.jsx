@@ -188,6 +188,155 @@ describe('CbatSymbols — gameplay', () => {
   })
 })
 
+describe('CbatSymbols — fast restart countdown', () => {
+  beforeEach(() => vi.clearAllMocks())
+  afterEach(() => vi.useRealTimers())
+
+  const clickFastRestart = () =>
+    fireEvent.click(screen.getByRole('button', { name: /fast restart/i }))
+
+  it('is available from the intro screen', () => {
+    setupUser()
+    render(<CbatSymbols />)
+    expect(screen.getByRole('button', { name: /fast restart/i })).toBeDefined()
+  })
+
+  it('is hidden from guests', () => {
+    setupGuest()
+    render(<CbatSymbols />)
+    expect(screen.queryByRole('button', { name: /fast restart/i })).toBeNull()
+  })
+
+  it('counts 3 - 2 - 1 - GO at 500ms a beat, then starts the round', async () => {
+    setupUser()
+    vi.useFakeTimers()
+    render(<CbatSymbols />)
+
+    const beat = () => screen.getByTestId('symbols-countdown-beat').textContent
+
+    clickFastRestart()
+    expect(screen.getByTestId('symbols-countdown')).toBeDefined()
+    expect(beat()).toContain('3')
+    // Stays mounted while counting (so the header never reflows) but is inert
+    expect(screen.getByRole('button', { name: /fast restart/i }).disabled).toBe(true)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(beat()).toContain('2')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(beat()).toContain('1')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    expect(beat()).toContain('GO')
+    // Still the countdown — the scatter is inert, no tile is clickable yet
+    expect(document.querySelectorAll('.grid button').length).toBe(0)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(400) })
+    expect(screen.queryByTestId('symbols-countdown')).toBeNull()
+    expect(screen.getByText(/Find the target symbol/i)).toBeDefined()
+    expect(document.querySelectorAll('.grid button').length).toBeGreaterThanOrEqual(12)
+  })
+
+  it('shows a shuffling symbol scatter behind the count', async () => {
+    setupUser()
+    vi.useFakeTimers()
+    render(<CbatSymbols />)
+
+    clickFastRestart()
+    const readScatter = () =>
+      Array.from(
+        screen.getByTestId('symbols-countdown').querySelectorAll('.grid > div')
+      ).map(el => el.textContent)
+
+    const first = readScatter()
+    expect(first.length).toBeGreaterThanOrEqual(12)
+
+    // Several scatter ticks (110ms each) must change what is on screen
+    await act(async () => { await vi.advanceTimersByTimeAsync(440) })
+    expect(readScatter()).not.toEqual(first)
+  })
+
+  // The scatter is sized from the round that is about to start, so the grid
+  // does not gain or lose a row the moment gameplay takes over.
+  it('lays out the scatter with exactly as many tiles as round 1', async () => {
+    setupUser()
+    vi.useFakeTimers()
+    render(<CbatSymbols />)
+
+    clickFastRestart()
+    const scatterTiles = screen
+      .getByTestId('symbols-countdown')
+      .querySelectorAll('.grid > div').length
+
+    for (let s = 0; s < 4; s++) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    }
+
+    expect(screen.queryByTestId('symbols-countdown')).toBeNull()
+    expect(document.querySelectorAll('.grid button').length).toBe(scatterTiles)
+  })
+
+  it('restarts a run in progress, discarding the previous rounds', async () => {
+    setupUser()
+    vi.useFakeTimers()
+    render(<CbatSymbols />)
+
+    fireEvent.click(screen.getByRole('button', { name: /^start$/i }))
+    fireEvent.click(document.querySelector('.grid button'))
+    // Mid-feedback, before the pending advance to round 2 fires
+    clickFastRestart()
+
+    // The abandoned advance timeout must not fire us back into the old run
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(screen.getByTestId('symbols-countdown')).toBeDefined()
+
+    // Beat by beat — a single large advance does not pick up each newly
+    // scheduled timeout, so the countdown chain has to be stepped.
+    for (let s = 0; s < 4; s++) {
+      await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+    }
+    expect(screen.queryByTestId('symbols-countdown')).toBeNull()
+
+    const hud = document.querySelector('.font-mono')
+    expect(hud.textContent).toContain('Round 1/15') // back to the first round
+    expect(hud.textContent).toContain('✓ 0')   // correct count reset
+    expect(mockSubmitCbatResult).not.toHaveBeenCalled()
+  })
+})
+
+describe('CbatSymbols — round review', () => {
+  beforeEach(() => vi.clearAllMocks())
+  afterEach(() => vi.useRealTimers())
+
+  it('shows the symbol you picked on every missed round', async () => {
+    setupUser()
+    vi.useFakeTimers()
+    render(<CbatSymbols />)
+
+    fireEvent.click(screen.getByRole('button', { name: /^start$/i }))
+    const picks = []
+    for (let i = 0; i < 15; i++) {
+      const tile = document.querySelector('.grid button')
+      picks.push(tile.textContent)
+      fireEvent.click(tile)
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    }
+
+    const rows = Array.from(document.querySelectorAll('.space-y-1 > div'))
+    expect(rows.length).toBe(15)
+    // Picking tile 0 every round all but guarantees misses to assert on
+    const missed = rows.filter(r => r.textContent.includes('missed'))
+    expect(missed.length).toBeGreaterThan(0)
+
+    rows.forEach((row, i) => {
+      if (row.textContent.includes('missed')) {
+        // The wrong symbol sits alongside the cross, next to the target
+        expect(row.textContent).toContain(picks[i])
+      }
+    })
+  })
+})
+
 describe('CbatSymbols — total time consistency', () => {
   beforeEach(() => vi.clearAllMocks())
   afterEach(() => vi.useRealTimers())

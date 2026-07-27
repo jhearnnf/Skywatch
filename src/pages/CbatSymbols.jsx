@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
+import { getSymbolScale } from '../utils/cbat/symbolScale'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
@@ -12,6 +13,15 @@ import CbatGameOver from '../components/CbatGameOver'
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 15
 const FEEDBACK_MS = 1000
+
+// Fast-restart countdown: 3 / 2 / 1 at half a second each, then a short GO flash.
+const COUNTDOWN_FROM = 3
+const COUNTDOWN_STEP_MS = 500
+const COUNTDOWN_GO_MS = 400
+// Background scatter shown behind the countdown
+const SCATTER_TILES = 15
+const SCATTER_TICK_MS = 110
+const SCATTER_SWAPS_PER_TICK = 3
 
 // Tier ranges: inclusive min/max grid sizes per tier
 const TIERS = [
@@ -84,6 +94,10 @@ export function pickUniqueSymbols(count) {
   return out
 }
 
+function randomSymbol() {
+  return String.fromCodePoint(SYMBOL_POOL[Math.floor(Math.random() * SYMBOL_POOL.length)])
+}
+
 function buildRounds() {
   const rounds = []
   for (let i = 0; i < TOTAL_ROUNDS; i++) {
@@ -95,6 +109,112 @@ function buildRounds() {
     rounds.push({ symbols, target: symbols[targetIdx], tier })
   }
   return rounds
+}
+
+// ── Fast-restart countdown ───────────────────────────────────────────────────
+// A live scatter of symbols with a "selector" box hopping between tiles, so the
+// wait reads as the game warming up rather than as dead time. Purely decorative:
+// the real round is built when the countdown ends.
+//
+// The layout deliberately mirrors the play screen element for element — HUD row,
+// progress bar, grid card, target card — so when the round takes over, nothing
+// moves. Only the scrim lifts and the real symbols fade in over the scatter.
+function CountdownScreen({ count, tileCount }) {
+  const [tiles, setTiles] = useState(() => pickUniqueSymbols(tileCount))
+  const [selected, setSelected] = useState(() => Math.floor(Math.random() * tileCount))
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSelected(Math.floor(Math.random() * tileCount))
+      setTiles(prev => {
+        const next = [...prev]
+        for (let k = 0; k < SCATTER_SWAPS_PER_TICK; k++) {
+          next[Math.floor(Math.random() * next.length)] = randomSymbol()
+        }
+        return next
+      })
+    }, SCATTER_TICK_MS)
+    return () => clearInterval(id)
+  }, [tileCount])
+
+  const isGo = count <= 0
+  const spotlit = tiles[selected] || tiles[0]
+
+  return (
+    <div className="w-full max-w-md" data-testid="symbols-countdown">
+      {/* HUD — same row as in play, holding its place with resting values */}
+      <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 text-slate-400 opacity-50">
+        <span>Round <span className="text-brand-300">1</span>/{TOTAL_ROUNDS}</span>
+        <span>Tier <span className="text-brand-300">1</span></span>
+        <span>{'✓'} <span className="text-green-400">0</span></span>
+        <span>{'⏱'} <span className="text-brand-300">0.0s</span></span>
+      </div>
+
+      {/* Progress bar — empty, ready to fill */}
+      <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden" />
+
+      {/* Grid card */}
+      <div className="relative bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 mb-3 overflow-hidden">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-3">
+          Find the target symbol
+        </p>
+        {/* Scatter — held at a constant dim through GO. It must never start to
+            resolve into a readable grid: the real symbols appear only when the
+            round takes over, so there is nothing to pre-read. */}
+        <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 opacity-40" aria-hidden="true">
+          {tiles.map((sym, i) => (
+            <div
+              key={i}
+              className={`aspect-square flex items-center justify-center overflow-hidden rounded-lg border-2 text-2xl sm:text-3xl transition-colors duration-100 ${
+                i === selected
+                  ? 'bg-[#0f2240] border-brand-400 text-brand-200'
+                  : 'bg-[#060e1a] border-[#1a3a5c] text-[#ddeaf8]'
+              }`}
+            >
+              <span style={{ fontSize: `${getSymbolScale(sym)}em`, lineHeight: 1 }}>{sym}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Scrim — constant, right up to the handoff */}
+        <div className="absolute inset-0 bg-[#060e1a]/55 pointer-events-none" />
+
+        {/* Count */}
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+          data-testid="symbols-countdown-beat"
+        >
+          <motion.div
+            key={count}
+            initial={{ scale: 1.7, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ duration: 0.22 }}
+            className={`font-mono font-extrabold drop-shadow-[0_0_18px_rgba(6,16,26,0.9)] ${
+              isGo ? 'text-5xl sm:text-6xl text-green-400' : 'text-7xl sm:text-8xl text-brand-300'
+            }`}
+          >
+            {isGo ? 'GO' : count}
+          </motion.div>
+          <p className="text-[10px] text-slate-300 uppercase tracking-[0.2em] mt-2 drop-shadow-[0_0_10px_rgba(6,16,26,0.9)]">
+            {isGo ? 'Find the target' : 'Get ready'}
+          </p>
+        </div>
+      </div>
+
+      {/* Target card — same box the round uses, cycling with the selector */}
+      <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2">
+          Target
+        </p>
+        <div className="flex items-center justify-center">
+          <div className="w-24 h-24 overflow-hidden rounded-xl border-2 border-brand-400/50 bg-[#060e1a] flex items-center justify-center text-6xl text-[#ddeaf8]/60">
+            <span style={{ fontSize: `${getSymbolScale(spotlit)}em`, lineHeight: 1 }}>{spotlit}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── Results screen ───────────────────────────────────────────────────────────
@@ -154,14 +274,26 @@ function ResultsScreen({ answers, totalTime }) {
 
       {/* Answer review — scrollable */}
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-6 max-h-48 overflow-y-auto">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Round Review</p>
+        <div className="flex items-baseline justify-between mb-2 sticky top-0 bg-[#060e1a]">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Round Review</p>
+          <p className="text-[10px] text-slate-600">{'target \u2192 your pick'}</p>
+        </div>
         <div className="space-y-1">
           {answers.map((a, i) => (
-            <div key={i} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${a.correct ? 'text-green-400' : 'text-red-400'}`}>
-              <span className="text-slate-500 w-6 text-left">#{i + 1}</span>
-              <span className="text-lg">{a.target}</span>
-              <span>{a.correct ? '\u2713' : '\u2717'}</span>
-              <span className="font-mono text-slate-500">
+            <div key={i} className={`flex items-center justify-between gap-2 text-xs px-2 py-1 rounded ${a.correct ? 'text-green-400' : 'text-red-400'}`}>
+              <span className="text-slate-500 w-6 shrink-0 text-left">#{i + 1}</span>
+              <span className="text-lg w-7 shrink-0 text-center overflow-hidden text-[#ddeaf8]">
+                <span style={{ fontSize: `${getSymbolScale(a.target)}em`, lineHeight: 1 }}>{a.target}</span>
+              </span>
+              <span className="w-4 shrink-0 text-center">{a.correct ? '\u2713' : '\u2717'}</span>
+              {/* What was actually clicked \u2014 only meaningful on a miss, but the
+                  slot is always reserved so the columns stay aligned. */}
+              <span className="text-lg w-7 shrink-0 text-center overflow-hidden">
+                {!a.correct && (
+                  <span style={{ fontSize: `${getSymbolScale(a.picked)}em`, lineHeight: 1 }}>{a.picked}</span>
+                )}
+              </span>
+              <span className="font-mono text-slate-500 ml-auto">
                 {a.correct ? `${a.roundTime.toFixed(2)}s` : 'missed'}
               </span>
             </div>
@@ -178,10 +310,13 @@ export default function CbatSymbols() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
-  const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
+  const [phase, setPhase] = useState('intro') // intro | countdown | playing | feedback | results
+  const [countdown, setCountdown] = useState(COUNTDOWN_FROM)
+  const [scatterSize, setScatterSize] = useState(SCATTER_TILES)
+  const pendingRoundsRef = useRef(null)
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
-    if (phase === 'playing' || phase === 'feedback') enterImmersive()
+    if (phase === 'countdown' || phase === 'playing' || phase === 'feedback') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
@@ -272,7 +407,10 @@ export default function CbatSymbols() {
 
   const startGame = useCallback(() => {
     startTracking('symbols')
-    setRounds(buildRounds())
+    // The countdown builds the run ahead of time so its scatter can be sized to
+    // round 1 exactly; fall back to a fresh build for a normal start.
+    setRounds(pendingRoundsRef.current || buildRounds())
+    pendingRoundsRef.current = null
     setCurrentIdx(0)
     setAnswers([])
     setPickedSymbol(null)
@@ -283,6 +421,29 @@ export default function CbatSymbols() {
     roundStartRef.current = 0
     setPhase('playing')
   }, [apiFetch, API])
+
+  // Fast restart — abandons whatever is on screen and runs the countdown first.
+  // Deliberately not confirmed: the point of the button is to be instant.
+  const startCountdown = useCallback(() => {
+    clearInterval(timerRef.current)
+    if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current)
+    const built = buildRounds()
+    pendingRoundsRef.current = built
+    setScatterSize(built[0].symbols.length)
+    setCountdown(COUNTDOWN_FROM)
+    setPhase('countdown')
+  }, [])
+
+  // Drive the countdown: COUNTDOWN_FROM..1, then a short GO flash at 0.
+  useEffect(() => {
+    if (phase !== 'countdown') return
+    const isGo = countdown <= 0
+    const t = setTimeout(
+      () => { if (isGo) startGame(); else setCountdown(c => c - 1) },
+      isGo ? COUNTDOWN_GO_MS : COUNTDOWN_STEP_MS
+    )
+    return () => clearTimeout(t)
+  }, [phase, countdown, startGame])
 
   const goToIntro = useCallback(() => {
     clearInterval(timerRef.current)
@@ -358,6 +519,21 @@ export default function CbatSymbols() {
           : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['playing', 'feedback'].includes(phase)} />
         }
         <h1 className="text-sm font-extrabold text-slate-900">Symbols</h1>
+        {user && (
+          // Stays mounted while counting — unmounting it reflowed the header
+          // and nudged the whole game down a few pixels mid-animation.
+          <button
+            onClick={startCountdown}
+            disabled={phase === 'countdown'}
+            className={`ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[#1a3a5c] bg-[#0a1628] text-[11px] font-bold text-brand-300 transition-colors ${
+              phase === 'countdown'
+                ? 'opacity-40 cursor-default'
+                : 'hover:text-brand-200 hover:border-brand-400'
+            }`}
+          >
+            <span aria-hidden="true">{'⚡'}</span> Fast Restart
+          </button>
+        )}
       </div>
 
       {/* Not logged in */}
@@ -436,6 +612,9 @@ export default function CbatSymbols() {
             </motion.div>
           )}
 
+          {/* Fast-restart countdown */}
+          {phase === 'countdown' && <CountdownScreen count={countdown} tileCount={scatterSize} />}
+
           {/* Playing / Feedback */}
           {(phase === 'playing' || phase === 'feedback') && currentRound && (
             <div className="w-full max-w-md">
@@ -492,11 +671,15 @@ export default function CbatSymbols() {
                         key={i}
                         onClick={() => handlePick(sym)}
                         disabled={phase === 'feedback'}
-                        className={`aspect-square flex items-center justify-center rounded-lg border-2 text-2xl sm:text-3xl transition-all ${btnClass} ${
+                        className={`aspect-square flex items-center justify-center overflow-hidden rounded-lg border-2 text-2xl sm:text-3xl transition-all ${btnClass} ${
                           phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                         }`}
                       >
-                        {sym}
+                        {/* Per-glyph normalisation — scripts ink at very different
+                            heights, so an unscaled grid mixes tiny and huge symbols. */}
+                        <span style={{ fontSize: `${getSymbolScale(sym)}em`, lineHeight: 1 }}>
+                          {sym}
+                        </span>
                       </button>
                     )
                   })}
@@ -509,8 +692,10 @@ export default function CbatSymbols() {
                   Target
                 </p>
                 <div className="flex items-center justify-center">
-                  <div className="w-24 h-24 rounded-xl border-2 border-brand-400 bg-[#060e1a] flex items-center justify-center text-6xl">
-                    {currentRound.target}
+                  <div className="w-24 h-24 overflow-hidden rounded-xl border-2 border-brand-400 bg-[#060e1a] flex items-center justify-center text-6xl">
+                    <span style={{ fontSize: `${getSymbolScale(currentRound.target)}em`, lineHeight: 1 }}>
+                      {currentRound.target}
+                    </span>
                   </div>
                 </div>
 
