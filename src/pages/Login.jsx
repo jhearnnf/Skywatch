@@ -40,6 +40,104 @@ function CrosshairLogo() {
   )
 }
 
+// Google sign-in, offered on every view a visitor can arrive at.
+//
+// It used to live only on the "sign in or create an account" chooser, so anyone
+// who landed straight on the form — which is most people, since the landing
+// CTA, the locked-brief modal and the welcome flow all link to
+// /login?tab=register — was shown an email/password form and nothing else. The
+// account they already have was one tap away and invisible.
+//
+// Hoisted rather than nested in LoginPage: a component defined inside another's
+// render is a fresh type every render, so this would unmount and re-render the
+// Google button on every keystroke in the email field.
+function GoogleAuthButton({ isNative, busy, onNativeClick, onCredential }) {
+  // The credential handler closes over page state, so keep the latest without
+  // re-initialising Google Identity Services every render.
+  const onCredentialRef = useRef(onCredential)
+  useEffect(() => { onCredentialRef.current = onCredential }, [onCredential])
+
+  // A callback ref, not a plain one: with AnimatePresence the outgoing view
+  // finishes exiting before the new one mounts, so an effect keyed on `view`
+  // fires while the container it wants to draw into does not exist yet.
+  const [node, setNode] = useState(null)
+
+  useEffect(() => {
+    if (isNative || !node) return
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId) return
+
+    let cancelled = false
+    let poll = null
+    let giveUp = null
+
+    const draw = () => {
+      if (cancelled || !window.google?.accounts?.id) return false
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => onCredentialRef.current(response),
+      })
+      window.google.accounts.id.renderButton(node, {
+        theme: 'outline', size: 'large', text: 'continue_with', width: 300, logo_alignment: 'center',
+      })
+      return true
+    }
+
+    // The GSI script is async/defer, so on a cold load it is often not ready
+    // when this first runs. Without the retry the button silently never
+    // appears — which is the other half of "no mention of signing in with
+    // Google".
+    if (!draw()) {
+      poll = setInterval(() => { if (draw()) clearInterval(poll) }, 150)
+      giveUp = setTimeout(() => clearInterval(poll), 10000)
+    }
+
+    return () => {
+      cancelled = true
+      if (poll) clearInterval(poll)
+      if (giveUp) clearTimeout(giveUp)
+    }
+  }, [isNative, node])
+
+  if (isNative) {
+    return (
+      <button
+        onClick={onNativeClick}
+        disabled={busy}
+        className="w-full py-3.5 border-2 border-slate-200 hover:border-brand-300 hover:bg-brand-50 text-slate-700 font-bold rounded-2xl transition-all text-sm flex items-center justify-center gap-2"
+      >
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+          <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+          <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
+          <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+          <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+        </svg>
+        Continue with Google
+      </button>
+    )
+  }
+
+  return (
+    <>
+      <div ref={setNode} className="flex justify-center" data-testid="google-signin" />
+      {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+        <p className="text-xs text-slate-400 text-center">Google sign-in requires VITE_GOOGLE_CLIENT_ID</p>
+      )}
+    </>
+  )
+}
+
+// A labelled rule, used to separate Google from the email form.
+function OrDivider() {
+  return (
+    <div className="flex items-center gap-3 my-4">
+      <div className="flex-1 h-px bg-slate-100" />
+      <span className="text-xs text-slate-400">or</span>
+      <div className="flex-1 h-px bg-slate-100" />
+    </div>
+  )
+}
+
 export default function LoginPage() {
   const { setUser, API, apiFetch, awardAirstars } = useAuth()
   const { settings } = useAppSettings() ?? {}
@@ -73,7 +171,6 @@ export default function LoginPage() {
   const [confirmPass,    setConfirmPass]    = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [captchaToken, setCaptchaToken] = useState('')
-  const googleBtnRef  = useRef(null)
   const captchaContainerRef = useRef(null)
   const captchaWidgetIdRef  = useRef(null)
 
@@ -85,17 +182,6 @@ export default function LoginPage() {
 
   const isNative = Capacitor.isNativePlatform()
 
-  useEffect(() => {
-    if (isNative || view !== VIEW.CHOICE) return
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
-    if (!clientId || !window.google) return
-    window.google.accounts.id.initialize({ client_id: clientId, callback: handleGoogleCredential })
-    if (googleBtnRef.current) {
-      window.google.accounts.id.renderButton(googleBtnRef.current, {
-        theme: 'outline', size: 'large', text: 'continue_with', width: 300, logo_alignment: 'center',
-      })
-    }
-  }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load Cloudflare Turnstile script once when signup CAPTCHA is active and we're on the register view.
   useEffect(() => {
@@ -392,34 +478,14 @@ export default function LoginPage() {
                 Sign In with Email
               </button>
 
-              <div className="flex items-center gap-3 my-2">
-                <div className="flex-1 h-px bg-slate-100" />
-                <span className="text-xs text-slate-400">or</span>
-                <div className="flex-1 h-px bg-slate-100" />
-              </div>
+              <OrDivider />
 
-              {isNative ? (
-                <button
-                  onClick={handleNativeGoogleSignIn}
-                  disabled={busy}
-                  className="w-full py-3.5 border-2 border-slate-200 hover:border-brand-300 hover:bg-brand-50 text-slate-700 font-bold rounded-2xl transition-all text-sm flex items-center justify-center gap-2"
-                >
-                  <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-                    <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
-                    <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
-                    <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
-                    <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
-                  </svg>
-                  Continue with Google
-                </button>
-              ) : (
-                <>
-                  <div ref={googleBtnRef} className="flex justify-center" />
-                  {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
-                    <p className="text-xs text-slate-400 text-center">Google sign-in requires VITE_GOOGLE_CLIENT_ID</p>
-                  )}
-                </>
-              )}
+              <GoogleAuthButton
+                isNative={isNative}
+                busy={busy}
+                onNativeClick={handleNativeGoogleSignIn}
+                onCredential={handleGoogleCredential}
+              />
 
               {error && (
                 <p className="text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-xl">{error}</p>
@@ -439,6 +505,17 @@ export default function LoginPage() {
               <h2 className="text-xl font-extrabold text-slate-900 mb-5">
                 {view === VIEW.SIGNIN ? 'Welcome back' : 'Join SkyWatch'}
               </h2>
+
+              {/* Google first: it is one tap, it carries a verified email, and
+                  it is the account most visitors already have. */}
+              <GoogleAuthButton
+                isNative={isNative}
+                busy={busy}
+                onNativeClick={handleNativeGoogleSignIn}
+                onCredential={handleGoogleCredential}
+              />
+
+              <OrDivider />
 
               <form onSubmit={handleSubmit} noValidate className="space-y-4">
                 <div>
