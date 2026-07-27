@@ -7,6 +7,7 @@ const { createUser, createAdminUser, createSettings, authCookie } = require('../
 const GameSessionCbatTargetResult = require('../../models/GameSessionCbatTargetResult');
 const GameSessionCbatAnglesResult = require('../../models/GameSessionCbatAnglesResult');
 const GameSessionCbatStart        = require('../../models/GameSessionCbatStart');
+const AppOpen                     = require('../../models/AppOpen');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Buckets are keyed by Europe/London calendar day, so tests must key the same way.
@@ -31,6 +32,10 @@ afterAll(async () => db.closeDatabase());
 
 async function playTarget(userId, when) {
   return GameSessionCbatTargetResult.create({ userId, totalScore: 100, totalTime: 60, createdAt: when });
+}
+
+async function openApp(userId, when, platform = 'android') {
+  return AppOpen.record(userId, platform, when);
 }
 
 describe('GET /api/admin/reports/snapshot — test usage', () => {
@@ -109,5 +114,70 @@ describe('GET /api/admin/reports/snapshot — test usage', () => {
     const testUsage = res.body.data.testUsage;
     expect(testUsage).toHaveLength(7);
     expect(testUsage.every(r => r.count === 0)).toBe(true);
+  });
+
+  // Opening the app counts as a test on its own — that is what beta testing asks
+  // of a tester, and a launch that never reaches a game is still a launch worth
+  // knowing about (it may well be a launch that crashed).
+  it('counts a tester who only opened the app, with no game at all', async () => {
+    const when   = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const tester = await createUser({ agentNumber: '1000020', isTester: true });
+    await openApp(tester._id, when);
+
+    const res = await request(app)
+      .get('/api/admin/reports/snapshot')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const byDate = Object.fromEntries(res.body.data.testUsage.map(r => [r.date, r.count]));
+    expect(byDate[ymd(when)]).toBe(1);
+  });
+
+  it('does not double-count a tester who both opened the app and played', async () => {
+    const when   = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const tester = await createUser({ agentNumber: '1000021', isTester: true });
+    await openApp(tester._id, when);
+    await playTarget(tester._id, when);
+
+    const res = await request(app)
+      .get('/api/admin/reports/snapshot')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const byDate = Object.fromEntries(res.body.data.testUsage.map(r => [r.date, r.count]));
+    expect(byDate[ymd(when)]).toBe(1);
+  });
+
+  it('counts an app open on each day it happened, not just the latest', async () => {
+    // The reason app opens are logged per day rather than read off
+    // lastClients.<platform>.lastSeenAt, which only remembers the most recent.
+    const today     = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const yesterday = new Date(Date.now() - DAY_MS - 2 * 60 * 60 * 1000);
+    const tester    = await createUser({ agentNumber: '1000022', isTester: true });
+    await openApp(tester._id, yesterday);
+    await openApp(tester._id, today);
+
+    const res = await request(app)
+      .get('/api/admin/reports/snapshot')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const byDate = Object.fromEntries(res.body.data.testUsage.map(r => [r.date, r.count]));
+    expect(byDate[ymd(today)]).toBe(1);
+    expect(byDate[ymd(yesterday)]).toBe(1);
+  });
+
+  it('ignores app opens from accounts that are not flagged testers', async () => {
+    const when   = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await createUser({ agentNumber: '1000023', isTester: true });        // tester, did nothing
+    const normal = await createUser({ agentNumber: '1000024' });
+    await openApp(normal._id, when);
+
+    const res = await request(app)
+      .get('/api/admin/reports/snapshot')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.testUsage.every(r => r.count === 0)).toBe(true);
   });
 });

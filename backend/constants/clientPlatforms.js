@@ -3,6 +3,10 @@
 // the wire and end up rendered in the admin panel.
 const CLIENT_PLATFORMS = ['web', 'android', 'ios'];
 
+// The subset that means "the installed app", as opposed to the site in a
+// browser. Only these count as an app open (see models/AppOpen).
+const NATIVE_PLATFORMS = ['android', 'ios'];
+
 // Version/build strings are free text from the client (gradle versionName, a
 // commit sha, a semver). Keep them short and boring: letters, digits and the
 // punctuation real version strings actually use.
@@ -47,4 +51,4 @@ function osFromUserAgent(ua) {
   return null;
 }
 
-module.exports = { CLIENT_PLATFORMS, VERSION_PATTERN, sanitiseClientInfo, OS_KEYS, osFromUserAgent };
+module.exports = { CLIENT_PLATFORMS, NATIVE_PLATFORMS, VERSION_PATTERN, sanitiseClientInfo, OS_KEYS, osFromUserAgent };

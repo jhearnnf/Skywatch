@@ -105,8 +105,8 @@ describe('Admin — Users tab: tester flag', () => {
     expect(checkbox.checked).toBe(true)
   })
 
-  it('gives a tester who has NOT played today the idle pulsing border', async () => {
-    // No lastTestGameAt → never played → idle
+  it('gives a tester who has NOT tested today the idle pulsing border', async () => {
+    // No lastTestGameAt and no lastTestAppOpenAt → nothing today → idle
     global.fetch = setupFetch([OFFLINE_TESTER])
 
     render(<Admin />)
@@ -131,6 +131,34 @@ describe('Admin — Users tab: tester flag', () => {
     expect(row.className).toMatch(/border-amber-700/)
   })
 
+  it('does NOT flag a tester as idle when they only opened the app today', async () => {
+    // Opening the app is what beta testing asks of a tester, so a launch with no
+    // game played still clears the row for the day.
+    const openedApp = { ...OFFLINE_TESTER, lastTestAppOpenAt: new Date().toISOString() }
+    global.fetch = setupFetch([openedApp])
+
+    render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('tester@test.com'))
+
+    const row = screen.getByText('tester@test.com').closest('.admin-tester-row')
+    expect(row.className).not.toMatch(/admin-tester-idle/)
+    expect(row.className).toMatch(/border-amber-700/)
+  })
+
+  it('still flags a tester whose last app open was yesterday', async () => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    const stale = { ...OFFLINE_TESTER, lastTestAppOpenAt: yesterday.toISOString() }
+    global.fetch = setupFetch([stale])
+
+    render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('tester@test.com'))
+
+    const row = screen.getByText('tester@test.com').closest('.admin-tester-row')
+    expect(row.className).toMatch(/admin-tester-idle/)
+  })
+
   it('sorts an offline tester above an offline non-tester', async () => {
     // Array order puts the plain user first; the tester must still render first.
     global.fetch = setupFetch([OFFLINE_PLAIN, OFFLINE_TESTER])
@@ -145,13 +173,13 @@ describe('Admin — Users tab: tester flag', () => {
     expect(testerEl.compareDocumentPosition(plainEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('sorts a tester who owes a game today above one who has played', async () => {
-    const played = {
+  it('sorts a tester who owes a test today above one who has opened the app', async () => {
+    const opened = {
       ...OFFLINE_TESTER, _id: 'u3', agentNumber: '003', email: 'played@test.com',
-      lastTestGameAt: new Date().toISOString(),
+      lastTestAppOpenAt: new Date().toISOString(),
     }
-    // Array order puts the played tester first; the idle one must still lead.
-    global.fetch = setupFetch([played, OFFLINE_TESTER])
+    // Array order puts the satisfied tester first; the idle one must still lead.
+    global.fetch = setupFetch([opened, OFFLINE_TESTER])
 
     render(<Admin />)
     await navigateToUsers()

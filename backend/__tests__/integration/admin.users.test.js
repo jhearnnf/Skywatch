@@ -16,6 +16,7 @@ const {
 const IntelligenceBriefRead  = require('../../models/IntelligenceBriefRead');
 const { CBAT_GAMES }         = require('../../constants/cbatGames');
 const GameSessionCbatStart   = require('../../models/GameSessionCbatStart');
+const User     = require('../../models/User');
 const mongoose = require('mongoose');
 
 // Minimal payload satisfying the union of required fields across every CBAT
@@ -359,6 +360,59 @@ describe('GET /api/admin/users — lastTestGameAt', () => {
     const bRow = res.body.data.users.find(x => x._id.toString() === userB._id.toString());
     expect(new Date(aRow.lastTestGameAt).getTime()).toBe(tA.getTime());
     expect(bRow.lastTestGameAt).toBeNull();
+  });
+});
+
+// ── lastTestAppOpenAt (idle-tester flag) ─────────────────────────────────────
+// Opening the app counts as testing on its own, so the Users list needs the last
+// *native* client sighting alongside the last game.
+
+describe('GET /api/admin/users — lastTestAppOpenAt', () => {
+  const rowFor = (res, user) => res.body.data.users.find(x => x._id.toString() === user._id.toString());
+
+  it('is null when the account has never been seen on a native client', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    const res = await request(app).get('/api/admin/users').set('Cookie', authCookie(admin._id));
+    expect(rowFor(res, user).lastTestAppOpenAt).toBeNull();
+  });
+
+  it('reports the Android client sighting', async () => {
+    const admin = await createAdminUser();
+    const seen  = new Date('2026-07-17T14:30:00Z');
+    const user  = await createUser();
+    await User.findByIdAndUpdate(user._id, {
+      'lastClients.android': { version: '1.2.3', build: '7', buildNumber: 7, lastSeenAt: seen },
+    });
+
+    const res = await request(app).get('/api/admin/users').set('Cookie', authCookie(admin._id));
+    expect(new Date(rowFor(res, user).lastTestAppOpenAt).getTime()).toBe(seen.getTime());
+  });
+
+  it('ignores a web-only sighting — the browser is not the app', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+    await User.findByIdAndUpdate(user._id, {
+      'lastClients.web': { version: '1.2.3', build: 'a3f9c21', buildNumber: null, lastSeenAt: new Date() },
+    });
+
+    const res = await request(app).get('/api/admin/users').set('Cookie', authCookie(admin._id));
+    expect(rowFor(res, user).lastTestAppOpenAt).toBeNull();
+  });
+
+  it('takes the most recent across native platforms', async () => {
+    const admin   = await createAdminUser();
+    const older   = new Date('2026-07-16T09:00:00Z');
+    const newer   = new Date('2026-07-17T14:30:00Z');
+    const user    = await createUser();
+    await User.findByIdAndUpdate(user._id, {
+      'lastClients.android': { version: '1.2.3', build: '7', buildNumber: 7, lastSeenAt: older },
+      'lastClients.ios':     { version: '1.2.3', build: '7', buildNumber: 7, lastSeenAt: newer },
+    });
+
+    const res = await request(app).get('/api/admin/users').set('Cookie', authCookie(admin._id));
+    expect(new Date(rowFor(res, user).lastTestAppOpenAt).getTime()).toBe(newer.getTime());
   });
 });
 

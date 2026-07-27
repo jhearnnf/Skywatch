@@ -855,7 +855,7 @@ function ReportsTab({ API }) {
                 />
               </ChartCard>
 
-              <ChartCard title="Test Usage" sub="tester CBAT activity · last 7 days">
+              <ChartCard title="Test Usage" sub="testers who played CBAT or opened the app · last 7 days">
                 <ReportChart
                   type="bar"
                   data={snapshot.testUsage ?? []}
@@ -3243,12 +3243,20 @@ function versionStatus(client, latestClients, webReference) {
 }
 
 // True when the given timestamp falls on the admin's current calendar day.
-function playedToday(ts) {
+function sameDayAsToday(ts) {
   if (!ts) return false
   const d = new Date(ts), now = new Date()
   return d.getFullYear() === now.getFullYear()
       && d.getMonth()    === now.getMonth()
       && d.getDate()     === now.getDate()
+}
+
+// Has this account done anything today that counts as testing? Either playing a
+// CBAT game (finished or abandoned) or simply having the app open on a native
+// platform — launching the app is what beta testing asks of a tester, so it
+// counts on its own without them having to finish a game.
+function testedToday(u) {
+  return sameDayAsToday(u.lastTestGameAt) || sameDayAsToday(u.lastTestAppOpenAt)
 }
 
 // ── Admin email drafts ────────────────────────────────────────────────────────
@@ -3644,19 +3652,19 @@ function UsersTab({ API }) {
   }
 
   const sortedUsers = useMemo(() => {
-    // A tester still owing a game today is the row worth chasing, so they lead
+    // A tester who has not tested today is the row worth chasing, so they lead
     // their group — matching the idle border the row already gets.
-    const owesGame = u => u.isTester && !playedToday(u.lastTestGameAt)
+    const owesTest = u => u.isTester && !testedToday(u)
     const priority = u => {
       if (u.isAdmin) return 3
       const s = onlineStatus(u.lastSeen)
       if (s === 'live') return 2
       if (s === 'away') return 1
       if (!u.isTester) return 0     // offline testers sit atop the offline group
-      return owesGame(u) ? 0.75 : 0.5
+      return owesTest(u) ? 0.75 : 0.5
     }
     return [...users].sort((a, b) =>
-      priority(b) - priority(a) || owesGame(b) - owesGame(a))
+      priority(b) - priority(a) || owesTest(b) - owesTest(a))
   }, [users])
 
   // Flag/unflag a user as a tester. Saves instantly (no confirm) and optimistically
@@ -3774,7 +3782,7 @@ function UsersTab({ API }) {
           </div>
           <div className={`relative z-10 rounded-2xl border overflow-hidden ${
             u.isTester
-              ? `admin-tester-row ${playedToday(u.lastTestGameAt) ? 'border-amber-700/60' : 'admin-tester-idle'}`
+              ? `admin-tester-row ${testedToday(u) ? 'border-amber-700/60' : 'admin-tester-idle'}`
             : u._id === currentUser?._id ? 'bg-red-950/40 border-red-900/50'
             : 'bg-surface border-slate-200'}`}>
             {/* Header (clickable — toggles expansion) */}

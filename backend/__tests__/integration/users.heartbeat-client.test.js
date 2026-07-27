@@ -22,7 +22,9 @@ const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, authCookie } = require('../helpers/factories');
 
-const User = require('../../models/User');
+const User    = require('../../models/User');
+const AppOpen = require('../../models/AppOpen');
+const { ymdInTz } = require('../../constants/activity');
 
 beforeAll(async () => { await db.connect(); });
 afterEach(async () => { await db.clearDatabase(); });
@@ -179,5 +181,67 @@ describe('POST /api/users/heartbeat — osSeen accumulation', () => {
     expect(saved.osSeen.linux).toBeNull();
     expect(saved.osSeen.ios).toBeNull();
     expect(saved.osSeen.android).toBeNull();
+  });
+});
+
+// Opening the app is itself evidence a tester tested that day, so each native
+// heartbeat stamps a per-day AppOpen row. lastClients only remembers the most
+// recent open, which cannot feed the 7-day Test Usage chart.
+describe('POST /api/users/heartbeat — app-open day log', () => {
+  it('records an AppOpen row for an Android heartbeat', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    await beat(cookie, { client: { platform: 'android', version: '1.2.3', build: '7' } });
+
+    const rows = await AppOpen.find({ userId: user._id }).lean();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].platform).toBe('android');
+    expect(rows[0].day).toBe(ymdInTz(new Date()));
+    expect(rows[0].openedAt).toBeTruthy();
+  });
+
+  it('keeps one row per day however many heartbeats arrive', async () => {
+    // The client beats every 30s. Without an idempotent upsert the chart would
+    // count heartbeats, not testers.
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    await beat(cookie, { client: { platform: 'android', version: '1.2.3', build: '7' } });
+    await beat(cookie, { client: { platform: 'android', version: '1.2.3', build: '7' } });
+    await beat(cookie, { client: { platform: 'android', version: '1.2.3', build: '7' } });
+
+    expect(await AppOpen.countDocuments({ userId: user._id })).toBe(1);
+  });
+
+  it('does NOT record an app open for a web heartbeat', async () => {
+    // Loading the site in a browser is not testing the app build.
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    await beatUA(cookie, { client: { platform: 'web', version: '1.2.3', build: 'a3f9c21' } }, UA_WINDOWS_CHROME);
+
+    expect(await AppOpen.countDocuments({ userId: user._id })).toBe(0);
+  });
+
+  it('does NOT record an app open when the client payload is unusable', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    const res = await beatUA(cookie, { client: { platform: 'playstation', version: '1.2.3' } }, UA_WINDOWS_CHROME);
+    expect(res.status).toBe(200);
+
+    expect(await AppOpen.countDocuments({ userId: user._id })).toBe(0);
+  });
+
+  it('keeps rows separate per platform', async () => {
+    const user   = await createUser();
+    const cookie = authCookie(user._id);
+
+    await beat(cookie, { client: { platform: 'android', version: '1.2.3', build: '7' } });
+    await beat(cookie, { client: { platform: 'ios',     version: '1.2.3', build: '7' } });
+
+    const rows = await AppOpen.find({ userId: user._id }).lean();
+    expect(rows.map(r => r.platform).sort()).toEqual(['android', 'ios']);
   });
 });

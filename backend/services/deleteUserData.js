@@ -17,12 +17,14 @@ const model = (name) => require(`../models/${name}`);
 // model in backend/models that refs 'User' — it fails loudly on omissions.
 const OWNED_BY_USER = [
   'AirstarLog',
+  'AppOpen',
   'AptitudeSyncUsage',
   'GameSessionCaseFileResult',
   'GameSessionCbatActResult',
   'GameSessionCbatAnglesResult',
   'GameSessionCbatAntResult',
   'GameSessionCbatCodeDuplicatesResult',
+  'GameSessionCbatCutResult',
   'GameSessionCbatDADResult',
   'GameSessionCbatDptResult',
   'GameSessionCbatFlagResult',

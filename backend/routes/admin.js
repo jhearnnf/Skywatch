@@ -44,6 +44,7 @@ const { autoLinkKeywords, buildTitleRejectCheck } = require('../utils/keywordLin
 const { validateBriefTitleForCategory } = require('../utils/airframeValidation');
 const { reprioritizeCategory } = require('../utils/priorityRanking');
 const { lookupRankOrderByTitle } = require('../constants/rankOrder');
+const { NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
 const {
   compactRankOrder,
   setRankOrder: setLeadRankOrder,
@@ -1131,9 +1132,19 @@ async function enrichUsersWithStats(users) {
   return users.map(u => {
     const plain = u.toObject({ virtuals: true });
     const uid   = plain._id.toString();
+    // Last time this account had the *app* open, on any native platform. Opening
+    // the app is itself a test, so the Users list treats it as evidence of the
+    // day's testing exactly as a played game is. Read off lastClients rather than
+    // the AppOpen log because only "was it today?" is asked here, and lastClients
+    // already carries that with no extra query.
+    const lastAppOpen = NATIVE_PLATFORMS
+      .map(p => plain.lastClients?.[p]?.lastSeenAt)
+      .filter(Boolean)
+      .reduce((max, ts) => (max && new Date(max) >= new Date(ts) ? max : ts), null);
     return {
       ...plain,
       lastTestGameAt: uid in lastGameMap ? new Date(lastGameMap[uid]).toISOString() : null,
+      lastTestAppOpenAt: lastAppOpen ? new Date(lastAppOpen).toISOString() : null,
       profileStats: {
         brifsRead:        briefMap[uid]          ?? 0,
         quizzesPlayed:    quizMap[uid]?.total     ?? 0,
@@ -1166,8 +1177,7 @@ async function enrichUsersWithStats(users) {
 // Web is deliberately absent: a commit sha has no ordering, so "latest web
 // build" cannot be derived this way. The admin's own browser answers that
 // question instead (see Admin › Users), since it is by definition running the
-// currently deployed bundle.
-const NATIVE_PLATFORMS = ['android', 'ios'];
+// currently deployed bundle (NATIVE_PLATFORMS is imported at the top).
 
 async function latestNativeReleases() {
   const entries = await Promise.all(NATIVE_PLATFORMS.map(async platform => {

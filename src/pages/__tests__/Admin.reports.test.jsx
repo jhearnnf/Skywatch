@@ -221,7 +221,9 @@ describe('Admin — Reports tab', () => {
   it('renders the Test Usage snapshot card', async () => {
     await openReportsTab()
     await waitFor(() => expect(screen.getByText('Test Usage')).toBeInTheDocument())
-    expect(screen.getByText('tester CBAT activity · last 7 days')).toBeInTheDocument()
+    // The subtitle names both qualifying signals: an app open counts as a test
+    // in its own right, not only a game played.
+    expect(screen.getByText('testers who played CBAT or opened the app · last 7 days')).toBeInTheDocument()
   })
 
   it('renders the Operating Systems snapshot card with an unreported bucket', async () => {

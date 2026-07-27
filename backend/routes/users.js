@@ -23,7 +23,8 @@ const { CBAT_GAMES } = require('../constants/cbatGames');
 const { withSelectedBadge } = require('../utils/selectedBadge');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
-const { sanitiseClientInfo, osFromUserAgent } = require('../constants/clientPlatforms');
+const { sanitiseClientInfo, osFromUserAgent, NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
+const AppOpen = require('../models/AppOpen');
 
 // True when the request should be treated as "slim" (CBAT-only) mode, in which
 // every Aircraft with a cutout is an unlockable badge regardless of whether the
@@ -716,6 +717,20 @@ router.post('/heartbeat', protect, async (req, res) => {
     if (os) update[`osSeen.${os}`] = now;
 
     await User.findByIdAndUpdate(req.user._id, update);
+
+    // Log the calendar day as one on which this account had the app open. Only
+    // native clients count — the app being opened at all is what beta testing
+    // asks of a tester, so it stands on its own as evidence of a test, whereas
+    // loading the site in a browser does not.
+    //
+    // Best-effort and deliberately after the presence write: this is reporting
+    // data, and losing a day of it must never cost a user their online status.
+    if (client && NATIVE_PLATFORMS.includes(client.platform)) {
+      try {
+        await AppOpen.record(req.user._id, client.platform, now);
+      } catch { /* duplicate-key race or write failure — presence still stands */ }
+    }
+
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });

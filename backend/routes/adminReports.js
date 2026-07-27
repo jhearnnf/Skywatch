@@ -9,6 +9,7 @@ const GameSessionFlashcardRecallResult = require('../models/GameSessionFlashcard
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
+const AppOpen = require('../models/AppOpen');
 const { CBAT_GAMES } = require('../constants/cbatGames');
 const { OS_KEYS } = require('../constants/clientPlatforms');
 
@@ -24,11 +25,12 @@ const TUTORIAL_GAMES = [
   { key: 'target-tutorial', gameKey: 'target', label: 'Target (tutorial)' },
 ];
 
-// Timezone for the day/hour activity heatmap. The audience is UK-based, and
-// "what time of day" only reads correctly in local time (a UTC grid smears
-// peaks by an hour under BST), so starts are bucketed in Europe/London rather
-// than UTC like the daily charts.
-const ACTIVITY_TZ = 'Europe/London';
+// Timezone for the day/hour activity heatmap and the Test Usage series. The
+// audience is UK-based, and "what time of day" only reads correctly in local
+// time (a UTC grid smears peaks by an hour under BST), so starts are bucketed in
+// Europe/London rather than UTC like the daily charts. Shared with the app-open
+// log, which stores its day keys pre-bucketed in the same zone.
+const { ACTIVITY_TZ, ymdInTz } = require('../constants/activity');
 
 router.use(protect, adminOnly);
 
@@ -77,14 +79,6 @@ function relDelta(curr, prev) {
 function ymd(date) {
   const x = new Date(date);
   return x.toISOString().slice(0, 10);
-}
-
-// Format a Date as YYYY-MM-DD in a given IANA timezone (en-CA yields ISO order).
-// Used to bucket days the way UK users experience them rather than by UTC.
-function ymdInTz(date, tz) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date(date));
 }
 
 // Ordered list of the last `days` calendar-day keys (inclusive of today) in `tz`.
@@ -344,24 +338,38 @@ router.get('/snapshot', async (_req, res) => {
     const streams = await activityStreams(sparkStart);
     const dailyMap = mergeDailyDistinctUsers(streams);
 
-    // Test usage — distinct tester accounts who engaged with any CBAT game per day
-    // over the last 7 days. Fixed 7-day window (independent of the report window
-    // picker). Days are bucketed in Europe/London (not UTC) so the columns match
-    // what UK-based testers experience as "today", and both game *starts* (incl.
-    // abandoned sessions) and finished results count — mirroring the "played
-    // today" highlight on the admin Users list, which is the number admins eyeball
-    // against this chart.
+    // Test usage — distinct tester accounts who tested per day over the last 7
+    // days. Fixed 7-day window (independent of the report window picker). Days
+    // are bucketed in Europe/London (not UTC) so the columns match what UK-based
+    // testers experience as "today".
+    //
+    // A tester counts for a day if they either engaged with a CBAT game — both
+    // *starts* (incl. abandoned sessions) and finished results — or simply had
+    // the app open on a native platform. Opening the app is what beta testing
+    // actually asks of a tester, so it stands on its own; a tester who launches
+    // the app and looks around has tested, whether or not they finished a game.
+    // Mirrors the "tested today" highlight on the admin Users list, which is the
+    // number admins eyeball against this chart.
     const testerIds = new Set(testerDocs.map(u => String(u._id)));
     const testDayKeys = recentDayKeysInTz(7, ACTIVITY_TZ, now);
     let testUsage = testDayKeys.map(date => ({ date, count: 0 }));
     if (testerIds.size) {
-      const testerCbatStreams = await Promise.all([
-        ...Object.values(CBAT_GAMES).map(g =>
-          dailyDistinctUsers(g.Model, 'createdAt', 'userId', testStart, g.modeFilter ?? {}, null, ACTIVITY_TZ)
-        ),
-        dailyDistinctUsers(GameSessionCbatStart, 'startedAt', 'userId', testStart, {}, null, ACTIVITY_TZ),
+      const [testerCbatStreams, appOpens] = await Promise.all([
+        Promise.all([
+          ...Object.values(CBAT_GAMES).map(g =>
+            dailyDistinctUsers(g.Model, 'createdAt', 'userId', testStart, g.modeFilter ?? {}, null, ACTIVITY_TZ)
+          ),
+          dailyDistinctUsers(GameSessionCbatStart, 'startedAt', 'userId', testStart, {}, null, ACTIVITY_TZ),
+        ]),
+        // AppOpen rows are already keyed by ACTIVITY_TZ calendar day, so they
+        // drop straight into the same merge with no bucketing of their own.
+        AppOpen.find({ userId: { $in: testerDocs.map(u => u._id) }, day: { $in: testDayKeys } })
+          .select('userId day').lean(),
       ]);
-      const testerByDay = mergeDailyDistinctUsers(testerCbatStreams); // date → Set<userId>
+      const testerByDay = mergeDailyDistinctUsers([
+        ...testerCbatStreams,
+        appOpens.map(o => ({ date: o.day, userId: String(o.userId) })),
+      ]); // date → Set<userId>
       testUsage = testDayKeys.map(date => {
         const users = testerByDay.get(date);
         let count = 0;
