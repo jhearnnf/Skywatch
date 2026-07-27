@@ -1,11 +1,12 @@
-// Admin round-skip cheat codes for ACT.
+// Admin round-skip cheat codes, shared by ACT and Trace 1.
 //
 // Same convention as DPT's numpad codes (see CbatDpt.jsx ADMIN_ROUND_CHEATS):
-// type 111 for round 1, 222 for round 2, and so on. ACT has five rounds.
-// Using one flags the run as a debug session — the score is never submitted.
+// type 111 for round 1, 222 for round 2, and so on. Both games have five
+// rounds. Using one flags the run as a debug session — the score is never
+// submitted.
 //
-// The matcher lives here rather than in CbatAct so the sliding-window/idle
-// logic can be tested without standing up an R3F canvas.
+// The matcher lives here rather than in the page components so the
+// sliding-window/idle logic can be tested without standing up an R3F canvas.
 
 export const ADMIN_ROUND_CHEATS = { 111: 1, 222: 2, 333: 3, 444: 4, 555: 5 }
 

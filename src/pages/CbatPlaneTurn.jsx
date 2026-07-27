@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import * as THREE from 'three'
 import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { getAircraftRoster } from '../lib/offlineRoster'
@@ -15,7 +14,6 @@ import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import { useTraceMode } from '../hooks/useTraceMode'
 import TraceModeSelector from '../components/TraceModeSelector'
-
 // Aircraft control model: full local-frame flight controls.
 //   - Pitch (climb/dive): rotation around the aircraft's local right axis (model -Z).
 //   - Yaw (left/right):   rotation around the aircraft's local up axis (model +Y).
@@ -25,29 +23,16 @@ import TraceModeSelector from '../components/TraceModeSelector'
 //     toward its right wing).
 //   - Each input is a single 90° rotation around one local axis. Quaternion is
 //     normalised after each multiplication to prevent floating-point drift.
-const DIR_VECS_WORLD = [
-  new THREE.Vector3(0, 0, -1),  // DIR 0 → world -Z
-  new THREE.Vector3(1, 0, 0),   // DIR 1 → world +X
-  new THREE.Vector3(0, 0, 1),   // DIR 2 → world +Z
-  new THREE.Vector3(-1, 0, 0),  // DIR 3 → world -X
-]
-
-const MODEL_UP    = new THREE.Vector3(0, 1, 0)   // aircraft local up axis (model frame)
-const MODEL_RIGHT = new THREE.Vector3(0, 0, -1)  // aircraft local right axis (model frame)
-const MODEL_NOSE  = new THREE.Vector3(-1, 0, 0)  // aircraft local nose direction
-
-function applyLocalRot(prevArr, axis, angle) {
-  const q = new THREE.Quaternion(prevArr[0], prevArr[1], prevArr[2], prevArr[3])
-  const local = new THREE.Quaternion().setFromAxisAngle(axis, angle)
-  q.multiply(local)
-  q.normalize()
-  return [q.x, q.y, q.z, q.w]
-}
-
-function getForward(quatArr) {
-  const q = new THREE.Quaternion(quatArr[0], quatArr[1], quatArr[2], quatArr[3])
-  return MODEL_NOSE.clone().applyQuaternion(q)
-}
+// These live in trace1Generator so the schedule builder can stay pure and
+// testable; Practise 2D/3D shares the same rotation maths.
+import {
+  MODEL_UP, MODEL_RIGHT,
+  applyLocalRot, getForward, initialPlaneQuat,
+  TRACE1_ROUNDS, TRACE1_TURNS_PER_ROUND, TRACE1_SPEED_TABLE, TRACE1_PLANE_COUNT,
+  TRACE1_SWITCH_PREVIEW_MS, TRACE1_TURN_DEFS, TRACE1_TOTAL_TURNS,
+  trace1KeyToTurn, trace1InitialPlaneStates, buildTrace1Round,
+} from '../utils/cbat/trace1Generator'
+import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
 
 function forwardToMoveState(forwardVec, prevDir) {
   const x = Math.round(forwardVec.x), y = Math.round(forwardVec.y), z = Math.round(forwardVec.z)
@@ -58,20 +43,6 @@ function forwardToMoveState(forwardVec, prevDir) {
   if (z === 1)  return { moveMode: 0, dir: 2 }
   if (x === -1) return { moveMode: 0, dir: 3 }
   return { moveMode: 0, dir: prevDir }
-}
-
-function initialPlaneQuat(dir) {
-  // Level forward in `dir` with body upright (up = world +Y).
-  const forward = DIR_VECS_WORLD[dir].clone()
-  const up = new THREE.Vector3(0, 1, 0)
-  const right = new THREE.Vector3().crossVectors(forward, up).normalize()
-  const m = new THREE.Matrix4().makeBasis(
-    forward.clone().negate(),
-    up,
-    right.clone().negate(),
-  )
-  const q = new THREE.Quaternion().setFromRotationMatrix(m)
-  return [q.x, q.y, q.z, q.w]
 }
 
 const PlaneModel3D    = lazy(() => import('../components/PlaneModel3D'))
@@ -85,110 +56,6 @@ const TOTAL_PACKAGES = 5
 const MAX_LEVEL      = 5
 const BASE_INTERVAL  = 500 // ms per move at level 1
 const SPEED_STEP     = 40  // ms faster each level
-
-// ── Trace 1 constants ────────────────────────────────────────────────────────
-// Recall test: autopilot performs one of four turns; player presses the matching
-// arrow within the gap before the next turn. Speed ramps linearly across rounds;
-// round 5 lands at the old level-3 pace (930ms) — challenging but readable.
-const TRACE1_ROUNDS          = 5
-const TRACE1_TURNS_PER_ROUND = 8
-const TRACE1_SPEED_TABLE     = [1870, 1635, 1400, 1165, 930] // ms between turns
-const TRACE1_TOTAL_TURNS     = TRACE1_ROUNDS * TRACE1_TURNS_PER_ROUND
-const TRACE1_AIRCRAFT_SLUG   = 'hawk t2'
-// Keep the plane at least two cells away from each wall at every projected
-// turn moment. With slerp lag the plane can drift up to ~0.4 cells past the
-// projection in the old direction, so margin=2 leaves a full cell of buffer
-// between the worst-case excursion and the scene's soft-clamp at world ±3.5.
-// The schedule + clamp together guarantee the visible aircraft never freezes
-// against the wireframe wall.
-const TRACE1_WALL_MARGIN     = 2
-
-// Each turn is a local-frame quaternion rotation.
-const TRACE1_TURN_DEFS = {
-  yawL:   { axis: MODEL_UP,    angle:  Math.PI / 2, key: 'ArrowLeft',  label: '←' },
-  yawR:   { axis: MODEL_UP,    angle: -Math.PI / 2, key: 'ArrowRight', label: '→' },
-  pitchD: { axis: MODEL_RIGHT, angle: -Math.PI / 2, key: 'ArrowUp',    label: '↑' }, // stick: forward = dive
-  pitchU: { axis: MODEL_RIGHT, angle:  Math.PI / 2, key: 'ArrowDown',  label: '↓' }, // stick: back = climb
-}
-const TRACE1_TURN_KEYS = ['yawL', 'yawR', 'pitchD', 'pitchU']
-
-function trace1KeyToTurn(key) {
-  switch (key) {
-    case 'ArrowLeft':  return 'yawL'
-    case 'ArrowRight': return 'yawR'
-    case 'ArrowUp':    return 'pitchD'
-    case 'ArrowDown':  return 'pitchU'
-    default: return null
-  }
-}
-
-// Simulate `steps` forward cells along `quat`'s heading. Returns the final
-// grid position, or null if any step would cross the margin-tightened bound.
-function simulateForwardSteps(quat, startPos, steps, margin = TRACE1_WALL_MARGIN) {
-  const fwd = getForward(quat)
-  const x = Math.round(fwd.x), y = Math.round(fwd.y), z = Math.round(fwd.z)
-  const out = { r: startPos.r, c: startPos.c, layer: startPos.layer }
-  const min = margin
-  const maxR = GRID  - 1 - margin
-  const maxC = GRID  - 1 - margin
-  const maxL = LAYERS - 1 - margin
-  for (let i = 0; i < steps; i++) {
-    out.layer += y
-    out.c     += x
-    out.r     += z
-    if (out.r < min || out.r > maxR || out.c < min || out.c > maxC || out.layer < min || out.layer > maxL) return null
-  }
-  return out
-}
-
-// Build an 8-turn schedule that keeps the plane inside [margin, GRID-1-margin]
-// on every axis. With a 10-cell arena and the plane starting at centre, at
-// least one of the 4 candidate turns always keeps the path in bounds (the
-// candidates are 4 of the 6 cardinal axes); we score each by how much margin
-// it leaves and pick a random one from the safest pool. `prevTail` is the
-// last 1–2 turn keys from the previous round so we can forbid a 3rd identical
-// turn in a row across the round boundary.
-function buildTrace1Round(initialQuat, initialPos, prevTail = []) {
-  const schedule = []
-  let quat = [...initialQuat]
-  let pos  = { ...initialPos }
-  const tail = prevTail.slice(-2)
-  for (let i = 0; i < TRACE1_TURNS_PER_ROUND; i++) {
-    // Evaluate all 4 candidate turns.
-    const evaluated = TRACE1_TURN_KEYS.map(cand => {
-      const def     = TRACE1_TURN_DEFS[cand]
-      const newQuat = applyLocalRot(quat, def.axis, def.angle)
-      const stepped = simulateForwardSteps(newQuat, pos, 2)
-      return { cand, newQuat, stepped }
-    })
-
-    // If the last two turns were the same, that direction is now forbidden —
-    // taking it would make 3 in a row.
-    const forbidden = (tail.length >= 2 && tail[tail.length - 1] === tail[tail.length - 2])
-      ? tail[tail.length - 1]
-      : null
-    const dropForbidden = (list) => forbidden ? list.filter(e => e.cand !== forbidden) : list
-
-    // Prefer candidates that land at least 1 extra cell from any wall.
-    const valid    = dropForbidden(evaluated.filter(e => e.stepped))
-    const looseSet = valid.length ? valid : dropForbidden(evaluated.map(e => ({
-      ...e,
-      // Force-walked fallback: re-simulate without margin, clamp inside.
-      stepped: simulateForwardSteps(e.newQuat, pos, 2, 0) || pos,
-    })))
-    // Safety net: if the forbidden filter wipes the set (shouldn't happen
-    // with 4 turn options) fall back to the unfiltered list.
-    const finalSet = looseSet.length ? looseSet : evaluated
-
-    const chosen = finalSet[Math.floor(Math.random() * finalSet.length)]
-    schedule.push(chosen.cand)
-    tail.push(chosen.cand)
-    if (tail.length > 2) tail.shift()
-    quat = chosen.newQuat
-    pos  = chosen.stepped || pos
-  }
-  return { schedule, endQuat: quat, endPos: pos, tail }
-}
 
 // Direction vectors: index matches rotation (0=up,1=right,2=down,3=left)
 const DIR = [
@@ -235,7 +102,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
 
   // Personal-best label varies per mode (different scoring shape).
   const pbLine = gameModeTrace1
-    ? (personalBest && <>Best: <span className="text-brand-300">{personalBest.bestScore}/40</span></>)
+    ? (personalBest && <>Best: <span className="text-brand-300">{personalBest.bestScore}/{TRACE1_TOTAL_TURNS}</span></>)
     : (personalBest && <>{personalBest.bestScore} rotations <span className="text-slate-500 mx-1">·</span> {personalBest.bestTime.toFixed(1)}s</>)
 
   // Leaderboard target depends on mode. Plane Turn 2D and 3D are separate
@@ -267,7 +134,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
           {gameModeTrace1 ? (
             <>
               <span className="font-extrabold uppercase tracking-wide">Trace 1 — Recall.</span>{' '}
-              <span className="text-slate-800">Hawk T2 auto-flies the arena. Press the arrow matching each turn it just made. 5 rounds × 8 turns. +1 correct / −1 wrong.</span>
+              <span className="text-slate-800">Hawk T2 auto-flies the arena. Press the arrow matching each turn it just made. Extra aircraft join from round 3 — only the ringed one is scored. 5 rounds × 8 turns. +1 correct / −1 wrong.</span>
             </>
           ) : gameMode3D ? (
             <>
@@ -297,12 +164,16 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
                 <span>After each turn, press the matching arrow: <span className="font-mono text-slate-300">←</span> yaw left · <span className="font-mono text-slate-300">→</span> yaw right · <span className="font-mono text-slate-300">↑</span> dive · <span className="font-mono text-slate-300">↓</span> climb.</span>
               </div>
               <div className="flex items-start gap-2">
+                <span className="text-brand-300 shrink-0">🎯</span>
+                <span>From round 3 more aircraft join. A glowing ring marks the one you're tracking — answer for that aircraft only. The ring moves during the quiet gaps.</span>
+              </div>
+              <div className="flex items-start gap-2">
                 <span className="text-brand-300 shrink-0">🏆</span>
-                <span>+1 per correct, −1 per wrong or missed. Aim for +40.</span>
+                <span>+1 per correct, −1 per wrong or missed. Aim for +{TRACE1_TOTAL_TURNS}.</span>
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-brand-300 shrink-0">⚡</span>
-                <span>5 rounds × 8 turns. Each round flies faster than the last.</span>
+                <span>5 rounds × 8 turns. Speed peaks at round 2 — after that the aircraft pile up instead: 2, then 3, then 4.</span>
               </div>
             </>
           ) : (
@@ -471,10 +342,25 @@ function GameOverOverlay({ won, score, level, maxLevel, onRestart, onMenu }) {
 }
 
 // ── Trace 1 HUD ──────────────────────────────────────────────────────────────
-function Trace1HUD({ round, turn }) {
+// `tracked` is null in the single-aircraft rounds — there's nothing to choose
+// between, so the HUD stays exactly as it was before multi-aircraft rounds.
+function Trace1HUD({ round, turn, tracked, debug }) {
   return (
     <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
-      <span className="text-slate-400">ROUND <span className="text-brand-300">{Math.min(round + 1, TRACE1_ROUNDS)}</span>/{TRACE1_ROUNDS}</span>
+      <span className="text-slate-400">
+        ROUND <span className="text-brand-300">{Math.min(round + 1, TRACE1_ROUNDS)}</span>/{TRACE1_ROUNDS}
+        {debug && <span className="ml-2 text-amber-400">DEBUG</span>}
+      </span>
+      {tracked && (
+        <span className="flex items-center gap-1.5 text-slate-400">
+          TRACK
+          <span
+            className="inline-block w-2 h-2 rounded-full"
+            style={{ background: tracked.hex, boxShadow: `0 0 6px ${tracked.hex}` }}
+          />
+          <span className="font-bold uppercase" style={{ color: tracked.hex }}>{tracked.label}</span>
+        </span>
+      )}
       <span className="text-slate-400">TURN <span className="text-brand-300">{Math.min(turn, TRACE1_TURNS_PER_ROUND)}</span>/{TRACE1_TURNS_PER_ROUND}</span>
     </div>
   )
@@ -523,7 +409,7 @@ const TITLE_BY_MODE = {
 }
 
 // ── Main Component ───────────────────────────────────────────────────────────
-export default function CbatPlaneTurn() {
+export default function CbatPlaneTurn({ forcedMode = null }) {
   const { user, apiFetch, API } = useAuth()
   const { settings } = useAppSettings()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
@@ -536,7 +422,14 @@ export default function CbatPlaneTurn() {
   // Mode (4 values: '2d' | '3d' | 'trace1' | 'trace2'). Single selector;
   // Practise modes drive the legacy plane-turn loop, Trace 1 drives the new
   // autopilot loop. Trace 2 is selector-stub only.
-  const [mode, setMode]                 = useTraceMode()
+  //
+  // `forcedMode` pins the mode and bypasses the persisted selection entirely.
+  // The landing page's live game wall mounts this page more than once (Trace 2,
+  // Practise 2D, Practise 3D as separate cards) — without the pin they would
+  // all fight over the single localStorage key useTraceMode writes to.
+  const [storedMode, setStoredMode]     = useTraceMode()
+  const mode                            = forcedMode ?? storedMode
+  const setMode                         = forcedMode ? () => {} : setStoredMode
   const gameMode3D                      = mode === '3d'
   const gameModeTrace1                  = mode === 'trace1'
   const gameModeTrace2                  = mode === 'trace2'
@@ -625,15 +518,30 @@ export default function CbatPlaneTurn() {
   // ── Trace 1 state ──────────────────────────────────────────────────────────
   const [trace1Round, setTrace1Round]         = useState(0)        // 0-indexed
   const [trace1Turn, setTrace1Turn]           = useState(0)        // 0-indexed within round
-  const [trace1Schedule, setTrace1Schedule]   = useState([])       // current round's turns
   const [trace1Correct, setTrace1Correct]     = useState(0)
   const [trace1Total, setTrace1Total]         = useState(0)
   const [trace1Popup, setTrace1Popup]         = useState(null)     // { value: '✓'|'✗', key }
   const [trace1Banner, setTrace1Banner]       = useState(null)     // round-end banner text
   const [trace1Generation, setTrace1Generation] = useState(0)      // bump to re-init the loop
+  // Multi-aircraft state. From round 3 several jets fly at once, all turning on
+  // every tick; only the tracked one is scored.
+  const [trace1PlaneCount, setTrace1PlaneCount] = useState(1)
+  const [trace1Quats, setTrace1Quats]           = useState(() => [initialPlaneQuat(0)])
+  const [trace1Selected, setTrace1Selected]     = useState(0)      // index into the aircraft array
+  // Set when an admin uses the round-skip cheat. Permanent for the rest of the
+  // run: the score is never submitted. Mirrored into a ref so trace1Finalize can
+  // read it without gaining a dependency that would re-run the boot effect and
+  // restart the game from round 1.
+  const [trace1Debug, setTrace1Debug]           = useState(false)
+  // Bumped on every round-skip so the scene respawns the jets even when the jump
+  // doesn't change the aircraft count (1 → 2, or re-typing the current round).
+  // Without it the planner would plan from the spread start slots while the
+  // visible aircraft carried on from wherever they'd drifted to.
+  const [trace1JumpNonce, setTrace1JumpNonce]   = useState(0)
+  const trace1DebugRef    = useRef(false)
+  const trace1CheatBufRef = useRef(emptyCheatBuffer())
   const trace1AwaitingRef = useRef(false)
   const trace1LastTurnRef = useRef(null)
-  const trace1ScheduleRef = useRef([])
   const trace1RoundRef    = useRef(0)
   const trace1TurnRef     = useRef(0)
   const trace1StartedAtRef = useRef(0)
@@ -641,11 +549,17 @@ export default function CbatPlaneTurn() {
   const trace1CorrectRef  = useRef(0)
   const trace1TotalRef    = useRef(0)
   const trace1TickRef     = useRef(null)
+  // Fires mid-gap when the ring is about to move, so the switch always lands in
+  // quiet air rather than on top of the next turn.
+  const trace1MidRef      = useRef(null)
   const trace1PopupSeqRef = useRef(0)
-  const trace1PosRef      = useRef({ r: 5, c: 5, layer: 5 })
-  const trace1QuatRef     = useRef(initialPlaneQuat(0))
-  // Last 1–2 turn keys, carried across round boundaries to forbid 3 in a row.
-  const trace1TailRef     = useRef([])
+  // Post-round flight states (quat + grid pos + recent-turn tail) per aircraft,
+  // fed straight back into the next round's build so flight stays continuous.
+  const trace1StatesRef      = useRef([])
+  const trace1SchedulesRef   = useRef([])   // [planeIdx][turnIdx] → turn key
+  const trace1SelectionRef   = useRef([])   // [turnIdx] → tracked plane index
+  const trace1LiveQuatsRef   = useRef([])   // visual quats, advanced each tick
+  const trace1PlaneCountRef  = useRef(0)
 
   const gameRef  = useRef({})
   const timerRef = useRef(null)
@@ -894,37 +808,70 @@ export default function CbatPlaneTurn() {
   }, [phase, gameModeTrace1])
 
   // ── Trace 1 game loop ──────────────────────────────────────────────────────
-  const trace1Finalize = useCallback(() => {
+  const trace1ClearTimers = useCallback(() => {
     if (trace1TickRef.current) { clearTimeout(trace1TickRef.current); trace1TickRef.current = null }
+    if (trace1MidRef.current)  { clearTimeout(trace1MidRef.current);  trace1MidRef.current  = null }
+  }, [])
+
+  const trace1Finalize = useCallback(() => {
+    trace1ClearTimers()
     const elapsedMs = performance.now() - trace1StartedAtRef.current
     setPhase('finished')
+    // Debug run (admin skipped rounds) — never reaches the leaderboard.
+    if (trace1DebugRef.current) return
     submitTrace1Score(
       trace1ScoreRef.current,
       trace1CorrectRef.current,
       trace1TotalRef.current,
       Math.round(elapsedMs),
     )
-  }, [submitTrace1Score])
+  }, [submitTrace1Score, trace1ClearTimers])
 
-  // Apply a turn (rotate the plane) and arm the input window. In smooth-flight
-  // mode the scene integrates position continuously; we still track a grid-based
-  // position internally so the schedule generator can bound future turns to the
-  // arena, but we do NOT push position changes to the visible plane state.
-  const trace1ExecuteTurn = useCallback((turnKey) => {
-    const def = TRACE1_TURN_DEFS[turnKey]
-    const prevQuat = trace1QuatRef.current
-    const newQuat  = applyLocalRot(prevQuat, def.axis, def.angle)
-    trace1QuatRef.current = newQuat
+  // Build the next round's flight plans + tracked-aircraft track, and push the
+  // opening state to the scene. Aircraft respawn at their spread start slots
+  // only when the plane count changes (rounds 3/4/5) — otherwise flight carries
+  // over from the previous round exactly as it always has. The respawn happens
+  // behind the round banner, so the reposition isn't visible.
+  const trace1BeginRound = useCallback((roundIdx) => {
+    const count = TRACE1_PLANE_COUNT[roundIdx] ?? 1
+    const states = (count === trace1PlaneCountRef.current && trace1StatesRef.current.length)
+      ? trace1StatesRef.current
+      : trace1InitialPlaneStates(count)
 
-    // Advance the internal simulated position (used only by buildTrace1Round
-    // for next-round bounds checking). The visible plane is driven by the
-    // smooth-flight component, not by these grid coords.
-    const stepped = simulateForwardSteps(newQuat, trace1PosRef.current, 2) || trace1PosRef.current
-    trace1PosRef.current = stepped
+    const built = buildTrace1Round(states)
+    trace1StatesRef.current    = built.states       // end-of-round → next round's seed
+    trace1SchedulesRef.current = built.schedules
+    trace1SelectionRef.current = built.selection
+    trace1LiveQuatsRef.current = states.map(s => [...s.quat])
+    trace1PlaneCountRef.current = count
 
-    setPlaneQuat(newQuat)
+    setTrace1PlaneCount(count)
+    setTrace1Quats(trace1LiveQuatsRef.current)
+    setTrace1Selected(built.selection[0] ?? 0)
+    trace1RoundRef.current = roundIdx; setTrace1Round(roundIdx)
+    trace1TurnRef.current  = 0;        setTrace1Turn(0)
+  }, [])
 
-    trace1LastTurnRef.current = turnKey
+  // Turn every aircraft on the tick, then arm the input window against the
+  // tracked one. Positions aren't tracked here — the live execution replays the
+  // schedule the generator already simulated, so its end states are authoritative.
+  const trace1ExecuteTurn = useCallback((turnIdx) => {
+    const schedules = trace1SchedulesRef.current
+    const next = trace1LiveQuatsRef.current.map((q, i) => {
+      const turnKey = schedules[i]?.[turnIdx]
+      if (!turnKey) return q
+      const def = TRACE1_TURN_DEFS[turnKey]
+      return applyLocalRot(q, def.axis, def.angle)
+    })
+    trace1LiveQuatsRef.current = next
+    setTrace1Quats(next)
+
+    // Safety net: the ring normally moves mid-gap, but pin it to the scored
+    // aircraft at turn time so a dropped timer can never mis-score a turn.
+    const sel = trace1SelectionRef.current[turnIdx] ?? 0
+    setTrace1Selected(sel)
+
+    trace1LastTurnRef.current = schedules[sel]?.[turnIdx] ?? null
     trace1AwaitingRef.current = true
   }, [])
 
@@ -957,34 +904,96 @@ export default function CbatPlaneTurn() {
         // Round complete. Banner, then next round or finish.
         const completedRound = roundIdx + 1
         const isLast = completedRound >= TRACE1_ROUNDS
+        // From round 3 the pace is flat and aircraft are added instead, so the
+        // tagline has to name what actually changes.
+        const nextCount = TRACE1_PLANE_COUNT[completedRound] ?? 1
         setTrace1Banner(isLast
           ? { variant: 'final',    title: 'MISSION COMPLETE' }
-          : { variant: 'roundEnd', title: `ROUND ${completedRound} CLEAR`, nextRound: completedRound + 1 })
+          : {
+              variant: 'roundEnd',
+              title: `ROUND ${completedRound} CLEAR`,
+              nextRound: completedRound + 1,
+              nextLabel: nextCount > 1 ? `${nextCount} Aircraft` : 'Faster',
+            })
         trace1TickRef.current = setTimeout(() => {
           setTrace1Banner(null)
           if (isLast) { trace1Finalize(); return }
           const nextRoundIdx = roundIdx + 1
-          const built = buildTrace1Round(trace1QuatRef.current, trace1PosRef.current, trace1TailRef.current)
-          trace1TailRef.current = built.tail
-          trace1ScheduleRef.current = built.schedule
-          setTrace1Schedule(built.schedule)
-          trace1RoundRef.current = nextRoundIdx
-          setTrace1Round(nextRoundIdx)
-          trace1TurnRef.current = 0
-          setTrace1Turn(0)
+          trace1BeginRound(nextRoundIdx)
           trace1ScheduleTick(nextRoundIdx, 0)
         }, 2200)
         return
       }
 
-      // Execute the scheduled turn.
-      const turnKey = trace1ScheduleRef.current[turnIdx]
-      trace1ExecuteTurn(turnKey)
+      // Execute the scheduled turn on every aircraft.
+      trace1ExecuteTurn(turnIdx)
       trace1TurnRef.current = turnIdx + 1
       setTrace1Turn(turnIdx + 1)
+
+      // If the ring moves for the next turn, close this answer window early and
+      // move it mid-gap. That guarantees the switch lands in quiet air with
+      // TRACE1_SWITCH_PREVIEW_MS of warning before the new jet turns, instead of
+      // arriving at the same instant the player still owes an answer.
+      const sel     = trace1SelectionRef.current
+      const nextIdx = turnIdx + 1
+      if (nextIdx < TRACE1_TURNS_PER_ROUND && sel[nextIdx] !== sel[turnIdx]) {
+        const preview = Math.min(TRACE1_SWITCH_PREVIEW_MS, Math.round(speed * 0.45))
+        trace1MidRef.current = setTimeout(() => {
+          if (trace1AwaitingRef.current) {
+            trace1AwaitingRef.current = false
+            trace1ApplyScore(-1)
+          }
+          setTrace1Selected(sel[nextIdx])
+        }, Math.max(0, speed - preview))
+      }
+
       trace1ScheduleTick(roundIdx, turnIdx + 1)
     }, speed)
-  }, [trace1ApplyScore, trace1ExecuteTurn, trace1Finalize])
+  }, [trace1ApplyScore, trace1ExecuteTurn, trace1Finalize, trace1BeginRound])
+
+  // ── Admin round-skip ───────────────────────────────────────────────────────
+  // Jump straight into a round without playing the ones before it. Wipes the
+  // run's tallies (the earlier rounds never happened) and flags it as debug, so
+  // the score is never submitted.
+  const trace1JumpToRound = useCallback((roundNum) => {
+    trace1ClearTimers()
+    trace1DebugRef.current = true
+    setTrace1Debug(true)
+
+    trace1ScoreRef.current   = 0
+    trace1CorrectRef.current  = 0; setTrace1Correct(0)
+    trace1TotalRef.current    = 0; setTrace1Total(0)
+    trace1AwaitingRef.current = false
+    trace1LastTurnRef.current = null
+    setTrace1Banner(null)
+    setTrace1Popup(null)
+    trace1StartedAtRef.current = performance.now()
+
+    // Force a respawn so the target round's aircraft appear on their spread
+    // start slots rather than wherever the previous round left them.
+    trace1PlaneCountRef.current = 0
+    trace1StatesRef.current     = []
+    setTrace1JumpNonce(n => n + 1)
+
+    const roundIdx = roundNum - 1
+    trace1BeginRound(roundIdx)
+    // Same settle delay as a normal boot, so the jets are visibly airborne
+    // before the first turn fires.
+    trace1TickRef.current = setTimeout(() => trace1ScheduleTick(roundIdx, 0), 800)
+  }, [trace1BeginRound, trace1ClearTimers, trace1ScheduleTick])
+
+  // Typed cheat codes, DPT/ACT-style: 111 → round 1 … 555 → round 5. Admin only.
+  // Digits never collide with play here — Trace 1's only input is the arrow keys.
+  useEffect(() => {
+    if (!gameModeTrace1 || phase !== 'playing' || !user?.isAdmin) return
+    const onKeyDown = (e) => {
+      const { buffer, round } = pushCheatDigit(trace1CheatBufRef.current, e.key, Date.now())
+      trace1CheatBufRef.current = buffer
+      if (round != null) trace1JumpToRound(round)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [gameModeTrace1, phase, user, trace1JumpToRound])
 
   // Boot the Trace 1 loop whenever we enter the playing phase in trace1 mode.
   // `trace1Generation` is a manual bump so handlePlayAgain can restart the loop
@@ -993,20 +1002,15 @@ export default function CbatPlaneTurn() {
     if (phase !== 'playing' || !gameModeTrace1) return
     // Initial state — smooth-flight component owns the visible position, but
     // we still init plane state so existing render paths have valid values.
-    trace1QuatRef.current = initialPlaneQuat(0)
-    trace1PosRef.current  = { r: 5, c: 5, layer: 5 }
     setPlane({ r: 5, c: 5, dir: 0, angle: 0 })
     setLayer(5)
-    setPlaneQuat(trace1QuatRef.current)
     setMoveMode(0)
 
-    trace1TailRef.current = []
-    const built = buildTrace1Round(trace1QuatRef.current, trace1PosRef.current)
-    trace1TailRef.current = built.tail
-    trace1ScheduleRef.current = built.schedule
-    setTrace1Schedule(built.schedule)
-    trace1RoundRef.current = 0; setTrace1Round(0)
-    trace1TurnRef.current  = 0; setTrace1Turn(0)
+    // Force a respawn on round 0 regardless of what the last run left behind.
+    trace1PlaneCountRef.current = 0
+    trace1StatesRef.current     = []
+    trace1BeginRound(0)
+
     trace1ScoreRef.current = 0
     trace1CorrectRef.current = 0; setTrace1Correct(0)
     trace1TotalRef.current = 0; setTrace1Total(0)
@@ -1020,9 +1024,9 @@ export default function CbatPlaneTurn() {
 
     return () => {
       clearTimeout(startTimeout)
-      if (trace1TickRef.current) { clearTimeout(trace1TickRef.current); trace1TickRef.current = null }
+      trace1ClearTimers()
     }
-  }, [phase, gameModeTrace1, trace1Generation, trace1ScheduleTick])
+  }, [phase, gameModeTrace1, trace1Generation, trace1ScheduleTick, trace1BeginRound, trace1ClearTimers])
 
   // Trace 1 input — keyboard + D-pad share this handler.
   const trace1HandleInput = useCallback((turnKey) => {
@@ -1066,9 +1070,30 @@ export default function CbatPlaneTurn() {
     trace1TurnRef.current    = 0; setTrace1Turn(0)
     trace1AwaitingRef.current = false
     trace1LastTurnRef.current = null
+    setTrace1PlaneCount(1)
+    setTrace1Selected(0)
     setTrace1Banner(null)
     setTrace1Popup(null)
+    // A fresh run is a clean run — the debug flag doesn't survive Play Again.
+    trace1DebugRef.current = false
+    setTrace1Debug(false)
+    trace1CheatBufRef.current = emptyCheatBuffer()
   }, [])
+
+  // Per-aircraft render data. Colour is null in the single-aircraft rounds, so
+  // rounds 1–2 keep the model's own livery exactly as before.
+  const trace1Aircraft = useMemo(
+    () => trace1InitialPlaneStates(trace1PlaneCount).map((p, i) => ({
+      id:         p.color?.key ?? 'solo',
+      hex:        p.color?.hex ?? null,
+      label:      p.color?.label ?? null,
+      startWorld: p.startWorld,
+      quat:       trace1Quats[i] ?? p.quat,
+    })),
+    [trace1PlaneCount, trace1Quats],
+  )
+  // Null in single-aircraft rounds — nothing to disambiguate, so no HUD chip.
+  const trace1Tracked = trace1PlaneCount > 1 ? trace1Aircraft[trace1Selected] : null
 
   // Handlers
   const handleSelect = (a) => {
@@ -1290,14 +1315,16 @@ export default function CbatPlaneTurn() {
               <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
                 <p className="text-4xl mb-2">🛩️</p>
                 <p className="text-xl font-extrabold text-white mb-1">Trace 1 Complete</p>
-                <p className="text-sm text-slate-400 mb-5">All 5 rounds finished.</p>
+                {trace1Debug
+                  ? <p className="text-xs text-amber-400 mb-5">DEBUG MODE · run not submitted to leaderboard</p>
+                  : <p className="text-sm text-slate-400 mb-5">All {TRACE1_ROUNDS} rounds finished.</p>}
 
                 <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 sm:p-5">
                   <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
                   <div className="flex justify-center items-center gap-4 sm:gap-8">
                     <div className="min-w-0">
                       <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-300">
-                        {trace1Correct}<span className="text-slate-400">/40</span>
+                        {trace1Correct}<span className="text-slate-400">/{TRACE1_TOTAL_TURNS}</span>
                       </p>
                       <p className="text-xs text-slate-500 mt-1">correct</p>
                     </div>
@@ -1353,7 +1380,7 @@ export default function CbatPlaneTurn() {
           {(phase === 'playing' || phase === 'over' || phase === 'intro') && selected && (
             <div className="w-full max-w-md">
               {gameModeTrace1
-                ? <Trace1HUD round={trace1Round} turn={trace1Turn} />
+                ? <Trace1HUD round={trace1Round} turn={trace1Turn} tracked={trace1Tracked} debug={trace1Debug} />
                 : <HUD collected={collected} rotations={rotations} elapsed={elapsed} level={level} />}
 
               {/* ── 3D Game (Practise 3D + Trace 1 share the 3D arena) ── */}
@@ -1390,13 +1417,19 @@ export default function CbatPlaneTurn() {
                       onError={() => {}}
                       onReady={handle3DReady}
                       traceFlight={gameModeTrace1}
+                      traceAircraft={gameModeTrace1 ? trace1Aircraft : undefined}
+                      traceSelected={trace1Selected}
                       // 2 cells of forward distance per scheduled turn → speed
-                      // (cells/sec) = 2000 / tickMs. Scales naturally per round.
+                      // (cells/sec) = 2000 / tickMs. Because the speed table is
+                      // flat from round 2, airspeed stops rising there too.
                       traceFlightSpeed={gameModeTrace1
                         ? (2000 / (TRACE1_SPEED_TABLE[trace1Round] ?? TRACE1_SPEED_TABLE[TRACE1_SPEED_TABLE.length - 1]))
                         : 0}
                       traceFlightActive={gameModeTrace1 && phase === 'playing'}
-                      traceFlightResetKey={trace1Generation}
+                      // Plane count is part of the key so every jet respawns at
+                      // its spread start slot when aircraft are added; the jump
+                      // nonce covers admin skips that keep the same count.
+                      traceFlightResetKey={`${trace1Generation}-${trace1PlaneCount}-${trace1JumpNonce}`}
                     />
                   </Suspense>
 
@@ -1450,7 +1483,9 @@ export default function CbatPlaneTurn() {
                             animate={{ letterSpacing: '0.25em', opacity: 1 }}
                             transition={{ duration: 0.4, delay: 0.05 }}
                             className={`text-3xl sm:text-4xl font-extrabold uppercase ${
-                              trace1Banner.variant === 'final' ? 'text-amber-200' : 'text-white'
+                              // amber-200 is the DARK end of this theme's inverted
+                              // amber scale (#4a3400) — unreadable on the navy card.
+                              trace1Banner.variant === 'final' ? 'text-amber-800' : 'text-white'
                             }`}
                             style={{
                               textShadow: trace1Banner.variant === 'final'
@@ -1469,7 +1504,7 @@ export default function CbatPlaneTurn() {
                               transition={{ delay: 0.55, duration: 0.3 }}
                               className="mt-3 text-sm sm:text-base font-extrabold uppercase tracking-[0.25em] text-brand-300"
                             >
-                              Round {trace1Banner.nextRound} <span className="text-amber-300">·</span> Faster
+                              Round {trace1Banner.nextRound} <span className="text-amber-300">·</span> {trace1Banner.nextLabel}
                             </motion.p>
                           )}
                           {trace1Banner.variant === 'final' && (
@@ -1723,7 +1758,9 @@ export default function CbatPlaneTurn() {
               {/* Instructions hint */}
               <p className="text-center text-[10px] text-slate-500 mt-3">
                 {gameModeTrace1
-                  ? <>After each turn, press the arrow the plane just took</>
+                  ? (trace1PlaneCount > 1
+                      ? <>After each turn, press the arrow the <span className="font-bold" style={{ color: trace1Tracked?.hex }}>ringed</span> aircraft just took</>
+                      : <>After each turn, press the arrow the plane just took</>)
                   : gameMode3D
                     ? <>Use <span className="font-mono text-slate-400">←→</span> to turn &middot; <span className="font-mono text-slate-400">↓</span> climb &middot; <span className="font-mono text-slate-400">↑</span> dive (stick)</>
                     : <>Use <span className="font-mono text-slate-400">&larr;</span> <span className="font-mono text-slate-400">&rarr;</span> arrow keys or tap the buttons to rotate</>

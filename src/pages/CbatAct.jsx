@@ -31,7 +31,7 @@ import {
   scoreCodeRecall,
 } from '../utils/cbat/cbatActPlan'
 import CodeRecall from './CbatAct/CodeRecall'
-import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/actRoundCheat'
+import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 5

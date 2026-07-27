@@ -1,5 +1,5 @@
 import { useRef, useEffect, Suspense, Component, useMemo } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 
@@ -69,19 +69,93 @@ function AircraftModel3D({ url, quat, onReady }) {
   return <primitive ref={meshRef} object={clonedScene} scale={[0.7, 0.7, 0.7]} />
 }
 
+// Marks the aircraft the player is currently being scored on. Billboarded to
+// the camera so it always reads as a flat ring, and drawn with depthTest off so
+// it stays visible when another jet crosses in front.
+//
+// White rather than the jet's own tint: the ring is a cursor, not a label, so it
+// has to stay legible over every airframe colour and against the bright sky.
+function SelectionRing() {
+  const ringRef = useRef()
+  const { camera } = useThree()
+  useFrame(({ clock }) => {
+    if (!ringRef.current) return
+    ringRef.current.quaternion.copy(camera.quaternion)
+    ringRef.current.scale.setScalar(1 + Math.sin(clock.elapsedTime * 4) * 0.08)
+  })
+  return (
+    <mesh ref={ringRef} renderOrder={10}>
+      <ringGeometry args={[0.86, 0.92, 64]} />
+      <meshBasicMaterial
+        color="#ffffff"
+        transparent
+        opacity={0.95}
+        side={THREE.DoubleSide}
+        depthTest={false}
+        depthWrite={false}
+      />
+    </mesh>
+  )
+}
+
+// Dollies the camera between framings without remounting the Canvas (the
+// `camera` prop is only read at creation). Lerped so the pull-back when extra
+// aircraft join reads as a smooth dolly rather than a cut.
+function CameraRig({ z, fov, lookY }) {
+  // The camera comes off the per-frame state rather than useThree() so it stays
+  // a plain callback argument — the same shape as the Canvas onCreated handler.
+  // useFrame re-subscribes when the callback identity changes, so the closure
+  // always sees the current target without stashing it in a ref.
+  useFrame(({ camera }) => {
+    const dz = z   - camera.position.z
+    const df = fov - camera.fov
+    if (Math.abs(dz) < 0.005 && Math.abs(df) < 0.02) return
+    camera.position.z += dz * 0.06
+    camera.fov        += df * 0.06
+    camera.updateProjectionMatrix()
+    camera.lookAt(0, lookY, 0)
+  })
+  return null
+}
+
 // Smooth-flight aircraft used by Trace 1: position integrates each frame so
 // the plane visibly flies between rotation events instead of teleporting
 // grid-cell to grid-cell. Rotation still slerps to the target quaternion.
-function SmoothFlightAircraft({ url, quat, speed, active, resetKey, onReady }) {
+//
+// `hex` tints the airframe so multiple jets can be told apart (null = the
+// model's own livery, used for the single-aircraft rounds). `startWorld` is the
+// spawn point, which must match the schedule generator's start slot so the
+// planner's bounds projections and the visible position stay aligned.
+function SmoothFlightAircraft({ url, quat, hex, startWorld, selected, speed, active, resetKey, onReady }) {
   const { scene } = useGLTF(url)
-  const clonedScene = useMemo(() => scene.clone(), [scene])
+  const clonedScene = useMemo(() => {
+    const c = scene.clone(true)
+    if (!hex) return c
+    const tint = new THREE.Color(hex)
+    c.traverse(o => {
+      if (!o.isMesh || !o.material) return
+      const applyTo = (mat) => {
+        const m = mat.clone()
+        m.color = tint.clone()
+        m.emissive = tint.clone().multiplyScalar(0.4)
+        m.emissiveIntensity = 0.6
+        m.metalness = 0.1
+        m.roughness = 0.55
+        m.map = null
+        m.needsUpdate = true
+        return m
+      }
+      o.material = Array.isArray(o.material) ? o.material.map(applyTo) : applyTo(o.material)
+    })
+    return c
+  }, [scene, hex])
+
   const meshRef     = useRef()
   const groupRef    = useRef()
   const targetQuat  = useRef(new THREE.Quaternion())
   const currentQuat = useRef(new THREE.Quaternion())
-  // Match the schedule generator's grid origin of (5, 5, 5) → world (0.5, 5, 0.5)
-  // so the planner's bounds projections and the visible position stay aligned.
-  const worldPos    = useRef(new THREE.Vector3(0.5, 5, 0.5))
+  const spawn       = startWorld || [0.5, 5, 0.5]
+  const worldPos    = useRef(new THREE.Vector3(spawn[0], spawn[1], spawn[2]))
   const forwardTmp  = useRef(new THREE.Vector3())
   const initialised = useRef(false)
   const lastReset   = useRef(resetKey)
@@ -90,10 +164,10 @@ function SmoothFlightAircraft({ url, quat, speed, active, resetKey, onReady }) {
 
   useEffect(() => {
     if (resetKey !== lastReset.current) {
-      worldPos.current.set(0.5, 5, 0.5)
+      worldPos.current.set(spawn[0], spawn[1], spawn[2])
       lastReset.current = resetKey
     }
-  }, [resetKey])
+  }, [resetKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!quat || quat.length < 4) return
@@ -135,6 +209,7 @@ function SmoothFlightAircraft({ url, quat, speed, active, resetKey, onReady }) {
   return (
     <group ref={groupRef}>
       <primitive ref={meshRef} object={clonedScene} scale={[1.05, 1.05, 1.05]} />
+      {selected && <SelectionRing />}
     </group>
   )
 }
@@ -198,9 +273,13 @@ function NextPosPlane({ position, axis, inBounds }) {
 export default function PlaneTurn3DScene({
   plane, pkg, modelUrl, onError, onReady,
   // Trace 1 smooth-flight overrides — when traceFlight is true, the aircraft
-  // integrates position continuously inside the scene rather than snapping to
+  // integrate position continuously inside the scene rather than snapping to
   // grid cells. NextPosPlane (a discrete-grid concept) is suppressed.
   traceFlight = false,
+  // [{ id, hex, quat, startWorld }] — one entry per aircraft on screen.
+  traceAircraft = [],
+  // Index into traceAircraft of the jet the player is being scored on.
+  traceSelected = 0,
   traceFlightSpeed = 0,
   traceFlightActive = false,
   traceFlightResetKey = 0,
@@ -257,7 +336,14 @@ export default function PlaneTurn3DScene({
   // We need that ≥ 2.9 with at least ~0.8 cells of margin so the plane
   // never clips at the corners. z=10 + fov=55 → (10-2.9)*tan(27.5°)=3.70 →
   // 0.80 of safe margin. Plane appears ~33% larger than the legacy framing.
-  const cameraPos = traceFlight ? [0, arenaY, 10] : [0, arenaY, 12]
+  //
+  // Multiple aircraft spread to the full soft-clamp box (x/z ±3.5, y 1–8), so
+  // the tight single-jet framing would crop the corners. Pulling back to z=12.5
+  // gives (12.5-3.5)*tan(27.5°)=4.69 — comfortably past the 3.5 needed. The
+  // dolly between the two framings is lerped by <CameraRig>.
+  const multiPlane = traceFlight && traceAircraft.length > 1
+  const traceCamZ  = multiPlane ? 12.5 : 10
+  const cameraPos = traceFlight ? [0, arenaY, traceCamZ] : [0, arenaY, 12]
   const cameraFov = traceFlight ? 55 : 60
 
   return (
@@ -290,21 +376,28 @@ export default function PlaneTurn3DScene({
         </>
       )}
 
+      {traceFlight && <CameraRig z={traceCamZ} fov={cameraFov} lookY={arenaY} />}
+
       {modelUrl && (
         traceFlight ? (
-          <Suspense fallback={null}>
-            <ErrorCatcher onError={onError}>
-              <SmoothFlightAircraft
-                key={modelUrl}
-                url={modelUrl}
-                quat={plane.quat}
-                speed={traceFlightSpeed}
-                active={traceFlightActive}
-                resetKey={traceFlightResetKey}
-                onReady={onReady}
-              />
-            </ErrorCatcher>
-          </Suspense>
+          traceAircraft.map((a, idx) => (
+            <Suspense key={`${modelUrl}-${a.id}`} fallback={null}>
+              <ErrorCatcher onError={onError}>
+                <SmoothFlightAircraft
+                  url={modelUrl}
+                  quat={a.quat}
+                  hex={a.hex}
+                  startWorld={a.startWorld}
+                  // A lone aircraft is implicitly the tracked one — no ring.
+                  selected={multiPlane && idx === traceSelected}
+                  speed={traceFlightSpeed}
+                  active={traceFlightActive}
+                  resetKey={traceFlightResetKey}
+                  onReady={idx === 0 ? onReady : undefined}
+                />
+              </ErrorCatcher>
+            </Suspense>
+          ))
         ) : (
           <group position={[px, py, pz]}>
             <Suspense fallback={null}>

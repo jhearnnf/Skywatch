@@ -4,7 +4,8 @@ import {
   CHEAT_IDLE_MS,
   emptyCheatBuffer,
   pushCheatDigit,
-} from '../actRoundCheat'
+} from '../roundCheat'
+import { TRACE1_ROUNDS } from '../trace1Generator'
 
 // Type a string of digits in quick succession, returning the last result.
 function type(keys, { start = 1000, gap = 100, buffer = emptyCheatBuffer() } = {}) {
@@ -20,6 +21,13 @@ function type(keys, { start = 1000, gap = 100, buffer = emptyCheatBuffer() } = {
 describe('ADMIN_ROUND_CHEATS', () => {
   it('covers all five ACT rounds, DPT-style', () => {
     expect(ADMIN_ROUND_CHEATS).toEqual({ 111: 1, 222: 2, 333: 3, 444: 4, 555: 5 })
+  })
+
+  it('covers every Trace 1 round too', () => {
+    // Trace 1 shares this table, so a code must exist for each of its rounds.
+    for (let round = 1; round <= TRACE1_ROUNDS; round++) {
+      expect(Object.values(ADMIN_ROUND_CHEATS)).toContain(round)
+    }
   })
 })
 
