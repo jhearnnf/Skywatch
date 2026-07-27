@@ -3632,14 +3632,19 @@ function UsersTab({ API }) {
   }
 
   const sortedUsers = useMemo(() => {
+    // A tester still owing a game today is the row worth chasing, so they lead
+    // their group — matching the idle border the row already gets.
+    const owesGame = u => u.isTester && !playedToday(u.lastTestGameAt)
     const priority = u => {
       if (u.isAdmin) return 3
       const s = onlineStatus(u.lastSeen)
       if (s === 'live') return 2
       if (s === 'away') return 1
-      return u.isTester ? 0.5 : 0   // offline testers sit atop the offline group
+      if (!u.isTester) return 0     // offline testers sit atop the offline group
+      return owesGame(u) ? 0.75 : 0.5
     }
-    return [...users].sort((a, b) => priority(b) - priority(a))
+    return [...users].sort((a, b) =>
+      priority(b) - priority(a) || owesGame(b) - owesGame(a))
   }, [users])
 
   // Flag/unflag a user as a tester. Saves instantly (no confirm) and optimistically

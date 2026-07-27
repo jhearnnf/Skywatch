@@ -144,4 +144,38 @@ describe('Admin — Users tab: tester flag', () => {
     // tester row appears before plain row in the DOM
     expect(testerEl.compareDocumentPosition(plainEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
+
+  it('sorts a tester who owes a game today above one who has played', async () => {
+    const played = {
+      ...OFFLINE_TESTER, _id: 'u3', agentNumber: '003', email: 'played@test.com',
+      lastTestGameAt: new Date().toISOString(),
+    }
+    // Array order puts the played tester first; the idle one must still lead.
+    global.fetch = setupFetch([played, OFFLINE_TESTER])
+
+    render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('tester@test.com'))
+
+    const idleEl   = screen.getByText('tester@test.com')
+    const playedEl = screen.getByText('played@test.com')
+    expect(idleEl.compareDocumentPosition(playedEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps online status above tester urgency for a live tester', async () => {
+    // Live tester who played today still outranks an offline tester who has not.
+    const liveTester = {
+      ...OFFLINE_TESTER, _id: 'u4', agentNumber: '004', email: 'live@test.com',
+      lastSeen: new Date().toISOString(), lastTestGameAt: new Date().toISOString(),
+    }
+    global.fetch = setupFetch([OFFLINE_TESTER, liveTester])
+
+    render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('live@test.com'))
+
+    const liveEl = screen.getByText('live@test.com')
+    const idleEl = screen.getByText('tester@test.com')
+    expect(liveEl.compareDocumentPosition(idleEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
 })
