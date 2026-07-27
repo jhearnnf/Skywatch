@@ -2,6 +2,7 @@ import { render, screen, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatCut from '../CbatCut'
 import { press, START_SELECTOR, ANSWER_SELECTOR } from '../../components/landingGames/demoDriver'
+import { CbatDemoContext } from '../../utils/cbat/demoMode'
 
 // Swapping which system each display shows is the whole game — a real player
 // does it constantly. The landing page's demo driver can only press controls
@@ -55,5 +56,27 @@ describe('CUT — driveable by the demo wall', () => {
     act(() => { press(nav) })
 
     expect(screen.getAllByText('Required').length).toBeGreaterThan(0)
+  })
+
+  // The column is a fixed 300px of a 900px stage — a third of the tile spent on
+  // a score log nobody can read at that size.
+  it('starts with the commentary column minimised in a tile', () => {
+    localStorage.setItem('cbat:cut:commentary', '1')
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch: vi.fn(async () => ({ ok: true, json: async () => ({}) })) })
+    const { container } = render(
+      <CbatDemoContext.Provider value={{ portalTarget: null }}>
+        <CbatCut />
+      </CbatDemoContext.Provider>,
+    )
+    act(() => { press(container.querySelector(START_SELECTOR)) })
+
+    expect(screen.getByTitle('Show commentary')).toBeTruthy()
+  })
+
+  it('respects the saved preference for a real player', () => {
+    localStorage.setItem('cbat:cut:commentary', '1')
+    const { container } = startedGame()
+    expect(container.querySelector('[title="Show commentary"]')).toBeNull()
+    expect(screen.getByTitle('Minimise')).toBeTruthy()
   })
 })

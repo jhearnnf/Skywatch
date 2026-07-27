@@ -16,6 +16,7 @@ import {
   PRESS_LOW, PRESS_HIGH, CODE_SUBMIT_WINDOW,
 } from '../utils/cbat/cutSim'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import { useCbatDemo } from '../utils/cbat/demoMode'
 
 // ── Panels ───────────────────────────────────────────────────────────────────
 function Panel({ title, accent = '#5baaff', children, pad = true }) {
@@ -375,12 +376,18 @@ export default function CbatCut() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
   const { enterImmersive, exitImmersive } = useGameChrome()
+  const isDemo = !!useCbatDemo()
 
   const [phase, setPhase] = useState('intro') // intro | playing | results
   const [sel1, setSel1] = useState('message')
   const [sel2, setSel2] = useState('engine')
-  // Commentary column open/minimised — persisted so the choice sticks.
+  // Commentary column open/minimised — persisted so the choice sticks. A demo
+  // tile starts it minimised whatever the visitor's own preference is: the
+  // column is a fixed 300px of a 900px stage, and a landing card has better
+  // uses for that width than a scrolling score log nobody can read at tile
+  // size.
   const [commentaryOpen, setCommentaryOpen] = useState(() => {
+    if (isDemo) return false
     try { return localStorage.getItem('cbat:cut:commentary') !== '0' } catch { return true }
   })
   const toggleCommentary = useCallback(() => {
