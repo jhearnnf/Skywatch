@@ -2658,6 +2658,14 @@ router.post('/cbat/act/result', protect, async (req, res) => {
   }
 });
 
+// How many deduped rows to pull through the users $lookup before trimming to
+// the visible 20. The join's $unwind silently drops any row whose user account
+// has since been deleted, so trimming to 20 BEFORE the join yields a short
+// board — which padLeaderboard then fills with a demo row, swapping a real
+// player for a fake one. Over-fetching absorbs the orphans; $group has already
+// collapsed the collection to one row per user, so the extra rows are cheap.
+const LEADERBOARD_OVERFETCH = 100;
+
 // Generic CBAT leaderboard handler — reused by all games.
 // Every session is a standalone entry — a user can occupy multiple rows if
 // several of their runs land in the top 20.
@@ -2690,7 +2698,7 @@ async function cbatLeaderboard(req, res, gameKey) {
       },
       // $group doesn't preserve order — re-sort the deduped rows.
       { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
-      { $limit: 20 },
+      { $limit: LEADERBOARD_OVERFETCH },
       {
         $lookup: {
           from: 'users',
@@ -2699,7 +2707,11 @@ async function cbatLeaderboard(req, res, gameKey) {
           as: 'user',
         },
       },
+      // Drops results belonging to deleted accounts, then trim to the visible
+      // board — so an orphaned row is replaced by the next real player rather
+      // than leaving a hole for a demo row (see LEADERBOARD_OVERFETCH).
       { $unwind: '$user' },
+      { $limit: 20 },
       {
         $project: {
           _id: '$sessionId',
@@ -2762,6 +2774,11 @@ async function cbatLeaderboard(req, res, gameKey) {
                     ],
                   },
             },
+            // Deleted accounts no longer appear on the board, so they must not
+            // count as ahead of you either — otherwise a user is told "rank 21"
+            // while the board above them shows only 20 real rows.
+            { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+            { $match: { 'user.0': { $exists: true } } },
             { $count: 'n' },
           ]);
           const countBetter = betterAgg[0]?.n || 0;
@@ -2826,9 +2843,13 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
       { $match: { ...(modeFilter ?? {}), createdAt: { $gte: weekStart } } },
       groupStage,
       { $sort: { weekTotal: -1, lastPlayed: -1 } },
-      { $limit: 20 },
+      // Over-fetch, drop deleted accounts, then trim — same reason as the
+      // all-time board (see LEADERBOARD_OVERFETCH): a short board here drags the
+      // real count under WEEKLY_SPARSE_THRESHOLD and summons demo rows.
+      { $limit: LEADERBOARD_OVERFETCH },
       { $lookup: { from: 'users', localField: 'userId', foreignField: '_id', as: 'user' } },
       { $unwind: '$user' },
+      { $limit: 20 },
       {
         $project: {
           _id: '$userId',
@@ -2862,6 +2883,10 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
             { $match: { ...(modeFilter ?? {}), createdAt: { $gte: weekStart } } },
             { $group: { _id: '$userId', weekTotal: { $sum: valueExpr } } },
             { $match: { weekTotal: { $gt: mine.weekTotal } } },
+            // Deleted accounts are off the board, so they don't rank ahead of
+            // you either — keeps this rank consistent with the board above.
+            { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+            { $match: { 'user.0': { $exists: true } } },
             { $count: 'n' },
           ]);
           myWeekly = {
