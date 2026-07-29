@@ -8,6 +8,9 @@ import LeaderboardRow, { rowCols, rowPad } from './LeaderboardRow'
 import CbatProgressChart from './CbatProgressChart'
 import { cbatTrend, isCbatNewBest } from '../utils/cbatProgress'
 import useCountUp from '../hooks/useCountUp'
+import { isOnline, onNetworkChange } from '../lib/net'
+import { onApiHealthChange, getApiHealth } from '../lib/apiHealth'
+import { onOutboxChange, pendingCount } from '../lib/cbatOutbox'
 
 // Shared CBAT game-completion screen. Every CBAT game renders this at
 // phase === 'results', passing its results breakdown as `children` (with its
@@ -18,8 +21,9 @@ import useCountUp from '../hooks/useCountUp'
 // board), the game-specific breakdown, then a single unified action row. There
 // is no separate "View Results" step — the breakdown is always visible inline.
 //
-// Offline (queued): the score is saved locally but not yet ranked, so we skip
-// the weekly fetch and tell the user their rank updates on reconnect.
+// Queued: the score is saved locally but not yet ranked, so we skip the weekly
+// and progress fetches and render <QueuedScoreNote/> in their place — it names
+// whichever of offline / signed out / can't-reach-us is holding the upload up.
 //
 // Props:
 //   gameKey      — leaderboard key (e.g. 'target', 'plane-turn-2d')
@@ -245,6 +249,74 @@ function ProgressTrend({ progress, cfg }) {
   )
 }
 
+// Confirmation that a run which couldn't be submitted is nonetheless safe.
+//
+// This is the one moment the reassurance is worth anything — the player has
+// just finished and is looking at a score the server has never seen. The global
+// sync pill used to cover it, but it is fixed-position and this screen is
+// inside a game, so it was taking space over the results; it now shows on the
+// CBAT menu only (see OfflineStatus). Inline, in flow, is the right shape here.
+//
+// Says which of the three things is actually blocking the upload, because they
+// need different things from the user: reconnect, sign in, or nothing at all.
+// Vague copy here is what let a five-week outage go unnoticed.
+function QueuedScoreNote() {
+  const { user } = useAuth()
+  const [online,  setOnline]  = useState(isOnline())
+  const [health,  setHealth]  = useState(getApiHealth)
+  const [pending, setPending] = useState(0)
+
+  useEffect(() => onNetworkChange(setOnline), [])
+  useEffect(() => onApiHealthChange(setHealth), [])
+
+  // Owner-scoped, like the pill's: on a shared device another account's queued
+  // runs are not ours to count (see cbatOutbox.pendingCount).
+  const userId = user?._id ?? null
+  useEffect(() => {
+    let active = true
+    const refresh = () => { Promise.resolve(pendingCount(userId)).then((n) => { if (active) setPending(n) }) }
+    refresh()
+    const off = onOutboxChange(refresh)
+    return () => { active = false; off() }
+  }, [userId])
+
+  const noSession = !user || health.status === 'signedOut'
+
+  let reason, cta = null
+  if (!online) {
+    // Offline first: reconnecting is the precondition for the other two, and a
+    // "Sign in" link is useless without a network.
+    reason = 'Uploads as soon as you reconnect.'
+  } else if (noSession) {
+    reason = 'Sign in and it uploads from here.'
+    cta = <Link to="/login" className="text-brand-300 font-bold underline">Sign in</Link>
+  } else if (health.status === 'unreachable') {
+    reason = "We can't reach Skywatch right now — it uploads by itself once we can."
+  } else {
+    reason = 'Uploading in the background.'
+  }
+
+  // Only ever the *other* runs: this one is already accounted for by the
+  // headline, and "1 run waiting" next to "your score is saved" reads as a
+  // second, unexplained thing.
+  const others = Math.max(0, pending - 1)
+
+  return (
+    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-1 text-left">
+      <p className="text-xs text-amber-300 font-bold">📡 Score saved on this device</p>
+      <p className="text-[11px] text-slate-400 mt-1">
+        {reason} Your weekly rank updates then too.
+      </p>
+      {others > 0 && (
+        <p className="text-[11px] text-slate-400 mt-1">
+          {others} earlier {others === 1 ? 'run is' : 'runs are'} waiting as well.
+        </p>
+      )}
+      {cta && <p className="text-[11px] mt-2">{cta}</p>}
+    </div>
+  )
+}
+
 export default function CbatGameOver({
   gameKey, score, scoreSaved, queued, personalBest, onPlayAgain, extraActions = [], children,
 }) {
@@ -376,11 +448,7 @@ export default function CbatGameOver({
             <div className="w-6 h-6 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
-        {weeklyState === 'offline' && (
-          <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-1">
-            <p className="text-xs text-amber-300">📡 Saved offline — your weekly rank updates when you reconnect.</p>
-          </div>
-        )}
+        {queued && <QueuedScoreNote />}
 
         {scoreSaved && weeklyState !== 'offline' && (
           <p className="text-[11px] text-green-400 mt-1">✓ Score saved</p>

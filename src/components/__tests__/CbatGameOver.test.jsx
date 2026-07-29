@@ -5,6 +5,25 @@ import CbatGameOver from '../CbatGameOver'
 const mockUseAuth = vi.hoisted(() => vi.fn())
 const mockChrome = vi.hoisted(() => ({ enterGameOver: vi.fn(), exitGameOver: vi.fn() }))
 
+// The queued-score note reads live connectivity, API health and the outbox
+// depth. Stubbed so each case can pin exactly one reason for the score not
+// having uploaded — that distinction is the whole point of the note.
+const mockIsOnline     = vi.hoisted(() => vi.fn(() => true))
+const mockApiHealth    = vi.hoisted(() => vi.fn(() => ({ status: 'ok' })))
+const mockPendingCount = vi.hoisted(() => vi.fn(async () => 1))
+vi.mock('../../lib/net', () => ({
+  isOnline: mockIsOnline,
+  onNetworkChange: () => () => {},
+}))
+vi.mock('../../lib/apiHealth', () => ({
+  getApiHealth: mockApiHealth,
+  onApiHealthChange: () => () => {},
+}))
+vi.mock('../../lib/cbatOutbox', () => ({
+  pendingCount: mockPendingCount,
+  onOutboxChange: () => () => {},
+}))
+
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to, state }) => (
     <a href={to} data-state={state ? JSON.stringify(state) : undefined}>{children}</a>
@@ -36,6 +55,11 @@ beforeEach(() => {
   let t = 0
   vi.stubGlobal('requestAnimationFrame', (cb) => { t += 800; cb(t); return t })
   vi.stubGlobal('cancelAnimationFrame', () => {})
+  // Healthy defaults — mockReturnValue survives clearAllMocks, so each case has
+  // to start from a known baseline rather than inherit the last one's.
+  mockIsOnline.mockReturnValue(true)
+  mockApiHealth.mockReturnValue({ status: 'ok' })
+  mockPendingCount.mockResolvedValue(1)
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -399,10 +423,93 @@ describe('CbatGameOver', () => {
   it('skips the weekly fetch and shows an offline notice when queued', async () => {
     const apiFetch = vi.fn()
     setup({ apiFetch })
+    mockIsOnline.mockReturnValue(false)
     render(<CbatGameOver {...baseProps} queued={true} scoreSaved={false}><div /></CbatGameOver>)
 
-    await waitFor(() => expect(screen.getByText(/updates when you reconnect/i)).toBeDefined())
+    await waitFor(() => expect(screen.getByText(/as soon as you reconnect/i)).toBeDefined())
     expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  // The player has just finished and is looking at a score the server has never
+  // seen. This is the one moment the reassurance is worth anything — and the
+  // reason it hasn't uploaded decides what they have to do about it, so a single
+  // vague "saved offline" is not good enough. (The global sync pill used to
+  // cover this screen but is fixed-position; it is now the CBAT menu's alone.)
+  describe('queued-score note', () => {
+    const queuedProps = { ...baseProps, queued: true, scoreSaved: false }
+
+    it('says nothing when the score went through', () => {
+      setup()
+      render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)
+      expect(screen.queryByText(/saved on this device/i)).toBeNull()
+      expect(screen.getByText(/score saved/i)).toBeDefined()
+    })
+
+    it('confirms the score is on the device whatever the reason', async () => {
+      setup()
+      render(<CbatGameOver {...queuedProps}><div /></CbatGameOver>)
+      await waitFor(() => expect(screen.getByText(/saved on this device/i)).toBeDefined())
+    })
+
+    it('offline: promises an upload on reconnect and offers no dead Sign in link', async () => {
+      setup()
+      mockIsOnline.mockReturnValue(false)
+      render(<CbatGameOver {...queuedProps}><div /></CbatGameOver>)
+
+      await waitFor(() => expect(screen.getByText(/as soon as you reconnect/i)).toBeDefined())
+      // Signing in needs a network. Offering it here would be a button that
+      // cannot work, which is worse than no button.
+      expect(screen.queryByRole('link', { name: /sign in/i })).toBeNull()
+    })
+
+    it('signed out: asks them to sign in, the one thing they can act on', async () => {
+      setup()
+      mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: vi.fn() })
+      render(<CbatGameOver {...queuedProps}><div /></CbatGameOver>)
+
+      await waitFor(() => expect(screen.getByText(/sign in and it uploads/i)).toBeDefined())
+      expect(screen.getByRole('link', { name: /sign in/i })).toBeDefined()
+    })
+
+    it('treats a dead session the same as no user at all', async () => {
+      setup()
+      mockApiHealth.mockReturnValue({ status: 'signedOut' })
+      render(<CbatGameOver {...queuedProps}><div /></CbatGameOver>)
+
+      await waitFor(() => expect(screen.getByRole('link', { name: /sign in/i })).toBeDefined())
+    })
+
+    it("unreachable: owns the failure rather than blaming the user's connection", async () => {
+      setup()
+      mockApiHealth.mockReturnValue({ status: 'unreachable' })
+      render(<CbatGameOver {...queuedProps}><div /></CbatGameOver>)
+
+      await waitFor(() => expect(screen.getByText(/can't reach skywatch/i)).toBeDefined())
+      expect(screen.queryByText(/check your connection/i)).toBeNull()
+    })
+
+    it('mentions earlier runs still waiting, excluding this one', async () => {
+      setup()
+      mockPendingCount.mockResolvedValue(3)
+      render(<CbatGameOver {...queuedProps}><div /></CbatGameOver>)
+
+      await waitFor(() => expect(screen.getByText(/2 earlier runs are waiting/i)).toBeDefined())
+    })
+
+    it('does not count this run as a run waiting as well', async () => {
+      setup()
+      mockPendingCount.mockResolvedValue(1)
+      render(<CbatGameOver {...queuedProps}><div /></CbatGameOver>)
+
+      await waitFor(() => expect(screen.getByText(/saved on this device/i)).toBeDefined())
+      expect(screen.queryByText(/waiting as well/i)).toBeNull()
+    })
+
+    it('counts only this user’s queued runs on a shared device', async () => {
+      setup()
+      render(<CbatGameOver {...queuedProps}><div /></CbatGameOver>)
+      await waitFor(() => expect(mockPendingCount).toHaveBeenCalledWith('u1'))
+    })
   })
 
   it('calls onPlayAgain from the reveal', () => {
@@ -467,7 +574,7 @@ describe('CbatGameOver', () => {
       setup({ apiFetch })
       render(<CbatGameOver {...baseProps} queued={true} scoreSaved={false}><div /></CbatGameOver>)
 
-      await waitFor(() => expect(screen.getByText(/updates when you reconnect/i)).toBeDefined())
+      await waitFor(() => expect(screen.getByText(/saved on this device/i)).toBeDefined())
       expect(apiFetch.mock.calls.filter(([url]) => String(url).includes('/progress'))).toHaveLength(0)
     })
 
