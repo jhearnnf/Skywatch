@@ -375,6 +375,31 @@ describe('CbatFlag — difficulty selection', () => {
     expect(document.querySelector('[data-difficulty-marker]').getAttribute('data-difficulty-marker')).toBe('hard')
   })
 
+  // Regression: the callsign prompt used to fire on a per-tick random roll, so
+  // a run could serve a single question. The count is now scheduled, and this
+  // walks a whole run counting how many times the Y/N control goes live.
+  const countCallsignPrompts = async () => {
+    let prompts = 0
+    let showing = false
+    for (let i = 0; i < 55; i++) {
+      await act(async () => { vi.advanceTimersByTime(1000) })
+      const live = !screen.getByRole('button', { name: 'YES' }).disabled
+      if (live && !showing) prompts++
+      showing = live
+    }
+    return prompts
+  }
+
+  it('asks the promised number of callsign questions on Easier', async () => {
+    await renderAndStart()
+    expect(await countCallsignPrompts()).toBe(4)
+  })
+
+  it('asks more of them on Hard', async () => {
+    await renderAndStart({ difficulty: 'hard' })
+    expect(await countCallsignPrompts()).toBe(6)
+  })
+
   it('an Easier run submits to the flag-easier board', async () => {
     const { apiFetch } = await renderAndStart()
     await act(async () => { vi.advanceTimersByTime(62_000) })

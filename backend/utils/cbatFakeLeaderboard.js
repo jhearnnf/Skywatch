@@ -119,11 +119,13 @@ const FAKE_TUNING = {
   },
   'flag-easier': {
     // Same fixed-60s shape as `flag` (integer seedTime, timeStep 0 — see the
-    // note above), scaled down: easier serves ~6 maths questions, fewer
-    // callsign prompts and fewer armed shapes, so the achievable band sits
-    // below hard's.
-    floor: 40, ceiling: 86, seedTime: 60, timeStep: 0,
-    scoreSequence: [86, 83, 80, 77, 74, 71, 68, 65, 62, 59, 57, 55, 53, 51, 49, 47, 45, 43, 41, 40],
+    // note above). Every FLAG award is a multiple of 5 (+30/-10 maths,
+    // +20/-15 callsign, +15/-10 target) with one exception — a missed callsign
+    // question is -3 — so a clean run's total is always a multiple of 5 and
+    // demo rows are built that way. Top demo of 260 is a strong Easier run
+    // (Outstanding starts at 300), trailing to 60 at the foot of the board.
+    floor: 60, ceiling: 260, seedTime: 60, timeStep: 0,
+    scoreSequence: [260, 245, 230, 215, 200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70, 65, 60],
   },
   'act': {
     // 5 rounds × ~45s = ~225s totalTime. Score is a sum of correct rings (+20),

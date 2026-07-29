@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   FLAG_TUNING, FLAG_DIFFICULTIES, DEFAULT_FLAG_DIFFICULTY,
-  flagTuning, flagGameKey, pickMathDifficulty, computeGrade,
+  flagTuning, flagGameKey, buildQuestionSchedule, pickMathDifficulty, computeGrade,
   readStoredFlagDifficulty, storeFlagDifficulty,
 } from '../difficulty'
 
@@ -27,8 +27,13 @@ describe('FLAG difficulty tuning', () => {
     const h = FLAG_TUNING.hard
 
     expect(e.mathCount).toBeLessThan(h.mathCount)
-    expect(e.acSpawnChance).toBeLessThan(h.acSpawnChance)
+    expect(e.acCount).toBeLessThan(h.acCount)
     expect(e.circleChance).toBeLessThan(h.circleChance)
+
+    // Both counts are guaranteed per run, so "fewer" has to still be "several" —
+    // a run that serves one callsign question teaches nothing.
+    expect(e.acCount).toBeGreaterThanOrEqual(4)
+    expect(e.mathCount).toBeGreaterThanOrEqual(5)
 
     // …and rings stay frequent enough that shapes keep arming — the strikes are
     // the reps a new player most needs.
@@ -40,7 +45,7 @@ describe('FLAG difficulty tuning', () => {
     // something other than volume (mathWeights being the deliberate exception —
     // Easier never draws a hard sum). Grades are derived: fewer questions cap
     // the achievable total, so the bands come down with it.
-    const allowed = ['key', 'label', 'gameKey', 'bars', 'blurb', 'mathCount', 'mathWeights', 'acSpawnChance', 'circleChance', 'grades']
+    const allowed = ['key', 'label', 'gameKey', 'bars', 'blurb', 'mathCount', 'mathWeights', 'acCount', 'circleChance', 'grades']
     for (const t of FLAG_DIFFICULTIES) {
       expect(Object.keys(t).sort()).toEqual([...allowed].sort())
     }
@@ -60,7 +65,7 @@ describe('FLAG difficulty tuning', () => {
   })
 
   it('hard keeps the original constants (unchanged for existing scores)', () => {
-    expect(FLAG_TUNING.hard).toMatchObject({ mathCount: 10, mathWeights: null, acSpawnChance: 0.015, circleChance: 0.5 })
+    expect(FLAG_TUNING.hard).toMatchObject({ mathCount: 10, mathWeights: null, acCount: 6, circleChance: 0.5 })
     expect(computeGrade(400, FLAG_TUNING.hard)).toBe('Outstanding')
     expect(computeGrade(250, FLAG_TUNING.hard)).toBe('Good')
     expect(computeGrade(100, FLAG_TUNING.hard)).toBe('Needs Work')
@@ -70,6 +75,34 @@ describe('FLAG difficulty tuning', () => {
   it('grades easier on its own (lower) bands', () => {
     expect(computeGrade(300, FLAG_TUNING.easier)).toBe('Outstanding')
     expect(computeGrade(300, FLAG_TUNING.hard)).toBe('Good')
+  })
+})
+
+// Callsign prompts used to fire on a per-tick random roll, which could serve a
+// whole run just one question. The schedule is what makes the count a promise.
+describe('FLAG question schedules', () => {
+  it('serves exactly the requested number of questions', () => {
+    for (const count of [4, 6, 10]) {
+      expect(buildQuestionSchedule(count, 5, 51)).toHaveLength(count)
+    }
+  })
+
+  it('keeps them in order and inside the run', () => {
+    for (let run = 0; run < 50; run++) {
+      const times = buildQuestionSchedule(4, 5, 51)
+      expect([...times].sort((a, b) => a - b)).toEqual(times)
+      // The jitter is ±20% of a step, so nothing escapes the window by enough
+      // to start before the game does or to land after the clock stops.
+      expect(times[0]).toBeGreaterThan(0)
+      expect(times[times.length - 1]).toBeLessThan(56)
+    }
+  })
+
+  it('spreads them out rather than clustering', () => {
+    const times = buildQuestionSchedule(6, 5, 51)
+    for (let i = 1; i < times.length; i++) {
+      expect(times[i] - times[i - 1]).toBeGreaterThan(1)
+    }
   })
 })
 

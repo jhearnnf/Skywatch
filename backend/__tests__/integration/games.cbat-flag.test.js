@@ -269,7 +269,7 @@ describe('CBAT FLAG (Easier)', () => {
   it('leaderboard only ranks easier runs', async () => {
     // A hard run that would top the easier board if the collections leaked.
     await request(app).post(HARD_RESULT_URL).set('Cookie', cookie2).send(sample({ totalScore: 900 }));
-    await request(app).post(EASIER_RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 200, totalTime: 60 }));
+    await request(app).post(EASIER_RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 400, totalTime: 60 }));
 
     const res = await request(app).get(EASIER_LB_URL).set('Cookie', cookie);
     const { leaderboard } = res.body.data;
@@ -277,18 +277,21 @@ describe('CBAT FLAG (Easier)', () => {
     expect(res.status).toBe(200);
     expect(leaderboard).toHaveLength(20);
     expect(leaderboard.find(e => e.agentNumber === '1000002')).toBeUndefined();
-    // 200 beats every demo row (ceiling 86), so the real easier run leads.
+    // 400 beats every demo row (ceiling 260), so the real easier run leads.
     expect(leaderboard[0].agentNumber).toBe('1000001');
   });
 
-  it('demo padding uses the easier tuning (all rows below the hard ceiling)', async () => {
+  it('demo padding uses the easier tuning — realistic multiples of 5, topping out at 260', async () => {
     const res = await request(app).get(EASIER_LB_URL).set('Cookie', cookie);
     const { leaderboard } = res.body.data;
     expect(leaderboard).toHaveLength(20);
     expect(leaderboard.every(e => e.isFake)).toBe(true);
     leaderboard.forEach(e => {
-      expect(e.bestScore).toBeGreaterThanOrEqual(40);
-      expect(e.bestScore).toBeLessThanOrEqual(86);
+      expect(e.bestScore).toBeGreaterThanOrEqual(60);
+      expect(e.bestScore).toBeLessThanOrEqual(260);
+      // Every FLAG award is a multiple of 5 (the lone -3 missed-callsign
+      // penalty aside), so a demo score that isn't looks fabricated.
+      expect(e.bestScore % 5).toBe(0);
     });
   });
 });

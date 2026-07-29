@@ -45,9 +45,9 @@ export const FLAG_TUNING = {
     // Fixed mix instead of the stage schedule: an easier run never serves a
     // hard sum.
     mathWeights: { easy: 7, medium: 3, hard: 0 },
-    // Per-tick odds of a callsign question once the cooldown clears: roughly
-    // half as many prompts as Hard.
-    acSpawnChance: 0.008,
+    // Callsign questions per run. A guaranteed count, not odds — see
+    // buildQuestionSchedule.
+    acCount: 4,
     // Share of contacts carrying a white ring. Below Hard's 50/50, but high
     // enough that shapes keep arming steadily.
     circleChance: 0.35,
@@ -63,7 +63,7 @@ export const FLAG_TUNING = {
     blurb: 'Harder than the real thing',
     mathCount: 10,
     mathWeights: null,          // null = weight by the stage schedule
-    acSpawnChance: 0.015,
+    acCount: 6,
     circleChance: 0.5,
     grades: { outstanding: 400, good: 250, needsWork: 100 },
   },
@@ -78,6 +78,26 @@ export function flagTuning(difficulty) {
 
 export function flagGameKey(difficulty) {
   return flagTuning(difficulty).gameKey
+}
+
+// Evenly-spaced trigger times for a run's questions, jittered so the cadence
+// isn't metronomic. Used for both the maths and the callsign schedules.
+//
+// Callsigns used to fire on a per-tick random roll instead. The expected count
+// was about right, but the variance wasn't: a run could serve one prompt or
+// eight, which makes "fewer questions on Easier" meaningless as a difficulty
+// dial and makes practice runs incomparable. A schedule delivers the count the
+// tuning promises. The game loop still defers a due question while another is
+// on screen (or during the cooldown) — it's never skipped, only pushed later.
+export function buildQuestionSchedule(count, first, span) {
+  const step = span / count
+  const times = []
+  for (let i = 0; i < count; i++) {
+    // Clamped at `first`: negative jitter on the opening question would put it
+    // before the window the game opens questions in, and it would be dropped.
+    times.push(Math.max(first, first + i * step + (Math.random() - 0.5) * step * 0.4))
+  }
+  return times.sort((a, b) => a - b)
 }
 
 function weightedPick(weights) {

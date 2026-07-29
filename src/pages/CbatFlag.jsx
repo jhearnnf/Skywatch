@@ -13,7 +13,7 @@ import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import { generateMath } from './CbatFlag/mathBank'
 import {
   FLAG_DIFFICULTIES, FLAG_LAUNCH_MS, flagTuning,
-  pickMathDifficulty, computeGrade,
+  buildQuestionSchedule, pickMathDifficulty, computeGrade,
   readStoredFlagDifficulty, storeFlagDifficulty,
 } from './CbatFlag/difficulty'
 import { generateUniqueSymbols } from './CbatFlag/symbols'
@@ -37,16 +37,16 @@ const AC_QUESTION_COOLDOWN = 3
 const AC_QUESTION_DURATION = 4
 const AC_QUESTION_FIRST = 5
 
-// Build a list of ~mathCount evenly-spaced trigger times across 60s
-function buildMathSchedule(tuning) {
-  const times = []
-  const span = GAME_DURATION
-  const step = span / tuning.mathCount
-  for (let i = 0; i < tuning.mathCount; i++) {
-    times.push(3 + i * step + (Math.random() - 0.5) * step * 0.4)
-  }
-  return times.sort((a, b) => a - b)
-}
+// Maths questions start at 3s and are spread across the full run.
+const buildMathSchedule = (tuning) => buildQuestionSchedule(tuning.mathCount, 3, GAME_DURATION)
+
+// Callsign questions start at AC_QUESTION_FIRST and stop early enough that the
+// last one can still be answered before the clock runs out.
+const buildAcSchedule = (tuning) => buildQuestionSchedule(
+  tuning.acCount,
+  AC_QUESTION_FIRST,
+  GAME_DURATION - AC_QUESTION_FIRST - AC_QUESTION_DURATION,
+)
 
 // ── Grade badge helper ────────────────────────────────────────────────────────
 const GRADE_STYLE = {
@@ -742,6 +742,8 @@ export default function CbatFlag() {
   const mathLastEndedRef = useRef(-Infinity)
 
   // Aircraft question state
+  const acScheduleRef = useRef([])
+  const acIdxRef = useRef(0)
   const [acSymbol, setAcSymbol] = useState(null)
   const acSymbolRef = useRef(null)
   const acQuestionTimerRef = useRef(null)
@@ -869,10 +871,12 @@ export default function CbatFlag() {
     acSymbolRef.current = null
   }, [])
 
+  // Returns whether a question actually went up, so a caller working through a
+  // schedule doesn't burn a slot on a call that bailed.
   const spawnAcQuestion = useCallback((gameTime) => {
-    if (acSymbolRef.current) return
-    if (gameTime - acLastQuestionRef.current < AC_QUESTION_COOLDOWN) return
-    if (gameTime < AC_QUESTION_FIRST) return
+    if (acSymbolRef.current) return false
+    if (gameTime - acLastQuestionRef.current < AC_QUESTION_COOLDOWN) return false
+    if (gameTime < AC_QUESTION_FIRST) return false
 
     const roll = Math.random()
     let sym
@@ -887,7 +891,7 @@ export default function CbatFlag() {
     } else if (seenArr.length > 0) {
       sym = seenArr[Math.floor(Math.random() * seenArr.length)]
     } else {
-      return
+      return false
     }
 
     acLastQuestionRef.current = gameTime
@@ -905,6 +909,7 @@ export default function CbatFlag() {
       }
       endAcQuestion()
     }, AC_QUESTION_DURATION * 1000)
+    return true
   }, [bumpCounter, endAcQuestion])
 
   // ── Game timer tick ───────────────────────────────────────────────────────
@@ -931,16 +936,19 @@ export default function CbatFlag() {
         startMathQuestion(t)
       }
 
-      // Aircraft question schedule — cooldown gate then a per-tick roll;
-      // mean wait once eligible ≈ 1 / acSpawnChance ticks (≈6.7s on hard,
-      // ≈12.5s on easier, at a 100ms tick).
-      if (!acSymbolRef.current && t >= AC_QUESTION_FIRST) {
-        const timeSinceLast = t - acLastQuestionRef.current
-        if (timeSinceLast >= AC_QUESTION_COOLDOWN) {
-          if (Math.random() < runTuningRef.current.acSpawnChance) {
-            spawnAcQuestion(t)
-          }
-        }
+      // Callsign question schedule — same shape as the maths one above: a due
+      // question waits (it isn't dropped) while another is on screen or the
+      // cooldown is still running, so every run serves the count its difficulty
+      // promises.
+      const acTimes = acScheduleRef.current
+      const aIdx = acIdxRef.current
+      if (
+        aIdx < acTimes.length &&
+        t >= acTimes[aIdx] &&
+        !acSymbolRef.current &&
+        t - acLastQuestionRef.current >= AC_QUESTION_COOLDOWN
+      ) {
+        if (spawnAcQuestion(t)) acIdxRef.current = aIdx + 1
       }
 
       if (t >= GAME_DURATION) {
@@ -1125,6 +1133,8 @@ export default function CbatFlag() {
     mathQuestionRef.current = null
     mathLastEndedRef.current = -Infinity
     acSymbolRef.current = null
+    acScheduleRef.current = buildAcSchedule(runTuningRef.current)
+    acIdxRef.current = 0
     acLastQuestionRef.current = 0
     acDisabledRef.current = false
     setMathQuestion(null)
