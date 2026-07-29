@@ -117,3 +117,56 @@ describe('RecentCbatScores — admin username → CBAT history', () => {
     expect(screen.queryByRole('button', { name: /Maverick/ })).toBeNull()
   })
 })
+
+// FLAG and CUT each keep two boards. A score on one means nothing without
+// knowing which, and the backend's "(Easier)" label suffix is the first thing
+// to truncate away in this narrow column — so the row carries an explicit chip.
+describe('RecentCbatScores — difficulty chip', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const row = (id, gameKey, gameLabel) => ({
+    _id: id, userId: 'other', gameKey, gameLabel, rank: 2,
+    agentNumber: 'A100', displayName: `Pilot ${id}`, achievedAt: new Date().toISOString(),
+  })
+
+  it('labels both halves of a split game, not just the easier one', async () => {
+    setupAuth({
+      apiFetch: mockFetch([
+        row('r1', 'flag-easier', 'FLAG (Easier)'),
+        row('r2', 'flag', 'FLAG'),
+        row('r3', 'cut-easier', 'Cognitive Updating Test (Easier)'),
+        row('r4', 'cut', 'Cognitive Updating Test'),
+      ]),
+    })
+    render(<RecentCbatScores />)
+
+    await waitFor(() => expect(document.querySelectorAll('[data-difficulty]')).toHaveLength(4))
+    const chips = [...document.querySelectorAll('[data-difficulty]')].map(c => c.getAttribute('data-difficulty'))
+    expect(chips).toEqual(['easier', 'hard', 'easier', 'hard'])
+  })
+
+  it('drops the duplicated "(Easier)" suffix from the title beside the chip', async () => {
+    setupAuth({ apiFetch: mockFetch([row('r1', 'cut-easier', 'Cognitive Updating Test (Easier)')]) })
+    render(<RecentCbatScores />)
+
+    await waitFor(() => expect(screen.getByText('Cognitive Updating Test')).toBeDefined())
+    expect(screen.queryByText(/\(Easier\)/)).toBeNull()
+    expect(screen.getByText('Easier')).toBeDefined()
+  })
+
+  it('leaves games without a difficulty split unchipped', async () => {
+    setupAuth({ apiFetch: mockFetch([row('r1', 'angles', 'Angles')]) })
+    render(<RecentCbatScores />)
+
+    await waitFor(() => expect(screen.getByText('Angles')).toBeDefined())
+    expect(document.querySelector('[data-difficulty]')).toBeNull()
+  })
+
+  it('routes an Easier row to the Easier board', async () => {
+    setupAuth({ apiFetch: mockFetch([row('r1', 'flag-easier', 'FLAG (Easier)')]) })
+    render(<RecentCbatScores />)
+
+    const link = await screen.findByRole('link', { name: /FLAG Easier all-time leaderboard/i })
+    expect(link.getAttribute('href')).toBe('/cbat/flag-easier/leaderboard?period=all-time')
+  })
+})

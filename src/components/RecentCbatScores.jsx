@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
+import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_GROUPS } from '../data/cbatGames'
 
 function timeAgo(iso) {
   if (!iso) return ''
@@ -22,6 +22,16 @@ function timeAgo(iso) {
 // component); src/data/cbatGames.js is pure data, so it doesn't.
 const EMOJI_BY_KEY = Object.fromEntries(
   Object.entries(CBAT_LEADERBOARD_CONFIG).map(([key, cfg]) => [key, cfg.emoji])
+)
+
+// gameKey → 'Easier' | 'Hard', for the games that ship a difficulty split. The
+// two difficulties are separate boards, so a score means nothing without
+// knowing which one it was set on. BOTH halves are chipped, not just Easier: a
+// bare "FLAG" sitting next to a "FLAG · Easier" row reads as ambiguous rather
+// than as Hard. Derived from the same table the leaderboard pills use, so a new
+// split game is labelled here automatically.
+const DIFFICULTY_BY_KEY = Object.fromEntries(
+  Object.values(CBAT_DIFFICULTY_GROUPS).flat().map(d => [d.gameKey, d.label])
 )
 
 export default function RecentCbatScores() {
@@ -81,7 +91,13 @@ export default function RecentCbatScores() {
         <div className="divide-y divide-[#1a3a5c]/50 max-h-[640px] overflow-y-auto">
           {rows.map((r) => {
             const emoji = EMOJI_BY_KEY[r.gameKey] || '🎯'
-            const title = r.gameLabel || r.gameKey
+            const difficulty = DIFFICULTY_BY_KEY[r.gameKey] || null
+            // Split games take the base title from the shared config — the
+            // backend label carries its own "(Easier)" suffix, which would read
+            // twice beside the chip (and is what truncates away first).
+            const title = difficulty
+              ? (CBAT_LEADERBOARD_CONFIG[r.gameKey]?.title || r.gameLabel)
+              : (r.gameLabel || r.gameKey)
             // Pin the All Time tab: the row is billed as the all-time board, and the
             // leaderboard page otherwise opens on This Week.
             const leaderboardPath = `/cbat/${r.gameKey}/leaderboard?period=all-time`
@@ -104,7 +120,7 @@ export default function RecentCbatScores() {
                     row so every cell but the admin username button routes here. */}
                 <Link
                   to={leaderboardPath}
-                  aria-label={`${title} all-time leaderboard`}
+                  aria-label={`${title}${difficulty ? ` ${difficulty}` : ''} all-time leaderboard`}
                   className="absolute inset-0 z-0"
                 />
                 {canOpenHistory ? (
@@ -126,8 +142,21 @@ export default function RecentCbatScores() {
                 <span className="font-mono text-[11px] text-brand-600 shrink-0">
                   {rankBadge}
                 </span>
-                <span className="text-xs text-slate-400 truncate">
-                  <span className="mr-1">{emoji}</span>{title}
+                <span className="text-xs text-slate-400 min-w-0 flex items-center gap-1">
+                  <span className="shrink-0">{emoji}</span>
+                  <span className="truncate">{title}</span>
+                  {difficulty && (
+                    <span
+                      data-difficulty={difficulty.toLowerCase()}
+                      className={`shrink-0 px-1.5 py-px rounded text-[9px] font-extrabold uppercase tracking-wide ${
+                        difficulty === 'Hard'
+                          ? 'bg-brand-600/15 text-brand-600'
+                          : 'bg-[#0c1829] border border-[#1a3a5c] text-slate-600'
+                      }`}
+                    >
+                      {difficulty}
+                    </span>
+                  )}
                 </span>
                 <span className="text-[10px] text-slate-500 shrink-0" title={new Date(r.achievedAt).toLocaleString()}>
                   {timeAgo(r.achievedAt)}
