@@ -119,8 +119,9 @@ const FAKE_TUNING = {
   },
   'flag-easier': {
     // Same fixed-60s shape as `flag` (integer seedTime, timeStep 0 — see the
-    // note above), scaled down: the easier pace serves ~6 maths questions and
-    // fewer callsign prompts, so the achievable band sits below hard's.
+    // note above), scaled down: easier serves ~6 maths questions, fewer
+    // callsign prompts and fewer armed shapes, so the achievable band sits
+    // below hard's.
     floor: 40, ceiling: 86, seedTime: 60, timeStep: 0,
     scoreSequence: [86, 83, 80, 77, 74, 71, 68, 65, 62, 59, 57, 55, 53, 51, 49, 47, 45, 43, 41, 40],
   },
@@ -301,8 +302,9 @@ const WEEKLY_PER_PLAY = {
   'visualisation-2d':  4,  // real med 3
   'visualisation-3d':  4,  // real med 4
   'flag':            220,  // real med 246
-  // Easier runs fewer maths questions and fewer callsign prompts in the same
-  // 60s, so a decent run scores below a decent hard run despite the gentler pace.
+  // Easier serves fewer maths questions, fewer callsign prompts and fewer
+  // ringed contacts in the same 60s, so a decent run scores below a decent
+  // hard one.
   'flag-easier':     170,
   'dpt':            3400,  // real med 3850
   'act':            1300,  // real med 1482

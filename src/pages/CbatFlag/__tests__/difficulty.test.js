@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   FLAG_TUNING, FLAG_DIFFICULTIES, DEFAULT_FLAG_DIFFICULTY,
-  flagTuning, flagGameKey, pickMathDifficulty, stageConfig, computeGrade,
+  flagTuning, flagGameKey, pickMathDifficulty, computeGrade,
   readStoredFlagDifficulty, storeFlagDifficulty,
 } from '../difficulty'
 
@@ -19,29 +19,31 @@ describe('FLAG difficulty tuning', () => {
     expect(flagTuning('nonsense')).toBe(FLAG_TUNING[DEFAULT_FLAG_DIFFICULTY])
   })
 
-  // The whole point of the easier mode: the same 60 seconds, run slowly.
-  it('easier is slower than hard on every pacing dimension', () => {
+  // The point of Easier is load, not pace: it serves fewer maths questions,
+  // fewer callsign questions and fewer ringed contacts. Nothing else about the
+  // run may differ — no slower aircraft, no longer timers.
+  it('only lowers the three volume dials', () => {
     const e = FLAG_TUNING.easier
     const h = FLAG_TUNING.hard
+
     expect(e.mathCount).toBeLessThan(h.mathCount)
-    expect(e.mathTimeout).toBeGreaterThan(h.mathTimeout)
-    expect(e.mathGap).toBeGreaterThan(h.mathGap)
-    expect(e.acDuration).toBeGreaterThan(h.acDuration)
-    expect(e.acCooldown).toBeGreaterThan(h.acCooldown)
-    expect(e.symbolFlashSeconds).toBeGreaterThan(h.symbolFlashSeconds)
-    expect(e.aircraftSpeed).toBeLessThan(h.aircraftSpeed)
+    expect(e.acSpawnChance).toBeLessThan(h.acSpawnChance)
+    expect(e.circleChance).toBeLessThan(h.circleChance)
+
+    // …and rings stay frequent enough that shapes keep arming — the strikes are
+    // the reps a new player most needs.
+    expect(e.circleChance).toBeGreaterThanOrEqual(0.3)
   })
 
-  it('hard keeps the original constants (unchanged for existing scores)', () => {
-    expect(FLAG_TUNING.hard).toMatchObject({
-      mathCount: 10, mathTimeout: 8, mathGap: 3,
-      acCooldown: 3, acDuration: 4, acFirst: 5, acSpawnChance: 0.015,
-      aircraftSpeed: 20, symbolFlashSeconds: 5, maxScale: 1, spawnScale: 1,
-    })
-    expect(computeGrade(400, FLAG_TUNING.hard)).toBe('Outstanding')
-    expect(computeGrade(250, FLAG_TUNING.hard)).toBe('Good')
-    expect(computeGrade(100, FLAG_TUNING.hard)).toBe('Needs Work')
-    expect(computeGrade(99, FLAG_TUNING.hard)).toBe('Failed')
+  it('carries no pace or timing knobs at all', () => {
+    // A key appearing here would mean a difficulty had started changing
+    // something other than volume (mathWeights being the deliberate exception —
+    // Easier never draws a hard sum). Grades are derived: fewer questions cap
+    // the achievable total, so the bands come down with it.
+    const allowed = ['key', 'label', 'gameKey', 'bars', 'blurb', 'mathCount', 'mathWeights', 'acSpawnChance', 'circleChance', 'grades']
+    for (const t of FLAG_DIFFICULTIES) {
+      expect(Object.keys(t).sort()).toEqual([...allowed].sort())
+    }
   })
 
   it('never serves a hard sum on the easier difficulty', () => {
@@ -57,14 +59,12 @@ describe('FLAG difficulty tuning', () => {
     expect(seen.has('hard')).toBe(true)
   })
 
-  it('thins the traffic on easier without ever emptying the field', () => {
-    for (const t of [0, 12, 24, 36, 48, 59]) {
-      const e = stageConfig(t, FLAG_TUNING.easier)
-      const h = stageConfig(t, FLAG_TUNING.hard)
-      expect(e.max).toBeLessThan(h.max)
-      expect(e.max).toBeGreaterThanOrEqual(2)
-      expect(e.spawn).toBeGreaterThan(h.spawn)
-    }
+  it('hard keeps the original constants (unchanged for existing scores)', () => {
+    expect(FLAG_TUNING.hard).toMatchObject({ mathCount: 10, mathWeights: null, acSpawnChance: 0.015, circleChance: 0.5 })
+    expect(computeGrade(400, FLAG_TUNING.hard)).toBe('Outstanding')
+    expect(computeGrade(250, FLAG_TUNING.hard)).toBe('Good')
+    expect(computeGrade(100, FLAG_TUNING.hard)).toBe('Needs Work')
+    expect(computeGrade(99, FLAG_TUNING.hard)).toBe('Failed')
   })
 
   it('grades easier on its own (lower) bands', () => {

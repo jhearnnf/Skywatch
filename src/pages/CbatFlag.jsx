@@ -26,10 +26,16 @@ import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-// Both difficulties run the same 60-second mission; everything that differs
-// between them (maths cadence, callsign timing, traffic) comes from the tuning
-// table in ./CbatFlag/difficulty.js.
+// Shared by both difficulties. The only things a difficulty changes are how
+// MANY maths questions, callsign questions and ringed contacts a run serves,
+// plus which band of sums they're drawn from — see ./CbatFlag/difficulty.js.
+// Timings and traffic are the same either way.
 const GAME_DURATION = 60
+const MATH_TIMEOUT = 8
+const MATH_GAP = 3                  // min seconds between maths questions
+const AC_QUESTION_COOLDOWN = 3
+const AC_QUESTION_DURATION = 4
+const AC_QUESTION_FIRST = 5
 
 // Build a list of ~mathCount evenly-spaced trigger times across 60s
 function buildMathSchedule(tuning) {
@@ -330,7 +336,7 @@ function TutorialComplete({ onExit }) {
   )
 }
 
-function FlagTutorial({ onExit, onProgress, modelUrl, difficulty }) {
+function FlagTutorial({ onExit, onProgress, modelUrl }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [done, setDone] = useState(false)
   const [runId] = useState(makeTutorialRunId)
@@ -599,7 +605,6 @@ function FlagTutorial({ onExit, onProgress, modelUrl, difficulty }) {
           keepAircraftLonger={aircraftActive}
           maxAircraft={aircraftActive ? 1 : null}
           highlightSymbol={aircraftActive ? acHighlightSym : null}
-          difficulty={difficulty}
           active
         />
       </div>
@@ -848,7 +853,7 @@ export default function CbatFlag() {
     setMathEntered('')
     mathEnteredRef.current = ''
     clearMathTimeout()
-    mathTimerRef.current = setTimeout(() => endMathQuestion('timeout'), runTuningRef.current.mathTimeout * 1000)
+    mathTimerRef.current = setTimeout(() => endMathQuestion('timeout'), MATH_TIMEOUT * 1000)
   }, [endMathQuestion])
 
   // ── Aircraft question lifecycle ───────────────────────────────────────────
@@ -866,8 +871,8 @@ export default function CbatFlag() {
 
   const spawnAcQuestion = useCallback((gameTime) => {
     if (acSymbolRef.current) return
-    if (gameTime - acLastQuestionRef.current < runTuningRef.current.acCooldown) return
-    if (gameTime < runTuningRef.current.acFirst) return
+    if (gameTime - acLastQuestionRef.current < AC_QUESTION_COOLDOWN) return
+    if (gameTime < AC_QUESTION_FIRST) return
 
     const roll = Math.random()
     let sym
@@ -899,7 +904,7 @@ export default function CbatFlag() {
         setStats(prev => ({ ...prev, totalScore: prev.totalScore - 3, aircraftScore: prev.aircraftScore - 3 }))
       }
       endAcQuestion()
-    }, runTuningRef.current.acDuration * 1000)
+    }, AC_QUESTION_DURATION * 1000)
   }, [bumpCounter, endAcQuestion])
 
   // ── Game timer tick ───────────────────────────────────────────────────────
@@ -920,7 +925,7 @@ export default function CbatFlag() {
         mIdx < mathTimes.length &&
         t >= mathTimes[mIdx] &&
         !mathActiveRef.current &&
-        t - mathLastEndedRef.current >= runTuningRef.current.mathGap
+        t - mathLastEndedRef.current >= MATH_GAP
       ) {
         mathIdxRef.current = mIdx + 1
         startMathQuestion(t)
@@ -928,10 +933,10 @@ export default function CbatFlag() {
 
       // Aircraft question schedule — cooldown gate then a per-tick roll;
       // mean wait once eligible ≈ 1 / acSpawnChance ticks (≈6.7s on hard,
-      // ≈8.3s on easier, at a 100ms tick).
-      if (!acSymbolRef.current && t >= runTuningRef.current.acFirst) {
+      // ≈12.5s on easier, at a 100ms tick).
+      if (!acSymbolRef.current && t >= AC_QUESTION_FIRST) {
         const timeSinceLast = t - acLastQuestionRef.current
-        if (timeSinceLast >= runTuningRef.current.acCooldown) {
+        if (timeSinceLast >= AC_QUESTION_COOLDOWN) {
           if (Math.random() < runTuningRef.current.acSpawnChance) {
             spawnAcQuestion(t)
           }
@@ -1210,7 +1215,6 @@ export default function CbatFlag() {
                 onExit={() => setPhase('intro')}
                 onProgress={reportTutorialProgress}
                 modelUrl={modelUrl}
-                difficulty={difficulty}
               />
             )}
 
@@ -1242,7 +1246,7 @@ export default function CbatFlag() {
                       onAircraftSeen={handleAircraftSeen}
                       onAircraftSpawn={handleAircraftSpawn}
                       onAircraftDespawn={handleAircraftDespawn}
-                      difficulty={runTuning.key}
+                      circleChance={runTuning.circleChance}
                       gameCues
                       active={phase === 'playing'}
                     />

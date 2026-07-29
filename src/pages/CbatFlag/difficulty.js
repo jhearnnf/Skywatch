@@ -1,14 +1,17 @@
 // FLAG difficulty tuning.
 //
-// 'hard' is the original assessment-pace game — every value here matches what
-// FLAG shipped with. 'easier' is the SAME 60-second mission run slowly: maths
-// questions arrive less often and stay up far longer, callsigns are readable
-// for twice as long, aircraft fly slower, and the field carries fewer contacts
-// at once. Per-event scoring is identical; the two difficulties keep entirely
-// separate leaderboards, so their totals never have to be comparable.
+// Easier is NOT a slowed-down FLAG: aircraft fly at the same speed, spawn at the
+// same rate, and callsigns stay legible for exactly as long as on Hard. The
+// mission is the same 60 seconds with the same maths, the same scoring and the
+// same clock. What changes is how much lands on you at once:
 //
-// Everything difficulty-dependent lives in this one table so the game page, the
-// play field and the results screen can't drift apart.
+//   • fewer maths questions, and never a hard sum
+//   • fewer callsign questions
+//   • fewer white-ringed contacts (still plenty — the shape strikes are the part
+//     a new player most needs the reps on)
+//
+// Anything not listed here is deliberately shared, so the two difficulties stay
+// the same game at different loads.
 
 import { CBAT_FLAG_DIFFICULTY_KEY } from '../../utils/storageKeys'
 
@@ -18,9 +21,8 @@ export const DEFAULT_FLAG_DIFFICULTY = 'easier'
 // actually begins.
 export const FLAG_LAUNCH_MS = 1000
 
-// Spawn pressure across the run, in 12s windows: easy → medium → hard → medium
-// → easy. `max` is the soft cap on simultaneous on-screen aircraft, `spawn` the
-// average gap between spawn attempts. Scaled per difficulty by the tuning below.
+// Which band of sums a run draws from, by game time. Hard weights toward the
+// harder stages; Easier ignores the schedule entirely (see mathWeights).
 const STAGE_SCHEDULE = [
   { start: 0,  end: 12, diff: 'easy'   },
   { start: 12, end: 24, diff: 'medium' },
@@ -36,28 +38,21 @@ export const FLAG_TUNING = {
     // Backend leaderboard key — its own collection, its own board.
     gameKey: 'flag-easier',
     bars: 1,
-    blurb: 'Slower maths, longer callsign reads',
-    // Maths: 6 questions instead of 10, roughly twice the time to answer, and
-    // twice the breather between them.
+    blurb: 'Fewer questions and contacts',
+    // Maths questions across the 60s — same timeout as Hard, there are simply
+    // fewer of them.
     mathCount: 6,
-    mathTimeout: 15,
-    mathGap: 6,
-    // Fixed mix instead of the stage schedule — an easier run never serves a
+    // Fixed mix instead of the stage schedule: an easier run never serves a
     // hard sum.
     mathWeights: { easy: 7, medium: 3, hard: 0 },
-    // Callsign questions: rarer, and far longer on screen to answer.
-    acCooldown: 6,
-    acDuration: 9,
-    acFirst: 6,
-    acSpawnChance: 0.012,
-    // Play field: slower traffic, callsigns legible for twice as long, half the
-    // contacts, and longer gaps between spawns.
-    aircraftSpeed: 12,
-    symbolFlashSeconds: 10,
-    maxScale: 0.5,
-    spawnScale: 1.8,
-    // Fewer scoring opportunities in the same 60s, so the grade bands scale
-    // down with them.
+    // Per-tick odds of a callsign question once the cooldown clears: roughly
+    // half as many prompts as Hard.
+    acSpawnChance: 0.008,
+    // Share of contacts carrying a white ring. Below Hard's 50/50, but high
+    // enough that shapes keep arming steadily.
+    circleChance: 0.35,
+    // Fewer questions and fewer armed shapes mean a lower achievable total, so
+    // the grade bands come down with them.
     grades: { outstanding: 300, good: 180, needsWork: 70 },
   },
   hard: {
@@ -67,17 +62,9 @@ export const FLAG_TUNING = {
     bars: 3,
     blurb: 'Harder than the real thing',
     mathCount: 10,
-    mathTimeout: 8,
-    mathGap: 3,
     mathWeights: null,          // null = weight by the stage schedule
-    acCooldown: 3,
-    acDuration: 4,
-    acFirst: 5,
     acSpawnChance: 0.015,
-    aircraftSpeed: 20,
-    symbolFlashSeconds: 5,
-    maxScale: 1,
-    spawnScale: 1,
+    circleChance: 0.5,
     grades: { outstanding: 400, good: 250, needsWork: 100 },
   },
 }
@@ -93,11 +80,9 @@ export function flagGameKey(difficulty) {
   return flagTuning(difficulty).gameKey
 }
 
-// ── Difficulty-aware helpers ─────────────────────────────────────────────────
-
 function weightedPick(weights) {
   const entries = Object.entries(weights).filter(([, w]) => w > 0)
-  const total = entries.reduce((s, [, w]) => s + w, 0)
+  const total = entries.reduce((sum, [, w]) => sum + w, 0)
   let roll = Math.random() * total
   for (const [key, w] of entries) {
     roll -= w
@@ -126,20 +111,6 @@ export function pickMathDifficulty(gameTime, tuning) {
   if (roll < 0.5) return 'easy'
   if (roll < 0.8) return 'medium'
   return 'hard'
-}
-
-// Per-stage spawn pressure, scaled by difficulty. Shared by the play field.
-export function stageConfig(gameTime, tuning) {
-  let base
-  if (gameTime < 12)      base = { max: 4,  spawn: 2.2 }
-  else if (gameTime < 24) base = { max: 8,  spawn: 1.3 }
-  else if (gameTime < 36) base = { max: 14, spawn: 0.55 }
-  else if (gameTime < 48) base = { max: 8,  spawn: 1.3 }
-  else                    base = { max: 4,  spawn: 2.2 }
-  return {
-    max: Math.max(2, Math.round(base.max * tuning.maxScale)),
-    spawn: base.spawn * tuning.spawnScale,
-  }
 }
 
 export function computeGrade(score, tuning) {

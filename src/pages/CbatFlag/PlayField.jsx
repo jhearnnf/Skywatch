@@ -4,11 +4,9 @@ import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { playFlagBleep } from '../../utils/sound'
 import { useCbatDemoCanvas } from '../../utils/cbat/demoMode'
-import { flagTuning, stageConfig } from './difficulty'
 
 // ── Constants ────────────────────────────────────────────────────────────────
-// Aircraft speed, the callsign flash duration and the spawn pressure are all
-// difficulty-scaled — see ./difficulty.js. Everything else is shared.
+const AIRCRAFT_SPEED = 20          // px/s
 const AIRCRAFT_RADIUS = 25         // circle ring radius in px
 const AIRCRAFT_SIZE = 28           // target visual size px
 const AIRCRAFT_LIFETIME = 20       // seconds
@@ -84,6 +82,17 @@ function pointPolyDist(px, py, verts) {
   return Math.sqrt(minSq)
 }
 
+// Per-stage spawn pressure. Stage schedule: easy/medium/hard/medium/easy across
+// 12s windows. maxAircraft is the soft cap on simultaneous on-screen aircraft;
+// spawnInterval is the average gap between spawn attempts when below the cap.
+function stageConfig(gameTime) {
+  if (gameTime < 12)  return { max: 4,  spawn: 2.2 }
+  if (gameTime < 24)  return { max: 8,  spawn: 1.3 }
+  if (gameTime < 36)  return { max: 14, spawn: 0.55 }
+  if (gameTime < 48)  return { max: 8,  spawn: 1.3 }
+  return                       { max: 4,  spawn: 2.2 }
+}
+
 // ── Shared geometry for aircraft count ───────────────────────────────────────
 const uidAc = (() => { let i = 0; return () => ++i })()
 const uidSh = (() => { let i = 0; return () => ++i })()
@@ -91,8 +100,10 @@ const uidSh = (() => { let i = 0; return () => ++i })()
 function randRange(lo, hi) { return lo + Math.random() * (hi - lo) }
 function randPick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
 
-// Spawn position: random edge, heading inward
-function spawnAircraft(fieldW, fieldH) {
+// Spawn position: random edge, heading inward. `circleChance` is the odds this
+// contact carries a white ring — the ring is what arms shapes and what carries a
+// callsign, so it's the dial that sets how busy the field feels.
+function spawnAircraft(fieldW, fieldH, circleChance) {
   const edge = Math.floor(Math.random() * 4)
   let x, y, heading
   if (edge === 0) { x = Math.random() * fieldW; y = 0;       heading = Math.PI / 2 + (Math.random() - 0.5) * 0.8 }
@@ -107,7 +118,7 @@ function spawnAircraft(fieldW, fieldH) {
     state: 'STRAIGHT',
     stateTimer: randRange(STATE_INTERVAL_MIN, STATE_INTERVAL_MAX),
     age: 0,
-    hasCircle: Math.random() < 0.5,
+    hasCircle: Math.random() < circleChance,
     symbol: null,
     symbolFlashAt: randRange(2, 15),
     symbolFlashEnd: 0,
@@ -601,17 +612,15 @@ function PlayFieldImpl({
   keepAircraftLonger = false,
   maxAircraft = null,
   highlightSymbol = null,
+  // Share of contacts that carry a white ring. The only value FLAG's difficulty
+  // selection changes on the field — traffic volume and speed are identical
+  // either way. Defaults to the original 50/50 for callers that don't set it.
+  circleChance = 0.5,
   onHotColorsChange,
-  // 'easier' | 'hard' — scales traffic speed, spawn pressure and how long a
-  // callsign stays legible. Defaults to 'hard', i.e. the original constants,
-  // so any caller that doesn't care about difficulty is unaffected.
-  difficulty = 'hard',
   // Live-play cues: enter/leave contact bleeps and the red "leaving" callsign
   // box. Off in the tutorial so its scripted scenarios stay quiet and focused.
   gameCues = false,
 }, ref) {
-  // Stable module-level object per difficulty, so it's safe as an effect dep.
-  const tuning = flagTuning(difficulty)
   // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty
   // for real players.
   const demoCanvas = useCbatDemoCanvas()
@@ -681,11 +690,11 @@ function PlayFieldImpl({
       // Spawn timer with stage-based cap & cadence. Skip entirely after t=55
       // so the field can clear before the timer ends.
       if (gameTime < 55) {
-        const { max, spawn } = stageConfig(gameTime, tuning)
+        const { max, spawn } = stageConfig(gameTime)
         const effMax = maxAircraft != null ? maxAircraft : max
         spawnTimerRef.current -= dt
         if (spawnTimerRef.current <= 0 && aircraftRef.current.length < effMax) {
-          const ac = spawnAircraft(w, h)
+          const ac = spawnAircraft(w, h, circleChance)
           // Tutorial: force the first aircraft to carry a ring so the "watch it,
           // then click the shape it touches" lesson is guaranteed to play out.
           if (tutorialHints && firstAcIdRef.current == null) {
@@ -786,7 +795,7 @@ function PlayFieldImpl({
         // Symbol flash trigger — only circled aircraft carry a symbol.
         if (next.symbol && !next.flashTriggered && next.age >= next.symbolFlashAt) {
           next.flashTriggered = true
-          next.symbolFlashEnd = nowSec + tuning.symbolFlashSeconds
+          next.symbolFlashEnd = nowSec + 5
           onAircraftSeen?.(next.symbol)
         }
 
@@ -812,8 +821,8 @@ function PlayFieldImpl({
           }
         }
 
-        next.x += Math.cos(next.heading) * tuning.aircraftSpeed * dt
-        next.y += Math.sin(next.heading) * tuning.aircraftSpeed * dt
+        next.x += Math.cos(next.heading) * AIRCRAFT_SPEED * dt
+        next.y += Math.sin(next.heading) * AIRCRAFT_SPEED * dt
 
         // Despawn if off screen or too old — but never the pinned focus aircraft,
         // which stays until the player's first strike releases it.
@@ -967,7 +976,7 @@ function PlayFieldImpl({
 
     rafRef.current = requestAnimationFrame(tick)
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [active, fieldSize, gameTimeRef, onAircraftSpawn, onAircraftDespawn, onAircraftSeen, onScoreEvent, tutorialHints, onHotColorsChange, keepAircraftLonger, maxAircraft, blinkSymbols, gameCues, tuning])
+  }, [active, fieldSize, gameTimeRef, onAircraftSpawn, onAircraftDespawn, onAircraftSeen, onScoreEvent, tutorialHints, onHotColorsChange, keepAircraftLonger, maxAircraft, blinkSymbols, gameCues, circleChance])
 
   const flashShape = (shapeId, kind) => {
     const field = kind === 'green' ? 'flashGreen' : 'flashRed'
