@@ -288,6 +288,19 @@ body.cbat-dpt-fullwidth .app-shell-content {
   }
 }
 
+/* Admin Reports: a grid of charts, so the max-w-3xl reading column wasted most
+   of a desktop monitor and turned the page into a long scroll. Toggled from
+   src/pages/Admin.jsx while the Reports tab is open (mirrors the
+   cbat-recent-wide pattern). Uncapped on purpose — the charts fill whatever
+   the monitor gives them; the grid column counts keep each one a sane size. */
+@media (min-width: 1024px) {
+  body.admin-reports-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
 /* SAT is in beta. While CbatSat is mounted it adds `cbat-sat-beta` to <body>
    (mirrors the cbat-dpt-fullwidth pattern). We swap the cool dark-blue shell
    backdrop for a warm amber wash watermarked with endlessly repeating "beta",

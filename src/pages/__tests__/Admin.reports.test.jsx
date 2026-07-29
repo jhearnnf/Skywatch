@@ -422,21 +422,26 @@ describe('Admin — Reports tab', () => {
   })
 
   // Reports is a grid of charts, so it gets the full-width shell; the form and
-  // list tabs stay in the narrow reading column.
+  // list tabs stay in the narrow reading column. The body class matters just as
+  // much as the shell class — without it AppShell's max-w-3xl clamps the page
+  // to 768px and widening the inner container does nothing.
   it('widens the admin shell for Reports only', async () => {
     render(<Admin />)
     const shell = () => document.querySelector('[data-admin-shell]')
 
     // Stats is the default tab — narrow.
     expect(shell().className).toContain('max-w-2xl')
+    expect(document.body.classList.contains('admin-reports-wide')).toBe(false)
 
     fireEvent.click(await screen.findByRole('button', { name: /Reports/i }))
-    await waitFor(() => expect(shell().className).toContain('max-w-[1600px]'))
+    await waitFor(() => expect(shell().className).toContain('max-w-none'))
     expect(shell().className).not.toContain('max-w-2xl')
+    expect(document.body.classList.contains('admin-reports-wide')).toBe(true)
 
-    // Back to Stats — narrow again.
+    // Back to Stats — narrow again, and the shell override is released.
     fireEvent.click(screen.getByRole('button', { name: /Stats/i }))
     await waitFor(() => expect(shell().className).toContain('max-w-2xl'))
-    expect(shell().className).not.toContain('max-w-[1600px]')
+    expect(shell().className).not.toContain('max-w-none')
+    expect(document.body.classList.contains('admin-reports-wide')).toBe(false)
   })
 })

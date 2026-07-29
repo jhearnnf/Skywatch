@@ -9596,6 +9596,10 @@ const TABS = [
 // past half-empty rows; the charts are all ResponsiveContainer-based and take
 // whatever width they're given. Every other tab is forms, tables and prose
 // that only stay readable in a narrow measure, so they keep max-w-2xl.
+//
+// Note this only takes effect alongside the `admin-reports-wide` body class
+// below — AppShell's own max-w-3xl column would otherwise clamp the page to
+// 768px no matter what width is set here.
 const WIDE_TABS = new Set(['reports'])
 
 export default function Admin() {
@@ -9642,12 +9646,21 @@ export default function Admin() {
     if (!loading && (!user || !user.isAdmin)) navigate('/home', { replace: true })
   }, [loading, user, navigate])
 
+  // AppShell wraps every page in a max-w-3xl reading column, which would clamp
+  // the wide tabs to 768px however wide their own shell is. Release it while a
+  // wide tab is open — mirror of the cbat-recent-wide pattern.
+  useEffect(() => {
+    if (!WIDE_TABS.has(tab)) return
+    document.body.classList.add('admin-reports-wide')
+    return () => document.body.classList.remove('admin-reports-wide')
+  }, [tab])
+
   if (loading || !user?.isAdmin) return null
 
   return (
     <div className="min-h-screen bg-slate-50">
       <SEO title="Admin" description="SkyWatch admin dashboard." noIndex={true} />
-      <div data-admin-shell className={`mx-auto px-4 py-6 ${WIDE_TABS.has(tab) ? 'max-w-[1600px]' : 'max-w-2xl'}`}>
+      <div data-admin-shell className={`mx-auto px-4 py-6 ${WIDE_TABS.has(tab) ? 'max-w-none' : 'max-w-2xl'}`}>
 
         {/* Header */}
         <div className="mb-5">
