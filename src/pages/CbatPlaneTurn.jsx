@@ -1355,6 +1355,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
             <CbatGameOver
               gameKey={`plane-turn-${mode}`}
               score={totalRotations}
+              time={totalTime}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}

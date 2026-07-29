@@ -743,6 +743,7 @@ export default function CbatSymbols() {
             <CbatGameOver
               gameKey="symbols"
               score={answers.filter(a => a.correct).length}
+              time={elapsed}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}

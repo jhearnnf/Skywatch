@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cbatTrend, isCbatNewBest } from '../cbatProgress'
+import { cbatTrend, cbatTrendPhrase, isCbatNewBest } from '../cbatProgress'
 
 // The whole point of this helper is that "positive = improving" holds for every CBAT game,
 // including the ones where a lower score is the better score.
@@ -49,6 +49,41 @@ describe('cbatTrend', () => {
     it('when the starting average is zero', () => {
       expect(cbatTrend({ firstAvg: 0, lastAvg: 5 }, false)).toBeNull()
     })
+  })
+})
+
+// The wording lives here so the post-game panel and the leaderboard's "You" tab can't read the
+// same delta two different ways.
+describe('cbatTrendPhrase', () => {
+  const improving = { pct: 25, improving: true, steady: false }
+  const declining = { pct: -25, improving: false, steady: false }
+  const steady    = { pct: 0, improving: false, steady: true }
+
+  it('says "better" for a score and "faster" for a clock', () => {
+    expect(cbatTrendPhrase(improving, 'score').text).toBe('Last 5 runs 25% better than your first 5')
+    expect(cbatTrendPhrase(improving, 'speed').text).toBe('Last 5 runs 25% faster than your first 5')
+  })
+
+  // The sign is already carried by the words, so the number is never shown negative.
+  it('states a dip without a minus sign, in each metric\'s own words', () => {
+    expect(cbatTrendPhrase(declining, 'score').text).toBe('Last 5 runs 25% below your first 5')
+    expect(cbatTrendPhrase(declining, 'speed').text).toBe('Last 5 runs 25% slower than your first 5')
+  })
+
+  // A dip is information, not a telling-off — it never gets a warning tone.
+  it('tones a gain as good and everything else as flat', () => {
+    expect(cbatTrendPhrase(improving, 'score').tone).toBe('good')
+    expect(cbatTrendPhrase(declining, 'score').tone).toBe('flat')
+    expect(cbatTrendPhrase(steady, 'score').tone).toBe('flat')
+  })
+
+  it('has its own steady wording per metric', () => {
+    expect(cbatTrendPhrase(steady, 'score').text).toMatch(/holding steady/i)
+    expect(cbatTrendPhrase(steady, 'speed').text).toMatch(/same pace/i)
+  })
+
+  it('says nothing when there is no trend', () => {
+    expect(cbatTrendPhrase(null, 'speed')).toBeNull()
   })
 })
 

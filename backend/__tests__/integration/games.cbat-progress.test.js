@@ -91,7 +91,10 @@ describe('GET /api/games/cbat/:gameKey/progress', () => {
     const res = await request(app).get('/api/games/cbat/target/progress').set('Cookie', cookie);
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({ attempts: 0, series: [], best: null, firstAvg: null, lastAvg: null });
+    expect(res.body.data).toMatchObject({
+      attempts: 0, series: [], best: null,
+      firstAvg: null, lastAvg: null, timeFirstAvg: null, timeLastAvg: null,
+    });
   });
 
   // plane-turn-2d and plane-turn-3d share one collection and are separated only by cfg.modeFilter.
@@ -148,6 +151,50 @@ describe('GET /api/games/cbat/:gameKey/progress', () => {
 
       expect(res.body.data.firstAvg).toBe(2);
       expect(res.body.data.lastAvg).toBe(7);
+    });
+
+    // Speed gets the same first-vs-last comparison as the score, because a player who has topped
+    // out on a scoring ceiling is often still improving — on the clock, where nothing else shows it.
+    it('averages the first and last 5 times the same way', async () => {
+      const cfg = CBAT_GAMES['angles'];
+      // Times 40..31 oldest → newest: first 5 average 38, last 5 average 33.
+      for (let i = 0; i < 10; i++) {
+        await GameSessionCbatAnglesResult.create(makeDoc(cfg, user._id, 5, daysAgo(20 - i), 40 - i));
+      }
+
+      const res = await request(app).get('/api/games/cbat/angles/progress').set('Cookie', cookie);
+
+      expect(res.body.data.timeFirstAvg).toBe(38);
+      expect(res.body.data.timeLastAvg).toBe(33);
+    });
+
+    it('omits the time averages below 6 attempts, like the score ones', async () => {
+      const cfg = CBAT_GAMES['angles'];
+      for (let i = 0; i < 5; i++) {
+        await GameSessionCbatAnglesResult.create(makeDoc(cfg, user._id, 5, daysAgo(10 - i), 30 + i));
+      }
+
+      const res = await request(app).get('/api/games/cbat/angles/progress').set('Cookie', cookie);
+
+      expect(res.body.data.timeFirstAvg).toBeNull();
+      expect(res.body.data.timeLastAvg).toBeNull();
+    });
+
+    // Trace 1/2 default totalTime to 0, and older rows predate the field. Averaging those would
+    // produce a confident "0% faster" out of nothing, which is worse than saying nothing at all.
+    it('omits the time averages when any run in the window has no clock', async () => {
+      const cfg = CBAT_GAMES['angles'];
+      for (let i = 0; i < 10; i++) {
+        await GameSessionCbatAnglesResult.create(
+          makeDoc(cfg, user._id, 5, daysAgo(20 - i), i === 4 ? 0 : 30)
+        );
+      }
+
+      const res = await request(app).get('/api/games/cbat/angles/progress').set('Cookie', cookie);
+
+      expect(res.body.data.firstAvg).toBe(5);      // the score trend is unaffected
+      expect(res.body.data.timeFirstAvg).toBeNull();
+      expect(res.body.data.timeLastAvg).toBeNull();
     });
   });
 

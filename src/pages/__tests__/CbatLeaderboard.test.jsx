@@ -280,6 +280,70 @@ describe('CbatLeaderboard — "You" progress tab', () => {
     })
   })
 
+  // A ceiling is what makes the score chart stop telling the truth about a good player: they max
+  // out, the line flatlines, and every further gain lands on the clock instead. Those games — and
+  // only those — get a speed chart here.
+  describe('speed chart', () => {
+    const timed = (scores, times, over = {}) => progressData(scores, {
+      series: scores.map((score, i) => ({
+        score, time: times[i],
+        at: new Date(Date.now() - (scores.length - i) * 86400000).toISOString(),
+      })),
+      ...over,
+    })
+
+    const openYou = async (gameKey, progress) => {
+      setupAuth(mockProgressApi(progress))
+      mockUseParams.mockReturnValue({ gameKey })
+      render(<CbatLeaderboard />)
+      await selectYou()
+      await waitFor(() => expect(screen.getByText('Attempts')).toBeDefined())
+    }
+
+    it('charts speed as well for a game with a max score', async () => {
+      await openYou('symbols', timed([12, 15, 14, 15], [30, 26, 24, 21]))
+
+      expect(screen.getByText('Speed')).toBeDefined()
+      expect(screen.getByText('Score')).toBeDefined()   // the score chart gets named once there are two
+    })
+
+    it('names the score the highlighted runs share', async () => {
+      await openYou('symbols', timed([12, 15, 14, 15], [30, 26, 24, 21]))
+
+      // Latest run scored 15/15, and one earlier run matched it.
+      expect(screen.getByText(/your 2 runs at 15\/15/i)).toBeDefined()
+    })
+
+    it('reads the speed trend in the same words as the post-game screen', async () => {
+      await openYou('symbols', timed(
+        [12, 15, 14, 15, 15, 15], [40, 38, 36, 34, 32, 30], { timeFirstAvg: 40, timeLastAvg: 30 },
+      ))
+
+      expect(screen.getByText(/last 5 runs 25% faster than your first 5/i)).toBeDefined()
+    })
+
+    // ANT and DPT have no ceiling — their score keeps moving for as long as the player improves,
+    // so a second chart would be noise rather than the only remaining signal.
+    it('leaves an uncapped game with its score chart alone', async () => {
+      await openYou('ant', timed([120, 180, 240, 300], [30, 28, 26, 24]))
+
+      expect(screen.queryByText('Speed')).toBeNull()
+    })
+
+    // Trace 1 has a ceiling (40) but runs a fixed length, so there is no speed to chart.
+    it('leaves a fixed-duration game alone even though it has a max score', async () => {
+      await openYou('trace-1', timed([20, 28, 34, 38], [60, 60, 60, 60]))
+
+      expect(screen.queryByText('Speed')).toBeNull()
+    })
+
+    it('stands the speed chart down when a run has no clock', async () => {
+      await openYou('symbols', timed([12, 15, 14, 15], [30, 26, null, 21]))
+
+      expect(screen.queryByText('Speed')).toBeNull()
+    })
+  })
+
   describe('current-form percentile', () => {
     const withForm = (over = {}) => progressData([10, 12, 14, 15], {
       form: {

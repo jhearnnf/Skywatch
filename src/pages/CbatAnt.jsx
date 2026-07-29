@@ -1308,6 +1308,7 @@ export default function CbatAnt() {
             <CbatGameOver
               gameKey="ant"
               score={finalTotalScore}
+              time={totalElapsed}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}

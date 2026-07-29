@@ -939,6 +939,7 @@ export default function CbatSat() {
             <CbatGameOver
               gameKey="sat"
               score={answers.filter(a => a.correct).length}
+              time={totalElapsedMs / 1000}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}

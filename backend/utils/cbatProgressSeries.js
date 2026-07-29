@@ -12,6 +12,10 @@
 // (most recent), so a user with 200 runs still sees "200 attempts" under a 50-point chart.
 // firstAvg/lastAvg are computed over the returned window for the same reason — they describe the
 // chart being looked at.
+//
+// timeFirstAvg/timeLastAvg are the same first-vs-last comparison over the clock, for the games
+// that have a meaningful one. They matter because score alone hides half the improvement: once a
+// player tops out at 15/15 the score line flatlines while they're still getting quicker every run.
 
 const PROGRESS_TREND_WINDOW = 5;   // attempts averaged at each end for the first-vs-last delta
 const PROGRESS_MIN_FOR_TREND = 6;  // fewer than this and the delta is noise, so we omit it
@@ -46,7 +50,10 @@ async function buildCbatProgress(cfg, userId, limit = PROGRESS_DEFAULT_LIMIT) {
   }));
 
   if (!series.length) {
-    return { attempts: 0, series: [], best: null, firstAvg: null, lastAvg: null };
+    return {
+      attempts: 0, series: [], best: null,
+      firstAvg: null, lastAvg: null, timeFirstAvg: null, timeLastAvg: null,
+    };
   }
 
   const attempts = await cfg.Model.countDocuments(query);
@@ -57,12 +64,20 @@ async function buildCbatProgress(cfg, userId, limit = PROGRESS_DEFAULT_LIMIT) {
   const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
   const hasTrend = series.length >= PROGRESS_MIN_FOR_TREND;
 
+  // The clock only earns a trend when every run in the window actually carries one. Fixed-duration
+  // games (Target, FLAG, ACT) and rows written before totalTime existed would otherwise average
+  // constants and zeroes into a confident-looking "0% faster", which is worse than saying nothing.
+  const times = series.map(p => p.time);
+  const hasTimeTrend = hasTrend && times.every(t => Number.isFinite(t) && t > 0);
+
   return {
     attempts,
     series,
     best,
     firstAvg: hasTrend ? avg(scores.slice(0, PROGRESS_TREND_WINDOW)) : null,
     lastAvg:  hasTrend ? avg(scores.slice(-PROGRESS_TREND_WINDOW))  : null,
+    timeFirstAvg: hasTimeTrend ? avg(times.slice(0, PROGRESS_TREND_WINDOW)) : null,
+    timeLastAvg:  hasTimeTrend ? avg(times.slice(-PROGRESS_TREND_WINDOW))  : null,
   };
 }
 

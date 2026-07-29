@@ -20,6 +20,36 @@ export function cbatTrend({ firstAvg, lastAvg }, lowerIsBetter) {
   return { pct, improving: pct >= 1, steady: Math.abs(pct) < 1 }
 }
 
+// The plain-English reading of a cbatTrend, shared by the post-game panel and the leaderboard's
+// "You" tab so the same delta can't be worded two ways in two places.
+//
+// Wording is per-metric because "12% better" and "12% faster" are not interchangeable, and a score
+// that fell is "below" your first 5 while a clock that rose is "slower" — same maths, different
+// English. Returns null when there's no trend to state, otherwise { text, tone }: 'good' or 'flat'.
+// A dip is 'flat', never a warning tone — it's information, not a telling-off.
+const TREND_PHRASES = {
+  score: {
+    better: 'better than your first 5',
+    worse:  'below your first 5',
+    steady: 'Holding steady over your last 5 runs',
+  },
+  speed: {
+    better: 'faster than your first 5',
+    worse:  'slower than your first 5',
+    steady: 'Holding the same pace over your last 5 runs',
+  },
+}
+
+export function cbatTrendPhrase(trend, kind = 'score') {
+  if (!trend) return null
+  const words = TREND_PHRASES[kind]
+  if (trend.steady) return { text: words.steady, tone: 'flat' }
+  const pct = Math.abs(trend.pct)
+  return trend.improving
+    ? { text: `Last 5 runs ${pct}% ${words.better}`, tone: 'good' }
+    : { text: `Last 5 runs ${pct}% ${words.worse}`,  tone: 'flat' }
+}
+
 // Is run `a` strictly better than run `b` by leaderboard ordering — score first, then time as
 // the tiebreaker (lower time wins). On a hideTime game, or when either time is missing, equal
 // scores are NOT strictly better: there's no meaningful tiebreak, so a tie is just a tie.

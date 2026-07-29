@@ -39,26 +39,32 @@ export const CBAT_GAMES = [
 //   hideTime      — game has no meaningful per-run time column.
 //   timeDecimals  — decimal places on the time column (default 1). Symbols uses
 //                   2 because runs cluster tightly and time is the tiebreaker.
+//   maxScore      — the score a perfect run gets, where the game has a ceiling.
+//                   Stated rather than parsed back out of formatScore, and it
+//                   earns its place: a ceiling is what makes a score chart stop
+//                   telling the truth about a good player (they max out and the
+//                   line flatlines while they keep getting quicker), so the "You"
+//                   tab charts speed as well for exactly these games.
 export const CBAT_LEADERBOARD_CONFIG = {
   'plane-turn-2d':   { title: 'Trace Practise 2D', emoji: '🗺️', scoreLabel: 'Rotations', lowerIsBetter: true,  formatScore: (s) => `${s}`,     backPath: '/cbat/trace',          planeTurnMode: '2d' },
   'plane-turn-3d':   { title: 'Trace Practise 3D', emoji: '🗺️', scoreLabel: 'Rotations', lowerIsBetter: true,  formatScore: (s) => `${s}`,     backPath: '/cbat/trace',          planeTurnMode: '3d' },
-  'trace-1':         { title: 'Trace 1',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/40`,  backPath: '/cbat/trace',          hideTime: true },
-  'trace-2':         { title: 'Trace 2',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/8`,   backPath: '/cbat/trace',          hideTime: true },
-  'angles':          { title: 'Angles',            emoji: '📐',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/20`,  backPath: '/cbat/angles' },
-  'code-duplicates': { title: 'Code Duplicates',   emoji: '🧩',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/15`,  backPath: '/cbat/code-duplicates' },
-  'symbols':         { title: 'Symbols',           emoji: '🔣',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/15`,  backPath: '/cbat/symbols', timeDecimals: 2 },
+  'trace-1':         { title: 'Trace 1',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 40, formatScore: (s) => `${s}/40`,  backPath: '/cbat/trace',          hideTime: true },
+  'trace-2':         { title: 'Trace 2',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/trace',          hideTime: true },
+  'angles':          { title: 'Angles',            emoji: '📐',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 20, formatScore: (s) => `${s}/20`,  backPath: '/cbat/angles' },
+  'code-duplicates': { title: 'Code Duplicates',   emoji: '🧩',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`,  backPath: '/cbat/code-duplicates' },
+  'symbols':         { title: 'Symbols',           emoji: '🔣',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`,  backPath: '/cbat/symbols', timeDecimals: 2 },
   'target':          { title: 'Target',            emoji: '🎯',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/target',         hideTime: true },
   'instruments':     { title: 'Instruments',       emoji: '🛫',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/instruments',    hideTime: true },
   'ant':             { title: 'ANT',               emoji: '📡',  scoreLabel: 'Points',    lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/ant' },
   'flag':            { title: 'FLAG',              emoji: '🚩',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/flag',           hideTime: true, difficultyGroup: 'flag' },
   'flag-easier':     { title: 'FLAG',              emoji: '🚩',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/flag',           hideTime: true, difficultyGroup: 'flag' },
-  'visualisation-2d':{ title: 'Visualisation 2D',  emoji: '🧮',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
-  'visualisation-3d':{ title: 'Visualisation 3D',  emoji: '🧊',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
+  'visualisation-2d':{ title: 'Visualisation 2D',  emoji: '🧮',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
+  'visualisation-3d':{ title: 'Visualisation 3D',  emoji: '🧊',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
   'dpt':             { title: 'DPT',               emoji: '🛩️', scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/dpt' },
   'act':             { title: 'ACT',               emoji: '🎧',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/act',            hideTime: true },
-  'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops' },
-  'dad':             { title: 'Directions & Distances', emoji: '🧭', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}/15`, backPath: '/cbat/dad' },
-  'sat':             { title: 'Situational Awareness Test', emoji: '🗺️', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}/18`, backPath: '/cbat/sat' },
+  'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops' },
+  'dad':             { title: 'Directions & Distances', emoji: '🧭', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`, backPath: '/cbat/dad' },
+  'sat':             { title: 'Situational Awareness Test', emoji: '🗺️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 18, formatScore: (s) => `${s}/18`, backPath: '/cbat/sat' },
   'cut':             { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true, difficultyGroup: 'cut' },
   'cut-easier':      { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true, difficultyGroup: 'cut' },
 }

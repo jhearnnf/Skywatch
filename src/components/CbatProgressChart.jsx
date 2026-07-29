@@ -11,6 +11,15 @@ import {
 //   'spark' — ~56px, no axes, for the post-game screen's personal panel (<CbatGameOver>)
 //   'full'  — the leaderboard's "You" tab, with a date axis and tooltip
 //
+// `metric` picks which figure of each run is plotted — 'score' or 'time'. The speed chart is the
+// same chart, and has to be: the two are read one above the other on the post-game screen, so any
+// difference in spacing, axis or dot treatment would read as a difference in the data.
+//
+// `highlightScore` narrows the eye without narrowing the chart. On the speed chart, comparing
+// today's 14/15 against a run that scored 8 says nothing about how fast the player has got, so the
+// runs that scored the same as the one just played are drawn in amber and the rest dimmed — the
+// whole history still visible for context, the comparable runs picked out of it.
+//
 // SPACING vs LABELS are deliberately decoupled:
 //   • Points are evenly spaced by attempt, NOT positioned on a real time scale. Twenty runs in one
 //     evening followed by a quiet month would otherwise pile up into an unreadable clump. This is
@@ -34,6 +43,10 @@ import {
 const COLORS = {
   brand: '#5baaff',
   axis:  '#aec0d8',
+  // Highlight pair. The dimmed runs sit ON the line colour rather than under it, so they melt into
+  // the trace and only the amber points read as marks.
+  highlight: '#fbbf24',
+  dim:       '#4a6282',
 }
 
 const DAY_MS = 86400000
@@ -87,50 +100,67 @@ const tooltipStyle = {
 
 export default function CbatProgressChart({
   series = [],
+  metric = 'score',
   lowerIsBetter = false,
   formatScore = (s) => `${s}`,
+  valueLabel = 'Score',
+  highlightScore = null,
   variant = 'spark',
   height,
 }) {
   if (!series.length) return null
 
-  const data = series.map((p, i) => ({ attempt: i + 1, score: p.score, at: p.at }))
+  const data = series.map((p, i) => ({ attempt: i + 1, value: p[metric], score: p.score, at: p.at }))
   const isSpark = variant === 'spark'
   const chartHeight = height ?? (isSpark ? 56 : 220)
 
   // Pad the DRAWN domain so the line never touches the frame and a flat run still renders mid-box
   // rather than welded to an edge...
-  const scores = series.map(p => p.score)
-  const lo = Math.min(...scores)
-  const hi = Math.max(...scores)
-  const pad = Math.max(1, (hi - lo) * 0.15)
+  const values = data.map(d => d.value)
+  const lo = Math.min(...values)
+  const hi = Math.max(...values)
+  const pad = Math.max(metric === 'time' ? 0.1 : 1, (hi - lo) * 0.15)
   const domain = [lo - pad, hi + pad]
 
   // ...but keep the LABELLED ticks inside the real range. Letting Recharts pick ticks across the
   // padded domain invents scores that can't exist, which formatScore then renders as nonsense
-  // ("16/15" on a 15-question game). Ticks are whole numbers because every CBAT score is one.
+  // ("16/15" on a 15-question game). Score ticks are whole numbers because every CBAT score is one;
+  // times are not, and rounding them collapses a tight cluster of runs into a single repeated tick.
+  const quantise = metric === 'time' ? (v) => Number(v.toFixed(1)) : (v) => Math.round(v)
   const valueTicks = [...new Set(
-    (hi === lo ? [lo] : [0, 1, 2, 3].map(i => Math.round(lo + ((hi - lo) * i) / 3)))
+    (hi === lo ? [lo] : [0, 1, 2, 3].map(i => quantise(lo + ((hi - lo) * i) / 3)))
   )]
+
+  // Amber for the runs worth comparing against, dim for the rest — see the header note. Off
+  // entirely (every point brand-coloured) when no highlight score is given.
+  const highlighting = highlightScore != null
+  const isMatch = (i) => data[i].score === highlightScore
 
   // The final point is the run the user just finished, so it gets a larger filled dot — it anchors
   // "this is you, today" against the trail behind it.
   const lastIndex = data.length - 1
   const runDot = ({ cx, cy, index, key }) => {
     const isLast = index === lastIndex
+    const match = highlighting && isMatch(index)
+    const colour = highlighting ? (match ? COLORS.highlight : COLORS.dim) : COLORS.brand
     return (
       <circle
         key={key}
         className="recharts-line-dot"
+        data-match={highlighting ? String(match) : undefined}
         cx={cx}
         cy={cy}
-        r={isLast ? 3.5 : (isSpark ? 1.5 : 2.5)}
-        fill={isLast ? '#ddeaf8' : COLORS.brand}
-        stroke={isLast ? COLORS.brand : 'none'}
+        r={isLast ? 3.5 : (match ? 2.5 : isSpark ? 1.5 : 2.5)}
+        fill={isLast ? '#ddeaf8' : colour}
+        stroke={isLast ? colour : 'none'}
         strokeWidth={isLast ? 1.5 : 0}
       />
     )
   }
+
+  // The trace itself recedes to grey while highlighting, so the amber points carry the reading
+  // rather than competing with a full-strength blue line behind them.
+  const lineColour = highlighting ? COLORS.dim : COLORS.brand
 
   if (isSpark) {
     return (
@@ -140,8 +170,8 @@ export default function CbatProgressChart({
           <YAxis domain={domain} reversed={lowerIsBetter} hide />
           <Line
             type="monotone"
-            dataKey="score"
-            stroke={COLORS.brand}
+            dataKey="value"
+            stroke={lineColour}
             strokeWidth={2}
             isAnimationActive={false}
             dot={runDot}
@@ -181,7 +211,7 @@ export default function CbatProgressChart({
           domain={domain}
           ticks={valueTicks}
           reversed={lowerIsBetter}
-          tickFormatter={(v) => formatScore(Math.round(v))}
+          tickFormatter={(v) => formatScore(quantise(v))}
           tickLine={false}
           axisLine={false}
           width={44}
@@ -198,13 +228,13 @@ export default function CbatProgressChart({
             const at = payload?.[0]?.payload?.at
             return at ? `Attempt ${attempt} · ${fullDate(at)}` : `Attempt ${attempt}`
           }}
-          formatter={(val) => [formatScore(Math.round(val)), 'Score']}
+          formatter={(val) => [formatScore(quantise(val)), valueLabel]}
         />
         <Line
           type="monotone"
-          dataKey="score"
-          name="Score"
-          stroke={COLORS.brand}
+          dataKey="value"
+          name={valueLabel}
+          stroke={lineColour}
           strokeWidth={2}
           dot={runDot}
           activeDot={{ r: 4 }}

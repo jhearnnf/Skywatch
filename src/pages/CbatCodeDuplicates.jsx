@@ -568,6 +568,7 @@ export default function CbatCodeDuplicates() {
             <CbatGameOver
               gameKey="code-duplicates"
               score={roundResults.filter(r => r.correct).length}
+              time={elapsed}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}

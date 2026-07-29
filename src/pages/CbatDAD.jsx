@@ -569,6 +569,7 @@ export default function CbatDAD() {
             <CbatGameOver
               gameKey="dad"
               score={answers.filter(a => a.correct).length}
+              time={totalElapsedMs / 1000}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}

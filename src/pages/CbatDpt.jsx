@@ -2099,6 +2099,7 @@ export default function CbatDpt() {
               <CbatGameOver
                 gameKey="dpt"
                 score={totalScore}
+                time={elapsed}
                 scoreSaved={scoreSaved}
                 queued={queued}
                 personalBest={personalBest}

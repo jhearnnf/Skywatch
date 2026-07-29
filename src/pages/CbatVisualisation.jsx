@@ -1073,6 +1073,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
             <CbatGameOver
               gameKey={gameKey}
               score={answers.filter(a => a.correct).length}
+              time={elapsed}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}

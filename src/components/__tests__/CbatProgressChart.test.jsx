@@ -143,6 +143,62 @@ describe('CbatProgressChart', () => {
     })
   })
 
+  // The speed chart is this same component with metric="time" — same spacing, same dots, same axis
+  // rules — because the two sparklines are read stacked and any divergence would look like data.
+  describe('the time metric', () => {
+    const runs = [
+      { score: 12, time: 30, at: new Date(Date.now() - 3 * DAY).toISOString() },
+      { score: 14, time: 24, at: new Date(Date.now() - 2 * DAY).toISOString() },
+      { score: 14, time: 19, at: new Date(Date.now() - 1 * DAY).toISOString() },
+    ]
+
+    it('plots the clock rather than the score', () => {
+      const { container } = renderFull(runs, { metric: 'time', formatScore: (t) => `${t.toFixed(1)}s` })
+      expect(yTicks(container).some(l => l.endsWith('s'))).toBe(true)
+      // Real times, not scores: 19–30 is the range on screen, and 12/14 must not be.
+      const values = yTicks(container).map(l => parseFloat(l))
+      expect(Math.min(...values)).toBe(19)
+      expect(Math.max(...values)).toBe(30)
+    })
+
+    // Rounding times to whole seconds collapsed a tight cluster of runs into one repeated tick —
+    // Symbols runs sit within a second or two of each other, which is exactly when speed matters.
+    it('keeps a sub-second spread of times apart on the axis', () => {
+      const tight = runs.map((p, i) => ({ ...p, time: [12.1, 12.4, 12.7][i] }))
+      const { container } = renderFull(tight, { metric: 'time', formatScore: (t) => `${t.toFixed(1)}s` })
+
+      expect(new Set(yTicks(container)).size).toBeGreaterThan(1)
+    })
+  })
+
+  // Speed is only comparable at equal accuracy, so the runs matching the score just played are
+  // picked out of the full history rather than the rest being dropped from it.
+  describe('score-matched highlighting', () => {
+    const runs = [
+      { score: 12, time: 30, at: new Date(Date.now() - 3 * DAY).toISOString() },
+      { score: 14, time: 24, at: new Date(Date.now() - 2 * DAY).toISOString() },
+      { score: 9,  time: 21, at: new Date(Date.now() - 1 * DAY).toISOString() },
+      { score: 14, time: 19, at: new Date().toISOString() },
+    ]
+    const dots = (container) => [...container.querySelectorAll('.recharts-line-dot')]
+
+    it('still plots every run, matching or not', () => {
+      const { container } = renderFull(runs, { metric: 'time', highlightScore: 14 })
+      expect(dots(container)).toHaveLength(4)
+    })
+
+    it('lights the matching runs and dims the rest', () => {
+      const { container } = renderFull(runs, { metric: 'time', highlightScore: 14 })
+      expect(dots(container).map(d => d.getAttribute('data-match')))
+        .toEqual(['false', 'true', 'false', 'true'])
+    })
+
+    it('leaves every point in the brand colour when no score is highlighted', () => {
+      const { container } = renderFull(runs, { metric: 'time' })
+      expect(dots(container).every(d => d.getAttribute('data-match') === null)).toBe(true)
+    })
+  })
+
   describe('lower-is-better games', () => {
     // Trace Practise scores rotations. Reversing the axis keeps "up = better" true everywhere,
     // which is what makes the sparkline readable at a glance without an axis to consult.

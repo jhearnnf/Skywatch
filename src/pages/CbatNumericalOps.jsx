@@ -602,6 +602,7 @@ export default function CbatNumericalOps() {
             <CbatGameOver
               gameKey="numerical-ops"
               score={Math.round((answers.filter(a => a.correct).length / TOTAL_QUESTIONS) * 100)}
+              time={totalElapsedMs / 1000}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}

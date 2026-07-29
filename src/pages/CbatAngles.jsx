@@ -593,6 +593,7 @@ export default function CbatAngles() {
             <CbatGameOver
               gameKey="angles"
               score={answers.filter(a => a.correct).length}
+              time={elapsed}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}

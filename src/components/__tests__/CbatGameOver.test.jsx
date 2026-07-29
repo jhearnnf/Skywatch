@@ -593,6 +593,117 @@ describe('CbatGameOver', () => {
     })
   })
 
+  // Time is the tiebreaker on every board and the second half of a run's result, so the headline
+  // reports it rather than leaving the player to find it further down the breakdown.
+  describe('the run time beside the score', () => {
+    it('shows the clock next to the score for a game that has one', () => {
+      setup()
+      render(<CbatGameOver {...baseProps} gameKey="angles" score={14} time={42.7}><div /></CbatGameOver>)
+
+      expect(screen.getByText('Time')).toBeDefined()
+      expect(screen.getByText('42.7s')).toBeDefined()
+      expect(screen.getByText('14/20')).toBeDefined()
+    })
+
+    // Symbols runs cluster within a second of each other, so its board reads to 2dp — the
+    // game-over screen has to agree with the board it is about to send the player to.
+    it('uses the precision that game\'s leaderboard uses', () => {
+      setup()
+      render(<CbatGameOver {...baseProps} gameKey="symbols" score={15} time={17.25}><div /></CbatGameOver>)
+
+      expect(screen.getByText('17.25s')).toBeDefined()
+    })
+
+    // Target, FLAG, ACT and CUT run a fixed duration — reporting it as an achievement is a lie.
+    it('stays off a fixed-duration game even if a time is passed', () => {
+      setup()
+      render(<CbatGameOver {...baseProps} time={60}><div /></CbatGameOver>)   // gameKey 'target'
+
+      expect(screen.queryByText('Time')).toBeNull()
+      expect(screen.queryByText('60.0s')).toBeNull()
+    })
+
+    it('shows the score alone when the game never passed a time', () => {
+      setup()
+      render(<CbatGameOver {...baseProps} gameKey="angles" score={14}><div /></CbatGameOver>)
+
+      expect(screen.queryByText('Time')).toBeNull()
+      expect(screen.getByText('14/20')).toBeDefined()
+    })
+  })
+
+  // Score alone hides half the improvement: a player who has topped out at 20/20 has a flat score
+  // line while they're still getting quicker every run. Games with a real clock chart that too.
+  describe('speed trend', () => {
+    // Six runs so both trends clear the 6-attempt floor. Times fall 40s → 30s (25% faster).
+    const timedRuns = (scores, times) => progressData(scores, {
+      series: scores.map((score, i) => ({
+        score, time: times[i],
+        at: new Date(Date.now() - (scores.length - i) * 86400000).toISOString(),
+      })),
+      firstAvg: 14, lastAvg: 18, timeFirstAvg: 40, timeLastAvg: 30,
+    })
+    const anglesRun = () => timedRuns([12, 14, 16, 20, 14, 14], [44, 40, 36, 33, 31, 27])
+
+    const renderAngles = (progress) => {
+      setup({ progress })
+      render(
+        <CbatGameOver {...baseProps} gameKey="angles" score={14}
+          personalBest={{ bestScore: 20, bestTime: 33 }}><div /></CbatGameOver>
+      )
+    }
+
+    it('charts speed alongside score for a game with a meaningful clock', async () => {
+      renderAngles(anglesRun())
+
+      await waitFor(() => expect(screen.getByText('Speed')).toBeDefined())
+      expect(screen.getAllByTestId('progress-chart')).toHaveLength(2)
+    })
+
+    it('states the speed trend separately from the score trend', async () => {
+      renderAngles(anglesRun())
+
+      await waitFor(() => expect(screen.getByText(/25% faster than your first 5/i)).toBeDefined())
+      // The score verdict is still its own line — one panel, two readings.
+      expect(screen.getByText(/29% better than your first 5/i)).toBeDefined()
+    })
+
+    it('says slower rather than "below" when the clock goes the wrong way', async () => {
+      const prog = anglesRun()
+      renderAngles({ ...prog, timeFirstAvg: 30, timeLastAvg: 36 })
+
+      await waitFor(() => expect(screen.getByText(/20% slower than your first 5/i)).toBeDefined())
+    })
+
+    // The amber points on the speed line are meaningless without being named.
+    it('names the score the highlighted runs share', async () => {
+      renderAngles(anglesRun())   // three runs scored 14/20, including the one just played
+
+      await waitFor(() => expect(screen.getByText(/your 3 runs at 14\/20/i)).toBeDefined())
+    })
+
+    // Target, FLAG, ACT and CUT run a fixed duration — their "speed" is a constant, so charting it
+    // would show a flat line and invite the user to read meaning into the noise.
+    it('leaves the speed chart off a fixed-duration game', async () => {
+      setup({ progress: timedRuns([100, 120, 140, 200, 220, 240], [60, 60, 60, 60, 60, 60]) })
+      render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)   // gameKey 'target' — hideTime
+
+      await waitFor(() => expect(screen.getByText('6 attempts')).toBeDefined())
+      expect(screen.queryByText('Speed')).toBeNull()
+      expect(screen.getAllByTestId('progress-chart')).toHaveLength(1)
+    })
+
+    // One run without a clock would leave a gap in the line, so the whole chart stands down.
+    it('stands the speed chart down when any run has no time', async () => {
+      const prog = anglesRun()
+      prog.series[2].time = null
+      renderAngles(prog)
+
+      await waitFor(() => expect(screen.getByText('6 attempts')).toBeDefined())
+      expect(screen.queryByText('Speed')).toBeNull()
+    })
+  })
+
   it('signals game-over chrome while mounted (so the menu music returns to full volume)', () => {
     setup()
     const { unmount } = render(<CbatGameOver {...baseProps}><div /></CbatGameOver>)

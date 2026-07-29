@@ -6,7 +6,7 @@ import { useGameChrome } from '../context/GameChromeContext'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 import LeaderboardRow, { rowCols, rowPad } from './LeaderboardRow'
 import CbatProgressChart from './CbatProgressChart'
-import { cbatTrend, isCbatNewBest } from '../utils/cbatProgress'
+import { cbatTrend, cbatTrendPhrase, isCbatNewBest } from '../utils/cbatProgress'
 import { cbatAdminViewOn, withCbatView } from '../utils/cbatAdminView'
 import useCountUp from '../hooks/useCountUp'
 import { isOnline, onNetworkChange } from '../lib/net'
@@ -29,6 +29,10 @@ import { onOutboxChange, pendingCount } from '../lib/cbatOutbox'
 // Props:
 //   gameKey      — leaderboard key (e.g. 'target', 'plane-turn-2d')
 //   score        — this run's primary score (already in display units)
+//   time         — this run's clock in seconds. Optional, and only shown for games whose time
+//                  means something (see hideTime): it is the tiebreaker on every board and the
+//                  second half of a run's result, so the screen that reports the run should say
+//                  it rather than leaving the player to hunt for it in the breakdown below.
 //   scoreSaved   — true once the online submit succeeded
 //   queued       — true when the submit was queued offline
 //   personalBest — { bestScore, attempts } or null (may include this run)
@@ -201,11 +205,33 @@ const MIN_ATTEMPTS_FOR_CHART = 3
 // long rather than leaving the panels spinning forever.
 const SAVE_WAIT_FALLBACK_MS = 5000
 
+// One plain-English verdict off a cbatTrend. The wording itself lives in cbatTrendPhrase so the
+// leaderboard's "You" tab reads a given delta exactly the same way this screen does.
+function trendVerdict(trend, kind) {
+  const phrase = cbatTrendPhrase(trend, kind)
+  if (!phrase) return null
+  return <span className={phrase.tone === 'good' ? 'text-emerald-300' : 'text-slate-400'}>{phrase.text}</span>
+}
+
+// A run's clock, at the precision that game's leaderboard uses (Symbols runs cluster tightly
+// enough to need 2dp, so a shared 1dp would flatten its whole speed chart).
+const fmtTime = (decimals) => (t) => `${Number(t).toFixed(decimals)}s`
+
 // The personal trend: a sparkline of recent attempts plus one plain-English verdict. Sits with
 // the score/PB lines because it's part of the same personal beat — the competitive beat
 // (<WeeklyChase>) comes after it.
+//
+// Games with a meaningful clock get a SECOND sparkline for speed, because score alone hides half
+// the improvement: on Symbols and the like a player tops out at 15/15 and the score line flatlines
+// while they're still shaving seconds off every run. Both charts plot the full history, so the two
+// read as one story of the same runs.
+//
+// The speed chart then highlights only the runs that scored the same as the one just played, in
+// amber against the rest dimmed. Speed is only comparable at equal accuracy — a fast run that
+// scored 8 is not evidence of anything next to a slower 14 — but hiding those runs would break the
+// shared timeline, so they stay on the chart and step back instead.
 function ProgressTrend({ progress, cfg }) {
-  const { series, firstAvg, lastAvg, attempts } = progress
+  const { series, firstAvg, lastAvg, timeFirstAvg, timeLastAvg, attempts } = progress
   const formatScore = cfg.formatScore || ((s) => `${s}`)
 
   // Too early to chart — say how much further it is rather than going silent, which doubles as a
@@ -220,23 +246,28 @@ function ProgressTrend({ progress, cfg }) {
   }
 
   // Sign handling lives in cbatTrend — positive always means "getting better", whichever
-  // direction the game scores in.
-  const trend = cbatTrend({ firstAvg, lastAvg }, !!cfg.lowerIsBetter)
-  let verdict = null
-  if (trend) {
-    if (trend.steady) {
-      verdict = <span className="text-slate-400">Holding steady over your last 5 runs</span>
-    } else if (trend.improving) {
-      verdict = <span className="text-emerald-300">Last 5 runs {trend.pct}% better than your first 5</span>
-    } else {
-      verdict = <span className="text-slate-400">Last 5 runs {Math.abs(trend.pct)}% below your first 5</span>
-    }
-  }
+  // direction the game scores in. For the clock that direction is always down, hence the hard true.
+  const verdict = trendVerdict(cbatTrend({ firstAvg, lastAvg }, !!cfg.lowerIsBetter), 'score')
+  const speedVerdict = trendVerdict(cbatTrend({ firstAvg: timeFirstAvg, lastAvg: timeLastAvg }, true), 'speed')
+
+  // The clock is only shown for games that have a real one — the fixed-duration games (Target,
+  // FLAG, ACT, CUT) run the same length every time, so their "speed" is a constant. Runs missing a
+  // time would leave gaps in the line, so a single one stands the whole chart down.
+  const hasTimes = series.every(p => Number.isFinite(p.time) && p.time > 0)
+  const showSpeed = !cfg.hideTime && hasTimes
+
+  // Highlight from the SERIES' last point rather than the `score` prop: it is the same figure the
+  // chart is drawing, so the legend can never name a score that isn't lit up on the line.
+  const currentScore = series[series.length - 1].score
+  const matches = series.filter(p => p.score === currentScore).length
+  const formatTime = fmtTime(cfg.timeDecimals ?? 1)
 
   return (
     <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-2 mb-4">
       <div className="flex items-center justify-between mb-0.5 px-1">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide">Your Progress</p>
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide">
+          {showSpeed ? 'Your Progress · Score' : 'Your Progress'}
+        </p>
         <p className="text-[10px] text-slate-500">{attempts} attempts</p>
       </div>
       <CbatProgressChart
@@ -246,6 +277,31 @@ function ProgressTrend({ progress, cfg }) {
         variant="spark"
       />
       {verdict && <p className="text-[11px] text-center mt-1">{verdict}</p>}
+
+      {showSpeed && (
+        <div className="mt-2 pt-2 border-t border-[#1a3a5c]">
+          <div className="flex items-center justify-between mb-0.5 px-1">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Speed</p>
+            {/* Names what the amber points are. Without it the two-tone line is a puzzle. */}
+            <p className="text-[10px] text-slate-500">
+              <span className="text-amber-300">●</span>{' '}
+              {matches === 1
+                ? <>first run at {formatScore(currentScore)}</>
+                : <>your {matches} runs at {formatScore(currentScore)}</>}
+            </p>
+          </div>
+          <CbatProgressChart
+            series={series}
+            metric="time"
+            lowerIsBetter={true}
+            formatScore={formatTime}
+            valueLabel="Time"
+            highlightScore={currentScore}
+            variant="spark"
+          />
+          {speedVerdict && <p className="text-[11px] text-center mt-1">{speedVerdict}</p>}
+        </div>
+      )}
     </div>
   )
 }
@@ -319,7 +375,7 @@ function QueuedScoreNote() {
 }
 
 export default function CbatGameOver({
-  gameKey, score, scoreSaved, queued, personalBest, onPlayAgain, extraActions = [], children,
+  gameKey, score, time, scoreSaved, queued, personalBest, onPlayAgain, extraActions = [], children,
 }) {
   const { apiFetch, API } = useAuth()
   const { enterGameOver, exitGameOver } = useGameChrome()
@@ -391,6 +447,8 @@ export default function CbatGameOver({
   }, [gameKey, queued, scoreSaved])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatScore = cfg.formatScore || ((s) => `${s}`)
+  const formatTime = fmtTime(cfg.timeDecimals ?? 1)
+  const showTime = !cfg.hideTime && Number.isFinite(time)
 
   // A genuine PB means this run holds the record, not merely that it tied the top score — otherwise
   // games with a score ceiling flash "personal best" on every max, even a slower one. The progress
@@ -418,8 +476,27 @@ export default function CbatGameOver({
     >
       {/* Panel 1 — personal beat + weekly position */}
       <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
-        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Your Score</p>
-        <p className="text-5xl font-mono font-bold text-brand-300 mb-2">{formatScore(shown)}</p>
+        {/* Score and clock sit side by side, but not as equals: the score stays the headline and
+            the time is deliberately the smaller figure, because it only ever breaks ties between
+            equal scores. Games with a fixed duration (hideTime) show the score alone — their
+            "time" is the same constant every run. */}
+        {showTime ? (
+          <div className="flex items-end justify-center gap-8 mb-2">
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Your Score</p>
+              <p className="text-5xl font-mono font-bold text-brand-300">{formatScore(shown)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Time</p>
+              <p className="text-3xl font-mono font-bold text-brand-300">{formatTime(time)}</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Your Score</p>
+            <p className="text-5xl font-mono font-bold text-brand-300 mb-2">{formatScore(shown)}</p>
+          </>
+        )}
 
         {isPB
           ? <p className="text-sm font-bold text-amber-300 mb-4">🎉 Personal best!</p>

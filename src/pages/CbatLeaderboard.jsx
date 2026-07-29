@@ -7,7 +7,7 @@ import LeaderboardRow, { rowCols, rowPad } from '../components/LeaderboardRow'
 import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_GROUPS } from '../data/cbatGames'
 import LeaderboardIntro, { INTRO_PILL_LAYOUT_ID } from '../components/LeaderboardIntro'
 import CbatProgressChart from '../components/CbatProgressChart'
-import { cbatTrend } from '../utils/cbatProgress'
+import { cbatTrend, cbatTrendPhrase } from '../utils/cbatProgress'
 import { cbatLastRankKey } from '../utils/storageKeys'
 import { useCbatAdminView, withCbatView } from '../utils/cbatAdminView'
 
@@ -132,8 +132,17 @@ function FormPercentile({ form, cfg }) {
 }
 
 // The "You" tab body — the user's own score history rather than a board of other agents.
+//
+// Games with a scoring ceiling get a second chart for SPEED, because for exactly those games the
+// score chart eventually stops telling the truth about a good player: they max out, the line
+// flatlines, and every further improvement — which is real, and is what the boards rank them on —
+// happens on the clock instead. Uncapped games (Target, ANT, DPT) need no such thing; their score
+// keeps moving for as long as the player does. See maxScore in CBAT_LEADERBOARD_CONFIG.
 function ProgressPanel({ board, cfg }) {
-  const { series = [], attempts = 0, best = null, form = null } = board || {}
+  const {
+    series = [], attempts = 0, best = null, form = null,
+    timeFirstAvg = null, timeLastAvg = null,
+  } = board || {}
   const formatScore = cfg.formatScore || ((s) => `${s}`)
 
   // Neither empty state carries its own play button: the page already renders a persistent
@@ -163,6 +172,20 @@ function ProgressPanel({ board, cfg }) {
 
   const verdict = trendTile(board, !!cfg.lowerIsBetter)
 
+  // A run missing its clock would leave a hole in the line, so one stands the whole chart down.
+  const showSpeed = cfg.maxScore != null && !cfg.hideTime &&
+    series.every(p => Number.isFinite(p.time) && p.time > 0)
+
+  // Speed is only comparable at equal accuracy — a quick run that scored 8 is no evidence next to
+  // a slower 14 — so the runs matching the latest score are lit and the rest dimmed. They stay on
+  // the chart rather than being filtered out: both charts plot the same runs in the same places,
+  // which is what lets the two be read against each other.
+  const latestScore = series[series.length - 1].score
+  const matches = series.filter(p => p.score === latestScore).length
+  const speedPhrase = cbatTrendPhrase(
+    cbatTrend({ firstAvg: timeFirstAvg, lastAvg: timeLastAvg }, true), 'speed'
+  )
+
   return (
     <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4">
       <div className="flex gap-2 mb-4">
@@ -171,6 +194,7 @@ function ProgressPanel({ board, cfg }) {
         {verdict && <StatTile label={verdict.heading} value={verdict.value} tone={verdict.tone} />}
       </div>
 
+      {showSpeed && <p className="text-[11px] text-slate-500 uppercase tracking-wide mb-1">Score</p>}
       <CbatProgressChart
         series={series}
         lowerIsBetter={!!cfg.lowerIsBetter}
@@ -181,6 +205,39 @@ function ProgressPanel({ board, cfg }) {
       <p className="text-[11px] text-slate-500 text-center mt-2">
         {cfg.lowerIsBetter ? 'Higher on the chart is better (fewer rotations).' : 'Each point is one finished run.'}
       </p>
+
+      {showSpeed && (
+        <div className="mt-4 pt-3 border-t border-[#1a3a5c]">
+          <div className="flex items-baseline justify-between mb-1">
+            <p className="text-[11px] text-slate-500 uppercase tracking-wide">Speed</p>
+            {/* Names the amber points. Without it the two-tone line is a puzzle. */}
+            <p className="text-[10px] text-slate-500">
+              <span className="text-amber-300">●</span>{' '}
+              {matches === 1
+                ? <>your one run at {formatScore(latestScore)}</>
+                : <>your {matches} runs at {formatScore(latestScore)}</>}
+            </p>
+          </div>
+          <CbatProgressChart
+            series={series}
+            metric="time"
+            lowerIsBetter={true}
+            formatScore={(t) => `${Number(t).toFixed(cfg.timeDecimals ?? 1)}s`}
+            valueLabel="Time"
+            highlightScore={latestScore}
+            variant="full"
+            height={180}
+          />
+          <p className="text-[11px] text-slate-500 text-center mt-2">
+            Higher on the chart is quicker.
+            {speedPhrase && (
+              <span className={`block ${speedPhrase.tone === 'good' ? 'text-emerald-300' : 'text-slate-400'}`}>
+                {speedPhrase.text}
+              </span>
+            )}
+          </p>
+        </div>
+      )}
 
       {form && <FormPercentile form={form} cfg={cfg} />}
     </div>
