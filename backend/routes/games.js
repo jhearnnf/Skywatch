@@ -24,6 +24,7 @@ const { CBAT_GAMES } = require('../constants/cbatGames');
 const { saveCbatResult } = require('../utils/cbatResult');
 const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const { startOfWeekUTC, nextResetAt } = require('../utils/weekWindow');
+const { buildCbatProgress, parseProgressLimit } = require('../utils/cbatProgressSeries');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn-2d'].Model;
@@ -3282,18 +3283,11 @@ router.get('/cbat/cut-easier/personal-best', protect, (req, res) => cbatPersonal
 // GET /api/games/cbat/:gameKey/progress — the signed-in user's own score series for one game,
 // oldest → newest, backing the post-game trend sparkline and the leaderboard's "You" tab.
 //
-// Only finished runs exist in the result collections (starts live in GameSessionCbatStart), so
-// the series is finished attempts only — which is what "am I improving?" wants.
-//
-// `attempts` is the user's true lifetime count, NOT series.length: the series is capped at
-// `limit` (most recent), so a user with 200 runs still sees "200 attempts" under a 50-point chart.
-// firstAvg/lastAvg are computed over the returned window for the same reason — they describe the
-// chart the user is looking at.
+// The series/window/trend rules live in utils/cbatProgressSeries.js because the admin Users
+// panel draws the same chart for any user and must read the numbers identically.
 //
 // One param route covers every game (cfg resolved from CBAT_GAMES at call time), so a new game
 // gets this endpoint for free. Every result model already indexes { userId: 1, createdAt: -1 }.
-const PROGRESS_TREND_WINDOW = 5;   // attempts averaged at each end for the first-vs-last delta
-const PROGRESS_MIN_FOR_TREND = 6;  // fewer than this and the delta is noise, so we omit it
 
 // ── Recent-form percentile (?percentile=1) ───────────────────────────────────────────────────
 // "Where does my current form sit against the field?" — a question neither leaderboard answers.
@@ -3388,49 +3382,17 @@ async function cbatProgress(req, res, gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return res.status(400).json({ message: 'Unknown game' });
 
-  const modeFilter = cfg.modeFilter ?? {};
-  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
-
   try {
-    const query = { ...modeFilter, userId: req.user._id };
+    const progress = await buildCbatProgress(cfg, req.user._id, parseProgressLimit(req.query.limit));
 
-    // Take the most recent `limit` (descending + limit uses the index), then flip to
-    // chronological for plotting.
-    const recent = await cfg.Model.find(query)
-      .select(`${cfg.primaryField} totalTime createdAt`)
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
-    const series = recent.reverse().map(s => ({
-      score: s[cfg.primaryField],
-      time: s.totalTime ?? null,
-      at: s.createdAt,
-    }));
-
-    if (!series.length) {
-      return res.json({
-        status: 'success',
-        data: { gameKey, attempts: 0, series: [], best: null, firstAvg: null, lastAvg: null, form: null },
-      });
-    }
-
-    const attempts = await cfg.Model.countDocuments(query);
-    const scores = series.map(p => p.score);
-    const best = cfg.sortDir === 1 ? Math.min(...scores) : Math.max(...scores);
-
-    // Averaged ends of the window — a rolling comparison that survives one fluke run at either end.
-    const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
-    const hasTrend = series.length >= PROGRESS_MIN_FOR_TREND;
-    const firstAvg = hasTrend ? avg(scores.slice(0, PROGRESS_TREND_WINDOW)) : null;
-    const lastAvg  = hasTrend ? avg(scores.slice(-PROGRESS_TREND_WINDOW)) : null;
-
+    // Skipped on an empty history — there is no form to rank, and the percentile aggregation
+    // sweeps the whole collection.
     // null whenever the user or the cohort is too small to rank honestly.
-    const form = req.query.percentile === '1' ? await cbatRecentForm(cfg, req.user._id) : null;
+    const form = progress.series.length && req.query.percentile === '1'
+      ? await cbatRecentForm(cfg, req.user._id)
+      : null;
 
-    res.json({
-      status: 'success',
-      data: { gameKey, attempts, series, best, firstAvg, lastAvg, form },
-    });
+    res.json({ status: 'success', data: { gameKey, ...progress, form } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -17,6 +17,7 @@ const GameFlashcardRecall                 = require('../models/GameFlashcardReca
 const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashcardRecallResult');
 const GameSessionWhereAircraftResult      = require('../models/GameSessionWhereAircraftResult');
 const { CBAT_GAMES }                      = require('../constants/cbatGames');
+const { buildCbatProgress, parseProgressLimit, PROGRESS_MIN_FOR_CHART } = require('../utils/cbatProgressSeries');
 const GameSessionCbatStart                = require('../models/GameSessionCbatStart');
 const GameCaseFile                        = require('../models/GameCaseFile');
 const AirstarLog             = require('../models/AirstarLog');
@@ -1673,6 +1674,89 @@ router.get('/users/:id/cbat-history', protect, adminOnly, async (req, res) => {
     const paginated = filtered.slice((page - 1) * limit, page * limit);
 
     res.json({ status: 'success', data: { sessions: paginated, total, page, limit, user: targetUser, counts } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/users/:id/cbat-progress — one user's score-over-time series for a single CBAT
+// game, backing the graph icon on the Users panel.
+//
+// Deliberately the same numbers the player sees on their own leaderboard "You" tab: both call
+// buildCbatProgress, so an admin looking at a support ticket and the user reading their own chart
+// are never looking at two different readings of the same history.
+//
+// `games` lists only the games this user has actually FINISHED a run of, most-played first, and
+// flags which have enough runs to draw a line at all (`chartable`). Ties break on who they picked
+// up first. That ordering is what makes ?gameKey optional: with no explicit choice the modal opens
+// on their most-played chartable game — the one with the most to say — so it never opens on a dead
+// panel, and the selected pill is the one leading the picker.
+router.get('/users/:id/cbat-progress', protect, adminOnly, async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.id)
+      .select('agentNumber displayName email').lean();
+    if (!targetUser) return res.status(404).json({ message: 'User not found' });
+
+    const requestedKey = req.query.gameKey;
+    if (requestedKey && !CBAT_GAMES[requestedKey]) {
+      return res.status(400).json({ message: 'Unknown game' });
+    }
+
+    const uid = new mongoose.Types.ObjectId(req.params.id);
+    const entries = Object.entries(CBAT_GAMES);
+
+    // One cheap $group per registry entry rather than per Model: two entries can share a
+    // collection (plane-turn 2d/3d), and each needs its modeFilter applied separately.
+    const summaries = await Promise.all(entries.map(async ([gameKey, cfg]) => {
+      const [row] = await cfg.Model.aggregate([
+        { $match: { ...(cfg.modeFilter ?? {}), userId: uid } },
+        { $group: { _id: null, attempts: { $sum: 1 }, firstPlayedAt: { $min: '$createdAt' }, lastPlayedAt: { $max: '$createdAt' } } },
+      ]);
+      if (!row?.attempts) return null;
+      return {
+        gameKey,
+        label: cfg.label,
+        attempts: row.attempts,
+        chartable: row.attempts >= PROGRESS_MIN_FOR_CHART,
+        firstPlayedAt: row.firstPlayedAt,
+        lastPlayedAt: row.lastPlayedAt,
+      };
+    }));
+
+    const games = summaries
+      .filter(Boolean)
+      .sort((a, b) => b.attempts - a.attempts
+        || new Date(a.firstPlayedAt) - new Date(b.firstPlayedAt));
+
+    // An explicit gameKey always wins, even if unplayed — the admin asked for that game, and an
+    // empty chart is the honest answer. Otherwise open on their most-played chartable game,
+    // falling back to the most played at all when none qualifies (the panel then says so rather
+    // than showing nothing).
+    const gameKey = requestedKey
+      ?? games.find(g => g.chartable)?.gameKey
+      ?? games[0]?.gameKey
+      ?? null;
+    if (!gameKey) {
+      return res.json({
+        status: 'success',
+        data: { user: targetUser, games: [], gameKey: null, label: null, attempts: 0, series: [], best: null, firstAvg: null, lastAvg: null },
+      });
+    }
+
+    const cfg = CBAT_GAMES[gameKey];
+    const progress = await buildCbatProgress(cfg, uid, parseProgressLimit(req.query.limit));
+
+    res.json({
+      status: 'success',
+      data: {
+        user: targetUser,
+        games,
+        gameKey,
+        label: cfg.label,
+        lowerIsBetter: cfg.sortDir === 1,
+        ...progress,
+      },
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

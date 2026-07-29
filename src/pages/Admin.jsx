@@ -25,6 +25,7 @@ import RankBadge from '../components/RankBadge'
 import SocialsSection from '../components/admin/SocialsSection'
 import BriefReelReviewPanel from '../components/briefReel/admin/BriefReelReviewPanel'
 import ReportChart, { ChartSkeleton } from '../components/admin/ReportChart'
+import UserCbatProgressModal from '../components/admin/UserCbatProgressModal'
 import ReportHeatmap from '../components/admin/ReportHeatmap'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 import TutorialsEditor from './admin/TutorialsEditor'
@@ -3617,6 +3618,7 @@ function UsersTab({ API, onViewEmailHistory }) {
   const [search,  setSearch]  = useState(false) // is in search mode
   const [modal,   setModal]   = useState(null)
   const [emailModal, setEmailModal] = useState(null) // user object whose email composer is open
+  const [scoresModal, setScoresModal] = useState(null) // user object whose CBAT score graph is open
   const [toast,   setToast]   = useState('')
   const [resetPanel,  setResetPanel]  = useState(null) // user._id of open panel
   const [resetChecks, setResetChecks] = useState({})
@@ -3747,6 +3749,14 @@ function UsersTab({ API, onViewEmailHistory }) {
           onClose={() => setEmailModal(null)}
           onSent={(email) => { setEmailModal(null); setToast(`Email sent to ${email}`) }}
           onError={(msg) => setToast(msg)}
+        />
+      )}
+      {scoresModal && (
+        <UserCbatProgressModal
+          user={scoresModal}
+          API={API}
+          apiFetch={apiFetch}
+          onClose={() => setScoresModal(null)}
         />
       )}
 
@@ -4088,6 +4098,18 @@ function UsersTab({ API, onViewEmailHistory }) {
                   )}
                 </button>
               )}
+              {/* CBAT score history — the same chart the agent sees on their own leaderboard
+                  "You" tab, for whichever game they played first (switchable in the modal).
+                  Sibling of the "CBAT Games Finished" stat above, which lists the raw sessions. */}
+              <button onClick={() => setScoresModal(u)}
+                title="View CBAT score graph"
+                aria-label="View CBAT score graph"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+                  <path d="m19 9-5 5-4-4-3 3" />
+                </svg>
+              </button>
               <button onClick={() => { if (!slim) { setAwardPanel(awardPanel === u._id ? null : u._id); setAwardAmount('') } }}
                 disabled={slim}
                 title={slim ? 'Airstars are unused while CBAT slim mode is enabled' : 'Award Airstars'}

@@ -125,6 +125,24 @@ describe('CbatProgressChart', () => {
     })
   })
 
+  // Recharts renders the tooltip as a position:absolute box inside its own wrapper, so anything it
+  // overhangs bleeds into whatever scroll container the chart sits in. In the admin user-scores
+  // modal that grew the scrollable body on hover, flashing the tooltip across the bottom edge and
+  // snapping a scrollbar in and out. The full variant clips to its own box to stop that.
+  describe('tooltip containment', () => {
+    it('wraps the full chart in a positioned, clipping box', () => {
+      const { container } = renderFull(seriesOverDays([3, 2, 1]))
+      const wrapper = container.firstChild
+      expect(wrapper).toHaveClass('relative')
+      expect(wrapper).toHaveClass('overflow-hidden')
+    })
+
+    it('leaves the sparkline unwrapped — it has no tooltip to contain', () => {
+      const { container } = render(<CbatProgressChart series={seriesOverDays([3, 2, 1])} variant="spark" />)
+      expect(container.firstChild).not.toHaveClass('overflow-hidden')
+    })
+  })
+
   describe('lower-is-better games', () => {
     // Trace Practise scores rotations. Reversing the axis keeps "up = better" true everywhere,
     // which is what makes the sparkline readable at a glance without an axis to consult.

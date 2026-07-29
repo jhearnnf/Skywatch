@@ -154,7 +154,13 @@ export default function CbatProgressChart({
 
   const { ticks, labelOf } = buildDateTicks(data)
 
+  // The tooltip is position:absolute inside Recharts' own wrapper, so anything it overhangs bleeds
+  // into whatever scroll container the chart is sitting in — inside the admin modal's overflow-y-auto
+  // body that grew the scrollable area on hover, flashing the tooltip along the bottom edge and
+  // snapping a scrollbar in and out. Clipping to the chart's own box is safe: allowEscapeViewBox
+  // defaults to false, so Recharts already keeps the tooltip inside the plot area by design.
   return (
+    <div className="relative overflow-hidden">
     <ResponsiveContainer width="100%" height={chartHeight}>
       {/* Right margin leaves room for the final date tick, which is centred on the last point and
           would otherwise be clipped by the chart edge ("16 Ju"). */}
@@ -181,6 +187,10 @@ export default function CbatProgressChart({
           width={44}
         />
         <Tooltip
+          // Recharts transitions the wrapper's transform over 400ms, and on the first hover it has
+          // no transform yet — so the box appeared at the chart's top-left and swept to the cursor.
+          // Off, it simply shows up where it belongs.
+          isAnimationActive={false}
           contentStyle={tooltipStyle}
           itemStyle={{ color: '#ddeaf8' }}
           labelStyle={{ color: COLORS.axis, fontWeight: 600 }}
@@ -201,5 +211,6 @@ export default function CbatProgressChart({
         />
       </LineChart>
     </ResponsiveContainer>
+    </div>
   )
 }
