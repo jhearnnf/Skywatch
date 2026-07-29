@@ -672,10 +672,12 @@ function CurrentOnlyChip() {
 // comparison; `tag` renders a chip beside the title (e.g. the "current only" mark).
 // `window` marks the card as driven by the Time window picker (compact chip);
 // `loading` shows a reload bar while that window's data refetches.
-function ChartCard({ title, sub, tag, window, loading = false, dim = false, children }) {
+// `className` is for grid placement only (col-span at wide breakpoints) — the
+// card's own look is fixed.
+function ChartCard({ title, sub, tag, window, loading = false, dim = false, className = '', children }) {
   return (
     <div
-      className={`relative rounded-2xl border border-slate-200 bg-surface p-4 transition-opacity ${dim ? 'opacity-60' : ''}`}
+      className={`relative rounded-2xl border border-slate-200 bg-surface p-4 transition-opacity ${dim ? 'opacity-60' : ''} ${className}`}
       aria-busy={loading || undefined}
     >
       <ChartLoadingBar active={loading} />
@@ -827,8 +829,10 @@ function ReportsTab({ API }) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)"><ChartSkeleton height={200} /></ChartCard>
+            {/* 3 columns at xl with DAU spanning 2 — five charts fill two rows
+                exactly, no ragged trailing gap. Mirrors the loaded layout. */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)" className="xl:col-span-2"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Test Usage" sub="last 7 days"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Signup Source" sub="all-time"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Subscription Tiers" sub="current snapshot"><ChartSkeleton height={200} /></ChartCard>
@@ -844,8 +848,10 @@ function ReportsTab({ API }) {
               <StatCard label="Total Users" value={fmtNum(snapshot.headlines.totalUsers)} color="slate" sub="registered all-time" />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)">
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+              {/* DAU spans two columns — it's a 30-point time series, so it's the
+                  one chart here that actually reads better wide. */}
+              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)" className="xl:col-span-2">
                 <ReportChart
                   type="line"
                   data={snapshot.dailyDau}
@@ -943,18 +949,20 @@ function ReportsTab({ API }) {
 
       {/* ── ACTIVITY & GROWTH ─────────────────────────────────────────────── */}
       <StatsSection title={<>Activity &amp; Growth<WindowChip window={window} /></>} defaultOpen>
+        {/* At xl the two headline cards sit in a narrow left column beside the
+            signups chart rather than above it — one less row to scroll past. */}
         {!windowed ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-3 xl:self-start">
               <StatCardSkeleton /><StatCardSkeleton />
             </div>
-            <ChartCard title="Daily Signups" sub={`window: ${window}`} window={window}>
+            <ChartCard title="Daily Signups" sub={`window: ${window}`} window={window} className="xl:col-span-2">
               <ChartSkeleton height={200} />
             </ChartCard>
           </div>
         ) : (
-          <div className={`space-y-4 ${windowedDimmed}`}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className={`grid grid-cols-1 xl:grid-cols-3 gap-4 ${windowedDimmed}`}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-3 xl:self-start">
               <StatCard
                 label="Signups (window)"
                 value={fmtNum(windowed.headlines.signupsInWindow)}
@@ -971,7 +979,7 @@ function ReportsTab({ API }) {
               />
             </div>
 
-            <ChartCard title="Daily Signups" sub={compareActive ? `window: ${window} · dashed = previous period` : `window: ${window}`} window={window} loading={windowedLoading}>
+            <ChartCard title="Daily Signups" sub={compareActive ? `window: ${window} · dashed = previous period` : `window: ${window}`} window={window} loading={windowedLoading} className="xl:col-span-2">
               <ReportChart
                 type="bar"
                 data={windowed.dailySignups}
@@ -994,12 +1002,14 @@ function ReportsTab({ API }) {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
             </div>
-            <ChartCard title="Daily CBAT Sessions" sub={`stacked by game · window: ${window}`} window={window}>
-              <ChartSkeleton height={260} />
-            </ChartCard>
-            <ChartCard title="CBAT Activity by Day & Hour" sub="game starts · UK time" window={window}>
-              <ChartSkeleton height={200} />
-            </ChartCard>
+            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+              <ChartCard title="Daily CBAT Sessions" sub={`stacked by game · window: ${window}`} window={window}>
+                <ChartSkeleton height={260} />
+              </ChartCard>
+              <ChartCard title="CBAT Activity by Day & Hour" sub="game starts · UK time" window={window}>
+                <ChartSkeleton height={200} />
+              </ChartCard>
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <ChartCard title="Sessions per User" sub="distribution across users" window={window}>
                 <ChartSkeleton height={220} />
@@ -1034,31 +1044,35 @@ function ReportsTab({ API }) {
                 delta={cCmp?.d7Retention?.delta} />
             </div>
 
-            {/* Daily sessions stacked by game */}
-            <ChartCard title="Daily CBAT Sessions" sub={compareActive ? `stacked by game · window: ${window} · dashed = previous period total` : `stacked by game · window: ${window}`} window={window} loading={cbatLoading}>
-              <ReportChart
-                type="stackedBar"
-                data={cbat.dailySessions}
-                xKey="date"
-                keys={cbat.gameKeys}
-                labels={cbat.gameLabels}
-                dimLabels={practiceLabels}
-                height={260}
-                showLegend
-                compareKey={compareActive ? '_prevTotal' : undefined}
-                compareLabel="Prev period total"
-              />
-            </ChartCard>
+            {/* Daily sessions stacked by game, and the day×hour heatmap. Paired
+                only at 2xl: the heatmap's 24 hour columns need ~560px, so on
+                anything narrower they each want the full row. */}
+            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+              <ChartCard title="Daily CBAT Sessions" sub={compareActive ? `stacked by game · window: ${window} · dashed = previous period total` : `stacked by game · window: ${window}`} window={window} loading={cbatLoading}>
+                <ReportChart
+                  type="stackedBar"
+                  data={cbat.dailySessions}
+                  xKey="date"
+                  keys={cbat.gameKeys}
+                  labels={cbat.gameLabels}
+                  dimLabels={practiceLabels}
+                  height={260}
+                  showLegend
+                  compareKey={compareActive ? '_prevTotal' : undefined}
+                  compareLabel="Prev period total"
+                />
+              </ChartCard>
 
-            {/* When users play: day-of-week × hour-of-day heatmap of game starts */}
-            <ChartCard
-              title="CBAT Activity by Day & Hour"
-              sub={`game starts · UK time · window: ${window}`}
-              window={window}
-              loading={cbatLoading}
-            >
-              <ReportHeatmap data={cbat.activityHeatmap} />
-            </ChartCard>
+              {/* When users play: day-of-week × hour-of-day heatmap of game starts */}
+              <ChartCard
+                title="CBAT Activity by Day & Hour"
+                sub={`game starts · UK time · window: ${window}`}
+                window={window}
+                loading={cbatLoading}
+              >
+                <ReportHeatmap data={cbat.activityHeatmap} />
+              </ChartCard>
+            </div>
 
             {/* Distribution + per-game side by side on lg */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1160,7 +1174,10 @@ function ReportsTab({ API }) {
                   </div>
                   <p className="text-[10px] text-slate-400 mt-0.5">practice-mode usage · window: {window}</p>
                 </div>
-                <div className="p-4 space-y-5">
+                {/* Two funnels per row from lg — with a tutorial per game these
+                    stack into a long scroll otherwise. gap-x is wider than the
+                    bar rows' spacing so adjacent funnels stay distinguishable. */}
+                <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
                   {cbat.tutorials.map(t => {
                     const base = t.funnel?.[0]?.reached || t.sessions || 0
                     return (
@@ -9574,6 +9591,13 @@ const TABS = [
   { id: 'intel',    label: 'Intel',    icon: '🗂️'  },
 ]
 
+// Tabs that get the full-width shell. Reports is a grid of charts and stat
+// cards, so on a desktop monitor the narrow column just meant a long scroll
+// past half-empty rows; the charts are all ResponsiveContainer-based and take
+// whatever width they're given. Every other tab is forms, tables and prose
+// that only stay readable in a narrow measure, so they keep max-w-2xl.
+const WIDE_TABS = new Set(['reports'])
+
 export default function Admin() {
   const { user, setUser, loading, API, apiFetch } = useAuth()
   const { unsolvedCount, unresolvedSystemLogs, refresh: refreshUnsolvedCount } = useUnsolvedReports()
@@ -9623,7 +9647,7 @@ export default function Admin() {
   return (
     <div className="min-h-screen bg-slate-50">
       <SEO title="Admin" description="SkyWatch admin dashboard." noIndex={true} />
-      <div className="max-w-2xl mx-auto px-4 py-6">
+      <div data-admin-shell className={`mx-auto px-4 py-6 ${WIDE_TABS.has(tab) ? 'max-w-[1600px]' : 'max-w-2xl'}`}>
 
         {/* Header */}
         <div className="mb-5">

@@ -420,4 +420,23 @@ describe('Admin — Reports tab', () => {
     await openReportsTab()
     await waitFor(() => expect(screen.getByText(/Failed to load/i)).toBeInTheDocument())
   })
+
+  // Reports is a grid of charts, so it gets the full-width shell; the form and
+  // list tabs stay in the narrow reading column.
+  it('widens the admin shell for Reports only', async () => {
+    render(<Admin />)
+    const shell = () => document.querySelector('[data-admin-shell]')
+
+    // Stats is the default tab — narrow.
+    expect(shell().className).toContain('max-w-2xl')
+
+    fireEvent.click(await screen.findByRole('button', { name: /Reports/i }))
+    await waitFor(() => expect(shell().className).toContain('max-w-[1600px]'))
+    expect(shell().className).not.toContain('max-w-2xl')
+
+    // Back to Stats — narrow again.
+    fireEvent.click(screen.getByRole('button', { name: /Stats/i }))
+    await waitFor(() => expect(shell().className).toContain('max-w-2xl'))
+    expect(shell().className).not.toContain('max-w-[1600px]')
+  })
 })
