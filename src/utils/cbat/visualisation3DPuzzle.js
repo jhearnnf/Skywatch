@@ -20,6 +20,7 @@
 export { SHAPES as COMPOSITES } from './visualisation3DShapes'
 export { shapeCorners as compositeCorners } from './visualisation3DShapes'
 
+import * as THREE from 'three'
 import { SHAPES } from './visualisation3DShapes'
 import { shapeCorners as compositeCorners, shapeOrbits } from './visualisation3DShapes'
 
@@ -59,6 +60,37 @@ export const TIER2_ROTATIONS = (() => {
   }
   return rots
 })()
+
+// ─── Rendered-appearance key ─────────────────────────────────────────────────
+// What an option tile actually LOOKS like for one shape slot: the rotated hull
+// (as a canonical point set) plus where the dot ends up. Two slots with the same
+// key are the same picture.
+//
+// The orbit rule below guarantees a distractor's dot is on a logically different
+// corner, but it can't stop two options being drawn the same: rotations come
+// from a symmetry group, so a different (rotation, corner) pair can land the
+// shape and its dot in exactly the same place. That produced rounds with two
+// identical tiles — and, if one of them was the correct option, two correct
+// answers. buildRound re-rolls until every tile is distinct.
+const _keyCache = new Map()
+export function slotRenderKey(compositeKey, euler, dotId) {
+  const memo = `${compositeKey}|${euler.join(',')}|${dotId}`
+  if (_keyCache.has(memo)) return _keyCache.get(memo)
+  const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(euler[0], euler[1], euler[2]))
+  const q = (n) => Math.round(n * 1000) / 1000
+  const at = (p) => {
+    const v = new THREE.Vector3(p[0], p[1], p[2]).applyMatrix4(m)
+    return `${q(v.x)},${q(v.y)},${q(v.z)}`
+  }
+  const hull = SHAPES[compositeKey].vertices.map(at).sort().join(';')
+  const corner = compositeCorners(compositeKey).find((c) => c.id === dotId)
+  const key = `${hull}|${corner ? at(corner.pos) : 'none'}`
+  _keyCache.set(memo, key)
+  return key
+}
+
+const optionRenderKey = (shapes, option) =>
+  shapes.map((s, i) => slotRenderKey(s.compositeKey, option.rotations[i], option.dots[i])).join('#')
 
 // ─── Seeded RNG ──────────────────────────────────────────────────────────────
 // Tiny LCG so test runs are deterministic when a seeded rng is passed.
@@ -183,6 +215,28 @@ export function buildRound(roundIdx, rng = Math.random) {
   const correct = {
     rotations: [correctRotA, correctRotB],
     dots: [dotA, dotB],
+  }
+
+  // Every tile must be a different picture. A distractor that renders exactly
+  // like the correct option is a second correct answer; two distractors that
+  // render alike are a duplicate choice. Re-roll the offender's rotations (the
+  // dots are already constrained by orbit, so rotation is the free variable),
+  // and fall back to nudging its dot if no rotation separates them.
+  const taken2 = new Set([optionRenderKey(shapes, correct)])
+  for (const d of distractors) {
+    let key = optionRenderKey(shapes, d)
+    for (let attempt = 0; taken2.has(key) && attempt < 40; attempt++) {
+      d.rotations = [pick(rng, rotationPool), pick(rng, rotationPool)]
+      if (attempt >= 20) {
+        // Rotation alone isn't separating them — try a different wrong corner.
+        d.dots = [
+          d.dots[0] === dotA ? dotA : pickN(rng, wrongPoolA, 1)[0],
+          d.dots[1] === dotB ? dotB : pickN(rng, wrongPoolB, 1)[0],
+        ]
+      }
+      key = optionRenderKey(shapes, d)
+    }
+    taken2.add(key)
   }
 
   // Shuffle the 5 options into A..E and record which letter is correct.

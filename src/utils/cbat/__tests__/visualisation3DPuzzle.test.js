@@ -10,6 +10,7 @@ import {
   mulberry32,
 } from '../visualisation3DPuzzle'
 import { getCompositeGeometry } from '../visualisation3DGeometry'
+import { slotRenderKey } from '../visualisation3DPuzzle'
 import { SHAPES, shapeOrbits } from '../visualisation3DShapes'
 
 describe('visualisation3DShapes — clean manifold geometry', () => {
@@ -249,5 +250,65 @@ describe('visualisation3DPuzzle — buildRound', () => {
         expect(COMPOSITES[shape.compositeKey]).toBeTruthy()
       }
     }
+  })
+})
+
+// The orbit rule keeps a distractor's dot on a logically different corner, but
+// it can't stop two options being DRAWN the same: rotations come from a symmetry
+// group, so a different (rotation, corner) pair can put the shape and its dot in
+// exactly the same place. Before the uniqueness guard, 1.1% of rounds shipped
+// two identical tiles — and when one of them was the correct option, the round
+// genuinely had two correct answers.
+describe('visualisation3DPuzzle — every option is a different picture', () => {
+  const dupPairs = (round) => {
+    const keys = round.options.map((o) =>
+      round.shapes.map((s, i) => slotRenderKey(s.compositeKey, o.rotations[i], o.dots[i])).join('#'))
+    const pairs = []
+    for (let i = 0; i < keys.length; i++) {
+      for (let j = i + 1; j < keys.length; j++) {
+        if (keys[i] === keys[j]) pairs.push([round.options[i].id, round.options[j].id])
+      }
+    }
+    return pairs
+  }
+
+  it('never renders two options identically, across every tier', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const rng = mulberry32(seed)
+      for (let r = 0; r < 8; r++) {
+        const round = buildRound(r, rng)
+        const dups = dupPairs(round)
+        expect(dups, `seed ${seed} round ${r}: identical options ${JSON.stringify(dups)}`).toHaveLength(0)
+      }
+    }
+  })
+
+  it('so a round never has two correct answers', () => {
+    // Restating the consequence the guard exists for: nothing may render the
+    // same as the correct option.
+    for (let seed = 500; seed <= 700; seed++) {
+      const rng = mulberry32(seed)
+      for (let r = 0; r < 8; r++) {
+        const round = buildRound(r, rng)
+        const twins = dupPairs(round).flat()
+        expect(twins).not.toContain(round.correctOptionId)
+      }
+    }
+  })
+
+  it('keys the rendered appearance off the rotation AND the dot, not the corner id', () => {
+    // Sanity for the helper the guard leans on: the same corner drawn at two
+    // rotations is two different pictures; the same picture keys the same.
+    const k = (rot, dot) => slotRenderKey('pyramidTop', rot, dot)
+    expect(k([0, 0, 0], 'c0')).not.toBe(k([0, Math.PI / 2, 0], 'c0'))
+    expect(k([0, 0, 0], 'c0')).toBe(k([0, 0, 0], 'c0'))
+    // pyramidTop is 4-fold about Y: turning it 90° maps c0 onto one of the other
+    // base corners, so that pair of tiles IS the same picture — exactly the
+    // collision the guard exists to reject.
+    const twin = compositeCorners('pyramidTop')
+      .map((c) => c.id)
+      .find((id) => k([0, Math.PI / 2, 0], id) === k([0, 0, 0], 'c0'))
+    expect(twin, 'no rotated corner reproduces the c0 tile').toBeTruthy()
+    expect(twin).not.toBe('c0')
   })
 })

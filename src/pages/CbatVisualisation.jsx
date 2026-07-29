@@ -386,6 +386,23 @@ function ResultsScreen({ answers, totalTime }) {
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Visualisation Complete</p>
 
+      {/* Score and time together — the run's two headline numbers. The time was
+          already recorded and submitted; it just wasn't being shown back. */}
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Score</p>
+          <p className="text-xl font-mono font-bold text-brand-300">{correct}/{TOTAL_ROUNDS}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">{pct}%</p>
+        </div>
+        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Time</p>
+          <p className="text-xl font-mono font-bold text-brand-300">{totalTime.toFixed(1)}s</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">
+            {correctTimes.length ? `avg ${avgTime.toFixed(2)}s per solve` : 'no solves'}
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-2 mb-6">
         {['Tier 1', 'Tier 2'].map((label, i) => (
           <div key={i} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
@@ -412,11 +429,6 @@ function ResultsScreen({ answers, totalTime }) {
         </div>
       </div>
 
-      {correctTimes.length > 0 && (
-        <p className="text-xs text-slate-500 mb-4">
-          Avg solve time: <span className="text-brand-300 font-mono">{avgTime.toFixed(2)}s</span>
-        </p>
-      )}
     </div>
   )
 }

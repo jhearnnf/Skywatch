@@ -109,3 +109,30 @@ describe('Visualisation 3D — admin composite labels', () => {
     expect(container.querySelector('[data-admin-composite]')).toBeNull()
   })
 })
+
+// The run's time was recorded and submitted but never shown back. Both modes
+// share this results screen, so covering one covers both.
+describe('Visualisation — post-game screen shows score and time', () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); localStorage.clear() })
+
+  it('reports both headline numbers once the run finishes', () => {
+    const { container } = started({ isAdmin: false })
+
+    // Answer all eight rounds. Answering disables every tile and leaves the
+    // Next Round control as the only live one, so drive that to advance.
+    for (let i = 0; i < 8; i++) {
+      act(() => { press(container.querySelector(ANSWER_SELECTOR)) })
+      const live = [...container.querySelectorAll(ANSWER_SELECTOR)].filter(b => !b.disabled)
+      act(() => { press(live[0]) })
+    }
+
+    const text = container.textContent
+    expect(text).toContain('Visualisation Complete')
+    expect(text).toContain('Score')
+    expect(text).toContain('Time')
+    // Score is out of the round count, time is a seconds figure.
+    expect(text).toMatch(/\d\/8/)
+    expect(text).toMatch(/\d+\.\ds/)
+  })
+})
