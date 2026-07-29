@@ -58,6 +58,58 @@ describe('visualisation3DShapes — clean manifold geometry', () => {
     }
   })
 
+  // A REGULAR pentagon has 5-fold symmetry about Y: turn it 72° and the
+  // silhouette is identical, so five corners are visually interchangeable and a
+  // marked corner can't be pinned to a side. The penta shapes therefore use an
+  // irregular base (PENTA_PROFILE). Guarded here because "tidying" the profile
+  // back to a regular n-gon would look harmless and quietly make those rounds
+  // unanswerable.
+  describe('pentagon shapes are irregular', () => {
+    const PENTA = ['pentaTower', 'pentaCap']
+
+    it('have no rotational symmetry at all — every corner is its own orbit', () => {
+      for (const key of PENTA) {
+        const orbits = shapeOrbits(key)
+        const distinct = new Set(Object.values(orbits)).size
+        expect(distinct, `${key} has symmetric corners`).toBe(SHAPES[key].vertices.length)
+      }
+    })
+
+    it('give every side of the base a different width', () => {
+      for (const key of PENTA) {
+        const V = SHAPES[key].vertices
+        const yMin = Math.min(...V.map((v) => v[1]))
+        const ring = V.filter((v) => Math.abs(v[1] - yMin) < 1e-6)
+        expect(ring).toHaveLength(5)
+
+        // Distinct radii — the visible cue that tells the sides apart.
+        const radii = ring.map((v) => Math.hypot(v[0], v[2]))
+        for (let i = 0; i < radii.length; i++) {
+          for (let j = i + 1; j < radii.length; j++) {
+            expect(Math.abs(radii[i] - radii[j])).toBeGreaterThan(0.02)
+          }
+        }
+
+        // Still convex — orientFaces and the wall/ring faces assume a polygon
+        // that's star-convex from its centroid.
+        const turns = new Set()
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[i], b = ring[(i + 1) % ring.length], c = ring[(i + 2) % ring.length]
+          turns.add(Math.sign((b[0] - a[0]) * (c[2] - b[2]) - (b[2] - a[2]) * (c[0] - b[0])))
+        }
+        expect(turns.size, `${key} base is not convex`).toBe(1)
+      }
+    })
+
+    it('stay inside the frame the camera already accommodates', () => {
+      // The irregular profile pushes one corner further out than the old radius;
+      // it must not exceed the widest shape the fixed camera already frames.
+      const far = (k) => Math.max(...SHAPES[k].vertices.map((v) => Math.hypot(v[0], v[1], v[2])))
+      const widest = Math.max(...Object.keys(SHAPES).filter(k => !PENTA.includes(k)).map(far))
+      for (const key of PENTA) expect(far(key)).toBeLessThanOrEqual(widest)
+    })
+  })
+
   it('every composite builds one non-empty geometry (cached)', () => {
     for (const key of Object.keys(COMPOSITES)) {
       const geo = getCompositeGeometry(key)

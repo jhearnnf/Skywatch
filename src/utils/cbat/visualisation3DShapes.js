@@ -21,26 +21,46 @@ import * as THREE from 'three'
 // Each returns { vertices: [[x,y,z], …], faces: [[vertexIndex, …], …] }, roughly
 // centred on the origin. Faces are oriented outward by orientFaces() below.
 
-// Regular n-gon in the XZ plane. First vertex at +Z (matches Three.js so shapes
-// look consistent if ever mixed with primitive geometry).
-function ngon(n, r, rot = 0) {
+// n-gon in the XZ plane. First vertex at +Z (matches Three.js so shapes look
+// consistent if ever mixed with primitive geometry).
+//
+// `profile` optionally scales each vertex's radius individually, turning the
+// regular polygon into an irregular one. See PENTA_PROFILE for why that matters.
+function ngon(n, r, rot = 0, profile = null) {
   const pts = []
   for (let k = 0; k < n; k++) {
     const a = rot + (k * 2 * Math.PI) / n
-    pts.push([r * Math.sin(a), r * Math.cos(a)])
+    const rk = profile ? r * profile[k] : r
+    pts.push([rk * Math.sin(a), rk * Math.cos(a)])
   }
   return pts
 }
 
+// Per-vertex radius multipliers for the pentagon shapes.
+//
+// A REGULAR pentagon has 5-fold rotational symmetry about Y: turn it 72° and
+// the silhouette is identical, so five different corners are visually
+// interchangeable. That guts the test — the player can't tell which side the
+// marked corner is on, and the generator loses four of every five corners to
+// the symmetry orbit rule. Scaling the radii breaks every rotational symmetry
+// (the sequence isn't invariant under any cyclic shift) while keeping the
+// polygon convex and star-convex from its centroid, which is what orientFaces
+// and the manifold builders rely on. Each side now reads as a visibly
+// different width, so a dot pins to one unambiguously.
+//
+// Applied to both radii of a stack (base and upper prism), so the shape stays
+// concentric and every wall/ring face stays planar.
+const PENTA_PROFILE = [1.16, 0.80, 1.04, 0.86, 1.10]
+
 // A prism (n-gon base) with a smaller concentric n-gon prism stacked on top.
 // The base's top becomes a flat ring (annulus) around the upper prism.
-function prismStack({ n, r, rot = 0, baseH, topR, topH }) {
+function prismStack({ n, r, rot = 0, baseH, topR, topH, profile = null }) {
   const total = baseH + topH
   const y0 = -total / 2
   const yb = y0 + baseH
   const yt = y0 + baseH + topH
-  const base = ngon(n, r, rot)
-  const top = ngon(n, topR, rot)
+  const base = ngon(n, r, rot, profile)
+  const top = ngon(n, topR, rot, profile)
   const V = []
   const push = (x, y, z) => (V.push([x, y, z]), V.length - 1)
   const bBot = base.map(([x, z]) => push(x, y0, z))
@@ -57,12 +77,12 @@ function prismStack({ n, r, rot = 0, baseH, topR, topH }) {
 }
 
 // A prism (n-gon base) capped by a pyramid to a single apex.
-function prismCap({ n, r, rot = 0, bodyH, capH }) {
+function prismCap({ n, r, rot = 0, bodyH, capH, profile = null }) {
   const total = bodyH + capH
   const y0 = -total / 2
   const yb = y0 + bodyH
   const ya = y0 + bodyH + capH
-  const base = ngon(n, r, rot)
+  const base = ngon(n, r, rot, profile)
   const V = []
   const push = (x, y, z) => (V.push([x, y, z]), V.length - 1)
   const bBot = base.map(([x, z]) => push(x, y0, z))
@@ -156,8 +176,9 @@ export const SHAPES = {
   triStack:    orientFaces(prismStack({ n: 3, r: 0.6, rot: 0, baseH: 0.75, topR: 0.34, topH: 0.5 })),
   taperBlock:  orientFaces(frustum({ n: 4, rBot: 0.7071, rTop: 0.45, rot: Math.PI / 4, height: 1.0 })),
   hexGem:      orientFaces(frustum({ n: 6, rBot: 0.52, rTop: 0.3, rot: 0, height: 0.95 })),
-  pentaTower:  orientFaces(prismStack({ n: 5, r: 0.55, rot: 0, baseH: 0.8, topR: 0.33, topH: 0.5 })),
-  pentaCap:    orientFaces(prismCap({ n: 5, r: 0.55, rot: 0, bodyH: 0.75, capH: 0.5 })),
+  // Irregular pentagons on purpose — see PENTA_PROFILE.
+  pentaTower:  orientFaces(prismStack({ n: 5, r: 0.55, rot: 0, baseH: 0.8, topR: 0.33, topH: 0.5, profile: PENTA_PROFILE })),
+  pentaCap:    orientFaces(prismCap({ n: 5, r: 0.55, rot: 0, bodyH: 0.75, capH: 0.5, profile: PENTA_PROFILE })),
 }
 
 // Corner list for a shape: every vertex, with a stable id (index order).
