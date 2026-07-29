@@ -16,5 +16,6 @@ emailLogSchema.index({ sentAt: -1 });
 emailLogSchema.index({ type: 1 });
 emailLogSchema.index({ status: 1 });
 emailLogSchema.index({ recipientEmail: 1 });
+emailLogSchema.index({ recipientUserId: 1, sentAt: -1 }); // per-user email history
 
 module.exports = mongoose.model('EmailLog', emailLogSchema);

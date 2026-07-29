@@ -693,3 +693,49 @@ describe('PATCH /api/admin/users/:id/subscription — tier change', () => {
     expect(action.reason).toBe('gift subscription');
   });
 });
+
+// ── emailsSent ────────────────────────────────────────────────────────────────
+
+describe('GET /api/admin/users — emailsSent', () => {
+  const EmailLog = require('../../models/EmailLog');
+  const logFor = (user, props = {}) => EmailLog.create({
+    type: 'welcome', status: 'sent',
+    recipientEmail: user.email, recipientUserId: user._id, ...props,
+  });
+
+  it('counts every logged email per user, isolated between users', async () => {
+    const admin = await createAdminUser();
+    const a     = await createUser({ email: 'a@test.com' });
+    const b     = await createUser({ email: 'b@test.com' });
+
+    await logFor(a);
+    await logFor(a, { type: 'app_invite' });
+    await logFor(a, { status: 'failed', error: 'bounced' }); // failures count too
+    await logFor(b);
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const byId = Object.fromEntries(res.body.data.users.map(u => [u._id, u.emailsSent]));
+    expect(byId[a._id.toString()]).toBe(3);
+    expect(byId[b._id.toString()]).toBe(1);
+    expect(byId[admin._id.toString()]).toBe(0);
+  });
+
+  it('is included in search results too', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser({ email: 'searchme@test.com' });
+    await logFor(user);
+    await logFor(user);
+
+    const res = await request(app)
+      .get('/api/admin/users/search?q=searchme')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const hit = res.body.data.users.find(u => u._id === user._id.toString());
+    expect(hit.emailsSent).toBe(2);
+  });
+});

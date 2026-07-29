@@ -1057,7 +1057,7 @@ async function enrichUsersWithStats(users) {
   const userIds = users.map(u => u._id);
 
   const cbatConfigs = Object.values(CBAT_GAMES);
-  const [briefCounts, quizCounts, booCounts, wtaCounts, whereCounts, flashCounts, cbatStartCounts, ...cbatCountsPerGame] = await Promise.all([
+  const [briefCounts, quizCounts, booCounts, wtaCounts, whereCounts, flashCounts, cbatStartCounts, emailCounts, ...cbatCountsPerGame] = await Promise.all([
     IntelligenceBriefRead.aggregate([
       { $match: { userId: { $in: userIds }, completed: true } },
       { $group: { _id: '$userId', count: { $sum: 1 } } },
@@ -1094,6 +1094,12 @@ async function enrichUsersWithStats(users) {
       { $match: { userId: { $in: userIds } } },
       { $group: { _id: '$userId', count: { $sum: 1 }, lastAt: { $max: '$startedAt' } } },
     ]),
+    // Every mail we have a record of for this user, failures included — the badge
+    // has to match the row count they land on in Intel ▸ Email Logs.
+    EmailLog.aggregate([
+      { $match: { recipientUserId: { $in: userIds } } },
+      { $group: { _id: '$recipientUserId', count: { $sum: 1 } } },
+    ]),
     ...cbatConfigs.map(cfg => cfg.Model.aggregate([
       { $match: { ...(cfg.modeFilter ?? {}), userId: { $in: userIds } } },
       { $group: { _id: '$userId', count: { $sum: 1 }, lastAt: { $max: '$createdAt' } } },
@@ -1107,6 +1113,7 @@ async function enrichUsersWithStats(users) {
   const whereMap       = Object.fromEntries(whereCounts.map(w  => [w._id.toString(), w.total]));
   const flashMap       = Object.fromEntries(flashCounts.map(f  => [f._id.toString(), f.total]));
   const cbatStartedMap = Object.fromEntries(cbatStartCounts.map(s => [s._id.toString(), s.count]));
+  const emailMap       = Object.fromEntries(emailCounts.map(e     => [e._id.toString(), e.count]));
 
   // Most recent CBAT activity per user — a start (covers finished *and* abandoned
   // sessions, both of which create a start) or a finish record (covers orphan/
@@ -1145,6 +1152,7 @@ async function enrichUsersWithStats(users) {
       ...plain,
       lastTestGameAt: uid in lastGameMap ? new Date(lastGameMap[uid]).toISOString() : null,
       lastTestAppOpenAt: lastAppOpen ? new Date(lastAppOpen).toISOString() : null,
+      emailsSent: emailMap[uid] ?? 0,
       profileStats: {
         brifsRead:        briefMap[uid]          ?? 0,
         quizzesPlayed:    quizMap[uid]?.total     ?? 0,
@@ -5956,7 +5964,10 @@ router.post('/save-generated-image', async (req, res) => {
   }
 });
 
-// GET /api/admin/email-logs?page=1&limit=50&type=welcome&status=failed&search=user@example.com
+// GET /api/admin/email-logs?page=1&limit=50&type=welcome&status=failed&search=user@example.com&userId=<id>
+// `userId` is the one-agent email history used by the Users panel. It filters on
+// recipientUserId rather than the address so a user who has since changed their
+// email still shows every mail we ever sent them.
 router.get('/email-logs', async (req, res) => {
   try {
     const page   = Math.max(1, parseInt(req.query.page,  10) || 1);
@@ -5965,6 +5976,12 @@ router.get('/email-logs', async (req, res) => {
     if (req.query.type)   filter.type   = req.query.type;
     if (req.query.status) filter.status = req.query.status;
     if (req.query.search) filter.recipientEmail = { $regex: req.query.search.trim(), $options: 'i' };
+    if (req.query.userId) {
+      if (!mongoose.Types.ObjectId.isValid(req.query.userId)) {
+        return res.status(400).json({ message: 'Invalid userId' });
+      }
+      filter.recipientUserId = req.query.userId;
+    }
 
     const [logs, total] = await Promise.all([
       EmailLog.find(filter)

@@ -3590,7 +3590,7 @@ function EmailUserModal({ user, API, apiFetch, onClose, onSent, onError }) {
   )
 }
 
-function UsersTab({ API }) {
+function UsersTab({ API, onViewEmailHistory }) {
   const { user: currentUser, refreshUser, apiFetch } = useAuth()
   const navigate = useNavigate()
   const slim = useSlimMode() // CBAT-only mode disables in-app messaging
@@ -4046,6 +4046,29 @@ function UsersTab({ API }) {
                     <rect width="20" height="16" x="2" y="4" rx="2" />
                     <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
                   </svg>
+                </button>
+              )}
+              {/* Read-only sibling of "Email this user": jumps to Intel → Email Logs
+                  pre-filtered to this agent. Deliberately neutral slate rather than
+                  brand blue so the two envelopes never read as the same action —
+                  brand = sends something, slate = just looks. */}
+              {u.email && (
+                <button onClick={() => onViewEmailHistory?.(u)}
+                  title={`View email history (${u.emailsSent ?? 0} sent)`}
+                  aria-label={`View email history — ${u.emailsSent ?? 0} sent`}
+                  className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M22 12.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7.5" />
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                    <circle cx="18" cy="18" r="3" />
+                    <path d="m22 22-1.5-1.5" />
+                  </svg>
+                  {(u.emailsSent ?? 0) > 0 && (
+                    <span aria-hidden="true"
+                      className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 inline-flex items-center justify-center rounded-full bg-brand-600 text-white text-[9px] font-bold leading-none shadow">
+                      {u.emailsSent > 99 ? '99+' : u.emailsSent}
+                    </span>
+                  )}
                 </button>
               )}
               <button onClick={() => { if (!slim) { setAwardPanel(awardPanel === u._id ? null : u._id); setAwardAmount('') } }}
@@ -8935,7 +8958,7 @@ function EmailTypeBadge({ type }) {
   return <LabelBadge label={info.label} color={info.color} uppercase />
 }
 
-function EmailLogsTab({ API, initialStatusFilter }) {
+function EmailLogsTab({ API, initialStatusFilter, initialUserFilter }) {
   const { apiFetch } = useAuth()
   const [logs,       setLogs]       = useState([])
   const [loading,    setLoading]    = useState(true)
@@ -8947,6 +8970,8 @@ function EmailLogsTab({ API, initialStatusFilter }) {
   const [search,     setSearch]     = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [expanded,   setExpanded]   = useState(null) // log._id of the open detail panel
+  // { id, email, displayName, agentNumber } when arriving from a Users row
+  const [userFilter, setUserFilter] = useState(initialUserFilter ?? null)
 
   useEffect(() => {
     setLoading(true)
@@ -8954,6 +8979,7 @@ function EmailLogsTab({ API, initialStatusFilter }) {
     if (typeFilter)   params.set('type',   typeFilter)
     if (statusFilter) params.set('status', statusFilter)
     if (search)       params.set('search', search)
+    if (userFilter)   params.set('userId', userFilter.id)
     apiFetch(`${API}/api/admin/email-logs?${params}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
@@ -8964,7 +8990,7 @@ function EmailLogsTab({ API, initialStatusFilter }) {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [API, page, typeFilter, statusFilter, search])
+  }, [API, page, typeFilter, statusFilter, search, userFilter?.id])
 
   const handleSearch = (e) => {
     e.preventDefault()
@@ -8998,6 +9024,28 @@ function EmailLogsTab({ API, initialStatusFilter }) {
           </select>
         </div>
       </div>
+
+      {userFilter && (
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-brand-50 border border-brand-200">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-brand-600">
+            <path d="M22 12.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7.5" />
+            <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+            <circle cx="18" cy="18" r="3" />
+            <path d="m22 22-1.5-1.5" />
+          </svg>
+          <p className="flex-1 min-w-0 text-[11px] text-slate-800 truncate">
+            Email history for <span className="font-semibold">{userFilter.displayName || userFilter.email}</span>
+            {userFilter.agentNumber && <span className="text-slate-600"> · Agent {userFilter.agentNumber}</span>}
+          </p>
+          <button
+            type="button"
+            onClick={() => { setUserFilter(null); setPage(1) }}
+            className="shrink-0 text-[11px] px-2 py-1 rounded-lg border border-brand-200 text-brand-600 font-semibold hover:bg-brand-100 transition-colors"
+          >
+            Show all
+          </button>
+        </div>
+      )}
 
       <form onSubmit={handleSearch} className="flex gap-2 mb-4">
         <input
@@ -9478,9 +9526,13 @@ function SystemLogsTab({ API, onResolved }) {
   )
 }
 
-function IntelTab({ API, unsolvedCount, unresolvedSystemLogs, initialSub, initialEmailStatus, onOpenBrief }) {
+function IntelTab({ API, unsolvedCount, unresolvedSystemLogs, initialSub, initialEmailStatus, initialEmailUser, onOpenBrief, onBootstrapConsumed }) {
   const [sub, setSub] = useState(initialSub ?? 'reports')
   const { refresh } = useUnsolvedReports()
+  // The bootstrap props are read once into child state on mount, so clear them in
+  // the parent immediately — otherwise leaving and re-entering Intel would silently
+  // reapply a stale email filter.
+  useEffect(() => { onBootstrapConsumed?.() }, [])
   return (
     <div>
       <div className="flex gap-1 bg-surface-raised rounded-xl p-1 mb-5">
@@ -9502,7 +9554,7 @@ function IntelTab({ API, unsolvedCount, unresolvedSystemLogs, initialSub, initia
       </div>
       {sub === 'reports'     && <ProblemsTab    API={API} onOpenBrief={onOpenBrief} />}
       {sub === 'action-log'  && <LogsTab        API={API} />}
-      {sub === 'email-log'   && <EmailLogsTab   API={API} initialStatusFilter={initialEmailStatus} />}
+      {sub === 'email-log'   && <EmailLogsTab   API={API} initialStatusFilter={initialEmailStatus} initialUserFilter={initialEmailUser} />}
       {sub === 'system-logs' && <SystemLogsTab  API={API} onResolved={refresh} />}
     </div>
   )
@@ -9531,10 +9583,20 @@ export default function Admin() {
   const [leadsInitialSearch, setLeadsInitialSearch] = useState(() => location.state?.leadsSearch ?? '')
   const [openLeadsOnMount,   setOpenLeadsOnMount]   = useState(() => !!location.state?.openLeads)
   const [editBriefIdOnMount, setEditBriefIdOnMount] = useState(() => location.state?.editBriefId ?? null)
-  const [intelInitial,       setIntelInitial]       = useState({ sub: null, emailStatus: null })
+  const [intelInitial,       setIntelInitial]       = useState({ sub: null, emailStatus: null, emailUser: null })
 
   const openEmailLog = (status) => {
-    setIntelInitial({ sub: 'email-log', emailStatus: status })
+    setIntelInitial({ sub: 'email-log', emailStatus: status, emailUser: null })
+    setTab('intel')
+  }
+
+  // Users row → Intel ▸ Email Logs, showing only what we've sent this agent.
+  const openUserEmailLog = (u) => {
+    setIntelInitial({
+      sub: 'email-log',
+      emailStatus: null,
+      emailUser: { id: u._id, email: u.email, displayName: u.displayName, agentNumber: u.agentNumber },
+    })
     setTab('intel')
   }
 
@@ -9602,10 +9664,10 @@ export default function Admin() {
             {tab === 'stats'    && <StatsTab    API={API} onViewEmailLog={openEmailLog} onViewUsers={() => setTab('users')} />}
             {tab === 'reports'  && <ReportsTab  API={API} />}
             {tab === 'settings' && <SettingsTab API={API} />}
-            {tab === 'users'    && <UsersTab    API={API} />}
+            {tab === 'users'    && <UsersTab    API={API} onViewEmailHistory={openUserEmailLog} />}
             {tab === 'content'  && <ContentTab  API={API} />}
             {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} editBriefIdOnMount={editBriefIdOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false); setEditBriefIdOnMount(null) }} />}
-            {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} initialSub={intelInitial.sub} initialEmailStatus={intelInitial.emailStatus} onOpenBrief={openBriefFromReport} />}
+            {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} initialSub={intelInitial.sub} initialEmailStatus={intelInitial.emailStatus} initialEmailUser={intelInitial.emailUser} onOpenBrief={openBriefFromReport} onBootstrapConsumed={() => setIntelInitial({ sub: null, emailStatus: null, emailUser: null })} />}
           </motion.div>
         </AnimatePresence>
 
