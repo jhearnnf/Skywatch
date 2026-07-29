@@ -97,6 +97,51 @@ SkyWatch CBAT is an independent training tool created to help candidates build g
 
 ---
 
+## Screenshot captions
+
+Store screenshots are **not** OCR'd for search ranking by either Play or the App
+Store — captions are a conversion lever, not an SEO one. The first two or three
+appear in Play search results before anyone taps through, so order matters more
+than wording.
+
+Set headlines in Inter ExtraBold or Black, all caps, tracking +30, in the banner
+area *outside* the phone frame. Sublines in Inter Regular, sentence case. On a
+1080 x 1920 canvas: headline 90-110pt, subline 40-48pt. Colours `#ddeaf8` or
+white on `#06101e`, with `#5baaff` on one emphasised word. Test every caption at
+15% scale before shipping it.
+
+Listed in intended screenshot order.
+
+| # | Game | Headline | Subline |
+|---|------|----------|---------|
+| 1 | Target | `EIGHT TASKS. ZERO DOWNTIME.` | Shapes, lights, aircraft and codes at once |
+| 2 | FLAG | `60 SECONDS. THREE TASKS.` | Track, calculate, identify |
+| 3 | DPT | `VECTOR AIRCRAFT THROUGH GATES` | Compass bearings under pressure |
+| 4 | Visualisation | `FOLD IT. ROTATE IT. MATCH IT.` | 2D and 3D spatial reasoning |
+| 5 | Trace | `WATCH. REMEMBER. RECALL.` | Rebuild the manoeuvre from memory |
+| 6 | Instruments | `READ THE COCKPIT FAST` | Instrument comprehension against the clock |
+| 7 | Symbols | `FIND THE SYMBOL` | The grid grows every round |
+
+Instruments and Symbols are the least visually distinctive screens, which is why
+they sit last.
+
+**Still outstanding:** there is no lead screenshot selling the app rather than an
+individual game. Something like `TRAIN THE SKILLS SELECTION TESTS MEASURE` over
+the Target screen, with Target's own caption moving to position two.
+
+### Per-game keywords for the full description
+
+These belong in the Play Console description, which *is* indexed - not on the
+images.
+
+- **DPT** - dynamic projection test, compass bearings, vectoring, intercepts, spatial orientation
+- **FLAG** - high-speed processing, mental maths, target identification, divided attention, reaction speed
+- **Instruments** - instrument comprehension, cockpit instruments, attitude indicator, pilot aptitude
+- **Symbols** - visual search, perceptual speed, pattern recognition, sustained attention
+- **Target** - multitasking, divided attention, working memory, task switching, aircraft recognition
+- **Trace** - spatial memory, trajectory recall, mental rotation, aircraft manoeuvres
+- **Visualisation** - spatial reasoning, mental rotation, shape matching, 2D and 3D
+
 ## Editing rules for this listing
 
 - **UK spelling throughout** — modelled, manoeuvres, Analyse, maths, Practise
