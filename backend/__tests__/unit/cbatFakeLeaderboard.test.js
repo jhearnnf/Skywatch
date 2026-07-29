@@ -191,7 +191,7 @@ describe('padLeaderboard', () => {
     // 20 real entries, every score below the game's floor. Without the
     // full-sequence path these would short-circuit past padding.
     const cases = [
-      { game: 'flag',            subFloor: -10 }, // floor 55
+      { game: 'flag',            subFloor: -10 }, // floor 75
       { game: 'flag-easier',     subFloor: -10 }, // floor 40
       { game: 'ant',             subFloor:   5 }, // floor 15
       { game: 'code-duplicates', subFloor:   3 }, // floor 7

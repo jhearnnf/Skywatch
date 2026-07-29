@@ -107,15 +107,24 @@ const FAKE_TUNING = {
     scoreSequence: [7, 7, 7, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2, 2],
   },
   'flag': {
-    floor: 55, ceiling: 104, seedTime: 60, timeStep: 0,
-    // 20 values, monotonically non-increasing, max 104, min 55. Higher is
-    // better. FLAG is a fixed-60s game so all real totalTimes equal 60 too —
-    // fakes match (timeStep: 0, integer seedTime) so tie-breaker order stays
-    // stable AND fake rows display the same 60.0 every real row does. This is
-    // the one tuning intentionally exempt from the "non-integer" rule above.
-    // Floor of 55 keeps the visible top-20 above 55 even when sub-floor real
+    // Retuned 2026-07: the old 55–104 band predated real play and sat an order
+    // of magnitude under it (real median single run ≈246), so every demo row
+    // was trivially beatable and the board carried no challenge. Now spans
+    // 380 (a strong run — Outstanding starts at 400) down to 75, with the
+    // median demo at 225 sitting just under the real median.
+    //
+    // Multiples of 5: every FLAG award is one (+30/-10 maths, +20/-15
+    // callsign, +15/-10 target) bar the -3 for a missed callsign question, so
+    // a clean run's total is always a multiple of 5 and demo rows match.
+    //
+    // FLAG is a fixed-60s game so all real totalTimes equal 60 too — fakes
+    // match (timeStep: 0, integer seedTime) so tie-breaker order stays stable
+    // AND fake rows display the same 60.0 every real row does. This is the one
+    // tuning intentionally exempt from the "non-integer" rule above.
+    // The floor keeps the visible top-20 above it even when sub-floor real
     // entries exist (paired with FULL_SEQUENCE_GAMES below).
-    scoreSequence: [104, 100, 97, 94, 91, 88, 85, 82, 79, 76, 73, 70, 67, 64, 62, 60, 58, 57, 56, 55],
+    floor: 75, ceiling: 380, seedTime: 60, timeStep: 0,
+    scoreSequence: [380, 355, 335, 315, 300, 285, 270, 255, 240, 225, 210, 195, 180, 165, 150, 135, 120, 105, 90, 75],
   },
   'flag-easier': {
     // Same fixed-60s shape as `flag` (integer seedTime, timeStep 0 — see the

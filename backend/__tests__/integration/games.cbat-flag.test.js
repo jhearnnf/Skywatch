@@ -126,7 +126,7 @@ describe('CBAT FLAG', () => {
 
   // ── GET /leaderboard ────────────────────────────────────────────────────────
   // FLAG uses padLeaderboard with FULL_SEQUENCE tuning: 20 demo entries (scores
-  // 55–104) always render, and any real entry below score 55 is displaced.
+  // 75–380) always render, and any real entry below score 75 is displaced.
   describe('GET /leaderboard', () => {
     it('returns 20 demo entries when no real results exist; myBest is null', async () => {
       const res = await request(app)
@@ -138,14 +138,21 @@ describe('CBAT FLAG', () => {
       expect(Array.isArray(leaderboard)).toBe(true);
       expect(leaderboard).toHaveLength(20);
       expect(leaderboard.every(e => e.isFake)).toBe(true);
-      // Floor enforced — no fake below 55.
-      leaderboard.forEach(e => expect(e.bestScore).toBeGreaterThanOrEqual(55));
+      // Floor enforced — no fake below 75 — and every demo score is a
+      // multiple of 5, as a clean real run's total always is.
+      leaderboard.forEach(e => {
+        expect(e.bestScore).toBeGreaterThanOrEqual(75);
+        expect(e.bestScore).toBeLessThanOrEqual(380);
+        expect(e.bestScore % 5).toBe(0);
+      });
       expect(myBest).toBeNull();
     });
 
     it('places a high real score at rank 1 above demos; myBest reflects the real score', async () => {
+      // Above the top demo (380) — the board is tuned to real play, so a rank-1
+      // real score has to be a genuinely strong run.
       await request(app).post(RESULT_URL).set('Cookie', cookie)
-        .send(sample({ totalScore: 300, totalTime: 90 }));
+        .send(sample({ totalScore: 450, totalTime: 90 }));
 
       const res = await request(app)
         .get(LEADERBOARD_URL)
@@ -154,16 +161,16 @@ describe('CBAT FLAG', () => {
       expect(res.status).toBe(200);
       const { leaderboard, myBest } = res.body.data;
       expect(leaderboard).toHaveLength(20);
-      expect(leaderboard[0].bestScore).toBe(300);
+      expect(leaderboard[0].bestScore).toBe(450);
       expect(leaderboard[0].rank).toBe(1);
       expect(leaderboard[0].isFake).toBeFalsy();
 
       expect(myBest).not.toBeNull();
-      expect(myBest.bestScore).toBe(300);
+      expect(myBest.bestScore).toBe(450);
       expect(myBest.userId.toString()).toBe(user._id.toString());
     });
 
-    it('hides real entries that score below the 55-point floor', async () => {
+    it('hides real entries that score below the 75-point floor', async () => {
       await request(app).post(RESULT_URL).set('Cookie', cookie)
         .send(sample({ totalScore: 40, totalTime: 60 }));
 
@@ -198,14 +205,14 @@ describe('CBAT FLAG', () => {
       expect(leaderboard).toHaveLength(20);
       // Every visible row is a fake; no sub-floor real sessions surface.
       expect(leaderboard.every(e => e.isFake)).toBe(true);
-      leaderboard.forEach(e => expect(e.bestScore).toBeGreaterThanOrEqual(55));
+      leaderboard.forEach(e => expect(e.bestScore).toBeGreaterThanOrEqual(75));
     });
 
     it('sorts by highest totalScore; ties broken by fastest totalTime', async () => {
       await request(app).post(RESULT_URL).set('Cookie', cookie)
-        .send(sample({ totalScore: 250, totalTime: 110 }));
+        .send(sample({ totalScore: 500, totalTime: 110 }));
       await request(app).post(RESULT_URL).set('Cookie', cookie2)
-        .send(sample({ totalScore: 250, totalTime: 90 }));
+        .send(sample({ totalScore: 500, totalTime: 90 }));
 
       const res = await request(app)
         .get(LEADERBOARD_URL)
@@ -218,7 +225,7 @@ describe('CBAT FLAG', () => {
       const p2Idx = leaderboard.findIndex(e => e.agentNumber === '1000002');
       const p1Idx = leaderboard.findIndex(e => e.agentNumber === '1000001');
       expect(p2Idx).toBeLessThan(p1Idx);
-      // Both real entries (250) outrank every fake (max 104).
+      // Both real entries (500) outrank every fake (max 380).
       expect(p1Idx).toBeLessThan(2);
     });
   });
