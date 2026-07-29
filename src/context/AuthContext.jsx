@@ -121,6 +121,13 @@ export function AuthProvider({ children }) {
 
   // Check session on mount
   useEffect(() => {
+    // Did this launch begin believing it was signed in? `user` here is the
+    // first-render value, i.e. the cached user; on native, a stored token counts
+    // too. A 401 only means "your session died" if we thought we had one — for a
+    // visitor who has never signed in it is simply the expected answer. Treating
+    // it as a dead session put "you're signed out — your scores aren't being
+    // saved" on the landing page of every first-time visitor.
+    const hadSession = user !== null || !!getStoredToken()
     const controller = new AbortController()
     const timeoutId  = setTimeout(() => controller.abort(), 8000)
     fetch(`${API}/api/auth/me`, { headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }), signal: controller.signal })
@@ -129,7 +136,11 @@ export function AuthProvider({ children }) {
         // Clearing the cached user is what turns "app silently records nothing"
         // into "please sign in". Any other failure mode leaves the cache alone
         // so genuine offline play still works.
-        if (r.status === 401) { noteApiUnauthorized(); return null }
+        if (r.status === 401) {
+          if (hadSession) noteApiUnauthorized()
+          else noteApiReachable()   // guest: the API answered, nothing is wrong
+          return null
+        }
         noteApiReachable()
         return r.ok ? r.json() : null
       })
@@ -218,6 +229,10 @@ export function AuthProvider({ children }) {
     if (isNative) clearToken()
     setUser(null)
     resetPostHog()
+    // Signing out on purpose is not a failure. Without this the next 401 from a
+    // public page would re-arm the "your session died" warning at someone who
+    // just chose to log out.
+    noteApiReachable()
   }
 
   const refreshUser = useCallback(async () => {
