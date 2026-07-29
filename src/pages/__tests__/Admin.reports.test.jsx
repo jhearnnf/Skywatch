@@ -421,27 +421,33 @@ describe('Admin — Reports tab', () => {
     await waitFor(() => expect(screen.getByText(/Failed to load/i)).toBeInTheDocument())
   })
 
-  // Reports is a grid of charts, so it gets the full-width shell; the form and
-  // list tabs stay in the narrow reading column. The body class matters just as
-  // much as the shell class — without it AppShell's max-w-3xl clamps the page
-  // to 768px and widening the inner container does nothing.
-  it('widens the admin shell for Reports only', async () => {
-    render(<Admin />)
-    const shell = () => document.querySelector('[data-admin-shell]')
+  // The page shell is full-bleed on every tab so the header and tab strip span
+  // the whole width; only the tab's own content narrows. The body class matters
+  // as much as the shell class — without it AppShell's max-w-3xl clamps the
+  // page to 768px and widening the inner container does nothing.
+  it('keeps the shell full width on every tab and narrows only the content', async () => {
+    const { unmount } = render(<Admin />)
+    const shell   = () => document.querySelector('[data-admin-shell]')
+    const content = () => document.querySelector('[data-admin-content]')
 
-    // Stats is the default tab — narrow.
-    expect(shell().className).toContain('max-w-2xl')
-    expect(document.body.classList.contains('admin-reports-wide')).toBe(false)
+    // Stats is the default tab — shell full width, content narrow.
+    expect(document.body.classList.contains('admin-wide')).toBe(true)
+    expect(shell().className).toContain('max-w-none')
+    expect(content().className).toContain('max-w-2xl')
 
+    // Reports — content goes full width too.
     fireEvent.click(await screen.findByRole('button', { name: /Reports/i }))
-    await waitFor(() => expect(shell().className).toContain('max-w-none'))
-    expect(shell().className).not.toContain('max-w-2xl')
-    expect(document.body.classList.contains('admin-reports-wide')).toBe(true)
+    await waitFor(() => expect(content().className).toContain('max-w-none'))
+    expect(content().className).not.toContain('max-w-2xl')
+    expect(shell().className).toContain('max-w-none')
 
-    // Back to Stats — narrow again, and the shell override is released.
+    // Back to Stats — content narrows again, shell stays full width.
     fireEvent.click(screen.getByRole('button', { name: /Stats/i }))
-    await waitFor(() => expect(shell().className).toContain('max-w-2xl'))
-    expect(shell().className).not.toContain('max-w-none')
-    expect(document.body.classList.contains('admin-reports-wide')).toBe(false)
+    await waitFor(() => expect(content().className).toContain('max-w-2xl'))
+    expect(shell().className).toContain('max-w-none')
+
+    // The shell override is scoped to the page, not left on the body.
+    unmount()
+    expect(document.body.classList.contains('admin-wide')).toBe(false)
   })
 })

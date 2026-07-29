@@ -288,13 +288,15 @@ body.cbat-dpt-fullwidth .app-shell-content {
   }
 }
 
-/* Admin Reports: a grid of charts, so the max-w-3xl reading column wasted most
-   of a desktop monitor and turned the page into a long scroll. Toggled from
-   src/pages/Admin.jsx while the Reports tab is open (mirrors the
-   cbat-recent-wide pattern). Uncapped on purpose — the charts fill whatever
+/* Admin panel: the max-w-3xl reading column wasted most of a desktop monitor —
+   the Reports tab is a grid of charts that turned into a long scroll, and the
+   tab strip only spanned 768px. Toggled from src/pages/Admin.jsx for the whole
+   page (mirrors the cbat-recent-wide pattern) so the header and tab strip are
+   full width on every tab; Admin.jsx then narrows the form/list tabs' own
+   content back to max-w-2xl. Uncapped on purpose — the charts fill whatever
    the monitor gives them; the grid column counts keep each one a sane size. */
 @media (min-width: 1024px) {
-  body.admin-reports-wide .app-shell-content {
+  body.admin-wide .app-shell-content {
     max-width: none;
     padding-left: 1rem;
     padding-right: 1rem;

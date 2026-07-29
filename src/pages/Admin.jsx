@@ -9591,15 +9591,15 @@ const TABS = [
   { id: 'intel',    label: 'Intel',    icon: '🗂️'  },
 ]
 
-// Tabs that get the full-width shell. Reports is a grid of charts and stat
+// Tabs whose *content* runs full width. Reports is a grid of charts and stat
 // cards, so on a desktop monitor the narrow column just meant a long scroll
 // past half-empty rows; the charts are all ResponsiveContainer-based and take
 // whatever width they're given. Every other tab is forms, tables and prose
 // that only stay readable in a narrow measure, so they keep max-w-2xl.
 //
-// Note this only takes effect alongside the `admin-reports-wide` body class
-// below — AppShell's own max-w-3xl column would otherwise clamp the page to
-// 768px no matter what width is set here.
+// This is about content only — the page shell (header + tab strip) is full
+// width on every tab, and needs the `admin-wide` body class below to be, since
+// AppShell's own max-w-3xl column would otherwise clamp it to 768px.
 const WIDE_TABS = new Set(['reports'])
 
 export default function Admin() {
@@ -9647,20 +9647,22 @@ export default function Admin() {
   }, [loading, user, navigate])
 
   // AppShell wraps every page in a max-w-3xl reading column, which would clamp
-  // the wide tabs to 768px however wide their own shell is. Release it while a
-  // wide tab is open — mirror of the cbat-recent-wide pattern.
+  // the whole admin panel to 768px however wide its own shell is. Release it
+  // for the entire page (not just the wide tabs) so the header and tab strip
+  // span the full width on every tab — mirror of the cbat-recent-wide pattern.
   useEffect(() => {
-    if (!WIDE_TABS.has(tab)) return
-    document.body.classList.add('admin-reports-wide')
-    return () => document.body.classList.remove('admin-reports-wide')
-  }, [tab])
+    document.body.classList.add('admin-wide')
+    return () => document.body.classList.remove('admin-wide')
+  }, [])
 
   if (loading || !user?.isAdmin) return null
 
   return (
     <div className="min-h-screen bg-slate-50">
       <SEO title="Admin" description="SkyWatch admin dashboard." noIndex={true} />
-      <div data-admin-shell className={`mx-auto px-4 py-6 ${WIDE_TABS.has(tab) ? 'max-w-none' : 'max-w-2xl'}`}>
+      {/* The shell is always full-bleed so the header and the tab strip span the
+          whole page on every tab; only the tab's own content is narrowed. */}
+      <div data-admin-shell className="mx-auto px-4 py-6 max-w-none">
 
         {/* Header */}
         <div className="mb-5">
@@ -9689,24 +9691,27 @@ export default function Admin() {
           ))}
         </div>
 
-        {/* Tab content */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={tab}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-          >
-            {tab === 'stats'    && <StatsTab    API={API} onViewEmailLog={openEmailLog} onViewUsers={() => setTab('users')} />}
-            {tab === 'reports'  && <ReportsTab  API={API} />}
-            {tab === 'settings' && <SettingsTab API={API} />}
-            {tab === 'users'    && <UsersTab    API={API} onViewEmailHistory={openUserEmailLog} />}
-            {tab === 'content'  && <ContentTab  API={API} />}
-            {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} editBriefIdOnMount={editBriefIdOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false); setEditBriefIdOnMount(null) }} />}
-            {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} initialSub={intelInitial.sub} initialEmailStatus={intelInitial.emailStatus} initialEmailUser={intelInitial.emailUser} onOpenBrief={openBriefFromReport} onBootstrapConsumed={() => setIntelInitial({ sub: null, emailStatus: null, emailUser: null })} />}
-          </motion.div>
-        </AnimatePresence>
+        {/* Tab content — Reports fills the page; the form/list tabs keep the
+            narrow reading column, centred under the full-width tab strip. */}
+        <div data-admin-content className={`mx-auto ${WIDE_TABS.has(tab) ? 'max-w-none' : 'max-w-2xl'}`}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              {tab === 'stats'    && <StatsTab    API={API} onViewEmailLog={openEmailLog} onViewUsers={() => setTab('users')} />}
+              {tab === 'reports'  && <ReportsTab  API={API} />}
+              {tab === 'settings' && <SettingsTab API={API} />}
+              {tab === 'users'    && <UsersTab    API={API} onViewEmailHistory={openUserEmailLog} />}
+              {tab === 'content'  && <ContentTab  API={API} />}
+              {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} editBriefIdOnMount={editBriefIdOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false); setEditBriefIdOnMount(null) }} />}
+              {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} initialSub={intelInitial.sub} initialEmailStatus={intelInitial.emailStatus} initialEmailUser={intelInitial.emailUser} onOpenBrief={openBriefFromReport} onBootstrapConsumed={() => setIntelInitial({ sub: null, emailStatus: null, emailUser: null })} />}
+            </motion.div>
+          </AnimatePresence>
+        </div>
 
       </div>
     </div>
