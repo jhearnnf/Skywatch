@@ -52,6 +52,18 @@ export function VisualisationShapeCanvas() {
   )
 }
 
+// The marked-corner dot. Small enough that it reads as a point ON a corner
+// rather than a blob covering it, and made to carry at that size by dropping
+// tone mapping: the canvas renders with ACES filmic, which pulls a plain red
+// towards a dull pink. `toneMapped={false}` paints the colour as authored, so a
+// dot roughly a third the old area still reads as the brightest thing on
+// screen. The ghost's opacity is up to match — a smaller dot on a back corner
+// has less area to be seen through the solid with.
+export const DOT_COLOR = '#ff2f2f'
+export const DOT_RADIUS = 0.07          // was 0.11
+export const DOT_GHOST_RADIUS = 0.064   // stays under DOT_RADIUS so the solid covers it
+export const DOT_GHOST_OPACITY = 0.45   // was 0.32
+
 // Static fixed-camera shape with one highlighted-corner dot. Renders a sized
 // tracking <div> via <View>; the scene below is tunnelled into the shared
 // VisualisationShapeCanvas. The camera/lighting match the old per-canvas setup
@@ -112,18 +124,19 @@ export default function Visualisation3DShape({
           // never invisible (fully-occluded bug).
           <group position={dotCorner.pos}>
             <mesh renderOrder={1}>
-              <sphereGeometry args={[0.1, 16, 16]} />
+              <sphereGeometry args={[DOT_GHOST_RADIUS, 16, 16]} />
               <meshBasicMaterial
-                color="#ff4444"
+                color={DOT_COLOR}
+                toneMapped={false}
                 transparent
-                opacity={0.32}
+                opacity={DOT_GHOST_OPACITY}
                 depthTest={false}
                 depthWrite={false}
               />
             </mesh>
             <mesh renderOrder={2}>
-              <sphereGeometry args={[0.11, 16, 16]} />
-              <meshBasicMaterial color="#ff4444" />
+              <sphereGeometry args={[DOT_RADIUS, 16, 16]} />
+              <meshBasicMaterial color={DOT_COLOR} toneMapped={false} />
             </mesh>
           </group>
         )}

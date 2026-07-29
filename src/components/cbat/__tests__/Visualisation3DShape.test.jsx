@@ -1,6 +1,8 @@
 import { render } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
-import Visualisation3DShape, { VisualisationShapeCanvas } from '../Visualisation3DShape'
+import Visualisation3DShape, {
+  VisualisationShapeCanvas, DOT_RADIUS, DOT_GHOST_RADIUS, DOT_GHOST_OPACITY,
+} from '../Visualisation3DShape'
 import { COMPOSITES } from '../../../utils/cbat/visualisation3DPuzzle'
 
 // These tests pin the single-WebGL-context architecture. Mounting one <Canvas>
@@ -70,5 +72,25 @@ describe('VisualisationShapeCanvas — the one host context', () => {
     const { queryAllByTestId, getByTestId } = render(<VisualisationShapeCanvas />)
     expect(queryAllByTestId('webgl-canvas')).toHaveLength(1)
     expect(getByTestId('view-port')).toBeTruthy()
+  })
+})
+
+// The corner dot is drawn twice — a depth-tested solid over a depth-ignoring
+// ghost — so a marked corner is readable whether it faces the camera or not.
+// That only works while the solid is the larger of the two: a ghost poking out
+// around the solid would ring every FRONT corner in translucent red.
+describe('Visualisation3DShape — corner dot', () => {
+  it('keeps the ghost inside the solid dot', () => {
+    expect(DOT_GHOST_RADIUS).toBeLessThan(DOT_RADIUS)
+  })
+
+  it('stays small enough to sit on a corner rather than cover it', () => {
+    // Shapes are unit-ish primitives, so a dot much past ~0.1 stops reading as
+    // a point on the corner.
+    expect(DOT_RADIUS).toBeLessThanOrEqual(0.08)
+  })
+
+  it('keeps the back-corner ghost visible', () => {
+    expect(DOT_GHOST_OPACITY).toBeGreaterThan(0.35)
   })
 })
