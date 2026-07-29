@@ -942,19 +942,17 @@ export default function CbatVisualisation({ forcedMode = null }) {
                             accent="prompt"
                             size={120}
                           />
-                          {/* Admin-only: names the shape being asked about, so a
-                              report about a specific composite can be traced back
-                              to it. Prompt panel only — putting it on the answer
-                              options would give the matching away. */}
-                          {isAdmin && (
-                            <span
-                              data-admin-composite={s.compositeKey}
-                              title="Admin only — composite key"
-                              className="font-mono text-[10px] text-amber-400 tracking-wide"
-                            >
-                              {s.compositeKey}
-                            </span>
-                          )}
+                          {/* Names the shape being asked about, so a report
+                              about a specific composite can be traced back to
+                              it — and so a player has a word for what they're
+                              looking at. */}
+                          <span
+                            data-composite-name={s.compositeKey}
+                            title="Composite shape name"
+                            className="font-mono text-[10px] text-amber-400 tracking-wide"
+                          >
+                            {s.compositeKey}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -1003,15 +1001,15 @@ export default function CbatVisualisation({ forcedMode = null }) {
                                     accent="option"
                                     size={72}
                                   />
-                                  {/* Admin-only, and only once the round is
-                                      answered — naming the composites while the
-                                      question is live would still be no help
-                                      (every option draws the same two), but it
-                                      would clutter the choice. */}
-                                  {isAdmin && phase === 'feedback' && (
+                                  {/* Only once the round is answered — naming
+                                      the composites while the question is live
+                                      would still be no help (every option draws
+                                      the same two), but it would clutter the
+                                      choice. */}
+                                  {phase === 'feedback' && (
                                     <span
-                                      data-admin-composite={s.compositeKey}
-                                      title="Admin only — composite key"
+                                      data-composite-name={s.compositeKey}
+                                      title="Composite shape name"
                                       className="font-mono text-[8px] leading-none text-amber-400 max-w-full truncate"
                                     >
                                       {s.compositeKey}

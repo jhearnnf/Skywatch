@@ -3,10 +3,11 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatVisualisation from '../CbatVisualisation'
 import { press, START_SELECTOR, ANSWER_SELECTOR } from '../../components/landingGames/demoDriver'
 
-// A 3D round's prompt panel names each composite for admins, so a report about
-// "the pentagon one" can be traced to an actual shape key. The answer options
-// get the same names once the round is answered — not while the choice is live —
-// and a normal player never sees any of it.
+// A 3D round's prompt panel names each composite, so a report about "the
+// pentagon one" can be traced to an actual shape key and a player has a word for
+// what they're looking at. The answer options get the same names once the round
+// is answered — not while the choice is live. Everyone sees them; the labels
+// were admin-only at first and were opened up deliberately.
 
 const mockUseAuth = vi.hoisted(() => vi.fn())
 
@@ -48,66 +49,59 @@ function started({ isAdmin }) {
   return view
 }
 
-describe('Visualisation 3D — admin composite labels', () => {
+describe('Visualisation 3D — composite name labels', () => {
   beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); localStorage.clear() })
 
-  it('names every prompt shape for an admin', () => {
-    const { container } = started({ isAdmin: true })
+  // Same rules whoever is looking — the labels are not an admin affordance.
+  for (const isAdmin of [true, false]) {
+    const who = isAdmin ? 'an admin' : 'a normal player'
 
-    const prompts = [...container.querySelectorAll('[data-accent="prompt"]')]
-    expect(prompts.length).toBeGreaterThan(0)
+    it(`names every prompt shape for ${who}`, () => {
+      const { container } = started({ isAdmin })
 
-    const labels = [...container.querySelectorAll('[data-admin-composite]')]
-    expect(labels).toHaveLength(prompts.length)
-    // Each label names the shape it sits under, and says so on screen.
-    labels.forEach((el, i) => {
-      const key = prompts[i].getAttribute('data-shape')
-      expect(el.getAttribute('data-admin-composite')).toBe(key)
-      expect(el.textContent).toBe(key)
+      const prompts = [...container.querySelectorAll('[data-accent="prompt"]')]
+      expect(prompts.length).toBeGreaterThan(0)
+
+      const labels = [...container.querySelectorAll('[data-composite-name]')]
+      expect(labels).toHaveLength(prompts.length)
+      // Each label names the shape it sits under, and says so on screen.
+      labels.forEach((el, i) => {
+        const key = prompts[i].getAttribute('data-shape')
+        expect(el.getAttribute('data-composite-name')).toBe(key)
+        expect(el.textContent).toBe(key)
+      })
     })
-  })
 
-  it('shows nothing to a normal player', () => {
-    const { container } = started({ isAdmin: false })
-    expect(container.querySelectorAll('[data-accent="prompt"]').length).toBeGreaterThan(0)
-    expect(container.querySelector('[data-admin-composite]')).toBeNull()
-  })
+    it(`leaves the answer options unlabelled for ${who} while the choice is live`, () => {
+      const { container } = started({ isAdmin })
 
-  it('leaves the answer options unlabelled while the choice is live', () => {
-    const { container } = started({ isAdmin: true })
+      // Options render inside the answer buttons; the prompt panel does not.
+      expect(container.querySelectorAll('button [data-composite-name]')).toHaveLength(0)
+      expect(container.querySelectorAll('[data-accent="option"]').length).toBeGreaterThan(0)
+    })
 
-    // Options render inside the answer buttons; the prompt panel does not.
-    expect(container.querySelectorAll('button [data-admin-composite]')).toHaveLength(0)
-    expect(container.querySelectorAll('[data-accent="option"]').length).toBeGreaterThan(0)
-  })
+    it(`names the option shapes for ${who} once an answer is pressed`, () => {
+      const { container } = started({ isAdmin })
+      const optionShapes = container.querySelectorAll('[data-accent="option"]').length
 
-  it('names the option shapes once an answer is pressed', () => {
-    const { container } = started({ isAdmin: true })
-    const optionShapes = container.querySelectorAll('[data-accent="option"]').length
+      act(() => { press(container.querySelector(ANSWER_SELECTOR)) })
 
-    act(() => { press(container.querySelector(ANSWER_SELECTOR)) })
-
-    const labels = [...container.querySelectorAll('button [data-admin-composite]')]
-    expect(labels).toHaveLength(optionShapes)
-    // Every option draws the same composites, so each tile repeats the round's
-    // shape names in order.
-    const promptKeys = [...container.querySelectorAll('[data-accent="prompt"]')]
-      .map(el => el.getAttribute('data-shape'))
-    const perTile = labels.map(el => el.getAttribute('data-admin-composite'))
-      .reduce((acc, key, i) => {
-        const tile = Math.floor(i / promptKeys.length)
-        ;(acc[tile] ||= []).push(key)
-        return acc
-      }, [])
-    perTile.forEach(keys => expect(keys).toEqual(promptKeys))
-  })
-
-  it('still shows nothing to a normal player after answering', () => {
-    const { container } = started({ isAdmin: false })
-    act(() => { press(container.querySelector(ANSWER_SELECTOR)) })
-    expect(container.querySelector('[data-admin-composite]')).toBeNull()
-  })
+      const labels = [...container.querySelectorAll('button [data-composite-name]')]
+      expect(labels).toHaveLength(optionShapes)
+      // Every option draws the same composites, so each tile repeats the round's
+      // shape names in order.
+      const promptKeys = [...container.querySelectorAll('[data-accent="prompt"]')]
+        .map(el => el.getAttribute('data-shape'))
+      const perTile = labels.map(el => el.getAttribute('data-composite-name'))
+        .reduce((acc, key, i) => {
+          const tile = Math.floor(i / promptKeys.length)
+          ;(acc[tile] ||= []).push(key)
+          return acc
+        }, [])
+      perTile.forEach(keys => expect(keys).toEqual(promptKeys))
+    })
+  }
 })
 
 // The run's time was recorded and submitted but never shown back. Both modes
