@@ -13,7 +13,7 @@ vi.mock('../offlineStore', () => ({
   outboxCount: vi.fn(async () => mem.size),
 }))
 
-import { submitCbatResult, flushOutbox } from '../cbatOutbox'
+import { submitCbatResult, flushOutbox, pendingCount } from '../cbatOutbox'
 import { setOutboxOwner, getOutboxOwner, ownsQueuedItem } from '../outboxOwner'
 import { isOnline } from '../net'
 
@@ -130,5 +130,51 @@ describe('flushOutbox ownership filtering', () => {
 
     expect(apiFetch).not.toHaveBeenCalled()
     expect(mem.size).toBe(1)
+  })
+})
+
+// The count drives the sync pill's wording ("Syncing 2 scores…"). It has to
+// agree with what flushOutbox will actually send, or the pill promises work
+// that never happens.
+describe('pendingCount — scoped to what a flush would send', () => {
+  it('counts the signed-in user’s own queued scores', async () => {
+    setOutboxOwner('u1')
+    isOnline.mockReturnValue(false)
+    await submitCbatResult('target', { totalScore: 10 }, ctx(vi.fn()))
+    await submitCbatResult('angles', { correctCount: 4 }, ctx(vi.fn()))
+
+    expect(await pendingCount()).toBe(2)
+  })
+
+  it('ignores another user’s queued score, which will never flush for us', async () => {
+    setOutboxOwner('u1')
+    isOnline.mockReturnValue(false)
+    await submitCbatResult('target', { totalScore: 10 }, ctx(vi.fn()))
+
+    setOutboxOwner('u2')
+    // Left "Syncing 1 score…" on screen forever: flushOutbox skips it, so the
+    // count never fell and the pill never went away.
+    expect(await pendingCount()).toBe(0)
+  })
+
+  it('counts only our share when the device holds both', async () => {
+    setOutboxOwner('u1')
+    isOnline.mockReturnValue(false)
+    await submitCbatResult('target', { totalScore: 10 }, ctx(vi.fn()))
+    setOutboxOwner('u2')
+    await submitCbatResult('angles', { correctCount: 4 }, ctx(vi.fn()))
+
+    expect(await pendingCount('u1')).toBe(1)
+    expect(await pendingCount('u2')).toBe(1)
+  })
+
+  it('counts everything when signed out — any of them may be theirs to upload', async () => {
+    setOutboxOwner('u1')
+    isOnline.mockReturnValue(false)
+    await submitCbatResult('target', { totalScore: 10 }, ctx(vi.fn()))
+    await submitCbatResult('angles', { correctCount: 4 }, ctx(vi.fn()))
+
+    setOutboxOwner(null)
+    expect(await pendingCount()).toBe(2)
   })
 })

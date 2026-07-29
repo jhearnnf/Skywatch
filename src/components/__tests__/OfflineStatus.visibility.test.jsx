@@ -6,12 +6,13 @@ import { canShowSyncStatus } from '../OfflineStatus'
 // banner used to mount globally at bottom-centre, so anyone with a queued score
 // had it sitting on top of every game they played.
 //
-// Hence an allowlist rather than a blocklist of game routes: a route added later
-// is hidden by default and can't start overlaying gameplay by accident.
+// It is now narrowed to a single screen, the CBAT menu: the one place a player
+// passes between runs, and the only place the pill's own "Sign in" CTA leads
+// anywhere useful. An allowlist rather than a blocklist of game routes means a
+// route added later is hidden by default and can't start overlaying gameplay.
 
-const playing   = { immersive: true,  gameOver: false }
-const scoreScrn = { immersive: false, gameOver: true }
-const idle      = { immersive: false, gameOver: false }
+const playing = { immersive: true }
+const idle    = { immersive: false }
 
 describe('canShowSyncStatus — never during play', () => {
   it.each([
@@ -25,31 +26,36 @@ describe('canShowSyncStatus — never during play', () => {
     expect(canShowSyncStatus(path, playing)).toBe(false)
   })
 
-  it('stays hidden while immersive even on an otherwise-allowed route', () => {
+  it('stays hidden while immersive even on the one allowed route', () => {
     expect(canShowSyncStatus('/cbat', playing)).toBe(false)
-    expect(canShowSyncStatus('/home', playing)).toBe(false)
-  })
-
-  it('immersive beats gameOver if both are somehow set', () => {
-    expect(canShowSyncStatus('/cbat/target', { immersive: true, gameOver: true })).toBe(false)
   })
 })
 
-describe('canShowSyncStatus — allowed screens', () => {
-  it('shows on the CBAT menu, home and landing', () => {
+describe('canShowSyncStatus — the CBAT menu only', () => {
+  it('shows on the CBAT menu', () => {
     expect(canShowSyncStatus('/cbat', idle)).toBe(true)
-    expect(canShowSyncStatus('/home', idle)).toBe(true)
-    expect(canShowSyncStatus('/', idle)).toBe(true)
   })
 
-  it('shows on the post-game score screen — they have stopped playing', () => {
-    expect(canShowSyncStatus('/cbat/target', scoreScrn)).toBe(true)
+  it('defaults to hidden when no chrome state is passed', () => {
+    expect(canShowSyncStatus('/cbat/target')).toBe(false)
   })
 
-  it('shows on a game leaderboard', () => {
-    expect(canShowSyncStatus('/cbat/target/leaderboard', idle)).toBe(true)
-    expect(canShowSyncStatus('/cbat/plane-turn-2d/leaderboard', idle)).toBe(true)
-    expect(canShowSyncStatus('/cbat/act/leaderboard/', idle)).toBe(true)
+  // Previously allowed, deliberately dropped. The landing page and /home are
+  // public, so a signed-out visitor there has nothing at stake — every game is
+  // behind RequireAuth. The score screen is still inside a game, where a fixed
+  // pill costs space at the worst moment.
+  it.each([
+    '/',
+    '/home',
+    '/cbat/target/leaderboard',
+    '/cbat/plane-turn-2d/leaderboard',
+    '/cbat/act/leaderboard/',
+  ])('no longer shows on %s', (path) => {
+    expect(canShowSyncStatus(path, idle)).toBe(false)
+  })
+
+  it('does not show on a score screen — gameOver no longer grants visibility', () => {
+    expect(canShowSyncStatus('/cbat/target', { immersive: false, gameOver: true })).toBe(false)
   })
 })
 
@@ -66,8 +72,8 @@ describe('canShowSyncStatus — hidden everywhere else', () => {
     expect(canShowSyncStatus(path, idle)).toBe(false)
   })
 
-  it('does not treat a game route as a leaderboard', () => {
+  it('does not treat a sub-route as the menu', () => {
     expect(canShowSyncStatus('/cbat/target', idle)).toBe(false)
-    expect(canShowSyncStatus('/cbat/target/leaderboard/extra', idle)).toBe(false)
+    expect(canShowSyncStatus('/cbat/', idle)).toBe(false)
   })
 })

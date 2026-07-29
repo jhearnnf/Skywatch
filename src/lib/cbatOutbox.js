@@ -34,8 +34,18 @@ export function onOutboxChange(cb) {
   changeListeners.add(cb)
   return () => changeListeners.delete(cb)
 }
-export function pendingCount() {
-  return outboxCount()
+// How many queued scores a flush would actually send for this user.
+//
+// Counting every row was wrong on a shared device: a score belonging to someone
+// else stays queued until they sign in here (see ownsQueuedItem), so counting it
+// left the current user watching "Syncing 1 score…" that could never resolve.
+// Signed out there is no owner to compare against and the UI only ever offers
+// "sign in to upload them" — true of any of them — so count the lot.
+export async function pendingCount(userId) {
+  const owner = userId ?? getOutboxOwner()
+  if (!owner) return outboxCount()
+  const items = await outboxAll()
+  return items.filter((item) => ownsQueuedItem(item, owner)).length
 }
 
 // ── Submit ───────────────────────────────────────────────────────────────────

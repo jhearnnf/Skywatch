@@ -119,15 +119,17 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  // Did this launch begin believing it was signed in? A cached user, or on
+  // native a stored token. A 401 from /auth/me only means "your session died"
+  // if we thought we had one — for a visitor who has never signed in it is
+  // simply the expected answer, and treating it as a dead session put
+  // "you're signed out — your scores aren't being saved" on the landing page of
+  // every first-time visitor. Frozen at first render on purpose: it describes
+  // how this launch started, so signing in later must not change it.
+  const [hadSession] = useState(() => readCachedUser() !== null || !!getStoredToken())
+
   // Check session on mount
   useEffect(() => {
-    // Did this launch begin believing it was signed in? `user` here is the
-    // first-render value, i.e. the cached user; on native, a stored token counts
-    // too. A 401 only means "your session died" if we thought we had one — for a
-    // visitor who has never signed in it is simply the expected answer. Treating
-    // it as a dead session put "you're signed out — your scores aren't being
-    // saved" on the landing page of every first-time visitor.
-    const hadSession = user !== null || !!getStoredToken()
     const controller = new AbortController()
     const timeoutId  = setTimeout(() => controller.abort(), 8000)
     fetch(`${API}/api/auth/me`, { headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }), signal: controller.signal })
@@ -173,7 +175,7 @@ export function AuthProvider({ children }) {
         else noteApiUnreachable(new Error('auth check timed out'))
       })
       .finally(() => { clearTimeout(timeoutId); setLoading(false) })
-  }, [])
+  }, [hadSession])   // frozen at first render — this still runs exactly once
 
   // Keep the offline queues pointed at the signed-in user so a flush can never
   // post one person's scores to another's account.

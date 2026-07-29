@@ -376,9 +376,9 @@ body.cbat-sat-beta {
 }
 
 /* Score-sync pill (OfflineStatus). Deliberately slow — this sits on the CBAT
-   menu and score screens to say something is unsynced, not to demand attention.
-   A quick blink would read as an error and pull focus off the page. The dot
-   carries most of the movement; the pill itself only breathes. */
+   menu to say something is unsynced, not to demand attention. A quick blink
+   would read as an error and pull focus off the page. The dot carries most of
+   the movement; the pill itself only breathes. */
 @keyframes sync-status-breathe {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.82; }
@@ -392,6 +392,14 @@ body.cbat-sat-beta {
 }
 .sync-status-dot {
   animation: sync-status-dot-pulse 3.2s ease-in-out infinite;
+}
+/* BottomNav (fixed, h-16 + safe-area, md:hidden) owns the bottom of the screen
+   below 768px. The pill is fixed at bottom:16px, so without this it sits on top
+   of the nav — over the tab the user is reaching for. Lift it clear. */
+@media (max-width: 767px) {
+  .sync-status-pill {
+    bottom: calc(4rem + env(safe-area-inset-bottom) + 12px) !important;
+  }
 }
 
 @media (max-width: 600px) {

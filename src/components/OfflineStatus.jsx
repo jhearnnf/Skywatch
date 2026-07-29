@@ -13,10 +13,10 @@ import { useAuth } from '../context/AuthContext'
 // run. This banner previously mounted globally at bottom-centre, so a player
 // with a queued score had a pill sitting on top of every game.
 //
-// So: hidden by default, shown only on the screens listed below. An allowlist
-// (not a blocklist of game routes) means a newly added route can never start
-// overlaying gameplay by accident. `immersive` is the app's own "mid-play"
-// flag and vetoes everything regardless.
+// So: hidden by default, shown only on the one screen listed below. An
+// allowlist (not a blocklist of game routes) means a newly added route can
+// never start overlaying gameplay by accident. `immersive` is the app's own
+// "mid-play" flag and vetoes everything regardless.
 //
 // FOUR STATES, and the distinction matters — see lib/apiHealth.js:
 //   • offline            — their network. Scores are queued and safe.
@@ -24,56 +24,75 @@ import { useAuth } from '../context/AuthContext'
 //                          don't tell them to "check your connection".
 //   • signed out         — the only state they can actually resolve.
 //   • syncing            — transient, while the queue drains.
-const ALLOWED_EXACT = new Set(['/', '/home', '/cbat'])
-const isLeaderboard = (path) => /^\/cbat\/[^/]+\/leaderboard\/?$/.test(path)
+//
+// ONE SCREEN: the CBAT menu. Not the landing page or /home (a signed-out
+// visitor there has nothing at stake — every game is behind RequireAuth), not
+// leaderboards, and not the post-game score screen, which is still inside a
+// game and where a fixed pill costs space at the worst moment. The menu is the
+// screen a player crosses between runs, so a queued score is seen on the way to
+// the next game — which is also the only place they can act on it.
+const ALLOWED_EXACT = new Set(['/cbat'])
 
-export function canShowSyncStatus(pathname, { immersive, gameOver }) {
+export function canShowSyncStatus(pathname, { immersive } = {}) {
   if (immersive) return false            // never over live gameplay
-  if (gameOver) return true              // score screen: they've stopped playing
-  return ALLOWED_EXACT.has(pathname) || isLeaderboard(pathname)
+  return ALLOWED_EXACT.has(pathname)
 }
 
 export default function OfflineStatus() {
   const [online, setOnline]   = useState(isOnline())
   const [pending, setPending] = useState(0)
   const [health, setHealth]   = useState(getApiHealth)
-  const { immersive, gameOver } = useGameChrome()
-  const { apiFetch, API } = useAuth()
+  const { immersive } = useGameChrome()
+  const { apiFetch, API, user } = useAuth()
   const { pathname } = useLocation()
   const navigate = useNavigate()
 
   useEffect(() => onNetworkChange(setOnline), [])
   useEffect(() => onApiHealthChange(setHealth), [])
 
+  // Re-counted when the user changes: the count is owner-scoped, so signing in
+  // or out changes how many of the queued scores are actually ours to send.
+  const userId = user?._id ?? null
   useEffect(() => {
     let active = true
-    const refresh = () => { Promise.resolve(pendingCount()).then((n) => { if (active) setPending(n) }) }
+    const refresh = () => { Promise.resolve(pendingCount(userId)).then((n) => { if (active) setPending(n) }) }
     refresh()
     const off = onOutboxChange(refresh)
     return () => { active = false; off() }
-  }, [])
+  }, [userId])
 
   // Re-check the pending count when connectivity flips (a flush may have run).
   useEffect(() => {
     if (!online) return
-    const t = setTimeout(() => { Promise.resolve(pendingCount()).then(setPending) }, 1500)
+    const t = setTimeout(() => { Promise.resolve(pendingCount(userId)).then(setPending) }, 1500)
     return () => clearTimeout(t)
-  }, [online])
+  }, [online, userId])
 
-  if (!canShowSyncStatus(pathname, { immersive, gameOver })) return null
+  if (!canShowSyncStatus(pathname, { immersive })) return null
 
-  const signedOut = health.status === 'signedOut'
+  // A dead session is what apiHealth reports; simply having no user covers the
+  // rest (logged out on purpose, never signed in). Both mean the same thing to
+  // the queue: flushOutbox is gated on a signed-in user, so nothing moves until
+  // they sign in. Without this the fallback branch claimed "Syncing 1 score…"
+  // at someone who had logged out, and nothing was syncing.
+  const sessionDied = health.status === 'signedOut'
+  const noSession   = sessionDied || !user
   const unreachable = health.status === 'unreachable'
 
-  // Being signed out matters even with nothing queued — it means nothing they
-  // do from here will be saved. Every other state is only worth raising if
-  // there's actually something waiting to go.
-  if (pending === 0 && !signedOut) return null
+  // Nothing queued: only a session that *died* is worth a word, because that's
+  // the one case where the user thinks they're signed in and isn't. A visitor
+  // who never signed in has nothing at stake and shouldn't be alarmed.
+  if (pending === 0 && !sessionDied) return null
 
   const scores = `${pending} score${pending === 1 ? '' : 's'}`
 
   let text, action, tone
-  if (signedOut) {
+  if (!online && pending > 0) {
+    // Offline outranks being signed out: reconnecting is the precondition for
+    // either, and a "Sign in" button they can't use is worse than no button.
+    text = `${scores} saved — will sync when you reconnect`
+    tone = 'waiting'
+  } else if (noSession) {
     // With nothing queued there is nothing being lost: every game route is
     // behind RequireAuth, so a signed-out user is bounced to /login the moment
     // they pick one. Saying "your scores aren't being saved" described a state
@@ -86,11 +105,8 @@ export default function OfflineStatus() {
     tone = 'alert'
   } else if (unreachable) {
     text = `Can't reach Skywatch — ${scores} saved on this device`
-    action = { label: 'Try again', onClick: () => flushOutbox({ apiFetch, API }) }
+    action = { label: 'Try again', onClick: () => flushOutbox({ apiFetch, API, userId }) }
     tone = 'alert'
-  } else if (!online) {
-    text = `${scores} saved — will sync when you reconnect`
-    tone = 'waiting'
   } else {
     text = `Syncing ${scores}…`
     tone = 'ok'
