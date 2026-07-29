@@ -334,6 +334,17 @@ export default function Cbat() {
                       New Game
                     </span>
                   )}
+                  {/* Announcement badge for an existing game that's gained
+                      something — same slot as New Game, which no game carrying
+                      one also has. */}
+                  {game.badge && !game.isNew && enabled && (
+                    <span
+                      className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase whitespace-nowrap ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
+                      style={{ zIndex: 4 }}
+                    >
+                      {game.badge}
+                    </span>
+                  )}
                   {!enabled && user?.isAdmin && (
                     <span
                       className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-slate-300 text-slate-700 text-[10px] font-extrabold tracking-wider uppercase"

@@ -25,6 +25,7 @@ const GAME_OFFSET = {
   'instruments':    20,
   'ant':             2,
   'flag':            6,
+  'flag-easier':     7,
   'visualisation-2d': 10,
   'visualisation-3d': 11,
   'dpt':             14,
@@ -51,8 +52,9 @@ const GAME_OFFSET = {
 //
 // Both seedTime and timeStep are kept non-integer so the rounded 1-decimal
 // display (`bestTime.toFixed(1)`) varies row-to-row (e.g. 80.4 / 83.7 / 87.0…)
-// instead of every demo row showing a .0 second tie. Exception: `flag` is a
-// fixed-60s game where every real run also displays 60.0, so its fakes match.
+// instead of every demo row showing a .0 second tie. Exception: `flag` and
+// `flag-easier` are fixed-60s games where every real run also displays 60.0,
+// so their fakes match.
 const FAKE_TUNING = {
   'plane-turn-2d': {
     floor: 42, ceiling: 107, seedTime: 80.4, timeStep: 3.3,
@@ -114,6 +116,13 @@ const FAKE_TUNING = {
     // Floor of 55 keeps the visible top-20 above 55 even when sub-floor real
     // entries exist (paired with FULL_SEQUENCE_GAMES below).
     scoreSequence: [104, 100, 97, 94, 91, 88, 85, 82, 79, 76, 73, 70, 67, 64, 62, 60, 58, 57, 56, 55],
+  },
+  'flag-easier': {
+    // Same fixed-60s shape as `flag` (integer seedTime, timeStep 0 — see the
+    // note above), scaled down: the easier pace serves ~6 maths questions and
+    // fewer callsign prompts, so the achievable band sits below hard's.
+    floor: 40, ceiling: 86, seedTime: 60, timeStep: 0,
+    scoreSequence: [86, 83, 80, 77, 74, 71, 68, 65, 62, 59, 57, 55, 53, 51, 49, 47, 45, 43, 41, 40],
   },
   'act': {
     // 5 rounds × ~45s = ~225s totalTime. Score is a sum of correct rings (+20),
@@ -228,7 +237,7 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
 // 20-row limit. A real run below the lowest demo is displaced off the board
 // until it beats that floor. Other games keep gap-fill padding
 // (limit - real.length) and short-circuit when real already fills the board.
-const FULL_SEQUENCE_GAMES = new Set(['ant', 'code-duplicates', 'flag', 'cut']);
+const FULL_SEQUENCE_GAMES = new Set(['ant', 'code-duplicates', 'flag', 'flag-easier', 'cut']);
 
 function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
   const cfg = CBAT_GAMES[gameKey];
@@ -292,6 +301,9 @@ const WEEKLY_PER_PLAY = {
   'visualisation-2d':  4,  // real med 3
   'visualisation-3d':  4,  // real med 4
   'flag':            220,  // real med 246
+  // Easier runs fewer maths questions and fewer callsign prompts in the same
+  // 60s, so a decent run scores below a decent hard run despite the gentler pace.
+  'flag-easier':     170,
   'dpt':            3400,  // real med 3850
   'act':            1300,  // real med 1482
   'trace-1':          26,  // real med 29 (correctTurns /40)

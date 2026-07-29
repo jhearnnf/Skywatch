@@ -12,6 +12,7 @@ const GAME_MAX = {
   'instruments':     null,   // time-limited, no fixed max
   'ant':             80,
   'flag':            null,   // accumulating score, no fixed ceiling
+  'flag-easier':     null,   // accumulating score, no fixed ceiling
   'visualisation-2d': null,  // small count, no ceiling assertion needed
   'visualisation-3d': 8,     // 8 rounds, one point each
   'dpt':             null,   // accumulating score, no fixed ceiling
@@ -23,6 +24,10 @@ const GAME_MAX = {
   'cut':             null,   // accumulating score, no fixed ceiling
 };
 const LOWER_BETTER = { 'plane-turn-2d': true, 'plane-turn-3d': true };
+
+// Fixed-duration games whose real runs all display the same totalTime, so their
+// demo rows deliberately tie on time instead of carrying fractional variety.
+const FIXED_60S_GAMES = new Set(['flag', 'flag-easier']);
 
 function realEntry({ id, userId, score, time, agent, rank }) {
   return { _id: id, userId, agentNumber: agent, bestScore: score, bestTime: time, rank };
@@ -161,12 +166,13 @@ describe('padLeaderboard', () => {
     }
   });
 
-  it('produces decimal-bearing demo times for every game except flag (fixed-60s, intentional)', () => {
+  it('produces decimal-bearing demo times for every game except the FLAG pair (fixed-60s, intentional)', () => {
     // Demo bestTime is rounded to 1 decimal. If seedTime AND timeStep are both
-    // integers, every row displays as N.0 — looks fake. flag is the documented
-    // exception (fixed-60s game where real runs also display 60.0).
+    // integers, every row displays as N.0 — looks fake. Both FLAG difficulties
+    // are the documented exception (fixed-60s games where real runs also
+    // display 60.0).
     for (const { game, opts } of ALL_GAMES_FROM_TUNING) {
-      if (game === 'flag') continue;
+      if (FIXED_60S_GAMES.has(game)) continue;
       const out = padLeaderboard([], game, opts);
       const fakes = out.filter(e => e.isFake);
       const fractional = fakes.filter(f => Math.round(f.bestTime * 10) % 10 !== 0);
@@ -174,9 +180,11 @@ describe('padLeaderboard', () => {
     }
   });
 
-  it('flag fakes intentionally tie at 60.0 (fixed-60s game, real runs do the same)', () => {
-    const out = padLeaderboard([], 'flag');
-    out.filter(e => e.isFake).forEach(f => expect(f.bestTime).toBe(60));
+  it('FLAG fakes intentionally tie at 60.0 (fixed-60s games, real runs do the same)', () => {
+    for (const game of FIXED_60S_GAMES) {
+      const out = padLeaderboard([], game);
+      out.filter(e => e.isFake).forEach(f => expect(f.bestTime).toBe(60));
+    }
   });
 
   it('full-sequence games (flag, ant, code-duplicates, cut) displace sub-floor real entries even when real fills the board', () => {
@@ -184,6 +192,7 @@ describe('padLeaderboard', () => {
     // full-sequence path these would short-circuit past padding.
     const cases = [
       { game: 'flag',            subFloor: -10 }, // floor 55
+      { game: 'flag-easier',     subFloor: -10 }, // floor 40
       { game: 'ant',             subFloor:   5 }, // floor 15
       { game: 'code-duplicates', subFloor:   3 }, // floor 7
       { game: 'cut',             subFloor: 149 }, // floor 150

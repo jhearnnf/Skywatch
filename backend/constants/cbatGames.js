@@ -6,6 +6,7 @@ const GameSessionCbatTargetResult         = require('../models/GameSessionCbatTa
 const GameSessionCbatInstrumentsResult    = require('../models/GameSessionCbatInstrumentsResult');
 const GameSessionCbatAntResult            = require('../models/GameSessionCbatAntResult');
 const GameSessionCbatFlagResult           = require('../models/GameSessionCbatFlagResult');
+const GameSessionCbatFlagEasierResult     = require('../models/GameSessionCbatFlagEasierResult');
 const GameSessionCbatVisualisation2DResult = require('../models/GameSessionCbatVisualisation2DResult');
 const GameSessionCbatVisualisation3DResult = require('../models/GameSessionCbatVisualisation3DResult');
 const GameSessionCbatDptResult           = require('../models/GameSessionCbatDptResult');
@@ -127,6 +128,16 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'FLAG',
+  },
+  // FLAG's "Easier" difficulty — slower maths cadence, longer callsign reads,
+  // gentler spawn pressure. Its own collection and therefore its own boards;
+  // the page at /cbat/flag picks the key from the selected difficulty.
+  'flag-easier': {
+    Model: GameSessionCbatFlagEasierResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'FLAG (Easier)',
   },
   'visualisation-2d': {
     Model: GameSessionCbatVisualisation2DResult,

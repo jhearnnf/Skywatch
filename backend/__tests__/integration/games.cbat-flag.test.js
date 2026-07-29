@@ -6,6 +6,7 @@ const db      = require('../helpers/setupDb');
 const { createUser, createSettings, authCookie } = require('../helpers/factories');
 
 const GameSessionCbatFlagResult = require('../../models/GameSessionCbatFlagResult');
+const GameSessionCbatFlagEasierResult = require('../../models/GameSessionCbatFlagEasierResult');
 
 let user, cookie, user2, cookie2;
 
@@ -219,6 +220,75 @@ describe('CBAT FLAG', () => {
       expect(p2Idx).toBeLessThan(p1Idx);
       // Both real entries (250) outrank every fake (max 104).
       expect(p1Idx).toBeLessThan(2);
+    });
+  });
+});
+
+// ── FLAG (Easier) ─────────────────────────────────────────────────────────────
+// The Easier difficulty is a separate registry entry backed by its own
+// collection, so its board must be completely independent of the Hard board —
+// scores must never leak either way.
+describe('CBAT FLAG (Easier)', () => {
+  const EASIER_RESULT_URL = '/api/games/cbat/flag-easier/result';
+  const EASIER_PB_URL     = '/api/games/cbat/flag-easier/personal-best';
+  const EASIER_LB_URL     = '/api/games/cbat/flag-easier/leaderboard';
+  const HARD_RESULT_URL   = '/api/games/cbat/flag/result';
+  const HARD_PB_URL       = '/api/games/cbat/flag/personal-best';
+
+  const sample = (overrides = {}) => ({
+    totalScore: 120, mathCorrect: 3, mathWrong: 1, mathTimeout: 0,
+    aircraftCorrect: 2, aircraftWrong: 0, aircraftMissed: 1,
+    targetHits: 5, targetMisses: 1, aircraftsSeen: 3,
+    aircraftBriefId: 'brief_abc123', totalTime: 60, grade: 'Good',
+    ...overrides,
+  });
+
+  it('saves an easier result to its own collection, not the hard one', async () => {
+    const res = await request(app)
+      .post(EASIER_RESULT_URL).set('Cookie', cookie).send(sample());
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.totalScore).toBe(120);
+    expect(await GameSessionCbatFlagEasierResult.countDocuments()).toBe(1);
+    expect(await GameSessionCbatFlagResult.countDocuments()).toBe(0);
+  });
+
+  it('keeps personal bests separate per difficulty', async () => {
+    await request(app).post(EASIER_RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 90 }));
+    await request(app).post(HARD_RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 300 }));
+
+    const easier = await request(app).get(EASIER_PB_URL).set('Cookie', cookie);
+    const hard   = await request(app).get(HARD_PB_URL).set('Cookie', cookie);
+
+    expect(easier.body.data.bestScore).toBe(90);
+    expect(easier.body.data.attempts).toBe(1);
+    expect(hard.body.data.bestScore).toBe(300);
+    expect(hard.body.data.attempts).toBe(1);
+  });
+
+  it('leaderboard only ranks easier runs', async () => {
+    // A hard run that would top the easier board if the collections leaked.
+    await request(app).post(HARD_RESULT_URL).set('Cookie', cookie2).send(sample({ totalScore: 900 }));
+    await request(app).post(EASIER_RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 200, totalTime: 60 }));
+
+    const res = await request(app).get(EASIER_LB_URL).set('Cookie', cookie);
+    const { leaderboard } = res.body.data;
+
+    expect(res.status).toBe(200);
+    expect(leaderboard).toHaveLength(20);
+    expect(leaderboard.find(e => e.agentNumber === '1000002')).toBeUndefined();
+    // 200 beats every demo row (ceiling 86), so the real easier run leads.
+    expect(leaderboard[0].agentNumber).toBe('1000001');
+  });
+
+  it('demo padding uses the easier tuning (all rows below the hard ceiling)', async () => {
+    const res = await request(app).get(EASIER_LB_URL).set('Cookie', cookie);
+    const { leaderboard } = res.body.data;
+    expect(leaderboard).toHaveLength(20);
+    expect(leaderboard.every(e => e.isFake)).toBe(true);
+    leaderboard.forEach(e => {
+      expect(e.bestScore).toBeGreaterThanOrEqual(40);
+      expect(e.bestScore).toBeLessThanOrEqual(86);
     });
   });
 });

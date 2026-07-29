@@ -91,15 +91,30 @@ function setupGuest() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function renderAndStart() {
-  const apiFetch = setupUser()
-  render(<CbatFlag />)
+// Start no longer drops straight into the game — the selected difficulty button
+// flashes for FLAG_LAUNCH_MS (1s) first, so every "now we're playing" helper
+// has to run the clock past it.
+const LAUNCH_MS = 1000
+
+async function clickStart() {
   await waitFor(() => {
     const btn = screen.queryByRole('button', { name: /^start$/i })
     expect(btn).not.toBeNull()
     expect(btn.disabled).toBe(false)
   })
   fireEvent.click(screen.getByRole('button', { name: /^start$/i }))
+}
+
+async function renderAndStart({ difficulty } = {}) {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  const apiFetch = setupUser()
+  render(<CbatFlag />)
+  if (difficulty) {
+    await waitFor(() => expect(screen.getByRole('button', { name: new RegExp(difficulty, 'i') })).toBeDefined())
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(difficulty, 'i') }))
+  }
+  await clickStart()
+  await act(async () => { vi.advanceTimersByTime(LAUNCH_MS + 100) })
   return { apiFetch }
 }
 
@@ -154,7 +169,8 @@ describe('CbatFlag — intro screen', () => {
     await waitFor(() => {
       const link = screen.queryByRole('link', { name: /view leaderboard/i })
       expect(link).not.toBeNull()
-      expect(link.getAttribute('href')).toBe('/cbat/flag/leaderboard')
+      // Defaults to the Easier difficulty, which has its own board.
+      expect(link.getAttribute('href')).toBe('/cbat/flag-easier/leaderboard')
     })
   })
 
@@ -168,6 +184,7 @@ describe('CbatFlag — intro screen', () => {
 
 describe('CbatFlag — numpad', () => {
   beforeEach(() => vi.clearAllMocks())
+  afterEach(() => vi.useRealTimers())
 
   it('renders numpad inside play phase', async () => {
     await renderAndStart()
@@ -244,10 +261,13 @@ describe('CbatFlag — score submission', () => {
   beforeEach(() => vi.clearAllMocks())
   afterEach(() => vi.useRealTimers())
 
-  it('POSTs to /cbat/flag/result with totalScore on game end', async () => {
+  it('POSTs to /cbat/flag/result with totalScore on game end (Hard)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const apiFetch = setupUser()
     render(<CbatFlag />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /hard/i })).toBeDefined())
+    fireEvent.click(screen.getByRole('button', { name: /hard/i }))
 
     await waitFor(() => {
       const btn = screen.queryByRole('button', { name: /^start$/i })
@@ -256,6 +276,8 @@ describe('CbatFlag — score submission', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: /^start$/i }))
 
+    // Launch flash first — the game timer only starts once it's finished.
+    await act(async () => { vi.advanceTimersByTime(LAUNCH_MS + 100) })
     // Advance past the full game duration
     await act(async () => { vi.advanceTimersByTime(62_000) })
     await act(async () => { await Promise.resolve() })
@@ -268,6 +290,100 @@ describe('CbatFlag — score submission', () => {
       expect('totalScore' in body).toBe(true)
       expect('grade' in body).toBe(true)
       expect(typeof body.totalScore).toBe('number')
+    })
+  })
+})
+
+describe('CbatFlag — difficulty selection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('defaults to Easier and marks it as the selected option', async () => {
+    setupUser()
+    render(<CbatFlag />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /easier/i })).toBeDefined())
+    expect(screen.getByRole('button', { name: /easier/i }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: /hard/i }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('switching to Hard repoints the leaderboard link and remembers the choice', async () => {
+    setupUser()
+    const { unmount } = render(<CbatFlag />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /hard/i })).toBeDefined())
+    fireEvent.click(screen.getByRole('button', { name: /hard/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /hard/i }).getAttribute('aria-pressed')).toBe('true')
+      expect(screen.getByRole('link', { name: /view leaderboard/i }).getAttribute('href'))
+        .toBe('/cbat/flag/leaderboard')
+    })
+
+    // Remembered across visits — the next mount opens on Hard.
+    unmount()
+    render(<CbatFlag />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /hard/i }).getAttribute('aria-pressed')).toBe('true')
+    })
+  })
+
+  it('refetches the personal best from the selected difficulty board', async () => {
+    const apiFetch = setupUser()
+    render(<CbatFlag />)
+    await waitFor(() => {
+      expect(apiFetch.mock.calls.some(([url]) => url.includes('/cbat/flag-easier/personal-best'))).toBe(true)
+    })
+    fireEvent.click(screen.getByRole('button', { name: /hard/i }))
+    await waitFor(() => {
+      expect(apiFetch.mock.calls.some(([url]) => url.includes('/cbat/flag/personal-best'))).toBe(true)
+    })
+  })
+
+  it('flashes the selected difficulty for 1s before the game starts', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    setupUser()
+    render(<CbatFlag />)
+    await clickStart()
+
+    // Launch phase: still on the instructions card, chosen button flashing,
+    // the other one greyed out.
+    expect(screen.queryByTestId('play-field')).toBeNull()
+    const easier = screen.getByRole('button', { name: /easier/i })
+    const hard = screen.getByRole('button', { name: /hard/i })
+    expect(easier.className).toContain('cbat-flag-launch-flash')
+    expect(hard.className).toContain('cbat-flag-launch-dim')
+
+    await act(async () => { vi.advanceTimersByTime(900) })
+    expect(screen.queryByTestId('play-field')).toBeNull()
+
+    await act(async () => { vi.advanceTimersByTime(200) })
+    expect(screen.getByTestId('play-field')).toBeDefined()
+  })
+
+  it('names the difficulty in play beside the page title', async () => {
+    await renderAndStart()
+    const marker = document.querySelector('[data-difficulty-marker]')
+    expect(marker).not.toBeNull()
+    expect(marker.getAttribute('data-difficulty-marker')).toBe('easier')
+    expect(marker.textContent).toContain('Easier')
+  })
+
+  it('shows Hard in the header when Hard is the run in play', async () => {
+    await renderAndStart({ difficulty: 'hard' })
+    expect(document.querySelector('[data-difficulty-marker]').getAttribute('data-difficulty-marker')).toBe('hard')
+  })
+
+  it('an Easier run submits to the flag-easier board', async () => {
+    const { apiFetch } = await renderAndStart()
+    await act(async () => { vi.advanceTimersByTime(62_000) })
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { await Promise.resolve() })
+
+    await waitFor(() => {
+      const calls = apiFetch.mock.calls.filter(([url]) => url.includes('/cbat/flag-easier/result'))
+      expect(calls.length).toBeGreaterThanOrEqual(1)
     })
   })
 })

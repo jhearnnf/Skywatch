@@ -11,6 +11,11 @@ import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import { generateMath } from './CbatFlag/mathBank'
+import {
+  FLAG_DIFFICULTIES, FLAG_LAUNCH_MS, flagTuning,
+  pickMathDifficulty, computeGrade,
+  readStoredFlagDifficulty, storeFlagDifficulty,
+} from './CbatFlag/difficulty'
 import { generateUniqueSymbols } from './CbatFlag/symbols'
 import { generatePalette, ShapeIcon } from './CbatFlag/shapes'
 import PlayField from './CbatFlag/PlayField'
@@ -21,66 +26,17 @@ import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+// Both difficulties run the same 60-second mission; everything that differs
+// between them (maths cadence, callsign timing, traffic) comes from the tuning
+// table in ./CbatFlag/difficulty.js.
 const GAME_DURATION = 60
-const MATH_COUNT = 10
-const MATH_TIMEOUT = 8
-const MATH_GAP = 3                  // min seconds between maths questions
-const AC_QUESTION_COOLDOWN = 3
-const AC_QUESTION_DURATION = 4
-const AC_QUESTION_FIRST = 5
 
-// Difficulty schedule: array of { start, end, diff }
-const STAGE_SCHEDULE = [
-  { start: 0,  end: 12, diff: 'easy'   },
-  { start: 12, end: 24, diff: 'medium' },
-  { start: 24, end: 36, diff: 'hard'   },
-  { start: 36, end: 48, diff: 'medium' },
-  { start: 48, end: 60, diff: 'easy'   },
-]
-
-// Weights for math difficulty distribution (indices match STAGE_SCHEDULE)
-// Hard stage gets 1.5× — this is reflected by inserting more hard questions at that stage
-const MATH_SCHEDULE = [0, 1, 2, 3, 4].map(i => {
-  const stage = STAGE_SCHEDULE[i]
-  const span = stage.end - stage.start
-  const weight = stage.diff === 'hard' ? span * 1.5 : span
-  return { ...stage, weight }
-})
-const TOTAL_WEIGHT = MATH_SCHEDULE.reduce((s, m) => s + m.weight, 0)
-
-function pickMathDifficulty(gameTime) {
-  // Weight toward harder stages
-  const stage = STAGE_SCHEDULE.find(s => gameTime >= s.start && gameTime < s.end)
-    || STAGE_SCHEDULE[STAGE_SCHEDULE.length - 1]
-  const roll = Math.random()
-  if (stage.diff === 'hard') {
-    if (roll < 0.55) return 'hard'
-    if (roll < 0.8)  return 'medium'
-    return 'easy'
-  }
-  if (stage.diff === 'medium') {
-    if (roll < 0.5) return 'medium'
-    if (roll < 0.75) return 'easy'
-    return 'hard'
-  }
-  if (roll < 0.5) return 'easy'
-  if (roll < 0.8) return 'medium'
-  return 'hard'
-}
-
-function computeGrade(score) {
-  if (score >= 400) return 'Outstanding'
-  if (score >= 250) return 'Good'
-  if (score >= 100) return 'Needs Work'
-  return 'Failed'
-}
-
-// Build a list of ~MATH_COUNT evenly-spaced trigger times across 60s
-function buildMathSchedule() {
+// Build a list of ~mathCount evenly-spaced trigger times across 60s
+function buildMathSchedule(tuning) {
   const times = []
   const span = GAME_DURATION
-  const step = span / MATH_COUNT
-  for (let i = 0; i < MATH_COUNT; i++) {
+  const step = span / tuning.mathCount
+  for (let i = 0; i < tuning.mathCount; i++) {
     times.push(3 + i * step + (Math.random() - 0.5) * step * 0.4)
   }
   return times.sort((a, b) => a - b)
@@ -95,8 +51,8 @@ const GRADE_STYLE = {
 }
 
 // ── Results screen ────────────────────────────────────────────────────────────
-function ResultsScreen({ stats }) {
-  const grade = computeGrade(stats.totalScore)
+function ResultsScreen({ stats, tuning }) {
+  const grade = computeGrade(stats.totalScore, tuning)
   const gs = GRADE_STYLE[grade]
 
   const row = (label, val, sub) => (
@@ -118,13 +74,83 @@ function ResultsScreen({ stats }) {
         {row('Aircraft', stats.aircraftScore, `${stats.aircraftCorrect}✓ ${stats.aircraftWrong}✗`)}
         {row('Targets', stats.targetScore, `${stats.targetHits}✓ ${stats.targetMisses}✗`)}
       </div>
+
+      <p className="text-[10px] text-slate-500 mt-3 uppercase tracking-wide">{tuning.label} difficulty</p>
     </div>
   )
 }
 
+// ── Difficulty selector ───────────────────────────────────────────────────────
+// A pair of buttons flanking the FLAG title: Easier on the left, Hard on the
+// right. The selected one is a live brand button (same weight as Start); the
+// other is greyed back so the choice reads at a glance. The stacked bars are a
+// threat-level meter — 1 of 3 for Easier, 3 of 3 for Hard — so the buttons say
+// what they are without needing a legend.
+const BAR_TONES = {
+  solid:  ['bg-white',     'bg-white/25'],       // on a filled brand button
+  muted:  ['bg-slate-600', 'bg-slate-400/40'],   // unselected button
+  accent: ['bg-brand-600', 'bg-brand-600/25'],   // on a dark surface
+}
+
+function DifficultyBars({ filled, tone = 'muted' }) {
+  const [onCls, offCls] = BAR_TONES[tone]
+  return (
+    <span className="flex items-end gap-[2px] h-[11px]" aria-hidden="true">
+      {[0, 1, 2].map(i => (
+        <span
+          key={i}
+          className={`w-[3px] rounded-[1px] ${i < filled ? onCls : offCls}`}
+          style={{ height: 5 + i * 3 }}
+        />
+      ))}
+    </span>
+  )
+}
+
+// The difficulty in play, shown beside the page title during a run so it's
+// never ambiguous which board the score is heading for. Sits in the header row
+// above the play field, not over it.
+function DifficultyMarker({ tuning }) {
+  return (
+    <span
+      data-difficulty-marker={tuning.key}
+      className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#0c1829] border border-[#1a3a5c] text-[10px] font-extrabold uppercase tracking-wide text-brand-300"
+    >
+      <DifficultyBars filled={tuning.bars} tone="accent" />
+      {tuning.label}
+    </span>
+  )
+}
+
+function DifficultyButton({ tuning, selected, onSelect, flashing, dimmed }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(tuning.key)}
+      aria-pressed={selected}
+      data-difficulty={tuning.key}
+      title={tuning.blurb}
+      className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-extrabold uppercase tracking-wide transition-all duration-200 cursor-pointer ${
+        selected
+          ? 'bg-brand-600 border-brand-600 text-white shadow-[0_0_12px_rgba(91,170,255,0.35)]'
+          : 'bg-[#060e1a] border-[#1a3a5c] text-slate-600 hover:text-[#ddeaf8] hover:border-brand-600'
+      }${flashing ? ' cbat-flag-launch-flash' : ''}${dimmed ? ' cbat-flag-launch-dim' : ''}`}
+    >
+      <DifficultyBars filled={tuning.bars} tone={selected ? 'solid' : 'muted'} />
+      {tuning.label}
+    </button>
+  )
+}
+
 // ── Intro screen ──────────────────────────────────────────────────────────────
-function IntroScreen({ onStart, onTutorial, personalBest, aircraftList, aircraftLoading }) {
+function IntroScreen({
+  onStart, onTutorial, personalBest, aircraftList, aircraftLoading,
+  difficulty, onDifficulty, tuning, launching,
+}) {
   const disabled = aircraftLoading || aircraftList.length === 0
+  // During the launch flash everything on the card except the chosen difficulty
+  // button greys out, so the flashing button is the only thing left alive.
+  const dim = launching ? ' cbat-flag-launch-dim' : ''
 
   return (
     <motion.div
@@ -132,13 +158,34 @@ function IntroScreen({ onStart, onTutorial, personalBest, aircraftList, aircraft
       animate={{ opacity: 1, y: 0 }}
       className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
     >
-      <p className="text-4xl mb-3">🚩</p>
-      <p className="text-xl font-extrabold text-white mb-2">FLAG</p>
-      <p className="text-sm text-slate-400 mb-5">
+      <p className={`text-4xl mb-3${dim}`}>🚩</p>
+
+      {/* FLAG_DIFFICULTIES is ordered [easier, hard] so the easier option lands
+          left of the title and hard lands right of it. */}
+      <div className="flex items-center justify-center gap-3 mb-1">
+        <DifficultyButton
+          tuning={FLAG_DIFFICULTIES[0]}
+          selected={difficulty === FLAG_DIFFICULTIES[0].key}
+          onSelect={onDifficulty}
+          flashing={launching && difficulty === FLAG_DIFFICULTIES[0].key}
+          dimmed={launching && difficulty !== FLAG_DIFFICULTIES[0].key}
+        />
+        <p className={`text-xl font-extrabold text-white${dim}`}>FLAG</p>
+        <DifficultyButton
+          tuning={FLAG_DIFFICULTIES[1]}
+          selected={difficulty === FLAG_DIFFICULTIES[1].key}
+          onSelect={onDifficulty}
+          flashing={launching && difficulty === FLAG_DIFFICULTIES[1].key}
+          dimmed={launching && difficulty !== FLAG_DIFFICULTIES[1].key}
+        />
+      </div>
+      <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
+
+      <p className={`text-sm text-slate-400 mb-5${dim}`}>
         Track aircraft, solve maths under pressure, and strike target shapes. All at once.
       </p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
+      <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2${dim}`}>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
           <span className="text-brand-300 font-bold shrink-0">⏱</span>
           <span>60-second mission</span>
@@ -161,21 +208,23 @@ function IntroScreen({ onStart, onTutorial, personalBest, aircraftList, aircraft
         </div>
       </div>
 
+      {/* Personal best and the leaderboard link both follow the selected
+          difficulty — the two boards are entirely separate. */}
       {personalBest && (
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
+        <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4${dim}`}>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
           <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore}</p>
           <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
         </div>
       )}
 
-      <div className="text-center mb-4">
-        <Link to="/cbat/flag/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+      <div className={`text-center mb-4${dim}`}>
+        <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
           View Leaderboard →
         </Link>
       </div>
 
-      <div className="flex flex-wrap gap-3 justify-center">
+      <div className={`flex flex-wrap gap-3 justify-center${dim}`}>
         <button
           onClick={onTutorial}
           className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm cursor-pointer"
@@ -184,7 +233,7 @@ function IntroScreen({ onStart, onTutorial, personalBest, aircraftList, aircraft
         </button>
         <button
           onClick={onStart}
-          disabled={disabled}
+          disabled={disabled || launching}
           data-demo-start
           className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
         >
@@ -281,7 +330,7 @@ function TutorialComplete({ onExit }) {
   )
 }
 
-function FlagTutorial({ onExit, onProgress, modelUrl }) {
+function FlagTutorial({ onExit, onProgress, modelUrl, difficulty }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [done, setDone] = useState(false)
   const [runId] = useState(makeTutorialRunId)
@@ -550,6 +599,7 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
           keepAircraftLonger={aircraftActive}
           maxAircraft={aircraftActive ? 1 : null}
           highlightSymbol={aircraftActive ? acHighlightSym : null}
+          difficulty={difficulty}
           active
         />
       </div>
@@ -638,7 +688,18 @@ export default function CbatFlag() {
   const { settings } = useAppSettings()
   const { enterImmersive, exitImmersive } = useGameChrome()
 
-  const [phase, setPhase] = useState('intro')
+  const [phase, setPhase] = useState('intro')   // intro | launching | tutorial | playing | results
+  // Defaults to 'easier'; a user who switches gets their most recent choice
+  // back on the next visit.
+  const [difficulty, setDifficulty] = useState(readStoredFlagDifficulty)
+  const tuning = flagTuning(difficulty)
+  // The difficulty in force for the run currently on screen. Pinned at launch so
+  // a mid-results difficulty switch can't relabel or misfile a finished run.
+  // Held twice on purpose: the ref is what the rAF/timeout game loop reads
+  // (no re-render churn), the state is what the render tree reads.
+  const runTuningRef = useRef(tuning)
+  const [runDifficulty, setRunDifficulty] = useState(difficulty)
+  const runTuning = flagTuning(runDifficulty)
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
@@ -706,14 +767,19 @@ export default function CbatFlag() {
     }).catch(() => {})
   }, [user, apiFetch, API])
 
-  // Fetch personal best and aircraft list
+  // Personal best is per-difficulty (separate collections), so it refetches
+  // whenever the selection changes.
   useEffect(() => {
     if (!user) return
-    apiFetch(`${API}/api/games/cbat/flag/personal-best`)
+    apiFetch(`${API}/api/games/cbat/${tuning.gameKey}/personal-best`)
       .then(r => r.json())
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
+  }, [user, tuning.gameKey])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch the aircraft list
+  useEffect(() => {
+    if (!user) return
     getAircraftRoster('aircraft-cutouts', { apiFetch, API })
       .then(d => {
         const allowlist = new Set((settings?.cbatFlagAircraftBriefIds ?? []).map(String))
@@ -774,7 +840,7 @@ export default function CbatFlag() {
 
   const startMathQuestion = useCallback((gameTime) => {
     if (mathActiveRef.current) return
-    const diff = pickMathDifficulty(gameTime)
+    const diff = pickMathDifficulty(gameTime, runTuningRef.current)
     const q = generateMath(diff)
     mathActiveRef.current = true
     mathQuestionRef.current = q
@@ -782,7 +848,7 @@ export default function CbatFlag() {
     setMathEntered('')
     mathEnteredRef.current = ''
     clearMathTimeout()
-    mathTimerRef.current = setTimeout(() => endMathQuestion('timeout'), MATH_TIMEOUT * 1000)
+    mathTimerRef.current = setTimeout(() => endMathQuestion('timeout'), runTuningRef.current.mathTimeout * 1000)
   }, [endMathQuestion])
 
   // ── Aircraft question lifecycle ───────────────────────────────────────────
@@ -800,8 +866,8 @@ export default function CbatFlag() {
 
   const spawnAcQuestion = useCallback((gameTime) => {
     if (acSymbolRef.current) return
-    if (gameTime - acLastQuestionRef.current < AC_QUESTION_COOLDOWN) return
-    if (gameTime < AC_QUESTION_FIRST) return
+    if (gameTime - acLastQuestionRef.current < runTuningRef.current.acCooldown) return
+    if (gameTime < runTuningRef.current.acFirst) return
 
     const roll = Math.random()
     let sym
@@ -833,7 +899,7 @@ export default function CbatFlag() {
         setStats(prev => ({ ...prev, totalScore: prev.totalScore - 3, aircraftScore: prev.aircraftScore - 3 }))
       }
       endAcQuestion()
-    }, AC_QUESTION_DURATION * 1000)
+    }, runTuningRef.current.acDuration * 1000)
   }, [bumpCounter, endAcQuestion])
 
   // ── Game timer tick ───────────────────────────────────────────────────────
@@ -854,18 +920,19 @@ export default function CbatFlag() {
         mIdx < mathTimes.length &&
         t >= mathTimes[mIdx] &&
         !mathActiveRef.current &&
-        t - mathLastEndedRef.current >= MATH_GAP
+        t - mathLastEndedRef.current >= runTuningRef.current.mathGap
       ) {
         mathIdxRef.current = mIdx + 1
         startMathQuestion(t)
       }
 
       // Aircraft question schedule — cooldown gate then a per-tick roll;
-      // mean wait once eligible ≈ 1 / 0.015 ticks ≈ 6.7s at 100ms tick.
-      if (!acSymbolRef.current && t >= AC_QUESTION_FIRST) {
+      // mean wait once eligible ≈ 1 / acSpawnChance ticks (≈6.7s on hard,
+      // ≈8.3s on easier, at a 100ms tick).
+      if (!acSymbolRef.current && t >= runTuningRef.current.acFirst) {
         const timeSinceLast = t - acLastQuestionRef.current
-        if (timeSinceLast >= AC_QUESTION_COOLDOWN) {
-          if (Math.random() < 0.015) {
+        if (timeSinceLast >= runTuningRef.current.acCooldown) {
+          if (Math.random() < runTuningRef.current.acSpawnChance) {
             spawnAcQuestion(t)
           }
         }
@@ -888,11 +955,14 @@ export default function CbatFlag() {
     setStats(finalStats => {
       if (resultSubmittedRef.current) return finalStats
       resultSubmittedRef.current = true
-      const grade = computeGrade(finalStats.totalScore)
+      // The ref, not the runTuning state above — same value, but this is the
+      // one the finished run was actually played under.
+      const playedTuning = runTuningRef.current
+      const grade = computeGrade(finalStats.totalScore, playedTuning)
       setScoreSaved(false)
       setQueued(false)
       markGameCompleted({ score: finalStats.totalScore })
-      submitCbatResult(`flag`, {
+      submitCbatResult(playedTuning.gameKey, {
           totalScore: finalStats.totalScore,
           mathCorrect: finalStats.mathCorrect,
           mathWrong: finalStats.mathWrong,
@@ -910,7 +980,7 @@ export default function CbatFlag() {
         .then((r) => {
           setScoreSaved(!!r?.synced)
           setQueued(!!r?.queued)
-          apiFetch(`${API}/api/games/cbat/flag/personal-best`)
+          apiFetch(`${API}/api/games/cbat/${playedTuning.gameKey}/personal-best`)
             .then(r => r.json())
             .then(d => { if (d.data) setPersonalBest(d.data) })
             .catch(() => {})
@@ -1044,7 +1114,7 @@ export default function CbatFlag() {
     allSymbolsRef.current = new Set(syms)
     seenPoolRef.current = new Set()
     onScreenRef.current = new Set()
-    mathScheduleRef.current = buildMathSchedule()
+    mathScheduleRef.current = buildMathSchedule(runTuningRef.current)
     mathIdxRef.current = 0
     mathActiveRef.current = false
     mathQuestionRef.current = null
@@ -1062,9 +1132,35 @@ export default function CbatFlag() {
     setScoreSaved(false)
     gameTimeRef.current = 0
     resultSubmittedRef.current = false
-    startTracking('flag')
+    startTracking(runTuningRef.current.gameKey)
     setPhase('playing')
-  }, [aircraftList, apiFetch, API])
+  }, [aircraftList, apiFetch, API])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pressing Start doesn't drop straight into the game: the chosen difficulty
+  // button flashes on a greyed-out card for FLAG_LAUNCH_MS first, so the run
+  // you're about to play is the last thing you see. The difficulty is pinned
+  // here, before the flash, so the whole run reads from one tuning.
+  const beginLaunch = useCallback(() => {
+    if (aircraftList.length === 0) return
+    runTuningRef.current = tuning
+    setRunDifficulty(tuning.key)
+    setPhase('launching')
+  }, [aircraftList, tuning])
+
+  useEffect(() => {
+    if (phase !== 'launching') return
+    const t = setTimeout(() => startGame(), FLAG_LAUNCH_MS)
+    return () => clearTimeout(t)
+  }, [phase, startGame])
+
+  const chooseDifficulty = useCallback((key) => {
+    setDifficulty(key)
+    storeFlagDifficulty(key)
+    // Clear the old board's best here rather than in the fetch effect — it
+    // belongs to the difficulty being left, and showing it under the new
+    // label until the refetch lands would be wrong.
+    setPersonalBest(null)
+  }, [])
 
   const remainingS = Math.max(0, GAME_DURATION - elapsed)
 
@@ -1085,22 +1181,27 @@ export default function CbatFlag() {
 
       {user && (
         <>
-          <div className="flex items-center gap-2 mb-2 max-[600px]:mb-1">
-            {phase === 'intro'
+          <div className={`flex items-center gap-2 mb-2 max-[600px]:mb-1${phase === 'launching' ? ' cbat-flag-launch-dim' : ''}`}>
+            {phase === 'intro' || phase === 'launching'
               ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
               : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
             }
             <h1 className="text-sm font-extrabold text-[#ddeaf8]">FLAG</h1>
+            {phase === 'playing' && <DifficultyMarker tuning={runTuning} />}
           </div>
 
           <div className="flex flex-col items-center max-[600px]:w-full">
-            {phase === 'intro' && (
+            {(phase === 'intro' || phase === 'launching') && (
               <IntroScreen
-                onStart={startGame}
+                onStart={beginLaunch}
                 onTutorial={() => setPhase('tutorial')}
                 personalBest={personalBest}
                 aircraftList={aircraftList}
                 aircraftLoading={aircraftLoading}
+                difficulty={difficulty}
+                onDifficulty={chooseDifficulty}
+                tuning={tuning}
+                launching={phase === 'launching'}
               />
             )}
 
@@ -1109,6 +1210,7 @@ export default function CbatFlag() {
                 onExit={() => setPhase('intro')}
                 onProgress={reportTutorialProgress}
                 modelUrl={modelUrl}
+                difficulty={difficulty}
               />
             )}
 
@@ -1140,6 +1242,7 @@ export default function CbatFlag() {
                       onAircraftSeen={handleAircraftSeen}
                       onAircraftSpawn={handleAircraftSpawn}
                       onAircraftDespawn={handleAircraftDespawn}
+                      difficulty={runTuning.key}
                       gameCues
                       active={phase === 'playing'}
                     />
@@ -1186,7 +1289,7 @@ export default function CbatFlag() {
 
             {phase === 'results' && (
               <CbatGameOver
-                gameKey="flag"
+                gameKey={runTuning.gameKey}
                 score={stats.totalScore}
                 scoreSaved={scoreSaved}
                 queued={queued}
@@ -1195,6 +1298,7 @@ export default function CbatFlag() {
               >
                 <ResultsScreen
                   stats={stats}
+                  tuning={runTuning}
                 />
               </CbatGameOver>
             )}

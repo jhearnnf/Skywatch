@@ -34,6 +34,7 @@ const GameSessionCbatTargetResult         = CBAT_GAMES['target'].Model;
 const GameSessionCbatInstrumentsResult    = CBAT_GAMES['instruments'].Model;
 const GameSessionCbatAntResult            = CBAT_GAMES['ant'].Model;
 const GameSessionCbatFlagResult           = CBAT_GAMES['flag'].Model;
+const GameSessionCbatFlagEasierResult     = CBAT_GAMES['flag-easier'].Model;
 const GameSessionCbatVisualisation2DResult = CBAT_GAMES['visualisation-2d'].Model;
 const GameSessionCbatVisualisation3DResult = CBAT_GAMES['visualisation-3d'].Model;
 const GameSessionCbatDptResult             = CBAT_GAMES['dpt'].Model;
@@ -2521,8 +2522,10 @@ router.post('/cbat/ant/result', protect, async (req, res) => {
   }
 });
 
-// POST /api/games/cbat/flag/result
-router.post('/cbat/flag/result', protect, async (req, res) => {
+// POST /api/games/cbat/flag/result and /flag-easier/result
+// Identical payloads; the difficulty is fixed by the route (never read from the
+// body) so a run can only ever land in the collection its board reads from.
+async function submitFlagResult(req, res, Model) {
   try {
     const {
       totalScore,
@@ -2532,7 +2535,7 @@ router.post('/cbat/flag/result', protect, async (req, res) => {
       aircraftsSeen, aircraftBriefId,
       totalTime, grade,
     } = req.body;
-    const result = await saveCbatResult(GameSessionCbatFlagResult, req, {
+    const result = await saveCbatResult(Model, req, {
       totalScore,
       mathCorrect, mathWrong, mathTimeout,
       aircraftCorrect, aircraftWrong, aircraftMissed,
@@ -2544,7 +2547,9 @@ router.post('/cbat/flag/result', protect, async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
-});
+}
+router.post('/cbat/flag/result', protect, (req, res) => submitFlagResult(req, res, GameSessionCbatFlagResult));
+router.post('/cbat/flag-easier/result', protect, (req, res) => submitFlagResult(req, res, GameSessionCbatFlagEasierResult));
 
 // POST /api/games/cbat/target/result
 router.post('/cbat/target/result', protect, async (req, res) => {
@@ -3051,6 +3056,7 @@ router.get('/cbat/target/leaderboard', protect, (req, res) => cbatLeaderboard(re
 router.get('/cbat/instruments/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'instruments'));
 router.get('/cbat/ant/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant'));
 router.get('/cbat/flag/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag'));
+router.get('/cbat/flag-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag-easier'));
 router.get('/cbat/visualisation-2d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-2d'));
 router.get('/cbat/visualisation-3d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-3d'));
 router.get('/cbat/dpt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt'));
@@ -3242,6 +3248,7 @@ router.get('/cbat/target/personal-best', protect, (req, res) => cbatPersonalBest
 router.get('/cbat/instruments/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'instruments'));
 router.get('/cbat/ant/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant'));
 router.get('/cbat/flag/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag'));
+router.get('/cbat/flag-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag-easier'));
 router.get('/cbat/visualisation-2d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-2d'));
 router.get('/cbat/visualisation-3d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-3d'));
 router.get('/cbat/dpt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt'));

@@ -16,6 +16,7 @@ export const GAME_LABELS = {
   'instruments':      'Instruments',
   'ant':              'Airborne Numerical Test',
   'flag':             'FLAG',
+  'flag-easier':      'FLAG (Easier)',
   'visualisation-2d': 'Visualisation 2D',
   'visualisation-3d': 'Visualisation 3D',
   'dpt':              'DPT',

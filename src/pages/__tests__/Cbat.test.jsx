@@ -105,6 +105,21 @@ describe('Cbat page — background images', () => {
   })
 })
 
+describe('Cbat page — tile badges', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('announces the new difficulty modes on the FLAG tile', () => {
+    renderWithUser()
+    expect(screen.getByText('New Difficulty Modes')).toBeDefined()
+  })
+
+  it('no longer flags CUT as a new game', () => {
+    renderWithUser()
+    expect(CBAT_GAMES.find(g => g.key === 'cut').isNew).toBeUndefined()
+    expect(screen.queryByText('New Game')).toBeNull()
+  })
+})
+
 describe('Cbat page — shortcut to all-time leaderboard', () => {
   beforeEach(() => {
     mockUseAuth.mockReset()

@@ -15,7 +15,10 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
   useLocation: () => ({ state: null, pathname: '/cbat/x/leaderboard', search: mockSearch.value, hash: '' }),
   useSearchParams: () => [new URLSearchParams(mockSearch.value), vi.fn()],
-  Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
+  // Pass the rest of the props through — the difficulty pills are Links
+  // carrying role/aria-selected, and dropping them would hide the ARIA the page
+  // actually renders.
+  Link: ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
 }))
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
@@ -539,5 +542,57 @@ describe('CbatLeaderboard — "You" progress tab', () => {
       await waitFor(() => expect(screen.getByText('Declined')).toBeDefined())
       expect(screen.queryByText('Improved')).toBeNull()
     })
+  })
+})
+
+// FLAG is the only difficulty-split game: 'flag' (Hard) and 'flag-easier' each
+// have their own board, and the pill pair beside the title is how a user moves
+// between them.
+describe('CbatLeaderboard — difficulty pills', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('shows Easier/Hard pills on a FLAG board, marking the current one', async () => {
+    setupAuth(mockApi())
+    mockUseParams.mockReturnValue({ gameKey: 'flag-easier' })
+    render(<CbatLeaderboard />)
+
+    const easier = await screen.findByRole('tab', { name: 'Easier' })
+    const hard = screen.getByRole('tab', { name: 'Hard' })
+    expect(easier.getAttribute('aria-selected')).toBe('true')
+    expect(hard.getAttribute('aria-selected')).toBe('false')
+    // Each pill is its own board, so switching is a route change.
+    expect(easier.getAttribute('href')).toBe('/cbat/flag-easier/leaderboard')
+    expect(hard.getAttribute('href')).toBe('/cbat/flag/leaderboard')
+  })
+
+  it('marks Hard as current on the /cbat/flag board', async () => {
+    setupAuth(mockApi())
+    mockUseParams.mockReturnValue({ gameKey: 'flag' })
+    render(<CbatLeaderboard />)
+
+    expect((await screen.findByRole('tab', { name: 'Hard' })).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: 'Easier' }).getAttribute('aria-selected')).toBe('false')
+  })
+
+  it('requests the board for the difficulty in the route', async () => {
+    const apiFetch = mockApi()
+    setupAuth(apiFetch)
+    mockUseParams.mockReturnValue({ gameKey: 'flag-easier' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => {
+      expect(apiFetch.mock.calls.some(([url]) => url.includes('/cbat/flag-easier/leaderboard'))).toBe(true)
+    })
+    expect(apiFetch.mock.calls.some(([url]) => url.includes('/cbat/flag/leaderboard'))).toBe(false)
+  })
+
+  it('leaves games without a difficulty split alone', async () => {
+    setupAuth(mockApi())
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: /this week/i })).toBeDefined())
+    expect(screen.queryByRole('tab', { name: 'Easier' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Hard' })).toBeNull()
   })
 })

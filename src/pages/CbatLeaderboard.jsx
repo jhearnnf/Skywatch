@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import LeaderboardRow, { rowCols, rowPad } from '../components/LeaderboardRow'
-import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
+import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_GROUPS } from '../data/cbatGames'
 import LeaderboardIntro, { INTRO_PILL_LAYOUT_ID } from '../components/LeaderboardIntro'
 import CbatProgressChart from '../components/CbatProgressChart'
 import { cbatTrend } from '../utils/cbatProgress'
@@ -200,6 +200,7 @@ export default function CbatLeaderboard() {
 
   const cfg = CBAT_LEADERBOARD_CONFIG[gameKey]
   const planeTurnMode = cfg?.planeTurnMode ?? null
+  const difficultyPills = cfg?.difficultyGroup ? CBAT_DIFFICULTY_GROUPS[cfg.difficultyGroup] : null
 
   // Arrival animation: the "This Week" card floats up into this tab on every
   // mount, then (only when arriving straight from a game) the user's row slides
@@ -219,11 +220,19 @@ export default function CbatLeaderboard() {
   // effect fires twice, so a plain mount-skip flag would let the second pass
   // clobber a deep-linked initial tab back to weekly.
   const lastGameKeyRef = useRef(gameKey)
+  const lastGroupRef = useRef(cfg?.difficultyGroup ?? null)
   useEffect(() => {
     if (lastGameKeyRef.current === gameKey) return
+    const group = cfg?.difficultyGroup ?? null
+    // Flipping difficulty within one game (the pills above) is still the same
+    // game, so it keeps whichever tab you were reading; a genuine game change
+    // goes back to This Week.
+    const sameGroup = !!group && group === lastGroupRef.current
     lastGameKeyRef.current = gameKey
-    setBoards({}); setLoading({}); setTab('weekly')
-  }, [gameKey])
+    lastGroupRef.current = group
+    setBoards({}); setLoading({})
+    if (!sameGroup) setTab('weekly')
+  }, [gameKey])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lazily fetch the active tab's data (weekly on mount, the others on first switch).
   useEffect(() => {
@@ -335,11 +344,32 @@ export default function CbatLeaderboard() {
 
       {!introDone && <LeaderboardIntro onDone={() => setIntroDone(true)} />}
 
-      {/* Header */}
+      {/* Header. Difficulty-split games (FLAG) carry a pill pair to the right of
+          the title — each pill is its own board, so switching swaps the route. */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Link to={cfg.backPath} className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; Instructions</Link>
           <h1 className="text-sm font-extrabold text-slate-900">{cfg.emoji} {cfg.title} Leaderboard</h1>
+          {difficultyPills && (
+            <div className="flex bg-[#060e1a] border border-[#1a3a5c] rounded-full p-0.5" role="tablist" aria-label="Difficulty">
+              {difficultyPills.map(d => {
+                const active = d.gameKey === gameKey
+                return (
+                  <Link
+                    key={d.gameKey}
+                    to={`/cbat/${d.gameKey}/leaderboard`}
+                    role="tab"
+                    aria-selected={active}
+                    className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-colors no-underline ${
+                      active ? 'bg-brand-600 text-white' : 'text-slate-600 hover:text-[#ddeaf8]'
+                    }`}
+                  >
+                    {d.label}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
