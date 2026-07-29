@@ -586,6 +586,17 @@ describe('CbatLeaderboard — difficulty pills', () => {
     expect(apiFetch.mock.calls.some(([url]) => url.includes('/cbat/flag/leaderboard'))).toBe(false)
   })
 
+  it('shows the same pills on the CUT boards', async () => {
+    setupAuth(mockApi())
+    mockUseParams.mockReturnValue({ gameKey: 'cut-easier' })
+    render(<CbatLeaderboard />)
+
+    const easier = await screen.findByRole('tab', { name: 'Easier' })
+    expect(easier.getAttribute('aria-selected')).toBe('true')
+    expect(easier.getAttribute('href')).toBe('/cbat/cut-easier/leaderboard')
+    expect(screen.getByRole('tab', { name: 'Hard' }).getAttribute('href')).toBe('/cbat/cut/leaderboard')
+  })
+
   it('leaves games without a difficulty split alone', async () => {
     setupAuth(mockApi())
     mockUseParams.mockReturnValue({ gameKey: 'symbols' })

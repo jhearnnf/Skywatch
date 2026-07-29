@@ -8,6 +8,11 @@ import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
+import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
+import {
+  CUT_DIFFICULTIES, CUT_LAUNCH_MS, cutTuning,
+  readStoredCutDifficulty, storeCutDifficulty,
+} from '../utils/cbat/cutDifficulty'
 import {
   GAME_MS, TICK_MS, SYSTEMS, SYSTEM_LABELS, SCORE, grade, award,
   makeSim, advanceSim, scheduleNextLoad, pushMessage, randRange, fmtWall, fmtClock,
@@ -347,8 +352,8 @@ function CommentaryPanel({ log, open, onToggle }) {
 
 
 // ── Results ──────────────────────────────────────────────────────────────────
-function ResultsScreen({ stats }) {
-  const g = grade(stats.totalScore)
+function ResultsScreen({ stats, tuning }) {
+  const g = grade(stats.totalScore, tuning)
   const row = (label, val, sub) => (
     <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
@@ -367,6 +372,8 @@ function ResultsScreen({ stats }) {
         {row('Tasks completed', stats.tasksCompleted)}
         {row('Tasks missed', stats.tasksMissed)}
       </div>
+
+      <p className="text-[10px] text-slate-500 mt-3 uppercase tracking-wide">{tuning.label} difficulty</p>
     </div>
   )
 }
@@ -378,7 +385,18 @@ export default function CbatCut() {
   const { enterImmersive, exitImmersive } = useGameChrome()
   const isDemo = !!useCbatDemo()
 
-  const [phase, setPhase] = useState('intro') // intro | playing | results
+  const [phase, setPhase] = useState('intro') // intro | launching | playing | results
+  // Defaults to 'easier'; a user who switches gets their most recent choice
+  // back on the next visit.
+  const [difficulty, setDifficulty] = useState(readStoredCutDifficulty)
+  const tuning = cutTuning(difficulty)
+  // The difficulty the run on screen is being played at. Pinned at launch so a
+  // mid-results switch can't relabel or misfile a finished run. Held twice on
+  // purpose: the ref is what the tick loop and handlers read, the state is what
+  // the render tree reads.
+  const runTuningRef = useRef(tuning)
+  const [runDifficulty, setRunDifficulty] = useState(difficulty)
+  const runTuning = cutTuning(runDifficulty)
   const [sel1, setSel1] = useState('message')
   const [sel2, setSel2] = useState('engine')
   // Commentary column open/minimised — persisted so the choice sticks. A demo
@@ -403,7 +421,7 @@ export default function CbatCut() {
   const [finalStats, setFinalStats] = useState(null)
 
   // One stable initial sim seeds both the mutable ref and the render snapshot.
-  const [initialSim] = useState(makeSim)
+  const [initialSim] = useState(() => makeSim(readStoredCutDifficulty()))
   const simRef = useRef(initialSim)
   const lastTsRef = useRef(0)
   // Render from an immutable snapshot of the sim, never the live ref (reading a
@@ -423,17 +441,21 @@ export default function CbatCut() {
   useGameBodyClass('cbat-cut-wide', phase === 'playing')
 
   // Personal best
-  const fetchPB = useCallback(() => {
+  // Per-difficulty (separate collections), so this refetches on every switch.
+  const fetchPB = useCallback((gameKey) => {
     if (!user) return
-    apiFetch(`${API}/api/games/cbat/cut/personal-best`)
+    apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
       .then(r => r.json())
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
   }, [user, apiFetch, API])
-  useEffect(() => { fetchPB() }, [fetchPB])
+  useEffect(() => { fetchPB(tuning.gameKey) }, [fetchPB, tuning.gameKey])
 
   const doFinish = useCallback(() => {
     const sim = simRef.current
+    // The ref, not the runTuning state — this is the tuning the finished run was
+    // actually played under.
+    const playedTuning = runTuningRef.current
     const stats = {
       totalScore: Math.round(sim.score),
       tasksCompleted: sim.tasksCompleted,
@@ -444,7 +466,7 @@ export default function CbatCut() {
     setScoreSaved(false)
     setQueued(false)
     markGameCompleted({ score: stats.totalScore })
-    submitCbatResult('cut', {
+    submitCbatResult(playedTuning.gameKey, {
       totalScore: stats.totalScore,
       totalTime: GAME_MS / 1000,
       tasksCompleted: stats.tasksCompleted,
@@ -454,7 +476,7 @@ export default function CbatCut() {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        fetchPB()
+        fetchPB(playedTuning.gameKey)
       })
       .catch(() => {})
     setPhase('results')
@@ -480,15 +502,39 @@ export default function CbatCut() {
   }, [phase, doFinish, sync])
 
   const startGame = useCallback(() => {
-    simRef.current = makeSim()
+    simRef.current = makeSim(runTuningRef.current.key)
     setView(simRef.current)
     setSel1('message')
     setSel2('engine')
     setFinalStats(null)
     setScoreSaved(false)
-    startTracking('cut')
+    startTracking(runTuningRef.current.gameKey)
     setPhase('playing')
   }, [startTracking])
+
+  // Pressing Start doesn't drop straight into the game: the chosen difficulty
+  // button flashes on a greyed-out card for CUT_LAUNCH_MS first. A demo tile
+  // skips it — the landing wall drives the Start button and shouldn't sit on a
+  // dimmed card for a second of its short loop.
+  const beginLaunch = useCallback(() => {
+    runTuningRef.current = tuning
+    setRunDifficulty(tuning.key)
+    if (isDemo) startGame()
+    else setPhase('launching')
+  }, [tuning, isDemo, startGame])
+
+  useEffect(() => {
+    if (phase !== 'launching') return
+    const t = setTimeout(() => startGame(), CUT_LAUNCH_MS)
+    return () => clearTimeout(t)
+  }, [phase, startGame])
+
+  const chooseDifficulty = useCallback((key) => {
+    setDifficulty(key)
+    storeCutDifficulty(key)
+    // The old board's best belongs to the difficulty being left.
+    setPersonalBest(null)
+  }, [])
 
   const goToIntro = useCallback(() => { setPhase('intro') }, [])
 
@@ -559,7 +605,7 @@ export default function CbatCut() {
       sim.tasksCompleted += 1
       sim.code = null
       sim.codeEntry = ''
-      sim.nextCodeAt = sim.elapsedMs + randRange(8_000, 14_000)
+      sim.nextCodeAt = sim.elapsedMs + randRange(...sim.tuning.codeGapMs)
     } else {
       award(sim, SCORE.codeWrong, 'wrong comms code')
       sim.codeEntry = ''
@@ -582,6 +628,10 @@ export default function CbatCut() {
 
   const sim = view
   const remainingMs = Math.max(0, GAME_MS - sim.elapsedMs)
+  const launching = phase === 'launching'
+  // During the launch flash everything on the card except the chosen difficulty
+  // button greys out, so the flashing button is the only thing left alive.
+  const dim = launching ? ' cbat-launch-dim' : ''
 
   return (
     <div className="cbat-cut-page">
@@ -602,12 +652,13 @@ export default function CbatCut() {
       {user && (
         <>
           {/* Header */}
-          <div className="flex items-center gap-2 mb-2">
-            {phase === 'intro'
+          <div className={`flex items-center gap-2 mb-2${phase === 'launching' ? ' cbat-launch-dim' : ''}`}>
+            {phase === 'intro' || phase === 'launching'
               ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
               : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
             }
             <h1 className="text-sm font-extrabold text-slate-900">Cognitive Updating Test</h1>
+            {phase === 'playing' && <DifficultyMarker tuning={runTuning} />}
             {phase === 'playing' && (
               <span className="ml-auto font-mono text-xs text-slate-500 flex gap-3">
                 <span>⏱ <span className={remainingMs < 20000 ? 'text-red-500' : 'text-slate-600'}>{fmtClock(remainingMs)}</span></span>
@@ -617,20 +668,43 @@ export default function CbatCut() {
           </div>
 
           {/* Intro */}
-          {phase === 'intro' && (
+          {(phase === 'intro' || phase === 'launching') && (
             <div className="flex flex-col items-center">
               <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
               >
-                <p className="text-4xl mb-3">🖥️</p>
-                <p className="text-xl font-extrabold text-white mb-2">Cognitive Updating Test</p>
-                <p className="text-sm text-slate-400 mb-5">
+                <p className={`text-4xl mb-3${dim}`}>🖥️</p>
+
+                {/* CUT_DIFFICULTIES is ordered [easier, hard], so the easier
+                    option lands left of the title and hard lands right of it.
+                    The title is too long to sit between them on a phone, so it
+                    goes above and the pair sits under it. */}
+                <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Cognitive Updating Test</p>
+                <div className="flex items-center justify-center gap-3 mb-1">
+                  <DifficultyButton
+                    tuning={CUT_DIFFICULTIES[0]}
+                    selected={difficulty === CUT_DIFFICULTIES[0].key}
+                    onSelect={chooseDifficulty}
+                    flashing={launching && difficulty === CUT_DIFFICULTIES[0].key}
+                    dimmed={launching && difficulty !== CUT_DIFFICULTIES[0].key}
+                  />
+                  <DifficultyButton
+                    tuning={CUT_DIFFICULTIES[1]}
+                    selected={difficulty === CUT_DIFFICULTIES[1].key}
+                    onSelect={chooseDifficulty}
+                    flashing={launching && difficulty === CUT_DIFFICULTIES[1].key}
+                    dimmed={launching && difficulty !== CUT_DIFFICULTIES[1].key}
+                  />
+                </div>
+                <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
+
+                <p className={`text-sm text-slate-400 mb-5${dim}`}>
                   Six aircraft displays run at once, but you can only view two at a time. Keep every system in
                   tolerance and react to scheduled tasks — the goal is to keep the <span className="text-red-400">Warning panel</span> empty.
                 </p>
 
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]">
+                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
                   <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Engine</span><span>keep the three fuel tanks within {FUEL_MAX_SPREAD} L</span></div>
                   <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Nav</span><span>hold airspeed within ±{SPEED_TOL} kts of required</span></div>
                   <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Sensor</span><span>re-activate Air &amp; Ground sensors on time; select the ordered camera</span></div>
@@ -641,18 +715,18 @@ export default function CbatCut() {
                 </div>
 
                 {personalBest && (
-                  <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
+                  <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4${dim}`}>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
                     <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore}</p>
                     <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                   </div>
                 )}
 
-                <div className="text-center mb-4">
-                  <Link to="/cbat/cut/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">View Leaderboard →</Link>
+                <div className={`text-center mb-4${dim}`}>
+                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">View Leaderboard →</Link>
                 </div>
 
-                <button onClick={startGame} data-demo-start className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer">Start</button>
+                <button onClick={beginLaunch} disabled={launching} data-demo-start className={`px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed${dim}`}>Start</button>
               </motion.div>
             </div>
           )}
@@ -719,14 +793,14 @@ export default function CbatCut() {
           {phase === 'results' && finalStats && (
             <div className="flex flex-col items-center">
               <CbatGameOver
-                gameKey="cut"
+                gameKey={runTuning.gameKey}
                 score={finalStats.totalScore}
                 scoreSaved={scoreSaved}
                 queued={queued}
                 personalBest={personalBest}
                 onPlayAgain={() => { setScoreSaved(false); startGame() }}
               >
-                <ResultsScreen stats={finalStats} />
+                <ResultsScreen stats={finalStats} tuning={runTuning} />
               </CbatGameOver>
             </div>
           )}

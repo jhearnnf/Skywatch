@@ -24,6 +24,7 @@ import AircraftQuestion from './CbatFlag/AircraftQuestion'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
+import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Shared by both difficulties. The only things a difficulty changes are how
@@ -86,68 +87,6 @@ function ResultsScreen({ stats, tuning }) {
   )
 }
 
-// ── Difficulty selector ───────────────────────────────────────────────────────
-// A pair of buttons flanking the FLAG title: Easier on the left, Hard on the
-// right. The selected one is a live brand button (same weight as Start); the
-// other is greyed back so the choice reads at a glance. The stacked bars are a
-// threat-level meter — 1 of 3 for Easier, 3 of 3 for Hard — so the buttons say
-// what they are without needing a legend.
-const BAR_TONES = {
-  solid:  ['bg-white',     'bg-white/25'],       // on a filled brand button
-  muted:  ['bg-slate-600', 'bg-slate-400/40'],   // unselected button
-  accent: ['bg-brand-600', 'bg-brand-600/25'],   // on a dark surface
-}
-
-function DifficultyBars({ filled, tone = 'muted' }) {
-  const [onCls, offCls] = BAR_TONES[tone]
-  return (
-    <span className="flex items-end gap-[2px] h-[11px]" aria-hidden="true">
-      {[0, 1, 2].map(i => (
-        <span
-          key={i}
-          className={`w-[3px] rounded-[1px] ${i < filled ? onCls : offCls}`}
-          style={{ height: 5 + i * 3 }}
-        />
-      ))}
-    </span>
-  )
-}
-
-// The difficulty in play, shown beside the page title during a run so it's
-// never ambiguous which board the score is heading for. Sits in the header row
-// above the play field, not over it.
-function DifficultyMarker({ tuning }) {
-  return (
-    <span
-      data-difficulty-marker={tuning.key}
-      className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#0c1829] border border-[#1a3a5c] text-[10px] font-extrabold uppercase tracking-wide text-brand-300"
-    >
-      <DifficultyBars filled={tuning.bars} tone="accent" />
-      {tuning.label}
-    </span>
-  )
-}
-
-function DifficultyButton({ tuning, selected, onSelect, flashing, dimmed }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(tuning.key)}
-      aria-pressed={selected}
-      data-difficulty={tuning.key}
-      title={tuning.blurb}
-      className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-extrabold uppercase tracking-wide transition-all duration-200 cursor-pointer ${
-        selected
-          ? 'bg-brand-600 border-brand-600 text-white shadow-[0_0_12px_rgba(91,170,255,0.35)]'
-          : 'bg-[#060e1a] border-[#1a3a5c] text-slate-600 hover:text-[#ddeaf8] hover:border-brand-600'
-      }${flashing ? ' cbat-flag-launch-flash' : ''}${dimmed ? ' cbat-flag-launch-dim' : ''}`}
-    >
-      <DifficultyBars filled={tuning.bars} tone={selected ? 'solid' : 'muted'} />
-      {tuning.label}
-    </button>
-  )
-}
-
 // ── Intro screen ──────────────────────────────────────────────────────────────
 function IntroScreen({
   onStart, onTutorial, personalBest, aircraftList, aircraftLoading,
@@ -156,7 +95,7 @@ function IntroScreen({
   const disabled = aircraftLoading || aircraftList.length === 0
   // During the launch flash everything on the card except the chosen difficulty
   // button greys out, so the flashing button is the only thing left alive.
-  const dim = launching ? ' cbat-flag-launch-dim' : ''
+  const dim = launching ? ' cbat-launch-dim' : ''
 
   return (
     <motion.div
@@ -1159,8 +1098,11 @@ export default function CbatFlag() {
     if (aircraftList.length === 0) return
     runTuningRef.current = tuning
     setRunDifficulty(tuning.key)
-    setPhase('launching')
-  }, [aircraftList, tuning])
+    // A demo tile skips the flash — the landing wall drives the Start button and
+    // shouldn't sit on a dimmed card for a second of its short loop.
+    if (demo) startGame()
+    else setPhase('launching')
+  }, [aircraftList, tuning, demo, startGame])
 
   useEffect(() => {
     if (phase !== 'launching') return
@@ -1196,7 +1138,7 @@ export default function CbatFlag() {
 
       {user && (
         <>
-          <div className={`flex items-center gap-2 mb-2 max-[600px]:mb-1${phase === 'launching' ? ' cbat-flag-launch-dim' : ''}`}>
+          <div className={`flex items-center gap-2 mb-2 max-[600px]:mb-1${phase === 'launching' ? ' cbat-launch-dim' : ''}`}>
             {phase === 'intro' || phase === 'launching'
               ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
               : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />

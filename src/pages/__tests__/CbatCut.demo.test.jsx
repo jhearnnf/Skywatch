@@ -26,14 +26,21 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => <>{children}</>,
 }))
 
-function startedGame() {
+// `demo` mirrors the real harness, which mounts every demo game inside
+// CbatDemoContext.Provider — the page skips its pre-game difficulty flash there,
+// so the driver's Start press lands straight in the game rather than sitting on
+// a dimmed card for a second of a short loop.
+function startedGame({ demo = true } = {}) {
   mockUseAuth.mockReturnValue({
     user: { _id: 'u1' },
     API: '',
     apiFetch: vi.fn(async () => ({ ok: true, json: async () => ({}) })),
   })
-  const view = render(<CbatCut />)
+  const view = demo
+    ? render(<CbatDemoContext.Provider value={{ portalTarget: null }}><CbatCut /></CbatDemoContext.Provider>)
+    : render(<CbatCut />)
   act(() => { press(view.container.querySelector(START_SELECTOR)) })
+  if (!demo) act(() => { vi.advanceTimersByTime(1100) })   // launch flash
   return view
 }
 
@@ -62,20 +69,22 @@ describe('CUT — driveable by the demo wall', () => {
   // a score log nobody can read at that size.
   it('starts with the commentary column minimised in a tile', () => {
     localStorage.setItem('cbat:cut:commentary', '1')
-    mockUseAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch: vi.fn(async () => ({ ok: true, json: async () => ({}) })) })
-    const { container } = render(
-      <CbatDemoContext.Provider value={{ portalTarget: null }}>
-        <CbatCut />
-      </CbatDemoContext.Provider>,
-    )
-    act(() => { press(container.querySelector(START_SELECTOR)) })
+    startedGame()
 
     expect(screen.getByTitle('Show commentary')).toBeTruthy()
   })
 
+  // A demo tile has a few seconds of attention; a second of dimmed card before
+  // anything moves is a second wasted.
+  it('skips the pre-game difficulty flash in a tile', () => {
+    const { container } = startedGame()
+    // Straight into the game — the display index is live with no clock advance.
+    expect(container.querySelectorAll(ANSWER_SELECTOR).length).toBeGreaterThan(0)
+  })
+
   it('respects the saved preference for a real player', () => {
     localStorage.setItem('cbat:cut:commentary', '1')
-    const { container } = startedGame()
+    const { container } = startedGame({ demo: false })
     expect(container.querySelector('[title="Show commentary"]')).toBeNull()
     expect(screen.getByTitle('Minimise')).toBeTruthy()
   })

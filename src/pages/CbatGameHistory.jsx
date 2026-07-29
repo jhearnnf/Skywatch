@@ -27,6 +27,7 @@ export const GAME_LABELS = {
   'dad':              'Directions and Distances',
   'sat':              'Situational Awareness Test',
   'cut':              'Cognitive Updating Test',
+  'cut-easier':       'Cognitive Updating Test (Easier)',
 }
 
 const PRIMARY_LABELS = {

@@ -21,11 +21,11 @@ beforeEach(async () => {
 afterEach(async () => db.clearDatabase());
 afterAll(async () => db.closeDatabase());
 
-// FLAG's two difficulties are separate CBAT_GAMES entries backed by separate
-// collections, and the CBAT report is registry-driven — so they should already
-// report independently, with no per-difficulty code in adminReports.js. This
-// pins that: a difficulty that stopped showing up (or that folded its numbers
-// into the other one) would be silent data loss on the Reports page.
+// FLAG's and CUT's difficulties are separate CBAT_GAMES entries backed by
+// separate collections, and the CBAT report is registry-driven — so they should
+// already report independently, with no per-difficulty code in adminReports.js.
+// This pins that: a difficulty that stopped showing up (or that folded its
+// numbers into the other one) would be silent data loss on the Reports page.
 describe('GET /api/admin/reports/cbat — FLAG difficulties report separately', () => {
   const result = (score) => ({
     totalScore: score, mathCorrect: 3, mathWrong: 0, mathTimeout: 0,
@@ -80,5 +80,29 @@ describe('GET /api/admin/reports/cbat — FLAG difficulties report separately', 
     // abandonPct is a 0–1 fraction, not a percentage.
     expect(easyRow.abandonPct).toBe(0.5);  // 2 starts, 1 result
     expect(hardRow.abandonPct).toBe(1);    // 1 start, no result
+  });
+});
+
+describe('GET /api/admin/reports/cbat — CUT difficulties report separately', () => {
+  const result = (score) => ({
+    totalScore: score, totalTime: 180, tasksCompleted: 6, tasksMissed: 1, warningSeconds: 20,
+  });
+
+  it('gives each difficulty its own labelled series and per-game row', async () => {
+    await request(app).post('/api/games/cbat/cut/result')
+      .set('Cookie', authCookie(u1._id)).send(result(900));
+    await request(app).post('/api/games/cbat/cut-easier/result')
+      .set('Cookie', authCookie(u2._id)).send(result(400));
+
+    const res = await request(app)
+      .get('/api/admin/reports/cbat?window=all')
+      .set('Cookie', cookie);
+
+    const { data } = res.body;
+    expect(data.gameKeys).toEqual(expect.arrayContaining(['cut', 'cut-easier']));
+    expect(data.gameLabels['cut']).toBe('Cognitive Updating Test');
+    expect(data.gameLabels['cut-easier']).toBe('Cognitive Updating Test (Easier)');
+    expect(data.perGame.find(g => g.key === 'cut').sessions).toBe(1);
+    expect(data.perGame.find(g => g.key === 'cut-easier').sessions).toBe(1);
   });
 });

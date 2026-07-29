@@ -352,8 +352,8 @@ describe('CbatFlag — difficulty selection', () => {
     expect(screen.queryByTestId('play-field')).toBeNull()
     const easier = screen.getByRole('button', { name: /easier/i })
     const hard = screen.getByRole('button', { name: /hard/i })
-    expect(easier.className).toContain('cbat-flag-launch-flash')
-    expect(hard.className).toContain('cbat-flag-launch-dim')
+    expect(easier.className).toContain('cbat-launch-flash')
+    expect(hard.className).toContain('cbat-launch-dim')
 
     await act(async () => { vi.advanceTimersByTime(900) })
     expect(screen.queryByTestId('play-field')).toBeNull()

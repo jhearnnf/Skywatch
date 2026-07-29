@@ -17,6 +17,7 @@ const GameSessionCbatNumericalOpsResult  = require('../models/GameSessionCbatNum
 const GameSessionCbatDADResult           = require('../models/GameSessionCbatDADResult');
 const GameSessionCbatSatResult           = require('../models/GameSessionCbatSatResult');
 const GameSessionCbatCutResult           = require('../models/GameSessionCbatCutResult');
+const GameSessionCbatCutEasierResult     = require('../models/GameSessionCbatCutEasierResult');
 
 // Single source of truth for CBAT games. Adding a new CBAT game = add one entry
 // here and it automatically flows through submission routes, leaderboards,
@@ -208,6 +209,16 @@ const CBAT_GAMES = {
     sortDir: -1,           // higher is better (accumulating score)
     bestOp: '$max',
     label: 'Cognitive Updating Test',
+  },
+  // CUT's "Easier" difficulty — slower fuel/pressure/airspeed drift and a
+  // thinner task cadence. Its own collection and therefore its own boards; the
+  // page at /cbat/cut picks the key from the selected difficulty.
+  'cut-easier': {
+    Model: GameSessionCbatCutEasierResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Cognitive Updating Test (Easier)',
   },
 };
 

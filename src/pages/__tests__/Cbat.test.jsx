@@ -108,9 +108,11 @@ describe('Cbat page — background images', () => {
 describe('Cbat page — tile badges', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('announces the new difficulty modes on the FLAG tile', () => {
+  it('announces the new difficulty modes on the tiles that have them', () => {
     renderWithUser()
-    expect(screen.getByText('New Difficulty Modes')).toBeDefined()
+    const badged = CBAT_GAMES.filter(g => g.badge === 'New Difficulty Modes').map(g => g.key)
+    expect(badged).toEqual(expect.arrayContaining(['flag', 'cut']))
+    expect(screen.getAllByText('New Difficulty Modes')).toHaveLength(badged.length)
   })
 
   it('no longer flags CUT as a new game', () => {

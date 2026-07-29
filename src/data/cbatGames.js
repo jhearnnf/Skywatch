@@ -22,7 +22,7 @@ export const CBAT_GAMES = [
   // `isNew: true` surfaces a "New Game" badge on the hub tile; `badge: '…'`
   // surfaces arbitrary announcement text in the same slot (for a game that
   // isn't new but has gained something).
-  { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png' },
+  { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png', badge: 'New Difficulty Modes' },
   // `beta: true` surfaces a BETA badge on the hub tile — SAT is live but still
   // being polished. Drop the flag once it's finished.
   { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', beta: true },
@@ -59,7 +59,8 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops' },
   'dad':             { title: 'Directions & Distances', emoji: '🧭', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}/15`, backPath: '/cbat/dad' },
   'sat':             { title: 'Situational Awareness Test', emoji: '🗺️', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}/18`, backPath: '/cbat/sat' },
-  'cut':             { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true },
+  'cut':             { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true, difficultyGroup: 'cut' },
+  'cut-easier':      { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true, difficultyGroup: 'cut' },
 }
 
 // Games whose difficulties keep separate leaderboards. The leaderboard page
@@ -71,6 +72,10 @@ export const CBAT_DIFFICULTY_GROUPS = {
   flag: [
     { gameKey: 'flag-easier', label: 'Easier' },
     { gameKey: 'flag',        label: 'Hard' },
+  ],
+  cut: [
+    { gameKey: 'cut-easier', label: 'Easier' },
+    { gameKey: 'cut',        label: 'Hard' },
   ],
 }
 

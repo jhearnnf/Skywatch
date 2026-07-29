@@ -7,6 +7,8 @@
 // tolerance while reacting to scheduled tasks and warnings. Cadences are scaled
 // down from the real test (Air 2min / Ground 4min) so several cycles fit 180s.
 
+import { cutTuning } from './cutDifficulty'
+
 export const GAME_MS = 180_000
 export const TICK_MS = 100
 
@@ -17,11 +19,13 @@ export const SYSTEM_LABELS = {
 }
 
 // Engine — one tank feeds (drains) at a time; keep all within 50 L.
-export const FUEL_DRAIN_PER_SEC = 4.5
+// The drain/drift/pressure RATES and the task cadences are difficulty-scaled:
+// each sim carries its own tuning (see cutDifficulty.js) and advanceSim reads
+// them off `sim.tuning`. The constants below are Hard's values, kept as the
+// documented defaults. Tolerances are shared — only the rates differ.
 export const FUEL_MAX_SPREAD = 50
 
 // Navigation — current airspeed drifts down; hold within ±10 of required.
-export const SPEED_DRIFT_PER_SEC = 0.5
 export const SPEED_TOL = 10
 export const SPEED_STEP = 2
 
@@ -40,8 +44,6 @@ export const LOAD_POINTS = 3
 export const stationName = (i) => `Station ${i + 1}`
 
 // System — hydraulic pressure band + comms-code entry.
-export const PRESS_RISE_PER_SEC = 0.7    // pump ON — very gentle (band lasts ~28s)
-export const PRESS_DROP_PER_SEC = 0.5    // pump OFF
 export const PRESS_LOW = 90
 export const PRESS_HIGH = 110
 // The comms code appears in Message this far ahead of its close — the keypad is
@@ -68,10 +70,11 @@ export const SCORE = {
   warnBleedPerSec: 1,    // per active warning, per second
 }
 
-export function grade(score) {
-  if (score >= 1100) return { label: 'Outstanding', emoji: '🎖️', color: 'text-green-400' }
-  if (score >= 700) return { label: 'Good', emoji: '🖥️', color: 'text-brand-300' }
-  if (score >= 350) return { label: 'Needs Work', emoji: '🔧', color: 'text-amber-400' }
+export function grade(score, tuning = cutTuning('hard')) {
+  const g = tuning.grades
+  if (score >= g.outstanding) return { label: 'Outstanding', emoji: '🎖️', color: 'text-green-400' }
+  if (score >= g.good) return { label: 'Good', emoji: '🖥️', color: 'text-brand-300' }
+  if (score >= g.needsWork) return { label: 'Needs Work', emoji: '🔧', color: 'text-amber-400' }
   return { label: 'Failed', emoji: '💥', color: 'text-red-400' }
 }
 
@@ -126,7 +129,7 @@ export const clockAt = (sim, elapsedMs) => fmtWall(sim.clockStartSec + elapsedMs
 // Schedule the next load drop — a station + an in-game clock time — and announce
 // it. The panel never shows the station/time, so the order lives only in Message.
 export function scheduleNextLoad(sim) {
-  sim.loadDueAt = sim.elapsedMs + randRange(18_000, 26_000)
+  sim.loadDueAt = sim.elapsedMs + randRange(...sim.tuning.loadGapMs)
   sim.loadTarget = rand(LOAD_POINTS)
   sim.loadArmed = true
   sim.loadLights = 0
@@ -135,12 +138,17 @@ export function scheduleNextLoad(sim) {
 }
 
 // Fresh simulation state.
-export function makeSim() {
+// Fresh simulation state at a given difficulty (see cutDifficulty.js). The
+// tuning rides on the sim so advanceSim stays a pure function of (sim, dt) —
+// nothing else has to be told which difficulty is running.
+export function makeSim(difficulty) {
+  const tuning = cutTuning(difficulty)
   const requiredSpeed = randRange(360, 480)
   const clockStartSec = randRange(0, 86_399)   // in-game wall-clock start
-  const loadDueAt = 22_000                      // first scheduled load drop (elapsed ms)
+  const loadDueAt = tuning.firstLoadMs          // first scheduled load drop (elapsed ms)
   const loadTarget = rand(LOAD_POINTS)          // which station the first drop wants
   return {
+    tuning,
     elapsedMs: 0,
     clockStartSec,
     score: 0,
@@ -160,12 +168,12 @@ export function makeSim() {
     // Navigation
     speed: requiredSpeed + SPEED_TOL,   // start at the safe ceiling
     requiredSpeed,
-    nextSpeedAt: randRange(32_000, 42_000),
+    nextSpeedAt: randRange(...tuning.speedChangeMs),
 
     // Sensor
     camera: 'Alpha',
     requiredCamera: null,
-    nextCameraAt: randRange(40_000, 55_000),
+    nextCameraAt: randRange(...tuning.cameraFirstMs),
     airDueAt: AIR_INTERVAL,
     groundDueAt: GROUND_INTERVAL,
 
@@ -181,7 +189,7 @@ export function makeSim() {
     pump: false,
     code: null,          // { digits, dueAt }
     codeEntry: '',
-    nextCodeAt: 10_000,
+    nextCodeAt: tuning.firstCodeMs,
 
     messages: [
       { id: mid(), t: 0, wall: fmtWall(clockStartSec), text: 'MISSION: hold all systems in tolerance. Keep the warning panel clear.' },
@@ -206,20 +214,21 @@ export function computeWarnings(sim) {
 // Advance the whole simulation by `dt` ms. Mutates `sim`.
 export function advanceSim(sim, dt) {
   const secs = dt / 1000
+  const tuning = sim.tuning
   sim.elapsedMs += dt
 
   // Engine — the feeding tank drains.
   const feed = sim.fuel.find(f => f.on)
-  if (feed) feed.level = Math.max(0, feed.level - FUEL_DRAIN_PER_SEC * secs)
+  if (feed) feed.level = Math.max(0, feed.level - tuning.fuelDrainPerSec * secs)
 
   // Navigation — current airspeed bleeds off; required changes periodically.
-  sim.speed = Math.max(0, sim.speed - SPEED_DRIFT_PER_SEC * secs)
+  sim.speed = Math.max(0, sim.speed - tuning.speedDriftPerSec * secs)
   if (sim.elapsedMs >= sim.nextSpeedAt) {
     sim.requiredSpeed = randRange(360, 480)
     // Current airspeed catches up to the new setting (safe ceiling), then drifts
     // down again so the player has to keep re-trimming it — same as game start.
     sim.speed = sim.requiredSpeed + SPEED_TOL
-    sim.nextSpeedAt = sim.elapsedMs + randRange(32_000, 42_000)
+    sim.nextSpeedAt = sim.elapsedMs + randRange(...tuning.speedChangeMs)
     pushMessage(sim, `NAV: set airspeed to ${sim.requiredSpeed} kts (±${SPEED_TOL})`)
   }
 
@@ -227,7 +236,7 @@ export function advanceSim(sim, dt) {
   // order to re-select the live camera would be a no-op.
   if (sim.elapsedMs >= sim.nextCameraAt) {
     sim.requiredCamera = sim.camera === 'Alpha' ? 'Bravo' : 'Alpha'
-    sim.nextCameraAt = sim.elapsedMs + randRange(40_000, 60_000)
+    sim.nextCameraAt = sim.elapsedMs + randRange(...tuning.cameraNextMs)
     pushMessage(sim, `SENSOR: select camera ${sim.requiredCamera}`)
   }
 
@@ -246,7 +255,7 @@ export function advanceSim(sim, dt) {
   }
 
   // System — hydraulic pressure drifts with pump state.
-  sim.pressure += (sim.pump ? PRESS_RISE_PER_SEC : -PRESS_DROP_PER_SEC) * secs
+  sim.pressure += (sim.pump ? tuning.pressRisePerSec : -tuning.pressDropPerSec) * secs
   sim.pressure = Math.max(60, Math.min(140, sim.pressure))
 
   // System — comms code lifecycle.
@@ -260,7 +269,7 @@ export function advanceSim(sim, dt) {
     sim.tasksMissed += 1
     sim.code = null
     sim.codeEntry = ''
-    sim.nextCodeAt = sim.elapsedMs + randRange(8_000, 14_000)
+    sim.nextCodeAt = sim.elapsedMs + randRange(...tuning.codeGapMs)
     pushMessage(sim, 'COMMS: code entry window missed')
   }
 

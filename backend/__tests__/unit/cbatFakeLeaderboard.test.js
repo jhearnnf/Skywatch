@@ -22,6 +22,7 @@ const GAME_MAX = {
   'dad':             15,     // 15 questions, one point each
   'sat':             18,     // 18 questions (3 situations × 6), one point each
   'cut':             null,   // accumulating score, no fixed ceiling
+  'cut-easier':      null,   // accumulating score, no fixed ceiling
 };
 const LOWER_BETTER = { 'plane-turn-2d': true, 'plane-turn-3d': true };
 

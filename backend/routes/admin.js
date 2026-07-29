@@ -774,7 +774,7 @@ router.patch('/settings', requireReason, async (req, res) => {
       'target', 'ant', 'symbols', 'code-duplicates', 'angles', 'instruments',
       'plane-turn-2d', 'plane-turn-3d', 'trace-1', 'trace-2', 'flag', 'flag-easier',
       'visualisation-2d', 'visualisation-3d',
-      'dpt', 'act', 'numerical-ops', 'dad', 'sat', 'cut',
+      'dpt', 'act', 'numerical-ops', 'dad', 'sat', 'cut', 'cut-easier',
     ]);
     const CBAT_UNIMPLEMENTED = new Set();
     if ('cbatGameEnabled' in updates) {

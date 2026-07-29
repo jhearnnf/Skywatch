@@ -35,6 +35,7 @@ const GAME_OFFSET = {
   'act':             18,
   'dad':             22,
   'cut':              3,
+  'cut-easier':       5,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -202,6 +203,13 @@ const FAKE_TUNING = {
     floor: 150, ceiling: 550, seedTime: 176.4, timeStep: 0.4,
     scoreSequence: [550, 530, 505, 480, 455, 430, 410, 390, 370, 350, 330, 310, 290, 270, 250, 230, 210, 190, 170, 150],
   },
+  'cut-easier': {
+    // Easier serves fewer scheduled tasks in the same 180s, so the achievable
+    // total is lower even though the systems drift more slowly and the passive
+    // in-tolerance trickle is unchanged. Band scaled to ~75% of Hard's.
+    floor: 110, ceiling: 420, seedTime: 176.9, timeStep: 0.4,
+    scoreSequence: [420, 400, 385, 365, 345, 330, 310, 295, 280, 265, 250, 235, 220, 205, 190, 175, 160, 145, 128, 110],
+  },
 };
 
 // Fixed delta tables — natural-looking variance without randomness.
@@ -325,6 +333,7 @@ const WEEKLY_PER_PLAY = {
   'dad':               9,  // correctCount /15 — a little below a decent single run
   'sat':              11,  // correctCount /18 — a little below a decent single run
   'cut':             350,  // accumulating totalScore — a little below a decent single run
+  'cut-easier':      260,  // fewer scheduled tasks in the same 180s
 };
 
 // Six deterministic demo players: a couple of active ones, the rest light.
