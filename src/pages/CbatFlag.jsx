@@ -105,8 +105,9 @@ function IntroScreen({
     >
       <p className={`text-4xl mb-3${dim}`}>🚩</p>
 
-      {/* FLAG_DIFFICULTIES is ordered [easier, hard] so the easier option lands
-          left of the title and hard lands right of it. */}
+      {/* FLAG_DIFFICULTIES is ordered [easier, hard], so the easier option lands
+          left and hard lands right. The pair sits under the title, matching CUT. */}
+      <p className={`text-xl font-extrabold text-white mb-2${dim}`}>FLAG</p>
       <div className="flex items-center justify-center gap-3 mb-1">
         <DifficultyButton
           tuning={FLAG_DIFFICULTIES[0]}
@@ -115,7 +116,6 @@ function IntroScreen({
           flashing={launching && difficulty === FLAG_DIFFICULTIES[0].key}
           dimmed={launching && difficulty !== FLAG_DIFFICULTIES[0].key}
         />
-        <p className={`text-xl font-extrabold text-white${dim}`}>FLAG</p>
         <DifficultyButton
           tuning={FLAG_DIFFICULTIES[1]}
           selected={difficulty === FLAG_DIFFICULTIES[1].key}
