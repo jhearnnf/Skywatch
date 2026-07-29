@@ -1,0 +1,111 @@
+import { render, act } from '@testing-library/react'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
+import CbatVisualisation from '../CbatVisualisation'
+import { press, START_SELECTOR, ANSWER_SELECTOR } from '../../components/landingGames/demoDriver'
+
+// A 3D round's prompt panel names each composite for admins, so a report about
+// "the pentagon one" can be traced to an actual shape key. The answer options
+// get the same names once the round is answered — not while the choice is live —
+// and a normal player never sees any of it.
+
+const mockUseAuth = vi.hoisted(() => vi.fn())
+
+vi.mock('react-router-dom', () => ({
+  Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+}))
+vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
+vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: {} }) }))
+vi.mock('../../components/SEO', () => ({ default: () => null }))
+vi.mock('../../components/CbatGameOver', () => ({ default: ({ children }) => <div>{children}</div> }))
+vi.mock('../../components/VisualisationModeSelector', () => ({ default: () => null }))
+// Stand in for the WebGL shape, tagging what it was asked to draw so the test
+// can tell prompt shapes from answer-option shapes.
+vi.mock('../../components/cbat/Visualisation3DShape', () => ({
+  default: ({ composite, accent }) => <div data-shape={composite} data-accent={accent} />,
+  VisualisationShapeCanvas: () => null,
+}))
+vi.mock('../../lib/cbatOutbox', () => ({ submitCbatResult: vi.fn(() => Promise.resolve({ synced: true })) }))
+vi.mock('../../utils/cbat/useCbatTracking', () => ({
+  useCbatTracking: () => ({ start: vi.fn(), setRound: vi.fn(), markCompleted: vi.fn() }),
+}))
+vi.mock('framer-motion', () => ({
+  motion: {
+    div:    ({ children, className, style }) => <div className={className} style={style}>{children}</div>,
+    button: ({ children, className, onClick, disabled }) => <button className={className} onClick={onClick} disabled={disabled}>{children}</button>,
+  },
+  AnimatePresence: ({ children }) => <>{children}</>,
+}))
+
+function started({ isAdmin }) {
+  mockUseAuth.mockReturnValue({
+    user: { _id: 'u1', isAdmin },
+    API: '',
+    apiFetch: vi.fn(async () => ({ ok: true, json: async () => ({}) })),
+  })
+  const view = render(<CbatVisualisation forcedMode="3d" />)
+  act(() => { press(view.container.querySelector(START_SELECTOR)) })
+  return view
+}
+
+describe('Visualisation 3D — admin composite labels', () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); localStorage.clear() })
+
+  it('names every prompt shape for an admin', () => {
+    const { container } = started({ isAdmin: true })
+
+    const prompts = [...container.querySelectorAll('[data-accent="prompt"]')]
+    expect(prompts.length).toBeGreaterThan(0)
+
+    const labels = [...container.querySelectorAll('[data-admin-composite]')]
+    expect(labels).toHaveLength(prompts.length)
+    // Each label names the shape it sits under, and says so on screen.
+    labels.forEach((el, i) => {
+      const key = prompts[i].getAttribute('data-shape')
+      expect(el.getAttribute('data-admin-composite')).toBe(key)
+      expect(el.textContent).toBe(key)
+    })
+  })
+
+  it('shows nothing to a normal player', () => {
+    const { container } = started({ isAdmin: false })
+    expect(container.querySelectorAll('[data-accent="prompt"]').length).toBeGreaterThan(0)
+    expect(container.querySelector('[data-admin-composite]')).toBeNull()
+  })
+
+  it('leaves the answer options unlabelled while the choice is live', () => {
+    const { container } = started({ isAdmin: true })
+
+    // Options render inside the answer buttons; the prompt panel does not.
+    expect(container.querySelectorAll('button [data-admin-composite]')).toHaveLength(0)
+    expect(container.querySelectorAll('[data-accent="option"]').length).toBeGreaterThan(0)
+  })
+
+  it('names the option shapes once an answer is pressed', () => {
+    const { container } = started({ isAdmin: true })
+    const optionShapes = container.querySelectorAll('[data-accent="option"]').length
+
+    act(() => { press(container.querySelector(ANSWER_SELECTOR)) })
+
+    const labels = [...container.querySelectorAll('button [data-admin-composite]')]
+    expect(labels).toHaveLength(optionShapes)
+    // Every option draws the same composites, so each tile repeats the round's
+    // shape names in order.
+    const promptKeys = [...container.querySelectorAll('[data-accent="prompt"]')]
+      .map(el => el.getAttribute('data-shape'))
+    const perTile = labels.map(el => el.getAttribute('data-admin-composite'))
+      .reduce((acc, key, i) => {
+        const tile = Math.floor(i / promptKeys.length)
+        ;(acc[tile] ||= []).push(key)
+        return acc
+      }, [])
+    perTile.forEach(keys => expect(keys).toEqual(promptKeys))
+  })
+
+  it('still shows nothing to a normal player after answering', () => {
+    const { container } = started({ isAdmin: false })
+    act(() => { press(container.querySelector(ANSWER_SELECTOR)) })
+    expect(container.querySelector('[data-admin-composite]')).toBeNull()
+  })
+})

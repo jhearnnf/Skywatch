@@ -920,9 +920,9 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
                       Find the option with the dots on the same corners
                     </p>
-                    <div className="flex items-center justify-center gap-2 sm:gap-5">
+                    <div className="flex items-start justify-center gap-2 sm:gap-5">
                       {currentRound.shapes.map((s, i) => (
-                        <div key={i} className="flex items-center justify-center">
+                        <div key={i} className="flex flex-col items-center justify-center">
                           <Visualisation3DShape
                             composite={s.compositeKey}
                             rotation={[0, 0, 0]}
@@ -930,6 +930,19 @@ export default function CbatVisualisation({ forcedMode = null }) {
                             accent="prompt"
                             size={120}
                           />
+                          {/* Admin-only: names the shape being asked about, so a
+                              report about a specific composite can be traced back
+                              to it. Prompt panel only — putting it on the answer
+                              options would give the matching away. */}
+                          {isAdmin && (
+                            <span
+                              data-admin-composite={s.compositeKey}
+                              title="Admin only — composite key"
+                              className="font-mono text-[10px] text-amber-400 tracking-wide"
+                            >
+                              {s.compositeKey}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -968,16 +981,31 @@ export default function CbatVisualisation({ forcedMode = null }) {
                             }`}
                           >
                             <span className="text-[10px] font-extrabold text-slate-400 mb-1">{opt.id}</span>
-                            <div className="flex flex-col items-center gap-0.5">
+                            <div className="flex flex-col items-center gap-0.5 w-full min-w-0">
                               {currentRound.shapes.map((s, i) => (
-                                <Visualisation3DShape
-                                  key={i}
-                                  composite={s.compositeKey}
-                                  rotation={opt.rotations[i]}
-                                  dotCornerId={opt.dots[i]}
-                                  accent="option"
-                                  size={72}
-                                />
+                                <div key={i} className="flex flex-col items-center w-full min-w-0">
+                                  <Visualisation3DShape
+                                    composite={s.compositeKey}
+                                    rotation={opt.rotations[i]}
+                                    dotCornerId={opt.dots[i]}
+                                    accent="option"
+                                    size={72}
+                                  />
+                                  {/* Admin-only, and only once the round is
+                                      answered — naming the composites while the
+                                      question is live would still be no help
+                                      (every option draws the same two), but it
+                                      would clutter the choice. */}
+                                  {isAdmin && phase === 'feedback' && (
+                                    <span
+                                      data-admin-composite={s.compositeKey}
+                                      title="Admin only — composite key"
+                                      className="font-mono text-[8px] leading-none text-amber-400 max-w-full truncate"
+                                    >
+                                      {s.compositeKey}
+                                    </span>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           </button>
