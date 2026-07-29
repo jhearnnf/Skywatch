@@ -9,6 +9,7 @@ import LeaderboardIntro, { INTRO_PILL_LAYOUT_ID } from '../components/Leaderboar
 import CbatProgressChart from '../components/CbatProgressChart'
 import { cbatTrend } from '../utils/cbatProgress'
 import { cbatLastRankKey } from '../utils/storageKeys'
+import { useCbatAdminView, withCbatView } from '../utils/cbatAdminView'
 
 // 'you' is the odd one out: it's the user's own score history rather than a board of other
 // people, and it reads from /progress instead of /leaderboard. It lives here anyway because
@@ -198,6 +199,13 @@ export default function CbatLeaderboard() {
   const [boards, setBoards] = useState({})           // { weekly: {...}, 'all-time': {...} }
   const [loading, setLoading] = useState({})         // per-period in-flight flag
 
+  // The CBAT hub's admin-view toggle. Admin view and agent view are genuinely
+  // different payloads (emails vs agent numbers), so each gets its own cache
+  // slot — flipping swaps datasets instead of invalidating the loaded one.
+  // ('you' is the user's own history — identical in both views, so it shares one slot.)
+  const adminView = useCbatAdminView()
+  const cacheKey = (period) => (adminView || period === 'you' ? period : `${period}:agent`)
+
   const cfg = CBAT_LEADERBOARD_CONFIG[gameKey]
   const planeTurnMode = cfg?.planeTurnMode ?? null
   const difficultyPills = cfg?.difficultyGroup ? CBAT_DIFFICULTY_GROUPS[cfg.difficultyGroup] : null
@@ -237,22 +245,24 @@ export default function CbatLeaderboard() {
   // Lazily fetch the active tab's data (weekly on mount, the others on first switch).
   useEffect(() => {
     if (!user || !cfg) return
-    if (boards[tab] || loading[tab]) return
+    const key = cacheKey(tab)
+    if (boards[key] || loading[key]) return
     const isProgress = tab === 'you'
     // percentile=1 is opt-in — it aggregates the whole collection, and only this tab shows it.
+    // The "you" tab is the user's own history, so the admin view has nothing to add to it.
     const url = isProgress
       ? `${API}/api/games/cbat/${gameKey}/progress?percentile=1`
-      : `${API}/api/games/cbat/${gameKey}/leaderboard?period=${tab}`
+      : withCbatView(`${API}/api/games/cbat/${gameKey}/leaderboard?period=${tab}`, adminView)
     const empty = isProgress
       ? { series: [], attempts: 0, best: null }
       : { leaderboard: [], myBest: null }
-    setLoading(l => ({ ...l, [tab]: true }))
+    setLoading(l => ({ ...l, [key]: true }))
     apiFetch(url)
       .then(r => r.json())
-      .then(d => setBoards(b => ({ ...b, [tab]: d.data || empty })))
-      .catch(() => setBoards(b => ({ ...b, [tab]: empty })))
-      .finally(() => setLoading(l => ({ ...l, [tab]: false })))
-  }, [user, gameKey, tab])  // eslint-disable-line react-hooks/exhaustive-deps
+      .then(d => setBoards(b => ({ ...b, [key]: d.data || empty })))
+      .catch(() => setBoards(b => ({ ...b, [key]: empty })))
+      .finally(() => setLoading(l => ({ ...l, [key]: false })))
+  }, [user, gameKey, tab, adminView])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Once the intro has docked and the weekly board is loaded, decide whether to
   // play the "your rank moved" slide. Fires at most once per mount, and always
@@ -260,7 +270,7 @@ export default function CbatLeaderboard() {
   // compare against.
   useEffect(() => {
     if (tab !== 'weekly' || slideFiredRef.current) return
-    const b = boards.weekly
+    const b = boards[cacheKey('weekly')]
     const newRank = b?.myBest?.rank
     if (!b?.leaderboard || newRank == null) return
     if (!introDone) return   // wait for the intro to dock before moving rows
@@ -297,7 +307,7 @@ export default function CbatLeaderboard() {
       setSlideRows(null)
       setSlideDelta(null)
     }, 2400)
-  }, [boards.weekly, tab, introDone, fromGame, gameKey])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [boards, tab, introDone, fromGame, gameKey])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cancel any in-flight slide timers on unmount.
   useEffect(() => () => {
@@ -323,8 +333,8 @@ export default function CbatLeaderboard() {
     )
   }
 
-  const board = boards[tab]
-  const isLoading = loading[tab] || !board
+  const board = boards[cacheKey(tab)]
+  const isLoading = loading[cacheKey(tab)] || !board
   const isWeekly = tab === 'weekly'
   const isProgress = tab === 'you'
   const countdown = isWeekly ? fmtCountdown(board?.resetsAt) : null

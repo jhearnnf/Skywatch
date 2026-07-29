@@ -2676,6 +2676,18 @@ router.post('/cbat/act/result', protect, async (req, res) => {
 // collapsed the collection to one row per user, so the extra rows are cheap.
 const LEADERBOARD_OVERFETCH = 100;
 
+// Whether this request should be answered with the admin-flavoured CBAT board
+// (emails and achievedAt on every row, "demo" on the injected fakes) or the
+// ordinary agent one.
+//
+// Admins can opt out per-request with ?adminView=0 — the CBAT hub carries a
+// toggle that sets it, so an admin can see the boards exactly as a player does.
+// It's resolved server-side rather than by hiding emails in the client because
+// some names are composed here (the weekly reveal's `neighbors[].name`) and the
+// demo rows are only labelled "demo" for admins; a client-side filter would
+// leave those two surfaces still reading as the admin view.
+const cbatAdminView = (req) => !!req.user?.isAdmin && req.query.adminView !== '0';
+
 // Generic CBAT leaderboard handler — reused by all games.
 // Every session is a standalone entry — a user can occupy multiple rows if
 // several of their runs land in the top 20.
@@ -2688,7 +2700,7 @@ async function cbatLeaderboard(req, res, gameKey) {
   // The frontend leaderboard page requests weekly by default as its first tab.
   if (req.query.period === 'weekly') return cbatWeeklyLeaderboard(req, res, gameKey, cfg);
 
-  const isAdmin = !!req.user?.isAdmin;
+  const isAdmin = cbatAdminView(req);
   const modeFilter = cfg.modeFilter ?? null;
 
   try {
@@ -2833,7 +2845,7 @@ function weeklyValueExpr(cfg) {
 // monotonic in effort: the more you play, the higher (or level) you sit, never
 // lower. Games that can't go negative are unaffected ($max:[0,x] === x).
 async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
-  const isAdmin = !!req.user?.isAdmin;
+  const isAdmin = cbatAdminView(req);
   const modeFilter = cfg.modeFilter ?? null;
   const weekStart = startOfWeekUTC();
   const valueExpr = weeklyValueExpr(cfg);
@@ -2935,7 +2947,7 @@ async function cbatWeeklyMe(req, res, gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return res.status(400).json({ message: 'Unknown game' });
 
-  const isAdmin = !!req.user?.isAdmin;
+  const isAdmin = cbatAdminView(req);
   const modeFilter = cfg.modeFilter ?? {};
   const weekStart = startOfWeekUTC();
   const valueExpr = weeklyValueExpr(cfg);
@@ -3134,7 +3146,7 @@ async function cbatPaddedFakes(gameKey, cfg, isAdmin) {
 // matches what the user sees on the leaderboard. Emails are only surfaced to admins; everyone
 // else sees displayName / agentNumber.
 router.get('/cbat/recent', protect, async (req, res) => {
-  const isAdmin = !!req.user?.isAdmin;
+  const isAdmin = cbatAdminView(req);
   const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
 

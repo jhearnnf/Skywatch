@@ -7,6 +7,7 @@ import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 import LeaderboardRow, { rowCols, rowPad } from './LeaderboardRow'
 import CbatProgressChart from './CbatProgressChart'
 import { cbatTrend, isCbatNewBest } from '../utils/cbatProgress'
+import { cbatAdminViewOn, withCbatView } from '../utils/cbatAdminView'
 import useCountUp from '../hooks/useCountUp'
 import { isOnline, onNetworkChange } from '../lib/net'
 import { onApiHealthChange, getApiHealth } from '../lib/apiHealth'
@@ -352,7 +353,9 @@ export default function CbatGameOver({
     if (queued) { setWeeklyState('offline'); return }
     let cancelled = false
     const fetchStanding = () => {
-      apiFetch(`${API}/api/games/cbat/${gameKey}/weekly/me`)
+      // Read (not subscribed): the hub's admin-view toggle isn't reachable from a
+      // game-over screen, so the value can't change while this panel is up.
+      apiFetch(withCbatView(`${API}/api/games/cbat/${gameKey}/weekly/me`, cbatAdminViewOn()))
         .then(r => r.json())
         .then(d => {
           if (cancelled) return

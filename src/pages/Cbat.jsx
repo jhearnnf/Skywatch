@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
 import RecentCbatScores from '../components/RecentCbatScores'
+import CbatAdminViewToggle from '../components/CbatAdminViewToggle'
 import { CBAT_GAMES } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
 
@@ -392,6 +393,15 @@ export default function Cbat() {
         {/* Recent scores side column — desktop (lg+) only, requires sign-in */}
         {user && (
           <aside className="hidden lg:block lg:w-[340px] lg:shrink-0 lg:sticky lg:top-4">
+            {/* Admin-only tab docked to the top edge of the card below: admins see
+                player emails on every CBAT board, and this drops them back to the
+                agent view a player gets. Inset from the right so it meets the
+                straight part of the card's edge rather than its rounded corner. */}
+            {user.isAdmin && (
+              <div className="flex justify-end pr-4">
+                <CbatAdminViewToggle />
+              </div>
+            )}
             <RecentCbatScores />
           </aside>
         )}

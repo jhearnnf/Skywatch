@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import Cbat, { CBAT_GAMES } from '../Cbat'
 
@@ -217,5 +217,59 @@ describe('Cbat page — shortcut to all-time leaderboard', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+// The admin-only switch docked to the Recent Scores card. It asks the API for the
+// board a player would get (?adminView=0) rather than hiding emails client-side,
+// so the assertions here are about the request, not the rendered names.
+describe('Cbat page — admin view toggle', () => {
+  beforeEach(() => {
+    mockUseAuth.mockReset()
+    mockNavigate.mockReset()
+    localStorage.clear()
+  })
+
+  function renderFor(user) {
+    const apiFetch = vi.fn().mockResolvedValue({
+      ok: true, json: async () => ({ status: 'success', data: { recent: [] } }),
+    })
+    mockUseAuth.mockReturnValue({ user, API: '', apiFetch })
+    render(<Cbat />)
+    return apiFetch
+  }
+
+  const toggle = () => screen.queryByRole('switch', { name: 'Admin view' })
+
+  it('is not rendered for a regular user', () => {
+    renderFor({ _id: '1' })
+    expect(toggle()).toBeNull()
+  })
+
+  it('starts in admin view for an admin who has never touched it', () => {
+    const apiFetch = renderFor({ _id: '1', isAdmin: true })
+    expect(toggle()).toHaveAttribute('aria-checked', 'true')
+    expect(toggle()).toHaveTextContent('Admin view')
+    // No opt-out param: the admin view is what the server gives an admin anyway.
+    expect(apiFetch).toHaveBeenCalledWith('/api/games/cbat/recent?limit=25')
+  })
+
+  it('switching to agent view refetches recent scores as a player would see them', () => {
+    const apiFetch = renderFor({ _id: '1', isAdmin: true })
+    fireEvent.click(toggle())
+
+    expect(toggle()).toHaveAttribute('aria-checked', 'false')
+    expect(toggle()).toHaveTextContent('Agent view')
+    expect(apiFetch).toHaveBeenLastCalledWith('/api/games/cbat/recent?limit=25&adminView=0')
+  })
+
+  it('remembers the choice across visits', () => {
+    renderFor({ _id: '1', isAdmin: true })
+    fireEvent.click(toggle())
+    cleanup()
+
+    const apiFetch = renderFor({ _id: '1', isAdmin: true })
+    expect(toggle()).toHaveAttribute('aria-checked', 'false')
+    expect(apiFetch).toHaveBeenCalledWith('/api/games/cbat/recent?limit=25&adminView=0')
   })
 })

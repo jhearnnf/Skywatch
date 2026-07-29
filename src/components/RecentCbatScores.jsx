@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_GROUPS } from '../data/cbatGames'
+import { useCbatAdminView, withCbatView } from '../utils/cbatAdminView'
 
 function timeAgo(iso) {
   if (!iso) return ''
@@ -37,7 +38,11 @@ const DIFFICULTY_BY_KEY = Object.fromEntries(
 export default function RecentCbatScores() {
   const { apiFetch, API, user } = useAuth()
   const navigate = useNavigate()
-  const isAdmin = !!user?.isAdmin
+  // Agent view is the hub toggle asking for the board a player would get, so it
+  // drops the admin affordances here too — emails, and the click-through into
+  // that user's CBAT history.
+  const adminView = useCbatAdminView()
+  const isAdmin = !!user?.isAdmin && adminView
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -45,7 +50,7 @@ export default function RecentCbatScores() {
   useEffect(() => {
     let cancelled = false
     function load() {
-      apiFetch(`${API}/api/games/cbat/recent?limit=25`)
+      apiFetch(withCbatView(`${API}/api/games/cbat/recent?limit=25`, adminView))
         .then(r => r.json())
         .then(d => {
           if (cancelled) return
@@ -62,7 +67,7 @@ export default function RecentCbatScores() {
     load()
     const id = setInterval(load, 30000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [apiFetch, API])
+  }, [apiFetch, API, adminView])
 
   return (
     <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">

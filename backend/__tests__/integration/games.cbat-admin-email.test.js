@@ -96,6 +96,66 @@ describe('CBAT leaderboard — admin email exposure', () => {
     expect(Number.isNaN(new Date(myBest.achievedAt).getTime())).toBe(false);
   });
 
+  // The CBAT hub's admin-view toggle sends ?adminView=0 so an admin can read the
+  // boards exactly as a player does.
+  it('drops email and achievedAt for an admin who asks for the agent view', async () => {
+    const res = await request(app).get(`${LEADERBOARD_URL}?adminView=0`).set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+
+    const { leaderboard, myBest } = res.body.data;
+    expect(leaderboard).toHaveLength(20);
+    leaderboard.forEach(entry => {
+      expect(entry.email).toBeUndefined();
+      expect(entry.achievedAt).toBeUndefined();
+      expect(entry.agentNumber).toBeDefined();
+    });
+    expect(myBest.email).toBeUndefined();
+    expect(myBest.achievedAt).toBeUndefined();
+  });
+
+  it('keeps the admin view on any other value of adminView', async () => {
+    const res = await request(app).get(`${LEADERBOARD_URL}?adminView=1`).set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    const real = res.body.data.leaderboard.filter(e => !e.isFake);
+    expect(real.map(e => e.email).sort()).toEqual(['boss@skywatch.test', 'pilot@example.com']);
+  });
+
+  it('drops email from the weekly board for an admin who asks for the agent view', async () => {
+    const admin$ = await request(app).get(`${LEADERBOARD_URL}?period=weekly`).set('Cookie', adminCookie);
+    expect(admin$.body.data.leaderboard.some(e => e.email)).toBe(true);
+
+    const res = await request(app).get(`${LEADERBOARD_URL}?period=weekly&adminView=0`).set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    res.body.data.leaderboard.forEach(entry => expect(entry.email).toBeUndefined());
+    expect(res.body.data.myBest?.email).toBeUndefined();
+  });
+
+  it('composes reveal neighbour names from agent numbers in the agent view', async () => {
+    const url = '/api/games/cbat/symbols/weekly/me';
+    const asAdmin = await request(app).get(url).set('Cookie', adminCookie);
+    expect(asAdmin.body.data.neighbors.some(n => n.name.includes('@'))).toBe(true);
+
+    const res = await request(app).get(`${url}?adminView=0`).set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    res.body.data.neighbors.forEach(n => {
+      expect(n.name).not.toContain('@');
+      expect(n.name).toMatch(/^Agent /);
+    });
+  });
+
+  it('drops email from the recent-scores feed for an admin who asks for the agent view', async () => {
+    const asAdmin = await request(app).get('/api/games/cbat/recent').set('Cookie', adminCookie);
+    expect(asAdmin.body.data.recent.some(r => r.email)).toBe(true);
+
+    const res = await request(app).get('/api/games/cbat/recent?adminView=0').set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data.recent.length).toBeGreaterThan(0);
+    res.body.data.recent.forEach(r => {
+      expect(r.email).toBeUndefined();
+      expect(r.agentNumber).toBeDefined();
+    });
+  });
+
   it('does NOT include email or achievedAt on myBest for a regular user outside the top 20', async () => {
     for (let i = 0; i < 20; i++) {
       const u = await createUser({ email: `filler${i}@test.com`, agentNumber: `800000${i}` });

@@ -17,6 +17,11 @@ export const lastSeenStreakKey  = (userId) => `sw_last_seen_streak_${userId}`
 // one after they finish a game. Written each time the board shows their rank.
 export const cbatLastRankKey    = (gameKey) => `sw_cbat_last_rank_${gameKey}`
 
+// Admin-only: whether CBAT boards are shown in the admin view (emails) or the
+// ordinary agent view. Absent/'1' = admin view, '0' = agent view. Toggled from
+// the CBAT hub; see src/utils/cbatAdminView.js.
+export const CBAT_ADMIN_VIEW_KEY = 'sw_cbat_admin_view'
+
 // FLAG's difficulty selection ('easier' | 'hard'). Defaults to 'easier'; once a
 // user switches, their most recent choice is what the instructions screen opens
 // on next visit.
